@@ -121,6 +121,8 @@ Pi remains the source of model-side conversation history:
 - Messages returned by `InvokingAsync` are deliberately not appended to the Pi prompt.
 - Current request messages are persisted before Pi starts the run.
 - Every authoritative `turn_end` Assistant/Tool message is persisted incrementally.
+- On `agent_settled`, a successful final Assistant text is emitted and persisted once with `type: "result"`, its own message ID, and no repeated reasoning, Tool Calls, or usage. The final `agent_end` snapshot supplies the answer, with `turn_end` as a fallback; intermediate passes, failed retries, and interrupted runs do not publish a Result.
+- A Result that exactly copies the last persisted Assistant text includes `resultSourceMessageId`, referencing that history message. Hosts can use this identity to avoid repeating the answer in handoff context while retaining both UI messages. Changed final text or a missing source is not linked.
 - Text deltas and partial Tool output are never persisted as authoritative history.
 - Cancellation, exceptions, and early stream disposal retain completed-turn persistence.
 - Request/turn persistence and the session-start callback ignore caller cancellation but are bounded by `HistoryPersistenceTimeout`.
@@ -136,6 +138,7 @@ The prompt builder uses only messages supplied for the current invocation. It pr
 | `toolcall_end` | One informational `FunctionCallContent` |
 | `tool_execution_end` | `FunctionResultContent` and optional `ErrorContent` |
 | `turn_end` | Persisted authoritative Assistant/Tool history and non-streaming response messages |
+| `agent_end` → `agent_settled` | Final Assistant text as a separate `type: "result"` message, persisted in both streaming and non-streaming runs |
 | `message_end`/`turn_end` without a streamed block | The missing authoritative Assistant content block |
 | Final retry, compaction, or provider failure | Fatal `ErrorContent` |
 | Authoritative usage boundaries | `UsageContent` or `AgentResponse.Usage` |

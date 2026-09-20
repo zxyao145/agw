@@ -69,7 +69,6 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   );
   assert.match(source, /<EnvironmentVariablesPanel/);
   assert.match(source, /External agents do not support instructions configuration/);
-  assert.match(source, /External agents do not support turn summary configuration/);
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
   assert.match(source, /External agents do not support MCP tool server configuration/);
@@ -185,7 +184,7 @@ test("Create and Edit Agent dialogs send normalized environment variables", asyn
   }
 });
 
-test("Agent forms expose summary settings but disable them for External Agents", async () => {
+test("Agent forms retain System summary settings and validation", async () => {
   const [createSource, editSource, formSource] = await Promise.all([
     readFile(CREATE_DIALOG_URL, "utf8"),
     readFile(EDIT_DIALOG_URL, "utf8"),
@@ -203,15 +202,13 @@ test("Agent forms expose summary settings but disable them for External Agents",
   );
   assert.match(formSource, /checked=\{enableSummary\}/);
   assert.match(formSource, /onCheckedChange=\{setEnableSummary\}/);
-  assert.match(formSource, /disabled=\{isExternalAgent\}/);
   assert.match(
     formSource,
     /const usesStructuredResult = supportsResponseSchema && responseSchema\.trim\(\)\.length > 0/,
   );
   assert.match(formSource, /Append the Agent's final JSON response directly/);
-  assert.match(formSource, /disabled=\{isExternalAgent \|\| usesStructuredResult\}/);
+  assert.match(formSource, /disabled=\{usesStructuredResult\}/);
   assert.match(formSource, /This selection is preserved for later use/);
-  assert.match(formSource, /External agents do not support turn summary configuration/);
   assert.match(createSource, /enableSummary,/);
   assert.match(createSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);
   assert.match(editSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);

@@ -496,7 +496,7 @@ public sealed class AgentRuntime : RuntimeBase
         CancellationToken cancellationToken
     )
     {
-        if (!_enableSummary || _summaryService == null)
+        if (AgentType != AgentType.System || !_enableSummary || _summaryService == null)
         {
             return null;
         }

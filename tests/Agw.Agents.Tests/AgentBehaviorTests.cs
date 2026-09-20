@@ -121,23 +121,28 @@ public class AgentBehaviorTests
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
-    [Fact]
-    public void PrepareForCreate_ExternalAgentWithSummaryEnabledAndSummaryModelProvider_PreservesSummary()
+    [Theory]
+    [InlineData(ExternalAgentKind.ClaudeCode, true)]
+    [InlineData(ExternalAgentKind.Codex, true)]
+    [InlineData(ExternalAgentKind.Pi, true)]
+    [InlineData(ExternalAgentKind.Pi, false)]
+    public void PrepareForCreate_ExternalAgentWithSummaryConfiguration_ThrowsInvalidParam(
+        ExternalAgentKind kind,
+        bool enableSummary
+    )
     {
         var summaryModelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
-            EnableSummary = true,
+            ExternalAgentKind = kind,
+            EnableSummary = enableSummary,
             ModelProviderId = null,
             SummaryModelProviderId = summaryModelProviderId,
         };
 
-        new AgentBehavior(agent).PrepareForCreate();
-
-        Assert.True(agent.EnableSummary);
-        Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
     [Fact]
@@ -232,12 +237,12 @@ public class AgentBehaviorTests
         Assert.Equal("original-name", agent.Name);
         Assert.Equal("original-prompt", agent.SystemPrompt);
         Assert.Same(originalTools, agent.Tools);
-        Assert.True(agent.EnableSummary);
+        Assert.False(agent.EnableSummary);
         Assert.Equal(AgentType.External, agent.Type);
         Assert.Equal(ExternalAgentKind.ClaudeCode, agent.ExternalAgentKind);
         Assert.Equal("After", agent.DisplayName);
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);
-        Assert.Equal(updatedSummaryModelProviderId, agent.SummaryModelProviderId);
+        Assert.Null(agent.SummaryModelProviderId);
         Assert.Equal("creator", agent.CreateBy);
         Assert.Equal(originalCreateTime, agent.CreateTime);
         Assert.Null(agent.UpdateBy);

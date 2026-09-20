@@ -22,8 +22,33 @@ public class AgentAppServiceUpdateTests : IDisposable
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    [Theory]
+    [InlineData(ExternalAgentKind.ClaudeCode)]
+    [InlineData(ExternalAgentKind.Codex)]
+    [InlineData(ExternalAgentKind.Pi)]
+    public async Task CreateAgentAsync_ExternalSummary_DoesNotPersistAgent(ExternalAgentKind kind)
+    {
+        // Arrange
+        var summaryModelProviderId = Guid.CreateVersion7();
+        var service = CreateService(CreateExternalAgent(), [summaryModelProviderId]);
+        var agent = CreateExternalAgent();
+        agent.ExternalAgentKind = kind;
+        agent.Name = "new-agent";
+        agent.EnableSummary = true;
+        agent.SummaryModelProviderId = summaryModelProviderId;
+
+        // Act
+        var error = await Assert.ThrowsAsync<AgwException>(() => service.CreateAgentAsync(agent, null, null, null));
+
+        // Assert
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+        Assert.False(
+            await _database.Context.Agents.AnyAsync(item => item.Id == agent.Id, TestContext.Current.CancellationToken)
+        );
+    }
+
     [Fact]
-    public async Task UpdateAgentAsync_ExternalAllowedFields_UpdatesSpecifiedValuesAndPreservesRelations()
+    public async Task UpdateAgentAsync_ExternalAllowedFields_ClearsLegacySummaryAndPreservesRelations()
     {
         var newModelProviderId = Guid.CreateVersion7();
         var summaryModelProviderId = Guid.CreateVersion7();
@@ -71,8 +96,8 @@ public class AgentAppServiceUpdateTests : IDisposable
         Assert.Equal("value", agent.EnvironmentVariables["TOKEN"]);
         Assert.Equal("original-prompt", agent.SystemPrompt);
         Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(Assert.Single(agent.Tools)).Definition);
-        Assert.True(agent.EnableSummary);
-        Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
+        Assert.False(agent.EnableSummary);
+        Assert.Null(agent.SummaryModelProviderId);
         Assert.Equal(mcpRelations, _database.Context.AgentMcpToolServers.ToArray());
         Assert.Equal(skillRelations, _database.Context.AgentSkillRelations.ToArray());
         Assert.Equal(connectionRelations, _database.Context.AgentConnectionRelations.ToArray());

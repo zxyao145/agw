@@ -12,6 +12,92 @@ public class ConversationHandoffProviderTests
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    [Theory]
+    [InlineData(AgentRuntimeType.Agentflow, false)]
+    [InlineData(AgentRuntimeType.Agent, true)]
+    [InlineData(AgentRuntimeType.Agent, false)]
+    public async Task CreateAsync_ResultCopy_KeepsResultAndUnrelatedEqualText(AgentRuntimeType targetType, bool scoped)
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var sourceId = Guid.CreateVersion7();
+        var metadata = CreateMetadata(
+            scoped ? AgentRuntimeType.Agentflow : AgentRuntimeType.Agent,
+            sourceId,
+            scoped ? CreateScope(sourceId) : null
+        );
+        var result = CreateTypedAssistantMessage("answer", "result", "result");
+        result.AuthorName = "pi";
+        result.AdditionalProperties!["resultSourceMessageId"] = "source";
+        await SeedAsync(
+            options,
+            projectId,
+            conversationId,
+            cancellationToken,
+            CreateRecord(conversationId, 0, CreateUserMessage("request", "user"), metadata),
+            CreateRecord(conversationId, 1, CreateAssistantMessage("answer", "source"), metadata),
+            CreateRecord(conversationId, 2, CreateAssistantMessage("answer", "unrelated"), metadata),
+            CreateRecord(conversationId, 3, result, metadata)
+        );
+        await using var dbContext = new AgwDbContext(options);
+
+        // Act
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(conversationId, targetType, Guid.CreateVersion7(), cancellationToken);
+
+        // Assert
+        string[] expectedIds =
+            targetType == AgentRuntimeType.Agent && !scoped ? ["result"] : ["user", "unrelated", "result"];
+        Assert.Equal(expectedIds, handoff.Messages.Select(message => message.MessageId));
+        Assert.Equal("pi", handoff.Messages.Last().AuthorName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateAsync_ResultWithoutMatchingSource_PreservesBothMessages(bool differentText)
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var result = CreateTypedAssistantMessage(differentText ? "summary" : "answer", "result", "result");
+        if (differentText)
+        {
+            result.AdditionalProperties!["resultSourceMessageId"] = "source";
+        }
+        await SeedAsync(
+            options,
+            projectId,
+            conversationId,
+            cancellationToken,
+            CreateRecord(
+                conversationId,
+                0,
+                CreateUserMessage("request", "user"),
+                CreateMetadata(AgentRuntimeType.Agent, Guid.CreateVersion7())
+            ),
+            CreateRecord(conversationId, 1, CreateAssistantMessage("answer", "source")),
+            CreateRecord(conversationId, 2, result)
+        );
+        await using var dbContext = new AgwDbContext(options);
+
+        // Act
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(conversationId, AgentRuntimeType.Agentflow, Guid.CreateVersion7(), cancellationToken);
+
+        // Assert
+        Assert.Equal(["user", "source", "result"], handoff.Messages.Select(message => message.MessageId));
+    }
+
     [Fact]
     public async Task CreateAsync_WithoutUserContext_ReturnsEmpty()
     {

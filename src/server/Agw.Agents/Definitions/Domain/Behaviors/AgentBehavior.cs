@@ -49,6 +49,8 @@ public sealed class AgentBehavior
             existing.Tools = originalTools;
             existing.Type = originalType;
             existing.ExternalAgentKind = originalExternalAgentKind;
+            existing.EnableSummary = false;
+            existing.SummaryModelProviderId = null;
         }
         else
         {
@@ -96,11 +98,11 @@ public sealed class AgentBehavior
             );
         }
 
-        if (agent.Type == AgentType.External && agent.EnableSummary && !agent.SummaryModelProviderId.HasValue)
+        if (agent.Type == AgentType.External && (agent.EnableSummary || agent.SummaryModelProviderId.HasValue))
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "External agent Summary requires a SummaryModelProviderId."
+                "External agents do not support turn summary configuration."
             );
         }
     }

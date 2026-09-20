@@ -467,14 +467,18 @@ DeepSeek 的 Responses 端点使用 `OpenAiResponsesReasoningChatClient`：普�
 
 Definition 创建的 System Agent 可通过 `EnableSummary` 在一次主执行成功后追加本轮总结。总结复用该 Agent 的 `ModelProviderId`，以一次性 `IChatClient` 调用执行；输入只包含本轮用户文字和本轮 Assistant 的 `TextContent`，不加载历史、工具或技能。External Agent 不支持该开关。
 
-当 Definition Agent 同时配置 `ResponseSchema` 与 `EnableSummary` 时，`result` 从本轮最后一条完整 Assistant 回复中提取唯一的 JSON 对象或数组，不再调用摘要模型，也不产生摘要用量。服务端移除 Markdown 围栏、外围说明和首尾空白，严格检查 JSON 语法及根类型，但不重新序列化字段和值；无有效 JSON、JSON 不完整或含多个对象/数组时明确失败，不保存文本 Result。消息设置 `additionalProperties.resultFormat = json`；没有最终 Assistant 文本时不追加 `result`。流式执行先聚合当前最后一次模型调用的更新，因此 Tool 调用前的说明和更早的模型轮次不会混入结构化 Result。客户端直接按字面展示 JSON，不经过 Markdown 渲染；带该标记的旧历史也在展示时移除围栏和外围说明。
+External Agent 创建时若开启 `EnableSummary` 或指定 `SummaryModelProviderId`，后端返回 `InvalidParam`；更新 API 同样拒绝这两个字段。运行时忽略遗留的外部 Agent 摘要配置，允许的配置更新会清除这些遗留值。详情与列表响应始终将 External Agent 的摘要配置投影为 `EnableSummary=false`、`SummaryModelProviderId=null`，读取不会修改存储；前端也不展示外部 Agent 的摘要配置区域。Claude Code、Codex 和 Pi 的原生 Result 保留 SDK 的 author，不改写为 `$agw-server`。Result 的识别依据是消息类型，而不是 author。
+
+Pi 在 `agent_settled` 后发布并持久化最终 Assistant 文本 Result；可关联到已保存的原回答时，携带 `resultSourceMessageId`。跨 Agent handoff 同时包含原回答和它的相同文本 Result 时只保留 Result；缺少原回答、内容不同或没有明确来源关联时不去重，也不会合并其他恰好相同的回答。
+
+当 Definition System Agent 同时配置 `ResponseSchema` 与 `EnableSummary` 时，`result` 从本轮最后一条完整 Assistant 回复中提取唯一的 JSON 对象或数组，不再调用摘要模型，也不产生摘要用量。服务端移除 Markdown 围栏、外围说明和首尾空白，严格检查 JSON 语法及根类型，但不重新序列化字段和值；无有效 JSON、JSON 不完整或含多个对象/数组时明确失败，不保存文本 Result。消息设置 `additionalProperties.resultFormat = json`；没有最终 Assistant 文本时不追加 `result`。流式执行先聚合当前最后一次模型调用的更新，因此 Tool 调用前的说明和更早的模型轮次不会混入结构化 Result。客户端直接按字面展示 JSON，不经过 Markdown 渲染；带该标记的旧历史也在展示时移除围栏和外围说明。
 
 Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发生在显式 Output 节点：`ConfigJson.enableSummary` 为 `true` 时，流程必须只有一个 Output，并配置有效的 `SummaryModelProviderId`。传入总结模型的是流入 Output 的消息，Output 的 `Instructions` 会作为额外总结要求。
 
 两种路径都保留原始输出并在末尾追加一条 `result`：
 
-- `role = system`；
-- `author = $agw-server`；
+- `role = assistant`；
+- `author = $agw-server`（仅上述 Agw 生成的总结或结构化 Result）；
 - 顶层 `additionalProperties.type = result`；
 - 结构化 Result 额外设置顶层 `additionalProperties.resultFormat = json`；
 - `contents` 只有一个 `TextContent`。

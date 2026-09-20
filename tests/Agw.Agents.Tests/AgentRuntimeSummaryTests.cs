@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -13,6 +14,58 @@ namespace Agw.Agents.Tests;
 
 public class AgentRuntimeSummaryTests
 {
+    [Theory]
+    [InlineData("claude-code", false)]
+    [InlineData("claude-code", true)]
+    [InlineData("codex", false)]
+    [InlineData("codex", true)]
+    [InlineData("pi", false)]
+    [InlineData("pi", true)]
+    public async Task Execute_ExternalNativeResult_PreservesAuthorAndSkipsLegacySummary(string author, bool streaming)
+    {
+        // Arrange
+        var summaryService = new RecordingSummaryService();
+        var agent = CreateAgent(new StubChatClient("native answer") { ResultAuthor = author });
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var runtime = new AgentRuntime(
+            NullLogger.Instance,
+            agent,
+            session,
+            Guid.CreateVersion7(),
+            "context-1",
+            sessionStateScope: null,
+            agentType: AgentType.External,
+            enableSummary: true,
+            summaryModelProviderId: Guid.CreateVersion7(),
+            summaryService: summaryService
+        );
+        var executor = new AgentTurnExecutor(null!, null!, null!);
+        var input = new AgwUserInput { Contents = [new AgwTextContent { Content = "request" }] };
+        var output = new List<AgwMessage>();
+
+        // Act
+        if (streaming)
+        {
+            await foreach (
+                var message in executor.ExecuteStreamingAsync(runtime, input, TestContext.Current.CancellationToken)
+            )
+            {
+                output.Add(message);
+            }
+        }
+        else
+        {
+            output.AddRange(await executor.ExecuteAsync(runtime, input, TestContext.Current.CancellationToken));
+        }
+
+        // Assert
+        var result = Assert.Single(output, message => IsMessageType(message.AdditionalProperties, "result"));
+        Assert.Equal(author, result.Author);
+        Assert.Equal("native answer", Assert.IsType<AgwTextContent>(Assert.Single(result.Contents)).Content);
+        Assert.Empty(summaryService.Calls);
+        Assert.Empty(summaryService.StructuredCalls);
+    }
+
     [Fact]
     public async Task ExecuteAsync_SummaryEnabled_AppendsResultUsingOnlyCurrentTurnText()
     {
@@ -560,6 +613,7 @@ public class AgentRuntimeSummaryTests
     private sealed class StubChatClient(string responseText, params string[] streamingChunks) : IChatClient
     {
         public List<List<ChatMessage>> Requests { get; } = [];
+        public string? ResultAuthor { get; init; }
 
         public void Dispose() { }
 
@@ -573,7 +627,15 @@ public class AgentRuntimeSummaryTests
         )
         {
             Requests.Add(messages.ToList());
-            return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
+            return Task.FromResult(
+                new ChatResponse([
+                    new ChatMessage(ChatRole.Assistant, responseText)
+                    {
+                        AuthorName = ResultAuthor,
+                        AdditionalProperties = ResultAuthor == null ? null : new() { ["type"] = "result" },
+                    },
+                ])
+            );
         }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
@@ -586,7 +648,11 @@ public class AgentRuntimeSummaryTests
             await Task.Yield();
             foreach (var chunk in streamingChunks.Length == 0 ? [responseText] : streamingChunks)
             {
-                yield return new ChatResponseUpdate(ChatRole.Assistant, chunk);
+                yield return new ChatResponseUpdate(ChatRole.Assistant, chunk)
+                {
+                    AuthorName = ResultAuthor,
+                    AdditionalProperties = ResultAuthor == null ? null : new() { ["type"] = "result" },
+                };
             }
         }
     }

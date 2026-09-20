@@ -129,7 +129,7 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
         {
             if (evt is PiTurnEndEvent turnEnd)
             {
-                var history = PiEventMapper.ToHistoryMessages(turnEnd, _options.SessionOptions.Model);
+                var history = eventMapper.ToHistoryMessages(turnEnd);
                 responseMessages.AddRange(history);
                 await PersistWithTimeoutAsync(safeSession, [], history).ConfigureAwait(false);
                 AddTurnUsage(turnEnd, ref usage, ref hasUsage);
@@ -141,6 +141,13 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
             }
 
             var update = eventMapper.ToUpdate(evt);
+            if (evt.Type == "agent_settled" && update != null)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var resultMessages = new[] { update }.ToAgentResponse().Messages;
+                responseMessages.AddRange(resultMessages);
+                await PersistWithTimeoutAsync(safeSession, [], resultMessages).ConfigureAwait(false);
+            }
             if (
                 evt is not PiMessageEvent
                 && evt is not PiTurnEndEvent
@@ -194,13 +201,19 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
         {
             if (evt is PiTurnEndEvent turnEnd)
             {
-                var history = PiEventMapper.ToHistoryMessages(turnEnd, _options.SessionOptions.Model);
+                var history = eventMapper.ToHistoryMessages(turnEnd);
                 await PersistWithTimeoutAsync(safeSession, [], history).ConfigureAwait(false);
             }
 
             var update = eventMapper.ToUpdate(evt);
             if (update != null)
             {
+                if (evt.Type == "agent_settled")
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await PersistWithTimeoutAsync(safeSession, [], new[] { update }.ToAgentResponse().Messages)
+                        .ConfigureAwait(false);
+                }
                 yield return update;
             }
         }

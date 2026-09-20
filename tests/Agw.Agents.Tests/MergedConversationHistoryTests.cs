@@ -10,6 +10,56 @@ namespace Agw.Agents.Tests;
 
 public sealed partial class AgentRequestContextAgentTests
 {
+    [Fact]
+    public async Task PiResult_Reload_PreservesResultWithoutDuplicatingModelHistory()
+    {
+        // Arrange
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
+        var provider = new PiChatHistoryProvider(fixture.Provider);
+        var agent = new HistoryNotifyingAgent(provider);
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        fixture.Provider.StageRequest(session, [new ChatMessage(ChatRole.User, "1+1=?")]);
+        var answer = new ChatMessage(ChatRole.Assistant, "2") { AuthorName = "pi", MessageId = "pi-answer" };
+        var result = new ChatMessage(ChatRole.Assistant, "2")
+        {
+            AuthorName = "pi",
+            MessageId = "pi-result",
+            AdditionalProperties = new()
+            {
+                ["type"] = "result",
+                ["modelName"] = "deepseek-flash",
+                ["resultSourceMessageId"] = "pi-answer",
+            },
+        };
+
+        // Act
+        foreach (var message in new[] { answer, result })
+        {
+            await provider.InvokedAsync(
+                new ChatHistoryProvider.InvokedContext(agent, session, [], [message]),
+                TestContext.Current.CancellationToken
+            );
+        }
+        var records = await fixture.ReadAsync();
+        var modelHistory = await provider.InvokingAsync(
+            new ChatHistoryProvider.InvokingContext(agent, session, []),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Equal(3, records.Count);
+        var persisted = Assert
+            .Single(records, record => record.ToChatMessage()?.MessageId == "pi-result")
+            .ToChatMessage()!;
+        Assert.Equal("2", persisted.Text);
+        Assert.Equal("result", persisted.AdditionalProperties!["type"]?.ToString());
+        Assert.Equal("deepseek-flash", persisted.AdditionalProperties["modelName"]?.ToString());
+        Assert.Equal("pi-answer", persisted.AdditionalProperties["resultSourceMessageId"]?.ToString());
+        Assert.Equal("pi", persisted.AuthorName);
+        Assert.Equal(["1+1=?", "2"], modelHistory.Select(message => message.Text));
+    }
+
     [Theory]
     [InlineData("system")]
     [InlineData("claude-code")]
@@ -48,6 +98,7 @@ public sealed partial class AgentRequestContextAgentTests
             .Single(records, record => record.ToChatMessage()?.MessageId == "schema-result")
             .ToChatMessage()!;
         Assert.Equal("json", persisted.AdditionalProperties!["resultFormat"]?.ToString());
+        Assert.Equal(kind, persisted.AuthorName);
         Assert.Equal("{\"approved\":false}", persisted.Text);
         Assert.Equal(2, records.Count);
     }

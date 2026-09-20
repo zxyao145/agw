@@ -355,60 +355,57 @@ export function AgentFormFields({
             ) : null}
           </div>
 
-          {isExternalAgent ? (
-            <ExternalAgentNotice>
-              External agents do not support turn summary configuration.
-            </ExternalAgentNotice>
-          ) : null}
+          {!isExternalAgent ? (
+            <>
+              <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
+                <div className="space-y-1">
+                  <Label htmlFor={`${idPrefix}enableSummary`} className="cursor-pointer">
+                    Generate Turn Summary
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {usesStructuredResult
+                      ? "Append the Agent's final JSON response directly after each successful turn."
+                      : "Append a Markdown summary after each successful turn using the selected Summary Model Provider."}
+                  </p>
+                </div>
+                <Switch
+                  id={`${idPrefix}enableSummary`}
+                  checked={enableSummary}
+                  onCheckedChange={setEnableSummary}
+                />
+              </div>
 
-          <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
-            <div className="space-y-1">
-              <Label htmlFor={`${idPrefix}enableSummary`} className="cursor-pointer">
-                Generate Turn Summary
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {usesStructuredResult
-                  ? "Append the Agent's final JSON response directly after each successful turn."
-                  : "Append a Markdown summary after each successful turn using the selected Summary Model Provider."}
-              </p>
-            </div>
-            <Switch
-              id={`${idPrefix}enableSummary`}
-              checked={enableSummary}
-              onCheckedChange={setEnableSummary}
-              disabled={isExternalAgent}
-            />
-          </div>
-
-          {enableSummary ? (
-            <div className="grid gap-2">
-              <Label htmlFor={`${idPrefix}summaryModelProviderId`}>
-                Summary Model Provider
-                {!isExternalAgent && !summaryModelProviderId ? (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    (Defaults to Agent Model Provider)
-                  </span>
-                ) : null}
-              </Label>
-              <SearchableSelect
-                id={`${idPrefix}summaryModelProviderId`}
-                ariaLabel="Summary Model Provider"
-                value={effectiveSummaryModelProviderId}
-                onValueChange={setSummaryModelProviderId}
-                options={modelProviderOptions}
-                placeholder="Select a summary model provider..."
-                searchPlaceholder="Search model providers..."
-                isLoading={modelProvidersQuery.isLoading}
-                clearable={!isExternalAgent && Boolean(summaryModelProviderId)}
-                disabled={isExternalAgent || usesStructuredResult}
-              />
-              {usesStructuredResult ? (
-                <p className="text-xs text-muted-foreground">
-                  Response Schema mode reuses the final JSON and does not call the Summary Model
-                  Provider. This selection is preserved for later use.
-                </p>
+              {enableSummary ? (
+                <div className="grid gap-2">
+                  <Label htmlFor={`${idPrefix}summaryModelProviderId`}>
+                    Summary Model Provider
+                    {!summaryModelProviderId ? (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        (Defaults to Agent Model Provider)
+                      </span>
+                    ) : null}
+                  </Label>
+                  <SearchableSelect
+                    id={`${idPrefix}summaryModelProviderId`}
+                    ariaLabel="Summary Model Provider"
+                    value={effectiveSummaryModelProviderId}
+                    onValueChange={setSummaryModelProviderId}
+                    options={modelProviderOptions}
+                    placeholder="Select a summary model provider..."
+                    searchPlaceholder="Search model providers..."
+                    isLoading={modelProvidersQuery.isLoading}
+                    clearable={Boolean(summaryModelProviderId)}
+                    disabled={usesStructuredResult}
+                  />
+                  {usesStructuredResult ? (
+                    <p className="text-xs text-muted-foreground">
+                      Response Schema mode reuses the final JSON and does not call the Summary Model
+                      Provider. This selection is preserved for later use.
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
-            </div>
+            </>
           ) : null}
         </div>
       </div>
