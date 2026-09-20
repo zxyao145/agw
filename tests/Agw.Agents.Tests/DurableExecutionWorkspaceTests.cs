@@ -68,8 +68,10 @@ public sealed partial class DurableExecutionStoreTests
         Assert.NotEqual(original.Fingerprint, next.Manifest.WorkspaceSnapshot.Fingerprint);
     }
 
-    [Fact]
-    public async Task EnsureWorkspaceSnapshotAsync_LegacyManifest_CapturesOnlyPrimaryAndPersistsOnce()
+    [Theory]
+    [InlineData("workspaceSnapshot")]
+    [InlineData("userId")]
+    public async Task GetAsync_MissingManifestField_RejectsWithoutCapturingOrPersisting(string field)
     {
         await using var database = await TestDatabase.CreateAsync();
         var task = CreateTask(database);
@@ -92,24 +94,20 @@ public sealed partial class DurableExecutionStoreTests
             CreateSettings(task.ProjectId, task.ContextId),
             token
         );
-        var legacy = registered.Manifest with { WorkspaceSnapshot = null };
+        var json = System.Text.Json.Nodes.JsonNode.Parse(DurableExecutionJson.Serialize(registered.Manifest))!;
+        Assert.True(json.AsObject().Remove(field));
+        var unsupportedJson = json.ToJsonString();
         var record = await database.Context.DurableExecutions.SingleAsync(token);
-        record.ManifestJson = DurableExecutionJson.Serialize(legacy);
+        record.ManifestJson = unsupportedJson;
         await database.Context.SaveChangesAsync(token);
 
-        var recovered = await store.EnsureWorkspaceSnapshotAsync(legacy, token);
-        Assert.Empty(recovered.WorkspaceSnapshot!.AdditionalDirectories);
-        Assert.Equal(
-            ProjectWorkspacePaths.Normalize(projects.Project.Workspace!),
-            recovered.WorkspaceSnapshot.Workspace
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            store.GetAsync(registered.Manifest.ExecutionId, token)
         );
-        projects.Project = projects.Project with { Workspace = Path.Combine(Path.GetTempPath(), "changed") };
-        var repeated = await store.EnsureWorkspaceSnapshotAsync(legacy, token);
-        Assert.Equal(recovered.WorkspaceSnapshot.Fingerprint, repeated.WorkspaceSnapshot!.Fingerprint);
-        Assert.Equal(
-            recovered.WorkspaceSnapshot.Fingerprint,
-            (await store.GetAsync(legacy.ExecutionId, token)).Manifest.WorkspaceSnapshot!.Fingerprint
-        );
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.DurableExecutionConflict.Code, exception.Code);
+        database.Context.ChangeTracker.Clear();
+        var unchanged = await database.Context.DurableExecutions.SingleAsync(token);
+        Assert.Equal(unsupportedJson, unchanged.ManifestJson);
     }
 
     private sealed class WorkspaceProjectFacade : IProjectRuntimeFacade

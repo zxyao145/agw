@@ -1,10 +1,7 @@
 export type ToolName =
   | "ask_user_question"
-  | "bash"
   | "diff"
-  | "generate_guid"
   | "git_clone"
-  | "powershell"
   | "run_shell"
   | "web_fetch"
   | "web_search";

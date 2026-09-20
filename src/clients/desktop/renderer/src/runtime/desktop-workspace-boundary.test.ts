@@ -35,8 +35,6 @@ test("Desktop workspace errors keep recovery navigation available", async () => 
   assert.match(source, /Try again/);
 });
 
-test("Desktop exports the legacy Chat route instead of returning a document error", async () => {
-  const source = await readFile(LEGACY_CHAT_PAGE_URL, "utf8");
-
-  assert.match(source, /DesktopChatPage as default/);
+test("Desktop does not export the old Chat route", async () => {
+  await assert.rejects(readFile(LEGACY_CHAT_PAGE_URL, "utf8"), { code: "ENOENT" });
 });

@@ -11,9 +11,6 @@ namespace Agw.Infrastructure.Agents;
 
 public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMaintenance
 {
-    private const int BatchSize = 128;
-    private const int MaxBatchesPerPass = 4;
-    private static readonly TimeSpan PassBudget = TimeSpan.FromSeconds(1);
     private readonly AgwDbContext _dbContext;
     private readonly IApplicationLock _applicationLock;
     private readonly TimeProvider _timeProvider;
@@ -50,95 +47,6 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
                     && conversation.Generation == expectedGeneration,
                 cancellationToken
             );
-
-    public async Task<DurableExecutionScopeBackfillResult> BackfillAsync(
-        CancellationToken cancellationToken = default,
-        DurableExecutionScopeCursor? after = null
-    )
-    {
-        var cursor = after;
-        var startedAt = _timeProvider.GetTimestamp();
-        var visited = false;
-        for (var batch = 0; batch < MaxBatchesPerPass; batch++)
-        {
-            var pending = _dbContext.DurableExecutions.AsNoTracking().Where(item => !item.ScopeBackfilled);
-            if (cursor != null)
-            {
-                var userId = cursor.UserId;
-                var id = cursor.Id;
-                pending = pending.Where(item =>
-                    string.Compare(item.UserId, userId) > 0 || item.UserId == userId && item.Id.CompareTo(id) > 0
-                );
-            }
-            var candidates = await pending
-                .OrderBy(item => item.UserId)
-                .ThenBy(item => item.Id)
-                .Select(item => new DurableExecutionScopeCursor(item.UserId, item.Id))
-                .Take(BatchSize)
-                .ToArrayAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (candidates.Length == 0)
-            {
-                cursor = null;
-                break;
-            }
-            var ids = candidates.Select(item => item.Id).ToArray();
-            var rows = await ProjectManifests(
-                    _dbContext
-                        .DurableExecutions.AsNoTracking()
-                        .Where(item => ids.Contains(item.Id) && !item.ScopeBackfilled)
-                )
-                .ToArrayAsync(cancellationToken)
-                .ConfigureAwait(false);
-            var byId = rows.ToDictionary(row => row.Id);
-            foreach (var candidate in candidates)
-            {
-                if (visited && _timeProvider.GetElapsedTime(startedAt) >= PassBudget)
-                {
-                    return await GetBackfillResultAsync(cursor, cancellationToken).ConfigureAwait(false);
-                }
-                visited = true;
-                cursor = candidate;
-                if (!byId.TryGetValue(candidate.Id, out var row))
-                {
-                    continue;
-                }
-                var id = row.Id;
-                var scope = ReadScope(row);
-                if (scope != null)
-                {
-                    await TryStampAsync(row, scope, cancellationToken).ConfigureAwait(false);
-                    continue;
-                }
-
-                // An executing worker owns this lock; never quarantine an in-flight execution underneath it.
-                await using var lease = await TryAcquireAsync(id, cancellationToken).ConfigureAwait(false);
-                if (lease == null)
-                {
-                    continue;
-                }
-                await ValidateLockedExecutionAsync(id, cancellationToken).ConfigureAwait(false);
-            }
-            // Advance past deferred rows too. Never re-read a busy head within this sweep.
-            if (candidates.Length < BatchSize)
-            {
-                cursor = null;
-                break;
-            }
-        }
-        return await GetBackfillResultAsync(cursor, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<DurableExecutionScopeBackfillResult> GetBackfillResultAsync(
-        DurableExecutionScopeCursor? cursor,
-        CancellationToken cancellationToken
-    )
-    {
-        var hasPending = await _dbContext
-            .DurableExecutions.AnyAsync(item => !item.ScopeBackfilled, cancellationToken)
-            .ConfigureAwait(false);
-        return new DurableExecutionScopeBackfillResult(hasPending ? cursor : null, hasPending);
-    }
 
     public async Task<bool> RepairAndCheckActiveExecutionsAsync(
         Guid projectId,
@@ -224,9 +132,6 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
         {
             return null;
         }
-        record.ProjectId = parsedScope!.ProjectId;
-        record.ProjectConversationId = parsedScope.ProjectConversationId;
-        record.ScopeBackfilled = true;
         return record;
     }
 
@@ -238,43 +143,15 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
     {
         if (
             scope != null
-            && (
-                !row.ScopeBackfilled
-                || row.ProjectId == scope.ProjectId && row.ProjectConversationId == scope.ProjectConversationId
-            )
+            && row.ScopeBackfilled
+            && row.ProjectId == scope.ProjectId
+            && row.ProjectConversationId == scope.ProjectConversationId
         )
         {
-            if (!row.ScopeBackfilled)
-            {
-                return await TryStampAsync(row, scope, cancellationToken).ConfigureAwait(false);
-            }
             return true;
         }
         await QuarantineAsync(row, scope, cancellationToken).ConfigureAwait(false);
         return false;
-    }
-
-    private async Task<bool> TryStampAsync(
-        StoredManifest row,
-        DurableExecutionScope scope,
-        CancellationToken cancellationToken
-    )
-    {
-        // Derived indexing is not a business transition: preserve audit timestamps and StateVersion.
-        // Zero rows means another writer won. Leave it for a fresh read, never fail the entire batch.
-        return await _dbContext
-                .DurableExecutions.Where(item =>
-                    item.Id == row.Id && item.StateVersion == row.StateVersion && !item.ScopeBackfilled
-                )
-                .ExecuteUpdateAsync(
-                    setters =>
-                        setters
-                            .SetProperty(item => item.ProjectId, scope.ProjectId)
-                            .SetProperty(item => item.ProjectConversationId, scope.ProjectConversationId)
-                            .SetProperty(item => item.ScopeBackfilled, true),
-                    cancellationToken
-                )
-                .ConfigureAwait(false) > 0;
     }
 
     private async Task QuarantineAsync(
@@ -297,7 +174,6 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
             .ExecuteUpdateAsync(
                 setters =>
                     setters
-                        .SetProperty(item => item.ScopeBackfilled, true)
                         .SetProperty(item => item.ProjectId, projectId)
                         .SetProperty(item => item.ProjectConversationId, conversationId)
                         .SetProperty(item => item.Status, active ? DurableExecutionStatus.Failed : row.Status)

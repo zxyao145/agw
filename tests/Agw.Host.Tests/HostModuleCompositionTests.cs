@@ -159,6 +159,7 @@ public sealed class HostModuleCompositionTests
         builder.Services.AddSignalR();
         builder.Services.AddScoped<IAgentCatalogFacade, EmptyAgentCatalogFacade>();
         builder.Services.AddScoped<IExternalTaskSnapshotStore, EmptyExternalTaskSnapshotStore>();
+        builder.Services.AddScoped<IProjectDefaultResolver, EmptyProjectDefaults>();
         builder.Services.AddA2A(new ConfigurationBuilder().Build());
         var app = builder.Build();
 
@@ -265,6 +266,15 @@ public sealed class HostModuleCompositionTests
 
         public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
             Task.FromResult<string?>(null);
+    }
+
+    private sealed class EmptyProjectDefaults : IProjectDefaultResolver
+    {
+        public Task<Guid?> ResolveDefaultProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
+
+        public Task<Guid?> ResolveA2AProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
     }
 
     private sealed class EmptyProjectTaskFacade : IProjectTaskFacade

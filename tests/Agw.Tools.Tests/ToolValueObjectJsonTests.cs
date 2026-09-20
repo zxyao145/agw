@@ -68,20 +68,15 @@ public sealed class ToolValueObjectJsonTests : IDisposable
         Assert.IsType<UserMemoryToolBlockDefinition>(value.Definition);
     }
 
-    [Fact]
-    public void Deserialize_LegacyToolNames_MapsToStrongDefinitions()
+    [Theory]
+    [InlineData("[\"web_search\"]")]
+    [InlineData("[\"WEB_SEARCH\",\"web_fetch\"]")]
+    [InlineData("[{\"kind\":\"tool\",\"definition\":{\"name\":\"bash\",\"options\":{}}}]")]
+    [InlineData("[{\"kind\":\"tool\",\"definition\":{\"name\":\"powershell\",\"options\":{}}}]")]
+    [InlineData("[{\"kind\":\"tool\",\"definition\":{\"name\":\"generate_guid\",\"options\":{}}}]")]
+    public void Deserialize_RemovedFormatOrTool_ThrowsJsonException(string json)
     {
-        var values = ToolValueObjectJson.Deserialize("""["WEB_SEARCH","web_fetch"]""");
-
-        Assert.Collection(
-            values,
-            value => Assert.IsType<WebSearchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-            value => Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(value).Definition)
-        );
-        Assert.Equal(
-            """[{"kind":"tool","definition":{"name":"web_search","options":{}}},{"kind":"tool","definition":{"name":"web_fetch","options":{}}}]""",
-            ToolValueObjectJson.Serialize(values)
-        );
+        Assert.Throws<JsonException>(() => ToolValueObjectJson.Deserialize(json));
     }
 
     [Theory]
@@ -93,17 +88,6 @@ public sealed class ToolValueObjectJsonTests : IDisposable
     public void Deserialize_InvalidTypedValue_ThrowsJsonException(string json)
     {
         Assert.Throws<JsonException>(() => ToolValueObjectJson.Deserialize(json));
-    }
-
-    [Fact]
-    public void Deserialize_UnknownLegacyToolName_ThrowsWithoutChangingSource()
-    {
-        const string json = """["unknown_tool"]""";
-
-        var exception = Assert.Throws<JsonException>(() => ToolValueObjectJson.Deserialize(json));
-
-        Assert.Contains("unknown_tool", exception.Message, StringComparison.Ordinal);
-        Assert.Equal("""["unknown_tool"]""", json);
     }
 
     [Fact]
@@ -156,52 +140,10 @@ public sealed class ToolValueObjectJsonTests : IDisposable
         );
     }
 
-    [Fact]
-    public async Task EfConverter_LegacyToolNames_ReadAndWriteBackAsTypedValues()
-    {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await using var dbContext = CreateDbContext(connection);
-        await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-        var agentId = Guid.CreateVersion7();
-        dbContext.Agents.Add(
-            new Agent
-            {
-                Id = agentId,
-                DisplayName = "Legacy tools",
-                Name = $"legacy-tools-{agentId:N}",
-                Type = AgentType.External,
-                CreateBy = "tester",
-            }
-        );
-        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE agent SET tools = '[\"web_search\"]' WHERE id = {agentId}",
-            TestContext.Current.CancellationToken
-        );
-        dbContext.ChangeTracker.Clear();
-
-        var agent = await dbContext.Agents.SingleAsync(
-            item => item.Id == agentId,
-            TestContext.Current.CancellationToken
-        );
-        Assert.IsType<WebSearchToolDefinition>(Assert.IsType<ToolValue>(Assert.Single(agent.Tools)).Definition);
-
-        agent.Tools.Add(new ToolValue { Definition = new WebFetchToolDefinition() });
-        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT tools FROM agent WHERE id = $id";
-        command.Parameters.AddWithValue("$id", agentId);
-        var storedJson = Assert.IsType<string>(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
-        Assert.Equal(
-            """[{"kind":"tool","definition":{"name":"web_search","options":{}}},{"kind":"tool","definition":{"name":"web_fetch","options":{}}}]""",
-            storedJson
-        );
-    }
-
-    [Fact]
-    public async Task EfConverter_UnknownLegacyToolName_FailsAndPreservesStoredValue()
+    [Theory]
+    [InlineData("web_search")]
+    [InlineData("unknown_tool")]
+    public async Task EfConverter_LegacyToolName_FailsAndPreservesStoredValue(string name)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(TestContext.Current.CancellationToken);
@@ -220,21 +162,20 @@ public sealed class ToolValueObjectJsonTests : IDisposable
         );
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE agent SET tools = '[\"unknown_tool\"]' WHERE id = {agentId}",
+            $"UPDATE agent SET tools = {JsonSerializer.Serialize(new[] { name })} WHERE id = {agentId}",
             TestContext.Current.CancellationToken
         );
         dbContext.ChangeTracker.Clear();
 
-        var exception = await Assert.ThrowsAsync<JsonException>(async () =>
+        await Assert.ThrowsAsync<JsonException>(async () =>
             await dbContext.Agents.SingleAsync(item => item.Id == agentId, TestContext.Current.CancellationToken)
         );
-        Assert.Contains("unknown_tool", exception.Message, StringComparison.Ordinal);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT tools FROM agent WHERE id = $id";
         command.Parameters.AddWithValue("$id", agentId);
         Assert.Equal(
-            """["unknown_tool"]""",
+            JsonSerializer.Serialize(new[] { name }),
             Assert.IsType<string>(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken))
         );
     }

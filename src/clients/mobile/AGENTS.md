@@ -38,4 +38,4 @@ Store only Profile metadata in AsyncStorage. Store each API token in its own Exp
 
 ## Tests and Style
 
-Use TypeScript, React function components, kebab-case filenames, 2-space indentation, Jest Expo, and React Native Testing Library. Cover Profile migration, authentication, execution reconnect/stop behavior, destructive file actions, and both platform configurations when changing their boundaries.
+Use TypeScript, React function components, kebab-case filenames, 2-space indentation, Jest Expo, and React Native Testing Library. Cover Profile loading and manual import, authentication, execution reconnect/stop behavior, destructive file actions, and both platform configurations when changing their boundaries.

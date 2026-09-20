@@ -1,6 +1,5 @@
 using Agw.Shared.Utils;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.EnvironmentVariables;
 
 namespace Agw.Shared.Runtime;
 
@@ -90,44 +89,12 @@ public sealed class AgwDataPaths
     }
 
     /// <summary>
-    /// Resolves Server data paths from <c>AGW_DATA_DIR</c>, defaulting to <c>~/agw</c>.
-    /// </summary>
-    /// <returns>The canonical absolute paths for the current process.</returns>
-    public static AgwDataPaths ResolveFromEnvironment()
-    {
-        var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Resolve(
-            Environment.GetEnvironmentVariable("AGW_DATA_DIR"),
-            userHome,
-            Environment.GetEnvironmentVariable("AgwLogDir")
-        );
-    }
-
-    /// <summary>
-    /// Resolves Server data paths from the standard configuration chain's AgwDataDir key, with AGW_DATA_DIR as an environment alias.
+    /// Resolves Server data paths from the standard configuration chain's AgwDataDir key.
     /// The root is selected once at startup and defaults to ~/agw.
     /// </summary>
     public static AgwDataPaths ResolveFromConfiguration(IConfiguration configuration)
     {
         var configuredRoot = configuration["AgwDataDir"];
-        if (configuration is IConfigurationRoot root)
-        {
-            // Resolve the legacy environment alias at its provider's priority, below command-line overrides.
-            foreach (var provider in root.Providers.Reverse())
-            {
-                if (
-                    provider.TryGet("AgwDataDir", out configuredRoot)
-                    || (
-                        provider is EnvironmentVariablesConfigurationProvider
-                        && provider.TryGet("AGW_DATA_DIR", out configuredRoot)
-                    )
-                )
-                {
-                    break;
-                }
-            }
-        }
-
         return Resolve(
             configuredRoot,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),

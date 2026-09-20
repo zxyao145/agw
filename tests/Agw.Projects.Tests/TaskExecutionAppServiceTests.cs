@@ -268,7 +268,7 @@ public class TaskExecutionAppServiceTests
     }
 
     [Fact]
-    public async Task CreateForExecutionAsync_WithLegacyUppercaseGuidContext_ReusesAndNormalizesContext()
+    public async Task CreateForExecutionAsync_WithLegacyUppercaseGuidContext_LeavesOldContextUntouched()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -303,9 +303,13 @@ public class TaskExecutionAppServiceTests
         );
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
-        var persistedContext = Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
-        Assert.Equal(context.Id, persistedContext.Id);
-        Assert.Equal(contextGuid.Normalize(), persistedContext.ContextId);
+        var contexts = await dbContext.ProjectConversations.ToListAsync(cancellationToken);
+        Assert.Equal(2, contexts.Count);
+        Assert.Equal(
+            contextGuid.ToString("D").ToUpperInvariant(),
+            contexts.Single(item => item.Id == context.Id).ContextId
+        );
+        Assert.Equal(contextGuid.Normalize(), contexts.Single(item => item.Id != context.Id).ContextId);
     }
 
     [Fact]

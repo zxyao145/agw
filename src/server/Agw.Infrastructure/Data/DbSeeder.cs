@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Text.Json;
-using Agw.Agents.Application.Persistence;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts;
@@ -19,7 +18,6 @@ using Agw.Shared.Tooling;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Infrastructure.Data;
@@ -159,23 +157,6 @@ public class DbSeeder
                 UpdateBy = Constants.AdminUserId,
             }
         );
-    }
-
-    /// <summary>
-    /// Runs a bounded data-recovery pass from the Host startup scope, separately from first-run seed insertion.
-    /// The trusted database bootstrap owns the system scope; maintenance and locks remain required DI services.
-    /// </summary>
-    public static async Task<DurableExecutionScopeBackfillResult> RecoverDurableExecutionScopesAsync(
-        IServiceProvider scopedServices,
-        CancellationToken cancellationToken = default,
-        DurableExecutionScopeCursor? after = null
-    )
-    {
-        using var systemScope = UserInfoUtil.PushSystemScope();
-        return await scopedServices
-            .GetRequiredService<IDurableExecutionScopeMaintenance>()
-            .BackfillAsync(cancellationToken, after)
-            .ConfigureAwait(false);
     }
 
     private async Task SeedBuiltInProjectsAsync()
@@ -418,10 +399,6 @@ public class DbSeeder
                 agent = definition;
                 _context.Agents.Add(agent);
             }
-            else
-            {
-                BackfillDefaultAgentTools(agent, definition, now);
-            }
 
             agents[definition.Name] = agent;
         }
@@ -613,45 +590,6 @@ public class DbSeeder
                 UpdateTime = now,
             },
         ];
-    }
-
-    private static void BackfillDefaultAgentTools(Agent agent, Agent definition, DateTimeOffset now)
-    {
-        if (agent.Id != definition.Id)
-        {
-            return;
-        }
-
-        IReadOnlyList<IReadOnlyList<ToolValueObject>> obsoleteToolSignatures = agent.Id switch
-        {
-            var id when id == GeneralAgentId =>
-            [
-                [
-                    new ToolValue { Definition = new DiffToolDefinition() },
-                    new ToolValue { Definition = new GitCloneToolDefinition() },
-                    new ToolValue { Definition = new BashToolDefinition() },
-                ],
-                [
-                    new ToolValue { Definition = new DiffToolDefinition() },
-                    new ToolValue { Definition = new GitCloneToolDefinition() },
-                    new ToolValue { Definition = new BashToolDefinition() },
-                    new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() },
-                ],
-            ],
-            var id when id == LocationExtractorAgentId =>
-            [
-                [new ToolValue { Definition = new WebFetchToolDefinition() }],
-            ],
-            _ => [],
-        };
-        if (!obsoleteToolSignatures.Any(agent.Tools.SequenceEqual))
-        {
-            return;
-        }
-
-        agent.Tools = definition.Tools;
-        agent.UpdateBy = Constants.AdminUserId;
-        agent.UpdateTime = now;
     }
 
     private async Task<Skill?> SeedDefaultSkillAsync()

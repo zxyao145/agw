@@ -130,7 +130,6 @@ These settings apply to either topology. In split deployments, configure them ac
 | `ASPNETCORE_URLS / --urls` | Local default port 30816; container runtime supplies its binding | Listening URLs. Use `--urls http://127.0.0.1:30816` for local access or bind another address as required. Separate multiple URLs with semicolons. |
 | `ASPNETCORE_ENVIRONMENT` | Production | Selects environment-specific JSON, such as `appsettings.Production.json`. Common names are Development, Staging, and Production; custom names are allowed. |
 | `AgwDataDir` | ~/agw | AGW data root for runtime data, Skills, encryption keys, and related files. Supports `~`; other relative paths resolve from the process working directory. |
-| `AGW_DATA_DIR` | Unset | Environment-variable alias for the data root. If both names exist at the environment layer, `AgwDataDir` wins. Command-line settings still override it. |
 | `AgwLogDir` | ./logs | Separate log directory; moving the data root does not move it. Supports `~`, with other relative paths relative to the working directory. |
 | `AllowedHosts` | * | HTTP Host filtering. `*` allows any hostname; use semicolon-separated hostnames such as `agw.example.com;localhost` to restrict it. This is not the client-origin list. |
 

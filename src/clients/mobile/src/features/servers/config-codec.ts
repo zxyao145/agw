@@ -1,4 +1,4 @@
-import type { LegacyLocalConfigV2 } from "./types";
+import type { ServerConfigImportV2 } from "./types";
 
 export class ServerProfileValidationError extends Error {
   public constructor(message: string) {
@@ -48,7 +48,7 @@ export function normalizeToken(value: string): string {
   return trimmed;
 }
 
-export function parseEncodedConfig(encodedValue: string): LegacyLocalConfigV2 {
+export function parseEncodedConfig(encodedValue: string): ServerConfigImportV2 {
   const normalized = encodedValue.trim().replace(/\s/gu, "");
   if (!normalized) throw new ServerProfileValidationError("Base64URL configuration is required.");
   if (!/^[A-Za-z0-9_-]+$/u.test(normalized) || normalized.length % 4 === 1) {
@@ -62,14 +62,14 @@ export function parseEncodedConfig(encodedValue: string): LegacyLocalConfigV2 {
       .padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
     const binary = atob(padded);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    return parseLegacyConfig(JSON.parse(new TextDecoder().decode(bytes)));
+    return parseConfigImport(JSON.parse(new TextDecoder().decode(bytes)));
   } catch (error) {
     if (error instanceof ServerProfileValidationError) throw error;
     throw new ServerProfileValidationError("Base64URL configuration is invalid.");
   }
 }
 
-export function parseLegacyConfig(value: unknown): LegacyLocalConfigV2 {
+export function parseConfigImport(value: unknown): ServerConfigImportV2 {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ServerProfileValidationError("Configuration must be a JSON object.");
   }

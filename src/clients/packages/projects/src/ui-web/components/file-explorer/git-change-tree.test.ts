@@ -65,7 +65,7 @@ test("git change tree separates scopes and duplicates partially staged files", (
   assert.equal(unstagedMixed?.gitStatus, "modified");
 });
 
-test("git change tree treats legacy gitStatus responses as unstaged changes", () => {
+test("git change tree does not infer a change scope from old gitStatus responses", () => {
   const items: FileItem[] = [
     {
       name: "DataProtectionEncryptedDataProtector.cs",
@@ -79,14 +79,7 @@ test("git change tree treats legacy gitStatus responses as unstaged changes", ()
 
   const groups = buildGitChangeGroups(items, "/Users/ben/source/repos/agw/");
 
-  assert.deepEqual(
-    groups.map((group) => [group.scope, group.fileCount]),
-    [["unstaged", 1]],
-  );
-  assert.equal(groups[0].items[0].changeCount, 1);
-  assert.equal(groups[0].items[0].children?.[0].name, "DataProtectionEncryptedDataProtector.cs");
-  assert.equal(groups[0].items[0].children?.[0].gitScope, "unstaged");
-  assert.equal(groups[0].items[0].children?.[0].gitStatus, "modified");
+  assert.deepEqual(groups, []);
 });
 
 test("formatFileCount uses singular and plural labels", () => {

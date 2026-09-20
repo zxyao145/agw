@@ -95,10 +95,20 @@ public class A2ADependencyInjectionTests
         services.AddScoped<IAgentExecutionFacade>(_ => execution ?? new FakeAgentExecutionFacade());
         services.AddScoped<IDurableAgentExecutionFacade, FakeDurableAgentExecutionFacade>();
         services.AddScoped<IProjectTaskFacade, FakeProjectTaskFacade>();
+        services.AddScoped<Agw.Projects.Contracts.Runtime.IProjectDefaultResolver, FakeProjectDefaults>();
         services.AddScoped<IExternalTaskSnapshotStore, FakeExternalTaskSnapshotStore>();
         services.AddScoped<IUserInfoService, FakeUserInfoService>();
         services.AddA2A(new ConfigurationManager());
         return services;
+    }
+
+    private sealed class FakeProjectDefaults : Agw.Projects.Contracts.Runtime.IProjectDefaultResolver
+    {
+        public Task<Guid?> ResolveDefaultProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
+
+        public Task<Guid?> ResolveA2AProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(Agw.Projects.Contracts.ProjectDefaults.A2AId);
     }
 
     private sealed class FakeAgentExecutionFacade : IAgentExecutionFacade

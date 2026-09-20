@@ -329,7 +329,8 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
     )
     {
         var executions = _dbContext.DurableExecutions.Where(execution =>
-            execution.UserId == ownerUserId
+            execution.ScopeBackfilled
+            && execution.UserId == ownerUserId
             && execution.ProjectId == projectId
             && (!conversationId.HasValue || execution.ProjectConversationId == conversationId.Value)
         );
@@ -356,14 +357,6 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             lifecycleLease.HandleLostToken
         );
         cancellationToken = mutation.Token;
-        var backfill = await _scopeMaintenance.BackfillAsync(cancellationToken).ConfigureAwait(false);
-        if (backfill.HasPending)
-        {
-            throw new AgwException(
-                ErrorCodes.DurableExecutionConflict,
-                "Execution scope recovery is still pending. Retry after recovery completes."
-            );
-        }
         return await ExecuteAsync(
                 async token =>
                 {

@@ -24,21 +24,6 @@ public static class ToolValueObjectJson
             return [];
         }
 
-        using var document = JsonDocument.Parse(json);
-        var elements =
-            document.RootElement.ValueKind == JsonValueKind.Array
-                ? document.RootElement.EnumerateArray().ToArray()
-                : [];
-        if (elements.Length == 0)
-        {
-            return JsonSerializer.Deserialize<List<ToolValueObject>>(json, SerializerOptions) ?? [];
-        }
-
-        if (elements.All(static element => element.ValueKind == JsonValueKind.String))
-        {
-            return elements.Select(CreateLegacyToolValue).ToList();
-        }
-
         var values = JsonSerializer.Deserialize<List<ToolValueObject>>(json, SerializerOptions) ?? [];
         return values;
     }
@@ -52,20 +37,4 @@ public static class ToolValueObjectJson
 
     public static int GetSequenceHashCode(IReadOnlyList<ToolValueObject>? values) =>
         values == null ? 0 : StringComparer.Ordinal.GetHashCode(Serialize(values));
-
-    private static ToolValueObject CreateLegacyToolValue(JsonElement element)
-    {
-        var name = element.GetString();
-        var canonicalName =
-            ToolDefinitionNames.All.FirstOrDefault(candidate =>
-                string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase)
-            ) ?? name;
-        var definitionJson = JsonSerializer.Serialize(
-            new { name = canonicalName, options = new { } },
-            SerializerOptions
-        );
-
-        var definition = JsonSerializer.Deserialize<ToolDefinition>(definitionJson, SerializerOptions);
-        return new ToolValue { Definition = definition! };
-    }
 }

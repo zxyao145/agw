@@ -32,7 +32,7 @@ public class ModelAppService : IModelAppService
             .FirstOrDefaultAsync(model => model.Id == id && model.CreateBy == ownerUserId);
     }
 
-    public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request, string user)
+    public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request)
     {
         _ = ResolveOwnerUserId();
         ModelRules.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
@@ -50,7 +50,7 @@ public class ModelAppService : IModelAppService
         return model;
     }
 
-    public async Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request, string user)
+    public async Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request)
     {
         var ownerUserId = ResolveOwnerUserId();
         var existing = await _dbContext.Models.FirstOrDefaultAsync(model =>

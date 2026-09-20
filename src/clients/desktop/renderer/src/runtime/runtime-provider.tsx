@@ -165,11 +165,10 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
   }, [isDesktop]);
 
   // 后台 turn 进入终态时请求主进程显示系统通知；interrupted 多为用户主动停止，不通知。
-  // preload 随应用启动注入、不支持热更新，需按方法存在性降级以容忍旧版 Electron 进程。
   // 标题只向事件所属的激活 Server 查询；旧 Server 的残留执行完成时不查，避免打错 Server。
   React.useEffect(() => {
     const bridge = isDesktop ? window.agwDesktop : undefined;
-    if (typeof bridge?.showTurnNotification !== "function") return;
+    if (!bridge) return;
     return executionSessionManager.subscribeTurnFinished(({ key, status }) => {
       if (status === "interrupted") return;
       void resolveTurnNotificationTitle(

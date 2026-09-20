@@ -9,9 +9,9 @@ public interface IProviderAppService
 
     Task<Provider?> GetAsync(Guid id);
 
-    Task<Provider> CreateAsync(ProviderCreateRequest request, string user);
+    Task<Provider> CreateAsync(ProviderCreateRequest request);
 
-    Task<Provider?> UpdateAsync(Guid id, ProviderUpdateRequest request, string user);
+    Task<Provider?> UpdateAsync(Guid id, ProviderUpdateRequest request);
 
     Task<bool> DeleteAsync(Guid id);
 }

@@ -52,11 +52,4 @@ public sealed class AgwToolAttribute : Attribute
     /// Default is 5000 (5 seconds). Set to 0 for no timeout.
     /// </summary>
     public int TimeoutMs { get; set; } = 5000;
-
-    /// <summary>
-    /// Gets or sets the legacy exception-result preference.
-    /// The Agent execution pipeline always returns Tool exceptions as results;
-    /// this property is retained for compatibility and cannot disable that policy.
-    /// </summary>
-    public bool ReturnExceptionsAsResults { get; set; } = true;
 }

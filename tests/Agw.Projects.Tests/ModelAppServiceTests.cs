@@ -28,7 +28,7 @@ public sealed class ModelAppServiceTests
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         var service = CreateService(dbContext);
 
-        var model = await service.CreateAsync(new ModelCreateRequest("test-model", null, 128_000, 16_000), "tester");
+        var model = await service.CreateAsync(new ModelCreateRequest("test-model", null, 128_000, 16_000));
 
         Assert.Equal(128_000, model.MaxContextWindowTokens);
         Assert.Equal(16_000, model.MaxOutputTokens);
@@ -67,8 +67,7 @@ public sealed class ModelAppServiceTests
 
         var model = await service.UpdateAsync(
             existing.Id,
-            new ModelUpdateRequest("updated-model", null, 256_000, 64_000),
-            "tester"
+            new ModelUpdateRequest("updated-model", null, 256_000, 64_000)
         );
 
         Assert.NotNull(model);

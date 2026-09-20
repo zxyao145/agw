@@ -6273,11 +6273,8 @@ export interface components {
     ToolCatalogItemKind: "tool" | "toolBlock";
     ToolDefinition:
       | components["schemas"]["ToolDefinitionAskUserQuestionToolDefinition"]
-      | components["schemas"]["ToolDefinitionBashToolDefinition"]
       | components["schemas"]["ToolDefinitionDiffToolDefinition"]
-      | components["schemas"]["ToolDefinitionGenerateGuidToolDefinition"]
       | components["schemas"]["ToolDefinitionGitCloneToolDefinition"]
-      | components["schemas"]["ToolDefinitionPowerShellToolDefinition"]
       | components["schemas"]["ToolDefinitionRunShellToolDefinition"]
       | components["schemas"]["ToolDefinitionWebFetchToolDefinition"]
       | components["schemas"]["ToolDefinitionWebSearchToolDefinition"];
@@ -6286,29 +6283,14 @@ export interface components {
       name: "ask_user_question";
       options: components["schemas"]["EmptyToolOptions"];
     };
-    ToolDefinitionBashToolDefinition: {
-      /** @enum {string} */
-      name: "bash";
-      options: components["schemas"]["EmptyToolOptions"];
-    };
     ToolDefinitionDiffToolDefinition: {
       /** @enum {string} */
       name: "diff";
       options: components["schemas"]["EmptyToolOptions"];
     };
-    ToolDefinitionGenerateGuidToolDefinition: {
-      /** @enum {string} */
-      name: "generate_guid";
-      options: components["schemas"]["EmptyToolOptions"];
-    };
     ToolDefinitionGitCloneToolDefinition: {
       /** @enum {string} */
       name: "git_clone";
-      options: components["schemas"]["EmptyToolOptions"];
-    };
-    ToolDefinitionPowerShellToolDefinition: {
-      /** @enum {string} */
-      name: "powershell";
       options: components["schemas"]["EmptyToolOptions"];
     };
     ToolDefinitionRunShellToolDefinition: {

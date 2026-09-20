@@ -69,10 +69,7 @@ function SessionProbe(): React.JSX.Element {
 describe("SessionProvider", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockLoadProfiles.mockResolvedValue({
-      state: { version: 1, activeProfileId: null, profiles: [profile] },
-      migratedProfileId: null,
-    });
+    mockLoadProfiles.mockResolvedValue({ version: 1, activeProfileId: null, profiles: [profile] });
     mockReadProfileToken.mockResolvedValue("agw_existing");
     mockWriteProfileToken.mockResolvedValue(undefined);
     mockPersistProfilesState.mockResolvedValue(undefined);
@@ -113,8 +110,9 @@ describe("SessionProvider", () => {
 test("an old server unauthorized callback cannot clear the current session", async () => {
   const second = { ...profile, id: "profile-2" };
   mockLoadProfiles.mockResolvedValue({
-    state: { version: 1, activeProfileId: profile.id, profiles: [profile, second] },
-    migratedProfileId: null,
+    version: 1,
+    activeProfileId: profile.id,
+    profiles: [profile, second],
   });
   mockReadProfileToken.mockResolvedValue("agw_existing");
   mockPersistProfilesState.mockResolvedValue(undefined);
@@ -138,8 +136,9 @@ test("an old server unauthorized callback cannot clear the current session", asy
 
 test("unauthorized candidate verification preserves the active session", async () => {
   mockLoadProfiles.mockResolvedValue({
-    state: { version: 1, activeProfileId: profile.id, profiles: [profile] },
-    migratedProfileId: null,
+    version: 1,
+    activeProfileId: profile.id,
+    profiles: [profile],
   });
   mockReadProfileToken.mockResolvedValue("agw_existing");
   mockVerifyServerProfile.mockImplementation(async (candidate, token) => ({

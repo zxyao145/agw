@@ -14,7 +14,7 @@ export type ServerProfilesStateV1 = {
   profiles: ServerProfile[];
 };
 
-export type LegacyLocalConfigV2 = {
+export type ServerConfigImportV2 = {
   version: 2;
   apiMajorVersion: 1;
   serverUrl: string;

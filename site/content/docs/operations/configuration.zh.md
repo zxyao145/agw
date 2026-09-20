@@ -138,7 +138,6 @@ Agent 执行时会不断产生回复和状态消息。系统保存这些消息�
 | `ASPNETCORE_URLS / --urls` | 本地默认端口 30816；容器由运行配置指定 | Server 接收请求的地址。用 `--urls http://127.0.0.1:30816` 仅供本机访问，或按部署需要绑定其他地址。多个地址用分号分隔。 |
 | `ASPNETCORE_ENVIRONMENT` | Production | 选择环境专用 JSON，例如 `appsettings.Production.json`。常用名称为 Development（开发）、Staging（预发布）、Production（生产）；这是环境名称，不是只接受三个值的枚举。 |
 | `AgwDataDir` | ~/agw | AGW 数据根目录，包含运行数据、Skills 和加密密钥等。支持 `~`；相对路径以启动程序时的工作目录为起点。 |
-| `AGW_DATA_DIR` | 未设置 | 数据目录的环境变量别名。在环境变量这一层与 `AgwDataDir` 同时存在时，以 `AgwDataDir` 为准；命令行仍可覆盖。 |
 | `AgwLogDir` | ./logs | 独立的日志目录，不随数据目录移动；支持 `~`，相对路径从工作目录解析。 |
 | `AllowedHosts` | * | 允许用哪些域名访问 Server。`*` 表示不限制；也可以填写 `agw.example.com;localhost` 这样的域名列表，用分号分隔。客户端从哪个页面连接，则由 AllowedOrigins 设置。 |
 

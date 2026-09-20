@@ -44,7 +44,7 @@ public class ProviderAppService : IProviderAppService
             .FirstOrDefaultAsync(provider => provider.Id == id && provider.CreateBy == ownerUserId);
     }
 
-    public async Task<Provider> CreateAsync(ProviderCreateRequest request, string user)
+    public async Task<Provider> CreateAsync(ProviderCreateRequest request)
     {
         var ownerUserId = ResolveOwnerUserId();
         var provider = new Provider
@@ -63,7 +63,7 @@ public class ProviderAppService : IProviderAppService
         return provider;
     }
 
-    public async Task<Provider?> UpdateAsync(Guid id, ProviderUpdateRequest request, string user)
+    public async Task<Provider?> UpdateAsync(Guid id, ProviderUpdateRequest request)
     {
         var ownerUserId = ResolveOwnerUserId();
         var existing = await _dbContext

@@ -7,9 +7,6 @@ public sealed record DurableExecutionScope(Guid ProjectId, Guid ProjectConversat
 
 public static class DurableExecutionManifestScopeReader
 {
-    public static string ResolveUserId(this DurableExecutionManifest manifest) =>
-        string.IsNullOrWhiteSpace(manifest.UserId) ? Constants.AdminUserId : manifest.UserId;
-
     public static DurableExecutionScope? Read(string json, Guid executionId, string ownerUserId)
     {
         try
@@ -19,7 +16,9 @@ public static class DurableExecutionManifestScopeReader
                 manifest == null
                 || manifest.SchemaVersion != DurableExecutionManifest.CurrentSchemaVersion
                 || manifest.ExecutionId != executionId
-                || !string.Equals(manifest.ResolveUserId(), ownerUserId, StringComparison.Ordinal)
+                || string.IsNullOrWhiteSpace(manifest.UserId)
+                || !string.Equals(manifest.UserId, ownerUserId, StringComparison.Ordinal)
+                || manifest.WorkspaceSnapshot == null
                 || manifest.Task == null
                 || manifest.Input == null
                 || manifest.Settings == null

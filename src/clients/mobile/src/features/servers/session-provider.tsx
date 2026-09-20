@@ -23,7 +23,6 @@ type SessionContextValue = {
   activeProfile: ServerProfile | null;
   error: string | null;
   isMutating: boolean;
-  migratedProfileId: string | null;
   saveProfile(draft: ProfileDraft): Promise<ServerProfile>;
   activateProfile(profileId: string): Promise<void>;
   confirmInsecureHttp(profileId: string): Promise<void>;
@@ -40,7 +39,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
   const [verifiedServer, setVerifiedServer] = React.useState<VerifiedServer | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isMutating, setIsMutating] = React.useState(false);
-  const [migratedProfileId, setMigratedProfileId] = React.useState<string | null>(null);
 
   const activeServerRef = React.useRef<VerifiedServer | null>(null);
   const setActiveServer = React.useCallback((server: VerifiedServer | null) => {
@@ -81,11 +79,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
     setError(null);
     try {
       const loaded = await loadProfiles();
-      setState(loaded.state);
-      setMigratedProfileId(loaded.migratedProfileId);
-      const active = loaded.state.profiles.find(
-        (profile) => profile.id === loaded.state.activeProfileId,
-      );
+      setState(loaded);
+      const active = loaded.profiles.find((profile) => profile.id === loaded.activeProfileId);
       if (!active) {
         setActiveServer(null);
         setStatus("unauthenticated");
@@ -152,7 +147,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         setActiveServer(verified);
         setStatus("authenticated");
         setError(null);
-        setMigratedProfileId((current) => (current === id ? null : current));
         return profile;
       } catch (caught) {
         if (activeServerRef.current) setStatus("authenticated");
@@ -213,7 +207,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         setActiveServer(verified);
         setStatus("authenticated");
         setError(null);
-        setMigratedProfileId((current) => (current === profileId ? null : current));
       } catch (caught) {
         setError(getErrorMessage(caught));
         throw caught;
@@ -241,7 +234,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
           setStatus("unauthenticated");
         }
         setError(null);
-        setMigratedProfileId((current) => (current === profileId ? null : current));
       } finally {
         setIsMutating(false);
       }
@@ -259,7 +251,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
       activeProfile,
       error,
       isMutating,
-      migratedProfileId,
       saveProfile,
       activateProfile,
       confirmInsecureHttp,
@@ -274,7 +265,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
       activeProfile,
       error,
       isMutating,
-      migratedProfileId,
       saveProfile,
       activateProfile,
       confirmInsecureHttp,

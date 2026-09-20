@@ -9,9 +9,9 @@ public interface IModelAppService
 
     Task<AgwAiModel?> GetAsync(Guid id);
 
-    Task<AgwAiModel> CreateAsync(ModelCreateRequest request, string user);
+    Task<AgwAiModel> CreateAsync(ModelCreateRequest request);
 
-    Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request, string user);
+    Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request);
 
     Task<bool> DeleteAsync(Guid id);
 }

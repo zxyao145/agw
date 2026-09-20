@@ -21,7 +21,7 @@ spec:
           env:
             - name: AgwLogDir
               value: /data/logs
-            - name: AGW_DATA_DIR
+            - name: AgwDataDir
               value: /data
             - name: ASPNETCORE_ENVIRONMENT
               value: Production

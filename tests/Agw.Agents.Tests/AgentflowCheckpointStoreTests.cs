@@ -342,6 +342,59 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         Assert.Equal(0, database.TransactionCount);
     }
 
+    [Theory]
+    [InlineData("userId")]
+    [InlineData("workspaceSnapshot")]
+    public async Task DistributedResume_IncompleteManifest_RejectsBeforeChangingHistory(string field)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixture = await database.SeedAsync();
+        var store = database.CreateStore();
+        var token = TestContext.Current.CancellationToken;
+        var sourceId = Guid.CreateVersion7();
+        await database.AddDurableExecutionAsync(fixture, sourceId, DurableExecutionStatus.Completed);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, token);
+        var recorded = await store.RecordAsync(
+            sourceId,
+            fixture.ProjectId,
+            fixture.ConversationId,
+            fixture.ContextId,
+            fixture.TaskId,
+            fixture.AgentflowId,
+            "user-id",
+            true,
+            fingerprint!,
+            CreateCheckpoint("checkpoint-1"),
+            new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
+            token
+        );
+        Assert.NotNull(recorded);
+        await database.AppendHistoryAsync(fixture, sequence: 2, "later message");
+        await using var context = database.CreateContext();
+        var original = await context.DurableExecutions.SingleAsync(token);
+        var json = System.Text.Json.Nodes.JsonNode.Parse(original.ManifestJson)!;
+        Assert.True(json.AsObject().Remove(field));
+        original.ManifestJson = json.ToJsonString();
+        await context.SaveChangesAsync(token);
+        var count = await context.ProjectConversationChatHistories.CountAsync(token);
+
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            store.PrepareDistributedResumeAsync(
+                recorded.Snapshot.OccurrenceId,
+                Guid.CreateVersion7(),
+                fixture.ProjectId,
+                fixture.ContextId,
+                fixture.AgentflowId,
+                "user-id",
+                token
+            )
+        );
+
+        Assert.Equal(ErrorCodes.DurableExecutionConflict.Code, error.Code);
+        Assert.Equal(count, await context.ProjectConversationChatHistories.CountAsync(token));
+        Assert.Equal(1, await context.DurableExecutions.CountAsync(token));
+    }
+
     [Fact]
     public async Task DistributedResume_RetryIsIdempotent_AndAllowsLaterBranch()
     {
@@ -591,9 +644,9 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             .DurableExecutions.Where(row => row.Id == brokenId)
             .Select(row => new { row.Status, row.ScopeBackfilled })
             .SingleAsync(token);
-        Assert.True(broken.ScopeBackfilled);
+        Assert.Equal(indexed, broken.ScopeBackfilled);
         Assert.Equal(
-            indexed && !sameConversation ? DurableExecutionStatus.WaitingForHuman : DurableExecutionStatus.Failed,
+            indexed && sameConversation ? DurableExecutionStatus.Failed : DurableExecutionStatus.WaitingForHuman,
             broken.Status
         );
     }
@@ -779,6 +832,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             {
                 ExecutionId = executionId,
                 UserId = "user-id",
+                WorkspaceSnapshot = Agw.Shared.Utils.ProjectWorkspacePaths.CreateSnapshot(fixture.ProjectId, null),
                 AgentId = fixture.AgentflowId,
                 AgentType = AgentRuntimeType.Agentflow,
                 Input = new AgwUserInput { Contents = [] },
@@ -801,6 +855,9 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                 {
                     Id = executionId,
                     UserId = "user-id",
+                    ProjectId = fixture.ProjectId,
+                    ProjectConversationId = fixture.ConversationId,
+                    ScopeBackfilled = true,
                     ManifestJson = DurableExecutionJson.Serialize(manifest),
                     Status = status,
                     StateChangedAt = TimeProvider.System.GetUtcNow(),

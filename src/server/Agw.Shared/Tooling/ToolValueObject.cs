@@ -18,17 +18,13 @@ public static class ToolValueObjectKinds
 public static class ToolDefinitionNames
 {
     public const string AskUserQuestion = "ask_user_question";
-    public const string Bash = "bash";
     public const string Diff = "diff";
-    public const string GenerateGuid = "generate_guid";
     public const string GitClone = "git_clone";
-    public const string PowerShell = "powershell";
     public const string RunShell = "run_shell";
     public const string WebFetch = "web_fetch";
     public const string WebSearch = "web_search";
 
-    public static IReadOnlyList<string> All { get; } =
-    [AskUserQuestion, Bash, Diff, GenerateGuid, GitClone, PowerShell, RunShell, WebFetch, WebSearch];
+    public static IReadOnlyList<string> All { get; } = [AskUserQuestion, Diff, GitClone, RunShell, WebFetch, WebSearch];
 }
 
 /// <summary>
@@ -73,11 +69,8 @@ public sealed record ToolBlockValue : ToolValueObject
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "name")]
 [JsonDerivedType(typeof(AskUserQuestionToolDefinition), ToolDefinitionNames.AskUserQuestion)]
-[JsonDerivedType(typeof(BashToolDefinition), ToolDefinitionNames.Bash)]
 [JsonDerivedType(typeof(DiffToolDefinition), ToolDefinitionNames.Diff)]
-[JsonDerivedType(typeof(GenerateGuidToolDefinition), ToolDefinitionNames.GenerateGuid)]
 [JsonDerivedType(typeof(GitCloneToolDefinition), ToolDefinitionNames.GitClone)]
-[JsonDerivedType(typeof(PowerShellToolDefinition), ToolDefinitionNames.PowerShell)]
 [JsonDerivedType(typeof(RunShellToolDefinition), ToolDefinitionNames.RunShell)]
 [JsonDerivedType(typeof(WebFetchToolDefinition), ToolDefinitionNames.WebFetch)]
 [JsonDerivedType(typeof(WebSearchToolDefinition), ToolDefinitionNames.WebSearch)]
@@ -104,29 +97,14 @@ public sealed record AskUserQuestionToolDefinition : ToolDefinition<EmptyToolOpt
     public override string GetDefinitionName() => ToolDefinitionNames.AskUserQuestion;
 }
 
-public sealed record BashToolDefinition : ToolDefinition<EmptyToolOptions>
-{
-    public override string GetDefinitionName() => ToolDefinitionNames.Bash;
-}
-
 public sealed record DiffToolDefinition : ToolDefinition<EmptyToolOptions>
 {
     public override string GetDefinitionName() => ToolDefinitionNames.Diff;
 }
 
-public sealed record GenerateGuidToolDefinition : ToolDefinition<EmptyToolOptions>
-{
-    public override string GetDefinitionName() => ToolDefinitionNames.GenerateGuid;
-}
-
 public sealed record GitCloneToolDefinition : ToolDefinition<EmptyToolOptions>
 {
     public override string GetDefinitionName() => ToolDefinitionNames.GitClone;
-}
-
-public sealed record PowerShellToolDefinition : ToolDefinition<EmptyToolOptions>
-{
-    public override string GetDefinitionName() => ToolDefinitionNames.PowerShell;
 }
 
 public sealed record RunShellToolDefinition : ToolDefinition<EmptyToolOptions>

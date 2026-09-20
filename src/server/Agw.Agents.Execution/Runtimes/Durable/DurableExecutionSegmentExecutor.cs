@@ -87,8 +87,7 @@ internal sealed class DurableExecutionSegmentExecutor : IDurableExecutionSegment
         {
             manifest = (await _store.GetAsync(input.ExecutionId, cancellationToken).ConfigureAwait(false)).Manifest;
         }
-        using var userScope = UserInfoUtil.Push(CreateUserPrincipal(manifest.ResolveUserId()));
-        manifest = await _store.EnsureWorkspaceSnapshotAsync(manifest, cancellationToken).ConfigureAwait(false);
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal(manifest.UserId));
         using var workspaceScope = ProjectWorkspaceContext.Push(manifest.Task.ProjectId, manifest.WorkspaceSnapshot!);
         ProjectWorkspacePaths.EnsureAvailable(manifest.Task.ProjectId, manifest.WorkspaceSnapshot!);
         using var sessionContext = ConversationSessionContext.Push(

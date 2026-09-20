@@ -28,7 +28,7 @@ pnpm --filter @agw/mobile native:generate -- --clean
 
 - Profile 元数据保存在 AsyncStorage。
 - token 按 Profile 分别保存在 Expo SecureStore。
-- 旧版 `agw.localConfig` 会在首次启动时自动迁移。
+- 仅读取当前 Server Profiles；旧 `agw.localConfig` 不读取、不迁移、不删除。旧用户需重新添加服务器或手动导入配置。
 - HTTP 连接必须确认明文传输风险；公网使用仍建议 HTTPS。
 - 删除 Mobile Profile 不会撤销服务端 token，撤销操作需在 Agw Web 完成。
 - Chat、Files 与 History 切换时保留当前 Workspace、会话和执行状态。

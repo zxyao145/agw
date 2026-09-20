@@ -114,22 +114,6 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-function clearLegacyChatSettingsUrl(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const searchParams = new URLSearchParams(window.location.search);
-  if (!searchParams.has("settings") && !window.location.hash) {
-    return;
-  }
-
-  searchParams.delete("settings");
-  const nextSearch = searchParams.toString();
-  const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`;
-  window.history.replaceState(window.history.state, "", nextUrl);
-}
-
 type ChatSettingsDraft = {
   envVars: EnvVar[];
 };
@@ -320,10 +304,6 @@ export function ChatWorkspace({
   const executionServerId = useExecutionPlatform().serverId;
   const queryProjectId = searchParams.get("projectId");
   const queryConversationId = searchParams.get("conversationId");
-
-  React.useEffect(() => {
-    clearLegacyChatSettingsUrl();
-  }, []);
 
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [executionReconnectState, setExecutionReconnectState] =

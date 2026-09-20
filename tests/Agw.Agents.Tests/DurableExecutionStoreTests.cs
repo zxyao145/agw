@@ -16,7 +16,6 @@ using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
 using Agw.Infrastructure.Data;
-using Agw.Shared;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
@@ -150,7 +149,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task RegisterAsync_UserIdPersistsAndLegacyManifestFallsBackToAdmin()
+    public async Task RegisterAsync_UserIdPersistsWithoutImplicitOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
@@ -166,7 +165,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal("user-id", snapshot.Manifest.ResolveUserId());
+        Assert.Equal("user-id", snapshot.Manifest.UserId);
         var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("user-id", record.UserId);
         Assert.Equal(task.ProjectId, record.ProjectId);
@@ -174,7 +173,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         Assert.True(record.ScopeBackfilled);
         Assert.Equal("user-id", record.CreateBy);
         Assert.Equal("user-id", record.UpdateBy);
-        Assert.Equal(Constants.AdminUserId, CreateManifest().ResolveUserId());
+        Assert.Empty(CreateManifest().UserId);
     }
 
     [Fact]
@@ -209,7 +208,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         );
 
         var snapshot = await store.GetAsync(executionId, TestContext.Current.CancellationToken);
-        Assert.Equal("user-id", snapshot.Manifest.ResolveUserId());
+        Assert.Equal("user-id", snapshot.Manifest.UserId);
     }
 
     [Fact]

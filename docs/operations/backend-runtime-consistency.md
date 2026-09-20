@@ -20,7 +20,7 @@ Workers retain the `StateVersion` returned when claiming a segment. Lock loss or
 
 This protects state commits, while external Tool effects remain at-least-once. When inspecting a recovered execution, distinguish a repeated external effect from a stale attempt successfully committing a result.
 
-Legacy durable rows receive indexed Project/Conversation scope through the existing recovery service. Unreadable manifests or inconsistent scope are handled under the execution lock and concurrency version. Inspect scope-recovery logs and preserve the database/key backup when investigating quarantined work; do not guess ownership or rewrite encrypted manifests manually.
+Legacy durable rows are not backfilled. Recovery requires an explicit user ID, a captured workspace snapshot, and matching indexed Project/Conversation scope; unindexed rows are not scheduled. Unreadable manifests or inconsistent scope are handled under the execution lock and concurrency version. Inspect validation/quarantine logs and preserve the database/key backup when investigating quarantined work; do not guess ownership or rewrite encrypted manifests manually.
 
 ## Conversation reset
 
@@ -35,7 +35,7 @@ When reset is blocked, inspect or stop the active execution and wait for cleanup
 Run from the repository root:
 
 ```bash
-dotnet test tests/Agw.Agents.Tests --filter "FullyQualifiedName~DurableExecutionScopeMaintenanceTests|FullyQualifiedName~DurableExecutionScopeRecoveryServiceTests|FullyQualifiedName~RuntimeDefinitionRefreshTests"
+dotnet test tests/Agw.Agents.Tests --filter "FullyQualifiedName~DurableExecutionScopeMaintenanceTests|FullyQualifiedName~RuntimeDefinitionRefreshTests"
 dotnet test tests/Agw.Projects.Tests --filter "FullyQualifiedName~ProjectConversationAppServiceTests"
 ```
 

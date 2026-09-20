@@ -60,8 +60,6 @@ import {
 
 type ProjectSummary = DesktopProjectOption;
 
-const CHAT_PATHS = new Set(["/chat", "/desktop/chat"]);
-
 const SETTINGS_GROUPS = [
   {
     label: "Operations",
@@ -502,7 +500,7 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const normalizedPathname = pathname.replace(/\/+$/u, "");
-  return CHAT_PATHS.has(normalizedPathname) ? (
+  return normalizedPathname === "/desktop/chat" ? (
     <ChatShell>{children}</ChatShell>
   ) : (
     <SettingsShell>{children}</SettingsShell>

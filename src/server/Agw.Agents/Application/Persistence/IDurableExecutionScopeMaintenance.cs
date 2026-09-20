@@ -2,10 +2,6 @@ using Agw.Shared.Data.Entities.Executions;
 
 namespace Agw.Agents.Application.Persistence;
 
-public sealed record DurableExecutionScopeCursor(string UserId, Guid Id);
-
-public sealed record DurableExecutionScopeBackfillResult(DurableExecutionScopeCursor? NextCursor, bool HasPending);
-
 public interface IDurableExecutionScopeMaintenance
 {
     Task<bool> IsSessionCurrentAsync(
@@ -14,13 +10,6 @@ public interface IDurableExecutionScopeMaintenance
         string ownerUserId,
         int expectedGeneration,
         CancellationToken cancellationToken = default
-    );
-
-    // Uses the ambient owner filter. Seeding and scheduler scans may run in the restricted system scope.
-    // One bounded pass. Background callers retain NextCursor across scopes/ticks; busy rows are retried next sweep.
-    Task<DurableExecutionScopeBackfillResult> BackfillAsync(
-        CancellationToken cancellationToken = default,
-        DurableExecutionScopeCursor? after = null
     );
 
     // Mutates corrupt records before checking for active executions. This is not a read-only predicate.

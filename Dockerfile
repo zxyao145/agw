@@ -62,7 +62,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-base
 WORKDIR /app
 ENV ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_URLS=http://0.0.0.0:8080 \
-    AGW_DATA_DIR=/data \
+    AgwDataDir=/data \
     DOTNET_RUNNING_IN_CONTAINER=true
 EXPOSE 8080
 RUN mkdir -p /data && chown -R $APP_UID:$APP_UID /app /data

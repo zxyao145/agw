@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
-using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
@@ -228,7 +227,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                         await using var controlScope = _scopeFactory.CreateAsyncScope();
                         var controlStore = controlScope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
                         var current = await controlStore
-                            .GetAuthorizedAsync(executionId, snapshot.Manifest.ResolveUserId(), linked.Token)
+                            .GetAuthorizedAsync(executionId, snapshot.Manifest.UserId, linked.Token)
                             .ConfigureAwait(false);
                         if (
                             current.Status != DurableExecutionStatus.Running
@@ -304,7 +303,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             }
 
             DurableExecutionSnapshot persisted;
-            using var ownerScope = UserInfoUtil.Push(CreateUserPrincipal(snapshot.Manifest.ResolveUserId()));
+            using var ownerScope = UserInfoUtil.Push(CreateUserPrincipal(snapshot.Manifest.UserId));
             using (UserInfoUtil.PushSystemScope())
             {
                 persisted = await store

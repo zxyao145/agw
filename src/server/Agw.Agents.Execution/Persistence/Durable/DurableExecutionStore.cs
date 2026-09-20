@@ -210,8 +210,7 @@ internal sealed class DurableExecutionStore
         manifest = manifest with
         {
             WorkspaceSnapshot =
-                manifest.WorkspaceSnapshot
-                ?? await CaptureWorkspaceAsync(task.ProjectId, primaryOnly: false, cancellationToken),
+                manifest.WorkspaceSnapshot ?? await CaptureWorkspaceAsync(task.ProjectId, cancellationToken),
         };
         manifestJson = DurableExecutionJson.Serialize(manifest);
         var now = _timeProvider.GetUtcNow();
@@ -257,47 +256,8 @@ internal sealed class DurableExecutionStore
         return ToSnapshot(record);
     }
 
-    /// <summary>
-    /// 按 executionId 加载 execution 快照，供受信任的后台执行器使用。
-    /// </summary>
-    internal async Task<DurableExecutionManifest> EnsureWorkspaceSnapshotAsync(
-        DurableExecutionManifest manifest,
-        CancellationToken cancellationToken
-    )
-    {
-        if (manifest.WorkspaceSnapshot != null)
-        {
-            return manifest;
-        }
-        var record =
-            await FindAsync(manifest.ExecutionId, UserInfoUtil.RequiredUserId, tracking: true, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        var current = ToSnapshot(record).Manifest;
-        if (current.WorkspaceSnapshot != null)
-        {
-            return current;
-        }
-        // Legacy executions predate additional directories. Capture their single root once under the execution lease.
-        current = current with
-        {
-            WorkspaceSnapshot = await CaptureWorkspaceAsync(
-                current.Task.ProjectId,
-                primaryOnly: true,
-                cancellationToken
-            ),
-        };
-        record.ManifestJson = DurableExecutionJson.Serialize(current);
-        await _dbContext.SaveConversationChangesAsync(
-            current.Task.ProjectConversationId,
-            current.Task.Generation,
-            cancellationToken
-        );
-        return current;
-    }
-
     private async Task<ProjectWorkspaceSnapshot> CaptureWorkspaceAsync(
         Guid projectId,
-        bool primaryOnly,
         CancellationToken cancellationToken
     )
     {
@@ -311,12 +271,10 @@ internal sealed class DurableExecutionStore
         return ProjectWorkspacePaths.CreateSnapshot(
             projectId,
             project.Workspace,
-            primaryOnly
-                ? null
-                : (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
-                    directory.Id,
-                    directory.Path
-                ))
+            (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
+                directory.Id,
+                directory.Path
+            ))
         );
     }
 
@@ -737,7 +695,7 @@ internal sealed class DurableExecutionStore
         string manifestJson
     )
     {
-        // Retrying the same execution must retain its original directories, including legacy null snapshots.
+        // Retrying the same execution must retain its original directory snapshot.
         var original = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
             existing.ManifestJson,
             "manifest"
@@ -893,11 +851,32 @@ internal sealed class DurableExecutionStore
                 $"Execution '{record.Id}' contains an inconsistent manifest."
             );
         }
-        if (!string.Equals(manifest.ResolveUserId(), record.UserId, StringComparison.Ordinal))
+        if (
+            string.IsNullOrWhiteSpace(manifest.UserId)
+            || !string.Equals(manifest.UserId, record.UserId, StringComparison.Ordinal)
+        )
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
                 $"Execution '{record.Id}' contains an inconsistent owner."
+            );
+        }
+
+        if (
+            !record.ScopeBackfilled
+            || manifest.WorkspaceSnapshot == null
+            || manifest.Task == null
+            || manifest.Input == null
+            || manifest.Settings == null
+            || manifest.Task.ProjectId == Guid.Empty
+            || manifest.Task.ProjectConversationId == Guid.Empty
+            || record.ProjectId != manifest.Task.ProjectId
+            || record.ProjectConversationId != manifest.Task.ProjectConversationId
+        )
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionConflict,
+                $"Execution '{record.Id}' contains an incomplete or inconsistent manifest scope."
             );
         }
 
@@ -998,7 +977,7 @@ internal sealed class DurableExecutionStore
             !await _scopeMaintenance.IsSessionCurrentAsync(
                 task.ProjectId,
                 task.ProjectConversationId,
-                snapshot.Manifest.ResolveUserId(),
+                snapshot.Manifest.UserId,
                 task.Generation,
                 cancellationToken
             )

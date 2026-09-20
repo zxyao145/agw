@@ -16,7 +16,7 @@ namespace Agw.Projects.Tests;
 public class ModelProviderAppServiceTests
 {
     [Fact]
-    public async Task CreateAsync_ForeignIdsAndLegacyActorArgument_CannotBypassCurrentOwner()
+    public async Task CreateAsync_ForeignIds_CannotBypassCurrentOwner()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -43,7 +43,7 @@ public class ModelProviderAppServiceTests
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.CreateAsync(new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0), "other-user")
+            service.CreateAsync(new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0))
         );
 
         // Assert

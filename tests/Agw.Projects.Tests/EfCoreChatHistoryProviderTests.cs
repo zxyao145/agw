@@ -169,9 +169,9 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
                     projectConversationId,
                     Guid.CreateVersion7(),
                     3,
-                    new ChatMessage(ChatRole.User, "legacy memory").WithAgentRequestMessageSource(
+                    new ChatMessage(ChatRole.User, "user memory").WithAgentRequestMessageSource(
                         AgentRequestMessageSourceType.AIContextProvider,
-                        ConversationHistoryMetadata.LegacyUserMemorySourceId
+                        ConversationHistoryMetadata.UserMemorySourceId
                     ),
                     jsonOptions
                 )
@@ -1099,7 +1099,7 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task AppendAsync_WithLegacyUppercaseGuidContext_ReusesAndNormalizesContext()
+    public async Task AppendAsync_WithLegacyUppercaseGuidContext_LeavesOldContextUntouched()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -1142,11 +1142,16 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
         );
 
         await using var verifyContext = new AgwDbContext(options);
-        var persistedContext = Assert.Single(await verifyContext.ProjectConversations.ToListAsync(cancellationToken));
-        Assert.Equal(projectConversationId, persistedContext.Id);
-        Assert.Equal(contextGuid.Normalize(), persistedContext.ContextId);
+        var contexts = await verifyContext.ProjectConversations.ToListAsync(cancellationToken);
+        Assert.Equal(2, contexts.Count);
         Assert.Equal(
-            projectConversationId,
+            contextGuid.ToString("D").ToUpperInvariant(),
+            contexts.Single(item => item.Id == projectConversationId).ContextId
+        );
+        var current = contexts.Single(item => item.Id != projectConversationId);
+        Assert.Equal(contextGuid.Normalize(), current.ContextId);
+        Assert.Equal(
+            current.Id,
             (await verifyContext.ProjectConversationChatHistories.SingleAsync(cancellationToken)).ConversationId
         );
     }
