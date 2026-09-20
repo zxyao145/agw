@@ -1,4 +1,5 @@
 import * as React from "react";
+export { useWorkSummary } from "./use-work-summary";
 
 import {
   ConversationController,

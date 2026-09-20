@@ -99,6 +99,8 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
   let active = false;
   let restored = 0;
   let stops = 0;
+  let upperCloses = 0;
+  let reconnectFailures = 0;
   const recoveryCalls: unknown[][] = [];
   const connection = {
     connectionId: null,
@@ -129,6 +131,12 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
   const session = new ExecutionSession(
     {
       onMessage() {},
+      onClose() {
+        upperCloses++;
+      },
+      onReconnectFailed() {
+        reconnectFailures++;
+      },
       onReconnected() {
         restored++;
       },
@@ -146,6 +154,9 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
     active = true;
     connection.state = HubConnectionState.Disconnected;
     close(new Error("Connection lost"));
+    assert.equal(session.hasActiveExecution(), true);
+    assert.equal(upperCloses, 0, "an active transport close must not reach the UI onClose handler");
+    assert.equal(reconnectFailures, 1);
     void session.retryConnection();
     for (let i = 0; i < 40; i++) await Promise.resolve();
     assert.equal(restored, 1);

@@ -39,22 +39,27 @@ export function MessageActions({ message }: { message: PresentedMessage }) {
   };
 
   return (
-    <div className="agw-msg-actions pointer-events-none absolute right-0 top-full flex h-8 items-center gap-2 whitespace-nowrap text-xs text-muted-foreground opacity-0 transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 motion-reduce:transition-none">
+    <div className="agw-msg-actions pointer-events-none absolute 
+     right-0 top-full flex h-8 items-center gap-2 whitespace-nowrap
+     text-xs text-muted-foreground opacity-0
+     transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 
+     group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 
+     motion-reduce:transition-none">
       {time ? <time dateTime={createdAt ?? undefined}>{time}</time> : null}
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="size-8 text-muted-foreground hover:text-foreground"
+        className="size-6 text-muted-foreground hover:text-foreground"
         aria-label={label}
         title={label}
         disabled={!text}
         onClick={handleCopy}
       >
         {copied ? (
-          <Check className="size-4" aria-hidden="true" />
+          <Check className="size-3.5" aria-hidden="true" />
         ) : (
-          <Copy className="size-4" aria-hidden="true" />
+          <Copy className="size-3.5" aria-hidden="true" />
         )}
       </Button>
     </div>

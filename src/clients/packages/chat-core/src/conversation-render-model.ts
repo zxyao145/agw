@@ -33,6 +33,7 @@ import {
 import { isSystemInjectedMessage } from "./message-source";
 import { parseMessageProposedPlan, type ProposedPlanPresentation } from "./proposed-plan";
 import { formatStructuredResult, normalizeStructuredResult } from "./structured-result";
+import { collapseCompletedWork } from "./work-summary";
 
 const HIDDEN_CONTROL_TYPES = new Set([
   "turn-start",
@@ -177,9 +178,13 @@ type BaseConversationRenderItem = {
   width: ConversationWidth;
 };
 
-export type ConversationRenderItem =
+export type ConversationMessageRenderItem =
   | (BaseConversationRenderItem & { type: "message"; message: PresentedMessage })
-  | (BaseConversationRenderItem & { type: "result"; message: PresentedMessage })
+  | (BaseConversationRenderItem & {
+      type: "result";
+      message: PresentedMessage;
+      hasWorkSummary?: boolean;
+    })
   | (BaseConversationRenderItem & { type: "plan"; message: PresentedMessage })
   | (BaseConversationRenderItem & {
       type: "tool-state";
@@ -206,7 +211,17 @@ export type ConversationRenderItem =
       availability: AgentflowCheckpointAvailability | null;
     });
 
+export type ConversationRenderItem =
+  | ConversationMessageRenderItem
+  | (BaseConversationRenderItem & {
+      type: "work-summary";
+      durationMs: number | null;
+      items: Exclude<ConversationMessageRenderItem, { type: "result" }>[];
+    });
+
 export type BuildConversationRenderModelOptions = {
+  /** Keep the current turn visible while executing, awaiting input, or restoring a connection. */
+  isCurrentTurnActive?: boolean;
   pendingInteraction?: PendingInteraction | null;
   checkpointAvailability?: readonly AgentflowCheckpointAvailability[];
   collapseToolRuns?: boolean;
@@ -514,7 +529,7 @@ export function buildConversationRenderModel(
     (options.checkpointAvailability ?? []).map((item) => [item.occurrenceId, item]),
   );
   const occurrences = new Map<string, number>();
-  const items: ConversationRenderItem[] = [];
+  const items: ConversationMessageRenderItem[] = [];
   let embeddedInteraction = false;
   const agentResultFormats = new Map(
     (options.agentResultFormats ?? []).map(
@@ -700,11 +715,16 @@ export function buildConversationRenderModel(
       embedded: false,
     });
   }
-  return options.collapseToolRuns ? collapseConsecutiveToolItems(items) : items;
+  return collapseCompletedWork(
+    options.collapseToolRuns ? collapseConsecutiveToolItems(items) : items,
+    options.isCurrentTurnActive === true || options.pendingInteraction != null,
+  );
 }
 
-function collapseConsecutiveToolItems(items: ConversationRenderItem[]): ConversationRenderItem[] {
-  const collapsed: ConversationRenderItem[] = [];
+function collapseConsecutiveToolItems(
+  items: ConversationMessageRenderItem[],
+): ConversationMessageRenderItem[] {
+  const collapsed: ConversationMessageRenderItem[] = [];
 
   for (let index = 0; index < items.length; ) {
     const item = items[index];

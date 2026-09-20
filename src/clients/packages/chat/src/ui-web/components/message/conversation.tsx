@@ -3,12 +3,14 @@
 import type { InteractionResponse } from "@agw/execution-core";
 
 import * as React from "react";
-import { CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, CircleAlert, LoaderCircle } from "lucide-react";
+import { useWorkSummary } from "@agw/chat-runtime/react";
 import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import {
   CHAT_BOTTOM_TOLERANCE_PX,
+  formatWorkedDuration,
   type ConversationRenderItem,
   type PresentedTool,
   type ToolCallStatus,
@@ -46,6 +48,8 @@ export type HumanResponseInput = InteractionResponse;
 
 export interface ChatSessionProps {
   items: ConversationRenderItem[];
+  conversationKey?: string;
+  onWorkSummaryToggle?: () => void;
   scrollElementRef: React.RefObject<HTMLDivElement | null>;
   hasOlderMessages?: boolean;
   isLoadingOlderMessages?: boolean;
@@ -61,7 +65,9 @@ export interface ChatSessionProps {
 }
 
 export function Conversation({
-  items,
+  items: renderItems,
+  conversationKey,
+  onWorkSummaryToggle,
   scrollElementRef,
   hasOlderMessages = false,
   isLoadingOlderMessages = false,
@@ -75,6 +81,11 @@ export function Conversation({
   onCheckpointResume,
   onHumanResponse,
 }: ChatSessionProps) {
+  const {
+    rows: items,
+    expandedKeys,
+    toggleWorkSummary,
+  } = useWorkSummary(renderItems, conversationKey);
   const hasHistoryLoader = hasOlderMessages || isLoadingOlderMessages;
   const rowOffset = hasHistoryLoader ? 1 : 0;
   const getItemKey = React.useCallback(
@@ -94,7 +105,7 @@ export function Conversation({
   });
   const virtualRows = virtualizer.getVirtualItems();
   const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-  const totalSize = virtualizer.getTotalSize() + 144;
+  const totalSize = virtualizer.getTotalSize() + 160;
   const navigationHeight = Math.max(viewportHeight - 168, 0);
   const userInputAnchors = React.useMemo(
     () => (userInputNavigationHost ? buildUserInputAnchors(items) : []),
@@ -203,6 +214,11 @@ export function Conversation({
               ) : item ? (
                 <ConversationItem
                   item={item}
+                  workExpanded={expandedKeys.has(item.key)}
+                  onWorkToggle={() => {
+                    onWorkSummaryToggle?.();
+                    toggleWorkSummary(item.key);
+                  }}
                   permissionMode={permissionMode}
                   showCheckpointResume={showCheckpointResume}
                   checkpointResumeDisabled={checkpointResumeDisabled}
@@ -220,6 +236,8 @@ export function Conversation({
 
 function ConversationItem({
   item,
+  workExpanded,
+  onWorkToggle,
   permissionMode,
   showCheckpointResume,
   checkpointResumeDisabled,
@@ -227,12 +245,33 @@ function ConversationItem({
   onHumanResponse,
 }: {
   item: ConversationRenderItem;
+  workExpanded: boolean;
+  onWorkToggle: () => void;
   permissionMode?: PermissionMode;
   showCheckpointResume: boolean;
   checkpointResumeDisabled: boolean;
   onCheckpointResume?: (occurrenceId: string) => void;
   onHumanResponse?: (response: HumanResponseInput) => void;
 }) {
+  if (item.type === "work-summary") {
+    return (
+      <div className="mx-4 mt-6 border-b border-border/60 pb-1">
+        <button
+          type="button"
+          aria-expanded={workExpanded}
+          onClick={onWorkToggle}
+          className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+        >
+          {formatWorkedDuration(item.durationMs)}
+          <ChevronRight
+            aria-hidden="true"
+            className={cn("size-4 transition-transform", workExpanded && "rotate-90")}
+          />
+        </button>
+      </div>
+    );
+  }
+
   if (item.type === "checkpoint") {
     return (
       <AgentflowCheckpointCard
@@ -360,7 +399,8 @@ function ConversationItem({
     <div
       className={cn(
         "mx-4 max-w-full",
-        item.type === "result" && "mt-8 border-t border-dashed pt-4",
+        item.type === "result" &&
+          (item.hasWorkSummary ? "pt-2" : "mt-8 border-t border-dashed pt-4"),
       )}
       data-msg-id={message.source.messageId}
     >
