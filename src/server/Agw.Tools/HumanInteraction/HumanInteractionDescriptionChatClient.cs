@@ -4,7 +4,9 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.HumanInteraction;
 
-/// <summary>Describes approval requests using the actual tools supplied to this model call.</summary>
+/// <summary>
+/// Describes approval requests using the actual tools supplied to this model call.
+/// </summary>
 public sealed class HumanInteractionDescriptionChatClient : DelegatingChatClient
 {
     private readonly IHumanInteractionContextAccessor? _interactions;

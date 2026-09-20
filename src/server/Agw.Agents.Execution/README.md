@@ -144,7 +144,12 @@ Agw.Agents.Execution/
 │   ├── Sessions/           # SDK Session 状态与作用域
 │   ├── ExternalAgents/     # 外部 SDK 适配与交互桥接
 │   ├── Tools/              # 工具执行和状态持久化
-│   ├── Middleware/         # 执行中间件
+│   ├── Middleware/         # 按功能组织的执行中间件和 ChatClient 包装
+│   │   ├── ToolFeedback/   # 工具告警与 Todo / Mode 状态快照
+│   │   ├── Telemetry/      # 执行日志、用量统计和结构化输出指标
+│   │   ├── History/        # 消息隔离、结果排序和本地压缩作用域
+│   │   ├── ModelInput/     # 输入过滤和 Provider 推理内容适配
+│   │   └── Approval/       # 后台 Agent 审批限制
 │   └── Contracts/          # Agent 执行请求和结果
 ├── Agentflows/
 │   ├── Runtime/            # AgentflowRuntime、RuntimeService 和接口
@@ -171,6 +176,12 @@ Agw.Agents.Execution/
 `Runtimes/Durable` 负责协调与领取，`Persistence/Durable` 保存执行事实，`Messaging/Durable` 提供事件存储与回放。`Outbound/Durable` 中的 Sink 将分段消息批量写入事件流；`Outbound/SignalR` 中的 Sink 向客户端发送消息，两种执行方式都使用它。只有持久执行需要 Worker、事件存储和持久状态机，不为这些能力创建空的 InProcess 实现。
 
 Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动；Agentflow 的两种 Runner 分别位于其 `Runners` 子目录。Skills、模型构造和执行仍为同一个 `AgentRuntimeService` 的 partial，不因物理归类拆成新服务。
+
+### `Agents/Middleware`
+
+`ToolFeedbackMiddleware` 统一发送工具初始化告警、调用告警和 Todo / Mode 快照：初始化告警在响应开头，调用告警在对应结果之前，快照在结果之后；同一更新包含两类结果时先 Todo 后 Mode。Todo 只在流式中间件补充快照；启用 Todo 时，普通执行仍通过流式执行聚合结果，保留每次变更的快照。告警和快照分别保留调用识别及去重规则，追踪状态仅属于当前执行。
+
+`AgentTelemetryMiddleware` 由普通 Agent 和外部 Agent 共用，依次记录开始日志、执行、用量和成功完成日志。流式用量在 `finally` 中结算，异常、取消或提前释放仍记录已收到的用量；统计失败不会覆盖执行结果。结构化输出指标保持独立的执行边界。历史和模型输入包装器保留原有注册位置，包括历史读写前后的两次工具结果排序。
 
 ### `Commands`
 
@@ -448,9 +459,15 @@ Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionSta
 
 第三方 Chat Completions 端点收到的 `TextReasoningContent` 会由 `OpenAiReasoningChatClient` 回填到对应 Assistant 消息的 `reasoning_content`，覆盖工具循环、审批恢复和持久化历史回放。同一作者的连续纯推理消息若紧接一条缺少推理的工具调用消息，也会将该推理前缀回填到工具调用；不会跨越其他消息、作者或覆盖工具调用已有的推理。兼容层在 SDK 完成消息转换后补字段，每个请求独立持有推理内容，共享原有 HTTP transport。DeepSeek 的历史 Assistant 消息必须携带该字段，未记录推理时补空字符串，并保留 SDK 已有的原生推理字段；其他兼容端点没有推理内容时不添加字段。官方 OpenAI 和 Azure OpenAI 端点沿用原 SDK 协议，Responses/Anthropic 路径也不使用此扩展。自定义网关需兼容其模型返回的 `reasoning_content` 协议；已经缺失的原始推理内容无法凭空恢复。
 
+Anthropic 路径使用 `AnthropicReasoningChatClient` 在响应及流式片段的 `AdditionalProperties` 中保留原始 thinking 类型，供聚合与历史持久化后回放。空文本加签名仍可能是普通 `thinking`，不能按文本是否为空推断为 `redacted_thinking`；请求通过原生内容块保留普通 thinking 的空文本及签名，真正的 redacted 数据保持不变。仅对 `api.deepseek.com`，没有类型标记的旧推理按该端点支持的普通 thinking 回放，没有推理记录的旧 Assistant 消息补空 thinking；其他端点不做此推断或补块。请求适配只修改副本，不改写历史，不借用其他消息的推理。历史持久化保留所有 `TextReasoningContent`，包括空文本、纯空白和只有签名的内容；界面展示仍可过滤空文本，不能将展示过滤应用到模型协议历史。
+
+DeepSeek 的 Responses 端点使用 `OpenAiResponsesReasoningChatClient`：普通响应从 `reasoning.content` 读取文本，流式响应沿用 SDK 的 `reasoning_text.delta` 转换，工具续接与历史回放通过原生 reasoning item 写回 `content`。该端点不支持 `summary` 或 `encrypted_content`，因此出站副本只携带可读推理，保留 item ID 与工具调用对应关系，不改写存储中的不透明数据。此投影仅匹配 `api.deepseek.com`；官方 OpenAI、Azure 和自定义 Responses 网关保持 SDK 行为。
+
 ### Result Summary
 
 Definition 创建的 System Agent 可通过 `EnableSummary` 在一次主执行成功后追加本轮总结。总结复用该 Agent 的 `ModelProviderId`，以一次性 `IChatClient` 调用执行；输入只包含本轮用户文字和本轮 Assistant 的 `TextContent`，不加载历史、工具或技能。External Agent 不支持该开关。
+
+当 Definition Agent 同时配置 `ResponseSchema` 与 `EnableSummary` 时，`result` 从本轮最后一条完整 Assistant 回复中提取唯一的 JSON 对象或数组，不再调用摘要模型，也不产生摘要用量。服务端移除 Markdown 围栏、外围说明和首尾空白，严格检查 JSON 语法及根类型，但不重新序列化字段和值；无有效 JSON、JSON 不完整或含多个对象/数组时明确失败，不保存文本 Result。消息设置 `additionalProperties.resultFormat = json`；没有最终 Assistant 文本时不追加 `result`。流式执行先聚合当前最后一次模型调用的更新，因此 Tool 调用前的说明和更早的模型轮次不会混入结构化 Result。客户端直接按字面展示 JSON，不经过 Markdown 渲染；带该标记的旧历史也在展示时移除围栏和外围说明。
 
 Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发生在显式 Output 节点：`ConfigJson.enableSummary` 为 `true` 时，流程必须只有一个 Output，并配置有效的 `SummaryModelProviderId`。传入总结模型的是流入 Output 的消息，Output 的 `Instructions` 会作为额外总结要求。
 
@@ -459,6 +476,7 @@ Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发�
 - `role = system`；
 - `author = $agw-server`；
 - 顶层 `additionalProperties.type = result`；
+- 结构化 Result 额外设置顶层 `additionalProperties.resultFormat = json`；
 - `contents` 只有一个 `TextContent`。
 
 总结文字可在有助于可读性时使用 Markdown（如标题、列表、强调或代码块），也可以保持纯文本；服务端除去首尾空白外不会改写模型返回的 Markdown。

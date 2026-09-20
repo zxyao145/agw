@@ -34,7 +34,10 @@ internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
         }
 
         var responseMessages = context
-            .ResponseMessages!.Select(ExternalAgentChatHistoryAgent.CreatePersistableMessage)
+            .ResponseMessages!.Where(message =>
+                !ClaudeCodeMessagePolicy.IsTransportEvent(message.Role, message.AdditionalProperties, message.Contents)
+            )
+            .Select(ExternalAgentChatHistoryAgent.CreatePersistableMessage)
             .OfType<ChatMessage>()
             .ToList();
         foreach (var responseMessage in responseMessages.Where(IsSyntheticAssistantError))

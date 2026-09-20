@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.ToolFeedback;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
@@ -8,7 +8,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
 
-public sealed class ModeStateSnapshotMiddlewareTests
+public sealed class ToolFeedbackModeTests
 {
     [Fact]
     public async Task RunStreamingAsync_ModeSetCompleted_EmitsCurrentModeAfterResult()
@@ -17,7 +17,7 @@ public sealed class ModeStateSnapshotMiddlewareTests
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
         await modeProvider.SetModeAsync(session, "execute", TestContext.Current.CancellationToken);
-        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+        var middleware = new ToolFeedbackMiddleware(null, modeProvider, [], new Dictionary<string, string>());
         var updates = new List<AgentResponseUpdate>();
 
         await foreach (
@@ -44,7 +44,7 @@ public sealed class ModeStateSnapshotMiddlewareTests
         var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
-        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+        var middleware = new ToolFeedbackMiddleware(null, modeProvider, [], new Dictionary<string, string>());
 
         var response = await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "switch mode")],
@@ -65,7 +65,7 @@ public sealed class ModeStateSnapshotMiddlewareTests
         var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
-        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+        var middleware = new ToolFeedbackMiddleware(null, modeProvider, [], new Dictionary<string, string>());
         var updates = new List<AgentResponseUpdate>();
 
         await foreach (
@@ -92,7 +92,7 @@ public sealed class ModeStateSnapshotMiddlewareTests
         var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
-        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+        var middleware = new ToolFeedbackMiddleware(null, modeProvider, [], new Dictionary<string, string>());
 
         var response = await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "get mode")],
@@ -113,7 +113,7 @@ public sealed class ModeStateSnapshotMiddlewareTests
         var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
-        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+        var middleware = new ToolFeedbackMiddleware(null, modeProvider, [], new Dictionary<string, string>());
         var errorResult = new ToolExecutionErrorResult(
             IsError: true,
             Code: ErrorCodes.ToolExecutionFailed.Code,

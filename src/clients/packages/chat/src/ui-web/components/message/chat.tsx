@@ -86,6 +86,7 @@ export type ConversationChangeOptions = {
 
 export interface ChatProps {
   target: Pick<ChatTargetOption, "id" | "type"> | null;
+  agentResultFormats?: readonly import("@agw/chat-core").AgentResultFormat[];
   projectId: string | null;
   directoryId?: string | null;
   searchDirectoryIds?: readonly (string | null)[];
@@ -166,6 +167,7 @@ function prependUniqueMessages(
  * */
 export function Chat({
   target,
+  agentResultFormats,
   projectId,
   directoryId,
   searchDirectoryIds,
@@ -332,11 +334,20 @@ export function Chat({
   const renderItems = React.useMemo(
     () =>
       buildConversationRenderModel(messages, {
+        activeAgentId: target?.type === "agent" ? target.id : null,
+        agentResultFormats,
         collapseToolRuns: true,
         pendingInteraction,
         checkpointAvailability,
       }),
-    [checkpointAvailability, messages, pendingInteraction],
+    [
+      checkpointAvailability,
+      messages,
+      pendingInteraction,
+      agentResultFormats,
+      target?.id,
+      target?.type,
+    ],
   );
   const currentTurnTodos = React.useMemo(() => getCurrentTurnTodoItems(messages), [messages]);
   const latestAvailableCheckpoint = React.useMemo(

@@ -8,8 +8,8 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| [IAgentTurnSummaryService.cs](IAgentTurnSummaryService.cs) | 定义根据消息生成摘要结果的接口。 |
-| [AgentTurnSummaryService.cs](AgentTurnSummaryService.cs) | 组织摘要提示词、调用模型、创建结果消息、写入历史并记录模型用量。 |
+| [IAgentTurnSummaryService.cs](IAgentTurnSummaryService.cs) | 定义根据消息生成摘要结果或直接保存结构化结果的接口。 |
+| [AgentTurnSummaryService.cs](AgentTurnSummaryService.cs) | 组织摘要提示词、调用模型、创建结果消息、写入历史并记录模型用量；结构化结果绕过模型调用。 |
 | [ISummaryChatClientFactory.cs](ISummaryChatClientFactory.cs) | 定义根据模型配置创建摘要 ChatClient 的接口。 |
 | [SummaryChatClientFactory.cs](SummaryChatClientFactory.cs) | 读取模型、Provider 和认证配置，创建摘要调用所需的 ChatClient。 |
 
@@ -34,6 +34,8 @@ Task<ChatMessage> CreateResultAsync(
 ```
 
 接口没有 `AgentType`、Agent ID 或 Agentflow ID 参数，服务内部也不根据执行目标类型分支。这里与 [Turns](../Turns/README.md) 的区别是：Turn 上下文保存执行目标，而摘要服务消费调用方已经选定的消息和配置。
+
+Definition Agent 配置 `ResponseSchema` 时，调用方改用 `CreateStructuredResultAsync`。该入口只保存最后一条完整 Assistant 回复中唯一的 JSON 对象或数组，移除 Markdown 围栏和外围说明，保留 JSON 内部原始文本并标记 `resultFormat=json`。无有效 JSON、根类型为标量或结果有歧义时抛出执行错误，不保存 Result；不创建摘要 ChatClient，也不记录 `$summary` 用量。
 
 ## 生成结果的流程
 

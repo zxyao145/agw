@@ -767,9 +767,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentResponse[]"];
+            "text/plain": components["schemas"]["ApiResultOfAgentListResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfAgentListResponse[]"];
+            "text/json": components["schemas"]["ApiResultOfAgentListResponse[]"];
           };
         };
       };
@@ -4505,6 +4505,11 @@ export interface components {
       externalAgentKind: components["schemas"]["ExternalAgentKind"];
       /** @description JSON object for additional external agent settings. */
       extra: null | string;
+      /**
+       * @description Raw user-configured JSON Schema text enforcing the agent's final response structure.
+       *     `null` means structured output is disabled.
+       */
+      responseSchema: null | string;
       tools?: components["schemas"]["ToolValueObject"][];
       environmentVariables?: {
         [key: string]: string;
@@ -4553,6 +4558,7 @@ export interface components {
       type?: null | components["schemas"]["AgentType"];
       externalAgentKind?: null | components["schemas"]["ExternalAgentKind"];
       extra?: null | string;
+      responseSchema: null | string;
     };
     AgentEnabledUpdateRequest: {
       /** Format: uuid */
@@ -4683,6 +4689,41 @@ export interface components {
       /** Format: uuid */
       summaryModelProviderId?: null | string;
     };
+    /**
+     * @description Response for the agent option list (`GET /api/agents`) used by Chat, Job, Project, and
+     *     Agentflow selectors. Exposes the default Result format without including the response schema text.
+     */
+    AgentListResponse: {
+      /** Format: uuid */
+      id: string;
+      displayName: string;
+      name: string;
+      description: string;
+      enable: boolean;
+      systemPrompt: string;
+      /** Format: uuid */
+      modelProviderId: null | string;
+      /** Format: uuid */
+      summaryModelProviderId: null | string;
+      enableSummary: boolean;
+      tools: components["schemas"]["ToolValueObject"][];
+      type: components["schemas"]["AgentType"];
+      externalAgentKind: components["schemas"]["ExternalAgentKind"];
+      extra: null | string;
+      environmentVariables: {
+        [key: string]: string;
+      };
+      agentMcpToolServers: components["schemas"]["AgentMcpToolServerRelationResponse"][];
+      agentSkillRelations: components["schemas"]["AgentSkillRelationResponse"][];
+      agentConnectionRelations: components["schemas"]["AgentConnectionRelationResponse"][];
+      /** Format: date-time */
+      createTime: string;
+      createBy: null | string;
+      /** Format: date-time */
+      updateTime: null | string;
+      updateBy: null | string;
+      resultFormat: components["schemas"]["ResultFormat"];
+    };
     AgentMcpServerRelation: {
       /** Format: uuid */
       agentId: string;
@@ -4726,6 +4767,8 @@ export interface components {
       /** Format: date-time */
       updateTime: null | string;
       updateBy: null | string;
+      resultFormat: components["schemas"]["ResultFormat"];
+      responseSchema: null | string;
     };
     AgentRuntimeType: number;
     AgentSkillRelation: {
@@ -4778,6 +4821,7 @@ export interface components {
       enableSummary?: null | boolean;
       /** Format: uuid */
       summaryModelProviderId?: null | string;
+      responseSchema?: null | string;
     };
     AgwAiModel: {
       /** Format: uuid */
@@ -4918,15 +4962,15 @@ export interface components {
       title: string;
       detail: null | string;
     };
-    ApiResultOfAgentResponse: {
-      data?: null | components["schemas"]["AgentResponse"];
+    "ApiResultOfAgentListResponse[]": {
+      data?: null | components["schemas"]["AgentListResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
       detail: null | string;
     };
-    "ApiResultOfAgentResponse[]": {
-      data?: null | components["schemas"]["AgentResponse"][];
+    ApiResultOfAgentResponse: {
+      data?: null | components["schemas"]["AgentResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -5277,6 +5321,8 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    /** @enum {unknown} */
+    AuthProviderType: "Oidc" | "OAuth2";
     AuthSchemeResponse: {
       id: string;
       displayName: string;
@@ -5782,8 +5828,7 @@ export interface components {
     OidcProviderResponse: {
       id: string;
       displayName: string;
-      /** @enum {string} */
-      type: "Oidc" | "OAuth2";
+      type: components["schemas"]["AuthProviderType"];
     };
     PagedResultOfAgentflow: {
       items: components["schemas"]["Agentflow"][];
@@ -6153,6 +6198,11 @@ export interface components {
       version: null | number | string;
       items: components["schemas"]["QuickPromptItem"][];
     };
+    /**
+     * @description The presentation format of an Agent's final Result.
+     * @enum {unknown}
+     */
+    ResultFormat: "markdown" | "json";
     SecretFieldStateResponse: {
       configured: boolean;
     };

@@ -1,7 +1,9 @@
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.PlanMode;
 using Agw.Agents.Execution.Agents.History;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.History;
+using Agw.Agents.Execution.Agents.Middleware.ModelInput;
+using Agw.Agents.Execution.Agents.Middleware.ToolFeedback;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
@@ -81,6 +83,8 @@ public static class AgwAgentExtensions
             Instructions = AgentRuntimeServiceUtil.BuildInstructions(definition.SystemPrompt),
             Tools = capabilities.Tools.Count == 0 ? null : capabilities.Tools.ToList(),
             MaxOutputTokens = definition.MaxOutputTokens,
+            // 配置了 Response Schema 时启用结构化输出；未配置时保持现有行为。
+            ResponseFormat = definition.ResponseFormat,
         };
         // 等所有 Provider 生成 Tool 后再添加 Plan 限制；受限 Tool 会对 Model 隐藏，调用时也会被拒绝。
         var contextProviders = capabilities.ContextProviders.ToList();
@@ -270,41 +274,20 @@ public static class AgwAgentExtensions
         var todoProvider = capabilities
             .ContextProviders.Select(static provider => provider.GetService<AgwTodoProvider>())
             .FirstOrDefault(static provider => provider != null);
-        if (todoProvider != null)
+        if (
+            todoProvider != null
+            || modeProvider != null
+            || capabilities.ToolWarnings.Count > 0
+            || capabilities.ToolInvocationWarnings.Count > 0
+        )
         {
-            var todoStateSnapshotMiddleware = new TodoStateSnapshotMiddleware(todoProvider);
-            // Streaming 执行中，Todo 修改成功后发送最新列表，让客户端更新展示；普通执行不经过此处理。
-            agentBuilder.Use(runFunc: null, runStreamingFunc: todoStateSnapshotMiddleware.RunStreamingAsync);
-        }
-
-        if (modeProvider != null)
-        {
-            var modeStateSnapshotMiddleware = new ModeStateSnapshotMiddleware(modeProvider);
-            // mode_set 返回结果后发送 Session 中的实际模式，让客户端准确展示 Plan / Execute 状态。
-            agentBuilder.Use(
-                runFunc: modeStateSnapshotMiddleware.RunAsync,
-                runStreamingFunc: modeStateSnapshotMiddleware.RunStreamingAsync
+            var feedback = new ToolFeedbackMiddleware(
+                todoProvider,
+                modeProvider,
+                capabilities.ToolWarnings,
+                capabilities.ToolInvocationWarnings
             );
-        }
-
-        if (capabilities.ToolWarnings.Count > 0)
-        {
-            var warningMiddleware = new ToolWarningMiddleware(capabilities.ToolWarnings);
-            // 在响应开头发送准备 Tool 时产生的提示，无论该 Tool 是否被调用。
-            agentBuilder.Use(
-                runFunc: warningMiddleware.RunAsync,
-                runStreamingFunc: warningMiddleware.RunStreamingAsync
-            );
-        }
-
-        if (capabilities.ToolInvocationWarnings.Count > 0)
-        {
-            var invocationWarningMiddleware = new ToolInvocationWarningMiddleware(capabilities.ToolInvocationWarnings);
-            // 只有 Tool 实际返回结果时才发送对应提示，例如本地搜索的降级说明；同一 CallId 只提示一次。
-            agentBuilder.Use(
-                runFunc: invocationWarningMiddleware.RunAsync,
-                runStreamingFunc: invocationWarningMiddleware.RunStreamingAsync
-            );
+            agentBuilder.Use(runFunc: feedback.RunAsync, runStreamingFunc: feedback.RunStreamingAsync);
         }
     }
 

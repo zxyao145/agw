@@ -6,7 +6,8 @@ using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Agents.Execution.Agents.Contracts;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.History;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -606,11 +607,10 @@ public class AgentRuntimeServiceSystemCompositionTests
             fileSystemResolver: null!,
             sessionStateStore: null!,
             NullLogger<AgentRuntimeService>.Instance,
-            new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
-            new UsageTrackingMiddleware(
+            new AgentTelemetryMiddleware(
                 providerSessionState: null!,
                 usageRecorder: null!,
-                NullLogger<UsageTrackingMiddleware>.Instance
+                NullLogger<AgentTelemetryMiddleware>.Instance
             ),
             summaryService: null!,
             services: new ServiceCollection().BuildServiceProvider(),

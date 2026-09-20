@@ -67,6 +67,7 @@ public sealed class AgentRuntimeConfiguration
                 agent.Type,
                 agent.ExternalAgentKind,
                 agent.Extra,
+                agent.ResponseSchema,
                 agent.Enable,
                 agent.EnableSummary,
                 agent.ModelProviderId,

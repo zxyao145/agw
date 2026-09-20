@@ -1,9 +1,10 @@
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Summaries;
 
-public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
+public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentStructuredResultService
 {
     internal const string FailureText = "Summary generation failed.";
     private const string SummaryAgentName = "$summary";
@@ -94,13 +95,37 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
         return result;
     }
 
-    internal static ChatMessage CreateResultMessage(string text) =>
-        new(ChatRole.Assistant, [new TextContent(text)])
+    public async Task<ChatMessage> CreateStructuredResultAsync(
+        string finalText,
+        Guid projectId,
+        string contextId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var json = AgentTurnResultText.NormalizeJson(finalText);
+        var result = CreateResultMessage(json, ResultFormat.Json);
+        await _conversationHistoryWriter
+            .AppendAsync(projectId, contextId, [result], cancellationToken)
+            .ConfigureAwait(false);
+        return result;
+    }
+
+    internal static ChatMessage CreateResultMessage(string text, ResultFormat resultFormat = ResultFormat.Markdown)
+    {
+        var additionalProperties = new AdditionalPropertiesDictionary
+        {
+            ["type"] = "result",
+            ["resultFormat"] = JsonSerializer.SerializeToElement(resultFormat).GetString()!,
+        };
+
+        return new ChatMessage(ChatRole.Assistant, [new TextContent(text)])
         {
             MessageId = Guid.CreateVersion7().ToString(),
             AuthorName = Constants.DefaultAgentAuthor,
-            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = "result" },
+            AdditionalProperties = additionalProperties,
         };
+    }
 
     private static IReadOnlyList<ChatMessage> CreatePromptMessages(
         IReadOnlyList<ChatMessage> sourceMessages,

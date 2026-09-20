@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Contracts;
@@ -6,10 +7,12 @@ using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Agents.Execution.Agents.History;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Approval;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Agw.Tools.Impl.ToolBlocks.UserMemory;
@@ -91,12 +94,16 @@ public partial class AgentRuntimeService
                     return context;
                 };
             }
+            var hasResponseSchema = !string.IsNullOrWhiteSpace(request.Agent.ResponseSchema);
+            var historyProvider = hasResponseSchema
+                ? new ResponseSchemaChatHistoryProvider(_chatHistoryProvider)
+                : _chatHistoryProvider;
             if (
                 !TryCreateExternalAgent(
                     request,
                     project,
                     environmentVariables,
-                    _chatHistoryProvider,
+                    historyProvider,
                     createMemoryContextAsync,
                     out aiAgent,
                     isBackground,
@@ -106,6 +113,16 @@ public partial class AgentRuntimeService
             {
                 await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
                 return null;
+            }
+
+            if (hasResponseSchema)
+            {
+                aiAgent = new AgentResponseSchemaExecutionAgent(
+                    aiAgent!,
+                    "external",
+                    ExternalAgentKindResolver.Resolve(request.Agent).ToString(),
+                    modelConfiguration?.Provider.ProviderType.ToString() ?? "default"
+                );
             }
 
             return new ResourceOwningAIAgent(aiAgent!, capabilities);
@@ -241,10 +258,7 @@ public partial class AgentRuntimeService
     )
     {
         var ownedResource = aiAgent as IAsyncDisposable;
-        if (onProviderSessionStartedAsync != null)
-        {
-            aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
-        }
+        aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
 
         var decorated = DecorateExternalAgent(aiAgent, historyProvider, isBackground, createMemoryContextAsync);
         return ownedResource == null ? decorated : new ResourceOwningAIAgent(decorated, ownedResource);
@@ -282,14 +296,7 @@ public partial class AgentRuntimeService
 
         var agentBuilder = aiAgent
             .AsBuilder()
-            .Use(
-                runFunc: _observabilityMiddleware.LogRunMiddleware,
-                runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
-            )
-            .Use(
-                runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
-            );
+            .Use(runFunc: _telemetryMiddleware.RunAsync, runStreamingFunc: _telemetryMiddleware.RunStreamingAsync);
         if (isBackground)
         {
             var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);
@@ -410,7 +417,32 @@ public partial class AgentRuntimeService
                 };
         }
 
+        options = ApplyResponseSchema(options, agent.ResponseSchema);
         return ApplyEnvironmentVariables(options, environmentVariables);
+    }
+
+    /// <summary>
+    /// Passes the configured response schema through the CLI's <c>--json-schema</c> argument. The schema
+    /// wins over a same-named Extra Settings entry, and the SDK renders ExtraArgs through the process
+    /// argument list so the JSON stays safely escaped and out of shell interpretation. The CLI validates
+    /// the final result against the schema; a run without a schema-conforming result fails there instead
+    /// of degrading to plain text.
+    /// </summary>
+    internal static ClaudeCodeAIAgentOptions ApplyResponseSchema(
+        ClaudeCodeAIAgentOptions options,
+        string? responseSchema
+    )
+    {
+        if (string.IsNullOrWhiteSpace(responseSchema))
+        {
+            return options;
+        }
+
+        var extraArgs = new Dictionary<string, string?>(options.ExtraArgs ?? new Dictionary<string, string?>())
+        {
+            ["json-schema"] = responseSchema,
+        };
+        return options with { ExtraArgs = extraArgs };
     }
 
     private AIAgent? CreateCodexAgent(
@@ -632,7 +664,46 @@ public partial class AgentRuntimeService
             };
         }
 
+        options = ApplyCodexResponseSchema(options, agent.ResponseSchema);
         return options;
+    }
+
+    /// <summary>
+    /// Maps the configured response schema to Codex <see cref="TurnOptions.OutputSchema"/> on both the
+    /// buffered and streaming turn paths. The SDK forwards the schema to the CLI through a temporary
+    /// file that it cleans up itself; a CLI that rejects the schema fails the turn instead of
+    /// degrading to plain text.
+    /// </summary>
+    internal static CodexAIAgentOptions ApplyCodexResponseSchema(CodexAIAgentOptions options, string? responseSchema)
+    {
+        if (string.IsNullOrWhiteSpace(responseSchema))
+        {
+            return options;
+        }
+
+        Dictionary<string, object?> outputSchema;
+        try
+        {
+            using var document = JsonDocument.Parse(responseSchema);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "Agent responseSchema must be a JSON object.");
+            }
+
+            // Clone each property so the dictionary stays valid after the document is disposed.
+            outputSchema = document
+                .RootElement.EnumerateObject()
+                .ToDictionary(property => property.Name, property => (object?)property.Value.Clone());
+        }
+        catch (JsonException)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Agent responseSchema is not valid JSON.");
+        }
+
+        return options with
+        {
+            TurnOptions = new TurnOptions { OutputSchema = outputSchema },
+        };
     }
 
     public static ClaudeCodeAIAgentOptions ApplyEnvironmentVariables(

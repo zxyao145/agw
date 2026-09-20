@@ -1,15 +1,16 @@
 using System.Runtime.CompilerServices;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public class UsageTrackingMiddlewareTests
+public class AgentTelemetryUsageTests
 {
     [Fact]
-    public async Task TrackRunMiddleware_ResponseHasUsage_RecordsUsage()
+    public async Task RunAsync_ResponseHasUsage_RecordsUsage()
     {
         var recorder = new CapturingUsageRecorder();
         var middleware = CreateMiddleware(recorder);
@@ -28,7 +29,7 @@ public class UsageTrackingMiddlewareTests
         );
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
-        var response = await middleware.TrackRunMiddleware(
+        var response = await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "hello")],
             session,
             options: null,
@@ -47,7 +48,7 @@ public class UsageTrackingMiddlewareTests
     }
 
     [Fact]
-    public async Task TrackStreamingMiddleware_MultipleUsageContents_RecordsCombinedUsage()
+    public async Task RunStreamingAsync_MultipleUsageContents_RecordsCombinedUsage()
     {
         var recorder = new CapturingUsageRecorder();
         var middleware = CreateMiddleware(recorder);
@@ -78,7 +79,7 @@ public class UsageTrackingMiddlewareTests
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
         await foreach (
-            var _ in middleware.TrackStreamingMiddleware(
+            var _ in middleware.RunStreamingAsync(
                 [new ChatMessage(ChatRole.User, "hello")],
                 session,
                 options: null,
@@ -97,7 +98,7 @@ public class UsageTrackingMiddlewareTests
     }
 
     [Fact]
-    public async Task TrackStreamingMiddleware_InnerAgentFailsAfterUsage_RecordsObservedUsage()
+    public async Task RunStreamingAsync_InnerAgentFailsAfterUsage_RecordsObservedUsage()
     {
         var recorder = new CapturingUsageRecorder();
         var middleware = CreateMiddleware(recorder);
@@ -113,7 +114,7 @@ public class UsageTrackingMiddlewareTests
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
             await foreach (
-                var _ in middleware.TrackStreamingMiddleware(
+                var _ in middleware.RunStreamingAsync(
                     [new ChatMessage(ChatRole.User, "hello")],
                     session,
                     options: null,
@@ -127,14 +128,14 @@ public class UsageTrackingMiddlewareTests
     }
 
     [Fact]
-    public async Task TrackRunMiddleware_RecorderFails_ReturnsAgentResponse()
+    public async Task RunAsync_RecorderFails_ReturnsAgentResponse()
     {
         var recorder = new CapturingUsageRecorder { ThrowOnAdd = true };
         var middleware = CreateMiddleware(recorder);
         var agent = CreateAgent(new UsageChatClient { ResponseUsage = new UsageDetails { TotalTokenCount = 3 } });
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
-        var response = await middleware.TrackRunMiddleware(
+        var response = await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "hello")],
             session,
             options: null,
@@ -146,14 +147,14 @@ public class UsageTrackingMiddlewareTests
     }
 
     [Fact]
-    public async Task TrackRunMiddleware_ResponseHasNoUsage_DoesNotRecord()
+    public async Task RunAsync_ResponseHasNoUsage_DoesNotRecord()
     {
         var recorder = new CapturingUsageRecorder();
         var middleware = CreateMiddleware(recorder);
         var agent = CreateAgent(new UsageChatClient());
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
-        await middleware.TrackRunMiddleware(
+        await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "hello")],
             session,
             options: null,
@@ -165,14 +166,14 @@ public class UsageTrackingMiddlewareTests
     }
 
     [Fact]
-    public async Task TrackRunMiddleware_ResponseHasZeroUsage_RecordsUsage()
+    public async Task RunAsync_ResponseHasZeroUsage_RecordsUsage()
     {
         var recorder = new CapturingUsageRecorder();
         var middleware = CreateMiddleware(recorder);
         var agent = CreateAgent(new UsageChatClient { ResponseUsage = new UsageDetails() });
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
-        await middleware.TrackRunMiddleware(
+        await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "hello")],
             session,
             options: null,
@@ -184,7 +185,7 @@ public class UsageTrackingMiddlewareTests
     }
 
     [Fact]
-    public async Task TrackRunMiddleware_AgentHasNoName_RecordsUnknownAgentName()
+    public async Task RunAsync_AgentHasNoName_RecordsUnknownAgentName()
     {
         var recorder = new CapturingUsageRecorder();
         var middleware = CreateMiddleware(recorder);
@@ -194,7 +195,7 @@ public class UsageTrackingMiddlewareTests
         );
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
-        await middleware.TrackRunMiddleware(
+        await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "hello")],
             session,
             options: null,
@@ -205,14 +206,174 @@ public class UsageTrackingMiddlewareTests
         Assert.Equal("$unknown", Assert.Single(recorder.Entries).AgentName);
     }
 
-    private static UsageTrackingMiddleware CreateMiddleware(IAgentUsageRecorder recorder) =>
-        new(new StubProviderSessionState(), recorder, NullLogger<UsageTrackingMiddleware>.Instance);
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunStreamingAsync_InterruptedAfterUsage_RecordsOnlyObservedUsageWithoutCompletionLog(bool cancel)
+    {
+        var recorder = new CapturingUsageRecorder();
+        var logger = new RecordingLogger();
+        var middleware = new AgentTelemetryMiddleware(new StubProviderSessionState(), recorder, logger);
+        var agent = CreateAgent(
+            new UsageChatClient
+            {
+                StreamingUsage = [new UsageDetails { TotalTokenCount = 9 }, new UsageDetails { TotalTokenCount = 40 }],
+            }
+        );
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var enumerator = middleware
+            .RunStreamingAsync([], session, null, agent, cancellation.Token)
+            .GetAsyncEnumerator(cancellation.Token);
+
+        try
+        {
+            Assert.True(await enumerator.MoveNextAsync());
+            if (cancel)
+            {
+                await cancellation.CancelAsync();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await enumerator.MoveNextAsync());
+            }
+        }
+        finally
+        {
+            await enumerator.DisposeAsync();
+        }
+
+        Assert.Equal(9, Assert.Single(recorder.Entries).Usage.TotalTokenCount);
+        Assert.Equal(CancellationToken.None, recorder.LastCancellationToken);
+        Assert.DoesNotContain(
+            logger.Messages,
+            message => message.StartsWith("Executed agent", StringComparison.Ordinal)
+        );
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Run_Success_RecordsUsageBeforeCompletionLog(bool streaming)
+    {
+        var logger = new RecordingLogger();
+        var recorder = new CapturingUsageRecorder { OnAdd = () => logger.Messages.Add("usage") };
+        var middleware = new AgentTelemetryMiddleware(new StubProviderSessionState(), recorder, logger);
+        var agent = CreateAgent(
+            new UsageChatClient
+            {
+                ResponseUsage = new UsageDetails { TotalTokenCount = 9 },
+                StreamingUsage = [new UsageDetails { TotalTokenCount = 9 }],
+            }
+        );
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        if (streaming)
+        {
+            await foreach (
+                var _ in middleware.RunStreamingAsync([], session, null, agent, TestContext.Current.CancellationToken)
+            ) { }
+        }
+        else
+        {
+            await middleware.RunAsync([], session, null, agent, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(["Executing agent agent", "usage", "Executed agent agent"], logger.Messages);
+        Assert.Single(recorder.Entries);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_MissingProjectContext_DoesNotRecord(bool missingSession)
+    {
+        var recorder = new CapturingUsageRecorder();
+        var middleware = new AgentTelemetryMiddleware(
+            new StubProviderSessionState { HasProjectContext = false },
+            recorder,
+            NullLogger<AgentTelemetryMiddleware>.Instance
+        );
+        var agent = CreateAgent(new UsageChatClient { ResponseUsage = new UsageDetails { TotalTokenCount = 9 } });
+        var session = missingSession ? null : await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        var response = await middleware.RunAsync([], session, null, agent, TestContext.Current.CancellationToken);
+
+        Assert.Equal("response", response.Text);
+        Assert.Empty(recorder.Entries);
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_InterleavedExecutions_RecordsUsageIndependently()
+    {
+        var recorder = new CapturingUsageRecorder();
+        var middleware = CreateMiddleware(recorder);
+        var firstAgent = CreateAgent(
+            new UsageChatClient { StreamingUsage = [new UsageDetails { TotalTokenCount = 3 }] },
+            "first"
+        );
+        var secondAgent = CreateAgent(
+            new UsageChatClient { StreamingUsage = [new UsageDetails { TotalTokenCount = 7 }] },
+            "second"
+        );
+        var firstSession = await firstAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var secondSession = await secondAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        await using var first = middleware
+            .RunStreamingAsync([], firstSession, null, firstAgent, TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        await using var second = middleware
+            .RunStreamingAsync([], secondSession, null, secondAgent, TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+
+        Assert.True(await first.MoveNextAsync());
+        Assert.True(await second.MoveNextAsync());
+        Assert.False(await first.MoveNextAsync());
+        Assert.False(await second.MoveNextAsync());
+
+        Assert.Collection(
+            recorder.Entries,
+            entry =>
+            {
+                Assert.Equal("first", entry.AgentName);
+                Assert.Equal(3, entry.Usage.TotalTokenCount);
+            },
+            entry =>
+            {
+                Assert.Equal("second", entry.AgentName);
+                Assert.Equal(7, entry.Usage.TotalTokenCount);
+            }
+        );
+    }
+
+    private sealed class RecordingLogger : ILogger<AgentTelemetryMiddleware>
+    {
+        public List<string> Messages { get; } = [];
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel == LogLevel.Information)
+                Messages.Add(formatter(state, exception));
+        }
+    }
+
+    private static AgentTelemetryMiddleware CreateMiddleware(IAgentUsageRecorder recorder) =>
+        new(new StubProviderSessionState(), recorder, NullLogger<AgentTelemetryMiddleware>.Instance);
 
     private static AIAgent CreateAgent(IChatClient chatClient, string? name = "agent") =>
         new ChatClientAgent(chatClient, new ChatClientAgentOptions { Id = "agent-id", Name = name });
 
     private sealed class StubProviderSessionState : IProviderSessionState
     {
+        public bool HasProjectContext { get; init; } = true;
+
         public void InitializeSessionState(AgentSession session, string contextId, Guid projectId) { }
 
         public void InitializeSessionState(
@@ -226,7 +387,7 @@ public class UsageTrackingMiddlewareTests
         {
             projectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
             contextId = "context-1";
-            return true;
+            return HasProjectContext;
         }
     }
 
@@ -235,6 +396,8 @@ public class UsageTrackingMiddlewareTests
         public List<Entry> Entries { get; } = [];
 
         public bool ThrowOnAdd { get; init; }
+        public Action? OnAdd { get; init; }
+        public CancellationToken LastCancellationToken { get; private set; }
 
         public Task AddAsync(
             Guid projectId,
@@ -244,6 +407,8 @@ public class UsageTrackingMiddlewareTests
             CancellationToken cancellationToken = default
         )
         {
+            LastCancellationToken = cancellationToken;
+            OnAdd?.Invoke();
             if (ThrowOnAdd)
             {
                 throw new InvalidOperationException("Recorder failed.");
@@ -286,6 +451,7 @@ public class UsageTrackingMiddlewareTests
         {
             foreach (var usage in StreamingUsage)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [new UsageContent(usage)] };
             }
 

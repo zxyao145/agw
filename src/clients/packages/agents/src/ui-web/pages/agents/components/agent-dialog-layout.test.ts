@@ -50,16 +50,23 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
 
   assert.match(source, /lg:grid-cols-\[360px_minmax\(0,1fr\)\]/);
   assert.match(source, /<TabsTrigger value="system-prompt">Instructions<\/TabsTrigger>/);
+  assert.match(
+    source,
+    /<TabsTrigger value="response-schema" disabled=\{!supportsResponseSchema\}>\s*Response Schema\s*<\/TabsTrigger>/,
+  );
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);
-  assert.equal(source.match(/<TabsTrigger value=/g)?.length, 7);
+  assert.equal(source.match(/<TabsTrigger value=/g)?.length, 8);
   assert.match(source, /<TabsTrigger value="mcp-tool-servers">MCP Tool Server<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="connections">Integrations<\/TabsTrigger>/);
   assert.match(
     source,
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,
   );
-  assert.match(source, /<TabsTrigger value="extra-settings">Extra Settings<\/TabsTrigger>/);
+  assert.match(
+    source,
+    /<TabsTrigger value="extra-settings" disabled=\{!canEditExtra\}>\s*Extra Settings\s*<\/TabsTrigger>/,
+  );
   assert.match(source, /<EnvironmentVariablesPanel/);
   assert.match(source, /External agents do not support instructions configuration/);
   assert.match(source, /External agents do not support turn summary configuration/);
@@ -68,6 +75,38 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   assert.match(source, /External agents do not support MCP tool server configuration/);
   assert.match(source, /External agents do not support integration configuration/);
   assert.match(source, /<SkillsPanel/);
+});
+
+test("Agent Response Schema tab trigger is disabled and its content hidden for Pi agents", async () => {
+  const source = await readFile(FORM_FIELDS_URL, "utf8");
+
+  assert.match(
+    source,
+    /const supportsResponseSchema = !\(isExternalAgent && externalAgentKind === ExternalAgentKind\.Pi\)/,
+  );
+  assert.match(
+    source,
+    /<TabsTrigger value="response-schema" disabled=\{!supportsResponseSchema\}>/,
+  );
+  assert.equal(source.split("{supportsResponseSchema ? (").length - 1, 1);
+});
+
+test("Agent Response Schema tab renders after Environment Variables and before Extra Settings with inline validation", async () => {
+  const source = await readFile(FORM_FIELDS_URL, "utf8");
+
+  const environmentVariablesTab = source.indexOf('<TabsTrigger value="environment-variables">');
+  const responseSchemaTab = source.indexOf('<TabsTrigger value="response-schema"');
+  const extraSettingsTab = source.indexOf('<TabsTrigger value="extra-settings"');
+  assert.ok(environmentVariablesTab < responseSchemaTab && responseSchemaTab < extraSettingsTab);
+
+  const tabContent = source.indexOf('value="response-schema"', responseSchemaTab);
+  assert.ok(tabContent > responseSchemaTab);
+  const schemaControl = source.indexOf("id={`${idPrefix}responseSchema`}", tabContent);
+  assert.ok(schemaControl > tabContent);
+  assert.match(source, /getAgentResponseSchemaError\(responseSchema\)/);
+  assert.match(source, /responseSchemaError \? \(/);
+  assert.match(source, /JSON Schema draft-07 is recommended/);
+  assert.match(source, /Leave empty to disable structured output/);
 });
 
 test("Agent Extra Settings is rendered in the right tab area", async () => {
@@ -165,6 +204,13 @@ test("Agent forms expose summary settings but disable them for External Agents",
   assert.match(formSource, /checked=\{enableSummary\}/);
   assert.match(formSource, /onCheckedChange=\{setEnableSummary\}/);
   assert.match(formSource, /disabled=\{isExternalAgent\}/);
+  assert.match(
+    formSource,
+    /const usesStructuredResult = supportsResponseSchema && responseSchema\.trim\(\)\.length > 0/,
+  );
+  assert.match(formSource, /Append the Agent's final JSON response directly/);
+  assert.match(formSource, /disabled=\{isExternalAgent \|\| usesStructuredResult\}/);
+  assert.match(formSource, /This selection is preserved for later use/);
   assert.match(formSource, /External agents do not support turn summary configuration/);
   assert.match(createSource, /enableSummary,/);
   assert.match(createSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);

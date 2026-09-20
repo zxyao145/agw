@@ -43,6 +43,32 @@ function claudeSystemMessage(
   };
 }
 
+test("Claude intermediate results stay ordinary messages live and after history replay", () => {
+  const progress = message("progress", "assistant", "两个后台 Agent 已启动，正在等待结果。", {
+    type: "assistant",
+    isIntermediateResult: true,
+    agentName: "claude-code",
+  });
+  const final = message("final", "assistant", "两个后台 Agent 均已完成。", {
+    type: "result",
+    isIntermediateResult: false,
+    agentName: "claude-code",
+  });
+
+  for (const messages of [[progress, final], JSON.parse(JSON.stringify([progress, final]))]) {
+    const items = buildConversationRenderModel(messages);
+    assert.deepEqual(
+      items.map((item) => item.type),
+      ["message", "result"],
+    );
+    const progressItem = items[0];
+    assert.equal(progressItem?.type, "message");
+    if (progressItem?.type !== "message") throw new Error("Expected a progress message");
+    assert.equal(progressItem.width, "normal");
+    assert.equal(progressItem.message.source.contents[0]?.content, progress.contents[0]?.content);
+  }
+});
+
 test("visible messages remove usage and controls before collapsing ordinary system runs", () => {
   const visible = prepareVisibleMessages([
     message("system-1", "system", "first"),
@@ -354,6 +380,207 @@ test("render model emits plan, full result, right user, image, and red error sem
     media.type === "message" ? media.message.contents.map((content) => content.type) : [],
     ["image", "error"],
   );
+});
+
+const schemaOptions = {
+  activeAgentId: "schema-agent",
+  agentResultFormats: [{ id: "schema-agent", resultFormat: "json" }],
+} as const;
+
+test("JSON results render directly without Markdown or changing source tokens", () => {
+  const json = '{"value":"```<tag>"}';
+  const source = {
+    ...message("result-json", "assistant", json, { type: "result", resultFormat: "json" }),
+    additionalProperties: { type: "result", resultFormat: "json" },
+  };
+
+  const items = buildConversationRenderModel([source], schemaOptions);
+
+  assert.equal(items.length, 1);
+  const item = items[0]!;
+  assert.equal(item.type, "result");
+  assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+    { type: "json", text: '{\n  "value": "```<tag>"\n}' },
+  ]);
+  assert.equal(source.contents[0]?.content, json);
+});
+
+test("historical JSON results strip model fences and trailing summaries in presentation", () => {
+  const json = '[{"approved":false,"id":9007199254740993}]';
+  const source = message("legacy-result", "assistant", `\`\`\`json\n${json}\n\`\`\`\n小结：完成。`);
+  source.additionalProperties = { type: "result", resultFormat: "json" };
+  const originalText = source.contents[0]?.content;
+
+  const items = buildConversationRenderModel([source], schemaOptions);
+
+  assert.equal(items.length, 1);
+  const item = items[0]!;
+  assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+    { type: "json", text: '[\n  {\n    "approved": false,\n    "id": 9007199254740993\n  }\n]' },
+  ]);
+  assert.equal(source.contents[0]?.content, originalText);
+});
+
+test("JSON result formatting preserves strings, number tokens, key order and empty containers", () => {
+  const expected = `{
+  "10": 1.00,
+  "2": 1e+30,
+  "nested": [
+    {},
+    [],
+    {
+      "text": "中文 ,:{}[] **literal** \\"quote\\" \\\\ \\n",
+      "values": [
+        true,
+        null,
+        -0
+      ]
+    }
+  ]
+}`;
+  for (const input of [expected.replace(/\n\s*/g, ""), expected]) {
+    const source = message("result", "assistant", input, { type: "result", resultFormat: "json" });
+    const item = buildConversationRenderModel([source], schemaOptions)[0]!;
+    assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+      { type: "json", text: expected },
+    ]);
+    assert.equal(source.contents[0]?.content, input);
+  }
+});
+
+test("all Agent kinds format JSON Results with a configured schema, regardless of SDK markers", () => {
+  const json = '{"approved":false,"id":9007199254740993}';
+  for (const author of ["system-agent", "claude-code", "codex", "pi", "future-agent"]) {
+    for (const contentMetadata of [false, true]) {
+      const source = message("claude-result", "assistant", json, {
+        type: contentMetadata ? "assistant" : "result",
+        subtype: "success",
+      });
+      source.author = author;
+      if (contentMetadata) source.contents[0]!.additionalProperties = { type: "result" };
+      const item = buildConversationRenderModel([source], schemaOptions)[0]!;
+      assert.equal(item.type, "result");
+      assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+        { type: "json", text: '{\n  "approved": false,\n  "id": 9007199254740993\n}' },
+      ]);
+      assert.equal(source.contents[0]?.content, json);
+    }
+  }
+});
+
+test("ordinary assistant JSON text keeps its Markdown presentation", () => {
+  const json = '{"approved":false}';
+  for (const properties of [{}, { resultFormat: "json" }]) {
+    const item = buildConversationRenderModel(
+      [message("plain", "assistant", json, properties)],
+      schemaOptions,
+    )[0]!;
+    assert.ok(item.type === "result" || item.type === "message");
+    assert.deepEqual(item.message.contents, [
+      { type: "markdown", markdown: json, sourceType: "TextContent" },
+    ]);
+  }
+});
+
+test("unmarked Result prose, partial JSON and scalar values keep their original presentation", () => {
+  for (const text of ['Summary: {"approved":false}', '{"approved":', "true", "null", "42"]) {
+    const item = buildConversationRenderModel(
+      [message("result", "assistant", text, { type: "result" })],
+      schemaOptions,
+    )[0]!;
+    assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+      { type: "markdown", markdown: text, sourceType: "TextContent" },
+    ]);
+  }
+});
+
+test("invalid historical JSON results show an error instead of returning the original prose", () => {
+  for (const text of ["### Summary", "true", "null", '"{}"', "{}\n[]", "{invalid}"]) {
+    const source = message("invalid-result", "assistant", text);
+    source.additionalProperties = { type: "result", resultFormat: "json" };
+
+    const item = buildConversationRenderModel([source], schemaOptions)[0]!;
+
+    assert.equal(item.type, "result");
+    assert.deepEqual(
+      item.type === "result" ? item.message.contents.map((content) => content.type) : [],
+      ["error"],
+    );
+  }
+});
+
+test("unmarked Result JSON stays Markdown without a configured schema", () => {
+  const json = '{"approved":false}';
+  for (const resultFormat of [undefined, "markdown"] as const) {
+    for (const author of ["system-agent", "claude-code", "codex", "pi"]) {
+      const source = message("result", "assistant", json, { type: "result" });
+      source.author = author;
+      const item = buildConversationRenderModel([source], {
+        activeAgentId: "agent",
+        agentResultFormats: [{ id: "agent", resultFormat }],
+      })[0]!;
+      assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+        { type: "markdown", markdown: json, sourceType: "TextContent" },
+      ]);
+    }
+  }
+});
+
+test("the persisted JSON Result marker preserves execution-time format without current Agent configuration", () => {
+  const source = message("result", "assistant", '{"approved":false}', {
+    type: "result",
+    resultFormat: "json",
+  });
+  for (const options of [
+    {},
+    {
+      ...schemaOptions,
+      agentResultFormats: [{ id: "schema-agent", resultFormat: "markdown" as const }],
+    },
+  ]) {
+    const item = buildConversationRenderModel([source], options)[0]!;
+    assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+      { type: "json", text: '{\n  "approved": false\n}' },
+    ]);
+  }
+});
+
+test("an explicit Markdown Result overrides the Agent's current JSON default", () => {
+  const json = '{"approved":false}';
+  const source = message("result", "assistant", json, { type: "result", resultFormat: "markdown" });
+  const item = buildConversationRenderModel([source], schemaOptions)[0]!;
+  assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+    { type: "markdown", markdown: json, sourceType: "TextContent" },
+  ]);
+});
+
+test("history uses each turn's target schema instead of the currently selected Agent", () => {
+  const messages: AiMessage[] = [];
+  for (const [index, target] of [
+    { targetType: "agent", targetId: "schema-agent" },
+    { targetType: "agent", targetId: "plain-agent" },
+    { targetType: "agentflow", targetId: "schema-agent" },
+    { targetType: "agent", targetId: "missing-agent" },
+    { targetType: "agent", targetId: "SCHEMA-AGENT" },
+  ].entries()) {
+    const input = message(`user-${index}`, "user", "Review");
+    input.contents[0]!.additionalProperties = target;
+    const result = message(`result-${index}`, "assistant", '{"approved":false}', {
+      type: "result",
+    });
+    input.streamingScopeId = result.streamingScopeId = input.messageId;
+    messages.push(input, result);
+  }
+  for (const activeAgentId of ["plain-agent", "schema-agent", null]) {
+    const results = buildConversationRenderModel(messages, {
+      ...schemaOptions,
+      activeAgentId,
+    }).filter((item) => item.type === "result");
+    assert.deepEqual(
+      results.map((item) => item.message.contents[0]?.type),
+      ["json", "markdown", "markdown", "markdown", "json"],
+    );
+  }
 });
 
 test("tool calls pair per scope and completed questions use a dedicated result item", () => {

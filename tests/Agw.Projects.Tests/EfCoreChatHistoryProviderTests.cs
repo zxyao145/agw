@@ -912,7 +912,7 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task AppendAsync_WhenMessagesContainBlankText_PersistsOnlyMessagesWithContent()
+    public async Task AppendAsync_WhenMessagesContainBlankText_PreservesProtocolReasoning()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -959,6 +959,11 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
                 ),
                 new ChatMessage(ChatRole.Assistant, [new TextContent(string.Empty), new TextContent("hello")]),
                 new ChatMessage(ChatRole.Assistant, [new TextReasoningContent("kept reasoning")]),
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    [new TextReasoningContent("") { ProtectedData = "signature-only" }]
+                ),
+                new ChatMessage(ChatRole.Assistant, [new TextReasoningContent("")]),
             ],
             cancellationToken
         );
@@ -977,14 +982,25 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
             .ToList();
         Assert.Collection(
             persisted,
+            message => Assert.Equal("\t", Assert.IsType<TextReasoningContent>(Assert.Single(message.Contents)).Text),
             message =>
-                Assert.Equal("call-1", Assert.IsType<FunctionCallContent>(Assert.Single(message.Contents)).CallId),
+            {
+                Assert.Equal(" ", Assert.IsType<TextReasoningContent>(message.Contents[0]).Text);
+                Assert.Equal("call-1", Assert.IsType<FunctionCallContent>(message.Contents[1]).CallId);
+                Assert.Equal(2, message.Contents.Count);
+            },
             message => Assert.Equal("hello", Assert.IsType<TextContent>(Assert.Single(message.Contents)).Text),
             message =>
                 Assert.Equal(
                     "kept reasoning",
                     Assert.IsType<TextReasoningContent>(Assert.Single(message.Contents)).Text
-                )
+                ),
+            message =>
+                Assert.Equal(
+                    "signature-only",
+                    Assert.IsType<TextReasoningContent>(Assert.Single(message.Contents)).ProtectedData
+                ),
+            message => Assert.Equal("", Assert.IsType<TextReasoningContent>(Assert.Single(message.Contents)).Text)
         );
     }
 

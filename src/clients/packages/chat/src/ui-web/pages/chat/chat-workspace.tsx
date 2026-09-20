@@ -87,6 +87,7 @@ type AgentDto = {
   displayName: string;
   name: string;
   enable: boolean;
+  resultFormat?: import("@agw/api").components["schemas"]["ResultFormat"];
 };
 
 type AgentflowDto = {
@@ -1219,6 +1220,7 @@ export function ChatWorkspace({
                 <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
                   <Chat
                     target={selectedTarget}
+                    agentResultFormats={agentsQuery.data}
                     projectId={selectedProjectId}
                     conversationId={conversationId}
                     sessionSeed={chatSessionSeed}

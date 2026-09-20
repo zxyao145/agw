@@ -2,7 +2,10 @@ using System.ClientModel;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Contracts;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.History;
+using Agw.Agents.Execution.Agents.Middleware.Approval;
+using Agw.Agents.Execution.Agents.Middleware.ModelInput;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
@@ -117,6 +120,11 @@ public partial class AgentRuntimeService
 
             _logger.LogInformation("Creating definition agent {AgentName}", agentDefinition.Name);
 
+            var responseFormat = AgentResponseSchemaFormat.Create(agentDefinition, provider.ProviderType);
+            var historyProvider =
+                responseFormat != null
+                    ? new ResponseSchemaChatHistoryProvider(_chatHistoryProvider)
+                    : _chatHistoryProvider;
             aiAgent = chatClient.AsAgwAgent(
                 new ResolvedAgentDefinition
                 {
@@ -126,13 +134,14 @@ public partial class AgentRuntimeService
                     SystemPrompt = agentDefinition.SystemPrompt,
                     ModelId = model.Name,
                     OpenTelemetrySourceName = provider.Name,
-                    ChatHistoryProvider = _chatHistoryProvider,
+                    ChatHistoryProvider = historyProvider,
                     CompactionProvider = new CompactionProvider(
                         new ContextWindowCompactionStrategy(model.MaxContextWindowTokens, model.MaxOutputTokens),
                         stateKey: $"agw.compaction.{agentDefinition.Id:N}",
                         loggerFactory: _loggerFactory
                     ),
                     MaxOutputTokens = model.MaxOutputTokens,
+                    ResponseFormat = responseFormat,
                 },
                 capabilities,
                 _loggerFactory,
@@ -143,17 +152,10 @@ public partial class AgentRuntimeService
                 .SingleOrDefault(static provider => provider != null);
             Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
                 userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
-            aiAgent = new AgentRequestContextAgent(aiAgent, _chatHistoryProvider, createMemoryContextAsync, _logger);
+            aiAgent = new AgentRequestContextAgent(aiAgent, historyProvider, createMemoryContextAsync, _logger);
             var agentBuilder = aiAgent
                 .AsBuilder()
-                .Use(
-                    runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
-                )
-                .Use(
-                    runFunc: _observabilityMiddleware.LogRunMiddleware,
-                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
-                );
+                .Use(runFunc: _telemetryMiddleware.RunAsync, runStreamingFunc: _telemetryMiddleware.RunStreamingAsync);
             if (backgroundDepth > 0)
             {
                 var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);
@@ -164,6 +166,16 @@ public partial class AgentRuntimeService
             }
 
             aiAgent = agentBuilder.Build();
+            if (responseFormat != null)
+            {
+                aiAgent = new AgentResponseSchemaExecutionAgent(
+                    aiAgent,
+                    "system",
+                    "none",
+                    provider.ProviderType.ToString()
+                );
+            }
+
             return new ResourceOwningAIAgent(aiAgent, capabilities);
         }
         catch
@@ -204,7 +216,7 @@ public partial class AgentRuntimeService
             BaseUrl = provider.Endpoint,
         };
         var client = new AnthropicClient(anthropicClientOptions);
-        return client.AsIChatClient(model.Name);
+        return AnthropicReasoningChatClient.Create(client.AsIChatClient(model.Name), new Uri(provider.Endpoint));
     }
 
     private IChatClient CreateOpenAiResponsesChatClient(
@@ -218,7 +230,10 @@ public partial class AgentRuntimeService
         var options = new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint) };
         var client = new OpenAIClient(credential, options);
 #pragma warning disable OPENAI001
-        return client.GetResponsesClient().AsIChatClient(model.Name);
+        return OpenAiResponsesReasoningChatClient.Create(
+            client.GetResponsesClient().AsIChatClient(model.Name),
+            options.Endpoint
+        );
 #pragma warning restore OPENAI001
     }
 

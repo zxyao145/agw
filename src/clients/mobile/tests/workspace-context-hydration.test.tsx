@@ -83,7 +83,14 @@ test.each([false, true])(
         case "/api/projects":
           return [{ id: "project-1", name: "Agw" }];
         case "/api/agents":
-          return [{ id: "agent-1", name: "ClaudeCode", displayName: "Claude Code" }];
+          return [
+            {
+              id: "agent-1",
+              name: "ClaudeCode",
+              displayName: "Claude Code",
+              resultFormat: "json",
+            },
+          ];
         case "/api/agentflows":
           return [];
         case "/api/agents/permission-capabilities":
@@ -123,6 +130,7 @@ test.each([false, true])(
     try {
       await waitFor(() => expect(result.current.conversations).toHaveLength(1));
       await waitFor(() => expect(result.current.selectedTarget).not.toBeNull());
+      expect(result.current.agents[0]?.resultFormat).toBe("json");
       await act(() => result.current.selectConversation(context.conversationId));
       await waitFor(() => expect(result.current.isChatLoading).toBe(true));
       if (failHistory) {

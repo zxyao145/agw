@@ -7,7 +7,7 @@ using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agentflows.Workflows.Builders;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -114,13 +114,14 @@ public class AgentflowWorkflowCompilerTests
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[] { Edge("agent-output", "agent-node", "output") };
-        var loggingMiddleware = new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance);
+        var loggingMiddleware = new AgentTelemetryMiddleware(
+            providerSessionState: null!,
+            usageRecorder: null!,
+            NullLogger<AgentTelemetryMiddleware>.Instance
+        );
         var agent = CreateAgent("agent-id", "persisted-agent")
             .AsBuilder()
-            .Use(
-                runFunc: loggingMiddleware.LogRunMiddleware,
-                runStreamingFunc: loggingMiddleware.LogStreamingMiddleware
-            )
+            .Use(runFunc: loggingMiddleware.RunAsync, runStreamingFunc: loggingMiddleware.RunStreamingAsync)
             .Build();
 
         var workflow = _compiler.Compile(

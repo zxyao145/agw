@@ -74,6 +74,8 @@ export type NativeConversationHistoryProps = {
 
 export type NativeConversationHistoryHostProps = Omit<NativeConversationHistoryProps, "items"> & {
   messages: import("@agw/api").AiMessage[];
+  activeAgentId?: string | null;
+  agentResultFormats?: readonly import("@agw/chat-core").AgentResultFormat[];
   pendingInteraction?: PendingInteraction | null;
   checkpointAvailability?: AgentflowCheckpointAvailability[];
 };
@@ -82,17 +84,26 @@ export const NativeConversationHistoryHost = React.forwardRef<
   NativeConversationHistoryHandle,
   NativeConversationHistoryHostProps
 >(function NativeConversationHistoryHost(
-  { messages, pendingInteraction, checkpointAvailability, ...props },
+  {
+    messages,
+    pendingInteraction,
+    checkpointAvailability,
+    activeAgentId,
+    agentResultFormats,
+    ...props
+  },
   ref,
 ) {
   const items = React.useMemo(
     () =>
       buildConversationRenderModel(messages, {
+        activeAgentId,
+        agentResultFormats,
         pendingInteraction,
         checkpointAvailability,
         collapseToolRuns: false,
       }),
-    [checkpointAvailability, messages, pendingInteraction],
+    [checkpointAvailability, messages, pendingInteraction, activeAgentId, agentResultFormats],
   );
   return <NativeConversationHistory ref={ref} items={items} {...props} />;
 });
@@ -460,6 +471,13 @@ function NativeContent({
     );
   }
   if (content.type === "error") return <Text style={styles.contentError}>{content.text}</Text>;
+  if (content.type === "json") {
+    return (
+      <Text selectable style={styles.plainText}>
+        {content.text}
+      </Text>
+    );
+  }
   if (content.type === "plain") return <Text style={styles.plainText}>{content.text}</Text>;
   if (content.type === "reasoning") {
     return (

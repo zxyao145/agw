@@ -17,7 +17,7 @@ namespace Agw.Migrations.Postgres.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -353,6 +353,10 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
+
+                    b.Property<string>("ResponseSchema")
+                        .HasColumnType("text")
+                        .HasColumnName("response_schema");
 
                     b.Property<Guid?>("SummaryModelProviderId")
                         .HasColumnType("uuid")

@@ -126,6 +126,7 @@ export default function AgentsPage() {
     ExternalAgentKind.None,
   );
   const [extra, setExtra] = React.useState("");
+  const [responseSchema, setResponseSchema] = React.useState("");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
   const [tools, setTools] = React.useState<ToolValueObject[]>([]);
@@ -151,6 +152,7 @@ export default function AgentsPage() {
     [],
   );
   const [editExtra, setEditExtra] = React.useState("");
+  const [editResponseSchema, setEditResponseSchema] = React.useState("");
   const [editEnvironmentVariables, setEditEnvironmentVariables] = React.useState<
     AgentEnvironmentVariableEntry[]
   >([]);
@@ -182,6 +184,7 @@ export default function AgentsPage() {
       setAgentType(AgentType.System);
       setExternalAgentKind(ExternalAgentKind.None);
       setExtra("");
+      setResponseSchema("");
       setSelectedSkillIds([]);
       setSelectedConnectionIds([]);
       setTools([]);
@@ -281,6 +284,9 @@ export default function AgentsPage() {
     setEditSummaryModelProviderId(agent.summaryModelProviderId ?? "");
     setEditEnableSummary(agent.enableSummary);
     setEditExtra(agent.extra || "");
+    setEditResponseSchema(
+      agent.externalAgentKind === ExternalAgentKind.Pi ? "" : (agent.responseSchema ?? ""),
+    );
     setEditEnvironmentVariables(toAgentEnvironmentVariableEntries(agent.environmentVariables));
     setEditTools(parseToolValues(agent.tools));
     setEditSelectedSkillIds(agent.agentSkillRelations?.map((relation) => relation.skillId) ?? []);
@@ -325,6 +331,9 @@ export default function AgentsPage() {
     const nextOption = externalAgentOptionsQuery.data?.find((option) => option.kind === nextKind);
     setExternalAgentKind(nextKind);
     setExtra(nextOption?.defaultExtra ?? "");
+    if (nextKind === ExternalAgentKind.Pi) {
+      setResponseSchema("");
+    }
   };
 
   const handleDelete = (agent: AgentDto) => {
@@ -434,6 +443,8 @@ export default function AgentsPage() {
             externalAgentOptionsQuery={externalAgentOptionsQuery}
             extra={extra}
             setExtra={setExtra}
+            responseSchema={responseSchema}
+            setResponseSchema={setResponseSchema}
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
@@ -509,6 +520,8 @@ export default function AgentsPage() {
         externalAgentOptionsQuery={externalAgentOptionsQuery}
         extra={editExtra}
         setExtra={setEditExtra}
+        responseSchema={editResponseSchema}
+        setResponseSchema={setEditResponseSchema}
         environmentVariables={editEnvironmentVariables}
         setEnvironmentVariables={setEditEnvironmentVariables}
         selectedSkillIds={editSelectedSkillIds}

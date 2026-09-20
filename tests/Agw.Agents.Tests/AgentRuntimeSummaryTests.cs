@@ -122,6 +122,81 @@ public class AgentRuntimeSummaryTests
         Assert.Equal("assistant response", call.Messages.Single(message => message.Role == ChatRole.Assistant).Text);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Execute_StructuredResult_UsesOnlyFinalAssistantResponse(bool streaming)
+    {
+        // Arrange
+        var projectId = Guid.CreateVersion7();
+        var summaryService = new RecordingSummaryService();
+        var agent = new MultipleApprovalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var runtime = new AgentRuntime(
+            NullLogger.Instance,
+            agent,
+            session,
+            projectId,
+            "context-1",
+            sessionStateScope: null,
+            enableSummary: true,
+            useStructuredResult: true,
+            summaryService: summaryService
+        );
+        var input = new AgwUserInput { Contents = [new AgwTextContent { Content = "run tools" }] };
+        var approvalHandler = new RecordingApprovalHandler();
+
+        // Act
+        if (streaming)
+        {
+            await foreach (
+                var _ in runtime.ExecuteStreamingAsync(input, approvalHandler, TestContext.Current.CancellationToken)
+            ) { }
+        }
+        else
+        {
+            await runtime.ExecuteAsync(input, approvalHandler, TestContext.Current.CancellationToken);
+        }
+
+        // Assert
+        var call = Assert.Single(summaryService.StructuredCalls);
+        Assert.Equal("done", call.FinalText);
+        Assert.Equal(projectId, call.ProjectId);
+        Assert.Equal("context-1", call.ContextId);
+        Assert.Empty(summaryService.Calls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_StructuredResultWithoutFinalText_DoesNotAppendResult()
+    {
+        // Arrange
+        var summaryService = new RecordingSummaryService();
+        var agent = CreateAgent(new StubChatClient("   "));
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var runtime = new AgentRuntime(
+            NullLogger.Instance,
+            agent,
+            session,
+            Guid.CreateVersion7(),
+            "context-1",
+            sessionStateScope: null,
+            enableSummary: true,
+            summaryService: summaryService,
+            useStructuredResult: true
+        );
+
+        // Act
+        var messages = await runtime.ExecuteAsync(
+            new AgwUserInput { Contents = [new AgwTextContent { Content = "request" }] },
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.DoesNotContain(messages, message => IsMessageType(message.AdditionalProperties, "result"));
+        Assert.Empty(summaryService.StructuredCalls);
+        Assert.Empty(summaryService.Calls);
+    }
+
     [Fact]
     public async Task ExecuteAsync_SummaryDisabled_DoesNotGenerateResult()
     {
@@ -136,6 +211,7 @@ public class AgentRuntimeSummaryTests
             "context-1",
             sessionStateScope: null,
             enableSummary: false,
+            useStructuredResult: true,
             summaryModelProviderId: Guid.CreateVersion7(),
             summaryService: summaryService
         );
@@ -147,6 +223,7 @@ public class AgentRuntimeSummaryTests
 
         Assert.Single(messages);
         Assert.Empty(summaryService.Calls);
+        Assert.Empty(summaryService.StructuredCalls);
     }
 
     [Fact]
@@ -285,9 +362,10 @@ public class AgentRuntimeSummaryTests
         properties?.TryGetValue("type", out var type) == true
         && string.Equals(type?.ToString(), expectedType, StringComparison.Ordinal);
 
-    private sealed class RecordingSummaryService : IAgentTurnSummaryService
+    private sealed class RecordingSummaryService : IAgentTurnSummaryService, IAgentStructuredResultService
     {
         public List<Call> Calls { get; } = [];
+        public List<StructuredCall> StructuredCalls { get; } = [];
 
         public Task<ChatMessage> CreateResultAsync(
             Guid modelProviderId,
@@ -301,6 +379,17 @@ public class AgentRuntimeSummaryTests
             Calls.Add(new Call(modelProviderId, sourceMessages, projectId, contextId, customInstructions));
             return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("turn summary"));
         }
+
+        public Task<ChatMessage> CreateStructuredResultAsync(
+            string finalText,
+            Guid projectId,
+            string contextId,
+            CancellationToken cancellationToken = default
+        )
+        {
+            StructuredCalls.Add(new StructuredCall(finalText, projectId, contextId));
+            return Task.FromResult(AgentTurnSummaryService.CreateResultMessage(finalText, ResultFormat.Json));
+        }
     }
 
     private sealed record Call(
@@ -310,6 +399,8 @@ public class AgentRuntimeSummaryTests
         string ContextId,
         string? CustomInstructions
     );
+
+    private sealed record StructuredCall(string FinalText, Guid ProjectId, string ContextId);
 
     private sealed class RecordingConversationHistoryWriter : IConversationHistoryWriter
     {
@@ -452,7 +543,12 @@ public class AgentRuntimeSummaryTests
                 .Count();
             return ReceivedApprovalResponses > 0
                 ? [new TextContent("done")]
-                : [CreateApproval("approval-1", "call-1"), CreateApproval("approval-2", "call-2")];
+                :
+                [
+                    new TextContent("before tool"),
+                    CreateApproval("approval-1", "call-1"),
+                    CreateApproval("approval-2", "call-2"),
+                ];
         }
 
         private static ToolApprovalRequestContent CreateApproval(string requestId, string callId) =>

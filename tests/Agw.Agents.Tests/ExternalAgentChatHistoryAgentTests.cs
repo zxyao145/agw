@@ -273,8 +273,77 @@ public class ExternalAgentChatHistoryAgentTests
         Assert.Equal("tool-1", Assert.IsType<FunctionResultContent>(Assert.Single(message.Contents)).CallId);
     }
 
+    [Theory]
+    [InlineData("thinking_tokens")]
+    [InlineData("status")]
+    [InlineData("vcs_state_changed")]
+    [InlineData("future_unknown_event")]
+    public async Task ClaudeResponse_WithoutSessionCallback_FiltersNotificationsAndPreservesErrors(string subtype)
+    {
+        // Arrange: reproduce the SDK contract with both JSON content and complete event metadata.
+        var notification = CreateClaudeSystemMessage(subtype, Guid.CreateVersion7());
+        var retry = new ChatMessage(ChatRole.System, [new ErrorContent("retry")])
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["type"] = "system",
+                ["subtype"] = "api_retry",
+            },
+        };
+        var answer = new ChatMessage(ChatRole.Assistant, "answer");
+        var inner = new PausableExternalAgent { NonStreamingMessages = [notification, retry, answer] };
+        var agent = new ClaudeCodeProviderSessionTrackingAgent(inner, null);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        inner.Emit(
+            new AgentResponseUpdate
+            {
+                Role = null,
+                Contents = notification.Contents,
+                AdditionalProperties = notification.AdditionalProperties,
+            }
+        );
+        inner.Emit(
+            new AgentResponseUpdate(ChatRole.System, [new ErrorContent("retry")])
+            {
+                AdditionalProperties = retry.AdditionalProperties,
+            }
+        );
+        inner.Emit(new AgentResponseUpdate(ChatRole.Assistant, "answer"));
+        inner.Complete();
+
+        // Act
+        var response = await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "request")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var updates = await CollectAsync(
+            agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "request")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
+
+        var history = new RecordingChatHistoryProvider();
+        await new ClaudeCodeChatHistoryProvider(history).InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [], [notification, retry, answer]),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Equal(2, Assert.Single(history.Calls).ResponseMessages.Count);
+        Assert.Equal(2, response.Messages.Count);
+        Assert.Equal(2, updates.Count);
+        Assert.IsType<ErrorContent>(Assert.Single(response.Messages[0].Contents));
+        Assert.IsType<ErrorContent>(Assert.Single(updates[0].Contents));
+        Assert.Equal("answer", response.Messages[1].Text);
+        Assert.Equal("answer", updates[1].Text);
+        Assert.Single(notification.Contents);
+    }
+
     [Fact]
-    public async Task RunStreamingAsync_ClaudeInit_CapturesProviderSessionOnceWithoutChangingUpdates()
+    public async Task RunStreamingAsync_ClaudeInit_CapturesProviderSessionOnceWithoutDisplayingNotifications()
     {
         var provider = new RecordingChatHistoryProvider();
         var innerAgent = new PausableExternalAgent();
@@ -302,10 +371,9 @@ public class ExternalAgentChatHistoryAgentTests
             )
         );
 
-        Assert.Equal(2, updates.Count);
+        Assert.Empty(updates);
         Assert.Equal(expectedSessionId.Normalize(), Assert.Single(capturedSessionIds));
-        var persistedMessages = Assert.Single(provider.Calls, call => call.ResponseMessages.Count > 0).ResponseMessages;
-        Assert.Equal(2, persistedMessages.Count);
+        Assert.All(provider.Calls, call => Assert.Empty(call.ResponseMessages));
     }
 
     [Fact]
@@ -340,8 +408,8 @@ public class ExternalAgentChatHistoryAgentTests
         );
 
         Assert.Equal(expectedSessionId.Normalize(), capturedSessionId);
-        Assert.Equal(2, response.Messages.Count);
-        Assert.Equal(2, Assert.Single(provider.Calls, call => call.ResponseMessages.Count > 0).ResponseMessages.Count);
+        Assert.Single(response.Messages);
+        Assert.Single(Assert.Single(provider.Calls, call => call.ResponseMessages.Count > 0).ResponseMessages);
     }
 
     [Fact]
@@ -379,7 +447,7 @@ public class ExternalAgentChatHistoryAgentTests
             )
         );
 
-        Assert.Equal(4, updates.Count);
+        Assert.Empty(updates);
         Assert.Equal(0, callbackCount);
     }
 
@@ -408,7 +476,6 @@ public class ExternalAgentChatHistoryAgentTests
             )
             .GetAsyncEnumerator(TestContext.Current.CancellationToken);
         innerAgent.Emit(CreateClaudeInitUpdate(expectedSessionId));
-        Assert.True(await enumerator.MoveNextAsync());
         innerAgent.Fail(new InvalidOperationException("429 quota exceeded"));
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => enumerator.MoveNextAsync().AsTask());
@@ -470,7 +537,24 @@ public class ExternalAgentChatHistoryAgentTests
 
         // Act
         await provider.InvokedAsync(
-            new ChatHistoryProvider.InvokedContext(agent, session, [request], [assistant, retry, rateLimit]),
+            new ChatHistoryProvider.InvokedContext(
+                agent,
+                session,
+                [request],
+                [
+                    assistant,
+                    retry,
+                    rateLimit,
+                    new ChatMessage(ChatRole.System, "{legacy-json}")
+                    {
+                        AdditionalProperties = new AdditionalPropertiesDictionary
+                        {
+                            ["type"] = "system",
+                            ["subtype"] = "future_event",
+                        },
+                    },
+                ]
+            ),
             TestContext.Current.CancellationToken
         );
 
@@ -602,21 +686,58 @@ public class ExternalAgentChatHistoryAgentTests
         Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync = null
     )
     {
+        if (onProviderSessionStartedAsync != null)
+        {
+            innerAgent = new ClaudeCodeProviderSessionTrackingAgent(innerAgent, onProviderSessionStartedAsync);
+        }
         AIAgent agent = new ExternalAgentChatHistoryAgent(
             innerAgent,
             provider,
             TimeProvider.System,
             NullLogger<ExternalAgentChatHistoryAgent>.Instance
         );
-        if (onProviderSessionStartedAsync != null)
-        {
-            agent = new ClaudeCodeProviderSessionTrackingAgent(agent, onProviderSessionStartedAsync);
-        }
         return agent;
     }
 
-    private static AgentResponseUpdate CreateClaudeInitUpdate(Guid sessionId) =>
-        CreateClaudeInitUpdate(JsonSerializer.Serialize(new { session_id = sessionId }));
+    private static ChatMessage CreateClaudeSystemMessage(string subtype, Guid sessionId)
+    {
+        var data = new Dictionary<string, object>
+        {
+            ["type"] = "system",
+            ["session_id"] = sessionId.ToString(),
+            ["uuid"] = Guid.CreateVersion7().ToString(),
+        };
+        var raw = new ClaudeCodeSdk.Types.SystemMessage
+        {
+            Id = data["uuid"].ToString()!,
+            Subtype = subtype,
+            SessionId = sessionId.ToString(),
+            Data = data,
+        };
+        return new ChatMessage(ChatRole.System, JsonSerializer.Serialize(data))
+        {
+            AuthorName = "claude-code",
+            MessageId = raw.Id,
+            RawRepresentation = raw,
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["type"] = "system",
+                ["subtype"] = subtype,
+                ["session_id"] = raw.SessionId,
+                ["systemData"] = data,
+            },
+        };
+    }
+
+    private static AgentResponseUpdate CreateClaudeInitUpdate(Guid sessionId)
+    {
+        var message = CreateClaudeSystemMessage("init", sessionId);
+        return new AgentResponseUpdate(ChatRole.System, message.Contents)
+        {
+            AdditionalProperties = message.AdditionalProperties,
+            RawRepresentation = message.RawRepresentation,
+        };
+    }
 
     private static AgentResponseUpdate CreateClaudeInitUpdate(string content, string subtype = "init") =>
         new(ChatRole.System, content)
@@ -624,11 +745,7 @@ public class ExternalAgentChatHistoryAgentTests
             AdditionalProperties = new AdditionalPropertiesDictionary { ["subtype"] = subtype },
         };
 
-    private static ChatMessage CreateClaudeInitMessage(Guid sessionId) =>
-        new(ChatRole.System, JsonSerializer.Serialize(new { session_id = sessionId }))
-        {
-            AdditionalProperties = new AdditionalPropertiesDictionary { ["subtype"] = "init" },
-        };
+    private static ChatMessage CreateClaudeInitMessage(Guid sessionId) => CreateClaudeSystemMessage("init", sessionId);
 
     private static async Task<List<AgentResponseUpdate>> CollectAsync(IAsyncEnumerable<AgentResponseUpdate> updates)
     {

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Button } from "@agw/components";
+import { Button, Separator } from "@agw/components";
 import { getExternalModelProviderError } from "./external-model-provider";
 import { UseQueryResult } from "@agw/components/query";
 
@@ -23,6 +23,10 @@ import { Textarea } from "@agw/components";
 import { ToolsPanel, type ToolLiteInfo, type ToolValueObject } from "@agw/tools";
 
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
+import {
+  AGENT_RESPONSE_SCHEMA_EXAMPLE,
+  getAgentResponseSchemaError,
+} from "./agent-response-schema";
 import {
   AgentType,
   ExternalAgentKind,
@@ -57,6 +61,8 @@ interface AgentFormFieldsProps {
   externalAgentOptionsQuery: UseQueryResult<ExternalAgentOptionDto[], Error>;
   extra: string;
   setExtra: (value: string) => void;
+  responseSchema: string;
+  setResponseSchema: (value: string) => void;
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -107,6 +113,8 @@ export function AgentFormFields({
   externalAgentOptionsQuery,
   extra,
   setExtra,
+  responseSchema,
+  setResponseSchema,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -131,6 +139,10 @@ export function AgentFormFields({
     : summaryModelProviderId || modelProviderId;
   const canEditExtra = isExternalAgent;
   const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
+  const responseSchemaError = getAgentResponseSchemaError(responseSchema);
+  // pi 暂时不支持 ResponseSchema
+  const supportsResponseSchema = !(isExternalAgent && externalAgentKind === ExternalAgentKind.Pi);
+  const usesStructuredResult = supportsResponseSchema && responseSchema.trim().length > 0;
   const modelProviderOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
       (modelProvidersQuery.data ?? []).map((modelProvider) => ({
@@ -355,8 +367,9 @@ export function AgentFormFields({
                 Generate Turn Summary
               </Label>
               <p className="text-xs text-muted-foreground">
-                Append a Markdown summary after each successful turn using the selected Summary
-                Model Provider.
+                {usesStructuredResult
+                  ? "Append the Agent's final JSON response directly after each successful turn."
+                  : "Append a Markdown summary after each successful turn using the selected Summary Model Provider."}
               </p>
             </div>
             <Switch
@@ -387,8 +400,14 @@ export function AgentFormFields({
                 searchPlaceholder="Search model providers..."
                 isLoading={modelProvidersQuery.isLoading}
                 clearable={!isExternalAgent && Boolean(summaryModelProviderId)}
-                disabled={isExternalAgent}
+                disabled={isExternalAgent || usesStructuredResult}
               />
+              {usesStructuredResult ? (
+                <p className="text-xs text-muted-foreground">
+                  Response Schema mode reuses the final JSON and does not call the Summary Model
+                  Provider. This selection is preserved for later use.
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -404,7 +423,12 @@ export function AgentFormFields({
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
               <TabsTrigger value="connections">Integrations</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
-              <TabsTrigger value="extra-settings">Extra Settings</TabsTrigger>
+              <TabsTrigger value="response-schema" disabled={!supportsResponseSchema}>
+                Response Schema
+              </TabsTrigger>
+              <TabsTrigger value="extra-settings" disabled={!canEditExtra}>
+                Extra Settings
+              </TabsTrigger>
             </TabsList>
             <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
               Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and
@@ -436,6 +460,41 @@ export function AgentFormFields({
               className="min-h-80 flex-1 resize-none font-mono text-sm"
             />
           </TabsContent>
+
+          {supportsResponseSchema ? (
+            <TabsContent
+              value="response-schema"
+              className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto agw-scrollbar p-6"
+            >
+              <div>
+                <h3 className="font-medium">Response Schema</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Require this agent&apos;s final response to conform to a JSON Schema. Available
+                  for both System and External agents.
+                </p>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <Label htmlFor={`${idPrefix}responseSchema`}>JSON Schema object</Label>
+                <Textarea
+                  id={`${idPrefix}responseSchema`}
+                  value={responseSchema}
+                  onChange={(event) => setResponseSchema(event.target.value)}
+                  placeholder={AGENT_RESPONSE_SCHEMA_EXAMPLE}
+                  aria-invalid={Boolean(responseSchemaError)}
+                  className="min-h-80 flex-1 resize-none font-mono text-xs"
+                />
+                {responseSchemaError ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {responseSchemaError}
+                  </p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  Example: {AGENT_RESPONSE_SCHEMA_EXAMPLE}. JSON Schema draft-07 is recommended.
+                  Leave empty to disable structured output and keep plain-text responses.
+                </p>
+              </div>
+            </TabsContent>
+          ) : null}
 
           <TabsContent
             value="skills"

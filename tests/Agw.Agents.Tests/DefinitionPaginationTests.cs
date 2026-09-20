@@ -313,6 +313,7 @@ public class DefinitionPaginationTests
                 new Dictionary<string, string> { [" KEY "] = $"{valueVersion}" },
                 null,
                 null,
+                null,
                 [AgentUpdateField.DisplayName, AgentUpdateField.Extra, AgentUpdateField.EnvironmentVariables]
             );
 
@@ -464,6 +465,7 @@ public class DefinitionPaginationTests
                 null,
                 null,
                 false,
+                null,
                 null,
                 [
                     AgentUpdateField.DisplayName,

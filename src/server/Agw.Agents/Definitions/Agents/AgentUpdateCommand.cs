@@ -16,6 +16,7 @@ public enum AgentUpdateField
     EnvironmentVariables,
     EnableSummary,
     SummaryModelProviderId,
+    ResponseSchema,
 }
 
 public sealed class AgentUpdateCommand
@@ -35,6 +36,7 @@ public sealed class AgentUpdateCommand
         Dictionary<string, string>? environmentVariables,
         bool? enableSummary,
         Guid? summaryModelProviderId,
+        string? responseSchema,
         IEnumerable<AgentUpdateField> specifiedFields
     )
     {
@@ -50,6 +52,7 @@ public sealed class AgentUpdateCommand
         EnvironmentVariables = environmentVariables;
         EnableSummary = enableSummary;
         SummaryModelProviderId = summaryModelProviderId;
+        ResponseSchema = responseSchema;
         _specifiedFields = [.. specifiedFields];
     }
 
@@ -65,6 +68,7 @@ public sealed class AgentUpdateCommand
     public Dictionary<string, string>? EnvironmentVariables { get; }
     public bool? EnableSummary { get; }
     public Guid? SummaryModelProviderId { get; }
+    public string? ResponseSchema { get; }
 
     public bool IsSpecified(AgentUpdateField field) => _specifiedFields.Contains(field);
 }

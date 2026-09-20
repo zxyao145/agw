@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:30816/"
+      "url": "http://localhost:31816/"
     }
   ],
   "paths": {
@@ -732,17 +732,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentListResponse[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentListResponse[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAgentResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgentListResponse[]"
                 }
               }
             }
@@ -3308,7 +3308,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/html": {}
+              "text/html": { }
             }
           }
         }
@@ -5468,6 +5468,7 @@
           "type",
           "externalAgentKind",
           "extra",
+          "responseSchema",
           "createTime",
           "createBy",
           "updateBy"
@@ -5524,6 +5525,13 @@
               "string"
             ],
             "description": "JSON object for additional external agent settings."
+          },
+          "responseSchema": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Raw user-configured JSON Schema text enforcing the agent's final response structure.\n`null` means structured output is disabled."
           },
           "tools": {
             "type": "array",
@@ -5631,7 +5639,8 @@
           "description",
           "systemPrompt",
           "modelProviderId",
-          "enableSummary"
+          "enableSummary",
+          "responseSchema"
         ],
         "type": "object",
         "properties": {
@@ -5734,6 +5743,12 @@
             ]
           },
           "extra": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "responseSchema": {
             "type": [
               "null",
               "string"
@@ -6294,47 +6309,7 @@
           }
         }
       },
-      "AgentMcpServerRelation": {
-        "required": [
-          "agentId",
-          "mcpToolServerId"
-        ],
-        "type": "object",
-        "properties": {
-          "agentId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "mcpToolServerId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "agent": {
-            "$ref": "#/components/schemas/Agent"
-          },
-          "mcpToolServer": {
-            "$ref": "#/components/schemas/McpServer"
-          }
-        }
-      },
-      "AgentMcpToolServerRelationResponse": {
-        "required": [
-          "agentId",
-          "mcpToolServerId"
-        ],
-        "type": "object",
-        "properties": {
-          "agentId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "mcpToolServerId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
-      "AgentResponse": {
+      "AgentListResponse": {
         "required": [
           "id",
           "displayName",
@@ -6356,7 +6331,8 @@
           "createTime",
           "createBy",
           "updateTime",
-          "updateBy"
+          "updateBy",
+          "resultFormat"
         ],
         "type": "object",
         "properties": {
@@ -6456,6 +6432,190 @@
             "format": "date-time"
           },
           "updateBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resultFormat": {
+            "$ref": "#/components/schemas/ResultFormat"
+          }
+        },
+        "description": "Response for the agent option list (`GET /api/agents`) used by Chat, Job, Project, and\nAgentflow selectors. Exposes the default Result format without including the response schema text."
+      },
+      "AgentMcpServerRelation": {
+        "required": [
+          "agentId",
+          "mcpToolServerId"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mcpToolServerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/Agent"
+          },
+          "mcpToolServer": {
+            "$ref": "#/components/schemas/McpServer"
+          }
+        }
+      },
+      "AgentMcpToolServerRelationResponse": {
+        "required": [
+          "agentId",
+          "mcpToolServerId"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mcpToolServerId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "AgentResponse": {
+        "required": [
+          "id",
+          "displayName",
+          "name",
+          "description",
+          "enable",
+          "systemPrompt",
+          "modelProviderId",
+          "summaryModelProviderId",
+          "enableSummary",
+          "tools",
+          "type",
+          "externalAgentKind",
+          "extra",
+          "environmentVariables",
+          "agentMcpToolServers",
+          "agentSkillRelations",
+          "agentConnectionRelations",
+          "createTime",
+          "createBy",
+          "updateTime",
+          "updateBy",
+          "resultFormat",
+          "responseSchema"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enable": {
+            "type": "boolean"
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "modelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "enableSummary": {
+            "type": "boolean"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentType"
+          },
+          "externalAgentKind": {
+            "$ref": "#/components/schemas/ExternalAgentKind"
+          },
+          "extra": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "environmentVariables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "agentMcpToolServers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentMcpToolServerRelationResponse"
+            }
+          },
+          "agentSkillRelations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentSkillRelationResponse"
+            }
+          },
+          "agentConnectionRelations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentConnectionRelationResponse"
+            }
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updateTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "updateBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resultFormat": {
+            "$ref": "#/components/schemas/ResultFormat"
+          },
+          "responseSchema": {
             "type": [
               "null",
               "string"
@@ -6658,6 +6818,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "responseSchema": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "Updates an agent. External agents support partial updates for displayName, description,\nmodelProviderId, extra, and environmentVariables only. When supplied for an External agent,\ndisplayName and description cannot be null."
@@ -7257,6 +7423,39 @@
           }
         }
       },
+      "ApiResultOfAgentListResponse[]": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AgentListResponse"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfAgentResponse": {
         "required": [
           "code",
@@ -7275,39 +7474,6 @@
                 "$ref": "#/components/schemas/AgentResponse"
               }
             ]
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ApiResultOfAgentResponse[]": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/AgentResponse"
-            }
           },
           "code": {
             "type": "integer",
@@ -8110,7 +8276,7 @@
         ],
         "type": "object",
         "properties": {
-          "data": {},
+          "data": { },
           "code": {
             "type": "integer",
             "format": "int32"
@@ -8962,6 +9128,12 @@
             ]
           }
         }
+      },
+      "AuthProviderType": {
+        "enum": [
+          "Oidc",
+          "OAuth2"
+        ]
       },
       "AuthSchemeResponse": {
         "required": [
@@ -10830,11 +11002,7 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "Oidc",
-              "OAuth2"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AuthProviderType"
           }
         }
       },
@@ -12376,6 +12544,13 @@
             }
           }
         }
+      },
+      "ResultFormat": {
+        "enum": [
+          "markdown",
+          "json"
+        ],
+        "description": "The presentation format of an Agent's final Result."
       },
       "SecretFieldStateResponse": {
         "required": [

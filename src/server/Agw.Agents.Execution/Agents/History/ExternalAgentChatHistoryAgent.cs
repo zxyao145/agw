@@ -6,8 +6,13 @@ using Microsoft.Extensions.Logging;
 namespace Agw.Agents.Execution.Agents.History;
 
 /// <summary>
-/// Persists External Agent response updates in bounded streaming batches.
+/// <para>将外部 Agent 的响应保存为可展示的历史消息，并对流式响应进行有界批量写入。</para>
+/// <para>Persists external-agent responses as displayable history and writes streaming responses in bounded batches.</para>
 /// </summary>
+/// <remarks>
+/// <para>流式批次达到 20 条或一秒窗口即刷新。退出时尝试刷新尾部并终止内层枚举；保留执行异常优先级，其次为持久化异常和释放异常。</para>
+/// <para>Flushes streaming batches at 20 messages or a one-second window. On exit, attempts a final flush and stops inner enumeration, prioritizing execution failures over persistence and disposal failures.</para>
+/// </remarks>
 internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
 {
     internal const int ResponseBatchSize = 20;
@@ -18,12 +23,25 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     private readonly ILogger _logger;
 
     /// <summary>
-    /// 创建负责持久化 External Agent 聊天历史的包装器。
+    /// <para>创建 ExternalAgentChatHistoryAgent 实例并保存本包装层使用的依赖和配置。</para>
+    /// <para>Initializes ExternalAgentChatHistoryAgent with the dependencies and configuration used by this wrapper.</para>
     /// </summary>
-    /// <param name="innerAgent">被包装的 External Agent。</param>
-    /// <param name="chatHistoryProvider">用于读写聊天历史的 Provider。</param>
-    /// <param name="timeProvider">用于控制定时刷新间隔的时间 Provider。</param>
-    /// <param name="logger">用于记录持久化或释放异常的日志记录器。</param>
+    /// <param name="innerAgent">
+    /// <para>由当前中间件继续调用的内层 Agent。</para>
+    /// <para>Inner agent invoked by this middleware.</para>
+    /// </param>
+    /// <param name="chatHistoryProvider">
+    /// <para>负责写入外部 Agent 历史的 Provider。</para>
+    /// <para>Provider responsible for persisting external-agent history.</para>
+    /// </param>
+    /// <param name="timeProvider">
+    /// <para>提供批量刷新计时的时钟。</para>
+    /// <para>Clock used for batch-flush timing.</para>
+    /// </param>
+    /// <param name="logger">
+    /// <para>记录执行、兼容处理或清理错误的日志器。</para>
+    /// <para>Logger for execution, compatibility handling, or cleanup errors.</para>
+    /// </param>
     internal ExternalAgentChatHistoryAgent(
         AIAgent innerAgent,
         ChatHistoryProvider chatHistoryProvider,
@@ -38,13 +56,29 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 执行非流式调用并持久化最终响应消息。
+    /// <para>执行外部 Agent，并将可展示的响应复制到历史存储。</para>
+    /// <para>Executes the external agent and copies displayable responses to history storage.</para>
     /// </summary>
-    /// <param name="messages">本轮请求消息。</param>
-    /// <param name="session">本轮使用的 Agent 会话；为空时创建新会话。</param>
-    /// <param name="options">Agent 运行选项。</param>
-    /// <param name="cancellationToken">用于取消 Agent 执行的令牌。</param>
-    /// <returns>External Agent 返回的完整响应。</returns>
+    /// <param name="messages">
+    /// <para>按调用顺序提供的聊天消息。</para>
+    /// <para>Chat messages in invocation order.</para>
+    /// </param>
+    /// <param name="session">
+    /// <para>当前 SDK 会话；为空时向内层 Agent 创建新会话。</para>
+    /// <para>Current SDK session; null creates a new session through the inner agent.</para>
+    /// </param>
+    /// <param name="options">
+    /// <para>本次调用选项；为空时由后续执行层处理默认值。</para>
+    /// <para>Options for this call; downstream execution handles defaults when null.</para>
+    /// </param>
+    /// <param name="cancellationToken">
+    /// <para>用于取消当前异步操作的令牌。</para>
+    /// <para>Token used to cancel the current asynchronous operation.</para>
+    /// </param>
+    /// <returns>
+    /// <para>完成当前包装层处理后的完整响应。</para>
+    /// <para>Complete response after processing by this wrapper.</para>
+    /// </returns>
     protected override async Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
@@ -65,13 +99,29 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 执行流式调用，并按数量或时间间隔批量持久化响应更新。
+    /// <para>转发流式响应，并按条数或计时窗口刷新历史；退出时刷新尾部、取消读取并释放枚举器。</para>
+    /// <para>Forwards streaming responses and flushes history by batch size or timer, then flushes the tail, cancels reads, and disposes the enumerator on exit.</para>
     /// </summary>
-    /// <param name="messages">本轮请求消息。</param>
-    /// <param name="session">本轮使用的 Agent 会话；为空时创建新会话。</param>
-    /// <param name="options">Agent 运行选项。</param>
-    /// <param name="cancellationToken">用于取消 Agent 执行的令牌。</param>
-    /// <returns>按原始顺序返回的 External Agent 响应更新流。</returns>
+    /// <param name="messages">
+    /// <para>按调用顺序提供的聊天消息。</para>
+    /// <para>Chat messages in invocation order.</para>
+    /// </param>
+    /// <param name="session">
+    /// <para>当前 SDK 会话；为空时向内层 Agent 创建新会话。</para>
+    /// <para>Current SDK session; null creates a new session through the inner agent.</para>
+    /// </param>
+    /// <param name="options">
+    /// <para>本次调用选项；为空时由后续执行层处理默认值。</para>
+    /// <para>Options for this call; downstream execution handles defaults when null.</para>
+    /// </param>
+    /// <param name="cancellationToken">
+    /// <para>用于取消当前异步操作的令牌。</para>
+    /// <para>Token used to cancel the current asynchronous operation.</para>
+    /// </param>
+    /// <returns>
+    /// <para>经当前包装层处理后按顺序产生的响应更新流。</para>
+    /// <para>Ordered response-update stream after processing by this wrapper.</para>
+    /// </returns>
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
@@ -84,6 +134,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
 
         var responseBuffer = new List<ChatMessage>(ResponseBatchSize);
 
+        // Use a linked token to stop the external agent when the consumer disposes early.
         // 使用独立的关联令牌控制底层流，以便消费方提前释放时主动终止 External Agent。
         using var innerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         IAsyncEnumerator<AgentResponseUpdate>? enumerator = null;
@@ -94,6 +145,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
 
         try
         {
+            // Drive enumeration manually so the one-second flush timer can run while awaiting an event.
             // 手动驱动枚举器，以便在等待下一条事件时同时响应一秒刷新计时器。
             enumerator = InnerAgent
                 .RunStreamingAsync(requestMessages, safeSession, options, innerCancellation.Token)
@@ -107,6 +159,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
                     moveNextTask ??= enumerator.MoveNextAsync().AsTask();
                     if (flushDelayTask != null)
                     {
+                        // Race the next event against the flush timer; flush the current batch when the timer wins.
                         // 下一条事件与刷新计时器竞速；计时器先完成时立即写入当前微批。
                         var completedTask = await Task.WhenAny(moveNextTask, flushDelayTask).ConfigureAwait(false);
                         if (completedTask == flushDelayTask)
@@ -131,12 +184,14 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
                         responseBuffer.Add(responseMessage);
                         if (responseBuffer.Count >= ResponseBatchSize)
                         {
+                            // Flush at the batch limit and stop the outstanding timer for that batch.
                             // 数量达到上限时优先刷新，并终止当前批次尚未完成的计时器。
                             StopFlushDelay(ref flushDelayCancellation, ref flushDelayTask);
                             await FlushAsync(safeSession, responseBuffer).ConfigureAwait(false);
                         }
                         else if (flushDelayTask == null)
                         {
+                            // Start the one-second window when the first persistable event enters an empty batch.
                             // 第一条可持久化事件进入空缓冲区时，启动该批次的一秒刷新窗口。
                             flushDelayCancellation = new CancellationTokenSource();
                             flushDelayTask = Task.Delay(
@@ -158,6 +213,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         }
         finally
         {
+            // Flush remaining events on completion, cancellation, failure, or early consumer disposal.
             // 无论正常完成、取消、异常还是消费方提前释放，都先写入尚未达到阈值的剩余事件。
             StopFlushDelay(ref flushDelayCancellation, ref flushDelayTask);
             Exception? persistenceFailure = null;
@@ -173,6 +229,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
             Exception? disposeFailure = null;
             try
             {
+                // Cancel and await an in-flight MoveNext before disposing to avoid disposal concurrent with a read.
                 // 先取消并等待进行中的 MoveNext，再释放枚举器，避免底层流仍在读取时并发释放。
                 innerCancellation.Cancel();
                 if (moveNextTask is { IsCompleted: false })
@@ -202,6 +259,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
                 }
             }
 
+            // Preserve an existing execution failure; otherwise propagate persistence or disposal failures.
             // 已有执行异常时保留原始异常；否则让持久化或释放异常使本轮执行失败。
             if (executionFailure != null)
             {
@@ -240,10 +298,21 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 将响应缓冲区中的消息持久化，并在成功后清空缓冲区。
+    /// <para>持久化当前响应批次，只有成功后才清空缓冲区。</para>
+    /// <para>Persists the current response batch and clears the buffer only after success.</para>
     /// </summary>
-    /// <param name="session">当前 Agent 会话。</param>
-    /// <param name="responseBuffer">待持久化的响应消息缓冲区。</param>
+    /// <param name="session">
+    /// <para>当前 SDK 会话及其状态。</para>
+    /// <para>Current SDK session and its state.</para>
+    /// </param>
+    /// <param name="responseBuffer">
+    /// <para>待提交的响应缓冲区，成功写入后原地清空。</para>
+    /// <para>Pending response buffer, cleared in place after successful persistence.</para>
+    /// </param>
+    /// <returns>
+    /// <para>表示上述异步处理完成的任务。</para>
+    /// <para>Task representing completion of the asynchronous operation described above.</para>
+    /// </returns>
     private async Task FlushAsync(AgentSession session, List<ChatMessage> responseBuffer)
     {
         if (responseBuffer.Count == 0)
@@ -252,17 +321,35 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         }
 
         await PersistAsync(session, [], responseBuffer, CancellationToken.None).ConfigureAwait(false);
+        // 仅在写入成功后清空；失败时保留缓冲，供上层按原异常策略处理。
+        // Clear only after a successful write; failures retain the buffer for the established error-handling path.
         responseBuffer.Clear();
     }
 
     /// <summary>
-    /// 通过统一的聊天历史 Provider 持久化一次请求或响应消息批次。
+    /// <para>通过历史 Provider 的执行完成回调提交请求和响应消息批次。</para>
+    /// <para>Submits request and response batches through the history provider's invocation-completion callback.</para>
     /// </summary>
-    /// <param name="session">当前 Agent 会话。</param>
-    /// <param name="requestMessages">本批次包含的请求消息。</param>
-    /// <param name="responseMessages">本批次包含的响应消息。</param>
-    /// <param name="cancellationToken">用于取消持久化操作的令牌。</param>
-    /// <returns>表示持久化操作的异步结果。</returns>
+    /// <param name="session">
+    /// <para>当前 SDK 会话及其状态。</para>
+    /// <para>Current SDK session and its state.</para>
+    /// </param>
+    /// <param name="requestMessages">
+    /// <para>当前操作使用的请求消息集合。</para>
+    /// <para>Request messages used by the current operation.</para>
+    /// </param>
+    /// <param name="responseMessages">
+    /// <para>本批次需要保存的响应消息。</para>
+    /// <para>Response messages to persist in this batch.</para>
+    /// </param>
+    /// <param name="cancellationToken">
+    /// <para>用于取消当前异步操作的令牌。</para>
+    /// <para>Token used to cancel the current asynchronous operation.</para>
+    /// </param>
+    /// <returns>
+    /// <para>表示上述异步处理完成的任务。</para>
+    /// <para>Task representing completion of the asynchronous operation described above.</para>
+    /// </returns>
     private ValueTask PersistAsync(
         AgentSession session,
         IEnumerable<ChatMessage> requestMessages,
@@ -275,10 +362,17 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         );
 
     /// <summary>
-    /// 将非空且可展示的流式响应更新转换为可持久化的聊天消息。
+    /// <para>移除空展示内容，复制必要的响应元数据，并将展示专用消息排除出模型历史。</para>
+    /// <para>Removes blank display content, copies required response metadata, and excludes display-only messages from model history.</para>
     /// </summary>
-    /// <param name="update">External Agent 返回的响应更新。</param>
-    /// <returns>可持久化的聊天消息；更新不包含有效内容时返回 <see langword="null" />。</returns>
+    /// <param name="update">
+    /// <para>当前执行产生的响应更新。</para>
+    /// <para>Response update produced by the current execution.</para>
+    /// </param>
+    /// <returns>
+    /// <para>可持久化的消息副本；内容被全部过滤时为空。</para>
+    /// <para>Persistable message copy, or null when all content is filtered out.</para>
+    /// </returns>
     private static ChatMessage? CreatePersistableMessage(AgentResponseUpdate update)
     {
         var contents = update.Contents.WithoutBlankTextualContent(update.AdditionalProperties);
@@ -303,10 +397,17 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 复制非空且可展示的完整响应消息，并移除不应写入历史的原始传输对象。
+    /// <para>移除空展示内容，复制必要的响应元数据，并将展示专用消息排除出模型历史。</para>
+    /// <para>Removes blank display content, copies required response metadata, and excludes display-only messages from model history.</para>
     /// </summary>
-    /// <param name="message">External Agent 返回的完整响应消息。</param>
-    /// <returns>可持久化的聊天消息；消息不包含有效内容时返回 <see langword="null" />。</returns>
+    /// <param name="message">
+    /// <para>待检查、复制或补充元数据的消息。</para>
+    /// <para>Message to inspect, copy, or annotate.</para>
+    /// </param>
+    /// <returns>
+    /// <para>可持久化的消息副本；内容被全部过滤时为空。</para>
+    /// <para>Persistable message copy, or null when all content is filtered out.</para>
+    /// </returns>
     internal static ChatMessage? CreatePersistableMessage(ChatMessage message)
     {
         var contents = message.Contents.WithoutBlankTextualContent(message.AdditionalProperties);
@@ -328,9 +429,13 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 将仅用于界面展示的 System、User 或 Tool 响应标记为不参与模型历史和跨 Agent 交接。
+    /// <para>将 System、User 和 Tool 响应标记为不参与模型历史及跨 Agent 交接。</para>
+    /// <para>Marks system, user, and tool responses as excluded from model history and cross-agent handoff.</para>
     /// </summary>
-    /// <param name="message">要检查并按需标记的响应消息。</param>
+    /// <param name="message">
+    /// <para>待检查、复制或补充元数据的消息。</para>
+    /// <para>Message to inspect, copy, or annotate.</para>
+    /// </param>
     private static void MarkDisplayOnlyMessage(ChatMessage message)
     {
         if (message.Role == ChatRole.System || message.Role == ChatRole.User || message.Role == ChatRole.Tool)
@@ -340,10 +445,17 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 取消并释放当前响应批次的定时刷新任务。
+    /// <para>取消并释放当前批次计时器，同时清空调用方持有的计时器引用。</para>
+    /// <para>Cancels and disposes the current batch timer and clears the caller's timer references.</para>
     /// </summary>
-    /// <param name="flushDelayCancellation">定时刷新任务使用的取消源。</param>
-    /// <param name="flushDelayTask">当前定时刷新任务。</param>
+    /// <param name="flushDelayCancellation">
+    /// <para>当前刷新计时器的取消源，方法结束时清空引用。</para>
+    /// <para>Cancellation source for the current flush timer, cleared on completion.</para>
+    /// </param>
+    /// <param name="flushDelayTask">
+    /// <para>当前批次的刷新等待任务，方法结束时清空引用。</para>
+    /// <para>Current batch's flush-delay task, cleared on completion.</para>
+    /// </param>
     private static void StopFlushDelay(ref CancellationTokenSource? flushDelayCancellation, ref Task? flushDelayTask)
     {
         flushDelayCancellation?.Cancel();

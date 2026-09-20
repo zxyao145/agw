@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -176,13 +177,15 @@ public partial class AgentRuntimeService
                 session,
                 (messages, token) => PersistToolBlockMessagesAsync(projectId.Value, resolvedContextId, messages, token)
             );
+            var finalResponseMessages = new List<ChatMessage>();
             var messages = await CollectStreamingMessagesAsync(
                     aiAgent,
                     chatMsg,
                     session,
                     turnPersistence,
                     cancellationToken,
-                    new UnattendedInteractionHandler(request.PermissionMode)
+                    new UnattendedInteractionHandler(request.PermissionMode),
+                    finalResponseMessages
                 )
                 .ConfigureAwait(false);
             messages = await AppendDefinitionSummaryAsync(
@@ -191,7 +194,8 @@ public partial class AgentRuntimeService
                     messages,
                     projectId.Value,
                     resolvedContextId,
-                    cancellationToken
+                    cancellationToken,
+                    finalResponseMessages
                 )
                 .ConfigureAwait(false);
 
@@ -292,51 +296,82 @@ public partial class AgentRuntimeService
         IReadOnlyList<AgwMessage> outputMessages,
         Guid projectId,
         string contextId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IReadOnlyList<ChatMessage>? finalResponseMessages = null
     )
     {
-        var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
-        if (!agent.EnableSummary || !summaryModelProviderId.HasValue)
+        if (!agent.EnableSummary)
         {
             return outputMessages.ToList();
         }
 
-        var sourceMessages = new List<ChatMessage>();
-        var userText = string.Concat(
-                inputMessages
-                    .Where(message => message.Role == Microsoft.Extensions.AI.ChatRole.User)
-                    .SelectMany(message => message.Contents)
-                    .OfType<Microsoft.Extensions.AI.TextContent>()
-                    .Select(content => content.Text)
-            )
-            .Trim();
-        if (!string.IsNullOrWhiteSpace(userText))
+        ChatMessage? result;
+        if (!string.IsNullOrWhiteSpace(agent.ResponseSchema))
         {
-            sourceMessages.Add(new ChatMessage(Microsoft.Extensions.AI.ChatRole.User, userText));
-        }
+            if (_summaryService is not IAgentStructuredResultService structuredResultService)
+            {
+                return outputMessages.ToList();
+            }
 
-        var assistantText = string.Concat(
-                outputMessages
-                    .SelectMany(message => message.Contents)
-                    .OfType<AgwTextContent>()
-                    .Select(content => content.Content)
-            )
-            .Trim();
-        if (!string.IsNullOrWhiteSpace(assistantText))
+            var finalText = AgentTurnResultText.ExtractLastAssistantText(finalResponseMessages ?? []);
+            if (finalText == null)
+            {
+                return outputMessages.ToList();
+            }
+
+            result = await structuredResultService
+                .CreateStructuredResultAsync(finalText, projectId, contextId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
         {
-            sourceMessages.Add(new ChatMessage(Microsoft.Extensions.AI.ChatRole.Assistant, assistantText));
-        }
+            var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
+            if (!summaryModelProviderId.HasValue)
+            {
+                return outputMessages.ToList();
+            }
 
-        var result = await _summaryService
-            .CreateResultAsync(
-                summaryModelProviderId.Value,
-                sourceMessages,
-                projectId,
-                contextId,
-                customInstructions: null,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+            var sourceMessages = new List<ChatMessage>();
+            var userText = string.Concat(
+                    inputMessages
+                        .Where(message => message.Role == Microsoft.Extensions.AI.ChatRole.User)
+                        .SelectMany(message => message.Contents)
+                        .OfType<Microsoft.Extensions.AI.TextContent>()
+                        .Select(content => content.Text)
+                )
+                .Trim();
+            if (!string.IsNullOrWhiteSpace(userText))
+            {
+                sourceMessages.Add(new ChatMessage(Microsoft.Extensions.AI.ChatRole.User, userText));
+            }
+
+            var assistantText = AgentTurnResultText.ExtractLastAssistantText(finalResponseMessages ?? []);
+            if (assistantText == null)
+            {
+                assistantText = string.Concat(
+                        outputMessages
+                            .SelectMany(message => message.Contents)
+                            .OfType<AgwTextContent>()
+                            .Select(content => content.Content)
+                    )
+                    .Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(assistantText))
+            {
+                sourceMessages.Add(new ChatMessage(Microsoft.Extensions.AI.ChatRole.Assistant, assistantText.Trim()));
+            }
+
+            result = await _summaryService
+                .CreateResultAsync(
+                    summaryModelProviderId.Value,
+                    sourceMessages,
+                    projectId,
+                    contextId,
+                    customInstructions: null,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
         var messages = outputMessages.ToList();
         var resultMessage = result.ToAiMessage();
         if (resultMessage != null)
@@ -356,7 +391,8 @@ public partial class AgentRuntimeService
         AgentSession session,
         ToolTurnPersistence turnPersistence,
         CancellationToken cancellationToken,
-        IInteractionHandler? approvalHandler = null
+        IInteractionHandler? approvalHandler = null,
+        ICollection<ChatMessage>? finalResponseMessages = null
     )
     {
         var messages = new List<AgwMessage>();
@@ -371,15 +407,25 @@ public partial class AgentRuntimeService
             }
 
             var approvals = new List<Microsoft.Extensions.AI.ToolApprovalRequestContent>();
+            var responseUpdates = new List<AgentResponseUpdate>();
             await foreach (
                 var update in aiAgent.RunStreamingAsync(currentMessages, session, cancellationToken: cancellationToken)
             )
             {
                 turnPersistence.Record(ToolStateSnapshots.ToMessage(update));
+                responseUpdates.Add(update);
                 approvals.AddRange(update.Contents.OfType<Microsoft.Extensions.AI.ToolApprovalRequestContent>());
                 if (update.ToAiMessage() is { } message)
                 {
                     messages.Add(message);
+                }
+            }
+            if (finalResponseMessages != null)
+            {
+                finalResponseMessages.Clear();
+                foreach (var responseMessage in responseUpdates.ToAgentResponse().Messages)
+                {
+                    finalResponseMessages.Add(responseMessage);
                 }
             }
 

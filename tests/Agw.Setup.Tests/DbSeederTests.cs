@@ -95,7 +95,7 @@ public class DbSeederTests : IDisposable
                 .Providers.OrderBy(x => x.ProviderType)
                 .Select(x => x.ProviderType)
                 .ToListAsync(TestContext.Current.CancellationToken);
-            Assert.Equal([ProviderType.OpenAIChatCompletions, ProviderType.Anthropic], providerTypes);
+            Assert.Equal([ProviderType.OpenAIResponses, ProviderType.Anthropic], providerTypes);
             Assert.Empty(await context.ProviderAuthConfigs.ToListAsync(TestContext.Current.CancellationToken));
 
             var agents = await context

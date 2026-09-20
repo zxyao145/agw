@@ -64,6 +64,12 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
         <Chat
           className="h-[calc(100vh-62px)]"
           target={{ id: executingAgent.id, type: "agent" }}
+          agentResultFormats={[
+            {
+              id: executingAgent.id,
+              resultFormat: executingAgent.resultFormat,
+            },
+          ]}
           projectId={projectId}
           conversationId={null}
           active={open}

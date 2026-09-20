@@ -62,6 +62,7 @@ export type ConversationControllerOptions = {
   adapter: ConversationRuntimeAdapter;
   projectId: string | null;
   target: ConversationTarget | null;
+  agentResultFormats?: readonly import("@agw/chat-core").AgentResultFormat[];
   sessionSeed: ConversationSessionSeed;
   environmentVariables?: Record<string, string>;
   permissionMode?: PermissionMode;
@@ -91,6 +92,7 @@ export class ConversationController {
   private readonly listeners = new Set<Listener>();
   private readonly pendingInteractions = new Map<string, PendingInteraction>();
   private options: ConversationControllerOptions;
+  private agentResultFormatsKey: string;
   private state: ConversationControllerState;
   private session: ExecutionSession | null = null;
   private configuredContextId: string | null = null;
@@ -100,6 +102,7 @@ export class ConversationController {
 
   public constructor(options: ConversationControllerOptions) {
     this.options = options;
+    this.agentResultFormatsKey = getAgentResultFormatsKey(options.agentResultFormats);
     const history = prepareHistory(options.sessionSeed.messages);
     this.state = {
       conversationId: options.sessionSeed.conversationId,
@@ -129,12 +132,17 @@ export class ConversationController {
   public readonly getSnapshot = (): ConversationControllerState => this.state;
 
   public updateOptions(options: ConversationControllerOptions): void {
+    const formatsKey = getAgentResultFormatsKey(options.agentResultFormats);
+    const formatsChanged = this.agentResultFormatsKey !== formatsKey;
+    this.agentResultFormatsKey = formatsKey;
     const previousKey = `${this.options.projectId}:${this.options.target?.type}:${this.options.target?.id}`;
     const nextKey = `${options.projectId}:${options.target?.type}:${options.target?.id}`;
     this.options = options;
     if (previousKey !== nextKey) {
       void this.disposeSession();
       this.patch({ pendingInteraction: null, checkpointAvailability: [] });
+    } else if (formatsChanged) {
+      this.patch({});
     }
   }
 
@@ -429,6 +437,8 @@ export class ConversationController {
     this.state = {
       ...this.state,
       items: buildConversationRenderModel(this.state.rawMessages, {
+        activeAgentId: this.options.target?.type === "agent" ? this.options.target.id : null,
+        agentResultFormats: this.options.agentResultFormats,
         pendingInteraction: this.state.pendingInteraction,
         checkpointAvailability: this.state.checkpointAvailability,
       }),
@@ -462,6 +472,15 @@ export class ConversationController {
     this.configuredContextId = null;
     if (session) await session.dispose().catch(() => undefined);
   }
+}
+
+function getAgentResultFormatsKey(
+  formats: ConversationControllerOptions["agentResultFormats"],
+): string {
+  const byAgent = new Map(
+    (formats ?? []).map((agent) => [agent.id.toLowerCase(), agent.resultFormat ?? "markdown"]),
+  );
+  return JSON.stringify([...byAgent].sort(([left], [right]) => left.localeCompare(right)));
 }
 
 function prepareHistory(messages: AiMessage[]): AiMessage[] {

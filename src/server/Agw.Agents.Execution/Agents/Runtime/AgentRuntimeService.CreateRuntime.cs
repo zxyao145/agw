@@ -145,7 +145,8 @@ public partial class AgentRuntimeService
                 contextId: resolvedContextId,
                 sessionStateScope: sessionScope,
                 agentType: agent.Type,
-                enableSummary: agent.EnableSummary && summaryModelProviderId.HasValue,
+                enableSummary: agent.EnableSummary,
+                useStructuredResult: !string.IsNullOrWhiteSpace(agent.ResponseSchema),
                 summaryModelProviderId: summaryModelProviderId,
                 summaryService: _summaryService,
                 conversationHistoryWriter: _conversationHistoryWriter

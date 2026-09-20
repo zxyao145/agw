@@ -8,7 +8,7 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.Workspace;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runners.Durable;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
@@ -122,8 +122,7 @@ public static class DependencyInjection
             services.AddSingleton<IHumanInteractionContextAccessor>(serviceProvider =>
                 serviceProvider.GetRequiredService<HumanInteractionContextAccessor>()
             );
-            services.AddSingleton<ObservabilityMiddleware>();
-            services.AddSingleton<UsageTrackingMiddleware>();
+            services.AddSingleton<AgentTelemetryMiddleware>();
             services.AddSingleton<IAgentflowNodeExecutionTraceStore, AgentflowNodeExecutionTraceStore>();
             if (registrationOptions.AddTraceCollector)
             {

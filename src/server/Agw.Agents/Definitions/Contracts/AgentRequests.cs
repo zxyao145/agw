@@ -20,7 +20,8 @@ public record AgentCreateRequest(
     Guid? SummaryModelProviderId = null,
     AgentType? Type = null,
     ExternalAgentKind? ExternalAgentKind = null,
-    string? Extra = null
+    string? Extra = null,
+    string? ResponseSchema = null
 );
 
 public sealed record ExternalAgentOptionResponse(
@@ -52,6 +53,7 @@ public sealed class AgentUpdateRequest
     private Dictionary<string, string>? _environmentVariables;
     private bool? _enableSummary;
     private Guid? _summaryModelProviderId;
+    private string? _responseSchema;
 
     public string? DisplayName
     {
@@ -173,6 +175,16 @@ public sealed class AgentUpdateRequest
         }
     }
 
+    public string? ResponseSchema
+    {
+        get => _responseSchema;
+        init
+        {
+            _responseSchema = value;
+            _specifiedFields.Add(AgentUpdateField.ResponseSchema);
+        }
+    }
+
     public AgentUpdateCommand ToCommand() =>
         new(
             DisplayName,
@@ -187,6 +199,7 @@ public sealed class AgentUpdateRequest
             EnvironmentVariables,
             EnableSummary,
             SummaryModelProviderId,
+            ResponseSchema,
             _specifiedFields
         );
 }
@@ -230,7 +243,9 @@ public sealed record AgentResponse(
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
-    string? UpdateBy
+    string? UpdateBy,
+    ResultFormat ResultFormat,
+    string? ResponseSchema = null
 )
 {
     public static AgentResponse FromDomain(Agent agent) =>
@@ -255,6 +270,64 @@ public sealed record AgentResponse(
             agent.CreateTime,
             agent.CreateBy,
             agent.UpdateTime,
-            agent.UpdateBy
+            agent.UpdateBy,
+            AgentResponseSchema.GetResultFormat(agent.ResponseSchema),
+            agent.ResponseSchema
+        );
+}
+
+/// <summary>
+/// Response for the agent option list (<c>GET /api/agents</c>) used by Chat, Job, Project, and
+/// Agentflow selectors. Exposes the default Result format without including the response schema text.
+/// </summary>
+public sealed record AgentListResponse(
+    Guid Id,
+    string DisplayName,
+    string Name,
+    string Description,
+    bool Enable,
+    string SystemPrompt,
+    Guid? ModelProviderId,
+    Guid? SummaryModelProviderId,
+    bool EnableSummary,
+    IReadOnlyList<ToolValueObject> Tools,
+    AgentType Type,
+    ExternalAgentKind ExternalAgentKind,
+    string? Extra,
+    IReadOnlyDictionary<string, string> EnvironmentVariables,
+    IReadOnlyList<AgentMcpToolServerRelationResponse> AgentMcpToolServers,
+    IReadOnlyList<AgentSkillRelationResponse> AgentSkillRelations,
+    IReadOnlyList<AgentConnectionRelationResponse> AgentConnectionRelations,
+    DateTimeOffset CreateTime,
+    string? CreateBy,
+    DateTimeOffset? UpdateTime,
+    string? UpdateBy,
+    ResultFormat ResultFormat
+)
+{
+    public static AgentListResponse FromDomain(Agent agent) =>
+        new(
+            agent.Id,
+            agent.DisplayName,
+            agent.Name,
+            agent.Description,
+            agent.Enable,
+            agent.SystemPrompt,
+            agent.ModelProviderId,
+            agent.SummaryModelProviderId,
+            agent.EnableSummary,
+            agent.Tools,
+            agent.Type,
+            agent.ExternalAgentKind,
+            agent.Extra,
+            agent.EnvironmentVariables,
+            [.. agent.AgentMcpToolServers.Select(AgentMcpToolServerRelationResponse.FromDomain)],
+            [.. agent.AgentSkillRelations.Select(AgentSkillRelationResponse.FromDomain)],
+            [.. agent.AgentConnectionRelations.Select(AgentConnectionRelationResponse.FromDomain)],
+            agent.CreateTime,
+            agent.CreateBy,
+            agent.UpdateTime,
+            agent.UpdateBy,
+            AgentResponseSchema.GetResultFormat(agent.ResponseSchema)
         );
 }

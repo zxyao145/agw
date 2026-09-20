@@ -15,7 +15,7 @@ namespace Agw.Migrations.Sqlite.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.Agentflow", b =>
                 {
@@ -348,6 +348,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
+
+                    b.Property<string>("ResponseSchema")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("response_schema");
 
                     b.Property<Guid?>("SummaryModelProviderId")
                         .HasColumnType("TEXT")

@@ -272,9 +272,9 @@ public class DbSeeder
             {
                 Id = DeepSeekOpenAiProviderId,
                 Name = "DeepSeek",
-                ProviderType = ProviderType.OpenAIChatCompletions,
+                ProviderType = ProviderType.OpenAIResponses,
                 Endpoint = "https://api.deepseek.com",
-                Description = "DeepSeek OpenAI Compatible",
+                Description = "DeepSeek OpenAI Response",
                 CreateBy = Constants.AdminUserId,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserId,
@@ -356,7 +356,7 @@ public class DbSeeder
         var openAiRelation = await SeedModelProviderRelationAsync(
             DeepSeekOpenAiModelProviderId,
             model.Id,
-            providers[ProviderType.OpenAIChatCompletions].Id,
+            providers[ProviderType.OpenAIResponses].Id,
             now
         );
         await SeedModelProviderRelationAsync(
