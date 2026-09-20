@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Projects.Application.History;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,48 @@ namespace Agw.Agents.Tests;
 
 public sealed partial class AgentRequestContextAgentTests
 {
+    [Theory]
+    [InlineData("system")]
+    [InlineData("claude-code")]
+    [InlineData("codex")]
+    [InlineData("pi")]
+    public async Task SchemaHistory_Result_ReloadsPersistedFormatAcrossSdkAdapters(string kind)
+    {
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
+        ChatHistoryProvider provider = new ResponseSchemaChatHistoryProvider(fixture.Provider);
+        provider = kind switch
+        {
+            "claude-code" => new ClaudeCodeChatHistoryProvider(provider),
+            "pi" => new PiChatHistoryProvider(provider),
+            _ => provider,
+        };
+        Assert.Same(fixture.Provider, provider.GetService<IConversationHistoryRequests>());
+        Assert.Equal(fixture.Provider.StateKeys, provider.StateKeys);
+        var agent = new HistoryNotifyingAgent(provider);
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        fixture.Provider.StageRequest(session, [new ChatMessage(ChatRole.User, "Review")]);
+        var result = new ChatMessage(ChatRole.Assistant, "{\"approved\":false}")
+        {
+            MessageId = "schema-result",
+            AuthorName = kind,
+            AdditionalProperties = new() { ["type"] = "result" },
+        };
+
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [], [result]),
+            TestContext.Current.CancellationToken
+        );
+
+        var records = await fixture.ReadAsync();
+        var persisted = Assert
+            .Single(records, record => record.ToChatMessage()?.MessageId == "schema-result")
+            .ToChatMessage()!;
+        Assert.Equal("json", persisted.AdditionalProperties!["resultFormat"]?.ToString());
+        Assert.Equal("{\"approved\":false}", persisted.Text);
+        Assert.Equal(2, records.Count);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

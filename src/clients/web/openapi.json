@@ -6331,7 +6331,8 @@
           "createTime",
           "createBy",
           "updateTime",
-          "updateBy"
+          "updateBy",
+          "resultFormat"
         ],
         "type": "object",
         "properties": {
@@ -6435,9 +6436,12 @@
               "null",
               "string"
             ]
+          },
+          "resultFormat": {
+            "$ref": "#/components/schemas/ResultFormat"
           }
         },
-        "description": "Response for the agent option list (`GET /api/agents`) used by Chat, Job, Project, and\nAgentflow selectors. Keeps the historical fields and intentionally omits responseSchema."
+        "description": "Response for the agent option list (`GET /api/agents`) used by Chat, Job, Project, and\nAgentflow selectors. Exposes the default Result format without including the response schema text."
       },
       "AgentMcpServerRelation": {
         "required": [
@@ -6502,6 +6506,7 @@
           "createBy",
           "updateTime",
           "updateBy",
+          "resultFormat",
           "responseSchema"
         ],
         "type": "object",
@@ -6606,6 +6611,9 @@
               "null",
               "string"
             ]
+          },
+          "resultFormat": {
+            "$ref": "#/components/schemas/ResultFormat"
           },
           "responseSchema": {
             "type": [
@@ -12536,6 +12544,13 @@
             }
           }
         }
+      },
+      "ResultFormat": {
+        "enum": [
+          "markdown",
+          "json"
+        ],
+        "description": "The presentation format of an Agent's final Result."
       },
       "SecretFieldStateResponse": {
         "required": [

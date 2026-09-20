@@ -61,7 +61,7 @@ import { getDefaultChatTargetValue } from "./chat-targets";
 import { type ExecutionReconnectState, MobileExecutionSession } from "./native-execution-session";
 
 export type Project = components["schemas"]["ProjectResponse"];
-export type Agent = components["schemas"]["AgentResponse"];
+export type Agent = components["schemas"]["AgentListResponse"];
 export type Agentflow = components["schemas"]["Agentflow"];
 export type AgentSuggestion = components["schemas"]["AgentSuggestionResponse"];
 
@@ -71,6 +71,7 @@ const EMPTY_AGENTFLOWS: Agentflow[] = [];
 
 export type NativeWorkspaceContextValue = {
   projects: Project[];
+  agents: Agent[];
   targets: ChatTargetOption[];
   conversations: ConversationSummary[];
   messages: AiMessage[];
@@ -1222,6 +1223,7 @@ function NativeWorkspaceSession({
   const value = React.useMemo<NativeWorkspaceContextValue>(
     () => ({
       projects,
+      agents,
       targets,
       conversations,
       messages,
@@ -1300,6 +1302,7 @@ function NativeWorkspaceSession({
     }),
     [
       projects,
+      agents,
       targets,
       conversations,
       messages,

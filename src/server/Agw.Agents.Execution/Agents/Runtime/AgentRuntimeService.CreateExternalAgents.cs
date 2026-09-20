@@ -94,12 +94,16 @@ public partial class AgentRuntimeService
                     return context;
                 };
             }
+            var hasResponseSchema = !string.IsNullOrWhiteSpace(request.Agent.ResponseSchema);
+            var historyProvider = hasResponseSchema
+                ? new ResponseSchemaChatHistoryProvider(_chatHistoryProvider)
+                : _chatHistoryProvider;
             if (
                 !TryCreateExternalAgent(
                     request,
                     project,
                     environmentVariables,
-                    _chatHistoryProvider,
+                    historyProvider,
                     createMemoryContextAsync,
                     out aiAgent,
                     isBackground,
@@ -111,7 +115,7 @@ public partial class AgentRuntimeService
                 return null;
             }
 
-            if (!string.IsNullOrWhiteSpace(request.Agent.ResponseSchema))
+            if (hasResponseSchema)
             {
                 aiAgent = new AgentResponseSchemaExecutionAgent(
                     aiAgent!,

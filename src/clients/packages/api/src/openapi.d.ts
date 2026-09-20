@@ -4691,7 +4691,7 @@ export interface components {
     };
     /**
      * @description Response for the agent option list (`GET /api/agents`) used by Chat, Job, Project, and
-     *     Agentflow selectors. Keeps the historical fields and intentionally omits responseSchema.
+     *     Agentflow selectors. Exposes the default Result format without including the response schema text.
      */
     AgentListResponse: {
       /** Format: uuid */
@@ -4722,6 +4722,7 @@ export interface components {
       /** Format: date-time */
       updateTime: null | string;
       updateBy: null | string;
+      resultFormat: components["schemas"]["ResultFormat"];
     };
     AgentMcpServerRelation: {
       /** Format: uuid */
@@ -4766,6 +4767,7 @@ export interface components {
       /** Format: date-time */
       updateTime: null | string;
       updateBy: null | string;
+      resultFormat: components["schemas"]["ResultFormat"];
       responseSchema: null | string;
     };
     AgentRuntimeType: number;
@@ -6196,6 +6198,11 @@ export interface components {
       version: null | number | string;
       items: components["schemas"]["QuickPromptItem"][];
     };
+    /**
+     * @description The presentation format of an Agent's final Result.
+     * @enum {unknown}
+     */
+    ResultFormat: "markdown" | "json";
     SecretFieldStateResponse: {
       configured: boolean;
     };

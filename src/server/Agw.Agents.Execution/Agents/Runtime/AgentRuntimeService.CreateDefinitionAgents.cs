@@ -2,6 +2,7 @@ using System.ClientModel;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Contracts;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Approval;
 using Agw.Agents.Execution.Agents.Middleware.ModelInput;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
@@ -120,6 +121,10 @@ public partial class AgentRuntimeService
             _logger.LogInformation("Creating definition agent {AgentName}", agentDefinition.Name);
 
             var responseFormat = AgentResponseSchemaFormat.Create(agentDefinition, provider.ProviderType);
+            var historyProvider =
+                responseFormat != null
+                    ? new ResponseSchemaChatHistoryProvider(_chatHistoryProvider)
+                    : _chatHistoryProvider;
             aiAgent = chatClient.AsAgwAgent(
                 new ResolvedAgentDefinition
                 {
@@ -129,7 +134,7 @@ public partial class AgentRuntimeService
                     SystemPrompt = agentDefinition.SystemPrompt,
                     ModelId = model.Name,
                     OpenTelemetrySourceName = provider.Name,
-                    ChatHistoryProvider = _chatHistoryProvider,
+                    ChatHistoryProvider = historyProvider,
                     CompactionProvider = new CompactionProvider(
                         new ContextWindowCompactionStrategy(model.MaxContextWindowTokens, model.MaxOutputTokens),
                         stateKey: $"agw.compaction.{agentDefinition.Id:N}",
@@ -147,7 +152,7 @@ public partial class AgentRuntimeService
                 .SingleOrDefault(static provider => provider != null);
             Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
                 userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
-            aiAgent = new AgentRequestContextAgent(aiAgent, _chatHistoryProvider, createMemoryContextAsync, _logger);
+            aiAgent = new AgentRequestContextAgent(aiAgent, historyProvider, createMemoryContextAsync, _logger);
             var agentBuilder = aiAgent
                 .AsBuilder()
                 .Use(runFunc: _telemetryMiddleware.RunAsync, runStreamingFunc: _telemetryMiddleware.RunStreamingAsync);

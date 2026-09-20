@@ -3,7 +3,130 @@ import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
 import type { ExecutionHubHandlers, ExecutionSession } from "./execution-session";
-import { ConversationController } from "./conversation-controller";
+import {
+  ConversationController,
+  type ConversationControllerOptions,
+} from "./conversation-controller";
+
+test("equivalent result format options preserve the snapshot and do not notify subscribers", () => {
+  const options: ConversationControllerOptions = {
+    adapter: { execution: { baseUrl: "https://agw.test", token: null } },
+    projectId: "project-1",
+    target: { id: "agent-1", type: "agent" },
+    sessionSeed: { revision: 1, conversationId: null, contextId: null, messages: [] },
+    agentResultFormats: [{ id: "agent-1", resultFormat: "json" }, { id: "agent-2" }],
+  };
+  const controller = new ConversationController(options);
+  const snapshot = controller.getSnapshot();
+  let notifications = 0;
+  controller.subscribe(() => notifications++);
+
+  for (let index = 0; index < 3; index++) {
+    controller.updateOptions({
+      ...options,
+      agentResultFormats: [
+        { id: "AGENT-2", resultFormat: "markdown" },
+        { id: "AGENT-1", resultFormat: "json" },
+      ],
+    });
+  }
+
+  assert.equal(notifications, 0);
+  assert.equal(controller.getSnapshot(), snapshot);
+});
+
+test("in-place result format changes update presentation and notify once", () => {
+  const formats: import("@agw/chat-core").AgentResultFormat[] = [
+    { id: "agent-1", resultFormat: "markdown" },
+  ];
+  const options: ConversationControllerOptions = {
+    adapter: { execution: { baseUrl: "https://agw.test", token: null } },
+    projectId: "project-1",
+    target: { id: "agent-1", type: "agent" },
+    agentResultFormats: formats,
+    sessionSeed: {
+      revision: 1,
+      conversationId: null,
+      contextId: null,
+      messages: [
+        {
+          messageId: "result",
+          role: "assistant",
+          additionalProperties: { type: "result" },
+          contents: [{ type: "TextContent", content: '{"approved":true}' }],
+        },
+      ],
+    },
+  };
+  const controller = new ConversationController(options);
+  let notifications = 0;
+  controller.subscribe(() => notifications++);
+
+  formats[0].resultFormat = "json";
+  controller.updateOptions(options);
+  controller.updateOptions(options);
+
+  assert.equal(notifications, 1);
+  const result = controller.getSnapshot().items.find((item) => item.type === "result");
+  assert.equal(result?.type === "result" && result.message.contents[0]?.type, "json");
+});
+
+test("schema configuration formats live Results and hydrated history, and updates after configuration loads", async () => {
+  let handlers!: ExecutionHubHandlers;
+  const session = {
+    configure: async () => ({ restoredDurableExecution: false }),
+    execute: async () => undefined,
+    dispose: async () => undefined,
+  } as unknown as ExecutionSession;
+  const options: ConversationControllerOptions = {
+    adapter: {
+      execution: { baseUrl: "https://agw.test", token: null },
+      createSession: (value) => {
+        handlers = value;
+        return session;
+      },
+    },
+    projectId: "project-1",
+    target: { id: "agent-1", type: "agent" },
+    sessionSeed: {
+      revision: 1,
+      conversationId: "conversation-1",
+      contextId: "context-1",
+      messages: [],
+    },
+  };
+  const controller = new ConversationController(options);
+  const result: AiMessage = {
+    messageId: "result",
+    role: "assistant",
+    author: "codex",
+    additionalProperties: { type: "result" },
+    contents: [{ type: "TextContent", content: '{"approved":false}' }],
+  };
+  const content = () => {
+    const item = controller.getSnapshot().items.find((item) => item.type === "result");
+    return item?.type === "result" ? item.message.contents[0] : undefined;
+  };
+  await controller.send("Review", []);
+  handlers.onMessage(result);
+  assert.equal(content()?.type, "markdown");
+
+  const configured: ConversationControllerOptions = {
+    ...options,
+    agentResultFormats: [{ id: "agent-1", resultFormat: "json" }],
+  };
+  controller.updateOptions(configured);
+  assert.deepEqual(content(), { type: "json", text: '{\n  "approved": false\n}' });
+
+  controller.hydrate({ ...options.sessionSeed, revision: 2, messages: [result] });
+  assert.equal(content()?.type, "json");
+  controller.updateOptions({
+    ...configured,
+    agentResultFormats: [{ id: "agent-1", resultFormat: "markdown" }],
+  });
+  assert.equal(content()?.type, "markdown");
+  await controller.dispose();
+});
 
 test("controller completes parallel gates individually without server re-publication", async () => {
   let handlers!: ExecutionHubHandlers;

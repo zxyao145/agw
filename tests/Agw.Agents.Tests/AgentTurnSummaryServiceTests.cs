@@ -11,6 +11,18 @@ namespace Agw.Agents.Tests;
 public class AgentTurnSummaryServiceTests
 {
     [Theory]
+    [InlineData(ResultFormat.Markdown, "markdown")]
+    [InlineData(ResultFormat.Json, "json")]
+    public void CreateResultMessage_TypedFormat_StoresLowercaseString(ResultFormat format, string expected)
+    {
+        var message = AgentTurnSummaryService.CreateResultMessage("body", format);
+
+        Assert.Equal(expected, Assert.IsType<string>(message.AdditionalProperties!["resultFormat"]));
+        Assert.Equal($"\"{expected}\"", JsonSerializer.Serialize(format));
+        Assert.Equal(format, JsonSerializer.Deserialize<ResultFormat>($"\"{expected}\""));
+    }
+
+    [Theory]
     [InlineData("  {\"value\":\"```<tag>\"}\n ", "{\"value\":\"```<tag>\"}")]
     [InlineData("```json\n{\"approved\":false}\n```\n\n小结：请修改代码。", "{\"approved\":false}")]
     [InlineData("结果如下：\n~~~json\n[{\"score\":38},null]\n~~~\n完成。", "[{\"score\":38},null]")]
@@ -160,6 +172,7 @@ public class AgentTurnSummaryServiceTests
         Assert.Equal(Constants.DefaultAgentAuthor, result.AuthorName);
         Assert.Equal("result", result.AdditionalProperties!["type"]);
         var text = Assert.IsType<TextContent>(Assert.Single(result.Contents));
+        Assert.Equal("markdown", result.AdditionalProperties["resultFormat"]);
         Assert.Equal("## 完成\n\n- 已支持 **Markdown**。", text.Text);
 
         Assert.Equal(modelProviderId, Assert.Single(clientFactory.RequestedIds));

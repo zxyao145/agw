@@ -29,7 +29,25 @@ async function checkConversationSession(kind: string, strictMode = false) {
     usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
     resumeState: { targetType: 0, targetId: "agent-1" },
   };
-  const messages = [{ messageId: "message-1", role: "user", contents: [] }];
+  const messages: import("@agw/api").AiMessage[] = [
+    { messageId: "message-1", role: "user", contents: [] },
+  ];
+  if (kind === "result-schema") {
+    messages[0]!.contents = [
+      {
+        type: "TextContent",
+        content: "Review",
+        additionalProperties: { targetType: "agent", targetId: "agent-1" },
+      },
+    ];
+    messages.push({
+      messageId: "result-1",
+      role: "assistant",
+      author: "codex",
+      additionalProperties: { type: "result" },
+      contents: [{ type: "TextContent", content: '{"approved":false}' }],
+    });
+  }
   const dom = new JSDOM("<div id='root'></div>", {
     url: "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
   });
@@ -78,6 +96,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
     };
     file?: { selectedFile: string | null };
     chat?: ChatProps;
+    items?: import("@agw/chat-core").ConversationRenderItem[];
     input?: {
       onClearSession: () => void;
       isTransitioning: boolean;
@@ -120,7 +139,13 @@ async function checkConversationSession(kind: string, strictMode = false) {
       { id: "project-2", name: "Second" },
     ],
     agents: [
-      { id: "agent-1", name: "first", displayName: "First", enable: true },
+      {
+        id: "agent-1",
+        name: "first",
+        displayName: "First",
+        enable: true,
+        resultFormat: kind === "result-schema" ? "json" : "markdown",
+      },
       { id: "agent-2", name: "second", displayName: "Second", enable: true },
     ],
     agentflows: [],
@@ -291,7 +316,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
         },
       },
       "./chat-aside": { ChatAside: () => null },
-      "./conversation": { Conversation: () => null },
+      "./conversation": {
+        Conversation: ({ items }: { items: NonNullable<typeof observed.items> }) => {
+          observed.items = items;
+          return null;
+        },
+      },
     },
   );
   modules["../../components/message/chat"] = {
@@ -335,7 +365,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         },
       );
       const Drawer = drawerModules[flow ? "ExecuteAgentflowDrawer" : "ExecuteAgentDrawer"];
-      const agent = { id: "agent-1", name: "First" };
+      const agent = { id: "agent-1", name: "First", resultFormat: "json" };
       const draw = (open: boolean) =>
         root.render(
           React.createElement(
@@ -348,6 +378,30 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => draw(true));
       await React.act(async () => observed.input!.onExecute("first turn", []));
       assert.equal(executions.length, 1);
+      if (!flow) {
+        await React.act(async () =>
+          reconnectHandlers!.onMessage({
+            messageId: "drawer-result",
+            role: "assistant",
+            author: "claude-code",
+            additionalProperties: { type: "result" },
+            contents: [{ type: "TextContent", content: '{"approved":false}' }],
+          }),
+        );
+        await React.act(async () =>
+          reconnectHandlers!.onMessage({
+            messageId: "drawer-finished",
+            role: "system",
+            additionalProperties: { type: "turn-finished", status: "completed" },
+            contents: [],
+          }),
+        );
+        const result = observed.items?.find((item) => item.type === "result");
+        assert.equal(
+          result?.type === "result" ? result.message.contents[0]?.type : undefined,
+          "json",
+        );
+      }
       await React.act(async () => draw(false));
       await React.act(async () => draw(true));
       assert.equal(observed.input?.isTransitioning, false);
@@ -365,6 +419,25 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => observed.input!.onExecute("too early", []));
       assert.equal(executions.length, 0);
       await React.act(async () => finishHistory());
+      if (kind === "result-schema") {
+        const resultContent = () => {
+          const item = observed.items?.find((item) => item.type === "result");
+          return item?.type === "result" ? item.message.contents[0] : undefined;
+        };
+        assert.deepEqual(resultContent(), { type: "json", text: '{\n  "approved": false\n}' });
+        queryData.agents = [
+          {
+            id: "agent-1",
+            name: "first",
+            displayName: "First",
+            enable: true,
+            resultFormat: "markdown",
+          },
+        ];
+        await React.act(async () => renderWorkspace());
+        assert.equal(resultContent()?.type, "markdown");
+        return;
+      }
       if (kind === "reconnect" || kind === "reconnect-send") {
         assert.ok(reconnectHandlers);
         for (let retryAttempt = 1; retryAttempt <= 10; retryAttempt += 1) {
@@ -580,6 +653,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
     actHost.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
   }
 }
+
+test("Web and Desktop pass the Agent list schema flag through Chat to Result rendering", () =>
+  checkConversationSession("result-schema"));
 
 test("returning to cached Chat and switching Agent preserves the conversation on send", () =>
   checkConversationSession("restore"));

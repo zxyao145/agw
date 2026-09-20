@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -6,7 +7,6 @@ namespace Agw.Agents.Execution.Summaries;
 public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentStructuredResultService
 {
     internal const string FailureText = "Summary generation failed.";
-    internal const string JsonResultFormat = "json";
     private const string SummaryAgentName = "$summary";
 
     private const string DefaultInstructions =
@@ -104,20 +104,20 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
     {
         cancellationToken.ThrowIfCancellationRequested();
         var json = AgentTurnResultText.NormalizeJson(finalText);
-        var result = CreateResultMessage(json, JsonResultFormat);
+        var result = CreateResultMessage(json, ResultFormat.Json);
         await _conversationHistoryWriter
             .AppendAsync(projectId, contextId, [result], cancellationToken)
             .ConfigureAwait(false);
         return result;
     }
 
-    internal static ChatMessage CreateResultMessage(string text, string? resultFormat = null)
+    internal static ChatMessage CreateResultMessage(string text, ResultFormat resultFormat = ResultFormat.Markdown)
     {
-        var additionalProperties = new AdditionalPropertiesDictionary { ["type"] = "result" };
-        if (!string.IsNullOrWhiteSpace(resultFormat))
+        var additionalProperties = new AdditionalPropertiesDictionary
         {
-            additionalProperties["resultFormat"] = resultFormat;
-        }
+            ["type"] = "result",
+            ["resultFormat"] = JsonSerializer.SerializeToElement(resultFormat).GetString()!,
+        };
 
         return new ChatMessage(ChatRole.Assistant, [new TextContent(text)])
         {

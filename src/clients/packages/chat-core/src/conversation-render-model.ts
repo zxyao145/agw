@@ -4,7 +4,12 @@ import {
   type AiMessage,
   type AiMessageContent,
 } from "@agw/api";
-import { getStreamingIdentity, isResultMessage, processMessages } from "@agw/execution-core";
+import {
+  getStreamingIdentity,
+  isResultMessage,
+  isUserTurnMessage,
+  processMessages,
+} from "@agw/execution-core";
 
 import { parseClaudeInitCommands } from "./claude-commands";
 import {
@@ -27,7 +32,7 @@ import {
 } from "./message-presentation";
 import { isSystemInjectedMessage } from "./message-source";
 import { parseMessageProposedPlan, type ProposedPlanPresentation } from "./proposed-plan";
-import { normalizeStructuredResult } from "./structured-result";
+import { formatStructuredResult, normalizeStructuredResult } from "./structured-result";
 
 const HIDDEN_CONTROL_TYPES = new Set([
   "turn-start",
@@ -205,7 +210,12 @@ export type BuildConversationRenderModelOptions = {
   pendingInteraction?: PendingInteraction | null;
   checkpointAvailability?: readonly AgentflowCheckpointAvailability[];
   collapseToolRuns?: boolean;
+  activeAgentId?: string | null;
+  agentResultFormats?: readonly AgentResultFormat[];
 };
+
+export type ResultFormat = import("@agw/api").components["schemas"]["ResultFormat"];
+export type AgentResultFormat = { id: string; resultFormat?: ResultFormat };
 
 export function isHiddenControlMessage(message: AiMessage): boolean {
   const type = String(message.additionalProperties?.type ?? "");
@@ -409,9 +419,14 @@ export function formatToolResultContent(value: unknown): string {
   return text.trim() ? fencePlainToolText(text) : text;
 }
 
-export function presentMessage(message: AiMessage): PresentedMessage | null {
+export function presentMessage(
+  message: AiMessage,
+  defaultResultFormat: ResultFormat = "markdown",
+): PresentedMessage | null {
   const result = isResultMessage(message);
-  const contents = message.contents.flatMap((content) => presentContent(message, content));
+  const contents = message.contents.flatMap((content) =>
+    presentContent(message, content, defaultResultFormat),
+  );
   if (contents.length === 0) return null;
   const hasPlan = contents.some((content) => content.type === "plan");
   const hasToolResult = message.contents.some(
@@ -501,6 +516,12 @@ export function buildConversationRenderModel(
   const occurrences = new Map<string, number>();
   const items: ConversationRenderItem[] = [];
   let embeddedInteraction = false;
+  const agentResultFormats = new Map(
+    (options.agentResultFormats ?? []).map(
+      (agent) => [agent.id.toLowerCase(), agent.resultFormat ?? "markdown"] as const,
+    ),
+  );
+  let resultAgentId = options.activeAgentId ?? null;
 
   const uniqueKey = (base: string) => {
     const occurrence = occurrences.get(base) ?? 0;
@@ -548,7 +569,10 @@ export function buildConversationRenderModel(
       }
 
       const presentedMessages = item.messages.flatMap((message) => {
-        const presented = presentMessage(message);
+        const presented = presentMessage(
+          message,
+          agentResultFormats.get(resultAgentId?.toLowerCase() ?? "") ?? "markdown",
+        );
         return presented ? [presented] : [];
       });
       const identity = uniqueKey(base);
@@ -563,6 +587,17 @@ export function buildConversationRenderModel(
     }
 
     const message = item.message;
+    if (isUserTurnMessage(message)) {
+      const target = [
+        message.additionalProperties,
+        ...message.contents.map((content) => content.additionalProperties),
+      ].find((properties) => properties?.targetType !== undefined);
+      resultAgentId = target
+        ? target.targetType === "agent" && typeof target.targetId === "string"
+          ? target.targetId
+          : null
+        : (options.activeAgentId ?? null);
+    }
     if (isHiddenSystemToolFragment(message, hiddenSystemToolKeys)) continue;
 
     const toolState = getToolStatePresentationType(message);
@@ -616,7 +651,10 @@ export function buildConversationRenderModel(
     const toolCall = getToolCallContent([message]);
     if (toolCall && options.collapseToolRuns) {
       const identity = uniqueKey(getToolPresentationBase(message, toolCall));
-      const presented = presentMessage(message);
+      const presented = presentMessage(
+        message,
+        agentResultFormats.get(resultAgentId?.toLowerCase() ?? "") ?? "markdown",
+      );
       items.push({
         type: "tool-accordion",
         key: identity,
@@ -632,7 +670,10 @@ export function buildConversationRenderModel(
       continue;
     }
 
-    const presented = presentMessage(message);
+    const presented = presentMessage(
+      message,
+      agentResultFormats.get(resultAgentId?.toLowerCase() ?? "") ?? "markdown",
+    );
     if (!presented) continue;
     const type =
       item.type === "result" || isResultMessage(message)
@@ -710,7 +751,11 @@ function collapseConsecutiveToolItems(items: ConversationRenderItem[]): Conversa
   return collapsed;
 }
 
-function presentContent(message: AiMessage, content: AiMessageContent): PresentedContent[] {
+function presentContent(
+  message: AiMessage,
+  content: AiMessageContent,
+  defaultResultFormat: ResultFormat,
+): PresentedContent[] {
   if (content.type === MessageContentType.UsageContent) return [];
   if (content.type === MessageContentType.DataContent) {
     const uri = content.uri ?? "";
@@ -724,15 +769,23 @@ function presentContent(message: AiMessage, content: AiMessageContent): Presente
   }
 
   const raw = stringifyContentValue(content.content);
+  const messageResultFormat = message.additionalProperties?.resultFormat;
+  const isStructuredResult = messageResultFormat === "json";
   if (
+    (messageResultFormat ?? defaultResultFormat) === "json" &&
     content.type === MessageContentType.TextContent &&
-    isResultMessage(message) &&
-    message.additionalProperties?.resultFormat === "json"
+    isResultMessage(message)
   ) {
     const json = normalizeStructuredResult(raw);
-    return json !== null
-      ? [{ type: "json", text: json }]
-      : [{ type: "error", text: "Invalid structured result: expected one JSON object or array." }];
+    // Older provider-native Results omit resultFormat; their configuration is the fallback.
+    if (json !== null && (isStructuredResult || json === raw.trim())) {
+      return [{ type: "json", text: formatStructuredResult(json) }];
+    }
+    if (isStructuredResult) {
+      return [
+        { type: "error", text: "Invalid structured result: expected one JSON object or array." },
+      ];
+    }
   }
   const hookEvent = getClaudeHookEventName(raw);
   if (hookEvent) return [{ type: "plain", text: hookEvent, sourceType: content.type }];

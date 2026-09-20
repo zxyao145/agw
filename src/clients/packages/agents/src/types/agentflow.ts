@@ -1,4 +1,5 @@
 import type { ToolValueObject } from "@agw/tools";
+import type { components } from "@agw/api";
 
 export interface BaseDto {
   createBy?: string | null;
@@ -23,6 +24,7 @@ export interface AgentDto extends BaseDto {
   externalAgentKind: 0 | 1 | 2 | 3;
   extra?: string | null;
   responseSchema?: string | null;
+  resultFormat?: components["schemas"]["AgentResponse"]["resultFormat"];
   environmentVariables: Record<string, string>;
   agentMcpToolServers?: Array<{
     agentId: string;

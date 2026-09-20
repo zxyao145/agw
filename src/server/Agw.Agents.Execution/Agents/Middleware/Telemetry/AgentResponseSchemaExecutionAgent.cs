@@ -5,8 +5,8 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.Execution.Agents.Middleware.Telemetry;
 
 /// <summary>
-/// <para>为启用结构化输出的 Agent 记录每次执行的成功或失败指标，并转发资源释放。</para>
-/// <para>Records per-execution success or failure metrics for schema-enabled agents and forwards resource disposal.</para>
+/// <para>为启用结构化输出的 Agent 标记 Result 格式、记录执行指标，并转发资源释放。</para>
+/// <para>Marks Result formats, records execution metrics for schema-enabled agents, and forwards resource disposal.</para>
 /// </summary>
 /// <remarks>
 /// <para>致命 ErrorContent 和非调用方取消异常计为失败。非流式在 finally 中计数；流式在释放内层枚举器成功后计数。</para>
@@ -89,6 +89,10 @@ internal sealed class AgentResponseSchemaExecutionAgent : DelegatingAIAgent, IAs
                 .RunAsync(messages, session, options, cancellationToken)
                 .ConfigureAwait(false);
             failed = HasFatalError(response.Messages.SelectMany(message => message.Contents));
+            foreach (var message in response.Messages)
+            {
+                ResponseSchemaResultMetadata.Apply(message);
+            }
             return response;
         }
         catch (Exception exception) when (!IsCancellation(exception, cancellationToken))
@@ -168,6 +172,7 @@ internal sealed class AgentResponseSchemaExecutionAgent : DelegatingAIAgent, IAs
                     failed = true;
                 }
 
+                ResponseSchemaResultMetadata.Apply(update);
                 yield return update;
             }
         }

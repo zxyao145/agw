@@ -50,6 +50,43 @@ public sealed class AgentResponseSchemaTests
         Assert.DoesNotContain("responseSchema", json);
         Assert.Contains("\"displayName\"", json);
         Assert.Contains("\"enable\"", json);
+        Assert.Contains("\"resultFormat\":\"json\"", json);
+    }
+
+    [Theory]
+    [InlineData(null, ResultFormat.Markdown)]
+    [InlineData("", ResultFormat.Markdown)]
+    [InlineData(" \n\t", ResultFormat.Markdown)]
+    [InlineData("{\"type\":\"object\"}", ResultFormat.Json)]
+    public void FromDomain_AgentResponses_ReportSameResultFormatForEveryAgentKind(string? schema, ResultFormat expected)
+    {
+        foreach (var kind in Enum.GetValues<ExternalAgentKind>())
+        {
+            var agent = new Agent
+            {
+                Id = Guid.CreateVersion7(),
+                Type = kind == ExternalAgentKind.None ? AgentType.System : AgentType.External,
+                ExternalAgentKind = kind,
+                ResponseSchema = schema,
+            };
+            var response = AgentListResponse.FromDomain(agent);
+            var detail = AgentResponse.FromDomain(agent);
+            using var document = JsonDocument.Parse(JsonSerializer.Serialize(response, JsonOptions));
+            using var detailDocument = JsonDocument.Parse(JsonSerializer.Serialize(detail, JsonOptions));
+
+            Assert.Equal(expected, response.ResultFormat);
+            Assert.Equal(expected, detail.ResultFormat);
+            Assert.Equal(
+                document.RootElement.GetProperty("resultFormat").GetString(),
+                detailDocument.RootElement.GetProperty("resultFormat").GetString()
+            );
+            Assert.Equal(
+                expected.ToString().ToLowerInvariant(),
+                document.RootElement.GetProperty("resultFormat").GetString()
+            );
+            Assert.False(document.RootElement.TryGetProperty("hasResponseSchema", out _));
+            Assert.False(document.RootElement.TryGetProperty("responseSchema", out _));
+        }
     }
 
     [Fact]

@@ -10,6 +10,9 @@ namespace Agw.Agents.Definitions.Agents;
 /// </summary>
 public static class AgentResponseSchema
 {
+    public static ResultFormat GetResultFormat(string? responseSchema) =>
+        string.IsNullOrWhiteSpace(responseSchema) ? ResultFormat.Markdown : ResultFormat.Json;
+
     /// <summary>
     /// Trims the raw text and requires valid JSON whose root node is an object.
     /// Blank input normalizes to <see langword="null"/>, which disables structured output.

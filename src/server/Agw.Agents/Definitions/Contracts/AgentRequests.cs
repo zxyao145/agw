@@ -244,6 +244,7 @@ public sealed record AgentResponse(
     string? CreateBy,
     DateTimeOffset? UpdateTime,
     string? UpdateBy,
+    ResultFormat ResultFormat,
     string? ResponseSchema = null
 )
 {
@@ -270,13 +271,14 @@ public sealed record AgentResponse(
             agent.CreateBy,
             agent.UpdateTime,
             agent.UpdateBy,
+            AgentResponseSchema.GetResultFormat(agent.ResponseSchema),
             agent.ResponseSchema
         );
 }
 
 /// <summary>
 /// Response for the agent option list (<c>GET /api/agents</c>) used by Chat, Job, Project, and
-/// Agentflow selectors. Keeps the historical fields and intentionally omits responseSchema.
+/// Agentflow selectors. Exposes the default Result format without including the response schema text.
 /// </summary>
 public sealed record AgentListResponse(
     Guid Id,
@@ -299,7 +301,8 @@ public sealed record AgentListResponse(
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
-    string? UpdateBy
+    string? UpdateBy,
+    ResultFormat ResultFormat
 )
 {
     public static AgentListResponse FromDomain(Agent agent) =>
@@ -324,6 +327,7 @@ public sealed record AgentListResponse(
             agent.CreateTime,
             agent.CreateBy,
             agent.UpdateTime,
-            agent.UpdateBy
+            agent.UpdateBy,
+            AgentResponseSchema.GetResultFormat(agent.ResponseSchema)
         );
 }

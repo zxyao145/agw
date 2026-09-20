@@ -14,6 +14,10 @@ export const ChatScreen = React.forwardRef<NativeConversationHistoryHandle>(
       <NativeConversationHistoryHost
         ref={ref}
         messages={workspace.messages}
+        activeAgentId={
+          workspace.selectedTarget?.type === "agent" ? workspace.selectedTarget.id : null
+        }
+        agentResultFormats={workspace.agents}
         pendingInteraction={workspace.pendingInteraction}
         checkpointAvailability={workspace.checkpointAvailability}
         loading={workspace.isChatLoading}

@@ -198,9 +198,7 @@ public class AgentRuntimeServiceSummaryTests
         )
         {
             StructuredCalls.Add(new StructuredCall(finalText, projectId, contextId));
-            return Task.FromResult(
-                AgentTurnSummaryService.CreateResultMessage(finalText, AgentTurnSummaryService.JsonResultFormat)
-            );
+            return Task.FromResult(AgentTurnSummaryService.CreateResultMessage(finalText, ResultFormat.Json));
         }
     }
 

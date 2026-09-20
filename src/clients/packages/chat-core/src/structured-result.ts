@@ -1,3 +1,31 @@
+// Format validated JSON without reserializing numbers, strings or property order.
+export function formatStructuredResult(json: string): string {
+  const tokens = json.match(/"(?:\\.|[^"\\])*"|[{}[\],:]|[^\s{}[\],:]+/g) ?? [];
+  let depth = 0;
+  let formatted = "";
+  const newline = () => `\n${"  ".repeat(depth)}`;
+
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token === "{" || token === "[") {
+      formatted += token;
+      depth++;
+      if (tokens[index + 1] !== "}" && tokens[index + 1] !== "]") formatted += newline();
+    } else if (token === "}" || token === "]") {
+      depth--;
+      if (tokens[index - 1] !== "{" && tokens[index - 1] !== "[") formatted += newline();
+      formatted += token;
+    } else if (token === ",") {
+      formatted += `,${newline()}`;
+    } else if (token === ":") {
+      formatted += ": ";
+    } else {
+      formatted += token;
+    }
+  }
+  return formatted;
+}
+
 // Keep the original JSON tokens (including large numbers); parse only to validate.
 export function normalizeStructuredResult(text: string): string | null {
   try {
