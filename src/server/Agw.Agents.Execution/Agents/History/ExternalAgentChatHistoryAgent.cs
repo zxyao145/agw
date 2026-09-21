@@ -442,7 +442,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     /// <para>待检查、复制或补充元数据的消息。</para>
     /// <para>Message to inspect, copy, or annotate.</para>
     /// </param>
-    private static void MarkDisplayOnlyMessage(ChatMessage message)
+    internal static void MarkDisplayOnlyMessage(ChatMessage message)
     {
         if (message.Role == ChatRole.System || message.Role == ChatRole.User || message.Role == ChatRole.Tool)
         {

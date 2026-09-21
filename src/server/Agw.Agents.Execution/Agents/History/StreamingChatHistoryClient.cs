@@ -99,9 +99,40 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
             // 先捕获不可变历史增量再转发，避免消费者推进或修改更新后再读取。
             // Capture history deltas before forwarding, rather than reading updates after consumer advancement or mutation.
             timestamps.Stamp(update);
-            if (history != null)
-                await history.AppendAsync(update, cancellationToken).ConfigureAwait(false);
-            yield return update;
+            if (history is NormalizedChatHistoryProvider.Capture capture)
+            {
+                var handled = await capture.AppendUpdateAsync(update, cancellationToken).ConfigureAwait(false);
+                foreach (var normalized in capture.Drain())
+                    yield return new ChatResponseUpdate(normalized.Role, normalized.Contents)
+                    {
+                        MessageId = normalized.MessageId,
+                        AuthorName = normalized.AuthorName,
+                        CreatedAt = normalized.CreatedAt,
+                        AdditionalProperties = normalized.AdditionalProperties,
+                        FinishReason = update.FinishReason,
+                        ModelId = update.ModelId,
+                        ResponseId = update.ResponseId,
+                    };
+                // 未被任何操作认领的更新原样下发，避免归并链路吞掉内容。
+                // An update no operation claimed still has to reach the consumer untouched.
+                if (!handled)
+                    yield return update;
+                else if (update.Contents.OfType<UsageContent>().Any())
+                    yield return new ChatResponseUpdate
+                    {
+                        Role = update.Role,
+                        Contents = update.Contents.OfType<UsageContent>().Cast<AIContent>().ToList(),
+                        FinishReason = update.FinishReason,
+                        ModelId = update.ModelId,
+                        ResponseId = update.ResponseId,
+                    };
+            }
+            else
+            {
+                if (history != null)
+                    await history.AppendAsync(update, cancellationToken).ConfigureAwait(false);
+                yield return update;
+            }
         }
     }
 }

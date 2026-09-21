@@ -6,6 +6,9 @@ namespace PiAgentSdk.MAF;
 /// <summary>Configures the Microsoft Agent Framework adapter for Pi.</summary>
 public sealed record PiAgentAIAgentOptions
 {
+    /// <summary>Emits explicitly marked authoritative turn snapshots for version-aware consumers.</summary>
+    public bool EmitMessageSnapshots { get; init; }
+
     /// <summary>Gets process-wide Pi SDK options.</summary>
     public PiAgentOptions GlobalOptions { get; init; } = new();
 

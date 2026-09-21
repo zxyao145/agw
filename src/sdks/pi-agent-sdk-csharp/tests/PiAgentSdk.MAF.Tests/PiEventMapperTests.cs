@@ -7,6 +7,33 @@ namespace PiAgentSdk.MAF.Tests;
 
 public sealed class PiEventMapperTests
 {
+    [Fact]
+    public void ToHistoryMessages_VersionedSnapshots_ShareLiveIdentityAndBlockIndex()
+    {
+        var mapper = new PiEventMapper(emitMessageSnapshots: true);
+        var assistant = new PiAssistantMessage { Content = [new PiTextContent { Text = "complete" }] };
+        mapper.ToUpdate(new PiMessageEvent("message_start") { Message = assistant });
+        var delta = mapper.ToUpdate(
+            new PiMessageUpdateEvent
+            {
+                AssistantMessageEvent = new PiTextDelta { Delta = "com", ContentIndex = 0 },
+            }
+        );
+        mapper.ToUpdate(new PiMessageEvent("message_end") { Message = assistant });
+        var turn = new PiTurnEndEvent { Message = assistant };
+
+        var history = mapper.ToHistoryMessages(turn);
+        var snapshot = mapper.ToUpdate(turn);
+
+        Assert.NotNull(delta);
+        Assert.NotNull(snapshot);
+        Assert.Equal(delta.MessageId, Assert.Single(history).MessageId);
+        Assert.Equal(delta.MessageId, snapshot.MessageId);
+        Assert.Equal("block:0", delta.Contents[0].AdditionalProperties!["blockId"]);
+        Assert.True((bool)snapshot.AdditionalProperties!["messageSnapshot"]!);
+        Assert.Equal("complete", Assert.IsType<TextContent>(snapshot.Contents[0]).Text);
+    }
+
     [Theory]
     [InlineData("stop")]
     [InlineData("STOP")]

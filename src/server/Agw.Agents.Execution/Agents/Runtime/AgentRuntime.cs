@@ -343,12 +343,20 @@ public sealed class AgentRuntime : RuntimeBase
                     approvals.AddRange(update.Contents.OfType<ToolApprovalRequestContent>());
 
                     var aiMessage = update.ToAiMessage();
-                    if (aiMessage != null && aiMessage.Contents.Count > 0)
+                    if (
+                        aiMessage != null
+                        && (
+                            aiMessage.Contents.Count > 0
+                            || aiMessage.AdditionalProperties?.ContainsKey("messageOperation") == true
+                        )
+                    )
                     {
                         yield return aiMessage;
                     }
                 }
-                finalResponseMessages = responseUpdates.ToAgentResponse().Messages.ToList();
+                finalResponseMessages = Agw
+                    .Agents.Execution.Agents.History.NormalizedResponseAggregation.Aggregate(responseUpdates)
+                    .Messages.ToList();
 
                 if (approvals.Count == 0)
                 {

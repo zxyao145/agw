@@ -108,8 +108,14 @@ public static class AgentRunResponseUpdateExtensions
                 AdditionalProperties = additionalProps,
             },
 
-            UriContent uriContent => new AgwUriContent(uriContent.Uri, uriContent.MediaType),
-            DataContent dataContent => new AgwDataContent(dataContent.Uri, dataContent.MediaType),
+            UriContent uriContent => new AgwUriContent(uriContent.Uri, uriContent.MediaType)
+            {
+                AdditionalProperties = additionalProps,
+            },
+            DataContent dataContent => new AgwDataContent(dataContent.Uri, dataContent.MediaType)
+            {
+                AdditionalProperties = additionalProps,
+            },
             _ => null,
         };
     }

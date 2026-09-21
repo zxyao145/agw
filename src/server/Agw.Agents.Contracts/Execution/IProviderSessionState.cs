@@ -1,3 +1,4 @@
+using Agw.Projects.Contracts.History;
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Contracts.Execution;
@@ -18,6 +19,8 @@ public interface IProviderSessionState
     {
         InitializeSessionState(session, contextId, projectId, historyScope);
     }
+
+    ConversationMessageWriteScope? GetMessageWriteScope(AgentSession session) => null;
 
     bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
     {

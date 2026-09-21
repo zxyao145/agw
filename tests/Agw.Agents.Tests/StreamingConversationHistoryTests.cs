@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Threading.Channels;
 using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.History;
@@ -23,8 +24,10 @@ namespace Agw.Agents.Tests;
 
 public sealed partial class AgentRequestContextAgentTests
 {
-    [Fact]
-    public async Task StreamingHistory_ThinkingToolLoop_ReturnsReasoningInContinuationRequest()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StreamingHistory_ThinkingToolLoop_ReturnsReasoningInContinuationRequest(bool normalized)
     {
         // Arrange
         using var owner = UserInfoUtil.Push(
@@ -34,18 +37,21 @@ public sealed partial class AgentRequestContextAgentTests
         await using var model = new OpenAiReasoningChatClientTests.ClientFixture("https://gateway.example.test/v1");
         model.Handler.CompleteAfterTools = true;
         await using var capabilities = CreateCapabilities([AIFunctionFactory.Create(() => "tool result", "lookup")]);
+        ChatHistoryProvider history = normalized
+            ? new NormalizedChatHistoryProvider(fixture.Provider, fixture.Clock)
+            : fixture.Provider;
         var definition = new ResolvedAgentDefinition
         {
             Id = "thinking-agent",
             Name = "Thinking agent",
             ModelId = "thinking-model",
             OpenTelemetrySourceName = "test-source",
-            ChatHistoryProvider = fixture.Provider,
+            ChatHistoryProvider = history,
             CompactionProvider = new CompactionProvider(new ContextWindowCompactionStrategy(100_000, 10_000)),
         };
         var agent = CreateAgent(
             model.Client.AsAgwAgent(definition, capabilities, NullLoggerFactory.Instance, fixture.Services),
-            fixture.Provider,
+            history,
             null
         );
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
@@ -79,10 +85,13 @@ public sealed partial class AgentRequestContextAgentTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
     public async Task StreamingHistory_LongModelCall_PersistsInputAndProgressBeforeCompletionWithoutDuplicates(
-        bool messageIds
+        bool messageIds,
+        bool normalized
     )
     {
         using var owner = UserInfoUtil.Push(
@@ -91,7 +100,9 @@ public sealed partial class AgentRequestContextAgentTests
         await using var fixture = await StreamingHistoryFixture.CreateAsync();
         await using var capabilities = CreateCapabilities();
         var model = new PausedChatClient { IncludeMessageIds = messageIds };
-        var history = fixture.Provider;
+        ChatHistoryProvider history = normalized
+            ? new NormalizedChatHistoryProvider(fixture.Provider, fixture.Clock)
+            : fixture.Provider;
         var inner = model.AsAgwAgent(
             CreateDefinition(history),
             capabilities,

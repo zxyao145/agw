@@ -52,9 +52,9 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 
 Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后每 10 秒批量提交；省略间隔配置时，`ConversationHistoryOptions` 兜底为 5 秒；也支持 `TurnEnd` 和 `Immediate`。每个执行作用域默认最多缓冲 16 MiB 的序列化内容，达到阈值会提前提交。模型读取合并数据库和本作用域的待写历史，普通历史 API 返回已提交内容。
 
-`EfCoreChatHistoryProvider` 同时负责原始输入暂存、请求去重、流式响应状态和数据库持久化。`AgentRequestContextAgent` 通过 Contracts 中的 `IConversationHistoryRequests` 暂存原始输入，再向 SDK 转发包含记忆的临时副本；Claude/Pi 历史适配器直接委托给 EF Provider。待写输入按 SDK session 实例隔离，不写入可序列化的 SDK state；释放枚举器时先完成 SDK 的历史回调，再保存残留输入并清理状态。
+`NormalizedChatHistoryProvider` 在 Execution 内维护每次 producer 调用的消息投影。普通模型、Claude、Codex、Pi 通过 `IAgentMessageAdapter<AgentResponseUpdate>` 明确追加、块替换、整条替换及封存语义；Projects 的 `EfCoreChatHistoryProvider` 负责原始输入去重、缓冲、owner/generation 校验和数据库提交。`AgentRequestContextAgent` 继续暂存原始输入并向 SDK 转发含记忆的临时副本；待写输入按 SDK session 隔离。
 
-普通模型的 `StreamingChatHistoryClient` 位于 MAF 的 per-service-call 历史读取之后，在调用开始时入队原始输入，并在流式更新到达时捕获不可变增量。Projects 在刷新边界将增量聚合为稳定 ID 的展示快照；SDK 完成回调原位替换为可用于模型上下文的完整消息，保留 TaskId 和历史序号。尚未完成的快照不进入模型历史或 handoff。Web/Desktop 的可见 Chat 在运行期间每 5 秒刷新会话列表。
+普通模型的 `StreamingChatHistoryClient` 位于 MAF 的 per-service-call 历史读取之后。流式到达时更新逻辑消息和内容块，只有读取/提交边界才序列化完整快照。同一规范 MessageId 跨批次、跨 flush 更新同一行；同一来源的捕获和提交串行执行，重复提交相同内容不新增行。内存使用脏标记和捕获对象确认，不增加数据库消息修订号。最终 SDK 回调校准并封存原消息，保留首次排序、行 ID 和输入的任务关联。未完成、中断和失败消息保留供 UI 展示，排除出模型历史及 handoff。
 
 外层 Agent/Agentflow 回合与 durable segment 拥有写入作用域，嵌套节点复用当前作用域。流式入口通过 `RunStreaming` 在每次 `MoveNextAsync` 和 `DisposeAsync` 恢复历史及会话代次上下文；普通 Task 执行使用 `BeginScope`。仅在异步迭代器内部设置 AsyncLocal 不能跨 yield 保持该上下文。回合正常结束、取消、异常和枚举器释放都会尝试提交剩余历史。SDK session state 保存与 checkpoint 的历史序号计算先获取历史刷新屏障，阻止并发追加越过恢复边界；然后沿用 Project → History/Session 的锁顺序。历史提交仍验证原始 owner 和 Generation；失效作用域不能重新创建被删除的 Conversation。
 
@@ -495,7 +495,13 @@ Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发�
 
 Claude Code External Agent 的原生 `AskUserQuestion` 通过 SDK stdio `can_use_tool` 回调接入同一套 channel。Agw 在每次 Agent run 内显式绑定当前 channel，把原生 `tool_use_id` 作为 `callId` 发出问卷 control message，并将客户端提交的 `answers` 作为 `updatedInput` 返回 Claude Code。后台执行和没有活动 channel 的调用会被拒绝；External Agent 仍不进入 Distributed HITL 恢复流程。
 
-Claude Code External Agent 默认启用 SDK partial messages。`ClaudeCodeSdk.MAF` 将 Claude `stream_event` 转成共享 `ResponseId`/`MessageId` 的标准 `AgentResponseUpdate` 增量，因此既有 SignalR 和客户端渲染链路无需 Claude 专用逻辑。实时 update 原样下发；同一逻辑消息同时收到 `message_stop` 和完整 `AssistantMessage` 后，SDK 通过 MAF `ToAgentResponse()` 聚合并立即交给 ChatHistoryProvider。因此一个包含多轮 Tool Call 的 turn 可以多次追加历史缓冲；数据库提交受 `ConversationHistory` 策略控制。若后续轮次被取消或以错误结束，结束清理会尝试保存已经完成的轮次，当前未完成的 partial Assistant 不写入历史。未收到 partial events 时回退为正常结束后的整轮聚合。Agw 只观察 init update 以保存 provider session ID，不收集或解析 partial 内容；其他 External Agent 仍使用原有一秒聚合窗口，再交给统一历史写入策略。
+Claude Code External Agent 默认启用 SDK partial messages。协议适配器读取原生 `StreamEvent` 的内容块索引；系统进度和 usage 继续走控制/计量链路，SDK 的历史回调提供权威消息校准。Codex 的文本和 thinking 复用通用追加逻辑，不同 item ID 保持消息边界，工具/计划的 System item 状态按原行更新；Pi 由 Agw 显式启用 `EmitMessageSnapshots`，实时与历史使用相同源 ID 和块 ID，SDK 默认行为保持兼容。未完成的可见内容在取消/失败时也会保存，但不进入后续模型上下文。
+
+实时消息沿用 `ReceiveMessage(AgwMessage)`，HTTP 历史响应保持不变。`additionalProperties` 携带 `messageOperation`、`messageState` 和来源身份；`@agw/execution-core` 按消息及块身份处理增量和完整校准。连接恢复复用既有执行恢复与历史加载，不增加消息版本协商或单消息快照接口。状态存入已有 JSON，不增加数据库列或迁移。服务端与共享客户端归并逻辑需配套发布。
+
+扩展 Agent 时添加适配器 factory，映射原生事件到四种操作并通过公共 fixture。归并器不增加 provider 分支，也不引入新计时器或独立历史 writer；接入说明见 [History](Agents/History/README.md)。
+
+Claude 历史适配层会先过滤纯传输通知，再按相邻的稳定消息 ID、角色、作者和消息类型重新聚合 assistant 片段，最后清理空内容并入库。这样 `thinking_tokens` 等通知不会把同一段 thinking 拆成多行，也不会丢失单独传输的空格；工具结果、错误和 Result 边界仍保留。客户端的共享历史准备逻辑只为已有碎片记录做相邻合并，不跨轮次或跨实际消息重排。此处理不回写既有数据库记录。
 
 ## Distributed HITL：`ask_user_question` 如何跨重启恢复
 

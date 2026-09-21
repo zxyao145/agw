@@ -7,6 +7,9 @@ using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.ExternalAgents;
+using Agw.Infrastructure.Data;
+using Agw.Projects.Application.Persistence;
+using Agw.Projects.Infrastructure;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -15,6 +18,8 @@ using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Agents.AI;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -377,6 +382,36 @@ public class AgentRuntimeServiceCompositionTests
         Assert.NotNull(agent.GetService<AgentRequestContextAgent>());
         Assert.Null(agent.GetService<ExternalAgentChatHistoryAgent>());
         Assert.NotNull(agent.GetService<StubAIAgent>());
+    }
+
+    [Fact]
+    public void WrapClaudeCodeAgent_MessageWritingHistoryProvider_UsesNormalizedHistoryAgent()
+    {
+        // 历史 Provider 能按消息写入时，Claude Code 走归并链路而非逐条追加。
+        // A provider that writes messages puts Claude Code on the normalizing path.
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        var services = new ServiceCollection()
+            .AddScoped<IProjectsDbContext>(_ => new AgwDbContext(
+                new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options
+            ))
+            .BuildServiceProvider();
+        var service = CreateRuntimeService(
+            new EfCoreChatHistoryProvider(
+                services.GetRequiredService<IServiceScopeFactory>(),
+                NullLogger<EfCoreChatHistoryProvider>.Instance,
+                TimeProvider.System
+            )
+        );
+
+        var agent = service.WrapClaudeCodeAgent(
+            new StubAIAgent(),
+            isBackground: false,
+            (_, _) => ValueTask.CompletedTask
+        );
+
+        Assert.NotNull(agent.GetService<NormalizedHistoryAgent>());
+        Assert.NotNull(agent.GetService<ClaudeCodeProviderSessionTrackingAgent>());
+        Assert.Null(agent.GetService<ExternalAgentChatHistoryAgent>());
     }
 
     [Fact]

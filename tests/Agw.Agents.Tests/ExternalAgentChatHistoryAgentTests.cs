@@ -637,6 +637,98 @@ public class ExternalAgentChatHistoryAgentTests
         Assert.Empty(Assert.Single(innerProvider.Calls).RequestMessages);
     }
 
+    [Theory]
+    [InlineData("id")]
+    [InlineData("author")]
+    [InlineData("role")]
+    [InlineData("type")]
+    [InlineData("content-result")]
+    [InlineData("missing-id")]
+    public async Task ClaudeCodeChatHistoryProvider_Invoked_PreservesMessageBoundaries(string boundary)
+    {
+        // Arrange
+        var innerProvider = new RecordingChatHistoryProvider();
+        var provider = new ClaudeCodeChatHistoryProvider(innerProvider);
+        var agent = new PausableExternalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var first = new ChatMessage(ChatRole.Assistant, "before")
+        {
+            MessageId = boundary == "missing-id" ? null : "message-1",
+            AuthorName = "claude-code",
+            AdditionalProperties = new() { ["type"] = "assistant" },
+        };
+        var second = first.Clone();
+        second.Contents = [new TextContent("after")];
+        if (boundary == "id")
+            second.MessageId = "message-2";
+        if (boundary == "author")
+            second.AuthorName = "other-agent";
+        if (boundary == "role")
+            second.Role = ChatRole.User;
+        if (boundary == "type")
+            second.AdditionalProperties = new() { ["type"] = "result" };
+        if (boundary == "content-result")
+            second.Contents[0].AdditionalProperties = new() { ["type"] = "result" };
+        List<ChatMessage> messages = [first, second];
+
+        // Act
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [], messages),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        var saved = Assert.Single(innerProvider.Calls).ResponseMessages;
+        Assert.Equal(messages.Count, saved.Count);
+        Assert.Equal("before", saved[0].Text);
+        Assert.Equal("after", saved[^1].Text);
+        Assert.Equal(second.AdditionalProperties!["type"], saved[^1].AdditionalProperties!["type"]);
+    }
+
+    [Theory]
+    [InlineData("tool-result")]
+    [InlineData("error")]
+    public async Task ClaudeCodeChatHistoryProvider_Invoked_MergesFragmentsAroundInterleavedMessage(string interleaved)
+    {
+        // Arrange
+        var innerProvider = new RecordingChatHistoryProvider();
+        var provider = new ClaudeCodeChatHistoryProvider(innerProvider);
+        var agent = new PausableExternalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var first = new ChatMessage(ChatRole.Assistant, "before")
+        {
+            MessageId = "message-1",
+            AuthorName = "claude-code",
+            AdditionalProperties = new() { ["type"] = "assistant" },
+        };
+        var second = first.Clone();
+        second.Contents = [new TextContent("after")];
+        List<ChatMessage> messages =
+        [
+            first,
+            interleaved == "tool-result"
+                ? new ChatMessage(ChatRole.User, [new FunctionResultContent("call-1", "result")])
+                : new ChatMessage(ChatRole.System, [new ErrorContent("rate limit")])
+                {
+                    AdditionalProperties = new() { ["type"] = "system", ["subtype"] = "api_retry" },
+                },
+            second,
+        ];
+
+        // Act
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [], messages),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        var saved = Assert.Single(innerProvider.Calls).ResponseMessages;
+        Assert.Equal(2, saved.Count);
+        Assert.Equal("message-1", saved[0].MessageId);
+        Assert.Equal("beforeafter", saved[0].Text);
+        Assert.Equal(messages[1].Role, saved[1].Role);
+    }
+
     [Fact]
     public async Task RunStreamingAsync_WhenFinalPersistenceFailsDuringExecutionFailure_PreservesExecutionFailure()
     {

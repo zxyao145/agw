@@ -36,6 +36,7 @@ public sealed partial class DurableExecutionStoreTests
             timeProvider: clock
         );
         await sink.WriteAsync(BatchText("first"), TestContext.Current.CancellationToken);
+        await clock.WaitForTimerAsync(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
         clock.Advance(TimeSpan.FromMilliseconds(249));
         Assert.Empty(stream.Batches);
 

@@ -423,7 +423,11 @@ public partial class AgentRuntimeService
             if (finalResponseMessages != null)
             {
                 finalResponseMessages.Clear();
-                foreach (var responseMessage in responseUpdates.ToAgentResponse().Messages)
+                foreach (
+                    var responseMessage in Agw
+                        .Agents.Execution.Agents.History.NormalizedResponseAggregation.Aggregate(responseUpdates)
+                        .Messages
+                )
                 {
                     finalResponseMessages.Add(responseMessage);
                 }

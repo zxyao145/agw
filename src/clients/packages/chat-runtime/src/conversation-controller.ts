@@ -11,7 +11,7 @@ import {
   buildConversationRenderModel,
   getAgentflowCheckpointMessage,
   getPendingInteraction,
-  prepareClaudeHistory,
+  prepareConversationHistory,
   type AgentflowCheckpointAvailability,
   type ConversationRenderItem,
   type PendingInteraction,
@@ -24,8 +24,6 @@ import {
   isModeControlMessage,
   isUserTurnMessage,
   mergeStreamingMessage,
-  mergeStreamingMessagesById,
-  scopeMessagesByUserTurn,
   scopeStreamingMessage,
   type AgentMode,
   type PermissionMode,
@@ -493,7 +491,5 @@ function getAgentResultFormatsKey(
 }
 
 function prepareHistory(messages: AiMessage[]): AiMessage[] {
-  return mergeStreamingMessagesById(
-    scopeMessagesByUserTurn(prepareClaudeHistory(messages).messages),
-  );
+  return prepareConversationHistory(messages).messages;
 }

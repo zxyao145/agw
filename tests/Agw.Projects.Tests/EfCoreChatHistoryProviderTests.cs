@@ -598,6 +598,105 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task ProvideChatHistoryAsync_WhenCallsSpanSeparateAssistantMessages_PreservesAnsweredCall()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectConversations.Add(CreateContext(projectConversationId, projectId, "context-1"));
+            seedContext.ProjectConversationChatHistories.AddRange(
+                CreateRecord(
+                    projectConversationId,
+                    Guid.CreateVersion7(),
+                    0,
+                    new ChatMessage(ChatRole.Assistant, "loading the skill"),
+                    jsonOptions
+                ),
+                CreateRecord(
+                    projectConversationId,
+                    Guid.CreateVersion7(),
+                    1,
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [new FunctionCallContent("answered-call", "load_skill", new Dictionary<string, object?>())]
+                    ),
+                    jsonOptions
+                ),
+                CreateRecord(
+                    projectConversationId,
+                    Guid.CreateVersion7(),
+                    2,
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [new FunctionCallContent("awaiting-call", "run_shell", new Dictionary<string, object?>())]
+                    ),
+                    jsonOptions
+                )
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions
+        );
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+        var currentToolResult = new ChatMessage(
+            ChatRole.Tool,
+            [new FunctionResultContent("answered-call", "skill loaded")]
+        );
+        var approval = new ChatMessage(
+            ChatRole.User,
+            [
+                new ToolApprovalResponseContent(
+                    "awaiting-call",
+                    approved: true,
+                    new FunctionCallContent("awaiting-call", "run_shell", new Dictionary<string, object?>())
+                ),
+            ]
+        );
+
+        var messages = (
+            await InvokeProvideChatHistoryAsync(
+                provider,
+                new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, [approval, currentToolResult]),
+                cancellationToken
+            )
+        ).ToList();
+
+        Assert.Collection(
+            messages,
+            message => Assert.Equal("loading the skill", message.Text),
+            message =>
+                Assert.Equal(
+                    "answered-call",
+                    Assert.IsType<FunctionCallContent>(Assert.Single(message.Contents)).CallId
+                )
+        );
+    }
+
+    [Fact]
     public async Task ProvideChatHistoryAsync_WhenToolMessageHasPortableContent_PreservesIt()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

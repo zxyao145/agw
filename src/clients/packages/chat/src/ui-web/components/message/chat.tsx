@@ -10,6 +10,7 @@ import { apiGet } from "@agw/api";
 import {
   buildConversationRenderModel,
   getCurrentTurnTodoItems,
+  prepareConversationHistory,
   updateAutoScrollState,
   type AutoScrollState,
 } from "@agw/chat-core";
@@ -50,9 +51,7 @@ import {
   createStreamingMessageBatcher,
   createUserMessage,
   mergeStreamingMessages,
-  mergeStreamingMessagesById,
   replaceStreamingScope,
-  scopeMessagesByUserTurn,
   scopeStreamingMessage,
   toExecutionUserInput,
   type StreamingMessageBatcher,
@@ -117,11 +116,7 @@ const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
 const EMPTY_PROJECT_DIRECTORIES: readonly ProjectDirectoryOption[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
-  const preparedHistory = prepareClaudeHistory(messages);
-  return {
-    ...preparedHistory,
-    messages: mergeStreamingMessagesById(scopeMessagesByUserTurn(preparedHistory.messages)),
-  };
+  return prepareConversationHistory(messages);
 }
 
 function calculateConversationUsage(messages: AiMessage[]): TokenUsage {
