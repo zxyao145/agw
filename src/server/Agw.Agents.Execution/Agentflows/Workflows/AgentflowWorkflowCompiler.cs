@@ -1112,11 +1112,20 @@ public sealed class AgentflowWorkflowCompiler
         public Dictionary<string, Queue<List<ChatMessage>>> PendingOutputs { get; set; } = new(StringComparer.Ordinal);
     }
 
-    private sealed class InputPassthroughAgent(string nodeId, string? name) : AIAgent
+    private sealed class InputPassthroughAgent : AIAgent
     {
-        protected override string? IdCore => nodeId;
+        private readonly string _nodeId;
+        private readonly string? _name;
 
-        public override string? Name => name ?? "Input";
+        public InputPassthroughAgent(string nodeId, string? name)
+        {
+            _nodeId = nodeId;
+            _name = name;
+        }
+
+        protected override string? IdCore => _nodeId;
+
+        public override string? Name => _name ?? "Input";
 
         public override string? Description => "User input";
 

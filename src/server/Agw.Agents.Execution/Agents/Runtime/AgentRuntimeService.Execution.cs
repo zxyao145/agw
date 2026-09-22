@@ -22,21 +22,9 @@ public partial class AgentRuntimeService
     public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentRuntime session,
         AgwUserInput input,
-        CancellationToken cancellationToken = default
-    ) => _turnExecutor.ExecuteStreamingAsync(session, input, cancellationToken);
-
-    public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-        AgentRuntime session,
-        AgwUserInput input,
         IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
     ) => _turnExecutor.ExecuteStreamingAsync(session, input, approvalHandler, cancellationToken);
-
-    public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-        AgentRuntime session,
-        AgwUserInput input,
-        CancellationToken cancellationToken = default
-    ) => _turnExecutor.ExecuteAsync(session, input, cancellationToken);
 
     public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgentRuntime session,

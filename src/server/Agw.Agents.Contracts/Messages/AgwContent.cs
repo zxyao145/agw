@@ -181,13 +181,20 @@ internal class AgwDataUriParser
         return MediaTypeHeaderValue.TryParse(mediaType, out _);
     }
 
-    public sealed class AgwDataUri(ReadOnlyMemory<char> data, bool isBase64, string? mediaType)
+    public sealed class AgwDataUri
     {
-        public string? MediaType { get; } = mediaType;
+        public AgwDataUri(ReadOnlyMemory<char> data, bool isBase64, string? mediaType)
+        {
+            Data = data;
+            IsBase64 = isBase64;
+            MediaType = mediaType;
+        }
 
-        public ReadOnlyMemory<char> Data { get; } = data;
+        public string? MediaType { get; }
 
-        public bool IsBase64 { get; } = isBase64;
+        public ReadOnlyMemory<char> Data { get; }
+
+        public bool IsBase64 { get; }
 
         public byte[] ToByteArray() =>
             IsBase64

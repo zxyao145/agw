@@ -13,7 +13,6 @@ using Agw.Skills.Contracts.Remote;
 using Agw.Tools.Generated;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
 
@@ -63,27 +62,20 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IProjectDefaultResolver projectDefaults,
         AgentTurnExecutor turnExecutor,
         AgentRuntimeConfiguration configuration,
-        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
-        IRemoteSkillContentResolver? remoteSkillContentResolver = null,
-        ILoggerFactory? loggerFactory = null,
-        IConversationHistoryWriter? conversationHistoryWriter = null,
-        HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
-        IRuntimeTurnContextAccessor? turnContextAccessor = null,
-        TimeProvider? timeProvider = null,
-        AgwGeneratedToolCatalog? generatedToolCatalog = null
+        IEnumerable<IAgentSkillRegistration> skillRegistrations,
+        IRemoteSkillContentResolver? remoteSkillContentResolver,
+        ILoggerFactory loggerFactory,
+        IConversationHistoryWriter? conversationHistoryWriter,
+        HumanInteractionContextAccessor? humanInteractionContextAccessor,
+        IRuntimeTurnContextAccessor? turnContextAccessor,
+        TimeProvider timeProvider,
+        AgwGeneratedToolCatalog? generatedToolCatalog
     )
     {
         _agentAppService = agentAppService;
         _projectRuntimeFacade = projectRuntimeFacade;
         _capabilityComposer = capabilityComposer;
-        _chatHistoryProvider =
-            chatHistoryProvider?.GetService<Agw.Projects.Contracts.History.IConversationMessageWriter>() == null
-                ? chatHistoryProvider!
-                : new Agw.Agents.Execution.Agents.History.NormalizedChatHistoryProvider(
-                    chatHistoryProvider,
-                    timeProvider ?? TimeProvider.System,
-                    turnContextAccessor
-                );
+        _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
         _providerBindings = providerBindings;
         _dataPaths = dataPaths;
@@ -92,9 +84,9 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _logger = logger;
         _telemetryMiddleware = telemetryMiddleware;
         _summaryService = summaryService;
-        _timeProvider = timeProvider ?? TimeProvider.System;
-        _conversationHistoryWriter = conversationHistoryWriter ?? chatHistoryProvider as IConversationHistoryWriter;
-        _skillRegistrations = (skillRegistrations ?? [])
+        _timeProvider = timeProvider;
+        _conversationHistoryWriter = conversationHistoryWriter;
+        _skillRegistrations = skillRegistrations
             .GroupBy(registration => registration.Id)
             .ToDictionary(group => group.Key, group => group.First());
         _remoteSkillContentResolver = remoteSkillContentResolver;
@@ -104,7 +96,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _turnContextAccessor = turnContextAccessor;
         _projectDefaults = projectDefaults;
         _generatedToolCatalog = generatedToolCatalog;
-        _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        _loggerFactory = loggerFactory;
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(projectDefaults);
         _services = services;

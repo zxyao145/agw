@@ -330,7 +330,15 @@ public sealed class RuntimeDefinitionRefreshTests
                 services: _services,
                 projectDefaults: new TestProjectDefaultResolver(),
                 turnExecutor: null!,
-                configuration: configuration
+                configuration: configuration,
+                skillRegistrations: [],
+                remoteSkillContentResolver: null,
+                loggerFactory: NullLoggerFactory.Instance,
+                conversationHistoryWriter: null,
+                humanInteractionContextAccessor: null,
+                turnContextAccessor: null,
+                timeProvider: TimeProvider.System,
+                generatedToolCatalog: null
             );
             Service = new RecordingRuntimeService(Db, checker, configuration);
             var factory = new RuntimeFactory(
@@ -469,16 +477,10 @@ public sealed class RuntimeDefinitionRefreshTests
             };
         }
 
-        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            IInteractionHandler? approvalHandler,
-            CancellationToken cancellationToken = default
-        ) => ExecuteAsync(session, input, cancellationToken);
-
         public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
             AgentRuntime session,
             AgwUserInput input,
+            IInteractionHandler? approvalHandler,
             CancellationToken cancellationToken = default
         )
         {
@@ -494,27 +496,29 @@ public sealed class RuntimeDefinitionRefreshTests
             return [];
         }
 
-        public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<AIAgent?> CreateAiAgentAsync(
+        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
             Guid agentId,
             Guid? projectId,
-            bool resume,
-            CancellationToken cancellationToken = default
+            Guid conversationId,
+            IReadOnlyDictionary<string, string>? environmentVariables,
+            bool deferHumanInteractions,
+            CancellationToken cancellationToken = default,
+            AgwPermissionMode? permissionMode = null
         ) => throw new NotSupportedException();
 
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            IReadOnlyDictionary<string, string>? environmentVariables,
+        public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task SetPermissionModeAsync(
+            AgentRuntime runtime,
+            AgwPermissionMode permissionMode,
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
         public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
             AgentRuntime session,
             AgwUserInput input,
+            IInteractionHandler? approvalHandler,
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 

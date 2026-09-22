@@ -21,27 +21,6 @@ namespace Agw.Agents.Tests;
 public sealed class AgentExecutionFacadeTests
 {
     [Fact]
-    public async Task RuntimeWithoutPermissionSupport_FailsInsteadOfSilentlyAccepting()
-    {
-        IAgentRuntimeService runtime = new RecordingAgentRuntimeService();
-        var token = TestContext.Current.CancellationToken;
-        await Assert.ThrowsAsync<AgwException>(() =>
-            runtime.SetPermissionModeAsync(null!, AgwPermissionMode.FullAccess, token)
-        );
-        await Assert.ThrowsAsync<AgwException>(() =>
-            runtime.CreateAgentflowNodeAgentAsync(Guid.CreateVersion7(), null, Guid.Empty, null, true, token)
-        );
-        Assert.Throws<AgwException>(() =>
-            runtime.ExecuteStreamingAsync(
-                null!,
-                new AgwUserInput { Contents = [] },
-                new UnattendedInteractionHandler(null),
-                token
-            )
-        );
-    }
-
-    [Fact]
     public async Task ExecuteAsync_Distributed_WaitsForOutcomeWithoutReadingEventStream()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -191,22 +170,17 @@ public sealed class AgentExecutionFacadeTests
         public string? CapturedUserId { get; private set; }
         public AgwPermissionMode? CapturedPermissionMode { get; private set; }
 
-        public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<AIAgent?>(null);
+        public Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
 
-        public Task<AIAgent?> CreateAiAgentAsync(
+        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
             Guid agentId,
             Guid? projectId,
-            bool resume,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<AIAgent?>(null);
-
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
+            Guid conversationId,
             IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default
+            bool deferHumanInteractions,
+            CancellationToken cancellationToken = default,
+            AgwPermissionMode? permissionMode = null
         ) => Task.FromResult<AIAgent?>(null);
 
         public Task<AgentRuntime?> CreateRuntimeAsync(
@@ -216,9 +190,19 @@ public sealed class AgentExecutionFacadeTests
             CancellationToken cancellationToken = default
         ) => Task.FromResult<AgentRuntime?>(null);
 
+        public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task SetPermissionModeAsync(
+            AgentRuntime runtime,
+            AgwPermissionMode permissionMode,
+            CancellationToken cancellationToken = default
+        ) => Task.CompletedTask;
+
         public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
             AgentRuntime session,
             AgwUserInput input,
+            IInteractionHandler? approvalHandler,
             [EnumeratorCancellation] CancellationToken cancellationToken = default
         )
         {
@@ -229,6 +213,7 @@ public sealed class AgentExecutionFacadeTests
         public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
             AgentRuntime session,
             AgwUserInput input,
+            IInteractionHandler? approvalHandler,
             CancellationToken cancellationToken = default
         ) => Task.FromResult<IReadOnlyList<AgwMessage>>([]);
 

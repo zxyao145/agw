@@ -171,7 +171,15 @@ public class AgentRuntimeServiceSummaryTests
             services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
             turnExecutor: null!,
-            configuration: null!
+            configuration: null!,
+            skillRegistrations: [],
+            remoteSkillContentResolver: null,
+            loggerFactory: NullLoggerFactory.Instance,
+            conversationHistoryWriter: null,
+            humanInteractionContextAccessor: null,
+            turnContextAccessor: null,
+            timeProvider: TimeProvider.System,
+            generatedToolCatalog: null
         );
 
     private sealed class RecordingSummaryService : IAgentTurnSummaryService, IAgentStructuredResultService

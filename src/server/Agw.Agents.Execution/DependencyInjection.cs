@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.Workspace;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runners.Durable;
 using Agw.Agents.Execution.Agents.Runtime;
@@ -26,6 +27,7 @@ using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -85,7 +87,17 @@ public static class DependencyInjection
             services.AddScoped<AgentTurnExecutor>();
             services.AddScoped<ExternalProviderSessionBindings>();
             services.AddScoped<AgentRuntimeConfiguration>();
-            services.AddScoped<AgentRuntimeService>();
+            services.AddScoped(serviceProvider =>
+            {
+                // Agent 运行时的历史写入链路：Normalized 装饰器包住 Projects 注册的 ChatHistoryProvider。
+                // History write chain of the Agent runtime: the Normalized decorator wraps the ChatHistoryProvider registered by Projects.
+                var normalizedHistory = new NormalizedChatHistoryProvider(
+                    serviceProvider.GetRequiredService<ChatHistoryProvider>(),
+                    serviceProvider.GetRequiredService<TimeProvider>(),
+                    serviceProvider.GetRequiredService<IRuntimeTurnContextAccessor>()
+                );
+                return ActivatorUtilities.CreateInstance<AgentRuntimeService>(serviceProvider, normalizedHistory);
+            });
             services.AddScoped<IAgentRuntimeService>(serviceProvider =>
                 serviceProvider.GetRequiredService<AgentRuntimeService>()
             );
