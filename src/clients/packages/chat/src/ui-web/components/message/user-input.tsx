@@ -341,7 +341,7 @@ function UserInputContainer({
   children,
   onSuggestion,
   inputRef,
-}: UserInputProps & { inputRef: React.RefObject<UserInputRef | null> }) {
+}: UserInputProps & { inputRef: React.Ref<UserInputRef> }) {
   const [input, setInput] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
@@ -583,14 +583,9 @@ function Sender({ children }: SenderProps) {
 Sender.displayName = "UserInput.Sender";
 
 // Export compound component
-const UserInputWithRef = forwardRef<UserInputRef, UserInputProps>((props, ref) => {
-  const internalRef = useRef<UserInputRef | null>(null);
-
-  // Forward the internal ref to the parent ref
-  useImperativeHandle(ref, () => internalRef.current!);
-
-  return <UserInputContainer {...props} inputRef={internalRef} />;
-});
+const UserInputWithRef = forwardRef<UserInputRef, UserInputProps>((props, ref) => (
+  <UserInputContainer {...props} inputRef={ref} />
+));
 
 UserInputWithRef.displayName = "UserInput";
 

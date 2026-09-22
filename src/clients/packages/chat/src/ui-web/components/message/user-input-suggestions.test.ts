@@ -1,63 +1,12 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-import test, { after, afterEach } from "node:test";
-import { fileURLToPath } from "node:url";
-import { JSDOM } from "jsdom";
-import * as React from "react";
+import test from "node:test";
+import { setupDomEnvironment } from "@agw/test-harness";
+
 import type { SuggestionItem } from "@agw/chat-core";
 
-const testRequire = createRequire(import.meta.url);
-const componentsRoot = fileURLToPath(new URL("../../../../../components", import.meta.url));
-const moduleCache = testRequire.cache as Record<
-  string,
-  { exports: unknown; id: string; filename: string; loaded: boolean }
->;
-
-// Use this package's React instance for @agw/components during DOM tests.
-for (const specifier of ["react", "react/jsx-runtime", "react/jsx-dev-runtime", "react-dom"]) {
-  const sharedModulePath = testRequire.resolve(specifier);
-  const componentsModulePath = testRequire.resolve(specifier, { paths: [componentsRoot] });
-  moduleCache[componentsModulePath] = {
-    exports: testRequire(sharedModulePath),
-    id: componentsModulePath,
-    filename: componentsModulePath,
-    loaded: true,
-  };
-}
-
-const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-  pretendToBeVisual: true,
-  url: "http://localhost/",
-});
-const { window } = dom;
-
-for (const [name, value] of Object.entries({
-  window,
-  document: window.document,
-  navigator: window.navigator,
-  HTMLElement: window.HTMLElement,
-  Element: window.Element,
-  Node: window.Node,
-  Event: window.Event,
-  MouseEvent: window.MouseEvent,
-  KeyboardEvent: window.KeyboardEvent,
-  MutationObserver: window.MutationObserver,
-  getComputedStyle: window.getComputedStyle.bind(window),
-  requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-})) {
-  Object.defineProperty(globalThis, name, { configurable: true, value });
-}
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
-
-const { act, cleanup, createEvent, fireEvent, render, screen, waitFor } =
-  await import("@testing-library/react");
+const { React, act, cleanup, createEvent, fireEvent, render, screen, waitFor } =
+  await setupDomEnvironment();
 const { UserInput } = await import("./user-input.tsx");
-
-afterEach(() => cleanup());
-after(() => dom.window.close());
 
 const suggestions: SuggestionItem[] = [
   { text: "/alpha", description: "First suggestion" },

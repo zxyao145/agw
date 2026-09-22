@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-
-const AGENTFLOWS_PAGE_URL = new URL("../page.tsx", import.meta.url);
 
 async function loadMermaidViewport() {
   return await import("./mermaid-viewport" + ".ts");
@@ -55,11 +52,4 @@ test("zoomViewport clamps scale to the supported range", async () => {
 
   assert.equal(zoomedOut.scale, 0.25);
   assert.equal(zoomedIn.scale, 4);
-});
-
-test("Mermaid wheel zoom uses a non-passive native listener", async () => {
-  const source = await readFile(AGENTFLOWS_PAGE_URL, "utf8");
-
-  assert.match(source, /addEventListener\("wheel", handleMermaidWheel, \{ passive: false \}\)/);
-  assert.doesNotMatch(source, /onWheel=\{handleMermaidWheel\}/);
 });

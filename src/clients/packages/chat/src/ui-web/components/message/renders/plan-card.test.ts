@@ -1,53 +1,69 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import * as React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import PlanCard from "./plan-card";
+import { setupDomEnvironment } from "@agw/test-harness";
 
-const planCardSource = readFileSync(new URL("./plan-card.tsx", import.meta.url), "utf8");
-const rendererSource = readFileSync(new URL("../presented-message.tsx", import.meta.url), "utf8");
-const planCardHtml = renderToStaticMarkup(
-  React.createElement(PlanCard, {
+const { React, act, fireEvent, render, screen, waitFor, window } = await setupDomEnvironment();
+const { default: PlanCard } = await import("./plan-card.tsx");
+
+function renderPlan(overrides: Partial<Parameters<typeof PlanCard>[0]> = {}) {
+  return render(
+    React.createElement(PlanCard, {
+      leadingMarkdown: "",
+      markdown: "# Decision-complete plan",
+      trailingMarkdown: "",
+      isClosed: true,
+      ...overrides,
+    }),
+  );
+}
+
+test("the plan renders as parsed Markdown under a labelled section", () => {
+  const view = renderPlan();
+  const section = view.container.querySelector("section");
+
+  assert.ok(section);
+  assert.ok(screen.getByRole("heading", { name: "Plan", level: 2 }));
+  assert.ok(screen.getByRole("heading", { name: "Decision-complete plan", level: 1 }));
+  assert.equal(
+    section.getAttribute("aria-labelledby"),
+    screen.getByRole("heading", { name: "Plan", level: 2 }).id,
+  );
+  assert.doesNotMatch(view.container.innerHTML, /proposed_plan/);
+});
+
+test("surrounding text stays outside the plan section in reading order", () => {
+  const view = renderPlan({
     leadingMarkdown: "Context before the plan",
-    markdown: "# Decision-complete plan",
     trailingMarkdown: "Notes after the plan",
-    isClosed: true,
-  }),
-);
+  });
+  const html = view.container.innerHTML;
 
-test("Plan Card renders parsed Markdown without protocol tags", () => {
-  assert.match(planCardHtml, /<section/);
-  assert.match(planCardHtml, /<h1>Decision-complete plan<\/h1>/);
-  assert.match(planCardHtml, /aria-label="Copy plan"/);
-  assert.doesNotMatch(planCardHtml, /proposed_plan/);
-  assert.ok(planCardHtml.indexOf("Context before the plan") < planCardHtml.indexOf("<section"));
-  assert.ok(planCardHtml.indexOf("Notes after the plan") > planCardHtml.indexOf("</section>"));
+  assert.ok(html.indexOf("Context before the plan") < html.indexOf("<section"));
+  assert.ok(html.indexOf("Notes after the plan") > html.indexOf("</section>"));
 });
 
-test("Plan Card uses a full-width accessible chat surface", () => {
-  const sectionClassName = planCardHtml.match(/<section[^>]*class="([^"]*)"/)?.[1] ?? "";
+test("copying the plan puts only its Markdown on the clipboard", async () => {
+  renderPlan({ leadingMarkdown: "Context", markdown: "  # Plan body  " });
 
-  assert.match(planCardHtml, /<section[^>]*aria-labelledby=/);
-  assert.match(planCardHtml, /<svg[^>]*aria-hidden="true"/);
-  assert.match(planCardHtml, /<h2[^>]*>Plan<\/h2>/);
-  for (const className of ["w-full", "overflow-hidden", "rounded-2xl", "border", "bg-card"]) {
-    assert.ok(sectionClassName.split(" ").includes(className));
-  }
-  assert.match(rendererSource, /message\.width === "full"/);
-  assert.match(rendererSource, /content\.type === "plan"/);
-  assert.match(rendererSource, /<PlanCard \{\.\.\.content\} \/>/);
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Copy plan" }));
+  });
+
+  assert.equal(await window.navigator.clipboard.readText(), "# Plan body");
+  await waitFor(() => assert.ok(screen.getByRole("button", { name: "Plan copied" })));
 });
 
-test("Plan Card copies only its parsed Markdown with visible accessible feedback", () => {
-  assert.match(planCardSource, /navigator\.clipboard\.writeText\(normalizedMarkdown\)/);
-  assert.match(planCardSource, /aria-label=\{copied \? "Plan copied" : "Copy plan"\}/);
-  assert.match(planCardSource, /<Copy/);
-  assert.match(planCardSource, /<Check/);
-  assert.match(planCardSource, /disabled=\{!normalizedMarkdown\}/);
-  assert.doesNotMatch(planCardSource, /Download|ThumbsUp|ThumbsDown|Maximize/);
+test("an empty plan cannot be copied", () => {
+  renderPlan({ markdown: "   " });
+
+  assert.equal(screen.getByRole("button", { name: "Copy plan" }).hasAttribute("disabled"), true);
 });
 
-test("only shared plan content reaches the Plan Card renderer", () => {
-  assert.match(rendererSource, /if \(content\.type === "plan"\)/);
+test("the plan card offers no action beyond copying", () => {
+  renderPlan();
+
+  assert.deepEqual(
+    screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")),
+    ["Copy plan"],
+  );
 });

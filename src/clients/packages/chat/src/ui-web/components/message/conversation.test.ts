@@ -1,162 +1,326 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { installLayoutMetrics, setupDomEnvironment } from "@agw/test-harness";
 
-import type { AiMessage } from "@agw/api";
-import { buildConversationRenderModel, getMessageMeta } from "@agw/chat-core";
+import type { ConversationRenderItem, PresentedMessage, PresentedTool } from "@agw/chat-core";
+import type { InteractionResponse } from "@agw/execution-core";
 
-const CONVERSATION_URL = new URL("./conversation.tsx", import.meta.url);
-const PRESENTED_MESSAGE_URL = new URL("./presented-message.tsx", import.meta.url);
-const MESSAGE_TRIGGER_URL = new URL("../message-trigger.tsx", import.meta.url);
+const environment = await setupDomEnvironment();
+const { React, act, fireEvent, render, screen, within } = environment;
+installLayoutMetrics(environment.window);
+const { Conversation } = await import("./conversation.tsx");
 
-test("conversation is a thin host over the shared render model union", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-  assert.match(source, /ConversationRenderItem/);
-  assert.match(source, /items: ConversationRenderItem\[\]/);
-  assert.doesNotMatch(source, /processMessages|collapseConsecutiveSystemMessages|callId/);
-  assert.match(source, /item\.type === "tool-accordion"/);
-  assert.match(source, /item\.type === "tool-batch"/);
-  assert.match(source, /item\.type === "human-interaction"/);
-  assert.match(source, /item\.type === "checkpoint"/);
+function textMessage(id: string, text: string, alignment: "left" | "right"): PresentedMessage {
+  return {
+    source: { messageId: id, role: alignment === "right" ? "user" : "assistant", contents: [] },
+    identity: id,
+    alignment,
+    width: "normal",
+    meta: null,
+    contents: [{ type: "plain", text, sourceType: "TextContent" }],
+  };
+}
+
+function messageItem(id: string, text: string, alignment: "left" | "right" = "left") {
+  return {
+    key: id,
+    type: "message",
+    alignment,
+    width: "normal",
+    message: textMessage(id, text, alignment),
+  } as ConversationRenderItem;
+}
+
+function tool(name: string, summary: string, status: PresentedTool["status"]): PresentedTool {
+  return { identity: name, scopeId: null, toolName: name, summary, status, messages: [] };
+}
+
+type ConversationOptions = {
+  items?: ConversationRenderItem[];
+  hasOlderMessages?: boolean;
+  isLoadingOlderMessages?: boolean;
+  isInitialLoading?: boolean;
+  loadRequests?: number[];
+  responses?: InteractionResponse[];
+  resumes?: string[];
+  showCheckpointResume?: boolean;
+};
+
+function Harness(options: ConversationOptions) {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [ready, setReady] = React.useState(false);
+  React.useLayoutEffect(() => setReady(true), []);
+
+  return React.createElement(
+    "div",
+    { ref: scrollRef, "data-testid": "scroller" },
+    ready &&
+      React.createElement(Conversation, {
+        items: options.items ?? [],
+        scrollElementRef: scrollRef,
+        hasOlderMessages: options.hasOlderMessages,
+        isLoadingOlderMessages: options.isLoadingOlderMessages,
+        isInitialLoading: options.isInitialLoading,
+        onLoadOlderMessages: () => options.loadRequests?.push(1),
+        showCheckpointResume: options.showCheckpointResume,
+        onCheckpointResume: (occurrenceId: string) => options.resumes?.push(occurrenceId),
+        onHumanResponse: (response: InteractionResponse) => options.responses?.push(response),
+      }),
+  );
+}
+
+function renderConversation(options: ConversationOptions = {}) {
+  return render(React.createElement(Harness, options));
+}
+
+test("an empty conversation says there are no messages", async () => {
+  renderConversation();
+
+  assert.ok(await screen.findByText("No Message Yet"));
+  assert.ok(screen.getByText("There are currently no messages."));
 });
 
-test("conversation virtualizes dynamically measured message rows", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
+test("an empty conversation that is still loading says so instead", async () => {
+  renderConversation({ isInitialLoading: true });
 
-  assert.match(source, /useVirtualizer\(/);
-  assert.match(source, /ref=\{virtualizer\.measureElement\}/);
-  assert.match(source, /getItemKey/);
-  assert.match(source, /estimateSize: \(\) => 72/);
-  assert.match(source, /overscan: 6/);
-  assert.match(source, /useFlushSync: false/);
-  assert.match(source, /Loading earlier messages/);
+  assert.ok(await screen.findByText("Loading conversation..."));
+  assert.equal(screen.queryByText("No Message Yet"), null);
 });
 
-test("conversation maps Desktop user-input navigation to measured virtual rows", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
+test("messages render as a labelled list in order", async () => {
+  renderConversation({
+    items: [messageItem("m1", "Review the change", "right"), messageItem("m2", "Reviewing now")],
+  });
 
-  assert.match(source, /buildUserInputAnchors\(items\)/);
-  assert.match(source, /layoutUserInputMarkers\(/);
-  assert.match(source, /virtualizer\.measurementsCache/);
-  assert.match(
-    source,
-    /virtualizer\.scrollToIndex\(rowIndex, \{ align: "start", behavior: "auto" \}\)/,
-  );
-  assert.match(source, /createPortal\(/);
-  assert.match(source, /userInputNavigationHost/);
-  assert.match(source, /userInputNavigationHost \? buildUserInputAnchors\(items\) : \[\]/);
-  assert.match(source, /userInputNavigationHost\s*\? layoutUserInputMarkers\(/);
-  assert.doesNotMatch(source, /@min-\[56rem\]:pl-12/);
-  assert.match(
-    source,
-    /scrollElement\.scrollHeight - scrollElement\.scrollTop - scrollElement\.clientHeight/,
-  );
-  assert.match(source, /getActiveUserInputMarkerKey\([\s\S]*?isAtBottom/);
-});
-
-test("tool rows constrain long summaries without pushing status off screen", async () => {
-  const [conversation, trigger] = await Promise.all([
-    readFile(CONVERSATION_URL, "utf8"),
-    readFile(MESSAGE_TRIGGER_URL, "utf8"),
-  ]);
-
-  assert.match(trigger, /Header className="flex min-w-0"/);
-  assert.match(trigger, /flex min-w-0 flex-1 items-start/);
-  assert.match(conversation, /className="mx-4 min-w-0 w-full max-w-\[80%\]"/);
-  assert.match(
-    conversation,
-    /className="flex w-0 min-w-0 flex-1 items-center gap-2 overflow-hidden"/,
-  );
-  assert.match(
-    conversation,
-    /className="block min-w-0 max-w-full flex-1 truncate text-xs text-muted-foreground"/,
-  );
-  assert.match(conversation, /className="ml-auto shrink-0"/);
-});
-
-test("agent metadata keeps name priority and independent author", () => {
+  const list = await screen.findByRole("list", { name: "Conversation messages" });
   assert.deepEqual(
-    getMessageMeta({
-      messageId: "message-1",
-      role: "assistant",
-      author: "model-author",
-      contents: [],
-      additionalProperties: {
-        nodeName: "Review Node",
-        name: "Fallback",
-        agentName: "general-agent",
-      },
-    }),
-    {
-      name: "Review Node",
-      author: "model-author",
-      model: null,
-    },
-  );
-  assert.deepEqual(
-    getMessageMeta({
-      messageId: "message-2",
-      role: "assistant",
-      contents: [],
-      additionalProperties: { agentName: "general-agent" },
-    }),
-    { name: "general-agent", author: null, model: null },
+    within(list)
+      .getAllByRole("listitem")
+      .map((row) => row.textContent),
+    ["Review the change", "Reviewing now"],
   );
 });
 
-test("conversation appends model metadata to the agent header", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
+test("older history offers a load action and reports the request", async () => {
+  const loadRequests: number[] = [];
+  renderConversation({
+    items: [messageItem("m1", "Latest")],
+    hasOlderMessages: true,
+    loadRequests,
+  });
 
-  assert.deepEqual(
-    getMessageMeta({
-      messageId: "message-3",
-      role: "assistant",
-      author: "pi",
-      contents: [],
-      additionalProperties: {
-        modelName: "deepseek-v4-flash-vision-exp",
-      },
-    }),
-    { name: "pi", author: null, model: "deepseek-v4-flash-vision-exp" },
-  );
-  assert.match(source, /message\.meta\.model/);
-  assert.match(source, /title=\{message\.meta\.model\}/);
+  const action = await screen.findByRole("button", { name: "Load earlier messages" });
+  fireEvent.click(action);
+
+  assert.deepEqual(loadRequests, [1]);
 });
 
-test("shared model provides stable per-turn tool groups to the renderer", () => {
-  const tool = (type: string, scope: string): AiMessage => ({
-    messageId: `${type}-${scope}`,
-    role: type === "FunctionCallContent" ? "assistant" : "tool",
-    author: "agent",
-    streamingScopeId: scope,
-    contents: [
+test("a history load in progress disables its action", async () => {
+  renderConversation({ items: [messageItem("m1", "Latest")], isLoadingOlderMessages: true });
+
+  const action = await screen.findByRole("button", { name: /Loading earlier messages/ });
+  assert.equal(action.hasAttribute("disabled"), true);
+});
+
+test("agent metadata renders name, author, and model", async () => {
+  const message = textMessage("m1", "Reviewing now", "left");
+  message.meta = { name: "Review Node", author: "claude-code", model: "claude-opus-5" };
+  renderConversation({
+    items: [{ key: "m1", type: "message", alignment: "left", width: "normal", message }],
+  });
+
+  assert.ok(await screen.findByText("Review Node"));
+  assert.ok(screen.getByText("claude-code"));
+  assert.equal(screen.getByText("claude-opus-5").getAttribute("title"), "claude-opus-5");
+});
+
+test("a tool run renders its name, summary, and status", async () => {
+  renderConversation({
+    items: [
       {
-        type,
-        content: "{}",
-        additionalProperties: { callId: "call-1", toolName: "command_execution" },
-      },
+        key: "tool-1",
+        type: "tool-accordion",
+        alignment: "left",
+        width: "normal",
+        ...tool("command_execution", "dotnet build Agw.slnx", "complete"),
+      } as ConversationRenderItem,
     ],
   });
-  const items = buildConversationRenderModel([
-    tool("FunctionCallContent", "user-1"),
-    tool("FunctionResultContent", "user-1"),
-    tool("FunctionCallContent", "user-2"),
-    tool("FunctionResultContent", "user-2"),
-  ]);
-  assert.deepEqual(
-    items.map((item) => item.type),
-    ["tool-accordion", "tool-accordion"],
-  );
-  assert.notEqual(items[0].key, items[1].key);
+
+  assert.ok(await screen.findByText("command_execution"));
+  assert.ok(screen.getByText("dotnet build Agw.slnx"));
 });
 
-test("DOM renderer applies the requested width and alignment rules", async () => {
-  const [conversation, message] = await Promise.all([
-    readFile(CONVERSATION_URL, "utf8"),
-    readFile(PRESENTED_MESSAGE_URL, "utf8"),
+test("a tool batch summarizes its calls and status counts", async () => {
+  renderConversation({
+    items: [
+      {
+        key: "batch-1",
+        type: "tool-batch",
+        alignment: "left",
+        width: "normal",
+        tools: [
+          tool("read_file", "src/index.ts", "complete"),
+          tool("write_file", "src/output.ts", "failed"),
+        ],
+      } as ConversationRenderItem,
+    ],
+  });
+
+  assert.ok(await screen.findByText("2 tool calls"));
+  assert.match(screen.getByText(/read_file/).textContent ?? "", /write_file/);
+});
+
+test("a pending tool approval answers through the conversation callback", async () => {
+  const responses: InteractionResponse[] = [];
+  renderConversation({
+    responses,
+    items: [
+      {
+        key: "interaction-1",
+        type: "human-interaction",
+        alignment: "left",
+        width: "normal",
+        embedded: false,
+        request: {
+          kind: "tool-approval",
+          interactionId: "interaction-1",
+          prompt: "Run the migration script?",
+          source: { toolName: "command_execution" },
+        },
+      } as ConversationRenderItem,
+    ],
+  });
+
+  const approve = await screen.findByRole("button", { name: /Always allow tool/ });
+  fireEvent.click(approve);
+  fireEvent.click(screen.getByRole("button", { name: /Reject/ }));
+
+  assert.deepEqual(responses, [
+    { kind: "tool-approval", interactionId: "interaction-1", approved: true, scope: "AlwaysTool" },
+    { kind: "tool-approval", interactionId: "interaction-1", approved: false, scope: "Once" },
   ]);
-  assert.match(conversation, /max-w-\[80%\]/);
-  assert.match(message, /isUser \? "agw-msg-user"/);
-  assert.match(message, /message\.width === "full"/);
-  assert.match(message, /text-destructive/);
+});
+
+test("a pending user input announces its source and submits a response", async () => {
+  const responses: InteractionResponse[] = [];
+  renderConversation({
+    responses,
+    items: [
+      {
+        key: "interaction-2",
+        type: "human-interaction",
+        alignment: "left",
+        width: "normal",
+        embedded: false,
+        request: {
+          kind: "user-input",
+          interactionId: "interaction-2",
+          prompt: "Which target?",
+          source: { toolName: "ask_user" },
+          inputKind: "confirm",
+          payload: {},
+        },
+      } as ConversationRenderItem,
+    ],
+  });
+
+  assert.ok(await screen.findByText("ask_user"));
+  assert.ok(screen.getByText("Waiting for your input"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+  assert.deepEqual(responses, [
+    {
+      kind: "user-input",
+      interactionId: "interaction-2",
+      cancelled: false,
+      responseData: { confirmed: true },
+    },
+  ]);
+});
+
+test("an answered question interaction renders its result", async () => {
+  renderConversation({
+    items: [
+      {
+        key: "result-1",
+        type: "human-interaction-result",
+        alignment: "left",
+        width: "normal",
+        result: {
+          cancelled: false,
+          items: [{ question: "Which database provider?", answer: "PostgreSQL" }],
+        },
+      } as ConversationRenderItem,
+    ],
+  });
+
+  assert.ok(await screen.findByText("Which database provider?"));
+  assert.ok(screen.getByText("PostgreSQL"));
+});
+
+test("an available checkpoint can resume its occurrence", async () => {
+  const resumes: string[] = [];
+  renderConversation({
+    resumes,
+    showCheckpointResume: true,
+    items: [
+      {
+        key: "checkpoint-1",
+        type: "checkpoint",
+        alignment: "left",
+        width: "normal",
+        checkpoint: { occurrenceId: "occurrence-1", nodeId: "node-1", name: "After review" },
+        availability: {
+          occurrenceId: "occurrence-1",
+          agentflowId: "flow-1",
+          boundarySequence: 1,
+          available: true,
+          markers: [],
+        },
+      } as ConversationRenderItem,
+    ],
+  });
+
+  assert.ok(await screen.findByText("After review"));
+  fireEvent.click(screen.getByRole("button", { name: /Resume/ }));
+
+  assert.deepEqual(resumes, ["occurrence-1"]);
+});
+
+test("user input navigation renders into the host the caller provides", async () => {
+  function NavigationHarness() {
+    const scrollRef = React.useRef<HTMLDivElement>(null);
+    const [host, setHost] = React.useState<HTMLDivElement | null>(null);
+    const items = Array.from({ length: 40 }, (_, index) =>
+      messageItem(`m${index}`, `Message ${index}`, index % 8 === 0 ? "right" : "left"),
+    );
+
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement("div", { ref: setHost, "data-testid": "navigation-host" }),
+      React.createElement(
+        "div",
+        { ref: scrollRef, "data-testid": "scroller" },
+        host &&
+          React.createElement(Conversation, {
+            items,
+            scrollElementRef: scrollRef,
+            userInputNavigationHost: host,
+          }),
+      ),
+    );
+  }
+
+  const view = render(React.createElement(NavigationHarness));
+  const scroller = await screen.findByTestId("scroller");
+  Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+  await act(async () => {
+    fireEvent.scroll(scroller);
+  });
+
+  const host = view.container.querySelector('[data-testid="navigation-host"]');
+  assert.ok(host);
+  assert.ok(within(host as HTMLElement).getByRole("navigation", { name: "User input navigation" }));
 });

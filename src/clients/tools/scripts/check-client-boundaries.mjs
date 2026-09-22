@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import ts from "typescript";
 
 const clientsRoot = resolve(import.meta.dirname, "..", "..");
 const packagesRoot = join(clientsRoot, "packages");
@@ -18,6 +19,7 @@ const requiredPackages = [
   "chat-native",
   "chat-runtime",
   "components",
+  "execution-core",
   "http-client",
   "integrations",
   "jobs",
@@ -146,40 +148,6 @@ for (const dependency of [
   );
 }
 
-for (const filePath of [
-  ...sourceFiles(join(mobileRoot, "app")),
-  ...sourceFiles(join(mobileRoot, "src")),
-]) {
-  const source = readFileSync(filePath, "utf8");
-  const sourcePath = relative(clientsRoot, filePath);
-  assert.doesNotMatch(
-    source,
-    /["']@agw\/(?:web|desktop|components)(?:[\/"'])/u,
-    `${sourcePath} imports a Web or Desktop boundary`,
-  );
-  assert.doesNotMatch(source, /["']@agw\/chat["']/u, `${sourcePath} must import @agw/chat-native`);
-  assert.doesNotMatch(
-    source,
-    /["']@agw\/projects["']/u,
-    `${sourcePath} must import @agw/projects-core`,
-  );
-  assert.doesNotMatch(
-    source,
-    /(?:web|desktop)\/src/u,
-    `${sourcePath} imports another application source tree`,
-  );
-  assert.doesNotMatch(
-    source,
-    /mobile\/shared|shared\/src\/rn/u,
-    `${sourcePath} imports the removed Mobile architecture`,
-  );
-  assert.doesNotMatch(
-    source,
-    /\.\.\/(?:\.\.\/)*packages\//u,
-    `${sourcePath} bypasses workspace package exports`,
-  );
-}
-
 const forbiddenWebDirectories = ["api", "components", "features", "hooks", "lib", "types"];
 for (const directory of forbiddenWebDirectories) {
   const absolutePath = join(clientsRoot, "web", "src", directory);
@@ -203,106 +171,273 @@ function sourceFiles(directory) {
   });
 }
 
-for (const filePath of sourceFiles(packagesRoot)) {
-  const source = readFileSync(filePath, "utf8");
-  const packagePath = relative(clientsRoot, filePath);
-  assert.doesNotMatch(
-    source,
-    /(?:from|import\s*)\s*\(?["']@\//u,
-    `${packagePath} imports Web alias`,
+const WORKSPACE_ROOTS = [
+  mobileRoot,
+  join(clientsRoot, "web"),
+  join(clientsRoot, "desktop"),
+  ...(existsSync(packagesRoot)
+    ? readdirSync(packagesRoot).map((entry) => join(packagesRoot, entry))
+    : []),
+].filter((directory) => existsSync(join(directory, "package.json")));
+
+function workspaceRootOf(filePath) {
+  return WORKSPACE_ROOTS.find(
+    (root) => filePath === root || filePath.startsWith(root + sep),
   );
-  assert.doesNotMatch(source, /["']@agw\/web(?:[\/"'])/u, `${packagePath} imports @agw/web`);
-  const owningPackage = relative(packagesRoot, filePath).split(sep)[0];
-  if (owningPackage !== "components" && owningPackage !== "chat-native") {
-    assert.doesNotMatch(
-      source,
-      /["']@tanstack\/react-query["']/u,
-      `${packagePath} bypasses @agw/components/query`,
-    );
-    assert.doesNotMatch(
-      source,
-      /["']@radix-ui\/react-accordion["']/u,
-      `${packagePath} bypasses @agw/components Accordion primitives`,
-    );
+}
+
+function packageNameOf(filePath) {
+  const packages = relative(packagesRoot, filePath);
+  if (!packages.startsWith("..") && !packages.startsWith(sep)) {
+    return packages.split(sep)[0];
   }
+  if (filePath.startsWith(mobileRoot + sep)) return "mobile";
+  if (filePath.startsWith(join(clientsRoot, "web") + sep)) return "web";
+  if (filePath.startsWith(join(clientsRoot, "desktop") + sep)) return "desktop";
+  return null;
+}
+
+// Extracts every import/require specifier with the TypeScript parser, so the boundary checks
+// read the actual dependency edges of each file instead of scanning source text.
+// 用 TypeScript 解析器提取每一条 import/require 说明符，让边界检查读到的是每个文件的
+// 真实依赖边，而不是扫描源码文本。
+function extractImportSpecifiers(filePath, sourceText) {
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  const specifiers = [];
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      specifiers.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      specifiers.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      ts.isStringLiteral(node.moduleReference.expression)
+    ) {
+      specifiers.push(node.moduleReference.expression.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0 &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
+      specifiers.push(node.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return specifiers;
+}
+
+const workspaceChecks = [
+  {
+    // A relative import must not leave the workspace root that owns the source file.
+    // 相对导入不得离开源文件所属的工作区根目录。
+    name: "relative import crosses a workspace boundary",
+    appliesTo: () => true,
+    test: (filePath, specifier) => {
+      if (!specifier.startsWith(".")) return null;
+      const targetRoot = workspaceRootOf(resolve(dirname(filePath), specifier));
+      return targetRoot && targetRoot !== workspaceRootOf(filePath)
+        ? `imports ${specifier} into another workspace`
+        : null;
+    },
+  },
+];
+
+const packageImportChecks = [
+  {
+    name: "Web alias",
+    appliesTo: (pkg) => pkg !== "mobile" && pkg !== "web" && pkg !== "desktop",
+    test: (_pkg, specifier) =>
+      /^@\//u.test(specifier) ? "imports the Web application alias" : null,
+  },
+  {
+    name: "@agw/web",
+    appliesTo: (pkg) => pkg !== "web" && pkg !== "desktop",
+    test: (_pkg, specifier) =>
+      /^@agw\/web(?:[\/"])/u.test(specifier) || specifier === "@agw/web"
+        ? "imports the Web application"
+        : null,
+  },
+  {
+    name: "@agw/desktop-renderer",
+    appliesTo: (pkg) => pkg !== "desktop",
+    test: (_pkg, specifier) =>
+      /^@agw\/desktop-renderer(?:[\/"])/u.test(specifier) ? "imports the removed Desktop renderer package" : null,
+  },
+  {
+    name: "react-query bypass",
+    appliesTo: (pkg) => pkg !== "components" && pkg !== "chat-native" && pkg !== "mobile",
+    test: (_pkg, specifier) =>
+      specifier === "@tanstack/react-query" ? "bypasses @agw/components/query" : null,
+  },
+  {
+    name: "Accordion bypass",
+    appliesTo: (pkg) => pkg !== "components" && pkg !== "chat-native" && pkg !== "mobile",
+    test: (_pkg, specifier) =>
+      specifier === "@radix-ui/react-accordion" ? "bypasses @agw/components Accordion primitives" : null,
+  },
+  {
+    name: "platform renderer imports",
+    appliesTo: (pkg) => pkg === "chat-core" || pkg === "chat-runtime",
+    test: (_pkg, specifier) =>
+      /^(?:next|react-dom|react-native|expo(?:-[^"']*)?|@agw\/components)(?:[\/"])/u.test(specifier) ||
+      ["next", "react-dom", "react-native", "expo", "@agw/components"].includes(specifier)
+        ? "imports a platform renderer dependency"
+        : null,
+  },
+  {
+    name: "Native renderer imports",
+    appliesTo: (pkg) => pkg === "chat",
+    test: (_pkg, specifier) =>
+      /^(?:react-native|expo(?:-[^"']*)?)(?:[\/"])/u.test(specifier) ||
+      ["react-native", "expo"].includes(specifier)
+        ? "imports a Native renderer dependency"
+        : null,
+  },
+  {
+    name: "DOM renderer imports",
+    appliesTo: (pkg) => pkg === "chat-native",
+    test: (_pkg, specifier) =>
+      /^(?:next|react-dom|@agw\/components|@agw\/chat)(?:[\/"])/u.test(specifier) ||
+      ["next", "react-dom", "@agw/components", "@agw/chat"].includes(specifier)
+        ? "imports a DOM renderer dependency"
+        : null,
+  },
+  {
+    name: "Desktop boundary",
+    appliesTo: (pkg) => pkg === "web",
+    test: (_pkg, specifier) =>
+      /^@agw\/desktop(?:[\/"])/u.test(specifier) ||
+      specifier === "@agw/desktop" ||
+      /^@agw\/desktop-renderer(?:[\/"])/u.test(specifier) ||
+      /^@agw\/desktop-contracts(?:[\/"])/u.test(specifier)
+        ? "imports a Desktop boundary"
+        : null,
+  },
+  {
+    name: "Web boundary",
+    appliesTo: (pkg) => pkg === "desktop",
+    test: (_pkg, specifier) =>
+      /^@agw\/web(?:[\/"])/u.test(specifier) ||
+      specifier === "@agw/web" ||
+      /^@agw\/desktop-contracts(?:[\/"])/u.test(specifier)
+        ? "imports the removed Web boundary"
+        : null,
+  },
+  {
+    name: "Mobile Web/Desktop boundary",
+    appliesTo: (pkg) => pkg === "mobile",
+    test: (_pkg, specifier) =>
+      /^@agw\/(?:web|desktop|components)(?:[\/"])/u.test(specifier) ||
+      ["@agw/web", "@agw/desktop", "@agw/components"].includes(specifier)
+        ? "imports a Web or Desktop boundary"
+        : null,
+  },
+  {
+    name: "Mobile Chat host",
+    appliesTo: (pkg) => pkg === "mobile",
+    test: (_pkg, specifier) =>
+      /^@agw\/chat(?:[\/"])/u.test(specifier) || specifier === "@agw/chat"
+        ? "must import @agw/chat-native"
+        : null,
+  },
+  {
+    name: "Mobile Projects core",
+    appliesTo: (pkg) => pkg === "mobile",
+    test: (_pkg, specifier) =>
+      /^@agw\/projects(?:[\/"])/u.test(specifier) || specifier === "@agw/projects"
+        ? "must import @agw/projects-core"
+        : null,
+  },
+];
+
+function checkSourceFile(filePath) {
+  const source = readFileSync(filePath, "utf8");
+  const sourcePath = relative(clientsRoot, filePath);
+  const owner = packageNameOf(filePath);
+  const specifiers = extractImportSpecifiers(filePath, source);
+
+  for (const specifier of specifiers) {
+    for (const check of workspaceChecks) {
+      const message = check.test(filePath, specifier);
+      if (message) {
+        assert.fail(`${sourcePath} ${check.name}: ${message}`);
+      }
+    }
+    if (!owner) continue;
+    for (const check of packageImportChecks) {
+      if (!check.appliesTo(owner)) continue;
+      const message = check.test(owner, specifier);
+      if (message) {
+        assert.fail(`${sourcePath} ${check.name}: ${message}`);
+      }
+    }
+  }
+
+  // Runtime accessors that no import can express, verified against source content.
+  // 导入无法表达的运行时访问，仍需对照源码内容核对。
+  if (owner === "web") {
+    assert.doesNotMatch(source, /\bagwDesktop\b/u, `${sourcePath} accesses the Desktop preload`);
+  }
+  if (owner === "desktop") {
+    assert.doesNotMatch(source, /\bwebDirectory\b|["']web["']/u, `${sourcePath} locates the Web application`);
+  }
+}
+
+const mobileSources = [...sourceFiles(join(mobileRoot, "app")), ...sourceFiles(join(mobileRoot, "src"))];
+for (const filePath of mobileSources) {
+  const source = readFileSync(filePath, "utf8");
+  const sourcePath = relative(clientsRoot, filePath);
   assert.doesNotMatch(
     source,
-    /["']@agw\/desktop-renderer(?:[\/"'])/u,
-    `${packagePath} imports the removed Desktop renderer package`,
+    /(?:web|desktop)\/src/u,
+    `${sourcePath} imports another application source tree`,
   );
-  assert.doesNotMatch(source, /web\/src/u, `${packagePath} imports web/src`);
+  assert.doesNotMatch(
+    source,
+    /mobile\/shared|shared\/src\/rn/u,
+    `${sourcePath} imports the removed Mobile architecture`,
+  );
+  assert.doesNotMatch(
+    source,
+    /\.\.\/(?:\.\.\/)*packages\//u,
+    `${sourcePath} bypasses workspace package exports`,
+  );
+  checkSourceFile(filePath);
+}
+
+for (const filePath of sourceFiles(packagesRoot)) {
+  checkSourceFile(filePath);
 }
 
 for (const filePath of [
   ...sourceFiles(join(packagesRoot, "chat-core", "src")),
   ...sourceFiles(join(packagesRoot, "chat-runtime", "src")),
+  ...sourceFiles(join(packagesRoot, "chat", "src")),
+  ...sourceFiles(join(packagesRoot, "chat-native", "src")),
 ]) {
-  const source = readFileSync(filePath, "utf8");
-  const packagePath = relative(clientsRoot, filePath);
-  assert.doesNotMatch(
-    source,
-    /["'](?:next|react-dom|react-native|expo(?:-[^"']*)?|@agw\/components)(?:[\/"'])/u,
-    `${packagePath} imports a platform renderer dependency`,
-  );
+  checkSourceFile(filePath);
 }
 
-for (const filePath of sourceFiles(join(packagesRoot, "chat", "src"))) {
-  const source = readFileSync(filePath, "utf8");
-  const packagePath = relative(clientsRoot, filePath);
-  assert.doesNotMatch(
-    source,
-    /["'](?:react-native|expo(?:-[^"']*)?)(?:[\/"'])/u,
-    `${packagePath} imports a Native renderer dependency`,
-  );
-}
-
-for (const filePath of sourceFiles(join(packagesRoot, "chat-native", "src"))) {
-  const source = readFileSync(filePath, "utf8");
-  const packagePath = relative(clientsRoot, filePath);
-  assert.doesNotMatch(
-    source,
-    /["'](?:next|react-dom|@agw\/components|@agw\/chat)(?:[\/"'])/u,
-    `${packagePath} imports a DOM renderer dependency`,
-  );
-}
-
-for (const forbiddenImplementation of [
+for (const filePath of [
   join(mobileRoot, "src", "features", "chat", "message-rendering.ts"),
   join(mobileRoot, "src", "features", "chat", "image-picker.ts"),
 ]) {
   assert.equal(
-    existsSync(forbiddenImplementation),
+    existsSync(filePath),
     false,
-    `${relative(clientsRoot, forbiddenImplementation)} must live in @agw/chat-native`,
+    `${relative(clientsRoot, filePath)} must live in @agw/chat-native`,
   );
 }
 
 for (const filePath of sourceFiles(join(clientsRoot, "web", "src"))) {
-  const source = readFileSync(filePath, "utf8");
-  const sourcePath = relative(clientsRoot, filePath);
-  assert.doesNotMatch(source, /["']@agw\/desktop(?:[\/"'])/u, `${sourcePath} imports @agw/desktop`);
-  assert.doesNotMatch(
-    source,
-    /["']@agw\/desktop-renderer(?:[\/"'])/u,
-    `${sourcePath} imports the removed Desktop renderer package`,
-  );
-  assert.doesNotMatch(
-    source,
-    /["']@agw\/desktop-contracts(?:[\/"'])/u,
-    `${sourcePath} imports Desktop bridge contracts`,
-  );
-  assert.doesNotMatch(
-    source,
-    /["']@tanstack\/react-query["']/u,
-    `${sourcePath} bypasses @agw/components/query`,
-  );
-  assert.doesNotMatch(
-    source,
-    /["']@radix-ui\/react-accordion["']/u,
-    `${sourcePath} bypasses @agw/components Accordion primitives`,
-  );
-  assert.doesNotMatch(source, /\bagwDesktop\b/u, `${sourcePath} accesses the Desktop preload`);
-  assert.doesNotMatch(source, /desktop\/src/u, `${sourcePath} imports desktop/src`);
+  checkSourceFile(filePath);
 }
 
 for (const filePath of [
@@ -310,30 +445,7 @@ for (const filePath of [
   ...sourceFiles(join(clientsRoot, "desktop", "renderer")),
   ...sourceFiles(join(clientsRoot, "desktop", "scripts")),
 ]) {
-  const source = readFileSync(filePath, "utf8");
-  const sourcePath = relative(clientsRoot, filePath);
-  assert.doesNotMatch(source, /["']@agw\/web(?:[\/"'])/u, `${sourcePath} imports @agw/web`);
-  assert.doesNotMatch(source, /web\/src/u, `${sourcePath} imports web/src`);
-  assert.doesNotMatch(
-    source,
-    /["']@agw\/desktop-contracts(?:[\/"'])/u,
-    `${sourcePath} imports the removed Desktop contracts package`,
-  );
-  assert.doesNotMatch(
-    source,
-    /["']@tanstack\/react-query["']/u,
-    `${sourcePath} bypasses @agw/components/query`,
-  );
-  assert.doesNotMatch(
-    source,
-    /["']@radix-ui\/react-accordion["']/u,
-    `${sourcePath} bypasses @agw/components Accordion primitives`,
-  );
-  assert.doesNotMatch(
-    source,
-    /\bwebDirectory\b|["']web["']/u,
-    `${sourcePath} locates the Web application`,
-  );
+  checkSourceFile(filePath);
 }
 
 assert.equal(
@@ -377,15 +489,18 @@ for (const packageDirectory of packageDirectories) {
     `${relative(clientsRoot, manifestPath)} has invalid name`,
   );
   const selfImportPattern = new RegExp(
-    `(?:from|import\\s*)\\s*\\(?["']${manifest.name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:[/"'])`,
+    `^(?:${manifest.name})(?:[/"])`,
     "u",
   );
   for (const filePath of sourceFiles(join(packageDirectory, "src"))) {
-    assert.doesNotMatch(
-      readFileSync(filePath, "utf8"),
-      selfImportPattern,
-      `${relative(clientsRoot, filePath)} imports its own package barrel`,
-    );
+    const source = readFileSync(filePath, "utf8");
+    for (const specifier of extractImportSpecifiers(filePath, source)) {
+      assert.doesNotMatch(
+        specifier,
+        selfImportPattern,
+        `${relative(clientsRoot, filePath)} imports its own package barrel`,
+      );
+    }
   }
 }
 

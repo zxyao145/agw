@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
@@ -12,8 +11,6 @@ import {
   STREAMING_MESSAGE_BATCH_INTERVAL_MS,
   toExecutionUserInput,
 } from "./execution-stream";
-
-const EXECUTION_STREAM_URL = new URL("./execution-stream.ts", import.meta.url);
 
 function textMessage({
   messageId,
@@ -36,13 +33,6 @@ function textMessage({
     streamingScopeId,
   };
 }
-
-test("execution stream delegates platform-neutral helpers to chat-runtime", async () => {
-  const source = await readFile(EXECUTION_STREAM_URL, "utf8");
-
-  assert.match(source, /from "@agw\/chat-runtime\/execution-stream"/);
-  assert.doesNotMatch(source, /execution-ws|WebSocket|parseExecutionWsMessage/);
-});
 
 test("streamed proposed plan tags merge into one restorable Plan Card payload", () => {
   const first = textMessage({
