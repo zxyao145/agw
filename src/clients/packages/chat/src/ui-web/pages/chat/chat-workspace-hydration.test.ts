@@ -125,10 +125,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
       isTransitioning: boolean;
       isExecuting: boolean;
       onExecute: (text: string, attachments: []) => void;
+      topLeft?: React.ReactNode;
     };
     newChat?: () => void;
     refreshSignal?: number;
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
+    selectTab?: (value: string) => void;
   } = {};
   const attachedContexts = new Set<string>();
   const executions: (ExecutionRequest & { contextId: string })[] = [];
@@ -185,8 +187,15 @@ async function checkConversationSession(kind: string, strictMode = false) {
         children,
         inert,
         "aria-hidden": ariaHidden,
-      }: React.HTMLAttributes<HTMLDivElement>) =>
-        React.createElement("div", { inert, "aria-hidden": ariaHidden }, children),
+        onValueChange,
+      }: React.HTMLAttributes<HTMLDivElement> & {
+        onValueChange?: (value: string) => void;
+      }) => {
+        // The sidebar renders the conversation list or the explorer by active tab,
+        // so expose the switch to let tests pick one.
+        observed.selectTab = onValueChange;
+        return React.createElement("div", { inert, "aria-hidden": ariaHidden }, children);
+      },
     },
     { get: (target, key) => Reflect.get(target, key) ?? Container },
   );
@@ -343,7 +352,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
       "./chat-input": {
         ChatInput: (props: NonNullable<typeof observed.input>) => {
           observed.input = props;
-          return null;
+          // The workspace passes the agent selector through the input's top-left slot,
+          // so mount it here to keep observing target changes.
+          return React.createElement(React.Fragment, null, props.topLeft ?? null);
         },
       },
       "./chat-aside": { ChatAside: () => null },
@@ -589,6 +600,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return;
       }
       if (kind === "directories") {
+        await React.act(async () => observed.selectTab!("files"));
         const contextId = observed.chat?.contextId;
         assert.deepEqual(observed.chat?.searchDirectoryIds, [null, "extra"]);
         await React.act(async () => observed.explorer!.onFileSelected("README.md"));

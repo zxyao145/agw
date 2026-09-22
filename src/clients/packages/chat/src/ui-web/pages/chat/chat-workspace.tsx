@@ -1091,6 +1091,41 @@ export function ChatWorkspace({
       });
   }, [contextId, executionServerId, selectedProjectId]);
 
+  /** Chat/Files 切换与侧栏折叠按钮，桌面端常驻左列顶部，移动端落在主区域顶部。 */
+  const sidebarControls = (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 px-2 pb-2">
+      <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
+        <TabsTrigger
+          value="chat"
+          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
+        >
+          Chat
+        </TabsTrigger>
+        <TabsTrigger
+          value="files"
+          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
+        >
+          Files
+        </TabsTrigger>
+      </TabsList>
+      <Button
+        variant="ghost"
+        className="cursor-pointer"
+        size="sm"
+        onClick={handleSidebarToggle}
+        title={sidebarToggleTitle}
+        aria-label={sidebarToggleTitle}
+        disabled={isSidebarToggleDisabled}
+      >
+        {activeSidebarVisible ? (
+          <PanelLeftClose className="h-4 w-4" />
+        ) : (
+          <PanelLeftOpen className="h-4 w-4" />
+        )}
+      </Button>
+    </div>
+  );
+
   return (
     <div className="relative flex h-full w-full min-w-0 flex-col gap-3 pt-2">
       {projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError ? (
@@ -1107,184 +1142,148 @@ export function ChatWorkspace({
         aria-hidden={showReconnect}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {showProjectSelect ? (
-              <div className="w-[220px]">
-                <SearchableSelect
-                  id="chat-project-select"
-                  ariaLabel="Select project"
-                  value={selectedProjectId ?? ""}
-                  onValueChange={handleProjectChange}
-                  options={projectSelectOptions}
-                  placeholder="Select project"
-                  searchPlaceholder="Search projects..."
-                  clearable={false}
-                />
-              </div>
-            ) : null}
-
-            <div className="w-65">
-              <AgentSelector
-                id="chat-target-select"
-                size={compactToolbar ? "sm" : "default"}
-                projectId={selectedProjectId}
-                value={
-                  selectedTarget
-                    ? {
-                        agentType: selectedTarget.type === "agent" ? 0 : 1,
-                        agentId: selectedTarget.id,
-                      }
-                    : null
-                }
-                onSelect={handleAgentSelect}
+        {showProjectSelect ? (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="w-[220px]">
+              <SearchableSelect
+                id="chat-project-select"
+                ariaLabel="Select project"
+                value={selectedProjectId ?? ""}
+                onValueChange={handleProjectChange}
+                options={projectSelectOptions}
+                placeholder="Select project"
+                searchPlaceholder="Search projects..."
+                clearable={false}
               />
             </div>
           </div>
-          <div className="flex-1" />
+        ) : null}
 
-          <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
-            <TabsTrigger
-              value="chat"
-              className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
-            >
-              Chat
-            </TabsTrigger>
-            <TabsTrigger
-              value="files"
-              className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
-            >
-              Files
-            </TabsTrigger>
-          </TabsList>
-          <Button
-            variant="ghost"
-            className="cursor-pointer"
-            size="sm"
-            onClick={handleSidebarToggle}
-            title={sidebarToggleTitle}
-            aria-label={sidebarToggleTitle}
-            disabled={isSidebarToggleDisabled}
-          >
-            {activeSidebarVisible ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeftOpen className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
+        <ColResizeSplit>
+          {isMobile ? null : (
+            <ColResizeSplit.Left minWidth={260} maxWidth={520} collapsed={!activeSidebarVisible}>
+              <div className="flex h-full min-h-0 flex-col">
+                {sidebarControls}
 
-        <TabsContent
-          value="chat"
-          forceMount
-          className="mt-2 flex min-h-0 flex-1 data-[state=inactive]:hidden"
-        >
-          <ColResizeSplit>
-            {!isMobile && isChatTab && showChatHistory ? (
-              <ColResizeSplit.Left minWidth={260} maxWidth={520}>
-                {renderConversationList()}
-              </ColResizeSplit.Left>
-            ) : null}
-
-            <ColResizeSplit.Right>
-              <div className="relative flex flex-col min-h-105 flex-1 overflow-hidden">
-                {/* <div className="border-b px-4 py-3">
-                  <div className="text-xs text-muted-foreground">
-                    {selectedProjectId
-                      ? `Project: ${projects.find((project) => project.id === selectedProjectId)?.name ?? selectedProjectId}`
-                      : "Select a project to begin"}
-                    {selectedTarget ? ` · Target: ${selectedTarget.type}` : ""}
+                {activeSidebarVisible ? (
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    {isChatTab ? renderConversationList() : null}
+                    {isFilesTab && hasProjectFileSystem ? (
+                      <Explorer
+                        key={`${selectedProjectId}:${selectedDirectory?.id ?? "primary"}:${resolvedWorkspace}`}
+                        projectId={selectedProjectId!}
+                        directoryId={selectedDirectory?.id}
+                        directories={projectDirectories}
+                        onDirectoryChange={setSelectedDirectoryId}
+                        rootDirectory={resolvedWorkspace || "/"}
+                        onlyDiff={onlyDiff}
+                        recursiveMode={recursiveMode}
+                        onOnlyDiffChange={setOnlyDiff}
+                        onFileDeleted={handleOnFileDeleted}
+                        onFileSelected={handleOnFileSelected}
+                        onFileReseted={handleOnFileReseted}
+                        onFileGitScopeChanged={handleOnFileGitScopeChanged}
+                      />
+                    ) : null}
                   </div>
-                </div> */}
+                ) : null}
+              </div>
+            </ColResizeSplit.Left>
+          )}
 
-                <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
-                  <Chat
-                    target={selectedTarget}
-                    agentResultFormats={agentsQuery.data}
-                    projectId={selectedProjectId}
-                    conversationId={conversationId}
-                    sessionSeed={chatSessionSeed}
-                    isLoadingConversation={
-                      isLoadingConversation ||
-                      Boolean(
-                        queryConversationId &&
-                        (queryProjectId !== selectedProjectId ||
-                          queryConversationId !== conversationId),
-                      )
-                    }
-                    showUserInputNavigation={showUserInputNavigation}
-                    restoreExecution={
-                      Number(chatSessionSeed.revision) > 0 &&
-                      queryProjectId === selectedProjectId &&
-                      queryConversationId === conversationId &&
-                      chatSessionSeed.contextId === contextId
-                    }
-                    environmentVariables={environmentVariables}
-                    onConversationIdChange={handleChatConversationIdChange}
-                    onConversationAccepted={handleConversationAccepted}
-                    onContextIdChange={handleChatContextIdChange}
-                    onConversationChange={refreshConversationList}
-                    directoryId={selectedDirectory?.id}
-                    searchDirectoryIds={searchDirectoryIds}
-                    directories={projectDirectories}
-                    pendingFileComments={comments}
-                    onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
-                    onReconnectStateChange={setExecutionReconnectState}
-                  />
+          <ColResizeSplit.Right>
+            <div className="flex h-full min-h-0 w-full flex-col">
+              {isMobile ? sidebarControls : null}
+
+              <TabsContent
+                value="chat"
+                forceMount
+                className="flex min-h-0 flex-1 data-[state=inactive]:hidden"
+              >
+                <div className="relative flex flex-col min-h-105 flex-1 overflow-hidden">
+                  <div className="relative flex min-h-0 flex-1 flex-col">
+                    <Chat
+                      target={selectedTarget}
+                      agentResultFormats={agentsQuery.data}
+                      projectId={selectedProjectId}
+                      inputTopLeft={
+                        <div className="w-44">
+                          <AgentSelector
+                            id="chat-target-select"
+                            size={compactToolbar ? "sm" : "default"}
+                            projectId={selectedProjectId}
+                            value={
+                              selectedTarget
+                                ? {
+                                    agentType: selectedTarget.type === "agent" ? 0 : 1,
+                                    agentId: selectedTarget.id,
+                                  }
+                                : null
+                            }
+                            onSelect={handleAgentSelect}
+                          />
+                        </div>
+                      }
+                      conversationId={conversationId}
+                      sessionSeed={chatSessionSeed}
+                      isLoadingConversation={
+                        isLoadingConversation ||
+                        Boolean(
+                          queryConversationId &&
+                          (queryProjectId !== selectedProjectId ||
+                            queryConversationId !== conversationId),
+                        )
+                      }
+                      showUserInputNavigation={showUserInputNavigation}
+                      restoreExecution={
+                        Number(chatSessionSeed.revision) > 0 &&
+                        queryProjectId === selectedProjectId &&
+                        queryConversationId === conversationId &&
+                        chatSessionSeed.contextId === contextId
+                      }
+                      environmentVariables={environmentVariables}
+                      onConversationIdChange={handleChatConversationIdChange}
+                      onConversationAccepted={handleConversationAccepted}
+                      onContextIdChange={handleChatContextIdChange}
+                      onConversationChange={refreshConversationList}
+                      directoryId={selectedDirectory?.id}
+                      searchDirectoryIds={searchDirectoryIds}
+                      directories={projectDirectories}
+                      pendingFileComments={comments}
+                      onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
+                      onReconnectStateChange={setExecutionReconnectState}
+                    />
+                  </div>
                 </div>
-              </div>
-            </ColResizeSplit.Right>
-          </ColResizeSplit>
-        </TabsContent>
+              </TabsContent>
 
-        <TabsContent value="files" className="mt-2 flex min-h-0 flex-1">
-          <ColResizeSplit>
-            {!isMobile && hasProjectFileSystem && showFileExplorer ? (
-              <ColResizeSplit.Left minWidth={260} maxWidth={520}>
-                <Explorer
-                  key={`${selectedProjectId}:${selectedDirectory?.id ?? "primary"}:${resolvedWorkspace}`}
-                  projectId={selectedProjectId!}
-                  directoryId={selectedDirectory?.id}
-                  directories={projectDirectories}
-                  onDirectoryChange={setSelectedDirectoryId}
-                  rootDirectory={resolvedWorkspace || "/"}
-                  onlyDiff={onlyDiff}
-                  recursiveMode={recursiveMode}
-                  onOnlyDiffChange={setOnlyDiff}
-                  onFileDeleted={handleOnFileDeleted}
-                  onFileSelected={handleOnFileSelected}
-                  onFileReseted={handleOnFileReseted}
-                  onFileGitScopeChanged={handleOnFileGitScopeChanged}
-                />
-              </ColResizeSplit.Left>
-            ) : null}
-
-            <ColResizeSplit.Right>
-              <div className="flex justify-center flex-1 overflow-hidden">
-                {hasProjectFileSystem ? (
-                  <FileContent
-                    projectId={selectedProjectId!}
-                    directoryId={selectedDirectory?.id}
-                    directoryName={
-                      projectDirectories.length > 1 ? selectedDirectory?.path : undefined
-                    }
-                    selectedFile={selectedFile}
-                    isLoadingContent={isLoadingContent}
-                    contentError={contentError}
-                    onlyDiff={onlyDiff}
-                    diffContentData={diffContentData}
-                    comments={comments}
-                    setComments={setComments}
-                    fileContent={fileContent}
-                    diffScope={selectedDiffScope}
-                  />
-                ) : (
-                  <ProjectRequiredState />
-                )}
-              </div>
-            </ColResizeSplit.Right>
-          </ColResizeSplit>
-        </TabsContent>
+              <TabsContent value="files" className="flex min-h-0 flex-1">
+                <div className="flex justify-center flex-1 overflow-hidden">
+                  {hasProjectFileSystem ? (
+                    <FileContent
+                      projectId={selectedProjectId!}
+                      directoryId={selectedDirectory?.id}
+                      directoryName={
+                        projectDirectories.length > 1 ? selectedDirectory?.path : undefined
+                      }
+                      selectedFile={selectedFile}
+                      isLoadingContent={isLoadingContent}
+                      contentError={contentError}
+                      onlyDiff={onlyDiff}
+                      diffContentData={diffContentData}
+                      comments={comments}
+                      setComments={setComments}
+                      fileContent={fileContent}
+                      diffScope={selectedDiffScope}
+                    />
+                  ) : (
+                    <ProjectRequiredState />
+                  )}
+                </div>
+              </TabsContent>
+            </div>
+          </ColResizeSplit.Right>
+        </ColResizeSplit>
       </Tabs>
 
       <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>

@@ -97,6 +97,8 @@ export interface ChatProps {
   environmentVariables?: Record<string, string>;
   placeholder?: string;
   className?: string;
+  /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
+  inputTopLeft?: React.ReactNode;
   onConversationIdChange?: (conversationId: string | null) => void;
   onConversationAccepted?: (conversationId: string) => void;
   onContextIdChange?: (contextId: string | null) => void;
@@ -174,6 +176,7 @@ export function Chat({
   environmentVariables,
   placeholder = "Type your message...",
   className,
+  inputTopLeft,
   onConversationIdChange,
   onConversationAccepted,
   onContextIdChange,
@@ -1728,6 +1731,7 @@ export function Chat({
             pendingFileCommentCount={pendingFileComments.length}
             onClearPendingFileComments={handleClearPendingFileComments}
             placeholder={placeholder}
+            topLeft={inputTopLeft}
             userInputRef={userInputRef}
           />
         </div>

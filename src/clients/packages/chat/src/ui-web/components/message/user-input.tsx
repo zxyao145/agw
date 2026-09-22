@@ -114,9 +114,7 @@ function UserInputRoot({
     <div className="relative">
       {/* Top bar with tools and actions */}
       <div className="flex mb-2 gap-2 pointer-events-auto">
-        <div
-          className={`bg-background rounded-md flex items-center p-0 ${topLeft.length > 0 ? "border" : ""}`}
-        >
+        <div className="bg-background rounded-md flex items-center p-0">
           {topLeft.length > 0 && <>{topLeft}</>}
         </div>
         <div className="flex-1" />

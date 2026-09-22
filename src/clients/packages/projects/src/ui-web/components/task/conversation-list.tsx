@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RotateCw, Trash2, Broom } from "lucide-react";
 import { toast } from "sonner";
 import {
   useInfiniteQuery,
@@ -288,7 +288,23 @@ export function ConversationList({
     <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Conversations</h2>
-        <div className="tools">
+        <div className="tools">          
+          {displayedConversations.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  className="cursor-pointer hover:text-destructive"
+                  size="sm"
+                  variant="ghost"
+                  aria-label="Delete All History"
+                  onClick={() => setClearAllDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete All History</TooltipContent>
+            </Tooltip>
+          )}
           <Button
             className="cursor-pointer"
             size="sm"
@@ -311,22 +327,6 @@ export function ConversationList({
           >
             <Plus className="h-4 w-4" />
           </Button>
-          {displayedConversations.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  className="cursor-pointer hover:text-destructive"
-                  size="sm"
-                  variant="ghost"
-                  aria-label="Delete All History"
-                  onClick={() => setClearAllDialogOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Delete All History</TooltipContent>
-            </Tooltip>
-          )}
           {headerActions}
         </div>
       </div>
