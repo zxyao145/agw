@@ -136,7 +136,7 @@ public partial class AgentRuntimeService
                     OpenTelemetrySourceName = provider.Name,
                     ChatHistoryProvider = historyProvider,
                     CompactionProvider = new CompactionProvider(
-                        new ContextWindowCompactionStrategy(model.MaxContextWindowTokens, model.MaxOutputTokens),
+                        ContextWindowCompactionPipeline.Create(model.MaxContextWindowTokens, model.MaxOutputTokens),
                         stateKey: $"agw.compaction.{agentDefinition.Id:N}",
                         loggerFactory: _loggerFactory
                     ),
