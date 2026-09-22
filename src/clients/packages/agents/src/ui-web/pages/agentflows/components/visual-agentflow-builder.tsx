@@ -65,6 +65,13 @@ import {
 import { toast } from "sonner";
 import { createGraphLayout } from "./autoLayout";
 import {
+  isPlainObject,
+  readConfigJson,
+  readString,
+  readStringArray,
+  updateConfigJson,
+} from "./config-json";
+import {
   addBlockParticipantId,
   canDeleteBlockMember,
   createBlockMembership,
@@ -2839,57 +2846,12 @@ function validateConditionJson(value: string): string | null {
   }
 }
 
-function readConfigJson(value: string): Record<string, unknown> | null {
-  if (!value.trim()) return {};
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isPlainObject(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function updateConfigJson(currentJson: string, update: Record<string, unknown>) {
-  const config = readConfigJson(currentJson) ?? {};
-  for (const [key, value] of Object.entries(update)) {
-    if (shouldRemoveConfigValue(value)) {
-      delete config[key];
-    } else {
-      config[key] = value;
-    }
-  }
-
-  return Object.keys(config).length > 0 ? JSON.stringify(config, null, 2) : "";
-}
-
-function shouldRemoveConfigValue(value: unknown) {
-  if (value === undefined || value === null) return true;
-  if (typeof value === "string" && value.trim() === "") return true;
-  if (Array.isArray(value) && value.length === 0) return true;
-  return false;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function readBoolean(value: unknown) {
   return typeof value === "boolean" ? value : false;
-}
-
-function readStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
 }
 
 function parseOptionalInteger(value: string) {

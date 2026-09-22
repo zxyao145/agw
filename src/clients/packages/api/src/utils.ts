@@ -21,7 +21,10 @@ export function getApiErrorMessage(error: unknown): string {
       }
 
       try {
-        return JSON.stringify(error.body);
+        const serializedBody = JSON.stringify(error.body);
+        if (serializedBody && serializedBody !== "{}") {
+          return serializedBody;
+        }
       } catch {
         // ignore
       }

@@ -1,4 +1,5 @@
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Domain.Rules;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
@@ -109,21 +110,9 @@ public sealed class AgentBehavior
 
     private static void NormalizeEnvironmentVariables(Agent agent)
     {
-        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, value) in agent.EnvironmentVariables ?? [])
-        {
-            var normalizedName = name.Trim();
-            if (
-                string.IsNullOrEmpty(normalizedName)
-                || normalizedName.Contains('=')
-                || normalizedName.Contains('\0')
-                || !normalized.TryAdd(normalizedName, value ?? string.Empty)
-            )
-            {
-                throw new AgwException(ErrorCodes.InvalidAgentEnvironmentVariableName);
-            }
-        }
-
-        agent.EnvironmentVariables = normalized;
+        agent.EnvironmentVariables = EnvironmentVariableRules.Normalize(
+            agent.EnvironmentVariables,
+            ErrorCodes.InvalidAgentEnvironmentVariableName
+        );
     }
 }

@@ -1,5 +1,6 @@
 using Agw.Projects.Domain.Rules;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Domain.Rules;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Projects.Domain.Behaviors;
@@ -46,21 +47,9 @@ public sealed class ProjectBehavior
 
     private static void NormalizeEnvironmentVariables(Project project)
     {
-        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, value) in project.EnvironmentVariables ?? [])
-        {
-            var normalizedName = name.Trim();
-            if (
-                string.IsNullOrEmpty(normalizedName)
-                || normalizedName.Contains('=')
-                || normalizedName.Contains('\0')
-                || !normalized.TryAdd(normalizedName, value ?? string.Empty)
-            )
-            {
-                throw new AgwException(ErrorCodes.InvalidProjectEnvironmentVariableName);
-            }
-        }
-
-        project.EnvironmentVariables = normalized;
+        project.EnvironmentVariables = EnvironmentVariableRules.Normalize(
+            project.EnvironmentVariables,
+            ErrorCodes.InvalidProjectEnvironmentVariableName
+        );
     }
 }

@@ -2,7 +2,7 @@
 
 import { useQuery } from "@agw/components/query";
 
-import { ApiError, apiGet } from "@agw/api";
+import { apiGet, getApiErrorMessage } from "@agw/api";
 
 import { TraceTable } from "./components/trace-table";
 
@@ -17,47 +17,6 @@ type DashboardStatsResponse = {
   usageOutputTokenCount: number;
   usageTotalTokenCount: number;
 };
-
-function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length > 0) {
-      return error.body;
-    }
-
-    if (error.body && typeof error.body === "object") {
-      const candidateBody = error.body as {
-        message?: unknown;
-        error?: unknown;
-        title?: unknown;
-        detail?: unknown;
-      };
-
-      if (typeof candidateBody.message === "string" && candidateBody.message.trim().length > 0) {
-        return candidateBody.message;
-      }
-
-      if (typeof candidateBody.error === "string" && candidateBody.error.trim().length > 0) {
-        return candidateBody.error;
-      }
-
-      if (typeof candidateBody.detail === "string" && candidateBody.detail.trim().length > 0) {
-        return candidateBody.detail;
-      }
-
-      if (typeof candidateBody.title === "string" && candidateBody.title.trim().length > 0) {
-        return candidateBody.title;
-      }
-    }
-
-    return `${error.status} ${error.statusText}`;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unknown error";
-}
 
 function formatStat(value: number | undefined, hasData: boolean): string {
   if (!hasData || value === undefined) {
