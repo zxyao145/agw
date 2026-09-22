@@ -3,12 +3,12 @@ import test from "node:test";
 import { setupDomEnvironment } from "@agw/test-harness";
 
 import type { AgentCommandSuggestion, CommandSource } from "../../../lib/chat/search-command";
-import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
+import type { AgentMode, PermissionMode } from "@agw/chat-runtime";
 
 const { React, act, fireEvent, render, screen } = await setupDomEnvironment();
 const { ChatInputToolbar } = await import("./chat-input-toolbar.tsx");
 
-const modeCommand: AgentCommandSuggestion = { text: "/mode_set", kind: "tool" };
+const modeCommand: AgentCommandSuggestion = { text: "/mode_set", kind: "tool", description: "" };
 const skillCommand: AgentCommandSuggestion = {
   text: "/review",
   kind: "skill",
@@ -92,7 +92,11 @@ test("the Add menu groups plan mode, skills, and tools", async () => {
 
 test("mode commands stay out of the tool list", async () => {
   renderToolbar({
-    commandSource: systemSource([modeCommand, { text: "/mode_get", kind: "tool" }, toolCommand]),
+    commandSource: systemSource([
+      modeCommand,
+      { text: "/mode_get", kind: "tool", description: "" },
+      toolCommand,
+    ]),
   });
   await openAddMenu();
 

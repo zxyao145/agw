@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { FileText, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from "lucide-react";
+import {
+  FileText,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Settings,
+  Trash2,
+  Info,
+} from "lucide-react";
 import { useQuery } from "@agw/components/query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -48,7 +56,7 @@ import { Label } from "@agw/components";
 import { SearchableSelect, type SearchableSelectOption } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
-import { buildChatHref, type ChatRouteBasePath } from "../../../lib/chat-route";
+import { buildChatHref } from "../../../lib/chat-route";
 import { cn } from "@agw/components";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -69,10 +77,10 @@ import {
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 import { getApiErrorMessage } from "@agw/api";
 import {
+  executionSessionManager,
   getExecutionReconnectProgress,
   type ExecutionReconnectState,
-} from "../../../services/execution-hub";
-import { executionSessionManager } from "../../../services/execution-session-manager";
+} from "@agw/chat-runtime";
 import { useExecutionPlatform } from "../../execution-platform";
 
 type ProjectDto = {
@@ -100,7 +108,7 @@ const DEFAULT_PROJECT_VALUE = "default-built-in";
 const DEFAULT_AGENT_LABEL = "Hello";
 
 export type ChatWorkspaceProps = {
-  routeBasePath: ChatRouteBasePath;
+  routeBasePath: string;
   showProjectSelect: boolean;
   compactToolbar?: boolean;
   showUserInputNavigation?: boolean;
@@ -193,7 +201,7 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
           aria-label="Open chat settings"
           disabled={!selectedProjectId}
         >
-          <Settings className="h-4 w-4" />
+          <Info className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent size="md" className={CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME}>
@@ -1093,7 +1101,7 @@ export function ChatWorkspace({
 
   /** Chat/Files 切换与侧栏折叠按钮，桌面端常驻左列顶部，移动端落在主区域顶部。 */
   const sidebarControls = (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 px-2 pb-2">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 ml-2">
       <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
         <TabsTrigger
           value="chat"
@@ -1142,9 +1150,9 @@ export function ChatWorkspace({
         aria-hidden={showReconnect}
         className="flex min-h-0 flex-1 flex-col"
       >
-        {showProjectSelect ? (
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <div className="w-[220px]">
+        <div className="mb-2 flex flex-wrap items-center">
+          {showProjectSelect ? (
+            <div className="w-50">
               <SearchableSelect
                 id="chat-project-select"
                 ariaLabel="Select project"
@@ -1156,15 +1164,20 @@ export function ChatWorkspace({
                 clearable={false}
               />
             </div>
-          </div>
-        ) : null}
+          ) : null}
+
+          {sidebarControls}
+        </div>
 
         <ColResizeSplit>
           {isMobile ? null : (
-            <ColResizeSplit.Left minWidth={260} maxWidth={520} collapsed={!activeSidebarVisible}>
+            <ColResizeSplit.Left
+              defaultPanelWidth={360}
+              minWidth={260}
+              maxWidth={520}
+              collapsed={!activeSidebarVisible}
+            >
               <div className="flex h-full min-h-0 flex-col">
-                {sidebarControls}
-
                 {activeSidebarVisible ? (
                   <div className="min-h-0 flex-1 overflow-hidden">
                     {isChatTab ? renderConversationList() : null}

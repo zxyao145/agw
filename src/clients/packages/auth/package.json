@@ -7,27 +7,18 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "lint": "oxlint ./src",
-    "format": "oxfmt ./src *.json",
-    "format:check": "oxfmt --check ./src *.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../.oxlintrc.json ./src",
+    "format": "oxfmt -c ../../.oxfmtrc.json ./src *.json",
+    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src *.json"
   },
   "dependencies": {
     "@agw/api": "workspace:*",
-    "@agw/components": "workspace:*",
-    "lucide-react": "0.577.0"
-  },
-  "devDependencies": {
-    "@types/node": "25.5.0",
-    "next": "16.2.1",
-    "oxfmt": "0.41.0",
-    "oxlint": "1.56.0",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "typescript": "5.9.3"
+    "@agw/components": "workspace:*"
   },
   "peerDependencies": {
-    "next": "16.2.1",
-    "react": "19.2.3"
+    "lucide-react": "catalog:",
+    "next": "catalog:",
+    "react": "catalog:"
   }
 }

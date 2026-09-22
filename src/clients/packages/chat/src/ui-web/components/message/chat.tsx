@@ -30,7 +30,16 @@ import {
   type ExecutionReconnectState,
   type PendingInteraction,
   type PermissionMode,
-} from "../../../services/execution-hub";
+  createStreamingMessageBatcher,
+  createUserMessage,
+  mergeStreamingMessages,
+  replaceStreamingScope,
+  scopeStreamingMessage,
+  toExecutionUserInput,
+  type StreamingMessageBatcher,
+  executionSessionManager,
+  type ManagedExecutionHandle,
+} from "@agw/chat-runtime";
 import {
   clearProjectConversationRecords,
   getProjectConversationMessages,
@@ -47,23 +56,10 @@ import {
   type AgentSuggestionsResponse,
 } from "../../../lib/chat/agent-suggestions";
 import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/ai-message-handlers";
-import {
-  createStreamingMessageBatcher,
-  createUserMessage,
-  mergeStreamingMessages,
-  replaceStreamingScope,
-  scopeStreamingMessage,
-  toExecutionUserInput,
-  type StreamingMessageBatcher,
-} from "../../../services/execution-stream";
 import { addTokenUsage, EMPTY_TOKEN_USAGE, getMessageTokenUsage, type TokenUsage } from "@agw/api";
 import { createUuidV7 } from "@agw/api";
 import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
-import {
-  executionSessionManager,
-  type ManagedExecutionHandle,
-} from "../../../services/execution-session-manager";
 import type { AiMessage } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";

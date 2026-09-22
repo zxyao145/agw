@@ -72,7 +72,7 @@ test("browser API clients wrap fetch transport errors", async (t) => {
 
   await assert.rejects(apiGet("/api/agents"), (caught: unknown) => {
     assert.ok(caught instanceof ApiTransportError);
-    assert.equal(caught.url, "/api/agents");
+    assert.equal((caught as { url: string }).url, "/api/agents");
     return true;
   });
 });

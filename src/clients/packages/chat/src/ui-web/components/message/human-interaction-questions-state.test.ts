@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { HumanInteractionQuestion } from "../../../services/human-interaction.ts";
+import type { HumanInteractionQuestion } from "@agw/chat-core";
 import {
   buildQuestionResponse,
   createQuestionSelections,

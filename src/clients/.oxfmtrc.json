@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    "**/.next/**",
+    "**/out/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/next-env.d.ts",
+    "**/expo-env.d.ts",
+    "mobile/android/**",
+    "mobile/ios/**",
+    "packages/api/openapi.json"
+  ]
+}

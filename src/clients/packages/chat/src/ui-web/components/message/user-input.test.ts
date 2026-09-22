@@ -191,9 +191,9 @@ test("setInput replaces the whole draft", async () => {
 test("the composer hosts context, toolbar, and help slots", () => {
   renderComposer({
     children: [
-      React.createElement(UserInput.Context, { key: "context" }, "attached image"),
-      React.createElement(UserInput.BottomLeft, { key: "bottom" }, "toolbar"),
-      React.createElement(UserInput.Help, { key: "help" }, "custom help"),
+      React.createElement(UserInput.Context, { key: "context", children: "attached image" }),
+      React.createElement(UserInput.BottomLeft, { key: "bottom", children: "toolbar" }),
+      React.createElement(UserInput.Help, { key: "help", children: "custom help" }),
     ],
   });
 

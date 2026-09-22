@@ -1,1 +1,1 @@
-export { DesktopChatPage as default } from "@agw/chat";
+export { DesktopChatPage as default } from "@/runtime";

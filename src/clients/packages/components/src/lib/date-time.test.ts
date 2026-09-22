@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// @ts-expect-error Node's type stripping requires the explicit TypeScript extension.
 import * as dateTime from "./date-time.ts";
 
 const { formatLocalDateTime, parseApiDateTime } = dateTime;

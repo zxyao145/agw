@@ -48,8 +48,8 @@ function Harness({
   initial = initialState,
   onState,
 }: {
-  agentType?: number;
-  externalAgentKind?: number;
+  agentType?: AgentType;
+  externalAgentKind?: ExternalAgentKind;
   initial?: FormState;
   onState?: (state: FormState) => void;
 }) {

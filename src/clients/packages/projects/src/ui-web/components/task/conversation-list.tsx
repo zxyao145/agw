@@ -286,9 +286,9 @@ export function ConversationList({
 
   return (
     <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
-      <div className="p-4 border-b flex items-center justify-between">
+      <div className="p-2 pl-4 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Conversations</h2>
-        <div className="tools">          
+        <div className="tools">
           {displayedConversations.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -299,7 +299,7 @@ export function ConversationList({
                   aria-label="Delete All History"
                   onClick={() => setClearAllDialogOpen(true)}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Broom className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Delete All History</TooltipContent>
@@ -331,7 +331,7 @@ export function ConversationList({
         </div>
       </div>
 
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto agw-scrollbar p-2 space-y-1">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto agw-scrollbar space-y-px">
         {conversationsQuery.isPending ? (
           <div className="space-y-2 p-1" aria-label="Loading conversations">
             {Array.from({ length: 5 }, (_, index) => (
@@ -356,8 +356,8 @@ export function ConversationList({
                 key={conversation.conversationId}
                 onClick={() => onConversationSelect(conversation)}
                 className={cn(
-                  "group relative p-2 rounded-md cursor-pointer transition-colors",
-                  isActive ? "bg-accent" : "bg-card hover:bg-accent/50",
+                  "group relative py-2 pl-4 rounded-md cursor-pointer transition-colors",
+                  isActive ? "bg-accent" : "hover:bg-accent/80",
                 )}
               >
                 <div className="flex items-start">
@@ -365,7 +365,7 @@ export function ConversationList({
                     <div className="font-medium text-sm truncate">
                       {conversation.title || "Untitled"}
                     </div>
-                    <div className="mt-2 text-xs text-muted-foreground flex gap-1.5">
+                    <div className="mt-1 text-xs text-muted-foreground flex gap-1.5">
                       <span>
                         {/* {context.executionCount}{" "}
                         {context.executionCount === 1
@@ -383,7 +383,12 @@ export function ConversationList({
                       </span>
                     </div>
                   </div>
-                  <div className="absolute inset-y-1 right-1 hidden group-hover:flex items-center rounded-md bg-inherit pl-1">
+                  <div
+                    className="absolute right-1 top-1
+                        hidden group-hover:flex 
+                        items-start rounded-md
+                        bg-accent"
+                  >
                     <Button
                       size="icon"
                       variant="ghost"

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
+import type { ExecutionReconnectState } from "./execution-hub";
 
 test("missing execution provider capability fails configuration without dispatching settings", async (t) => {
   const { ExecutionSession } = await import("./execution-session.ts");
@@ -554,7 +555,7 @@ test("manual reconnect consumes the current attempt and waits on the next after 
     invoke: async () => undefined,
   };
   HubConnectionBuilder.prototype.build = function () {
-    reconnectPolicy = this.reconnectPolicy;
+    reconnectPolicy = (this as unknown as { reconnectPolicy?: IRetryPolicy }).reconnectPolicy;
     return connection as never;
   };
 
@@ -567,8 +568,8 @@ test("manual reconnect consumes the current attempt and waits on the next after 
   const client = new ExecutionHubClient(
     {
       onMessage: () => undefined,
-      onReconnecting: (state) => reconnectStates.push(state),
-      onReconnectFailed: (state) => reconnectStates.push(state),
+      onReconnecting: (state: ExecutionReconnectState) => reconnectStates.push(state),
+      onReconnectFailed: (state: ExecutionReconnectState) => reconnectStates.push(state),
       onReconnected: () => {
         reconnectedCount += 1;
       },
@@ -736,11 +737,16 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
       stop: async () => {
         connection.state = HubConnectionState.Disconnected;
       },
-      invoke: async (methodName: string, command?: { type: string }) => {
+      invoke: async (
+        methodName: string,
+        command?: { type: string; executionId?: string; cursor?: string },
+      ) => {
         if (methodName === "GetExecutionProvider") return "distributed";
         if (command) commands.push(command);
-        if (command?.type === "SubscribeExecutionCommand") {
-          await subscribe(command, (message) => receiveMessage?.(message));
+        if (command?.type === "SubscribeExecutionCommand" && command.executionId) {
+          await subscribe({ executionId: command.executionId, cursor: command.cursor }, (message) =>
+            receiveMessage?.(message),
+          );
         }
       },
     };
@@ -809,7 +815,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
     const temporaryClient = new ExecutionHubClient(
       {
         onMessage: () => undefined,
-        onReconnectFailed: (state) => {
+        onReconnectFailed: (state: ExecutionReconnectState) => {
           reconnectState = state;
         },
       },

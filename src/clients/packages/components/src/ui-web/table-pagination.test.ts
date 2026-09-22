@@ -16,18 +16,15 @@ type PaginationState = {
 
 function renderPaginatedTable(state: PaginationState = {}) {
   return render(
-    React.createElement(
-      PaginatedTable,
-      {
-        pageIndex: state.pageIndex ?? 1,
-        pageSize: state.pageSize ?? 20,
-        total: state.total ?? 45,
-        isFetching: state.isFetching ?? false,
-        onPageIndexChange: state.onPageIndexChange ?? (() => {}),
-        onPageSizeChange: state.onPageSizeChange ?? (() => {}),
-      },
-      React.createElement("div", { "data-testid": "table" }, "table rows"),
-    ),
+    React.createElement(PaginatedTable, {
+      pageIndex: state.pageIndex ?? 1,
+      pageSize: state.pageSize ?? 20,
+      total: state.total ?? 45,
+      isFetching: state.isFetching ?? false,
+      onPageIndexChange: state.onPageIndexChange ?? (() => {}),
+      onPageSizeChange: state.onPageSizeChange ?? (() => {}),
+      children: React.createElement("div", { "data-testid": "table" }, "table rows"),
+    }),
   );
 }
 

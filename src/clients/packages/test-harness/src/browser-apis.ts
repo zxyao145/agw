@@ -102,7 +102,10 @@ export type LayoutMetrics = {
  * measure every element as zero and render no rows.
  * 给元素赋予尺寸。jsdom 不做排版，虚拟列表否则会把每个元素都测成零并渲染不出任何行。
  */
-export function installLayoutMetrics(window: JsdomWindow, metrics: LayoutMetrics = {}): void {
+export function installLayoutMetrics(
+  window: { HTMLElement: { prototype: object } },
+  metrics: LayoutMetrics = {},
+): void {
   const { viewportHeight = 600, rowHeight = 72, width = 800 } = metrics;
   Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", {
     configurable: true,

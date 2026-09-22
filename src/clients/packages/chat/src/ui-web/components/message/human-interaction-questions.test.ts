@@ -28,22 +28,18 @@ for (const inputKind of ["confirm", "select", "input", "editor"]) {
         },
       }),
     );
-    if (inputKind === "select")
-      fireEvent.click(screen.getByRole("button", { name: "B", exact: true }));
+    if (inputKind === "select") fireEvent.click(screen.getByRole("button", { name: "B" }));
     else if (inputKind !== "confirm")
       fireEvent.change(screen.getByRole("textbox"), { target: { value: "  revised\ntext  " } });
     fireEvent.click(
-      screen.getByRole("button", {
-        name: inputKind === "confirm" ? "Confirm" : "Submit",
-        exact: true,
-      }),
+      screen.getByRole("button", { name: inputKind === "confirm" ? "Confirm" : "Submit" }),
     );
     assert.deepEqual(submitted, [
       inputKind === "confirm"
         ? { confirmed: true }
         : { value: inputKind === "select" ? "B" : "  revised\ntext  " },
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     assert.equal(cancelled, true);
   });
 }

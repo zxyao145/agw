@@ -15,7 +15,7 @@ const sourceProject = {
     {
       kind: "tool",
       definition: {
-        name: "generate_guid",
+        name: "web_search",
         options: {},
       },
     },

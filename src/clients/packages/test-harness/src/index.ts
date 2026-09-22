@@ -1,8 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
-import { createRequire, registerHooks } from "node:module";
-import { join } from "node:path";
 import { after, afterEach } from "node:test";
-import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import type * as ReactNamespace from "react";
 import type * as TestingLibrary from "@testing-library/react";
@@ -13,72 +9,6 @@ export { installLayoutMetrics } from "./browser-apis";
 export type { LayoutMetrics, ObserverRegistry } from "./browser-apis";
 export { startApiServer } from "./api-server";
 export type { ApiRequestRecord, ApiRouteHandler, ApiRoutes, ApiServer } from "./api-server";
-
-// Each workspace installs its own React copy under a hoisted node_modules, so a component
-// imported from another package would otherwise run on a second hook dispatcher.
-// 每个工作区在各自的 node_modules 下安装独立的 React 副本，跨包导入的组件否则会运行在第二套 hook 调度器上。
-const SHARED_MODULES = [
-  "react",
-  "react/jsx-runtime",
-  "react/jsx-dev-runtime",
-  "react-dom",
-  "react-dom/client",
-] as const;
-
-const harnessRequire = createRequire(import.meta.url);
-const clientsRoot = fileURLToPath(new URL("../../../", import.meta.url));
-
-let reactInstancesShared = false;
-
-function workspaceDirectories(): string[] {
-  const packagesRoot = join(clientsRoot, "packages");
-  const packageDirectories = existsSync(packagesRoot)
-    ? readdirSync(packagesRoot).map((entry) => join(packagesRoot, entry))
-    : [];
-  return [...packageDirectories, join(clientsRoot, "web"), join(clientsRoot, "desktop")].filter(
-    (directory) => existsSync(join(directory, "package.json")),
-  );
-}
-
-function shareReactInstances(): void {
-  if (reactInstancesShared) return;
-  reactInstancesShared = true;
-
-  const sharedEsmUrls: Record<string, string> = {};
-  for (const specifier of SHARED_MODULES) {
-    sharedEsmUrls[specifier] = import.meta.resolve(specifier);
-  }
-  registerHooks({
-    resolve(specifier, context, nextResolve) {
-      const url = sharedEsmUrls[specifier];
-      return url ? { url, shortCircuit: true } : nextResolve(specifier, context);
-    },
-  });
-
-  const moduleCache = harnessRequire.cache as Record<
-    string,
-    { exports: unknown; id: string; filename: string; loaded: boolean }
-  >;
-  for (const directory of workspaceDirectories()) {
-    for (const specifier of SHARED_MODULES) {
-      let workspaceModulePath: string;
-      let sharedModulePath: string;
-      try {
-        workspaceModulePath = harnessRequire.resolve(specifier, { paths: [directory] });
-        sharedModulePath = harnessRequire.resolve(specifier);
-      } catch {
-        continue;
-      }
-      if (workspaceModulePath === sharedModulePath) continue;
-      moduleCache[workspaceModulePath] = {
-        exports: harnessRequire(sharedModulePath),
-        id: workspaceModulePath,
-        filename: workspaceModulePath,
-        loaded: true,
-      };
-    }
-  }
-}
 
 export type DomEnvironmentOptions = {
   html?: string;
@@ -173,11 +103,9 @@ export async function setupDomEnvironment(
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
-  // React DOM reads the browser globals when it first loads, so share the instances only
-  // once the environment above exists.
-  // React DOM 在首次加载时读取浏览器全局对象，因此在上述环境建立之后再共享实例。
-  shareReactInstances();
-
+  // React DOM reads the browser globals when it first loads, so import it only once the
+  // environment above exists.
+  // React DOM 在首次加载时读取浏览器全局对象，因此在上述环境建立之后再导入。
   const React = await import("react");
   // tsx compiles workspace .tsx sources with the classic JSX transform, which emits
   // React.createElement without adding an import.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
-import { parseProposedPlan } from "../ui-web/components/message/proposed-plan";
+import { parseProposedPlan } from "@agw/chat-core";
 import {
   createStreamingMessageBatcher,
   createUserMessage,
@@ -80,7 +80,7 @@ test("the 50ms batcher commits a burst once and drops an old generation", async 
     (callback: () => void, delay: number) => {
       assert.equal(delay, 50);
       scheduled.push(callback);
-      return scheduled.length;
+      return scheduled.length as unknown as ReturnType<typeof setTimeout>;
     },
     () => undefined,
   );
@@ -167,6 +167,7 @@ test("standalone whitespace deltas preserve fenced plan Markdown exactly", () =>
     isClosed: true,
   });
 });
+
 test("the local streaming scope is excluded from execution input", () => {
   const input = toExecutionUserInput(
     textMessage({

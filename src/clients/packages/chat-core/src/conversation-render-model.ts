@@ -726,7 +726,7 @@ function collapseConsecutiveToolItems(
 ): ConversationMessageRenderItem[] {
   const collapsed: ConversationMessageRenderItem[] = [];
 
-  for (let index = 0; index < items.length; ) {
+  for (let index = 0; index < items.length;) {
     const item = items[index];
     if (item.type !== "tool-accordion" || item.scopeId === null) {
       collapsed.push(item);

@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 
 import { Button, Textarea } from "@agw/components";
 import { parseSimpleUserInput, type SimpleUserInput } from "@agw/chat-core";
-import type { PendingInteraction } from "../../../services/execution-hub";
+import type { PendingInteraction } from "@agw/chat-runtime";
 import { HumanInteractionModeChange } from "./human-interaction-mode-change";
 import { HumanInteractionQuestions } from "./human-interaction-questions";
 

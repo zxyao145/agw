@@ -117,7 +117,7 @@ test("an external agent row names its kind", () => {
 
   renderTable({
     agentsQuery: queryOf({
-      items: [agent({ type: 1, externalAgentKind: 9 } as Partial<AgentDto>)],
+      items: [agent({ type: 1, externalAgentKind: 9 } as unknown as Partial<AgentDto>)],
     }),
   });
   assert.match(screen.getByText(/External ·/).textContent ?? "", /External · Unknown/);

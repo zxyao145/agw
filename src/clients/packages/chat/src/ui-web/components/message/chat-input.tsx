@@ -23,7 +23,7 @@ import {
   type ChatImageAttachment,
   validateImageFiles,
 } from "../../../lib/chat/image-attachments";
-import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
+import type { AgentMode, PermissionMode } from "@agw/chat-runtime";
 import { ChatInputToolbar } from "./chat-input-toolbar";
 import { UserInput, type UserInputRef } from "./user-input";
 

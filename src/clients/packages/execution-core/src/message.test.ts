@@ -399,7 +399,10 @@ test("streaming contents preserve text and tool ordering", () => {
   );
 
   assert.deepEqual(
-    merged[0].contents.map((content) => [content.type, content.content]),
+    merged[0].contents.map((content) => [
+      content.type,
+      "content" in content ? content.content : undefined,
+    ]),
     [
       ["TextContent", "before"],
       ["FunctionCallContent", undefined],

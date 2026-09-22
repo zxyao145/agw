@@ -3,28 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Workflow,
-  Bot,
-  Blocks,
-  BookOpenText,
-  // Terminal,
-  Boxes,
-  Cable,
-  MessagesSquare,
-  Clock,
-  Gauge,
-  Settings,
-  Box,
-  FolderKanban,
-  Network,
-  Sparkle,
-  Sparkles,
-  // Waypoints,
-  // Hammer,
-} from "lucide-react";
 
 import {
+  APP_ROUTES,
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
@@ -32,139 +13,39 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
   cn,
+  type AppRoute,
 } from "@agw/components";
 import { QueryErrorBoundary } from "@agw/components";
 import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
 import { SidebarProvider } from "@agw/components";
 import { AuthGate } from "@agw/auth";
 
+function menuItem(route: AppRoute): MenuItem {
+  return { url: route.href, title: route.title, isActive: true, icon: <route.icon /> };
+}
+
 const navItems: SidebarMenuGroupProps[] = [
-  {
-    groupLable: "Overview",
-    menus: [
-      {
-        url: "/dashboard",
-        title: "Dashboard",
-        isActive: true,
-        icon: <Gauge />,
-      },
-      // {
-      //   url: "/traces",
-      //   title: "Traces",
-      //   isActive: true,
-      //   icon: <Waypoints />,
-      // },
-    ],
-  },
+  { groupLable: "Overview", menus: [menuItem(APP_ROUTES.dashboard)] },
   {
     groupLable: "Projects",
-    menus: [
-      {
-        url: "/chat",
-        title: "Chat",
-        isActive: true,
-        icon: <MessagesSquare />,
-      },
-      {
-        url: "/projects",
-        title: "Projects",
-        isActive: true,
-        icon: <FolderKanban />,
-      },
-      {
-        url: "/jobs",
-        title: "Jobs",
-        isActive: true,
-        icon: <Clock />,
-      },
-    ],
+    menus: [APP_ROUTES.chat, APP_ROUTES.projects, APP_ROUTES.jobs].map(menuItem),
   },
-
-  {
-    groupLable: "Agent & Flow",
-    menus: [
-      {
-        url: "/agents",
-        title: "Agents",
-        isActive: true,
-        icon: <Bot />,
-      },
-      {
-        url: "/agentflows",
-        title: "Agentflows",
-        isActive: true,
-        icon: <Workflow />,
-      },
-    ],
-  },
-
+  { groupLable: "Agent & Flow", menus: [APP_ROUTES.agents, APP_ROUTES.agentflows].map(menuItem) },
   {
     groupLable: "Model & Provider",
-    menus: [
-      {
-        url: "/providers",
-        title: "Providers",
-        isActive: true,
-        icon: <Boxes />,
-      },
-      {
-        url: "/models",
-        title: "Models",
-        isActive: true,
-        // icon: <Blocks />,
-        // icon: <Box />,
-        icon: <Sparkles />,
-      },
-    ],
+    menus: [APP_ROUTES.providers, APP_ROUTES.models].map(menuItem),
   },
-
   {
     groupLable: "Capabilities",
     menus: [
-      {
-        url: "/user-memory",
-        title: "User Memory",
-        isActive: true,
-        icon: <BookOpenText />,
-      },
-      {
-        url: "/quick-prompts",
-        title: "Quick prompts",
-        isActive: true,
-        icon: <Sparkle />,
-      },
-      {
-        url: "/skills",
-        title: "Skills",
-        isActive: true,
-        icon: <Blocks />,
-      },
-      {
-        url: "/mcp-tool-servers",
-        title: "MCP Tool Servers",
-        isActive: true,
-        icon: <Network />,
-      },
-      {
-        url: "/integrations",
-        title: "Integrations",
-        isActive: true,
-        icon: <Cable />,
-      },
-    ],
+      APP_ROUTES.userMemory,
+      APP_ROUTES.quickPrompts,
+      APP_ROUTES.skills,
+      APP_ROUTES.mcpToolServers,
+      APP_ROUTES.integrations,
+    ].map(menuItem),
   },
-
-  {
-    groupLable: "System",
-    menus: [
-      {
-        url: "/settings",
-        title: "Settings",
-        isActive: true,
-        icon: <Settings />,
-      },
-    ],
-  },
+  { groupLable: "System", menus: [menuItem(APP_ROUTES.settings)] },
 ];
 
 function getActiveNavLabel(pathname: string): MenuItem | undefined {

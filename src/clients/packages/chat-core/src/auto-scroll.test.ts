@@ -23,6 +23,33 @@ test("auto scroll pauses upward and resumes at the bottom", () => {
   });
 });
 
+test("auto scroll remains enabled when streamed content grows without an upward scroll", () => {
+  assert.deepEqual(
+    updateAutoScrollState(
+      { shouldAutoScroll: true, scrollHeight: 1_000, scrollTop: 500 },
+      { clientHeight: 500, scrollHeight: 1_080, scrollTop: 500 },
+    ),
+    { shouldAutoScroll: true, scrollHeight: 1_080, scrollTop: 500 },
+  );
+});
+
+test("auto scroll resumes when a downward scroll reaches the bottom from before content grew", () => {
+  assert.deepEqual(
+    updateAutoScrollState(
+      { shouldAutoScroll: false, scrollHeight: 1_000, scrollTop: 200 },
+      { clientHeight: 500, scrollHeight: 1_080, scrollTop: 500 },
+    ),
+    { shouldAutoScroll: true, scrollHeight: 1_080, scrollTop: 500 },
+  );
+  assert.equal(
+    updateAutoScrollState(
+      { shouldAutoScroll: false, scrollHeight: 1_000, scrollTop: 200 },
+      { clientHeight: 500, scrollHeight: 1_200, scrollTop: 300 },
+    ).shouldAutoScroll,
+    false,
+  );
+});
+
 test("auto scroll stays enabled when initial row measurement clamps the view to the bottom", () => {
   const adjusted = updateAutoScrollState(
     { shouldAutoScroll: true, scrollHeight: 1_020, scrollTop: 20 },

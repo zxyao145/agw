@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import test from "node:test";
 
-const require = createRequire(import.meta.url);
-const {
-  getEnvironmentVariablesError: getAgentEnvironmentVariablesError,
-  normalizeEnvironmentVariables: normalizeAgentEnvironmentVariables,
-  toEnvironmentVariableEntries: toAgentEnvironmentVariableEntries,
-} = require("../../../../../../integrations/src/ui-web/components/definition-capabilities/environment-variables.ts") as typeof import("../../../../../../integrations/src/ui-web/components/definition-capabilities/environment-variables");
+import {
+  getEnvironmentVariablesError as getAgentEnvironmentVariablesError,
+  normalizeEnvironmentVariables as normalizeAgentEnvironmentVariables,
+  toEnvironmentVariableEntries as toAgentEnvironmentVariableEntries,
+} from "@agw/integrations";
 
 test("normalizeAgentEnvironmentVariables trims keys and preserves empty values", () => {
   const result = normalizeAgentEnvironmentVariables([

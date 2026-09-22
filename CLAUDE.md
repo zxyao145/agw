@@ -222,6 +222,7 @@ pnpm dev:mobile
 pnpm android:mobile
 pnpm ios:mobile
 pnpm build
+pnpm typecheck
 pnpm lint
 pnpm test
 pnpm fmt
@@ -230,7 +231,9 @@ pnpm gen:api
 ```
 
 - Web uses `3001`; Desktop renderer uses `3000` independently. Prefer root scripts; focus tasks with `pnpm exec turbo run <task> --filter=@agw/web`.
-- Lint/format use `oxlint`/`oxfmt`, not ESLint/Prettier. Turborepo uses local cache only.
+- Lint/format use `oxlint`/`oxfmt` with the shared `.oxlintrc.json`/`.oxfmtrc.json` at `src/clients`. Turborepo uses local cache only. Package `typecheck` runs `tsc`; applications build directly from package sources.
+- Shared library versions live in the `catalog` of `pnpm-workspace.yaml`. Packages declare React, Next, `lucide-react`, `sonner`, and `next-themes` as `catalog:` peerDependencies; applications provide them. Toolchain dependencies stay in the root `package.json`.
+- `pnpm test:boundaries` checks manifests and runs dependency-cruiser with `.dependency-cruiser.cjs`.
 - Package Desktop with `AGW_PACKAGE_FLAVOR=client pnpm make:desktop` or `AGW_PACKAGE_FLAVOR=full pnpm make:desktop`; pass architecture with `pnpm make:desktop -- --arch=x64`.
 - After backend contract changes, run `pnpm gen:api` to regenerate `packages/api/src/openapi.d.ts`.
 

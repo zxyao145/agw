@@ -3,7 +3,7 @@
   "plugins": null,
   "categories": {},
   "rules": {
-    "no-unused-vars": "warn",
+    "no-unused-vars": "warn"
   },
   "settings": {
     "no-unused-vars": {
@@ -48,10 +48,13 @@
   },
   "globals": {},
   "ignorePatterns": [
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    "src/components/ui/**",
+    "**/.next/**",
+    "**/out/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/next-env.d.ts",
+    "**/expo-env.d.ts",
+    "mobile/android/**",
+    "mobile/ios/**"
   ]
 }

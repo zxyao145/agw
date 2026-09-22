@@ -4,11 +4,8 @@ import * as React from "react";
 import { Check, ChevronLeft, ChevronRight, MessageCircleQuestion, X } from "lucide-react";
 
 import { Badge, Button, Checkbox, RadioGroup, RadioGroupItem, Textarea, cn } from "@agw/components";
-import type { PendingInteraction } from "../../../services/execution-hub";
-import type {
-  HumanInteractionQuestion,
-  HumanInteractionQuestionResponse,
-} from "../../../services/human-interaction";
+import type { PendingInteraction } from "@agw/chat-runtime";
+import type { HumanInteractionQuestion, HumanInteractionQuestionResponse } from "@agw/chat-core";
 import {
   buildQuestionResponse,
   createQuestionSelections,

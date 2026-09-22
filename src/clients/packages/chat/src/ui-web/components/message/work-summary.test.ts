@@ -87,14 +87,11 @@ test("expansion survives rerenders and virtual unmounts, resets for resumed turn
   fireEvent.click(await screen.findByRole("button", { name: "Worked for 17m 39s" }));
   const manyMessages = [
     ...messages,
-    ...Array.from(
-      { length: 80 },
-      (_, index): AiMessage => ({
-        messageId: `later-${index}`,
-        role: "user",
-        contents: [{ type: "TextContent", content: `Later ${index}` }],
-      }),
-    ),
+    ...Array.from({ length: 80 }, (_, index): AiMessage => ({
+      messageId: `later-${index}`,
+      role: "user",
+      contents: [{ type: "TextContent", content: `Later ${index}` }],
+    })),
   ];
   view.rerender(React.createElement(Harness, { history: manyMessages }));
   assert.ok(screen.getByText("Checking implementation"));

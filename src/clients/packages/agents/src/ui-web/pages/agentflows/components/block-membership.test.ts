@@ -13,7 +13,7 @@ const NodeKind = {
 } as const;
 
 async function loadBlockMembership() {
-  return await import("./block-membership" + ".ts");
+  return await import("./block-membership.ts");
 }
 
 type TestNodeData = {

@@ -402,11 +402,13 @@ test("response identity rejects stale kinds and preserves a newer pending intera
 test("conversation controller owns raw messages, control state, usage, and render items", async () => {
   let handlers!: ExecutionHubHandlers;
   let announcedConversationId: string | null = null;
-  let executionRequest: Parameters<ExecutionSession["execute"]>[0] | null = null;
+  const captured: { executionRequest: Parameters<ExecutionSession["execute"]>[0] | null } = {
+    executionRequest: null,
+  };
   const fakeSession = {
     configure: async () => ({ restoredDurableExecution: false }),
     execute: async (request: Parameters<ExecutionSession["execute"]>[0]) => {
-      executionRequest = request;
+      captured.executionRequest = request;
     },
     interrupt: async () => undefined,
     setMode: async () => undefined,
@@ -440,7 +442,7 @@ test("conversation controller owns raw messages, control state, usage, and rende
   await controller.send("hello", []);
   assert.match(controller.getSnapshot().conversationId ?? "", /^[0-9a-f-]{36}$/u);
   assert.equal(announcedConversationId, controller.getSnapshot().conversationId);
-  assert.equal(executionRequest?.conversationId, controller.getSnapshot().conversationId);
+  assert.equal(captured.executionRequest?.conversationId, controller.getSnapshot().conversationId);
   assert.equal(controller.getSnapshot().isExecuting, true);
   assert.equal(controller.getSnapshot().items[0]?.alignment, "right");
 

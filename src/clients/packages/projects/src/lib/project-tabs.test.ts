@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// @ts-expect-error Node's type stripping requires the explicit TypeScript extension.
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "./project-tabs.ts";
 
 const DEFAULT_PROJECT_UUID = "11111111-1111-1111-1111-000000000001";

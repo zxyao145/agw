@@ -342,13 +342,15 @@ function NativeWorkspaceSession({
           });
           return;
         }
-        queryClient.setQueryData<InfiniteData<ConversationPage>>(conversationsQueryKey, (current) =>
-          current
-            ? {
-                pages: current.pages.slice(0, 1),
-                pageParams: current.pageParams.slice(0, 1),
-              }
-            : current,
+        queryClient.setQueryData<InfiniteData<ConversationPage>>(
+          conversationsQueryKey,
+          (current) =>
+            current
+              ? {
+                  pages: current.pages.slice(0, 1),
+                  pageParams: current.pageParams.slice(0, 1),
+                }
+              : current,
         );
         await queryClient.refetchQueries({
           queryKey: conversationsQueryKey,

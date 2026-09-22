@@ -26,7 +26,12 @@ const plugin: PluginDefinition = {
           type: "OAuth2",
           installationFields: [],
           connectionFields: [],
-          installation: { enabled: true },
+          installation: {
+            id: "installation-1",
+            enabled: true,
+            configuration: {},
+            secrets: {},
+          },
         },
       ],
       capabilitySources: [],

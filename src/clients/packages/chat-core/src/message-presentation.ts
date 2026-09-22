@@ -169,7 +169,7 @@ export function prepareConversationHistory(messages: readonly AiMessage[]) {
   const prepared = prepareClaudeHistory(messages);
   const scoped = scopeMessagesByUserTurn(prepared.messages);
   const merged: AiMessage[] = [];
-  for (let start = 0; start < scoped.length; ) {
+  for (let start = 0; start < scoped.length;) {
     const first = scoped[start];
     let end = start + 1;
     if (first.role === "assistant" && first.messageId?.trim()) {

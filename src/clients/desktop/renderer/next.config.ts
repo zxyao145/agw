@@ -4,7 +4,6 @@ import { codeInspectorPlugin } from "code-inspector-plugin";
 import type { NextConfig } from "next";
 
 const rendererRoot = dirname(fileURLToPath(import.meta.url));
-const desktopRoot = resolve(rendererRoot, "..");
 const clientsRoot = resolve(rendererRoot, "..", "..");
 
 const nextConfig: NextConfig = {
@@ -35,11 +34,6 @@ const nextConfig: NextConfig = {
       );
     }
 
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "next-themes": resolve(desktopRoot, "node_modules", "next-themes"),
-      sonner: resolve(desktopRoot, "node_modules", "sonner"),
-    };
     return config;
   },
 };

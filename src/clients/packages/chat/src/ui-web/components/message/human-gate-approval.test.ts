@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { setupDomEnvironment } from "@agw/test-harness";
 
-import type { ApprovalScope, PendingInteraction, PermissionMode } from "@agw/chat-core";
+import type { ApprovalScope, PendingInteraction, PermissionMode } from "@agw/chat-runtime";
 
 const { React, fireEvent, render, screen } = await setupDomEnvironment();
 const { HumanGateApproval } = await import("./human-gate-approval.tsx");

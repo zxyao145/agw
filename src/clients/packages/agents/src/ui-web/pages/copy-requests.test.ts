@@ -19,6 +19,7 @@ const sourceAgent = {
   modelProviderId: "model-provider-1",
   summaryModelProviderId: "summary-provider-1",
   enableSummary: true,
+  enable: true,
   tools: [
     {
       kind: "tool",
@@ -168,6 +169,7 @@ test("createAgentflowCopyRequest copies the complete graph without source identi
     description: "Coordinates research",
     systemPrompt: "",
     summaryModelProviderId: "summary-provider-1",
+    enable: true,
   } satisfies AgentflowDto;
   const details = {
     ...source,
@@ -238,6 +240,7 @@ test("createAgentflowCopyRequest keeps the copied name within the database lengt
     description: null,
     systemPrompt: "",
     summaryModelProviderId: null,
+    enable: true,
   } satisfies AgentflowDto;
   const details = {
     ...source,
