@@ -1145,7 +1145,7 @@ export function ChatWorkspace({
 
   /** Chat/Files 切换与侧栏折叠按钮，桌面端常驻左列顶部，移动端落在主区域顶部。 */
   const sidebarControls = (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 ml-2">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 mb-2 ">
       <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
         <TabsTrigger
           value="chat"
@@ -1178,8 +1178,36 @@ export function ChatWorkspace({
     </div>
   );
 
+  /** 桌面端折叠左列时收起项目选择器，移动端的工具条始终保留它。 */
+  const showToolbarProjectSelect = showProjectSelect && (isMobile || activeSidebarVisible);
+
+  /** Web 左列顶部多一个项目选择器，默认宽度比 Desktop 宽 40px。 */
+  const sidebarDefaultWidth = showProjectSelect ? 360 : 320;
+
+  /** 项目选择器与 Chat/Files 工具条，桌面端位于左列顶部，移动端位于主区域顶部。 */
+  const workspaceToolbar = (
+    <div className="flex shrink-0 flex-wrap items-center pt-2">
+      {showToolbarProjectSelect ? (
+        <div className="w-50 mr-2 mb-2">
+          <SearchableSelect
+            id="chat-project-select"
+            ariaLabel="Select project"
+            value={selectedProjectId ?? ""}
+            onValueChange={handleProjectChange}
+            options={projectSelectOptions}
+            placeholder="Select project"
+            searchPlaceholder="Search projects..."
+            clearable={false}
+          />
+        </div>
+      ) : null}
+
+      {sidebarControls}
+    </div>
+  );
+
   return (
-    <div className="relative flex h-full w-full min-w-0 flex-col gap-3 pt-2">
+    <div className="relative flex h-full w-full min-w-0 flex-col gap-3">
       {projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError ? (
         <div className="text-sm text-destructive">
           Failed to load chat dependencies:{" "}
@@ -1194,34 +1222,17 @@ export function ChatWorkspace({
         aria-hidden={showReconnect}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="mb-2 flex flex-wrap items-center">
-          {showProjectSelect ? (
-            <div className="w-50">
-              <SearchableSelect
-                id="chat-project-select"
-                ariaLabel="Select project"
-                value={selectedProjectId ?? ""}
-                onValueChange={handleProjectChange}
-                options={projectSelectOptions}
-                placeholder="Select project"
-                searchPlaceholder="Search projects..."
-                clearable={false}
-              />
-            </div>
-          ) : null}
-
-          {sidebarControls}
-        </div>
-
         <ColResizeSplit>
           {isMobile ? null : (
             <ColResizeSplit.Left
-              defaultPanelWidth={360}
-              minWidth={260}
-              maxWidth={520}
+              defaultPanelWidth={sidebarDefaultWidth}
+              minWidth={268}
+              maxWidth={420}
               collapsed={!activeSidebarVisible}
             >
               <div className="flex h-full min-h-0 flex-col">
+                {workspaceToolbar}
+
                 {activeSidebarVisible ? (
                   <div className="min-h-0 flex-1 overflow-hidden">
                     {isChatTab ? renderConversationList() : null}
@@ -1250,7 +1261,7 @@ export function ChatWorkspace({
 
           <ColResizeSplit.Right>
             <div className="flex h-full min-h-0 w-full flex-col">
-              {isMobile ? sidebarControls : null}
+              {isMobile ? workspaceToolbar : null}
 
               <TabsContent
                 value="chat"
