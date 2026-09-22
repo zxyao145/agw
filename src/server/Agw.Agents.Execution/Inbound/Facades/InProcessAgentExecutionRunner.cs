@@ -14,16 +14,19 @@ namespace Agw.Agents.Execution.Inbound.Facades;
 public sealed class InProcessAgentExecutionRunner : IAgentExecutionRunner
 {
     private readonly IAgentRuntimeService _agentRuntimeService;
+    private readonly AgentTurnExecutor _turnExecutor;
     private readonly IAgentflowRuntimeService _agentflowRuntimeService;
     private readonly IConversationExecutionGate? _gate;
 
     public InProcessAgentExecutionRunner(
         IAgentRuntimeService agentRuntimeService,
+        AgentTurnExecutor turnExecutor,
         IAgentflowRuntimeService agentflowRuntimeService,
         IConversationExecutionGate? gate = null
     )
     {
         _agentRuntimeService = agentRuntimeService;
+        _turnExecutor = turnExecutor;
         _agentflowRuntimeService = agentflowRuntimeService;
         _gate = gate;
     }
@@ -64,7 +67,7 @@ public sealed class InProcessAgentExecutionRunner : IAgentExecutionRunner
             }
 
             await foreach (
-                var message in _agentRuntimeService
+                var message in _turnExecutor
                     .ExecuteStreamingAsync(
                         runtime,
                         request.Input,

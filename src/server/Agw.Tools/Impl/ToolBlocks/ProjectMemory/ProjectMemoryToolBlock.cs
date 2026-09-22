@@ -76,7 +76,7 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
         var storage = projectMemoryDefinition.Options.Storage;
         AgentFileStore store = storage switch
         {
-            ProjectMemoryStorage.Database => new EfProjectMemoryStore(
+            ProjectMemoryStorage.Database => new ProjectMemoryStore(
                 _serviceScopeFactory,
                 _timeProvider,
                 _applicationLock,

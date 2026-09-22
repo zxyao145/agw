@@ -48,6 +48,7 @@ public interface IRuntimeFactory
 public sealed class RuntimeFactory : IRuntimeFactory
 {
     private readonly IAgentRuntimeService _agentRuntimeService;
+    private readonly AgentTurnExecutor _turnExecutor;
     private readonly IConversationExecutionGate? _conversationGate;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
@@ -56,6 +57,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
 
     public RuntimeFactory(
         IAgentRuntimeService agentRuntimeService,
+        AgentTurnExecutor turnExecutor,
         AgentflowRuntimeService agentflowRuntimeService,
         IAgwFileSystemResolver fileSystemResolver,
         RuntimeTurnContextAccessor turnContextAccessor,
@@ -64,6 +66,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
     )
     {
         _agentRuntimeService = agentRuntimeService;
+        _turnExecutor = turnExecutor;
         _agentflowRuntimeService = agentflowRuntimeService;
         _fileSystemResolver = fileSystemResolver;
         _turnContextAccessor = turnContextAccessor;
@@ -341,10 +344,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
         );
         var linkedToken = linkedCts.Token;
         var messages = command.Stream
-            ? _agentRuntimeService.ExecuteStreamingAsync(session, command.Input, interactions, linkedToken)
-            : ToAsyncEnumerable(() =>
-                _agentRuntimeService.ExecuteAsync(session, command.Input, interactions, linkedToken)
-            );
+            ? _turnExecutor.ExecuteStreamingAsync(session, command.Input, interactions, linkedToken)
+            : ToAsyncEnumerable(() => _turnExecutor.ExecuteAsync(session, command.Input, interactions, linkedToken));
         await TurnPipeline.RunAsync(messages, command.Stream, sink, linkedToken);
     }
 

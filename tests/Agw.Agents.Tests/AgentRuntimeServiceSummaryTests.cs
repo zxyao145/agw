@@ -170,7 +170,6 @@ public class AgentRuntimeServiceSummaryTests
             summaryService,
             services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
-            turnExecutor: null!,
             configuration: null!,
             skillRegistrations: [],
             remoteSkillContentResolver: null,

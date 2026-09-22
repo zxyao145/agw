@@ -1,23 +1,7 @@
+using Agw.Agents.Definitions.Domain.Decisions;
 using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Definitions.Agents;
-
-public enum AgentUpdateField
-{
-    DisplayName,
-    Description,
-    SystemPrompt,
-    ModelProviderId,
-    Tools,
-    McpToolServerIds,
-    SkillIds,
-    ConnectionIds,
-    Extra,
-    EnvironmentVariables,
-    EnableSummary,
-    SummaryModelProviderId,
-    ResponseSchema,
-}
 
 public sealed class AgentUpdateCommand
 {
@@ -69,6 +53,8 @@ public sealed class AgentUpdateCommand
     public bool? EnableSummary { get; }
     public Guid? SummaryModelProviderId { get; }
     public string? ResponseSchema { get; }
+
+    public IReadOnlySet<AgentUpdateField> SpecifiedFields => _specifiedFields;
 
     public bool IsSpecified(AgentUpdateField field) => _specifiedFields.Contains(field);
 }

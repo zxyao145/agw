@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Tests;
 
-public sealed class EfProjectMemoryStoreTests : IDisposable
+public sealed class ProjectMemoryStoreTests : IDisposable
 {
     private readonly IDisposable _userScope = UserInfoUtil.Push(
         new ClaimsPrincipal(
@@ -41,8 +41,8 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var projectId = Guid.CreateVersion7();
         await SeedProjectsAsync(options, cancellationToken, projectId);
-        var firstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
-        var secondStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
+        var firstStore = new ProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
+        var secondStore = new ProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
 
         await firstStore.WriteAsync("notes.md", "shared content", cancellationToken);
 
@@ -73,8 +73,8 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         var firstProjectId = Guid.CreateVersion7();
         var secondProjectId = Guid.CreateVersion7();
         await SeedProjectsAsync(options, cancellationToken, firstProjectId, secondProjectId);
-        var firstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, firstProjectId);
-        var secondStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, secondProjectId);
+        var firstStore = new ProjectMemoryStore(scopeFactory, TimeProvider.System, firstProjectId);
+        var secondStore = new ProjectMemoryStore(scopeFactory, TimeProvider.System, secondProjectId);
 
         await firstStore.WriteAsync("notes.md", "first project", cancellationToken);
         await secondStore.WriteAsync("notes.md", "second project", cancellationToken);
@@ -102,12 +102,7 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var projectId = Guid.CreateVersion7();
         await SeedProjectsAsync(options, cancellationToken, projectId);
-        var store = new EfProjectMemoryStore(
-            scopeFactory,
-            TimeProvider.System,
-            new InMemoryApplicationLock(),
-            projectId
-        );
+        var store = new ProjectMemoryStore(scopeFactory, TimeProvider.System, new InMemoryApplicationLock(), projectId);
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var writes = Enumerable
             .Range(0, 12)
@@ -147,7 +142,7 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         var projectId = Guid.CreateVersion7();
         var directoryProjectId = Guid.CreateVersion7();
         await SeedProjectsAsync(options, cancellationToken, projectId, directoryProjectId);
-        var fileFirstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, applicationLock, projectId);
+        var fileFirstStore = new ProjectMemoryStore(scopeFactory, TimeProvider.System, applicationLock, projectId);
         await fileFirstStore.WriteAsync("foo", "file", cancellationToken);
 
         var descendantException = await Assert.ThrowsAsync<AgwException>(() =>
@@ -155,7 +150,7 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         );
         Assert.Equal(ErrorCodes.InvalidParam.Code, descendantException.Code);
 
-        var directoryFirstStore = new EfProjectMemoryStore(
+        var directoryFirstStore = new ProjectMemoryStore(
             scopeFactory,
             TimeProvider.System,
             applicationLock,
@@ -196,7 +191,7 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
         services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         await using var serviceProvider = services.BuildServiceProvider();
-        var store = new EfProjectMemoryStore(
+        var store = new ProjectMemoryStore(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             TimeProvider.System,
             projectId

@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
+using Agw.Agents.Definitions.Domain.Decisions;
 using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;

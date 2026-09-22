@@ -615,7 +615,6 @@ public class AgentRuntimeServiceSystemCompositionTests
             summaryService: null!,
             services: new ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
-            turnExecutor: null!,
             configuration: new AgentRuntimeConfiguration(appService, projectRuntimeFacade),
             skillRegistrations: skillRegistrations ?? [],
             remoteSkillContentResolver: remoteSkillContentResolver,

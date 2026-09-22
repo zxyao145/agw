@@ -34,7 +34,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
-    private readonly AgentTurnExecutor _turnExecutor;
     private readonly AgentRuntimeConfiguration _configuration;
     private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
     private readonly IProjectDefaultResolver _projectDefaults;
@@ -60,7 +59,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IAgentTurnSummaryService summaryService,
         IServiceProvider services,
         IProjectDefaultResolver projectDefaults,
-        AgentTurnExecutor turnExecutor,
         AgentRuntimeConfiguration configuration,
         IEnumerable<IAgentSkillRegistration> skillRegistrations,
         IRemoteSkillContentResolver? remoteSkillContentResolver,
@@ -91,7 +89,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
             .ToDictionary(group => group.Key, group => group.First());
         _remoteSkillContentResolver = remoteSkillContentResolver;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
-        _turnExecutor = turnExecutor;
         _configuration = configuration;
         _turnContextAccessor = turnContextAccessor;
         _projectDefaults = projectDefaults;

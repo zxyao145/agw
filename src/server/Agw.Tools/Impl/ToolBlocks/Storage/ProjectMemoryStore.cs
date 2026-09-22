@@ -10,17 +10,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
 
-public sealed class EfProjectMemoryStore : AgentFileStore
+public sealed class ProjectMemoryStore : AgentFileStore
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly TimeProvider _timeProvider;
     private readonly IApplicationLock _applicationLock;
     private readonly Guid _projectId;
 
-    public EfProjectMemoryStore(IServiceScopeFactory serviceScopeFactory, TimeProvider timeProvider, Guid projectId)
+    public ProjectMemoryStore(IServiceScopeFactory serviceScopeFactory, TimeProvider timeProvider, Guid projectId)
         : this(serviceScopeFactory, timeProvider, InMemoryApplicationLock.Shared, projectId) { }
 
-    public EfProjectMemoryStore(
+    public ProjectMemoryStore(
         IServiceScopeFactory serviceScopeFactory,
         TimeProvider timeProvider,
         IApplicationLock applicationLock,
@@ -40,16 +40,15 @@ public sealed class EfProjectMemoryStore : AgentFileStore
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(_projectId), cancellationToken)
             .ConfigureAwait(false);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
-        await persistence
-            .WriteAsync(
-                _projectId,
-                ResolveOwnerUserId(),
-                normalizedPath,
-                content,
-                _timeProvider.GetUtcNow(),
-                cancellationToken
+        await UsePersistenceAsync(persistence =>
+                persistence.WriteAsync(
+                    _projectId,
+                    ResolveOwnerUserId(),
+                    normalizedPath,
+                    content,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken
+                )
             )
             .ConfigureAwait(false);
     }
@@ -58,10 +57,9 @@ public sealed class EfProjectMemoryStore : AgentFileStore
     {
         var normalizedPath = NormalizePath(path);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
-        return await persistence
-            .ReadAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
+        return await UsePersistenceAsync(persistence =>
+                persistence.ReadAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
+            )
             .ConfigureAwait(false);
     }
 
@@ -72,10 +70,9 @@ public sealed class EfProjectMemoryStore : AgentFileStore
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(_projectId), cancellationToken)
             .ConfigureAwait(false);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
-        return await persistence
-            .DeleteAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
+        return await UsePersistenceAsync(persistence =>
+                persistence.DeleteAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
+            )
             .ConfigureAwait(false);
     }
 
@@ -85,10 +82,9 @@ public sealed class EfProjectMemoryStore : AgentFileStore
     )
     {
         var prefix = DirectoryPrefix(directory);
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
-        var paths = await persistence
-            .ListPathsAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken)
+        var paths = await UsePersistenceAsync(persistence =>
+                persistence.ListPathsAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken)
+            )
             .ConfigureAwait(false);
 
         return paths
@@ -111,10 +107,9 @@ public sealed class EfProjectMemoryStore : AgentFileStore
     public override async Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default)
     {
         var normalizedPath = NormalizePath(path);
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
-        return await persistence
-            .FileExistsAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
+        return await UsePersistenceAsync(persistence =>
+                persistence.FileExistsAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
+            )
             .ConfigureAwait(false);
     }
 
@@ -132,55 +127,74 @@ public sealed class EfProjectMemoryStore : AgentFileStore
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
             TimeSpan.FromSeconds(2)
         );
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
-        var entries = persistence.ListEntriesAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken);
+        return await UsePersistenceAsync(async persistence =>
+            {
+                var entries = persistence.ListEntriesAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken);
 
-        var results = new List<FileSearchResult>();
-        await foreach (var entry in entries.WithCancellation(cancellationToken).ConfigureAwait(false))
-        {
-            var relativePath = entry.Path[prefix.Length..];
-            if (
-                (!recursive && relativePath.Contains('/'))
-                || (
-                    !string.IsNullOrWhiteSpace(globPattern)
-                    && !FileSystemName.MatchesSimpleExpression(
-                        globPattern,
-                        Path.GetFileName(relativePath),
-                        ignoreCase: true
+                var results = new List<FileSearchResult>();
+                await foreach (var entry in entries.WithCancellation(cancellationToken).ConfigureAwait(false))
+                {
+                    var relativePath = entry.Path[prefix.Length..];
+                    if (
+                        (!recursive && relativePath.Contains('/'))
+                        || (
+                            !string.IsNullOrWhiteSpace(globPattern)
+                            && !FileSystemName.MatchesSimpleExpression(
+                                globPattern,
+                                Path.GetFileName(relativePath),
+                                ignoreCase: true
+                            )
+                        )
                     )
-                )
-            )
-            {
-                continue;
-            }
-
-            var matches = entry
-                .Content.Split('\n')
-                .Select((line, index) => new { Line = line.TrimEnd('\r'), Number = index + 1 })
-                .Where(line => regex.IsMatch(line.Line))
-                .Select(line => new FileSearchMatch { LineNumber = line.Number, Line = line.Line })
-                .ToList();
-            if (matches.Count > 0)
-            {
-                results.Add(
-                    new FileSearchResult
                     {
-                        FileName = relativePath,
-                        Snippet = matches[0].Line,
-                        MatchingLines = matches,
+                        continue;
                     }
-                );
-            }
-        }
 
-        return results;
+                    var matches = entry
+                        .Content.Split('\n')
+                        .Select((line, index) => new { Line = line.TrimEnd('\r'), Number = index + 1 })
+                        .Where(line => regex.IsMatch(line.Line))
+                        .Select(line => new FileSearchMatch { LineNumber = line.Number, Line = line.Line })
+                        .ToList();
+                    if (matches.Count > 0)
+                    {
+                        results.Add(
+                            new FileSearchResult
+                            {
+                                FileName = relativePath,
+                                Snippet = matches[0].Line,
+                                MatchingLines = matches,
+                            }
+                        );
+                    }
+                }
+
+                return results;
+            })
+            .ConfigureAwait(false);
     }
 
     public override Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
     {
         _ = NormalizePath(path, allowEmpty: true);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 在一个独立的服务范围内解析持久化端口并执行操作，操作完成后释放该范围。
+    /// Resolve the persistence port inside its own service scope and release the scope when the operation completes.
+    /// </summary>
+    private async Task UsePersistenceAsync(Func<IProjectMemoryPersistence, Task> operation)
+    {
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        await operation(scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>()).ConfigureAwait(false);
+    }
+
+    private async Task<TResult> UsePersistenceAsync<TResult>(Func<IProjectMemoryPersistence, Task<TResult>> operation)
+    {
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        return await operation(scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>())
+            .ConfigureAwait(false);
     }
 
     private static string ResolveOwnerUserId()

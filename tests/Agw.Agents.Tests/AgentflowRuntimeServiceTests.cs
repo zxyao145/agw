@@ -1387,20 +1387,6 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
 
-        public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            IInteractionHandler? approvalHandler,
-            CancellationToken cancellationToken = default
-        ) => throw new NotImplementedException();
-
-        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            IInteractionHandler? approvalHandler,
-            CancellationToken cancellationToken = default
-        ) => throw new NotImplementedException();
-
         public Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
             AgentExecuteByIdRequest request,
             CancellationToken cancellationToken = default

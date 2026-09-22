@@ -1075,7 +1075,6 @@ public class AgentRuntimeServiceCompositionTests
             summaryService: null!,
             services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
-            turnExecutor: null!,
             configuration: null!,
             skillRegistrations: [],
             remoteSkillContentResolver: null,

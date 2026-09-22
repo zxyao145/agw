@@ -43,20 +43,10 @@ public interface IAgentRuntimeService
         CancellationToken cancellationToken = default
     );
 
-    IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-        AgentRuntime session,
-        AgwUserInput input,
-        IInteractionHandler? approvalHandler,
-        CancellationToken cancellationToken = default
-    );
-
-    Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-        AgentRuntime session,
-        AgwUserInput input,
-        IInteractionHandler? approvalHandler,
-        CancellationToken cancellationToken = default
-    );
-
+    /// <summary>
+    /// 为调用方未提供 runtime 的场景解析上下文、创建 Agent 并完整执行一次请求。逐轮执行由 AgentTurnExecutor 承担。
+    /// Resolve the context, create the Agent and run one complete request for callers that hold no runtime. Per-turn execution belongs to AgentTurnExecutor.
+    /// </summary>
     Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
         AgentExecuteByIdRequest request,
         CancellationToken cancellationToken = default

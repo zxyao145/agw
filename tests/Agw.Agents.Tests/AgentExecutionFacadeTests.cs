@@ -80,7 +80,7 @@ public sealed class AgentExecutionFacadeTests
         var runtime = new RecordingAgentRuntimeService();
         await using var services = new ServiceCollection().BuildServiceProvider();
         var facade = new AgentExecutionFacade(
-            new InProcessAgentExecutionRunner(runtime, null!),
+            new InProcessAgentExecutionRunner(runtime, null!, null!),
             new AlwaysOwnedAgentCatalog()
         );
         var executionId = Guid.CreateVersion7();
@@ -123,7 +123,7 @@ public sealed class AgentExecutionFacadeTests
         var agentflowRuntime = new RejectingAgentflowRuntimeService();
         await using var services = new ServiceCollection().BuildServiceProvider();
         var facade = new AgentExecutionFacade(
-            new InProcessAgentExecutionRunner(null!, agentflowRuntime),
+            new InProcessAgentExecutionRunner(null!, null!, agentflowRuntime),
             new AlwaysOwnedAgentCatalog()
         );
         var executionId = Guid.CreateVersion7();
@@ -198,24 +198,6 @@ public sealed class AgentExecutionFacadeTests
             AgwPermissionMode permissionMode,
             CancellationToken cancellationToken = default
         ) => Task.CompletedTask;
-
-        public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            IInteractionHandler? approvalHandler,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default
-        )
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            IInteractionHandler? approvalHandler,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<IReadOnlyList<AgwMessage>>([]);
 
         public Task<AgentsDtos.AgentExecutionResult?> ExecuteByIdAsync(
             AgentsDtos.AgentExecuteByIdRequest request,

@@ -23,6 +23,7 @@ namespace Agw.Agents.Execution.Agents.Runners.Durable;
 internal sealed class DurableAgentSegmentRunner
 {
     private readonly AgentRuntimeService _runtimeService;
+    private readonly AgentTurnExecutor _turnExecutor;
     private readonly HumanInteractionContextAccessor _humanInteractionContextAccessor;
 
     /// <summary>
@@ -30,10 +31,12 @@ internal sealed class DurableAgentSegmentRunner
     /// </summary>
     public DurableAgentSegmentRunner(
         AgentRuntimeService runtimeService,
+        AgentTurnExecutor turnExecutor,
         HumanInteractionContextAccessor humanInteractionContextAccessor
     )
     {
         _runtimeService = runtimeService;
+        _turnExecutor = turnExecutor;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
     }
 
@@ -103,8 +106,8 @@ internal sealed class DurableAgentSegmentRunner
             // 首段消费原始用户输入；后续分段向已恢复的 Agent session 注入 Tool approval 响应。
             var messages =
                 input.SegmentIndex == 0
-                    ? _runtimeService.ExecuteStreamingAsync(runtime, manifest.Input, approvalHandler, cancellationToken)
-                    : _runtimeService.ExecuteDurableSegmentStreamingAsync(
+                    ? _turnExecutor.ExecuteStreamingAsync(runtime, manifest.Input, approvalHandler, cancellationToken)
+                    : _turnExecutor.ExecuteDurableSegmentStreamingAsync(
                         runtime,
                         CreateApprovalResponseMessage(input.ResolvedInteractions, permissions.Current),
                         manifest.Input,
