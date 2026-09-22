@@ -1268,6 +1268,7 @@ export function ChatWorkspace({
                           <AgentSelector
                             id="chat-target-select"
                             size={compactToolbar ? "sm" : "default"}
+                            height={34}
                             projectId={selectedProjectId}
                             value={
                               selectedTarget

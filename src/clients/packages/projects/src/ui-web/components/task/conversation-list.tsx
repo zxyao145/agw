@@ -366,9 +366,7 @@ export function ConversationList({
               >
                 <div className="flex items-start">
                   <div className="flex-1 min-w-0 space-y-1">
-                    <div className="font-medium truncate">
-                      {conversation.title || "Untitled"}
-                    </div>
+                    <div className="truncate">{conversation.title || "Untitled"}</div>
                   </div>
                   <div
                     className="absolute inset-y-1 right-0

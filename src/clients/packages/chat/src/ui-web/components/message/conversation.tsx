@@ -105,7 +105,7 @@ export function Conversation({
   });
   const virtualRows = virtualizer.getVirtualItems();
   const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-  const totalSize = virtualizer.getTotalSize() + 160;
+  const totalSize = virtualizer.getTotalSize() + 0;
   const navigationHeight = Math.max(viewportHeight - 168, 0);
   const userInputAnchors = React.useMemo(
     () => (userInputNavigationHost ? buildUserInputAnchors(items) : []),
@@ -162,7 +162,7 @@ export function Conversation({
   }
 
   return (
-    <div className="min-h-full w-full flex-1">
+    <div className="w-full flex-1">
       {showNavigation && userInputNavigationHost
         ? createPortal(
             <div className="absolute top-6 left-0">
