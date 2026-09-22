@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using System.Text.Unicode;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
@@ -41,6 +43,9 @@ public sealed partial class EfCoreChatHistoryProvider
             ChatHistoryProviderStateJsonContext.Default,
             new DefaultJsonTypeInfoResolver()
         ),
+        // 中文等非 ASCII 字符按原样写入 conversation_payload。
+        // Write CJK and other non-ASCII characters as-is into conversation_payload.
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
     };
 
     private static readonly Meter HistoryMeter = new("Agw.ConversationHistory.Persistence");
