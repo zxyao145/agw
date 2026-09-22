@@ -105,7 +105,7 @@ export function Conversation({
   });
   const virtualRows = virtualizer.getVirtualItems();
   const viewportHeight = virtualizer.scrollRect?.height ?? 0;
-  const totalSize = virtualizer.getTotalSize() + 0;
+  const totalSize = virtualizer.getTotalSize() + 20;
   const navigationHeight = Math.max(viewportHeight - 168, 0);
   const userInputAnchors = React.useMemo(
     () => (userInputNavigationHost ? buildUserInputAnchors(items) : []),
