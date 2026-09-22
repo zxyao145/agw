@@ -30,7 +30,6 @@ import {
   DialogTitle,
 } from "@agw/components";
 import { Input } from "@agw/components";
-import { formatFriendlyLocalDateTime } from "@agw/components";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
 import { cn } from "@agw/components";
 
@@ -41,7 +40,7 @@ interface ConversationListProps {
   onConversationSelect: (conversation: ConversationSummary) => void;
   onNewConversation: () => void;
   onAllConversationsDeleted: () => void;
-  headerActions?: React.ReactNode;
+  headerActions?: (currentConversation: ConversationSummary | null) => React.ReactNode;
 }
 
 const CONVERSATION_PAGE_SIZE = 20;
@@ -199,6 +198,11 @@ export function ConversationList({
       : conversations;
   }, [conversations, currentConversationQuery.data]);
 
+  const currentConversation = React.useMemo(
+    () => displayedConversations.find(matchesCurrentSession) ?? null,
+    [displayedConversations, matchesCurrentSession],
+  );
+
   React.useEffect(() => {
     const root = listScrollRef.current;
     const target = loadMoreRef.current;
@@ -327,11 +331,11 @@ export function ConversationList({
           >
             <Plus className="h-4 w-4" />
           </Button>
-          {headerActions}
+          {headerActions?.(currentConversation)}
         </div>
       </div>
 
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto agw-scrollbar space-y-px">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto agw-scrollbar space-y-px pt-2">
         {conversationsQuery.isPending ? (
           <div className="space-y-2 p-1" aria-label="Loading conversations">
             {Array.from({ length: 5 }, (_, index) => (
@@ -356,64 +360,54 @@ export function ConversationList({
                 key={conversation.conversationId}
                 onClick={() => onConversationSelect(conversation)}
                 className={cn(
-                  "group relative py-2 pl-4 rounded-md cursor-pointer transition-colors",
+                  "group relative py-2.5 pl-4 rounded-md cursor-pointer transition-colors",
                   isActive ? "bg-accent" : "hover:bg-accent/80",
                 )}
               >
                 <div className="flex items-start">
                   <div className="flex-1 min-w-0 space-y-1">
-                    <div className="font-medium text-sm truncate">
+                    <div className="font-medium truncate">
                       {conversation.title || "Untitled"}
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground flex gap-1.5">
-                      <span>
-                        {/* {context.executionCount}{" "}
-                        {context.executionCount === 1
-                          ? "execution"
-                          : "executions"}{" "}
-                        ·  */}
-                        {conversation.messageCount}{" "}
-                        {conversation.messageCount === 1 ? "message" : "messages"}
-                      </span>
-                      ·
-                      <span>
-                        {formatFriendlyLocalDateTime(
-                          conversation.updateTime ?? conversation.createTime,
-                        )}
-                      </span>
                     </div>
                   </div>
                   <div
-                    className="absolute right-1 top-1
-                        hidden group-hover:flex 
-                        items-start rounded-md
-                        bg-accent"
+                    className="absolute inset-y-1 right-0
+                        hidden group-hover:flex
+                        items-center"
                   >
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-muted-foreground"
-                      aria-label="Rename conversation"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setConversationToRename(conversation);
-                        setRenameTitle(conversation.title || "");
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      aria-label="Delete conversation"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setConversationToDelete(conversation);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {/* Fade the title out before it reaches the actions
+                        让标题在进入操作按钮之前淡出 */}
+                    <div
+                      aria-hidden="true"
+                      className="h-full w-8 bg-linear-to-r from-transparent to-accent"
+                    />
+                    <div className="flex h-full items-center rounded-md bg-accent px-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground"
+                        aria-label="Rename conversation"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setConversationToRename(conversation);
+                          setRenameTitle(conversation.title || "");
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        aria-label="Delete conversation"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setConversationToDelete(conversation);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

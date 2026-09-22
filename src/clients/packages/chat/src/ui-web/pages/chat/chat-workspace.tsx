@@ -53,6 +53,7 @@ import {
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@agw/components";
 import { Input } from "@agw/components";
 import { Label } from "@agw/components";
+import { formatFriendlyLocalDateTime } from "@agw/components";
 import { SearchableSelect, type SearchableSelectOption } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
@@ -148,11 +149,19 @@ function areEnvVarsEqual(left: EnvVar[], right: EnvVar[]): boolean {
 
 type ChatSettingsDialogProps = {
   selectedProjectId: string | null;
+  conversationId: string | null;
+  currentConversation: ConversationSummary | null;
   getDraft: (projectId: string | null) => ChatSettingsDraft;
   onSave: (draft: ChatSettingsDraft) => boolean;
 };
 
-function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSettingsDialogProps) {
+function ChatSettingsDialog({
+  selectedProjectId,
+  conversationId,
+  currentConversation,
+  getDraft,
+  onSave,
+}: ChatSettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [draftEnvVars, setDraftEnvVars] = React.useState<EnvVar[]>([]);
 
@@ -206,14 +215,47 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
       </DialogTrigger>
       <DialogContent size="md" className={CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME}>
         <DialogHeader>
-          <DialogTitle>Chat Settings</DialogTitle>
-          <DialogDescription>
-            Configure execution settings for the currently selected project.
-          </DialogDescription>
+          <DialogTitle>Conversation Settings</DialogTitle>
         </DialogHeader>
 
         <div className={CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME}>
           <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>Conversation Information</Label>
+              {conversationId === null ? (
+                <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                  No active conversation.
+                </div>
+              ) : (
+                <div className="rounded-md border text-xs">
+                  <div className="flex items-start justify-between gap-3 border-b p-2">
+                    <span className="text-muted-foreground">ID</span>
+                    <span className="font-mono break-all text-right">{conversationId}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 border-b p-2">
+                    <span className="text-muted-foreground">Messages</span>
+                    <span className="text-right">{currentConversation?.messageCount ?? "—"}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 border-b p-2">
+                    <span className="text-muted-foreground">Created</span>
+                    <span className="text-right">
+                      {currentConversation
+                        ? formatFriendlyLocalDateTime(currentConversation.createTime)
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 p-2">
+                    <span className="text-muted-foreground">Updated</span>
+                    <span className="text-right">
+                      {currentConversation?.updateTime
+                        ? formatFriendlyLocalDateTime(currentConversation.updateTime)
+                        : "—"}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label>Environment Variables</Label>
@@ -1037,13 +1079,15 @@ export function ChatWorkspace({
         }}
         onNewConversation={handleNewConversation}
         onAllConversationsDeleted={handleAllConversationsDeleted}
-        headerActions={
+        headerActions={(currentConversation) => (
           <ChatSettingsDialog
             selectedProjectId={selectedProjectId}
+            conversationId={conversationId}
+            currentConversation={currentConversation}
             getDraft={getActiveSettingsDraft}
             onSave={handleSaveChatSettings}
           />
-        }
+        )}
       />
     ),
     [
