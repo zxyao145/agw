@@ -4,10 +4,10 @@ using Agw.Auth.Extensions;
 using Agw.Host.Hosting;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
+using Agw.Settings;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
 using Agw.Setup.Services;
-using Agw.Shared.Configuration;
 using Agw.Shared.Contracts.Persistence;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
@@ -168,12 +168,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
             )
         );
 
-        Assert.Equal(
-            databaseProvider == "postgres" ? DatabaseProvider.Postgres : DatabaseProvider.Sqlite,
-            bootstrapper.Provider
-        );
-        var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
-        Assert.Equal(context.Database.GetConnectionString(), bootstrapper.ConnectionString);
+        Assert.Equal(1, bootstrapper.Invocations);
         Assert.False(provider.GetRequiredService<IServerInitializationState>().IsInitialized);
         Assert.False(File.Exists(Path.Combine(_paths.Root, "server-state.json")));
     }
@@ -192,6 +187,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(_paths.KeysDirectory));
         services.AddInfrastructure(configuration);
         services.AddAuth();
+        services.AddSettings();
         services.AddSetup(configuration, bootstrap);
         services.AddSingleton(new SetupCodeService("TEST-CODE"));
     }
@@ -205,17 +201,11 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
 
     private sealed class FailingDatabaseBootstrapper : IDatabaseBootstrapper
     {
-        public DatabaseProvider Provider { get; private set; }
-        public string? ConnectionString { get; private set; }
+        public int Invocations { get; private set; }
 
-        public Task InitializeAsync(
-            DatabaseProvider provider,
-            string connectionString,
-            CancellationToken cancellationToken = default
-        )
+        public Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            Provider = provider;
-            ConnectionString = connectionString;
+            Invocations++;
             throw new AgwException(ErrorCodes.InvalidSetupConfiguration, "Database bootstrap failed.");
         }
     }

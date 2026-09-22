@@ -2,14 +2,13 @@ using System.Net;
 using System.Reflection;
 using Agw.A2A.Extensions;
 using Agw.Agents;
-using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution;
 using Agw.Auth.Extensions;
 using Agw.Files;
-using Agw.Files.Api;
 using Agw.Host.Data;
 using Agw.Host.Hosting;
 using Agw.Host.Middleware;
+using Agw.Host.OpenApi;
 using Agw.Host.Runtime;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Configuration;
@@ -19,6 +18,7 @@ using Agw.Integrations.Extensions;
 using Agw.Jobs;
 using Agw.Projects;
 using Agw.Providers;
+using Agw.Settings;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
 using Agw.Shared.Contracts.Coordination;
@@ -26,7 +26,6 @@ using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 using Agw.Shared.Runtime;
-using Agw.Shared.Tooling;
 using Agw.Shared.Utils;
 using Agw.Skills;
 using Agw.Tools;
@@ -37,7 +36,6 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using Microsoft.OpenApi;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -212,72 +210,7 @@ public static class AgwHostApplication
                         ApiResult.BadRequest(context.ModelState, code: ErrorCodes.InvalidParam.Code);
                 });
                 builder.Services.AddEndpointsApiExplorer();
-                builder.Services.AddOpenApi(options =>
-                {
-                    options.AddSchemaTransformer(
-                        (schema, context, cancellationToken) =>
-                        {
-                            if (context.JsonTypeInfo.Type == typeof(int) || context.JsonTypeInfo.Type == typeof(int?))
-                            {
-                                schema.Type = JsonSchemaType.Integer;
-                                schema.Format = "int32";
-                                schema.Pattern = null;
-                            }
-
-                            var type = context.JsonTypeInfo.Type;
-                            if (type != typeof(ToolValueObject) && typeof(ToolValueObject).IsAssignableFrom(type))
-                            {
-                                schema.Required ??= new HashSet<string>();
-                                schema.Required.Add("kind");
-                            }
-
-                            if (
-                                (type != typeof(ToolDefinition) && typeof(ToolDefinition).IsAssignableFrom(type))
-                                || (
-                                    type != typeof(ToolBlockDefinition)
-                                    && typeof(ToolBlockDefinition).IsAssignableFrom(type)
-                                )
-                            )
-                            {
-                                schema.Required ??= new HashSet<string>();
-                                schema.Required.Add("name");
-                            }
-
-                            if (type == typeof(AgentUpdateRequest))
-                            {
-                                schema.Required?.Clear();
-                                return Task.CompletedTask;
-                            }
-
-                            if (type.IsClass)
-                            {
-                                foreach (var property in context.JsonTypeInfo.Properties)
-                                {
-                                    var propertyType = property.PropertyType;
-
-                                    // 非 nullable value type，例如 int、long、bool、DateTimeOffset
-                                    if (
-                                        (propertyType.IsValueType || propertyType == typeof(string))
-                                        && Nullable.GetUnderlyingType(propertyType) is null
-                                    )
-                                    {
-                                        var jsonName = property.Name;
-
-                                        schema.Required ??= new HashSet<string>();
-                                        schema.Required.Add(jsonName);
-                                    }
-                                }
-                            }
-
-                            if (type == typeof(AgentCreateRequest))
-                            {
-                                schema.Required?.Remove("extra");
-                            }
-
-                            return Task.CompletedTask;
-                        }
-                    );
-                });
+                builder.Services.AddOpenApi(options => options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>());
             }
             builder.Services.AddApiResult();
             builder.Services.AddHttpClient();
@@ -350,6 +283,7 @@ public static class AgwHostApplication
                 .AddSkills(builder.Configuration)
                 .AddProjects(builder.Configuration)
                 .AddAuth()
+                .AddSettings()
                 .AddSetup(builder.Configuration, readOnly: profile == AgwHostProfile.DataPlane)
                 .AddIntegrations(builder.Configuration);
 
@@ -434,7 +368,6 @@ public static class AgwHostApplication
             }
             app.UseRouting();
             app.UseAuthorization();
-            app.UseMiddleware<FileEndpointExceptionMappingMiddleware>();
 
             foreach (var module in modules)
             {

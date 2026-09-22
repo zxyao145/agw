@@ -2,7 +2,7 @@ using System.IO.Enumeration;
 using System.Text.RegularExpressions;
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
-using Agw.Files.Exceptions;
+using Agw.Shared.Exceptions;
 using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Agw.Files.Infrastructure.Storage;
@@ -39,8 +39,8 @@ public sealed class LocalFileSystem : ILocalFileSystem
 
         if (Path.IsPathRooted(normalized))
         {
-            throw new AgwFilesException(
-                FilesErrorCode.PathOutsideRoot,
+            throw new AgwException(
+                ErrorCodes.FilePathOutsideRoot,
                 $"Path '{path}' must be relative to the file system root."
             );
         }
@@ -49,8 +49,8 @@ public sealed class LocalFileSystem : ILocalFileSystem
 
         if (!fullPath.StartsWith(_normalizedRoot, PathComparison))
         {
-            throw new AgwFilesException(
-                FilesErrorCode.PathOutsideRoot,
+            throw new AgwException(
+                ErrorCodes.FilePathOutsideRoot,
                 $"Path '{path}' is outside the allowed root directory."
             );
         }

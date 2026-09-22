@@ -23,6 +23,7 @@ using Agw.Projects;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Providers;
+using Agw.Settings;
 using Agw.Setup.Services;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Runtime;
@@ -164,6 +165,7 @@ public sealed class HostModuleCompositionTests
                 .AddSkills(configuration)
                 .AddProjects(configuration)
                 .AddAuth()
+                .AddSettings()
                 .AddSetup(configuration, readOnly: false)
                 .AddIntegrations(configuration);
 

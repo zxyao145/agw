@@ -360,6 +360,11 @@ public static class ErrorCodes
         "Administrator access is required.",
         HttpStatusCode.Forbidden
     );
+    public static readonly ErrorCode FilePathOutsideRoot = new(
+        403_0005,
+        "Path is outside the allowed root directory.",
+        HttpStatusCode.Forbidden
+    );
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(
@@ -643,6 +648,11 @@ public static class ErrorCodes
     public static readonly ErrorCode ToolExecutionFailed = new(
         500_0026,
         "Tool execution failed.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode FileOperationFailed = new(
+        500_0027,
+        "Failed to process file request.",
         HttpStatusCode.InternalServerError
     );
 

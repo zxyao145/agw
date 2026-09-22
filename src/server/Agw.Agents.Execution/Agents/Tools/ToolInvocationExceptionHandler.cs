@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Agw.Files.Exceptions;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -75,11 +74,6 @@ internal sealed class ToolInvocationExceptionHandler
                 Code: agwException.Code,
                 Message: agwException.Message
             ),
-            AgwFilesException filesException => new ToolExecutionErrorResult(
-                IsError: true,
-                Code: filesException.Code,
-                Message: filesException.Message
-            ),
             _ => new ToolExecutionErrorResult(
                 IsError: true,
                 Code: ErrorCodes.ToolExecutionFailed.Code,
@@ -91,7 +85,7 @@ internal sealed class ToolInvocationExceptionHandler
     private void LogFailure(FunctionInvocationContext context, Exception exception, ToolExecutionErrorResult result)
     {
         var callId = context.CallContent?.CallId;
-        if (exception is AgwException or AgwFilesException)
+        if (exception is AgwException)
         {
             _logger.LogWarning(
                 exception,

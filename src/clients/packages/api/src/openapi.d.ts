@@ -4504,12 +4504,12 @@ export interface components {
       type: components["schemas"]["AgentType"];
       externalAgentKind: components["schemas"]["ExternalAgentKind"];
       /** @description JSON object for additional external agent settings. */
-      extra: null | string;
+      extra?: null | string;
       /**
        * @description Raw user-configured JSON Schema text enforcing the agent's final response structure.
        *     `null` means structured output is disabled.
        */
-      responseSchema: null | string;
+      responseSchema?: null | string;
       tools?: components["schemas"]["ToolValueObject"][];
       environmentVariables?: {
         [key: string]: string;
@@ -4520,10 +4520,10 @@ export interface components {
       agentConnectionRelations?: components["schemas"]["AgentConnectionRelation"][];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     AgentConnectionRelation: {
       /** Format: uuid */
@@ -4558,7 +4558,7 @@ export interface components {
       type?: null | components["schemas"]["AgentType"];
       externalAgentKind?: null | components["schemas"]["ExternalAgentKind"];
       extra?: null | string;
-      responseSchema: null | string;
+      responseSchema?: null | string;
     };
     AgentEnabledUpdateRequest: {
       /** Format: uuid */
@@ -4569,7 +4569,7 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
-      description: null | string;
+      description?: null | string;
       enable: boolean;
       systemPrompt: string;
       /** Format: uuid */
@@ -4578,10 +4578,10 @@ export interface components {
       edges?: components["schemas"]["AgentflowEdge"][];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     AgentflowCreateRequest: {
       name: string;
@@ -4598,17 +4598,17 @@ export interface components {
       sourceNodeId: string;
       targetNodeId: string;
       kind: components["schemas"]["AgentflowEdgeKind"];
-      label: null | string;
-      conditionJson: null | string;
-      configJson: null | string;
+      label?: null | string;
+      conditionJson?: null | string;
+      configJson?: null | string;
       sourceNode?: components["schemas"]["AgentflowNode"];
       targetNode?: components["schemas"]["AgentflowNode"];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     AgentflowEdgeKind: number;
     AgentflowEdgeRequest: {
@@ -4632,18 +4632,18 @@ export interface components {
       kind: components["schemas"]["AgentflowNodeKind"];
       /** Format: uuid */
       relateId?: null | string;
-      name: null | string;
-      positionJson: null | string;
-      instructions: null | string;
-      configJson: null | string;
+      name?: null | string;
+      positionJson?: null | string;
+      instructions?: null | string;
+      configJson?: null | string;
       sourceEdges?: components["schemas"]["AgentflowEdge"][];
       targetEdges?: components["schemas"]["AgentflowEdge"][];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     AgentflowNodeExecutionStatus: number;
     AgentflowNodeKind: number;
@@ -4670,16 +4670,16 @@ export interface components {
       /** Format: uuid */
       agentflowId: string;
       nodeId: string;
-      nodeName: null | string;
+      nodeName?: null | string;
       nodeKind: components["schemas"]["AgentflowNodeKind"];
       /** Format: uuid */
       agentId?: null | string;
-      agentName: null | string;
+      agentName?: null | string;
       input: string;
       /** Format: int64 */
       durationMilliseconds: number | string;
       status: components["schemas"]["AgentflowNodeExecutionStatus"];
-      error: null | string;
+      error?: null | string;
     };
     AgentflowUpdateRequest: {
       name: string;
@@ -4768,7 +4768,7 @@ export interface components {
       updateTime: null | string;
       updateBy: null | string;
       resultFormat: components["schemas"]["ResultFormat"];
-      responseSchema: null | string;
+      responseSchema?: null | string;
     };
     AgentRuntimeType: number;
     AgentSkillRelation: {
@@ -4827,7 +4827,7 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
-      description: null | string;
+      description?: null | string;
       /** Format: int32 */
       maxContextWindowTokens: number;
       /** Format: int32 */
@@ -4835,10 +4835,10 @@ export interface components {
       providers?: components["schemas"]["ModelProviderRelation"][];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     AgwContent:
       | components["schemas"]["AgwContentAgwTextContent"]
@@ -4855,15 +4855,15 @@ export interface components {
       kind: null | string;
       /** @description A data URI representing the content. */
       uri: string;
-      name: null | string;
+      name?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwErrorContent: {
       /** @enum {string} */
       type?: "ErrorContent";
       kind: null | string;
-      errorCode: null | string;
-      details: null | string;
+      errorCode?: null | string;
+      details?: null | string;
       content: string;
       additionalProperties?: null | Record<string, never>;
     };
@@ -4871,28 +4871,28 @@ export interface components {
       /** @enum {string} */
       type?: "FunctionCallContent";
       kind: null | string;
-      content: null | string;
+      content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwFunctionResultContent: {
       /** @enum {string} */
       type?: "FunctionResultContent";
       kind: null | string;
-      content: null | string;
+      content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwTextContent: {
       /** @enum {string} */
       type?: "TextContent";
       kind: null | string;
-      content: null | string;
+      content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwTextReasoningContent: {
       /** @enum {string} */
       type?: "TextReasoningContent";
       kind: null | string;
-      content: null | string;
+      content?: null | string;
       additionalProperties?: null | Record<string, never>;
     };
     AgwContentAgwUriContent: {
@@ -4915,7 +4915,7 @@ export interface components {
     AgwMessage: {
       messageId: string;
       /** Format: date-time */
-      createdAt?: string | null;
+      createdAt?: null | string;
       author: null | string;
       role: components["schemas"]["AiRole"];
       contents: components["schemas"]["AgwContent"][];
@@ -4934,98 +4934,98 @@ export interface components {
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfAgentflow: {
       data?: null | components["schemas"]["Agentflow"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfAgentflow[]": {
       data?: null | components["schemas"]["Agentflow"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfAgentflowEdge[]": {
       data?: null | components["schemas"]["AgentflowEdge"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfAgentflowNode[]": {
       data?: null | components["schemas"]["AgentflowNode"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfAgentListResponse[]": {
       data?: null | components["schemas"]["AgentListResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfAgentResponse: {
       data?: null | components["schemas"]["AgentResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfAgentSuggestionsResponse: {
       data?: null | components["schemas"]["AgentSuggestionsResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfAgwAiModel: {
       data?: null | components["schemas"]["AgwAiModel"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfAgwAiModel[]": {
       data?: null | components["schemas"]["AgwAiModel"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfConnectionResponse: {
       data?: null | components["schemas"]["ConnectionResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfConnectionResponse[]": {
       data?: null | components["schemas"]["ConnectionResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfDashboardStatsResponse: {
       data?: null | components["schemas"]["DashboardStatsResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfDesktopExchangeResponse: {
       data?: null | components["schemas"]["DesktopExchangeResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfDictionaryOfstringAndListOfToolLiteInfo: {
       data?: null | {
@@ -5034,294 +5034,294 @@ export interface components {
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfExecutionPermissionCapabilities: {
       data?: null | components["schemas"]["ExecutionPermissionCapabilities"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfExternalAgentOptionResponse[]": {
       data?: null | components["schemas"]["ExternalAgentOptionResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfFileListResponse: {
       data?: null | components["schemas"]["FileListResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfFileSearchResponse: {
       data?: null | components["schemas"]["FileSearchResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfIReadOnlyListOfQuickPromptResponse: {
       data?: null | components["schemas"]["QuickPromptResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfJob: {
       data?: null | components["schemas"]["Job"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfJob[]": {
       data?: null | components["schemas"]["Job"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfJobLogResponse[]": {
       data?: null | components["schemas"]["JobLogResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfMcpServer: {
       data?: null | components["schemas"]["McpServer"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfMcpServer[]": {
       data?: null | components["schemas"]["McpServer"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfMcpToolServerConnectResponse: {
       data?: null | components["schemas"]["McpToolServerConnectResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfModelProviderRelation: {
       data?: null | components["schemas"]["ModelProviderRelation"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfOAuthAuthorizeStartResponse: {
       data?: null | components["schemas"]["OAuthAuthorizeStartResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfOAuthCallbackInfoResponse: {
       data?: null | components["schemas"]["OAuthCallbackInfoResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfOAuthRefreshResponse: {
       data?: null | components["schemas"]["OAuthRefreshResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfObject: {
       data?: unknown;
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfObject[]": {
       data?: null | unknown[];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfOidcProviderResponse[]": {
       data?: null | components["schemas"]["OidcProviderResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPagedResultOfAgentflow: {
       data?: null | components["schemas"]["PagedResultOfAgentflow"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPagedResultOfAgentflowTraceDto: {
       data?: null | components["schemas"]["PagedResultOfAgentflowTraceDto"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPagedResultOfAgentResponse: {
       data?: null | components["schemas"]["PagedResultOfAgentResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPagedResultOfMcpServer: {
       data?: null | components["schemas"]["PagedResultOfMcpServer"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPagedResultOfProjectConversationSummaryResponse: {
       data?: null | components["schemas"]["PagedResultOfProjectConversationSummaryResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPagedResultOfSkillResponse: {
       data?: null | components["schemas"]["PagedResultOfSkillResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPagedResultOfUserMemorySummaryResponse: {
       data?: null | components["schemas"]["PagedResultOfUserMemorySummaryResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfPluginInstallationResponse: {
       data?: null | components["schemas"]["PluginInstallationResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfPluginResponse[]": {
       data?: null | components["schemas"]["PluginResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfProjectConversationMessagePageResponse: {
       data?: null | components["schemas"]["ProjectConversationMessagePageResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfProjectConversationResponse: {
       data?: null | components["schemas"]["ProjectConversationResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfProjectResponse: {
       data?: null | components["schemas"]["ProjectResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfProjectResponse[]": {
       data?: null | components["schemas"]["ProjectResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfProvider: {
       data?: null | components["schemas"]["Provider"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfProvider[]": {
       data?: null | components["schemas"]["Provider"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfProviderModelDiscoveryResponse: {
       data?: null | components["schemas"]["ProviderModelDiscoveryResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfQuickPromptManageResponse: {
       data?: null | components["schemas"]["QuickPromptManageResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfSkillResponse: {
       data?: null | components["schemas"]["SkillResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfSkillResponse[]": {
       data?: null | components["schemas"]["SkillResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfstring: {
-      data: null | string;
+      data?: null | string;
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfToolLiteInfo: {
       data?: null | components["schemas"]["ToolLiteInfo"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     "ApiResultOfToolLiteInfo[]": {
       data?: null | components["schemas"]["ToolLiteInfo"][];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     ApiResultOfUserMemoryDetailResponse: {
       data?: null | components["schemas"]["UserMemoryDetailResponse"];
       /** Format: int32 */
       code: number;
       title: string;
-      detail: null | string;
+      detail?: null | string;
     };
     /** @enum {unknown} */
     AuthProviderType: "Oidc" | "OAuth2";
@@ -5344,7 +5344,7 @@ export interface components {
     CapabilitySourceResponse: {
       id: string;
       kind: components["schemas"]["CapabilitySourceKindResponse"];
-      provider: null | string;
+      provider?: null | string;
       mcpTransport?: null | components["schemas"]["McpTransportResponse"];
       credentialBindings?: components["schemas"]["CredentialBindingResponse"][];
     };
@@ -5376,12 +5376,12 @@ export interface components {
       alias: string;
       enabled: boolean;
       status: components["schemas"]["ConnectionStatusResponse"];
-      subject: null | string;
+      subject?: null | string;
       /** Format: date-time */
       expiresAtUtc?: null | string;
       /** Format: date-time */
       lastValidatedAtUtc?: null | string;
-      lastValidationErrorCode: null | string;
+      lastValidationErrorCode?: null | string;
       configuration?: {
         [key: string]: string;
       };
@@ -5422,7 +5422,7 @@ export interface components {
     ConnectorResponse: {
       id: string;
       displayName: string;
-      description: null | string;
+      description?: null | string;
       authSchemes?: components["schemas"]["AuthSchemeResponse"][];
       capabilitySources?: components["schemas"]["CapabilitySourceResponse"][];
     };
@@ -5432,10 +5432,10 @@ export interface components {
     CredentialBindingResponse: {
       sourceKind: components["schemas"]["CredentialValueSourceKindResponse"];
       authSchemeId: string;
-      fieldId: null | string;
+      fieldId?: null | string;
       target: components["schemas"]["CredentialBindingTargetResponse"];
       targetName: string;
-      valuePrefix: null | string;
+      valuePrefix?: null | string;
     };
     /** @enum {unknown} */
     CredentialBindingTargetResponse: "EnvironmentVariable" | "HttpHeader";
@@ -5476,7 +5476,7 @@ export interface components {
     EmptyToolOptions: Record<string, never>;
     ExecutionPermissionCapabilities: {
       supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
-      reason: null | string;
+      reason?: null | string;
     };
     ExternalAgentKind: number;
     ExternalAgentOptionResponse: {
@@ -5495,9 +5495,9 @@ export interface components {
       size?: null | number | string;
       /** Format: date-time */
       modifiedTime?: null | string;
-      gitStatus: null | string;
-      gitStagedStatus: null | string;
-      gitUnstagedStatus: null | string;
+      gitStatus?: null | string;
+      gitStagedStatus?: null | string;
+      gitUnstagedStatus?: null | string;
     };
     FileListResponse: {
       items?: components["schemas"]["FileItem"][];
@@ -5517,7 +5517,7 @@ export interface components {
       label: string;
       type: components["schemas"]["FormFieldTypeResponse"];
       isRequired: boolean;
-      description: null | string;
+      description?: null | string;
     };
     /** @enum {unknown} */
     FormFieldTypeResponse: "Text" | "Secret" | "Url";
@@ -5532,7 +5532,7 @@ export interface components {
       /** Format: uuid */
       agentId?: null | string;
       name: string;
-      prompt: null | string;
+      prompt?: null | string;
       triggerType: components["schemas"]["TriggerType"];
       triggerValue: string;
       /** Format: date-time */
@@ -5543,15 +5543,15 @@ export interface components {
       retryCount: number;
       /** Format: int32 */
       maxRetryCount: number;
-      lastError: null | string;
+      lastError?: null | string;
       /** Format: byte */
       rowVersion?: string;
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     JobCreateRequest: {
       /** Format: uuid */
@@ -5560,7 +5560,7 @@ export interface components {
       /** Format: uuid */
       agentId?: null | string;
       name: string;
-      prompt: null | string;
+      prompt?: null | string;
       triggerType: components["schemas"]["TriggerType"];
       triggerValue: string;
       /** Format: int32 */
@@ -5595,7 +5595,7 @@ export interface components {
       /** Format: uuid */
       agentId?: null | string;
       name: string;
-      prompt: null | string;
+      prompt?: null | string;
       triggerType: components["schemas"]["TriggerType"];
       triggerValue: string;
       /** Format: int32 */
@@ -5615,21 +5615,21 @@ export interface components {
       /** @description Human-readable display name (e.g., "GitHub MCP Server"). */
       name: string;
       /** @description Description of the server's capabilities. */
-      description: null | string;
+      description?: null | string;
       /** @description Transport type: "stdio", "http". */
       transportType: string;
       /**
        * @description Command to launch the MCP server process (stdio transport only).
        *     Examples: "dnx", "npx", "python"
        */
-      command: null | string;
+      command?: null | string;
       /**
        * @description Arguments for the command (stdio transport only).
        *     Example: ["-y", "@modelcontextprotocol/server-github"]
        */
       arguments?: string[];
       /** @description Working directory for the stdio process. */
-      workingDirectory: null | string;
+      workingDirectory?: null | string;
       /**
        * @description Environment variables for the stdio process.
        *     Values may reference secrets using {{secret:key_name}} syntax.
@@ -5638,7 +5638,7 @@ export interface components {
         [key: string]: string;
       };
       /** @description URL for HTTP/SSE transport. */
-      url: null | string;
+      url?: null | string;
       /** @description HTTP headers for HTTP/SSE transport (e.g., auth tokens). */
       headers?: {
         [key: string]: string;
@@ -5648,10 +5648,10 @@ export interface components {
       agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     McpToolItem: {
       name: string;
@@ -5703,9 +5703,9 @@ export interface components {
     McpTransportKindResponse: "Stdio" | "Http" | "Sse";
     McpTransportResponse: {
       kind: components["schemas"]["McpTransportKindResponse"];
-      command: null | string;
+      command?: null | string;
       arguments?: string[];
-      endpoint: null | string;
+      endpoint?: null | string;
     };
     ModelCreateRequest: {
       name: string;
@@ -5752,10 +5752,10 @@ export interface components {
       provider?: null | components["schemas"]["Provider"];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     ModelProviderUpdateRequest: {
       /** Format: double */
@@ -5780,9 +5780,9 @@ export interface components {
     OAuth2AuthorizationCodeResponse: {
       authorizationEndpoint: string;
       tokenEndpoint: string;
-      userInfoEndpoint: null | string;
+      userInfoEndpoint?: null | string;
       clientIdFieldId: string;
-      clientSecretFieldId: null | string;
+      clientSecretFieldId?: null | string;
       subjectResolution?: components["schemas"]["OAuthSubjectResolutionResponse"];
       usePkce: boolean;
       clientAuthenticationMethod: components["schemas"]["OAuth2ClientAuthenticationMethodResponse"];
@@ -5936,7 +5936,7 @@ export interface components {
       id: string;
       version: string;
       displayName: string;
-      description: null | string;
+      description?: null | string;
       tags?: string[];
       connectors?: components["schemas"]["ConnectorResponse"][];
       skills?: components["schemas"]["PluginSkillResponse"][];
@@ -5947,12 +5947,12 @@ export interface components {
       contentPath: string;
     };
     ProblemDetails: {
-      type: null | string;
-      title: null | string;
+      type?: null | string;
+      title?: null | string;
       /** Format: int32 */
       status?: number;
-      detail: null | string;
-      instance: null | string;
+      detail?: null | string;
+      instance?: null | string;
     };
     ProjectConnectionRelationResponse: {
       /** Format: uuid */
@@ -6108,15 +6108,15 @@ export interface components {
       name: string;
       providerType: components["schemas"]["ProviderType"];
       endpoint: string;
-      description: null | string;
+      description?: null | string;
       models?: components["schemas"]["ModelProviderRelation"][];
       authConfigs?: components["schemas"]["ProviderAuthConfig"][];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     ProviderAuthConfig: {
       /** Format: uuid */
@@ -6124,16 +6124,16 @@ export interface components {
       /** Format: uuid */
       providerId: string;
       authType: components["schemas"]["ProviderAuthType"];
-      apiKey: null | string;
-      envName: null | string;
+      apiKey?: null | string;
+      envName?: null | string;
       enable: boolean;
       provider?: null | components["schemas"]["Provider"];
       /** Format: date-time */
       createTime: string;
-      createBy: null | string;
+      createBy?: null | string;
       /** Format: date-time */
       updateTime?: null | string;
-      updateBy: null | string;
+      updateBy?: null | string;
     };
     ProviderAuthConfigRequest: {
       authType: components["schemas"]["ProviderAuthType"];
@@ -6174,7 +6174,7 @@ export interface components {
       id: string;
       label: string;
       text: string;
-      description: null | string;
+      description?: null | string;
     };
     QuickPromptList: {
       items: components["schemas"]["QuickPromptResponse"][];
@@ -6210,7 +6210,7 @@ export interface components {
     };
     SecretFieldUpdateRequest: {
       action: components["schemas"]["SecretUpdateAction"];
-      secretValue: null | string;
+      secretValue?: null | string;
     };
     /** @enum {unknown} */
     SecretUpdateAction: "Keep" | "Set" | "Clear";

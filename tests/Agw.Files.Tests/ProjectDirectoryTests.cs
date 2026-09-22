@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
-using Agw.Files.Exceptions;
 using Agw.Files.Infrastructure.Git;
 using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
@@ -83,7 +82,10 @@ public sealed class ProjectDirectoryTests : IDisposable
     [InlineData("../../README.md")]
     public async Task ReadAsync_PathOutsideSelectedDirectory_IsRejected(string path)
     {
-        await Assert.ThrowsAsync<AgwFilesException>(() => _files.ReadAsync(_projectId, path, Token, _directoryId));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            _files.ReadAsync(_projectId, path, Token, _directoryId)
+        );
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
     }
 
     [Theory]

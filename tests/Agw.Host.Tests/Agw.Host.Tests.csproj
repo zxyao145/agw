@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
@@ -16,4 +17,19 @@
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj" />
   </ItemGroup>
+
+  <!--
+    三个 Host 可执行程序集的 XML 文档都声明 T:Program，OpenAPI XML 注释生成器会因重复键失败；
+    OpenAPI 文档测试只需要模块 Controller 的元数据，因此排除这些文档文件。
+    All three Host executables document T:Program, which makes the OpenAPI XML comment generator fail on a duplicate key;
+    OpenAPI document tests only need module Controller metadata, so those XML files are excluded.
+  -->
+  <Target Name="RemoveHostXmlDocsFromOpenApiGenerator" AfterTargets="GenerateAdditionalXmlFilesForOpenApi">
+    <ItemGroup>
+      <AdditionalFiles
+        Remove="@(AdditionalFiles)"
+        Condition="$([System.String]::Copy('%(Filename)').StartsWith('agw-'))"
+      />
+    </ItemGroup>
+  </Target>
 </Project>

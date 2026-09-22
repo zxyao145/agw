@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Setup/Agw.Setup.csproj" />
   </ItemGroup>
 </Project>

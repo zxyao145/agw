@@ -5467,11 +5467,7 @@
           "enableSummary",
           "type",
           "externalAgentKind",
-          "extra",
-          "responseSchema",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -5639,8 +5635,7 @@
           "description",
           "systemPrompt",
           "modelProviderId",
-          "enableSummary",
-          "responseSchema"
+          "enableSummary"
         ],
         "type": "object",
         "properties": {
@@ -5776,12 +5771,9 @@
         "required": [
           "id",
           "name",
-          "description",
           "enable",
           "systemPrompt",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -5894,12 +5886,7 @@
           "sourceNodeId",
           "targetNodeId",
           "kind",
-          "label",
-          "conditionJson",
-          "configJson",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -6036,13 +6023,7 @@
           "agentflowId",
           "nodeId",
           "kind",
-          "name",
-          "positionJson",
-          "instructions",
-          "configJson",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -6190,13 +6171,10 @@
           "taskId",
           "agentflowId",
           "nodeId",
-          "nodeName",
           "nodeKind",
-          "agentName",
           "input",
           "durationMilliseconds",
-          "status",
-          "error"
+          "status"
         ],
         "type": "object",
         "properties": {
@@ -6506,8 +6484,7 @@
           "createBy",
           "updateTime",
           "updateBy",
-          "resultFormat",
-          "responseSchema"
+          "resultFormat"
         ],
         "type": "object",
         "properties": {
@@ -6832,12 +6809,9 @@
         "required": [
           "id",
           "name",
-          "description",
           "maxContextWindowTokens",
           "maxOutputTokens",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -6944,7 +6918,6 @@
           "uri",
           "kind",
           "mediaType",
-          "name",
           "data"
         ],
         "properties": {
@@ -6981,8 +6954,6 @@
       "AgwContentAgwErrorContent": {
         "required": [
           "kind",
-          "errorCode",
-          "details",
           "content"
         ],
         "properties": {
@@ -7023,8 +6994,7 @@
       },
       "AgwContentAgwFunctionCallContent": {
         "required": [
-          "kind",
-          "content"
+          "kind"
         ],
         "properties": {
           "type": {
@@ -7055,8 +7025,7 @@
       },
       "AgwContentAgwFunctionResultContent": {
         "required": [
-          "kind",
-          "content"
+          "kind"
         ],
         "properties": {
           "type": {
@@ -7087,8 +7056,7 @@
       },
       "AgwContentAgwTextContent": {
         "required": [
-          "kind",
-          "content"
+          "kind"
         ],
         "properties": {
           "type": {
@@ -7119,8 +7087,7 @@
       },
       "AgwContentAgwTextReasoningContent": {
         "required": [
-          "kind",
-          "content"
+          "kind"
         ],
         "properties": {
           "type": {
@@ -7225,8 +7192,8 @@
           },
           "createdAt": {
             "type": [
-              "string",
-              "null"
+              "null",
+              "string"
             ],
             "format": "date-time"
           },
@@ -7276,9 +7243,7 @@
       "ApiResult": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7300,9 +7265,7 @@
       "ApiResultOfAgentflow": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7334,9 +7297,7 @@
       "ApiResultOfAgentflow[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7367,9 +7328,7 @@
       "ApiResultOfAgentflowEdge[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7400,9 +7359,7 @@
       "ApiResultOfAgentflowNode[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7433,9 +7390,7 @@
       "ApiResultOfAgentListResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7466,9 +7421,7 @@
       "ApiResultOfAgentResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7500,9 +7453,7 @@
       "ApiResultOfAgentSuggestionsResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7534,9 +7485,7 @@
       "ApiResultOfAgwAiModel": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7568,9 +7517,7 @@
       "ApiResultOfAgwAiModel[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7601,9 +7548,7 @@
       "ApiResultOfConnectionResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7635,9 +7580,7 @@
       "ApiResultOfConnectionResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7668,9 +7611,7 @@
       "ApiResultOfDashboardStatsResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7702,9 +7643,7 @@
       "ApiResultOfDesktopExchangeResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7736,9 +7675,7 @@
       "ApiResultOfDictionaryOfstringAndListOfToolLiteInfo": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7772,9 +7709,7 @@
       "ApiResultOfExecutionPermissionCapabilities": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7806,9 +7741,7 @@
       "ApiResultOfExternalAgentOptionResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7839,9 +7772,7 @@
       "ApiResultOfFileListResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7873,9 +7804,7 @@
       "ApiResultOfFileSearchResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7907,9 +7836,7 @@
       "ApiResultOfIReadOnlyListOfQuickPromptResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7940,9 +7867,7 @@
       "ApiResultOfJob": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -7974,9 +7899,7 @@
       "ApiResultOfJob[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8007,9 +7930,7 @@
       "ApiResultOfJobLogResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8040,9 +7961,7 @@
       "ApiResultOfMcpServer": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8074,9 +7993,7 @@
       "ApiResultOfMcpServer[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8107,9 +8024,7 @@
       "ApiResultOfMcpToolServerConnectResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8141,9 +8056,7 @@
       "ApiResultOfModelProviderRelation": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8175,9 +8088,7 @@
       "ApiResultOfOAuthAuthorizeStartResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8209,9 +8120,7 @@
       "ApiResultOfOAuthCallbackInfoResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8243,9 +8152,7 @@
       "ApiResultOfOAuthRefreshResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8277,9 +8184,7 @@
       "ApiResultOfObject": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8302,9 +8207,7 @@
       "ApiResultOfObject[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8332,9 +8235,7 @@
       "ApiResultOfOidcProviderResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8365,9 +8266,7 @@
       "ApiResultOfPagedResultOfAgentflow": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8399,9 +8298,7 @@
       "ApiResultOfPagedResultOfAgentflowTraceDto": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8433,9 +8330,7 @@
       "ApiResultOfPagedResultOfAgentResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8467,9 +8362,7 @@
       "ApiResultOfPagedResultOfMcpServer": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8501,9 +8394,7 @@
       "ApiResultOfPagedResultOfProjectConversationSummaryResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8535,9 +8426,7 @@
       "ApiResultOfPagedResultOfSkillResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8569,9 +8458,7 @@
       "ApiResultOfPagedResultOfUserMemorySummaryResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8603,9 +8490,7 @@
       "ApiResultOfPluginInstallationResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8637,9 +8522,7 @@
       "ApiResultOfPluginResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8670,9 +8553,7 @@
       "ApiResultOfProjectConversationMessagePageResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8704,9 +8585,7 @@
       "ApiResultOfProjectConversationResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8738,9 +8617,7 @@
       "ApiResultOfProjectResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8772,9 +8649,7 @@
       "ApiResultOfProjectResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8805,9 +8680,7 @@
       "ApiResultOfProvider": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8839,9 +8712,7 @@
       "ApiResultOfProvider[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8872,9 +8743,7 @@
       "ApiResultOfProviderModelDiscoveryResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8906,9 +8775,7 @@
       "ApiResultOfQuickPromptManageResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8940,9 +8807,7 @@
       "ApiResultOfSkillResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -8974,9 +8839,7 @@
       "ApiResultOfSkillResponse[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -9006,11 +8869,8 @@
       },
       "ApiResultOfstring": {
         "required": [
-          "data",
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -9038,9 +8898,7 @@
       "ApiResultOfToolLiteInfo": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -9072,9 +8930,7 @@
       "ApiResultOfToolLiteInfo[]": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -9105,9 +8961,7 @@
       "ApiResultOfUserMemoryDetailResponse": {
         "required": [
           "code",
-          "title",
-          "detail",
-          "contentType"
+          "title"
         ],
         "type": "object",
         "properties": {
@@ -9221,8 +9075,7 @@
       "CapabilitySourceResponse": {
         "required": [
           "id",
-          "kind",
-          "provider"
+          "kind"
         ],
         "type": "object",
         "properties": {
@@ -9326,9 +9179,7 @@
           "displayName",
           "alias",
           "enabled",
-          "status",
-          "subject",
-          "lastValidationErrorCode"
+          "status"
         ],
         "type": "object",
         "properties": {
@@ -9472,8 +9323,7 @@
       "ConnectorResponse": {
         "required": [
           "id",
-          "displayName",
-          "description"
+          "displayName"
         ],
         "type": "object",
         "properties": {
@@ -9518,10 +9368,8 @@
         "required": [
           "sourceKind",
           "authSchemeId",
-          "fieldId",
           "target",
-          "targetName",
-          "valuePrefix"
+          "targetName"
         ],
         "type": "object",
         "properties": {
@@ -9676,8 +9524,7 @@
       },
       "ExecutionPermissionCapabilities": {
         "required": [
-          "supportedPermissionModes",
-          "reason"
+          "supportedPermissionModes"
         ],
         "type": "object",
         "properties": {
@@ -9728,10 +9575,7 @@
         "required": [
           "name",
           "path",
-          "type",
-          "gitStatus",
-          "gitStagedStatus",
-          "gitUnstagedStatus"
+          "type"
         ],
         "type": "object",
         "properties": {
@@ -9840,8 +9684,7 @@
           "id",
           "label",
           "type",
-          "isRequired",
-          "description"
+          "isRequired"
         ],
         "type": "object",
         "properties": {
@@ -9881,7 +9724,6 @@
           "id",
           "projectId",
           "name",
-          "prompt",
           "triggerType",
           "triggerValue",
           "nextRunTime",
@@ -9889,10 +9731,7 @@
           "isEnabled",
           "retryCount",
           "maxRetryCount",
-          "lastError",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -9993,7 +9832,6 @@
         "required": [
           "projectId",
           "name",
-          "prompt",
           "triggerType",
           "triggerValue",
           "maxRetryCount",
@@ -10122,7 +9960,6 @@
         "required": [
           "projectId",
           "name",
-          "prompt",
           "triggerType",
           "triggerValue",
           "maxRetryCount",
@@ -10194,15 +10031,9 @@
         "required": [
           "id",
           "name",
-          "description",
           "transportType",
-          "command",
-          "workingDirectory",
-          "url",
           "enabled",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -10520,9 +10351,7 @@
       },
       "McpTransportResponse": {
         "required": [
-          "kind",
-          "command",
-          "endpoint"
+          "kind"
         ],
         "type": "object",
         "properties": {
@@ -10645,9 +10474,7 @@
           "cacheRead",
           "cacheWrite",
           "rpsLimit",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -10824,9 +10651,7 @@
         "required": [
           "authorizationEndpoint",
           "tokenEndpoint",
-          "userInfoEndpoint",
           "clientIdFieldId",
-          "clientSecretFieldId",
           "usePkce",
           "clientAuthenticationMethod",
           "supportsRefresh"
@@ -11351,8 +11176,7 @@
         "required": [
           "id",
           "version",
-          "displayName",
-          "description"
+          "displayName"
         ],
         "type": "object",
         "properties": {
@@ -11411,12 +11235,6 @@
         }
       },
       "ProblemDetails": {
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance"
-        ],
         "type": "object",
         "properties": {
           "type": {
@@ -12116,10 +11934,7 @@
           "name",
           "providerType",
           "endpoint",
-          "description",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -12184,12 +11999,8 @@
           "id",
           "providerId",
           "authType",
-          "apiKey",
-          "envName",
           "enable",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "createTime"
         ],
         "type": "object",
         "properties": {
@@ -12423,8 +12234,7 @@
         "required": [
           "id",
           "label",
-          "text",
-          "description"
+          "text"
         ],
         "type": "object",
         "properties": {
@@ -12572,8 +12382,7 @@
       },
       "SecretFieldUpdateRequest": {
         "required": [
-          "action",
-          "secretValue"
+          "action"
         ],
         "type": "object",
         "properties": {

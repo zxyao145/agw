@@ -14,7 +14,9 @@
 
 ## 架构设计
 
-### AD-01 · Files 模块维护独立于 `AgwException` 的错误体系，并把 `/api/files` 下的全部异常改写为 500
+### ~~AD-01 · Files 模块维护独立于 `AgwException` 的错误体系，并把 `/api/files` 下的全部异常改写为 500~~
+
+已修复（2026-09-23）。`AgwFilesException`、`FilesErrorCode`、`FileEndpointExceptionMappingMiddleware` 及其 Host 注册与测试已删除。`ErrorCodes` 新增 `FilePathOutsideRoot = 403_0005` 与 `FileOperationFailed = 500_0027`；`LocalFileSystem` 抛出 `AgwException`，`FilesController.MapError` 使用 `ErrorCodes.ResourceNotFound`、`InvalidParam`、`FileOperationFailed` 构造信封。`ExecutionHub` 与 `ToolInvocationExceptionHandler` 只处理 `AgwException`。新增 `tests/Agw.Files.Tests/FilesEndpointErrorEnvelopeTests.cs`，通过 TestServer 验证越界路径返回 403 信封、目录不可用返回 404 信封。
 
 **证据：**
 
@@ -33,7 +35,9 @@
 3. `ExecutionHub` 只保留 `AgwException` 的一份 `catch`。
 4. 在 `Agw.Files.Tests` 补一条端到端测试：外部 Project 的 `/api/files/list` 返回 404 信封，越界路径返回 403 信封。
 
-### AD-02 · `Agw.Setup` 的两条项目引用不成立
+### ~~AD-02 · `Agw.Setup` 的两条项目引用不成立~~
+
+已修复（2026-09-23）。`IDatabaseBootstrapper.InitializeAsync` 只接收 `CancellationToken`；`Agw.Infrastructure.Data.DatabaseBootstrapper` 自行读取 `IOptionsMonitor<DatabaseSettings>` 并用 `DatabaseConnectionStringResolver` 解析连接字符串，与 `AgwDbContext` 注册使用同一份配置。`SetupInitializationService` 只依赖 `IInitializationStateStore`、`IDatabaseBootstrapper`、`IPasswordHasher<object>`；`Agw.Setup.csproj` 只保留 `Agw.Auth` 与 `Agw.Shared`。依赖矩阵、`docs/2.Architecture.md` 依赖图与 `tests/Agw.Setup.Tests` 的项目引用已同步。
 
 **证据：**
 
@@ -48,7 +52,9 @@
 2. `Agw.Setup.csproj` 只保留 `Agw.Auth` 与 `Agw.Shared`。
 3. 同步更新 [BackendArchitectureTests.cs](../../tests/Agw.Architecture.Tests/BackendArchitectureTests.cs) 的 `AllowedProjectDependencies["Agw.Setup"]` 与 `docs/2.Architecture.md` 依赖图。
 
-### AD-03 · `Agw.Projects` 引用具体模块 `Agw.Integrations`、`Agw.Skills`，实际只使用它们的 Contracts 程序集
+### ~~AD-03 · `Agw.Projects` 引用具体模块 `Agw.Integrations`、`Agw.Skills`，实际只使用它们的 Contracts 程序集~~
+
+已修复（2026-09-23）。`Agw.Projects.csproj` 改为引用 `Agw.Integrations.Contracts` 与 `Agw.Skills.Contracts`；依赖矩阵与 `docs/2.Architecture.md` 依赖图同步，依赖图补充了 `Agw.Integrations.Contracts`、`Agw.Providers.Contracts`、`Agw.Skills.Contracts` 节点及其现有引用边。
 
 **证据：** [Agw.Projects.csproj](../../src/server/Agw.Projects/Agw.Projects.csproj) 第 10、12 行。整个 Projects 模块对这两个模块的引用只有 [ProjectAppService.cs](../../src/server/Agw.Projects/Application/ProjectAppService.cs) 第 5 行的 `Agw.Integrations.Contracts.References` 与第 11 行的 `Agw.Skills.Contracts.References`，两个命名空间分别位于 `Agw.Integrations.Contracts` 与 `Agw.Skills.Contracts` 项目。审查时用替换为 Contracts 引用的 csproj 编译 `Agw.Projects`，构建成功，随后已恢复 csproj。
 
@@ -58,13 +64,17 @@
 
 ### AD-04 · `IocUtil` 是没有任何调用者的静态 Service Locator
 
+处理方式（2026-09-23）：为 `IocUtil` 添加 `[Obsolete]` 注解，类与 `Program.cs` 的两处注册保留；两处使用产生 CS0618 警告。
+
 **证据：** [IocUtil.cs](../../src/server/Agw.Shared/Utils/IocUtil.cs) 通过静态属性暴露 `IServiceProvider` 与 `ILoggerFactory`；[Program.cs](../../src/server/Agw.Host/Program.cs) 第 284 行注册、第 381 行解析它以触发静态赋值；全仓库没有任何 `IocUtil.` 调用。`ErrorCodes.LoggerFactoryNotSet`、`ServiceProviderNotSet` 只被这个类使用。
 
 **后果：** 共享层保留了一个可以绕过构造函数注入的全局入口，与显式构造函数注入的编码规则相反。
 
 **修复：** 删除 `IocUtil.cs` 与 `Program.cs` 的两处引用。两个错误码按规则保留在目录中，不重新编号。
 
-### AD-05 · `Agw.<Module>.Contracts` 命名空间同时存在于 Contracts 程序集与具体程序集，守卫无法区分
+### ~~AD-05 · `Agw.<Module>.Contracts` 命名空间同时存在于 Contracts 程序集与具体程序集，守卫无法区分~~
+
+已修复（2026-09-23）。`BackendArchitectureTests` 新增 `ModuleSource_ReferencingSiblingOwnerLocalContractsNamespace_HasNoViolations`：对存在独立 `*.Contracts` 项目的模块，引用的 `Agw.<Module>.Contracts.*` 命名空间若只在具体程序集内声明，则跨模块引用视为违规；`AllowedOwnerLocalContractsConsumers` 固定了 `Agw.Skills.Contracts.Registration`（Agents、Jobs）、`Agw.Skills.Contracts.Remote`（Agents）、`Agw.Integrations.Contracts.Capabilities`（Agents）三条可执行扩展注册例外，`Agw.Infrastructure` 维持现有豁免。根命名空间 `Agw.Projects.Contracts` 由两个程序集共同声明，其中的 `IProjectAppService`、`ITaskAppService`、`ITaskSessionBindingService` 继续由既有的类型名守卫覆盖。守卫已通过临时注入 `using Agw.Providers.Contracts.Manager;` 验证能够定位到文件与行号。
 
 **证据：** Projects、Jobs、Skills、Integrations、Providers 五个模块的 `Contracts/` 目录都声明 `Agw.<Module>.Contracts.*` 命名空间，例如 [ProviderRequests.cs](../../src/server/Agw.Providers/Contracts/Manager/ProviderRequests.cs)、[IAgentSkillRegistration.cs](../../src/server/Agw.Skills/Contracts/Registration/IAgentSkillRegistration.cs)，与独立的 `Agw.<Module>.Contracts` 项目共用前缀。[BackendArchitectureTests.cs](../../tests/Agw.Architecture.Tests/BackendArchitectureTests.cs) 第 245 行的 `ModuleSource_ReferencingSiblingInternalLayer_HasNoViolations` 经第 605 行的 `ContainsInternalLayer` 只按 `Application`、`Domain`、`Infrastructure` 路径段判定，任何模块导入 `Agw.Providers.Contracts.Manager` 这类 HTTP DTO 都会被放行。当前没有越界实例（`Agw.Agents.Execution` 与 `Agw.Infrastructure` 的使用在依赖矩阵允许范围内）。
 
@@ -74,7 +84,9 @@
 
 ## 职责边界
 
-### RS-01 · Settings 模块的 DI 组合点位于 `Agw.Infrastructure`
+### ~~RS-01 · Settings 模块的 DI 组合点位于 `Agw.Infrastructure`~~
+
+已修复（2026-09-23）。`Agw.Host/Program.cs` 的模块组合链显式调用 `.AddSettings()`；`Agw.Infrastructure/DependencyInjection.cs` 只保留 `ISettingsPersistence`、`ISettingsDbContext` 的适配器注册。`EfSettingsPersistence` 的构造函数参数改为 `ISettingsDbContext`，实体状态通过 `Settings.Entry(setting)` 处理。`BackendArchitectureTests` 新增两条守卫：`InfrastructureSource_DoesNotComposeModuleRegistrations` 禁止 `Agw.Infrastructure` 源码调用任何模块的 `Add<Module>()`；`ModuleDbContextSeams_HaveConsumersBeyondRegistration` 要求每个 `I<Module>DbContext` 在声明、`AgwDbContext` 与 Infrastructure DI 之外至少有一个使用者。手工组合 Infrastructure 的测试（`SetupInitializationIntegrationTests`、`HostModuleCompositionTests`、`SettingsStoreTests`、`DatabaseInitializationStateStoreTests`）同步补齐 `AddSettings()` 或 `ISettingsDbContext` 注册。
 
 **证据：** [Agw.Infrastructure/DependencyInjection.cs](../../src/server/Agw.Infrastructure/DependencyInjection.cs) 第 115 行调用 `services.AddSettings()`；[Program.cs](../../src/server/Agw.Host/Program.cs) 第 324 至 354 行的模块组合链没有 `AddSettings`。第 117 行注册的 `ISettingsDbContext`，全仓库除 `AgwDbContext` 实现外没有任何消费者，[EfSettingsPersistence.cs](../../src/server/Agw.Infrastructure/Settings/EfSettingsPersistence.cs) 注入的是具体的 `AgwDbContext`。
 
@@ -85,7 +97,9 @@
 1. Host 组合链中显式加入 `.AddSettings()`，Infrastructure 只保留 `ISettingsPersistence` 的实现注册。
 2. `EfSettingsPersistence` 的构造函数参数改为 `ISettingsDbContext`，使接缝有真实使用者；`PersistenceOwnershipArchitectureTests.RawPersistenceAccessInventory` 中该文件的原始访问计数同步归零。
 
-### RS-02 · Host 的 OpenAPI 规则内嵌了 Agents 模块 DTO 的字段语义
+### ~~RS-02 · Host 的 OpenAPI 规则内嵌了 Agents 模块 DTO 的字段语义~~
+
+已修复（2026-09-23）。schema 规则移入 `Agw.Host/OpenApi/AgwOpenApiSchemaTransformer.cs`，只保留与模块无关的三条：int 格式、`ToolValueObject`/`ToolDefinition` 的多态判别字段、值类型与 `string` 属性按 `JsonPropertyInfo.IsGetNullable` 决定 required。`string?` 与 `Guid?` 因此按声明成为可选，`AgentUpdateRequest`、`AgentCreateRequest` 的两条专用规则随之消失。新增 `tests/Agw.Host.Tests/OpenApiSchemaTransformerTests.cs`，通过 TestServer 生成 Agents Controller 的 OpenAPI 文档并断言这两个 schema 的 required 集合。从开发服务器重新导出 `src/clients/packages/api/openapi.json` 并运行 `pnpm gen:api`：与之前的导出相比只有 `required` 数组变化，共 90 个 schema 移除了 `string?` 属性（含所有 `ApiResult*` 的 `contentType`、`detail`），`openapi.d.ts` 对应 134 处属性改为可选；Web、Desktop 与全部业务包 `typecheck` 通过。
 
 **证据：** [Program.cs](../../src/server/Agw.Host/Program.cs) 第 246 至 275 行的 schema transformer 对 `AgentUpdateRequest` 清空全部 required，对 `AgentCreateRequest` 移除 `extra` 的 required。
 

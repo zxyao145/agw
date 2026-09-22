@@ -2,7 +2,6 @@ using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Outbound.SignalR;
-using Agw.Files.Exceptions;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.AspNetCore.Authorization;
@@ -84,10 +83,6 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
         {
             throw CreateHubException(exception);
         }
-        catch (AgwFilesException exception)
-        {
-            throw CreateHubException(exception);
-        }
     }
 
     private static async Task<T> InvokeResultAsync<T>(Func<Task<T>> action)
@@ -100,15 +95,8 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
         {
             throw CreateHubException(exception);
         }
-        catch (AgwFilesException exception)
-        {
-            throw CreateHubException(exception);
-        }
     }
 
     private static HubException CreateHubException(AgwException exception) =>
-        new($"{exception.Code}: {exception.Message}");
-
-    private static HubException CreateHubException(AgwFilesException exception) =>
         new($"{exception.Code}: {exception.Message}");
 }

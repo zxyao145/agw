@@ -10,9 +10,9 @@ namespace Agw.Infrastructure.Settings;
 
 public sealed class EfSettingsPersistence : ISettingsPersistence
 {
-    private readonly AgwDbContext _context;
+    private readonly ISettingsDbContext _context;
 
-    public EfSettingsPersistence(AgwDbContext context)
+    public EfSettingsPersistence(ISettingsDbContext context)
     {
         _context = context;
     }
@@ -48,7 +48,7 @@ public sealed class EfSettingsPersistence : ISettingsPersistence
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
-            _context.Entry(setting).State = EntityState.Detached;
+            _context.Settings.Entry(setting).State = EntityState.Detached;
             if (await Query(key, userId).AnyAsync(cancellationToken))
                 return false;
             throw;
@@ -75,7 +75,7 @@ public sealed class EfSettingsPersistence : ISettingsPersistence
         }
         catch (DbUpdateConcurrencyException)
         {
-            _context.Entry(setting).State = EntityState.Detached;
+            _context.Settings.Entry(setting).State = EntityState.Detached;
             return false;
         }
     }

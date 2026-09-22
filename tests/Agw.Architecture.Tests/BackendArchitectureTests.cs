@@ -33,6 +33,19 @@ public sealed partial class BackendArchitectureTests
         "Agw.Tools/ToolValueResolution.cs"
     );
 
+    // 拥有独立 *.Contracts 程序集的模块，在具体程序集内声明的 Agw.<Module>.Contracts.* 命名空间属于所有者本地内容。
+    // 下列可执行扩展注册命名空间是唯一允许跨模块消费的例外，值为允许的消费方。
+    // Modules with a separate *.Contracts assembly keep any Agw.<Module>.Contracts.* namespace declared inside
+    // the concrete assembly owner-local. These executable extension registration namespaces are the only
+    // cross-module exceptions; the value lists the allowed consumers.
+    private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> AllowedOwnerLocalContractsConsumers =
+        new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+        {
+            ["Agw.Integrations.Contracts.Capabilities"] = Set("Agw.Agents"),
+            ["Agw.Skills.Contracts.Registration"] = Set("Agw.Agents", "Agw.Jobs"),
+            ["Agw.Skills.Contracts.Remote"] = Set("Agw.Agents"),
+        };
+
     private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> AllowedProjectDependencies =
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
         {
@@ -122,9 +135,9 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Auth",
                 "Agw.Data",
                 "Agw.Files",
-                "Agw.Integrations",
+                "Agw.Integrations.Contracts",
                 "Agw.Projects.Contracts",
-                "Agw.Skills",
+                "Agw.Skills.Contracts",
                 "Agw.Shared"
             ),
             ["Agw.Projects.Contracts"] = Set("Agw.Shared"),
@@ -145,7 +158,7 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Shared"] = Set(),
             ["Agw.Data"] = Set("Agw.Agents.Contracts", "Agw.Shared", "Agw.Providers.Contracts", "Agw.Skills.Contracts"),
 
-            ["Agw.Setup"] = Set("Agw.Auth", "Agw.Infrastructure", "Agw.Shared", "Agw.Skills"),
+            ["Agw.Setup"] = Set("Agw.Auth", "Agw.Shared"),
             ["Agw.Migrations.Postgres"] = Set("Agw.Infrastructure"),
             ["Agw.Migrations.Sqlite"] = Set("Agw.Infrastructure"),
         };
@@ -257,6 +270,76 @@ public sealed partial class BackendArchitectureTests
 
         // Assert
         Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void ModuleSource_ReferencingSiblingOwnerLocalContractsNamespace_HasNoViolations()
+    {
+        // Arrange
+        var serverRoot = GetServerRoot();
+        var sourceFiles = GetSourceFiles(serverRoot).ToArray();
+        var namespaceOwners = BuildNamespaceOwners(serverRoot, sourceFiles);
+
+        // Act
+        var violations = sourceFiles
+            .SelectMany(path => FindOwnerLocalContractsReferences(serverRoot, path, namespaceOwners))
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void InfrastructureSource_DoesNotComposeModuleRegistrations()
+    {
+        // Arrange
+        var serverRoot = GetServerRoot();
+
+        // Act
+        var violations = GetSourceFiles(Path.Combine(serverRoot, "Agw.Infrastructure"))
+            .SelectMany(path => FindMatches(serverRoot, path, ModuleCompositionCallRegex()))
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void ModuleDbContextSeams_HaveConsumersBeyondRegistration()
+    {
+        // Arrange
+        var serverRoot = GetServerRoot();
+        var registrationFiles = Set(
+            "Agw.Infrastructure/DependencyInjection.cs",
+            "Agw.Infrastructure/Data/AgwDbContext.cs"
+        );
+        var sources = GetSourceFiles(serverRoot)
+            .Select(path =>
+                (Path: NormalizePath(Path.GetRelativePath(serverRoot, path)), Source: File.ReadAllText(path))
+            )
+            .ToArray();
+        var seams = sources
+            .Where(static file => file.Path.Contains("/Application/Persistence/I", StringComparison.Ordinal))
+            .Select(static file => Path.GetFileNameWithoutExtension(file.Path))
+            .Where(static name => name.EndsWith("DbContext", StringComparison.Ordinal))
+            .ToArray();
+
+        // Act
+        var unusedSeams = seams
+            .Where(seam =>
+                !sources.Any(file =>
+                    !registrationFiles.Contains(file.Path)
+                    && !file.Path.EndsWith($"/{seam}.cs", StringComparison.Ordinal)
+                    && Regex.IsMatch(file.Source, $@"\b{seam}\b")
+                )
+            )
+            .OrderBy(static seam => seam, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(unusedSeams);
     }
 
     [Fact]
@@ -547,6 +630,69 @@ public sealed partial class BackendArchitectureTests
         }
     }
 
+    private static IEnumerable<string> FindOwnerLocalContractsReferences(
+        string serverRoot,
+        string sourceFile,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> namespaceOwners
+    )
+    {
+        var owningProject = GetOwningModule(serverRoot, sourceFile);
+        if (owningProject == "Agw.Infrastructure")
+        {
+            yield break;
+        }
+
+        var relativePath = NormalizePath(Path.GetRelativePath(serverRoot, sourceFile));
+        var lineNumber = 0;
+        foreach (var line in File.ReadLines(sourceFile))
+        {
+            lineNumber++;
+            var usingMatch = UsingDirectiveRegex().Match(line);
+            IEnumerable<string> referencedNamespaces = usingMatch.Success
+                ? [usingMatch.Groups["namespace"].Value]
+                : QualifiedAgwNameRegex()
+                    .Matches(line)
+                    .Select(static match => match.Groups["namespace"].Value)
+                    .Distinct(StringComparer.Ordinal);
+
+            foreach (var referencedNamespace in referencedNamespaces)
+            {
+                var contractsMatch = ModuleContractsNamespaceRegex().Match(referencedNamespace);
+                if (!contractsMatch.Success)
+                {
+                    continue;
+                }
+
+                var module = $"Agw.{contractsMatch.Groups["module"].Value}";
+                var contractsProject = $"{module}.Contracts";
+                if (owningProject == module || !AllowedProjectDependencies.ContainsKey(contractsProject))
+                {
+                    continue;
+                }
+
+                var owners = ResolveNamespaceOwners(referencedNamespace, namespaceOwners);
+                if (!owners.Contains(module) || owners.Contains(contractsProject))
+                {
+                    continue;
+                }
+
+                var allowedConsumers = AllowedOwnerLocalContractsConsumers
+                    .Where(pair =>
+                        string.Equals(referencedNamespace, pair.Key, StringComparison.Ordinal)
+                        || referencedNamespace.StartsWith($"{pair.Key}.", StringComparison.Ordinal)
+                    )
+                    .SelectMany(static pair => pair.Value)
+                    .ToHashSet(StringComparer.Ordinal);
+                if (allowedConsumers.Contains(owningProject))
+                {
+                    continue;
+                }
+
+                yield return $"{relativePath}:{lineNumber}: {owningProject} references owner-local {referencedNamespace} declared in {module}";
+            }
+        }
+    }
+
     private static IReadOnlySet<string> ResolveNamespaceOwners(
         string importedNamespace,
         IReadOnlyDictionary<string, IReadOnlySet<string>> namespaceOwners
@@ -700,6 +846,15 @@ public sealed partial class BackendArchitectureTests
 
     [GeneratedRegex(@"\b(?:global::)?(?<namespace>Agw(?:\.[A-Za-z_][A-Za-z0-9_]*)+)", RegexOptions.CultureInvariant)]
     private static partial Regex QualifiedAgwNameRegex();
+
+    [GeneratedRegex(@"^Agw\.(?<module>[A-Za-z_][A-Za-z0-9_]*)\.Contracts(?:\.|$)", RegexOptions.CultureInvariant)]
+    private static partial Regex ModuleContractsNamespaceRegex();
+
+    [GeneratedRegex(
+        @"\.Add(?:A2A|Agents|AgentExecution|Auth|Files|Integrations|Jobs|Projects|Providers|Settings|Setup|Skills|Tools)\s*\(",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex ModuleCompositionCallRegex();
 
     [GeneratedRegex(
         @"^\s*(?:public|internal|private|protected)?\s*(?:sealed\s+|abstract\s+|partial\s+)*(?:class|interface|record)\s+(?<type>[A-Za-z_][A-Za-z0-9_]*(?:AppService|RuntimeService))\b",
