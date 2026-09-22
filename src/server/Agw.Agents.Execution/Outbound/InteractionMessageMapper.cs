@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Outbound;
@@ -6,7 +7,7 @@ namespace Agw.Agents.Execution.Outbound;
 /// <summary>The single wire projection for live, persisted and replayed interactions.</summary>
 internal static class InteractionMessageMapper
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     public static AgwMessage Create(
         InteractionRequest request,

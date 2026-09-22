@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -10,7 +11,7 @@ namespace Agw.Agents.Contracts.Execution;
 public static class ConversationHistoryPrelude
 {
     private const string StateKey = "Agw.ConversationHistory.Prelude";
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     public static void Set(AgentSession? session, IReadOnlyList<ChatMessage> messages)
     {

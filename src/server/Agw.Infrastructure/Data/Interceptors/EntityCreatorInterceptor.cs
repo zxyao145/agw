@@ -1,93 +1,20 @@
-using Agw.Auth.Contracts;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Entities.Settings;
-using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Agw.Infrastructure.Data.Interceptors;
 
-public sealed class EntityCreatorInterceptor : SaveChangesInterceptor
+public sealed class EntityCreatorInterceptor : EntityAuditInterceptorBase
 {
-    private readonly IEntityAuditUserIdProvider _entityAuditUserIdProvider;
-    private readonly TimeProvider _timeProvider;
-
     public EntityCreatorInterceptor(IEntityAuditUserIdProvider entityAuditUserIdProvider, TimeProvider timeProvider)
-    {
-        _entityAuditUserIdProvider = entityAuditUserIdProvider;
-        _timeProvider = timeProvider;
-    }
+        : base(entityAuditUserIdProvider, timeProvider) { }
 
-    public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+    protected override void OnSavingEntry(EntityEntry entry, string userId, DateTimeOffset now)
     {
-        BeforeSaveChanges(eventData, _entityAuditUserIdProvider.GetUserId(), _timeProvider.GetUtcNow());
-        return base.SavingChanges(eventData, result);
-    }
-
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-        DbContextEventData eventData,
-        InterceptionResult<int> result,
-        CancellationToken cancellationToken = new CancellationToken()
-    )
-    {
-        BeforeSaveChanges(eventData, _entityAuditUserIdProvider.GetUserId(), _timeProvider.GetUtcNow());
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
-    }
-
-    private static void BeforeSaveChanges(DbContextEventData eventData, string userId, DateTimeOffset now)
-    {
-        if (eventData.Context is null)
+        if (entry.State == EntityState.Added)
         {
-            return;
-        }
-        foreach (var entry in eventData.Context.ChangeTracker.Entries())
-        {
-            if (entry.State == EntityState.Added)
-            {
-                EntityAuditStamping.StampCreated(entry, userId, now);
-                EnsureOwnerMatchesCurrentUser(entry);
-            }
-        }
-    }
-
-    private static void EnsureOwnerMatchesCurrentUser(EntityEntry entry)
-    {
-        if (entry.Entity is Setting { UserId: null })
-            return;
-        if (!UserInfoUtil.IsContextActive || UserInfoUtil.IsSystemScopeActive || entry.Entity is JobLog)
-        {
-            return;
-        }
-
-        var currentUserId = UserInfoUtil.RequiredUserId;
-        foreach (var propertyName in new[] { nameof(IEntityCreator.CreateBy), "UserId" })
-        {
-            var property = entry.Metadata.FindProperty(propertyName);
-            if (property == null)
-            {
-                continue;
-            }
-
-            var rawValue = entry.Property(propertyName).CurrentValue;
-            var value = rawValue is long numericId
-                ? numericId.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                : rawValue as string;
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                if (propertyName == "UserId")
-                {
-                    entry.Property(propertyName).CurrentValue = currentUserId;
-                }
-
-                continue;
-            }
-
-            if (!string.Equals(value.Trim(), currentUserId, StringComparison.Ordinal))
-            {
-                throw new AgwException(ErrorCodes.InvalidParam, $"{propertyName} must match the current user.");
-            }
+            EntityAuditStamping.StampCreated(entry, userId, now);
+            EntityOwnerGuard.EnsureOwnerMatchesCurrentUser(entry, EntityOwnerStage.Created);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Shared.Utils;
 
 namespace Agw.Skills.Contracts.Remote;
 
@@ -11,7 +12,7 @@ public sealed record RemoteSkillDefinition(
 
 public static class RemoteSkillDefinitionSerializer
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Options = WebJsonOptions.Default;
 
     public static string Serialize(RemoteSkillDefinition definition) => JsonSerializer.Serialize(definition, Options);
 

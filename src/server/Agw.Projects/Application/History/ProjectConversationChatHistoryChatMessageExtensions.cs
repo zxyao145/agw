@@ -1,12 +1,13 @@
 using System.Text.Json;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Application.History;
 
 public static class ProjectConversationChatHistoryChatMessageExtensions
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     public static ChatMessage? ToChatMessage(this ProjectConversationChatHistory record)
     {

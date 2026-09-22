@@ -9,6 +9,7 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,7 +22,7 @@ namespace Agw.Agents.Execution.Agentflows.Checkpoints;
 public sealed class AgentflowCheckpointStore
 {
     private const string CheckpointMessageType = "agentflow-checkpoint";
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IApplicationLock _applicationLock;

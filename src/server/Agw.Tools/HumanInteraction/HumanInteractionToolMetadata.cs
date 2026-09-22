@@ -7,7 +7,7 @@ public static class HumanInteractionToolMetadata
 {
     public const string SourceKey = "Agw.HumanInteraction.Source";
     private const string DescriptionKey = "Agw.HumanInteraction.Description";
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     public static InteractionSource ReadSource(ChatOptions? options) =>
         options?.AdditionalProperties?.TryGetValue(SourceKey, out var value) == true

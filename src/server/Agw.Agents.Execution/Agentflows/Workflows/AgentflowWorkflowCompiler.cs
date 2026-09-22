@@ -10,6 +10,7 @@ using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -158,7 +159,7 @@ public sealed class AgentflowWorkflowCompiler
     private const string LoopBarrierSourceSuffix = "__agw_loop_barrier_source";
     private const string LoopBarrierSuffix = "__agw_loop_barrier";
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     private static readonly AIAgentHostOptions AgentHostOptions = new()
     {
