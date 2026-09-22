@@ -9,7 +9,7 @@ using Agw.Auth.Contracts;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.History;
-using Agw.Projects.Domain.Services;
+using Agw.Projects.Domain.Rules;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
@@ -394,7 +394,7 @@ public sealed partial class EfCoreChatHistoryProvider
                 Id = Guid.CreateVersion7(),
                 ProjectId = projectId,
                 ContextId = contextId,
-                Title = TaskTitleFactory.Create(firstUserText),
+                Title = TaskTitleRules.Create(firstUserText),
                 CreateBy = ResolveCurrentUserId(),
                 CreateTime = now,
                 UpdateBy = ResolveCurrentUserId(),
@@ -404,10 +404,10 @@ public sealed partial class EfCoreChatHistoryProvider
         }
         else
         {
-            var titleFromUser = TaskTitleFactory.Create(firstUserText);
+            var titleFromUser = TaskTitleRules.Create(firstUserText);
             if (
-                string.Equals(projectConversation.Title, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal)
-                && !string.Equals(titleFromUser, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal)
+                string.Equals(projectConversation.Title, TaskTitleRules.DefaultTitle, StringComparison.Ordinal)
+                && !string.Equals(titleFromUser, TaskTitleRules.DefaultTitle, StringComparison.Ordinal)
             )
             {
                 projectConversation.Title = titleFromUser;

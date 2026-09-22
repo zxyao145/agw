@@ -5,9 +5,9 @@ using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Exceptions;
 using Microsoft.Extensions.FileSystemGlobbing;
 
-namespace Agw.Files.Application.Storage.Local;
+namespace Agw.Files.Infrastructure.Storage;
 
-public sealed class LocalFileSystem : IAgwFileSystem
+public sealed class LocalFileSystem : ILocalFileSystem
 {
     private static readonly TimeSpan SearchRegexTimeout = TimeSpan.FromSeconds(1);
 
@@ -58,12 +58,12 @@ public sealed class LocalFileSystem : IAgwFileSystem
         return fullPath;
     }
 
-    internal string ResolvePhysicalPath(string path)
+    public string ResolvePhysicalPath(string path)
     {
         return ResolvePath(path);
     }
 
-    internal string GetRelativePath(string fullPath)
+    public string GetRelativePath(string fullPath)
     {
         return ToRelativePath(fullPath);
     }

@@ -1,6 +1,6 @@
-namespace Agw.Projects.Domain.Services;
+namespace Agw.Projects.Domain.Rules;
 
-public static class TaskTitleFactory
+public static class TaskTitleRules
 {
     public const string DefaultTitle = "New Chat";
 

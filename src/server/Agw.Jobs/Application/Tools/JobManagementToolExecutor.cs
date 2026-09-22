@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using Agw.Auth.Contracts;
-using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
+using Agw.Jobs.Contracts;
 using Agw.Jobs.Contracts.Tools;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;

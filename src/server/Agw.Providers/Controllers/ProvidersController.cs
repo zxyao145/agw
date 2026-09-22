@@ -6,7 +6,7 @@ using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Providers.Controllers.Controllers;
+namespace Agw.Providers.Controllers;
 
 [ApiController]
 [Route("api/providers")]

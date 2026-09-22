@@ -1,7 +1,7 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
-using Agw.Files.Application.Storage.Resolver;
-using Agw.Files.Services;
+using Agw.Files.Infrastructure.Git;
+using Agw.Files.Infrastructure.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

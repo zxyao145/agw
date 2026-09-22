@@ -1,6 +1,6 @@
 using System.Security.Claims;
-using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
+using Agw.Jobs.Contracts;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;

@@ -1,4 +1,4 @@
-namespace Agw.Jobs.Application.Contracts;
+namespace Agw.Jobs.Contracts;
 
 public class JobEnabledUpdateRequest
 {

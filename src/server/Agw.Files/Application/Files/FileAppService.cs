@@ -1,7 +1,5 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
-using Agw.Files.Application.Storage.Local;
-using Agw.Files.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Files.Application.Files;
@@ -58,21 +56,21 @@ public sealed class FileAppService
             return FileOperationResult<FileListOutput>.Missing("Directory not found");
         }
 
-        if (diff && fileSystem is not LocalFileSystem)
+        if (diff && fileSystem is not ILocalFileSystem)
         {
             return FileOperationResult<FileListOutput>.Invalid(GitRequiresLocalFileSystem);
         }
 
         if (recursive && diff)
         {
-            return await GetAllChangedFilesAsync((LocalFileSystem)fileSystem, path, cancellationToken);
+            return await GetAllChangedFilesAsync((ILocalFileSystem)fileSystem, path, cancellationToken);
         }
 
         GitChangedFiles? changedFiles = null;
-        LocalFileSystem? local = null;
+        ILocalFileSystem? local = null;
         if (diff)
         {
-            local = (LocalFileSystem)fileSystem;
+            local = (ILocalFileSystem)fileSystem;
             var physicalPath = local.ResolvePhysicalPath(path);
             changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalPath, cancellationToken);
             if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
@@ -213,7 +211,7 @@ public sealed class FileAppService
             return FileOperationResult<FileDiffOutput>.Invalid("Path parameter is required");
         }
 
-        if (fileSystem is not LocalFileSystem localFileSystem)
+        if (fileSystem is not ILocalFileSystem localFileSystem)
         {
             return FileOperationResult<FileDiffOutput>.Invalid(GitRequiresLocalFileSystem);
         }
@@ -324,7 +322,7 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Invalid("Path parameter is required");
         }
 
-        if (fileSystem is not LocalFileSystem localFileSystem)
+        if (fileSystem is not ILocalFileSystem localFileSystem)
         {
             return FileOperationResult<FileMutationOutput>.Invalid(GitRequiresLocalFileSystem);
         }
@@ -430,7 +428,7 @@ public sealed class FileAppService
             .ThenBy(result => result.RelativePath, StringComparer.OrdinalIgnoreCase)
             .Take(limit)
             .Select(result =>
-                fileSystem is LocalFileSystem local
+                fileSystem is ILocalFileSystem local
                     ? result with
                     {
                         FullPath = NormalizePath(local.ResolvePhysicalPath(result.FullPath)),
@@ -483,7 +481,7 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Invalid("Path parameter is required");
         }
 
-        if (fileSystem is not LocalFileSystem localFileSystem)
+        if (fileSystem is not ILocalFileSystem localFileSystem)
         {
             return FileOperationResult<FileMutationOutput>.Invalid(GitRequiresLocalFileSystem);
         }
@@ -516,7 +514,7 @@ public sealed class FileAppService
     }
 
     private async Task<FileOperationResult<FileListOutput>> GetAllChangedFilesAsync(
-        LocalFileSystem fileSystem,
+        ILocalFileSystem fileSystem,
         string directoryPath,
         CancellationToken cancellationToken
     )

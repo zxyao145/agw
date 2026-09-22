@@ -1,4 +1,6 @@
-namespace Agw.Files.Services;
+using Agw.Files.Abstracts.Dtos;
+
+namespace Agw.Files.Abstracts;
 
 public interface IGitCommandService
 {

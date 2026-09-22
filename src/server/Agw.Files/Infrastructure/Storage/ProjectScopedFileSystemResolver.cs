@@ -1,13 +1,12 @@
 using System.Collections.Concurrent;
 using Agw.Files.Abstracts;
-using Agw.Files.Application.Storage.Local;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Files.Application.Storage.Resolver;
+namespace Agw.Files.Infrastructure.Storage;
 
 public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IProjectFileSystemCacheInvalidator
 {

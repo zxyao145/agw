@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
-using Agw.Files.Application.Storage.Resolver;
 using Agw.Files.Exceptions;
-using Agw.Files.Services;
+using Agw.Files.Infrastructure.Git;
+using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
