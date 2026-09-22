@@ -7223,6 +7223,13 @@
           "messageId": {
             "type": "string"
           },
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
           "author": {
             "type": [
               "null",

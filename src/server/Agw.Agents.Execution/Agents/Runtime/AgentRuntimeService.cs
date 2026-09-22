@@ -76,7 +76,14 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _agentAppService = agentAppService;
         _projectRuntimeFacade = projectRuntimeFacade;
         _capabilityComposer = capabilityComposer;
-        _chatHistoryProvider = chatHistoryProvider;
+        _chatHistoryProvider =
+            chatHistoryProvider?.GetService<Agw.Projects.Contracts.History.IConversationMessageWriter>() == null
+                ? chatHistoryProvider!
+                : new Agw.Agents.Execution.Agents.History.NormalizedChatHistoryProvider(
+                    chatHistoryProvider,
+                    timeProvider ?? TimeProvider.System,
+                    turnContextAccessor
+                );
         _providerSessionState = providerSessionState;
         _providerBindings = providerBindings;
         _dataPaths = dataPaths;

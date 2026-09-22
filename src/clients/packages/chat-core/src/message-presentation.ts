@@ -1,4 +1,9 @@
 import type { AiMessage } from "@agw/api";
+import {
+  getStreamingIdentity,
+  mergeStreamingMessagesById,
+  scopeMessagesByUserTurn,
+} from "@agw/execution-core";
 import { parseClaudeInitCommands } from "./claude-commands";
 import { isSystemInjectedMessage } from "./message-source";
 
@@ -157,6 +162,30 @@ export function prepareClaudeHistory(messages: readonly AiMessage[]): {
     messages: visibleMessages,
     commands: foundValidInit ? commands : [],
   };
+}
+
+/** Normalize historical fragments without moving content across real message boundaries. */
+export function prepareConversationHistory(messages: readonly AiMessage[]) {
+  const prepared = prepareClaudeHistory(messages);
+  const scoped = scopeMessagesByUserTurn(prepared.messages);
+  const merged: AiMessage[] = [];
+  for (let start = 0; start < scoped.length; ) {
+    const first = scoped[start];
+    let end = start + 1;
+    if (first.role === "assistant" && first.messageId?.trim()) {
+      const identity = getStreamingIdentity(first);
+      while (
+        end < scoped.length &&
+        getStreamingIdentity(scoped[end]) === identity &&
+        scoped[end].additionalProperties?.type === first.additionalProperties?.type &&
+        isResultMessage(scoped[end]) === isResultMessage(first)
+      )
+        end += 1;
+    }
+    merged.push(...mergeStreamingMessagesById(scoped.slice(start, end)));
+    start = end;
+  }
+  return { ...prepared, messages: merged };
 }
 
 type JsonParseResult = { parsed: true; value: unknown } | { parsed: false };

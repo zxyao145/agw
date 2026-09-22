@@ -33,10 +33,16 @@ internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
             return _innerProvider.InvokedAsync(failedContext, cancellationToken);
         }
 
-        var responseMessages = context
-            .ResponseMessages!.Where(message =>
-                !ClaudeCodeMessagePolicy.IsTransportEvent(message.Role, message.AdditionalProperties, message.Contents)
-            )
+        var responseMessages = PrepareResponseMessages(context.ResponseMessages!);
+#pragma warning disable MAAI001
+        var delegatedContext = new InvokedContext(context.Agent, context.Session, [], responseMessages);
+#pragma warning restore MAAI001
+        return _innerProvider.InvokedAsync(delegatedContext, cancellationToken);
+    }
+
+    internal static List<ChatMessage> PrepareResponseMessages(IEnumerable<ChatMessage> messages)
+    {
+        var responseMessages = CoalesceResponseMessages(messages)
             .Select(ExternalAgentChatHistoryAgent.CreatePersistableMessage)
             .OfType<ChatMessage>()
             .ToList();
@@ -44,11 +50,53 @@ internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
         {
             ConversationHistoryMetadata.ExcludeFromModelHistory(responseMessage);
         }
-#pragma warning disable MAAI001
-        var delegatedContext = new InvokedContext(context.Agent, context.Session, [], responseMessages);
-#pragma warning restore MAAI001
-        return _innerProvider.InvokedAsync(delegatedContext, cancellationToken);
+        return responseMessages;
     }
+
+    private static IEnumerable<ChatMessage> CoalesceResponseMessages(IEnumerable<ChatMessage> messages)
+    {
+        // 按消息身份合并同一条消息的所有片段，保留消息首次出现的顺序及独立通知。
+        // 通知或工具结果穿插在片段之间时，片段仍归属同一条消息。
+        // Combine every fragment of one message by message identity, retaining first appearance
+        // order and separate notifications. Notifications and tool results between two fragments
+        // keep their own place while the fragments still belong to one logical message.
+        List<List<ChatMessage>> groups = [];
+        Dictionary<(string Id, string? Author, bool Result, string? Type), int> groupIndexes = [];
+        foreach (var message in messages)
+        {
+            if (ClaudeCodeMessagePolicy.IsTransportEvent(message.Role, message.AdditionalProperties, message.Contents))
+                continue;
+
+            if (message.Role == ChatRole.Assistant && !string.IsNullOrWhiteSpace(message.MessageId))
+            {
+                var key = (
+                    message.MessageId,
+                    message.AuthorName,
+                    HasResultContent(message),
+                    message.AdditionalProperties?.GetValueOrDefault("type")?.ToString()
+                );
+                if (groupIndexes.TryGetValue(key, out var index))
+                {
+                    groups[index].Add(message);
+                    continue;
+                }
+                groupIndexes[key] = groups.Count;
+            }
+            groups.Add([message]);
+        }
+        foreach (var fragments in groups)
+            yield return CompleteMessage(fragments);
+
+        static ChatMessage CompleteMessage(List<ChatMessage> fragments) =>
+            fragments.Count == 1
+                ? fragments[0]
+                : new ChatResponse(fragments).ToChatResponseUpdates().ToChatResponse().Messages[0];
+    }
+
+    private static bool HasResultContent(ChatMessage message) =>
+        message.Contents.Any(content =>
+            content.AdditionalProperties?.GetValueOrDefault("type")?.ToString() == "result"
+        );
 
     private static bool IsSyntheticAssistantError(ChatMessage message) =>
         message.Role == ChatRole.Assistant

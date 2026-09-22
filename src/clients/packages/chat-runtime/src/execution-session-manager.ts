@@ -310,6 +310,7 @@ export class ExecutionSessionManager {
         scopeStreamingMessage(
           {
             messageId: input.messageId,
+            createdAt: input.createdAt,
             author: input.author,
             role: "user",
             contents: input.contents,

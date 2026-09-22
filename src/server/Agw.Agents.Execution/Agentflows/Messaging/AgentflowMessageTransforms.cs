@@ -203,6 +203,7 @@ internal static class AgentflowMessageTransforms
                 var input = message.Clone();
                 MarkNodeInput(input);
                 input.MessageId = Guid.CreateVersion7().ToString("N");
+                MessageTimestampMetadata.EnsureCreatedAt(input, TimeProvider.System.GetUtcNow());
                 return input;
             })
             .ToList();

@@ -513,6 +513,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     [Theory]
     [InlineData("function-loop-context-v1")]
     [InlineData("function-loop-context-v2")]
+    [InlineData("function-result-order-v3")]
     public async Task AsAgwAgent_StalledCompactionState_RebuildsFromCompleteHistory(string legacyVersion)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -559,7 +560,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.True(
             session.StateBag.TryGetValue<string>("stalled-compaction.agw-index-version", out var compactionIndexVersion)
         );
-        Assert.Equal("function-result-order-v3", compactionIndexVersion);
+        Assert.Equal("function-result-order-v4", compactionIndexVersion);
     }
 
     [Fact]

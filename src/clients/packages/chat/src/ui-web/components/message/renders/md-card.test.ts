@@ -71,7 +71,7 @@ test("markdown code blocks use a header and one visible background layer", () =>
   assert.match(blockBody, /overflow-hidden/);
   assert.match(headerBody, /border-b/);
   assert.match(preBody, /overflow-x-auto/);
-  assert.match(preBody, /p-4/);
+  assert.match(preBody, /p-3/);
   assert.match(nestedCodeBody, /bg-transparent/);
   assert.match(nestedCodeBody, /p-0/);
   assert.match(mdCardSource, /<MarkdownCodeBlock>\{children\}<\/MarkdownCodeBlock>/);
@@ -120,12 +120,10 @@ test("unfenced diff text does not produce per-line code block headers", async ()
 });
 
 test("indented code blocks keep plain pre styling", () => {
-  const preBody = getRuleBody("pre.msg-content-md-code");
-  const nestedCodeBody = getRuleBody("pre.msg-content-md-code > code.msg-content-md-code");
+  const codeBody = getRuleBody(".msg-content-md-code");
 
-  assert.match(preBody, /p-3/);
-  assert.match(nestedCodeBody, /bg-transparent/);
-  assert.match(nestedCodeBody, /p-0/);
+  assert.match(codeBody, /px-1/);
+  assert.match(codeBody, /py-0\.5/);
 });
 
 test("inline markdown code keeps the inline renderer without block controls", async () => {

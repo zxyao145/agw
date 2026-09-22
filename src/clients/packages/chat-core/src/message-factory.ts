@@ -24,6 +24,7 @@ export function createUserMessage(
 
   return {
     messageId: createUuidV7(),
+    createdAt: new Date().toISOString(),
     author: defaultUser,
     role: "user",
     contents,
@@ -33,6 +34,7 @@ export function createUserMessage(
 export function toExecutionUserInput(message: AiMessage): ExecutionUserInput<AiMessage> {
   return {
     messageId: message.messageId,
+    ...(message.createdAt ? { createdAt: message.createdAt } : {}),
     author: message.author,
     contents: message.contents.map(cloneMessageContent),
   };

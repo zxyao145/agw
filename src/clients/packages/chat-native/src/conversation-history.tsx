@@ -1,5 +1,6 @@
 import { parseSimpleUserInput, type SimpleUserInput } from "@agw/chat-core";
 import * as React from "react";
+import { useWorkSummary } from "@agw/chat-runtime/react";
 import { Image as ExpoImage } from "expo-image";
 import {
   Check,
@@ -31,6 +32,7 @@ import {
   buildQuestionResponse,
   buildConversationRenderModel,
   createAutoScrollState,
+  formatWorkedDuration,
   createQuestionSelections,
   normalizeMathDelimiters,
   updateAutoScrollState,
@@ -61,6 +63,7 @@ export type NativeConversationHistoryHandle = {
 
 export type NativeConversationHistoryProps = {
   items: ConversationRenderItem[];
+  conversationKey?: string;
   loading?: boolean;
   reconnectState?: ExecutionReconnectState | null;
   error?: string | null;
@@ -73,6 +76,7 @@ export type NativeConversationHistoryProps = {
 };
 
 export type NativeConversationHistoryHostProps = Omit<NativeConversationHistoryProps, "items"> & {
+  isCurrentTurnActive?: boolean;
   messages: import("@agw/api").AiMessage[];
   activeAgentId?: string | null;
   agentResultFormats?: readonly import("@agw/chat-core").AgentResultFormat[];
@@ -90,20 +94,30 @@ export const NativeConversationHistoryHost = React.forwardRef<
     checkpointAvailability,
     activeAgentId,
     agentResultFormats,
+    isCurrentTurnActive = false,
     ...props
   },
   ref,
 ) {
+  const active = isCurrentTurnActive || props.loading === true || props.reconnectState != null;
   const items = React.useMemo(
     () =>
       buildConversationRenderModel(messages, {
+        isCurrentTurnActive: active,
         activeAgentId,
         agentResultFormats,
         pendingInteraction,
         checkpointAvailability,
         collapseToolRuns: false,
       }),
-    [checkpointAvailability, messages, pendingInteraction, activeAgentId, agentResultFormats],
+    [
+      active,
+      checkpointAvailability,
+      messages,
+      pendingInteraction,
+      activeAgentId,
+      agentResultFormats,
+    ],
   );
   return <NativeConversationHistory ref={ref} items={items} {...props} />;
 });
@@ -113,7 +127,8 @@ export const NativeConversationHistory = React.forwardRef<
   NativeConversationHistoryProps
 >(function NativeConversationHistory(
   {
-    items,
+    items: renderItems,
+    conversationKey,
     loading = false,
     reconnectState = null,
     error = null,
@@ -126,6 +141,11 @@ export const NativeConversationHistory = React.forwardRef<
   },
   ref,
 ) {
+  const {
+    rows: items,
+    expandedKeys,
+    toggleWorkSummary,
+  } = useWorkSummary(renderItems, conversationKey);
   const reconnectProgress = getExecutionReconnectProgress(reconnectState);
   const listRef = React.useRef<FlatList<ConversationRenderItem>>(null);
   const autoScrollRef = React.useRef(createAutoScrollState());
@@ -205,6 +225,14 @@ export const NativeConversationHistory = React.forwardRef<
               ) : null}
               <NativeRenderItem
                 item={item}
+                workExpanded={expandedKeys.has(item.key)}
+                onWorkToggle={() => {
+                  autoScrollRef.current = {
+                    ...autoScrollRef.current,
+                    shouldAutoScroll: false,
+                  };
+                  toggleWorkSummary(item.key);
+                }}
                 permissionMode={permissionMode}
                 showCheckpointResume={showCheckpointResume}
                 checkpointResumeDisabled={checkpointResumeDisabled}
@@ -232,6 +260,8 @@ export const NativeConversationHistory = React.forwardRef<
 
 function NativeRenderItem({
   item,
+  workExpanded,
+  onWorkToggle,
   permissionMode,
   showCheckpointResume,
   checkpointResumeDisabled,
@@ -241,6 +271,8 @@ function NativeRenderItem({
   theme,
 }: {
   item: ConversationRenderItem;
+  workExpanded: boolean;
+  onWorkToggle: () => void;
   permissionMode?: PermissionMode;
   showCheckpointResume: boolean;
   checkpointResumeDisabled: boolean;
@@ -249,6 +281,23 @@ function NativeRenderItem({
   styles: ReturnType<typeof createStyles>;
   theme: NativeChatTheme;
 }) {
+  if (item.type === "work-summary") {
+    const Icon = workExpanded ? ChevronDown : ChevronRight;
+    return (
+      <View style={styles.workSummary}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={formatWorkedDuration(item.durationMs)}
+          accessibilityState={{ expanded: workExpanded }}
+          onPress={onWorkToggle}
+          style={styles.workSummaryButton}
+        >
+          <Text style={styles.workSummaryText}>{formatWorkedDuration(item.durationMs)}</Text>
+          <Icon color={theme.muted} size={16} />
+        </Pressable>
+      </View>
+    );
+  }
   if (item.type === "tool-accordion") {
     return <NativeToolAccordion item={item} styles={styles} theme={theme} />;
   }
@@ -325,7 +374,13 @@ function NativeRenderItem({
       theme={theme}
     />
   );
-  return item.type === "result" ? <View style={styles.resultSection}>{message}</View> : message;
+  return item.type === "result" ? (
+    <View style={item.hasWorkSummary ? styles.workSummaryResult : styles.resultSection}>
+      {message}
+    </View>
+  ) : (
+    message
+  );
 }
 
 function NativeToolState({
@@ -1111,6 +1166,22 @@ function createStyles(theme: NativeChatTheme) {
     messageRowAgent: { justifyContent: "flex-start" },
     messageRowUser: { justifyContent: "flex-end" },
     messageRowFull: { justifyContent: "flex-start" },
+    workSummary: {
+      marginTop: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+      paddingBottom: 4,
+    },
+    workSummaryButton: {
+      minHeight: 44,
+      minWidth: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 6,
+    },
+    workSummaryText: { color: theme.muted, fontFamily: theme.fontRegular, fontSize: 14 },
+    workSummaryResult: { width: "100%" },
     resultSection: {
       width: "100%",
       marginTop: 20,

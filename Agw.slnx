@@ -3,6 +3,7 @@
     <File Path=".csharpierrc" />
     <File Path=".editorconfig" />
     <File Path=".gitignore" />
+    <File Path="AGENTS.md" />
     <File Path="CLAUDE.md" />
     <File Path="CONTEXT.md" />
     <File Path="Dockerfile" />

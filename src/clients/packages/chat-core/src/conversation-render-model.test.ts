@@ -344,7 +344,7 @@ test("render model hides shared skill loader tools but keeps ordinary tool accor
 });
 
 test("render model emits plan, full result, right user, image, and red error semantics", () => {
-  const items = buildConversationRenderModel([
+  const grouped = buildConversationRenderModel([
     message("user-1", "user", "hello"),
     message("plan", "assistant", "<proposed_plan>\n# Plan\n</proposed_plan>"),
     {
@@ -364,18 +364,19 @@ test("render model emits plan, full result, right user, image, and red error sem
     },
   ]);
 
+  const items = grouped.flatMap((item) => (item.type === "work-summary" ? item.items : [item]));
   assert.deepEqual(
     items.map((item) => [item.type, item.alignment, item.width]),
     [
       ["message", "right", "normal"],
       ["plan", "left", "full"],
-      ["result", "left", "full"],
       ["message", "left", "normal"],
+      ["result", "left", "full"],
     ],
   );
-  const result = items[2];
+  const result = items[3];
   assert.equal(result.type === "result" ? result.message.meta : "unexpected", null);
-  const media = items[3];
+  const media = items[2];
   assert.deepEqual(
     media.type === "message" ? media.message.contents.map((content) => content.type) : [],
     ["image", "error"],

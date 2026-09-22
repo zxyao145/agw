@@ -1,9 +1,12 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
+using Agw.Projects.Contracts.History;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
@@ -39,6 +42,15 @@ public sealed partial class EfCoreChatHistoryProvider
             new DefaultJsonTypeInfoResolver()
         ),
     };
+
+    private static readonly Meter HistoryMeter = new("Agw.ConversationHistory.Persistence");
+    private static readonly Histogram<double> FlushDuration = HistoryMeter.CreateHistogram<double>(
+        "agw.history.flush.duration",
+        "ms"
+    );
+    private static readonly Counter<long> WriteFailures = HistoryMeter.CreateCounter<long>(
+        "agw.history.write.failures"
+    );
 
     private const string AgentNamePropertyName = "agentName";
     private const string HistoryScopeMetadataKey = "historyScope";
@@ -115,6 +127,21 @@ public sealed partial class EfCoreChatHistoryProvider
         ArgumentNullException.ThrowIfNull(session);
         var state = new State(ContextIdUtil.NormalizeContextId(contextId), projectId, historyScope.Trim(), nodeName);
         _state.SaveState(session, state);
+    }
+
+    public ConversationMessageWriteScope GetMessageWriteScope(AgentSession session)
+    {
+        var state = _state.GetOrInitializeState(session);
+        return new ConversationMessageWriteScope
+        {
+            ProjectId = state.ProjectId,
+            ContextId = state.ContextId,
+            Generation = state.Generation,
+            ProducerId = Guid.CreateVersion7(),
+            HistoryScope = state.HistoryScope,
+            NodeName = state.NodeName,
+            IsExecutionBound = state.IsExecutionBound,
+        };
     }
 
     public bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
@@ -289,6 +316,7 @@ public sealed partial class EfCoreChatHistoryProvider
             .Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message))
             .Select(RemoveBlankTextualContent)
             .OfType<ChatMessage>()
+            .Select(message => MessageTimestampMetadata.EnsureCreatedAt(message, now))
             .Select(message => new PendingHistoryRecord(
                 Guid.CreateVersion7(),
                 taskId,
@@ -381,6 +409,8 @@ public sealed partial class EfCoreChatHistoryProvider
             }
         }
 
+        if (projectConversation.Generation != expectedGeneration)
+            throw new AgwException(ErrorCodes.ConversationSessionConflict);
         var ids = records.Select(record => record.Id).ToArray();
         var existingRows = await dbContext
             .ProjectConversationChatHistories.Where(record =>
@@ -393,10 +423,21 @@ public sealed partial class EfCoreChatHistoryProvider
         var updated = false;
         foreach (var record in records.Where(record => record.IsStreamingSnapshot))
         {
-            if (
-                !existingById.TryGetValue(record.Id, out var existing)
-                || existing.ConversationPayload == record.Payload
-            )
+            if (!existingById.TryGetValue(record.Id, out var existing))
+                continue;
+            if (record.Scope != null && existing.TaskId != record.TaskId)
+            {
+                // Another producer owns this row. Leave it alone, but keep writing the rest of the
+                // batch: one fenced message must not discard every other pending message.
+                _logger.LogWarning(
+                    "Skipped history message {MessageId} written by producer {Producer}; the row belongs to {Owner}.",
+                    record.Id,
+                    record.TaskId,
+                    existing.TaskId
+                );
+                continue;
+            }
+            if (existing.ConversationPayload == record.Payload)
                 continue;
             existing.ConversationPayload = record.Payload;
             existing.Metadata = record.Metadata;
@@ -421,9 +462,22 @@ public sealed partial class EfCoreChatHistoryProvider
             dbContext.ProjectConversationChatHistories.Add(ToEntity(record, projectConversation.Id, nextSequence));
         }
 
-        await dbContext
-            .SaveConversationChangesAsync(projectConversation.Id, expectedGeneration, cancellationToken)
-            .ConfigureAwait(false);
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            await dbContext
+                .SaveConversationChangesAsync(projectConversation.Id, expectedGeneration, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            WriteFailures.Add(1);
+            throw;
+        }
+        finally
+        {
+            FlushDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
     }
 
     private static bool IsResult(ChatMessage message) =>
@@ -504,77 +558,32 @@ public sealed partial class EfCoreChatHistoryProvider
     {
         // Per-service-call persistence stores the assistant function call before invoking the tool.
         // Its result arrives as the next service call's request, so pairing must cross that boundary.
-        var allMessages = followingMessages.Count == 0 ? messages : messages.Concat(followingMessages).ToList();
+        // 一次模型响应可以拆成多条 assistant 消息，配对只能依据 callId。
+        // One model response can span several assistant messages, so pairing follows the callId
+        // instead of the distance between a call and the next assistant message.
+        var answeredCallIds = messages
+            .Concat(followingMessages)
+            .SelectMany(message => message.Contents)
+            .OfType<FunctionResultContent>()
+            .Select(content => content.CallId)
+            .ToHashSet(StringComparer.Ordinal);
+        var pendingCallIds = new HashSet<string>(StringComparer.Ordinal);
         var result = new List<ChatMessage>(messages.Count);
-        for (var index = 0; index < messages.Count; )
+        foreach (var message in messages)
         {
-            var message = allMessages[index];
-            var functionCalls =
-                message.Role == ChatRole.Assistant ? message.Contents.OfType<FunctionCallContent>().ToList() : [];
-            if (functionCalls.Count > 0)
+            if (message.Role == ChatRole.Assistant && message.Contents.OfType<FunctionCallContent>().Any())
             {
-                var toolMessageEnd = index + 1;
-                while (
-                    toolMessageEnd < allMessages.Count
-                    && (
-                        allMessages[toolMessageEnd].Role != ChatRole.Assistant
-                        || toolMessageEnd >= messages.Count
-                            && allMessages[toolMessageEnd].GetAgentRequestMessageSourceType()
-                                == AgentRequestMessageSourceType.AIContextProvider
+                var keptContents = message
+                    .Contents.Where(content =>
+                        content is not FunctionCallContent functionCall || answeredCallIds.Contains(functionCall.CallId)
                     )
-                )
+                    .ToList();
+                foreach (var functionCall in keptContents.OfType<FunctionCallContent>())
                 {
-                    toolMessageEnd++;
+                    pendingCallIds.Add(functionCall.CallId);
                 }
 
-                var resultCallIds = allMessages
-                    .Skip(index + 1)
-                    .Take(toolMessageEnd - index - 1)
-                    .SelectMany(toolMessage => toolMessage.Contents)
-                    .OfType<FunctionResultContent>()
-                    .Select(content => content.CallId)
-                    .ToHashSet(StringComparer.Ordinal);
-                var matchedCallIds = functionCalls
-                    .Select(content => content.CallId)
-                    .Where(resultCallIds.Contains)
-                    .ToHashSet(StringComparer.Ordinal);
-
-                AddFilteredMessage(
-                    result,
-                    message,
-                    message
-                        .Contents.Where(content =>
-                            content is not FunctionCallContent functionCall
-                            || matchedCallIds.Contains(functionCall.CallId)
-                        )
-                        .ToList()
-                );
-
-                var pendingCallIds = new HashSet<string>(matchedCallIds, StringComparer.Ordinal);
-                // A user can add instructions while approving a pending call. Keep the call
-                // paired across those messages, and replay its results before the new instructions.
-                var deferredMessages = new List<ChatMessage>();
-                for (
-                    var toolMessageIndex = index + 1;
-                    toolMessageIndex < toolMessageEnd && toolMessageIndex < messages.Count;
-                    toolMessageIndex++
-                )
-                {
-                    var toolMessage = allMessages[toolMessageIndex];
-                    AddFilteredMessage(
-                        toolMessage.Role == ChatRole.Tool ? result : deferredMessages,
-                        toolMessage,
-                        toolMessage
-                            .Contents.Where(content =>
-                                content is not FunctionResultContent functionResult
-                                || pendingCallIds.Remove(functionResult.CallId)
-                            )
-                            .ToList()
-                    );
-                }
-
-                result.AddRange(deferredMessages);
-                index = toolMessageEnd;
+                AddFilteredMessage(result, message, keptContents);
                 continue;
             }
 
@@ -583,15 +592,17 @@ public sealed partial class EfCoreChatHistoryProvider
                 AddFilteredMessage(
                     result,
                     message,
-                    message.Contents.Where(content => content is not FunctionResultContent).ToList()
+                    message
+                        .Contents.Where(content =>
+                            content is not FunctionResultContent functionResult
+                            || pendingCallIds.Remove(functionResult.CallId)
+                        )
+                        .ToList()
                 );
-            }
-            else
-            {
-                result.Add(message);
+                continue;
             }
 
-            index++;
+            result.Add(message);
         }
 
         return result;

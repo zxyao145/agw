@@ -8,6 +8,131 @@ import {
   type ConversationControllerOptions,
 } from "./conversation-controller";
 
+test("history hydration merges reasoning fragments without joining different turns", () => {
+  const messages: AiMessage[] = ["first", "second"].flatMap((turn) => [
+    {
+      messageId: `user-${turn}`,
+      role: "user",
+      contents: [{ type: "TextContent", content: turn }],
+    },
+    ...["The", " user", " wants", " me", " to", " fix"].map((content) => ({
+      messageId: "thinking",
+      role: "assistant",
+      author: "claude-code",
+      additionalProperties: { modelName: "deepseek-v4-pro" },
+      contents: [{ type: "TextReasoningContent", content }],
+    })),
+    {
+      messageId: `result-${turn}`,
+      role: "assistant",
+      additionalProperties: { type: "result" },
+      contents: [{ type: "TextContent", content: "Done" }],
+    },
+  ]);
+  const seed = { revision: 1, conversationId: "conversation", contextId: "context", messages };
+  const controller = new ConversationController({
+    adapter: { execution: { baseUrl: "https://agw.test", token: null } },
+    projectId: "project",
+    target: { id: "agent", type: "agent" },
+    sessionSeed: seed,
+  });
+  const checkHistory = () => {
+    const snapshot = controller.getSnapshot();
+    assert.equal(snapshot.rawMessages.length, 6);
+    const summaries = snapshot.items.filter((item) => item.type === "work-summary");
+    assert.equal(summaries.length, 2);
+    for (const summary of summaries) {
+      assert.equal(summary.items.length, 1);
+      const item = summary.items[0];
+      assert.equal(item.type, "message");
+      if (item.type !== "message") return;
+      assert.equal(item.message.contents.length, 1);
+      assert.deepEqual(item.message.contents[0], {
+        type: "reasoning",
+        markdown: "The user wants me to fix",
+        preview: "The user wants me to fix",
+      });
+    }
+    assert.equal(messages.length, 16, "hydration must not mutate the persisted history");
+    assert.equal(messages[1].contents[0].content, "The");
+  };
+  checkHistory();
+  controller.hydrate({ ...seed, revision: 2 });
+  checkHistory();
+});
+
+for (const status of ["completed", "failed", "interrupted", "recovered"]) {
+  test(`work stays visible until ${status}, then folds and survives history hydration`, async () => {
+    let handlers!: ExecutionHubHandlers;
+    let active = true;
+    const controller = new ConversationController({
+      adapter: {
+        execution: { baseUrl: "https://agw.test", token: null },
+        createSession: (value) => {
+          handlers = value;
+          return {
+            configure: async () => ({ restoredDurableExecution: false }),
+            execute: async () => undefined,
+            hasActiveExecution: () => active,
+            dispose: async () => undefined,
+          } as unknown as ExecutionSession;
+        },
+      },
+      projectId: "project",
+      target: { id: "agent", type: "agent" },
+      sessionSeed: {
+        revision: 1,
+        conversationId: "conversation",
+        contextId: "context",
+        messages: [],
+      },
+    });
+    const summaries = () =>
+      controller.getSnapshot().items.filter((item) => item.type === "work-summary");
+    await controller.send("Review changes", []);
+    handlers.onMessage({
+      messageId: "process",
+      role: "assistant",
+      contents: [{ type: "TextContent", content: "Reviewing" }],
+    });
+    handlers.onMessage({
+      messageId: "result",
+      role: "assistant",
+      createdAt: new Date().toISOString(),
+      additionalProperties: { type: "result" },
+      contents: [{ type: "TextContent", content: "Done" }],
+    });
+    assert.equal(summaries().length, 0);
+    handlers.onClose?.(new Error("Connection lost"));
+    assert.equal(summaries().length, 0, "disconnect alone must not hide the process");
+    if (status === "recovered") {
+      handlers.onReconnecting?.({ status: "reconnecting", retryAttempt: 1, retryDelayMs: 1000 });
+      assert.equal(summaries().length, 0);
+      active = false;
+      handlers.onReconnected?.();
+    } else {
+      handlers.onMessage({
+        messageId: "finished",
+        role: "system",
+        contents: [],
+        additionalProperties: { type: "turn-finished", status },
+      });
+    }
+    assert.equal(summaries().length, 1);
+    const summary = summaries()[0];
+    const messages = controller.getSnapshot().rawMessages;
+    controller.hydrate({
+      revision: 2,
+      conversationId: "conversation",
+      contextId: "context",
+      messages,
+    });
+    assert.equal(summaries()[0].key, summary.key);
+    assert.equal(summaries()[0].durationMs, summary.durationMs);
+    await controller.dispose();
+  });
+}
+
 test("equivalent result format options preserve the snapshot and do not notify subscribers", () => {
   const options: ConversationControllerOptions = {
     adapter: { execution: { baseUrl: "https://agw.test", token: null } },

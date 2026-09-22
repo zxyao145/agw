@@ -84,7 +84,7 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
     /// <para>按调用与结果关系重排后的消息序列。</para>
     /// <para>Message sequence reordered by call/result relationships.</para>
     /// </returns>
-    private static IEnumerable<ChatMessage> OrderMessages(IEnumerable<ChatMessage> messages)
+    internal static IEnumerable<ChatMessage> OrderMessages(IEnumerable<ChatMessage> messages)
     {
         var messageList = messages as IList<ChatMessage> ?? messages.ToList();
         // 区分注入上下文前缀与进行中的工具结果，兼容历史加载前后的两次调用。
@@ -115,15 +115,36 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
         for (var index = 0; index < messageList.Count; index++)
         {
             var message = messageList[index];
-            ordered.Add(message);
             if (message.Role != ChatRole.Assistant)
+            {
+                ordered.Add(message);
                 continue;
+            }
             var callIds = message
                 .Contents.OfType<FunctionCallContent>()
                 .Select(call => call.CallId)
                 .ToHashSet(StringComparer.Ordinal);
             if (callIds.Count == 0)
+            {
+                ordered.Add(message);
                 continue;
+            }
+
+            // 并行调用可能由多条 Assistant 消息承载；合并为一个压缩组后匹配整批结果。
+            // Parallel calls can span assistant messages; keep them in one compaction group with their results.
+            while (
+                index + 1 < messageList.Count
+                && messageList[index + 1].Role == ChatRole.Assistant
+                && messageList[index + 1].Contents.OfType<FunctionCallContent>().Any()
+            )
+            {
+                var nextCall = messageList[++index];
+                var combined = message.Clone();
+                combined.Contents = [.. message.Contents, .. nextCall.Contents];
+                message = combined;
+                callIds.UnionWith(nextCall.Contents.OfType<FunctionCallContent>().Select(call => call.CallId));
+            }
+            ordered.Add(message);
 
             var deferred = new List<ChatMessage>();
             // 在合并后的历史与请求中匹配结果，只跨越已知调用的间隔，并在下一条普通 Assistant 响应处停止。

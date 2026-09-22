@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Agw.Agents.Execution.Messaging;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -15,6 +16,7 @@ namespace Agw.Agents.Execution.Agents.History;
 internal sealed class StreamingChatHistoryClient : DelegatingChatClient
 {
     private readonly IStreamingConversationHistoryProvider _history;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// <para>创建 StreamingChatHistoryClient 实例并保存本包装层使用的依赖和配置。</para>
@@ -28,10 +30,29 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
     /// <para>为模型调用建立流式响应记录的历史服务。</para>
     /// <para>History service creating streaming response records for model calls.</para>
     /// </param>
-    public StreamingChatHistoryClient(IChatClient innerClient, IStreamingConversationHistoryProvider history)
+    /// <param name="timeProvider">Clock used when a provider omits message timestamps.</param>
+    public StreamingChatHistoryClient(
+        IChatClient innerClient,
+        IStreamingConversationHistoryProvider history,
+        TimeProvider? timeProvider = null
+    )
         : base(innerClient)
     {
         _history = history;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
+    public override async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var response = await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+        var timestamp = response.CreatedAt ?? _timeProvider.GetUtcNow();
+        foreach (var message in response.Messages)
+            MessageTimestampMetadata.EnsureCreatedAt(message, timestamp);
+        return response;
     }
 
     /// <summary>
@@ -62,6 +83,7 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
     {
         var context = AIAgent.CurrentRunContext;
         var input = messages.ToList();
+        var timestamps = new ResponseMessageTimestamps(_timeProvider);
         // 此时历史已由 SDK 加载；用当前会话建立本次模型响应的增量记录。
         // History is already loaded by the SDK; use the current session to start this model response's delta record.
         var history =
@@ -76,9 +98,41 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
         {
             // 先捕获不可变历史增量再转发，避免消费者推进或修改更新后再读取。
             // Capture history deltas before forwarding, rather than reading updates after consumer advancement or mutation.
-            if (history != null)
-                await history.AppendAsync(update, cancellationToken).ConfigureAwait(false);
-            yield return update;
+            timestamps.Stamp(update);
+            if (history is NormalizedChatHistoryProvider.Capture capture)
+            {
+                var handled = await capture.AppendUpdateAsync(update, cancellationToken).ConfigureAwait(false);
+                foreach (var normalized in capture.Drain())
+                    yield return new ChatResponseUpdate(normalized.Role, normalized.Contents)
+                    {
+                        MessageId = normalized.MessageId,
+                        AuthorName = normalized.AuthorName,
+                        CreatedAt = normalized.CreatedAt,
+                        AdditionalProperties = normalized.AdditionalProperties,
+                        FinishReason = update.FinishReason,
+                        ModelId = update.ModelId,
+                        ResponseId = update.ResponseId,
+                    };
+                // 未被任何操作认领的更新原样下发，避免归并链路吞掉内容。
+                // An update no operation claimed still has to reach the consumer untouched.
+                if (!handled)
+                    yield return update;
+                else if (update.Contents.OfType<UsageContent>().Any())
+                    yield return new ChatResponseUpdate
+                    {
+                        Role = update.Role,
+                        Contents = update.Contents.OfType<UsageContent>().Cast<AIContent>().ToList(),
+                        FinishReason = update.FinishReason,
+                        ModelId = update.ModelId,
+                        ResponseId = update.ResponseId,
+                    };
+            }
+            else
+            {
+                if (history != null)
+                    await history.AppendAsync(update, cancellationToken).ConfigureAwait(false);
+                yield return update;
+            }
         }
     }
 }

@@ -11,7 +11,7 @@ import {
   buildConversationRenderModel,
   getAgentflowCheckpointMessage,
   getPendingInteraction,
-  prepareClaudeHistory,
+  prepareConversationHistory,
   type AgentflowCheckpointAvailability,
   type ConversationRenderItem,
   type PendingInteraction,
@@ -24,7 +24,6 @@ import {
   isModeControlMessage,
   isUserTurnMessage,
   mergeStreamingMessage,
-  scopeMessagesByUserTurn,
   scopeStreamingMessage,
   type AgentMode,
   type PermissionMode,
@@ -325,11 +324,14 @@ export class ConversationController {
         },
         onReconnecting: (state) => this.patch({ reconnectState: state }),
         onReconnectFailed: (state) => this.patch({ reconnectState: state }),
-        onReconnected: () =>
+        onReconnected: () => {
+          const isExecuting = this.session?.hasActiveExecution() ?? false;
+          if (!isExecuting) this.activeStreamingScopeId = null;
           this.patch({
             reconnectState: null,
-            isExecuting: this.session?.hasActiveExecution() ?? false,
-          }),
+            isExecuting,
+          });
+        },
       };
       this.session =
         this.options.adapter.createSession?.(handlers) ??
@@ -437,6 +439,11 @@ export class ConversationController {
     this.state = {
       ...this.state,
       items: buildConversationRenderModel(this.state.rawMessages, {
+        isCurrentTurnActive:
+          this.state.isExecuting ||
+          this.state.isTransitioning ||
+          this.state.reconnectState !== null ||
+          this.activeStreamingScopeId !== null,
         activeAgentId: this.options.target?.type === "agent" ? this.options.target.id : null,
         agentResultFormats: this.options.agentResultFormats,
         pendingInteraction: this.state.pendingInteraction,
@@ -484,5 +491,5 @@ function getAgentResultFormatsKey(
 }
 
 function prepareHistory(messages: AiMessage[]): AiMessage[] {
-  return scopeMessagesByUserTurn(prepareClaudeHistory(messages).messages);
+  return prepareConversationHistory(messages).messages;
 }

@@ -1,5 +1,7 @@
 import type { ExecutionMessage, ExecutionMessageContent } from "./types";
 
+import { applyMessageOperation, isNormalizedMessage } from "./message-operations";
+
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 const FUNCTION_RESULT_CONTENT_TYPE = "FunctionResultContent";
 
@@ -48,6 +50,7 @@ function hasSameStreamingIdentity(message: ExecutionMessage, incoming: Execution
 }
 
 export function getStreamingIdentity(message: ExecutionMessage): string {
+  if (isNormalizedMessage(message)) return JSON.stringify(["normalized", message.messageId]);
   return JSON.stringify([
     normalizeStreamingScopeId(message),
     message.messageId,
@@ -90,6 +93,13 @@ export function appendStreamingContents(
   existing: ExecutionMessage,
   incoming: ExecutionMessage,
 ): void {
+  if (
+    (!existing.createdAt || !Number.isFinite(Date.parse(existing.createdAt))) &&
+    incoming.createdAt &&
+    Number.isFinite(Date.parse(incoming.createdAt))
+  ) {
+    existing.createdAt = incoming.createdAt;
+  }
   for (const incomingContent of incoming.contents) {
     const previousContent = existing.contents.at(-1);
     const canAppendText =
@@ -106,6 +116,7 @@ export function appendStreamingContents(
 }
 
 function cloneStreamingMessage<T extends ExecutionMessage>(message: T): T {
+  if (isNormalizedMessage(message)) return cloneMessage(message);
   const cloned = cloneMessage(message);
   cloned.contents = [];
   appendStreamingContents(cloned, message);
@@ -165,6 +176,16 @@ export function mergeStreamingMessages<T extends ExecutionMessage>(
             );
             return indexByIdentity.get(getStreamingIdentity(incoming));
           })();
+    if (isNormalizedMessage(incoming)) {
+      const current = existingIndex === undefined ? undefined : updated[existingIndex];
+      const projected = applyMessageOperation(current, incoming);
+      if (existingIndex === undefined) {
+        const index = updated.length;
+        updated.push(projected);
+        indexByIdentity?.set(getStreamingIdentity(incoming), index);
+      } else updated[existingIndex] = projected;
+      continue;
+    }
     if (existingIndex === undefined) {
       const appendedIndex = updated.length;
       updated.push(cloneStreamingMessage(incoming));

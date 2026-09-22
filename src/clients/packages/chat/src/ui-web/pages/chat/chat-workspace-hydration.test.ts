@@ -32,6 +32,24 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const messages: import("@agw/api").AiMessage[] = [
     { messageId: "message-1", role: "user", contents: [] },
   ];
+  if (kind === "reasoning-history") {
+    messages[0].contents = [{ type: "TextContent", content: "Fix the issue" }];
+    messages.push(
+      ...["The", " user", " wants", " me", " to", " fix"].map((content) => ({
+        messageId: "thinking",
+        role: "assistant",
+        author: "claude-code",
+        additionalProperties: { modelName: "deepseek-v4-pro" },
+        contents: [{ type: "TextReasoningContent", content }],
+      })),
+      {
+        messageId: "result",
+        role: "assistant",
+        additionalProperties: { type: "result" },
+        contents: [{ type: "TextContent", content: "Done" }],
+      },
+    );
+  }
   if (kind === "result-schema") {
     messages[0]!.contents = [
       {
@@ -83,6 +101,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
     finishRecovery = resolve;
   });
   let reconnectHandlers: ExecutionHubHandlers | undefined;
+  let managedStatus = kind === "restore-active" ? "running" : "idle";
+  let activeTurnSnapshot: {
+    streamingScopeId: string;
+    messages: import("@agw/api").AiMessage[];
+  } | null = null;
   let currentReconnectState:
     | import("@agw/chat-runtime/execution-session").ExecutionReconnectState
     | null = null;
@@ -246,7 +269,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "../../../services/execution-session-manager": {
       executionSessionManager: {
         has: (key: { contextId: string }) =>
-          kind === "restore-active" && attachedContexts.has(key.contextId),
+          (kind === "restore-active" || kind.startsWith("work-close")) &&
+          attachedContexts.has(key.contextId),
         attach: (key: { contextId: string }, handlers: ExecutionHubHandlers) => {
           reconnectHandlers = handlers;
           attachedContexts.add(key.contextId);
@@ -255,16 +279,23 @@ async function checkConversationSession(kind: string, strictMode = false) {
             detach() {},
             interruptAndWait: async () => {},
             dispose: async () => {},
-            getStatus: () => (kind === "restore-active" ? "running" : "idle"),
+            getStatus: () => managedStatus,
             listAgentflowCheckpoints: async () => [],
             getReconnectState: () => currentReconnectState,
-            getActiveTurnSnapshot: () => null,
+            getActiveTurnSnapshot: () => activeTurnSnapshot,
             configure: async (setting: ExecutionSetting) => {
               configurations.push(setting);
               if (kind === "restore-active") await recoveryReady;
               return { restoredDurableExecution: false };
             },
             execute: async (request: ExecutionRequest) => {
+              if (kind.startsWith("work-close")) {
+                managedStatus = "running";
+                activeTurnSnapshot = {
+                  streamingScopeId: request.input.messageId,
+                  messages: [{ ...request.input, role: "user" }],
+                };
+              }
               executions.push({ ...request, contextId: key.contextId });
             },
           };
@@ -419,6 +450,93 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => observed.input!.onExecute("too early", []));
       assert.equal(executions.length, 0);
       await React.act(async () => finishHistory());
+      if (kind === "reasoning-history") {
+        const summary = observed.items?.find((item) => item.type === "work-summary");
+        assert.ok(summary?.type === "work-summary");
+        assert.equal(summary.items.length, 1);
+        const item = summary.items[0];
+        assert.equal(item.type, "message");
+        assert.ok(item.type === "message");
+        assert.deepEqual(item.message.contents, [
+          {
+            type: "reasoning",
+            markdown: "The user wants me to fix",
+            preview: "The user wants me to fix",
+          },
+        ]);
+        return;
+      }
+      if (kind.startsWith("work-close")) {
+        await React.act(async () => observed.input!.onExecute("Review changes", []));
+        const initialHandlers = reconnectHandlers;
+        if (kind === "work-close-cached") {
+          await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+          assert.notEqual(
+            reconnectHandlers,
+            initialHandlers,
+            "exercise the cached-client attachment",
+          );
+        }
+        const handlers = reconnectHandlers!;
+        await React.act(async () => {
+          const updates: import("@agw/api").AiMessage[] = [
+            {
+              messageId: "process",
+              role: "assistant",
+              contents: [{ type: "TextContent", content: "Reviewing" }],
+            },
+            {
+              messageId: "result",
+              role: "assistant",
+              additionalProperties: { type: "result" },
+              contents: [{ type: "TextContent", content: "Done" }],
+            },
+          ];
+          activeTurnSnapshot!.messages.push(...updates);
+          for (const message of updates) handlers.onMessage(message);
+          // A mode control update flushes the queued output without finishing the turn.
+          handlers.onMessage({
+            messageId: "mode",
+            role: "system",
+            additionalProperties: { type: "mode-status", mode: "execute" },
+            contents: [],
+          });
+        });
+        const summaryCount = () =>
+          observed.items!.filter((item) => item.type === "work-summary").length;
+        assert.ok(observed.items!.some((item) => item.type === "result"));
+        assert.equal(summaryCount(), 0);
+        await React.act(async () => handlers.onClose?.(new Error("Connection lost")));
+        assert.equal(summaryCount(), 0, "disconnect alone must not hide the process");
+
+        await React.act(async () =>
+          observed.selectAgent!({
+            agentType: 0,
+            agentId: kind === "work-close-cached" ? "agent-1" : "agent-2",
+          }),
+        );
+        assert.notEqual(reconnectHandlers, handlers, "reattach before accepting further callbacks");
+        assert.equal(summaryCount(), 0);
+        await React.act(async () => {
+          if (kind === "work-close-cached") {
+            managedStatus = "idle";
+            reconnectHandlers!.onReconnected?.();
+          } else {
+            reconnectHandlers!.onMessage({
+              messageId: "finished",
+              role: "system",
+              additionalProperties: { type: "turn-finished", status: "completed" },
+              contents: [],
+            });
+          }
+        });
+        assert.equal(
+          summaryCount(),
+          1,
+          "fold only after terminal output or confirmed idle recovery",
+        );
+        return;
+      }
       if (kind === "result-schema") {
         const resultContent = () => {
           const item = observed.items?.find((item) => item.type === "result");
@@ -656,6 +774,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
 
 test("Web and Desktop pass the Agent list schema flag through Chat to Result rendering", () =>
   checkConversationSession("result-schema"));
+
+test("Web and Desktop hydrate reasoning fragments as one message in completed work", () =>
+  checkConversationSession("reasoning-history"));
+
+for (const attachment of ["new", "cached"]) {
+  test(`Web and Desktop ${attachment} client preserves unfolded work after onClose`, () =>
+    checkConversationSession(`work-close-${attachment}`));
+}
 
 test("returning to cached Chat and switching Agent preserves the conversation on send", () =>
   checkConversationSession("restore"));

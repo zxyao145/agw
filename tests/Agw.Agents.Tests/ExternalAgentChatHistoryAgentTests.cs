@@ -15,6 +15,42 @@ namespace Agw.Agents.Tests;
 public class ExternalAgentChatHistoryAgentTests
 {
     [Fact]
+    public async Task RunStreamingAsync_ResultDeltas_PersistTheSameTimestampAsLiveOutput()
+    {
+        // Arrange
+        var createdAt = new DateTimeOffset(2026, 9, 20, 13, 38, 0, TimeSpan.Zero);
+        var provider = new RecordingChatHistoryProvider();
+        var inner = new PausableExternalAgent();
+        var agent = CreateAgent(inner, provider);
+        foreach (var timestamp in new[] { createdAt, createdAt.AddMinutes(1) })
+        {
+            inner.Emit(
+                new AgentResponseUpdate(ChatRole.Assistant, "result text")
+                {
+                    MessageId = "result",
+                    CreatedAt = timestamp,
+                    AdditionalProperties = new() { ["type"] = "result" },
+                }
+            );
+        }
+        inner.Complete();
+
+        // Act
+        var output = new List<AgwMessage>();
+        await foreach (
+            var update in agent.RunStreamingAsync("question", cancellationToken: TestContext.Current.CancellationToken)
+        )
+            output.Add(update.ToAiMessage()!);
+
+        // Assert
+        Assert.Equal(2, output.Count);
+        Assert.All(output, message => Assert.Equal(createdAt, message.CreatedAt));
+        var saved = provider.Calls.SelectMany(call => call.ResponseMessages).ToList();
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, message => Assert.Equal(createdAt, message.ToAiMessage()!.CreatedAt));
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_NoResponse_DoesNotWriteResponseHistory()
     {
         var provider = new RecordingChatHistoryProvider();
@@ -599,6 +635,98 @@ public class ExternalAgentChatHistoryAgentTests
         );
 
         Assert.Empty(Assert.Single(innerProvider.Calls).RequestMessages);
+    }
+
+    [Theory]
+    [InlineData("id")]
+    [InlineData("author")]
+    [InlineData("role")]
+    [InlineData("type")]
+    [InlineData("content-result")]
+    [InlineData("missing-id")]
+    public async Task ClaudeCodeChatHistoryProvider_Invoked_PreservesMessageBoundaries(string boundary)
+    {
+        // Arrange
+        var innerProvider = new RecordingChatHistoryProvider();
+        var provider = new ClaudeCodeChatHistoryProvider(innerProvider);
+        var agent = new PausableExternalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var first = new ChatMessage(ChatRole.Assistant, "before")
+        {
+            MessageId = boundary == "missing-id" ? null : "message-1",
+            AuthorName = "claude-code",
+            AdditionalProperties = new() { ["type"] = "assistant" },
+        };
+        var second = first.Clone();
+        second.Contents = [new TextContent("after")];
+        if (boundary == "id")
+            second.MessageId = "message-2";
+        if (boundary == "author")
+            second.AuthorName = "other-agent";
+        if (boundary == "role")
+            second.Role = ChatRole.User;
+        if (boundary == "type")
+            second.AdditionalProperties = new() { ["type"] = "result" };
+        if (boundary == "content-result")
+            second.Contents[0].AdditionalProperties = new() { ["type"] = "result" };
+        List<ChatMessage> messages = [first, second];
+
+        // Act
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [], messages),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        var saved = Assert.Single(innerProvider.Calls).ResponseMessages;
+        Assert.Equal(messages.Count, saved.Count);
+        Assert.Equal("before", saved[0].Text);
+        Assert.Equal("after", saved[^1].Text);
+        Assert.Equal(second.AdditionalProperties!["type"], saved[^1].AdditionalProperties!["type"]);
+    }
+
+    [Theory]
+    [InlineData("tool-result")]
+    [InlineData("error")]
+    public async Task ClaudeCodeChatHistoryProvider_Invoked_MergesFragmentsAroundInterleavedMessage(string interleaved)
+    {
+        // Arrange
+        var innerProvider = new RecordingChatHistoryProvider();
+        var provider = new ClaudeCodeChatHistoryProvider(innerProvider);
+        var agent = new PausableExternalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var first = new ChatMessage(ChatRole.Assistant, "before")
+        {
+            MessageId = "message-1",
+            AuthorName = "claude-code",
+            AdditionalProperties = new() { ["type"] = "assistant" },
+        };
+        var second = first.Clone();
+        second.Contents = [new TextContent("after")];
+        List<ChatMessage> messages =
+        [
+            first,
+            interleaved == "tool-result"
+                ? new ChatMessage(ChatRole.User, [new FunctionResultContent("call-1", "result")])
+                : new ChatMessage(ChatRole.System, [new ErrorContent("rate limit")])
+                {
+                    AdditionalProperties = new() { ["type"] = "system", ["subtype"] = "api_retry" },
+                },
+            second,
+        ];
+
+        // Act
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [], messages),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        var saved = Assert.Single(innerProvider.Calls).ResponseMessages;
+        Assert.Equal(2, saved.Count);
+        Assert.Equal("message-1", saved[0].MessageId);
+        Assert.Equal("beforeafter", saved[0].Text);
+        Assert.Equal(messages[1].Role, saved[1].Role);
     }
 
     [Fact]

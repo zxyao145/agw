@@ -10,6 +10,86 @@ namespace Agw.Agents.Tests;
 
 public sealed partial class AgentRequestContextAgentTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ClaudeHistory_InterleavedProgress_PersistsCompleteMessageWithToolOrder(bool includeProgress)
+    {
+        // Arrange
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
+        var provider = new ClaudeCodeChatHistoryProvider(fixture.Provider);
+        var agent = new HistoryNotifyingAgent(provider);
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        fixture.Provider.StageRequest(session, [new ChatMessage(ChatRole.User, "Review")]);
+        var createdAt = new DateTimeOffset(2026, 9, 21, 0, 48, 54, TimeSpan.Zero);
+        var updates = new List<AgentResponseUpdate>();
+        foreach (var text in new[] { "The", " ", "user", " wants", " a review" })
+        {
+            updates.Add(
+                new AgentResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(text)])
+                {
+                    MessageId = "assistant-1",
+                    AuthorName = "claude-code",
+                    CreatedAt = createdAt,
+                    AdditionalProperties = new() { ["type"] = "assistant", ["modelName"] = "deepseek-v4-pro" },
+                }
+            );
+            if (includeProgress)
+                updates.Add(
+                    new AgentResponseUpdate(ChatRole.System, "progress")
+                    {
+                        MessageId = Guid.NewGuid().ToString(),
+                        AdditionalProperties = new() { ["type"] = "system", ["subtype"] = "thinking_tokens" },
+                    }
+                );
+        }
+        updates.Add(
+            new AgentResponseUpdate(
+                ChatRole.Assistant,
+                [new FunctionCallContent("call-1", "Skill", new Dictionary<string, object?> { ["skill"] = "review" })]
+            )
+            {
+                MessageId = "assistant-1",
+                AuthorName = "claude-code",
+                AdditionalProperties = new() { ["type"] = "assistant", ["modelName"] = "deepseek-v4-pro" },
+            }
+        );
+        var sdkMessages = updates.ToAgentResponse().Messages;
+        sdkMessages.Add(new ChatMessage(ChatRole.User, [new FunctionResultContent("call-1", "instructions")]));
+
+        // Act
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [], sdkMessages),
+            TestContext.Current.CancellationToken
+        );
+        var records = await fixture.ReadAsync();
+
+        // Assert
+        Assert.Equal(3, records.Count);
+        var assistant = records[1].ToChatMessage()!;
+        Assert.Equal("assistant-1", assistant.MessageId);
+        Assert.Equal("claude-code", assistant.AuthorName);
+        Assert.Equal("deepseek-v4-pro", assistant.AdditionalProperties!["modelName"]?.ToString());
+        Assert.Equal(createdAt, assistant.CreatedAt);
+        Assert.Collection(
+            assistant.Contents,
+            content => Assert.Equal("The user wants a review", Assert.IsType<TextReasoningContent>(content).Text),
+            content =>
+            {
+                var call = Assert.IsType<FunctionCallContent>(content);
+                Assert.Equal("call-1", call.CallId);
+                Assert.Equal("Skill", call.Name);
+                Assert.Equal("review", call.Arguments!["skill"]?.ToString());
+            }
+        );
+        Assert.Equal(
+            "call-1",
+            Assert.IsType<FunctionResultContent>(Assert.Single(records[2].ToChatMessage()!.Contents)).CallId
+        );
+        Assert.Equal("The", Assert.IsType<TextReasoningContent>(updates[0].Contents[0]).Text);
+    }
+
     [Fact]
     public async Task PiResult_Reload_PreservesResultWithoutDuplicatingModelHistory()
     {

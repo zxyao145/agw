@@ -46,6 +46,9 @@ public static class DependencyInjection
             .Validate(options => options.MaxBufferedBytes > 0, "History buffer limit must be positive.")
             .ValidateOnStart();
         services.AddSingleton<EfCoreChatHistoryProvider>();
+        services.AddSingleton<Agw.Projects.Contracts.History.IConversationMessageWriter>(sp =>
+            sp.GetRequiredService<EfCoreChatHistoryProvider>()
+        );
         services.AddSingleton<IConversationHistoryPersistence>(sp =>
             sp.GetRequiredService<EfCoreChatHistoryProvider>()
         );

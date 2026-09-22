@@ -6,6 +6,31 @@ namespace Agw.Agents.Tests;
 
 public sealed class AgentRunResponseUpdateExtensionsTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ToAiMessage_MediaBlock_PreservesMetadataInLiveAndHistory(bool embedded)
+    {
+        AIContent content = embedded
+            ? new DataContent(new byte[] { 1, 2, 3 }, "image/png")
+            : new UriContent(new Uri("https://example.test/image.png"), "image/png");
+        content.AdditionalProperties = new() { ["blockId"] = "block:0", ["detail"] = "high" };
+        var update = new AgentResponseUpdate(ChatRole.Assistant, [content]);
+        var message = new ChatMessage(ChatRole.Assistant, [content]);
+
+        var live = update.ToAiMessage();
+        var history = message.ToAiMessage();
+
+        foreach (var result in new[] { live, history })
+        {
+            Assert.NotNull(result);
+            var converted = Assert.Single(result.Contents);
+            Assert.Equal("block:0", converted.AdditionalProperties!["blockId"]);
+            Assert.Equal("high", converted.AdditionalProperties["detail"]);
+            Assert.NotSame(content.AdditionalProperties, converted.AdditionalProperties);
+        }
+    }
+
     [Fact]
     public void ToAiMessage_ChatMessageWithBlankTextualContent_RemovesBlankContent()
     {

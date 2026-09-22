@@ -121,7 +121,7 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
         var responseMessages = new List<ChatMessage>();
         var usage = new PiUsage();
         var hasUsage = false;
-        var eventMapper = new PiEventMapper(_options.SessionOptions.Model);
+        var eventMapper = new PiEventMapper(_options.SessionOptions.Model, _options.EmitMessageSnapshots);
 
         await foreach (
             var evt in piSession.RunStreamingAsync(prompt.Text, prompt.Images, cancellationToken).ConfigureAwait(false)
@@ -194,7 +194,7 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
 
         await PersistWithTimeoutAsync(safeSession, requestMessages, []).ConfigureAwait(false);
         var piSession = await GetOrCreatePiSessionAsync(safeSession, cancellationToken).ConfigureAwait(false);
-        var eventMapper = new PiEventMapper(_options.SessionOptions.Model);
+        var eventMapper = new PiEventMapper(_options.SessionOptions.Model, _options.EmitMessageSnapshots);
         await foreach (
             var evt in piSession.RunStreamingAsync(prompt.Text, prompt.Images, cancellationToken).ConfigureAwait(false)
         )

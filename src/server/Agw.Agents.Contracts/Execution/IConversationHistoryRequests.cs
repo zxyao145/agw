@@ -9,3 +9,14 @@ public interface IConversationHistoryRequests
     void StageRequest(AgentSession session, IReadOnlyList<ChatMessage> messages);
     ValueTask PersistPendingAsync(AIAgent agent, AgentSession session, CancellationToken cancellationToken);
 }
+
+/// <summary>Starts a normalized producer without changing input deduplication or task association.</summary>
+public interface IConversationMessageInputs
+{
+    ValueTask PersistInputsAsync(
+        AgentSession session,
+        IReadOnlyList<ChatMessage> messages,
+        Guid producerId,
+        CancellationToken cancellationToken
+    );
+}

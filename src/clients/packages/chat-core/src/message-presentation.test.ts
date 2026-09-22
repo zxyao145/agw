@@ -10,6 +10,7 @@ import {
   getMessageMeta,
   getMessagePreview,
   prepareClaudeHistory,
+  prepareConversationHistory,
 } from "./message-presentation.ts";
 
 function systemMessage(messageId: string, content: string): AiMessage {
@@ -18,6 +19,86 @@ function systemMessage(messageId: string, content: string): AiMessage {
     role: "system",
     contents: [{ type: "TextContent", content }],
   };
+}
+
+test("history combines adjacent fragments while preserving content order and turn boundaries", () => {
+  const messages: AiMessage[] = ["first", "second"].flatMap((turn) => [
+    {
+      messageId: turn,
+      role: "user",
+      contents: [{ type: "TextContent", content: turn }],
+    },
+    ...["The", " ", "user"].map((content) => ({
+      messageId: "assistant",
+      role: "assistant",
+      author: "claude-code",
+      contents: [{ type: "TextReasoningContent", content }],
+    })),
+    {
+      messageId: "assistant",
+      role: "assistant",
+      author: "claude-code",
+      contents: [
+        { type: "TextContent", content: "Checking" },
+        { type: "FunctionCallContent", additionalProperties: { callId: "call", toolName: "Bash" } },
+      ],
+    },
+  ]);
+  const history = prepareConversationHistory(messages).messages;
+
+  assert.equal(history.length, 4);
+  assert.deepEqual(
+    history.map((message) => message.streamingScopeId),
+    ["first", "first", "second", "second"],
+  );
+  assert.deepEqual(
+    history[1].contents.map((content) => [content.type, content.content]),
+    [
+      ["TextReasoningContent", "The user"],
+      ["TextContent", "Checking"],
+      ["FunctionCallContent", undefined],
+    ],
+  );
+  assert.equal(messages[1].contents[0].content, "The");
+  assert.deepEqual(prepareConversationHistory(history).messages, history);
+});
+
+for (const boundary of ["id", "author", "role", "result", "missing-id", "tool-result"]) {
+  test(`history does not merge across a ${boundary} boundary`, () => {
+    const first: AiMessage = {
+      messageId: boundary === "missing-id" ? "" : "assistant",
+      role: "assistant",
+      author: "claude-code",
+      contents: [{ type: "TextContent", content: "before" }],
+    };
+    const second: AiMessage = { ...first, contents: [{ type: "TextContent", content: "after" }] };
+    if (boundary === "id") second.messageId = "other";
+    if (boundary === "author") second.author = "other-agent";
+    if (boundary === "role") second.role = "tool";
+    if (boundary === "result") second.contents[0].additionalProperties = { type: "result" };
+    const messages: AiMessage[] = [
+      { messageId: "user", role: "user", contents: [{ type: "TextContent", content: "Review" }] },
+      first,
+    ];
+    if (boundary === "tool-result")
+      messages.push({
+        messageId: "tool-result",
+        role: "user",
+        contents: [
+          {
+            type: "FunctionResultContent",
+            content: "output",
+            additionalProperties: { callId: "call" },
+          },
+        ],
+      });
+    messages.push(second);
+    const history = prepareConversationHistory(messages).messages;
+
+    assert.equal(history.length, messages.length);
+    assert.equal(history[1].contents[0].content, "before");
+    assert.equal(history.at(-1)!.contents[0].content, "after");
+  });
 }
 
 test("collapses consecutive system messages with the same rules as Desktop", () => {

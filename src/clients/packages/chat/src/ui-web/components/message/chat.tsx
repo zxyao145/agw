@@ -10,6 +10,7 @@ import { apiGet } from "@agw/api";
 import {
   buildConversationRenderModel,
   getCurrentTurnTodoItems,
+  prepareConversationHistory,
   updateAutoScrollState,
   type AutoScrollState,
 } from "@agw/chat-core";
@@ -51,7 +52,6 @@ import {
   createUserMessage,
   mergeStreamingMessages,
   replaceStreamingScope,
-  scopeMessagesByUserTurn,
   scopeStreamingMessage,
   toExecutionUserInput,
   type StreamingMessageBatcher,
@@ -116,11 +116,7 @@ const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
 const EMPTY_PROJECT_DIRECTORIES: readonly ProjectDirectoryOption[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
-  const preparedHistory = prepareClaudeHistory(messages);
-  return {
-    ...preparedHistory,
-    messages: scopeMessagesByUserTurn(preparedHistory.messages),
-  };
+  return prepareConversationHistory(messages);
 }
 
 function calculateConversationUsage(messages: AiMessage[]): TokenUsage {
@@ -331,9 +327,25 @@ export function Chat({
     () => toCommandSource(agentSuggestionsQuery.data, claudeCommands),
     [agentSuggestionsQuery.data, claudeCommands],
   );
+  const isHydratingSession =
+    isLoadingConversation ||
+    hydratedSessionRevision !== sessionSeed.revision ||
+    Boolean(conversationId && !contextId);
+  const executionRestoreKey =
+    restoreExecution && projectId && contextId
+      ? JSON.stringify([executionServerId, projectId, contextId, sessionSeed.revision])
+      : null;
+  const isRestoringExecution =
+    executionRestoreKey !== null && restoredExecutionKey !== executionRestoreKey;
+  const showReconnect = getExecutionReconnectProgress(reconnectState) !== null;
+  const checkpointResumeDisabled =
+    isExecuting || isTransitioning || isHydratingSession || isRestoringExecution || showReconnect;
+  const isCurrentTurnActive =
+    checkpointResumeDisabled || reconnectState !== null || activeStreamingScopeRef.current !== null;
   const renderItems = React.useMemo(
     () =>
       buildConversationRenderModel(messages, {
+        isCurrentTurnActive,
         activeAgentId: target?.type === "agent" ? target.id : null,
         agentResultFormats,
         collapseToolRuns: true,
@@ -341,6 +353,7 @@ export function Chat({
         checkpointAvailability,
       }),
     [
+      isCurrentTurnActive,
       checkpointAvailability,
       messages,
       pendingInteraction,
@@ -361,19 +374,6 @@ export function Chat({
         ),
     [checkpointAvailability],
   );
-  const isHydratingSession =
-    isLoadingConversation ||
-    hydratedSessionRevision !== sessionSeed.revision ||
-    Boolean(conversationId && !contextId);
-  const executionRestoreKey =
-    restoreExecution && projectId && contextId
-      ? JSON.stringify([executionServerId, projectId, contextId, sessionSeed.revision])
-      : null;
-  const isRestoringExecution =
-    executionRestoreKey !== null && restoredExecutionKey !== executionRestoreKey;
-  const showReconnect = getExecutionReconnectProgress(reconnectState) !== null;
-  const checkpointResumeDisabled =
-    isExecuting || isTransitioning || isHydratingSession || isRestoringExecution || showReconnect;
 
   React.useEffect(() => {
     if (!isExecuting || !onConversationChange) return;
@@ -778,7 +778,11 @@ export function Chat({
           executionClientRef.current === client
         ) {
           setReconnectState(null);
-          setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
+          const stillActive = ["running", "waiting-approval", "detached"].includes(
+            client.getStatus(),
+          );
+          if (!stillActive) activeStreamingScopeRef.current = null;
+          setIsExecuting(stillActive);
           void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
         }
       },
@@ -841,7 +845,7 @@ export function Chat({
 
               executionClientRef.current = null;
               configuredSessionRef.current = null;
-              activeStreamingScopeRef.current = null;
+              // A closed connection does not confirm that the active turn has finished.
               setReconnectState(null);
               setIsExecuting(false);
               setPendingInteraction(null);
@@ -869,9 +873,11 @@ export function Chat({
                 executionClientRef.current === attachedClient
               ) {
                 setReconnectState(null);
-                setIsExecuting(
-                  ["running", "waiting-approval", "detached"].includes(attachedClient.getStatus()),
+                const stillActive = ["running", "waiting-approval", "detached"].includes(
+                  attachedClient.getStatus(),
                 );
+                if (!stillActive) activeStreamingScopeRef.current = null;
+                setIsExecuting(stillActive);
                 void refreshAgentflowCheckpoints(attachedClient, generation).catch(() => undefined);
               }
             },
@@ -1654,6 +1660,13 @@ export function Chat({
             <ToolDirectoriesContext.Provider value={directories}>
               <Conversation
                 items={renderItems}
+                conversationKey={JSON.stringify([
+                  executionServerId,
+                  projectId,
+                  contextId,
+                  conversationId,
+                ])}
+                onWorkSummaryToggle={handleUserInputNavigate}
                 scrollElementRef={conversationScrollRef}
                 userInputNavigationHost={userInputNavigationHost}
                 onUserInputNavigate={handleUserInputNavigate}

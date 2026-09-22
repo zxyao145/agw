@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -109,7 +110,9 @@ public sealed partial class EfCoreChatHistoryProvider
         string Payload,
         Dictionary<string, JsonElement>? Metadata,
         bool IsStreamingSnapshot = false,
-        HistoryStream? Stream = null
+        HistoryStream? Stream = null,
+        IConversationMessageSource? Source = null,
+        ConversationMessageWriteScope? Scope = null
     );
 
     private static ProjectConversationChatHistory ToEntity(
@@ -133,13 +136,32 @@ public sealed partial class EfCoreChatHistoryProvider
 
     private sealed class HistoryBuffer : IConversationHistoryPersistenceScope
     {
+        private readonly Dictionary<Guid, long> _messageOrder = [];
+        private long _nextMessageOrder;
         private readonly CancellationToken _ownershipLost;
         private readonly ClaimsPrincipal _principal;
         private readonly CancellationTokenSource _stop = new();
         private readonly SemaphoreSlim _signal = new(0, 1);
         private readonly Task _timer;
         private DateTimeOffset? _flushAt;
-        private long _bytes;
+        private readonly Guid _metricsId = Guid.NewGuid();
+        private DateTimeOffset? _pendingSince;
+        private long _bufferedBytes;
+        private long BufferedBytes
+        {
+            get => _bufferedBytes;
+            set
+            {
+                _bufferedBytes = value;
+                _pendingSince = value == 0 ? null : _pendingSince ?? Provider._timeProvider.GetUtcNow();
+                ConversationHistoryBufferMetrics.Update(
+                    _metricsId,
+                    value,
+                    _pendingSince ?? default,
+                    Provider._timeProvider
+                );
+            }
+        }
         private int _closed;
         private ExceptionDispatchInfo? _invalidated;
 
@@ -153,7 +175,26 @@ public sealed partial class EfCoreChatHistoryProvider
         public List<PendingHistoryRecord> Records { get; } = [];
 
         public List<PendingHistoryRecord> Snapshot() =>
-            Records.SelectMany(record => record.Stream?.Snapshot() ?? [record]).ToList();
+            Records
+                .SelectMany(record =>
+                    record.Source != null
+                        ? record
+                            .Source.CapturePending()
+                            .Where(snapshot => _messageOrder.ContainsKey(snapshot.MessageId))
+                            .Select(snapshot => Provider.CreateSnapshotRecord(record.Scope!, snapshot))
+                        : record.Stream?.Snapshot() ?? [record]
+                )
+                .OrderBy(GetMessageOrder)
+                .ToList();
+
+        private long GetMessageOrder(PendingHistoryRecord record) =>
+            _messageOrder.GetValueOrDefault(record.Id, _messageOrder.GetValueOrDefault(record.TaskId, long.MaxValue));
+
+        private void RegisterMessage(Guid id)
+        {
+            if (!_messageOrder.ContainsKey(id))
+                _messageOrder.Add(id, _nextMessageOrder++);
+        }
 
         public HistoryBuffer(
             EfCoreChatHistoryProvider provider,
@@ -188,13 +229,17 @@ public sealed partial class EfCoreChatHistoryProvider
 
         public async Task AppendAsync(IReadOnlyList<PendingHistoryRecord> records, CancellationToken token)
         {
+            if (records.Count == 0)
+                return;
             await Gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
                 EnsureActive();
                 StartTimer();
+                foreach (var record in records)
+                    RegisterMessage(record.Id);
                 Records.AddRange(records);
-                _bytes += records.Sum(record => (long)Encoding.UTF8.GetByteCount(record.Payload));
+                BufferedBytes += records.Sum(record => (long)Encoding.UTF8.GetByteCount(record.Payload));
                 if (records.Any(record => record.Metadata != null))
                 {
                     // Count metadata in a reusable pooled buffer without retaining its JSON bytes.
@@ -205,7 +250,7 @@ public sealed partial class EfCoreChatHistoryProvider
                         if (record.Metadata == null)
                             continue;
                         JsonSerializer.Serialize(writer, record.Metadata);
-                        _bytes += writer.BytesCommitted + writer.BytesPending;
+                        BufferedBytes += writer.BytesCommitted + writer.BytesPending;
                         writer.Reset(scratch);
                     }
                 }
@@ -252,6 +297,7 @@ public sealed partial class EfCoreChatHistoryProvider
         public Task EnqueueStreamAsync(HistoryStream stream, long bytes, CancellationToken token)
         {
             // Caller owns Gate; a stream occupies one queue position regardless of its token count.
+            RegisterMessage(stream.TaskId);
             StartTimer();
             if (!Records.Any(record => ReferenceEquals(record.Stream, stream)))
                 Records.Add(
@@ -266,13 +312,41 @@ public sealed partial class EfCoreChatHistoryProvider
                         Stream: stream
                     )
                 );
-            _bytes += bytes;
+            BufferedBytes += bytes;
+            return FlushIfFullAsync(token);
+        }
+
+        public Task EnqueueSourceAsync(
+            ConversationMessageWriteScope scope,
+            IConversationMessageSource source,
+            long bytes,
+            CancellationToken token
+        )
+        {
+            StartTimer();
+            foreach (var id in source.GetPendingMessageIds())
+                RegisterMessage(id);
+            if (!Records.Any(record => ReferenceEquals(record.Source, source)))
+                Records.Add(
+                    new PendingHistoryRecord(
+                        scope.ProducerId,
+                        scope.ProducerId,
+                        Provider._timeProvider.GetUtcNow(),
+                        null,
+                        null,
+                        "",
+                        null,
+                        Source: source,
+                        Scope: scope
+                    )
+                );
+            BufferedBytes += bytes;
             return FlushIfFullAsync(token);
         }
 
         private Task FlushIfFullAsync(CancellationToken token) =>
             Provider._options.Mode == ConversationHistoryWriteMode.Immediate
-            || _bytes >= Provider._options.MaxBufferedBytes
+            || BufferedBytes >= Provider._options.MaxBufferedBytes
                 ? FlushCoreAsync(token)
                 : Task.CompletedTask;
 
@@ -328,12 +402,31 @@ public sealed partial class EfCoreChatHistoryProvider
                 return;
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30), Provider._timeProvider);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token, _ownershipLost);
+            var captured = Records
+                .Where(record => record.Source != null)
+                .ToDictionary(
+                    record => record.Source!,
+                    record =>
+                        record
+                            .Source!.CapturePending()
+                            .Where(snapshot => _messageOrder.ContainsKey(snapshot.MessageId))
+                            .ToArray()
+                );
+            var snapshots = Records
+                .SelectMany(record =>
+                    record.Source != null
+                        ? captured[record.Source]
+                            .Select(snapshot => Provider.CreateSnapshotRecord(record.Scope!, snapshot))
+                        : record.Stream?.Snapshot() ?? [record]
+                )
+                .OrderBy(GetMessageOrder)
+                .ToList();
             try
             {
                 linked.Token.ThrowIfCancellationRequested();
                 using var userScope = UserInfoUtil.Push(_principal);
                 await Provider
-                    .AppendRecordsAsync(ProjectId, ContextId, Snapshot(), Generation, IsExecutionBound, linked.Token)
+                    .AppendRecordsAsync(ProjectId, ContextId, snapshots, Generation, IsExecutionBound, linked.Token)
                     .ConfigureAwait(false);
             }
             catch (Exception exception)
@@ -348,15 +441,17 @@ public sealed partial class EfCoreChatHistoryProvider
             {
                 _invalidated = ExceptionDispatchInfo.Capture(exception);
                 Records.Clear();
-                _bytes = 0;
+                BufferedBytes = 0;
                 _flushAt = null;
                 throw;
             }
             IsExecutionBound = true;
+            foreach (var (source, messages) in captured)
+                source.Acknowledge(messages);
             foreach (var record in Records)
                 record.Stream?.MarkPersisted();
             Records.Clear();
-            _bytes = 0;
+            BufferedBytes = 0;
             _flushAt = null;
         }
 
@@ -437,6 +532,8 @@ public sealed partial class EfCoreChatHistoryProvider
             finally
             {
                 Records.Clear();
+                _messageOrder.Clear();
+                BufferedBytes = 0;
                 _stop.Dispose();
                 // A late SDK callback can still observe this closed scope. Keep the gate available to reject it safely.
             }

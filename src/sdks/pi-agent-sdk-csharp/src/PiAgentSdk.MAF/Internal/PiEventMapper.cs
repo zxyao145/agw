@@ -11,16 +11,20 @@ internal sealed class PiEventMapper
     private readonly string _responseId = Guid.CreateVersion7().ToString("N");
     private readonly HashSet<int> _emittedAssistantContentIndexes = [];
     private readonly string _configuredModelName;
+    private readonly bool _emitMessageSnapshots;
     private string? _activeAssistantMessageId;
+    private string? _lastAssistantMessageId;
+    private readonly Dictionary<string, string> _toolMessageIds = new(StringComparer.Ordinal);
     private string _activeModelName;
     private int _messageSequence;
     private bool _assistantErrorEmitted;
     private PiAssistantMessage? _finalAssistantMessage;
     private ChatMessage? _lastAssistantHistoryMessage;
 
-    public PiEventMapper(string? configuredModelName = null)
+    public PiEventMapper(string? configuredModelName = null, bool emitMessageSnapshots = false)
     {
         _configuredModelName = NormalizeModelName(configuredModelName);
+        _emitMessageSnapshots = emitMessageSnapshots;
         _activeModelName = _configuredModelName;
     }
 
@@ -53,6 +57,7 @@ internal sealed class PiEventMapper
         if (evt is PiMessageEvent { Type: "message_start", Message: PiAssistantMessage startingAssistant })
         {
             _activeAssistantMessageId = CreateMessageId("assistant");
+            _lastAssistantMessageId = _activeAssistantMessageId;
             _activeModelName = ResolveModelName(startingAssistant.Model, _configuredModelName);
             ResetAssistantTracking();
             return null;
@@ -109,6 +114,7 @@ internal sealed class PiEventMapper
         if (evt is PiTurnEndEvent)
         {
             _activeAssistantMessageId = null;
+            _lastAssistantMessageId = null;
             _activeModelName = _configuredModelName;
             ResetAssistantTracking();
         }
@@ -155,7 +161,21 @@ internal sealed class PiEventMapper
         var modelName = ResolveModelName((turnEnd.Message as PiAssistantMessage)?.Model, _configuredModelName);
         if (turnEnd.Message is PiAssistantMessage assistant)
         {
-            var contents = assistant.Content.Select(MapContent).OfType<AIContent>().ToList();
+            var contents = assistant
+                .Content.Select(
+                    (content, index) =>
+                    {
+                        var mapped = MapContent(content);
+                        if (mapped != null)
+                        {
+                            mapped.AdditionalProperties ??= [];
+                            mapped.AdditionalProperties["blockId"] = $"block:{index}";
+                        }
+                        return mapped;
+                    }
+                )
+                .OfType<AIContent>()
+                .ToList();
             if (!string.IsNullOrWhiteSpace(assistant.ErrorMessage))
             {
                 contents.Add(CreateError(assistant.ErrorMessage, isFatal: true));
@@ -168,7 +188,7 @@ internal sealed class PiEventMapper
                     new ChatMessage(ChatRole.Assistant, contents)
                     {
                         AuthorName = AgentName,
-                        MessageId = Guid.CreateVersion7().ToString("N"),
+                        MessageId = _lastAssistantMessageId ??= CreateMessageId("assistant"),
                         AdditionalProperties = additionalProperties,
                     }
                 );
@@ -191,7 +211,7 @@ internal sealed class PiEventMapper
                 new ChatMessage(ChatRole.Tool, contents)
                 {
                     AuthorName = AgentName,
-                    MessageId = Guid.CreateVersion7().ToString("N"),
+                    MessageId = GetToolMessageId(result.ToolCallId),
                     AdditionalProperties = new AdditionalPropertiesDictionary { [ModelNamePropertyName] = modelName },
                 }
             );
@@ -250,6 +270,11 @@ internal sealed class PiEventMapper
         if (update != null)
         {
             _emittedAssistantContentIndexes.Add(message.AssistantMessageEvent.ContentIndex);
+            foreach (var content in update.Contents)
+            {
+                content.AdditionalProperties ??= [];
+                content.AdditionalProperties["blockId"] = $"block:{message.AssistantMessageEvent.ContentIndex}";
+            }
         }
 
         return update;
@@ -283,10 +308,31 @@ internal sealed class PiEventMapper
 
     private AgentResponseUpdate? MapTurnEnd(PiTurnEndEvent turnEnd)
     {
-        var contents = turnEnd.Message is PiAssistantMessage assistant ? MapMissingAssistantContents(assistant) : [];
+        var contents = turnEnd.Message is PiAssistantMessage assistant
+            ? !_emitMessageSnapshots
+                ? MapMissingAssistantContents(assistant)
+                : assistant
+                    .Content.Select(
+                        (content, index) =>
+                        {
+                            var mapped = MapContent(content);
+                            if (mapped != null)
+                            {
+                                mapped.AdditionalProperties ??= [];
+                                mapped.AdditionalProperties["blockId"] = $"block:{index}";
+                            }
+                            return mapped;
+                        }
+                    )
+                    .OfType<AIContent>()
+                    .ToList()
+            : [];
         if (turnEnd.Message is PiAssistantMessage completedAssistant)
         {
-            AddAssistantError(completedAssistant, contents);
+            if (_emitMessageSnapshots && !string.IsNullOrWhiteSpace(completedAssistant.ErrorMessage))
+                contents.Add(CreateError(completedAssistant.ErrorMessage, isFatal: true));
+            else
+                AddAssistantError(completedAssistant, contents);
         }
 
         var usage = new PiUsage();
@@ -311,9 +357,18 @@ internal sealed class PiEventMapper
             contents.Add(ToUsageContent(usage));
         }
 
-        var role = contents.Any(IsAssistantContent) ? ChatRole.Assistant : ChatRole.System;
+        var hasSnapshot =
+            _emitMessageSnapshots
+            && turnEnd.Message is PiAssistantMessage
+            && contents.Any(content => content is not UsageContent);
+        var role = hasSnapshot || contents.Any(IsAssistantContent) ? ChatRole.Assistant : ChatRole.System;
         var type = contents.Any(content => content is not UsageContent) ? "turn.end" : "turn.end.usage";
-        return contents.Count == 0 ? null : CreateUpdate(role, type, contents);
+        if (contents.Count == 0)
+            return null;
+        var update = CreateUpdate(role, type, contents);
+        if (hasSnapshot)
+            update.AdditionalProperties!["messageSnapshot"] = true;
+        return update;
     }
 
     private static AgentResponseUpdate? MapCompactionEnd(PiCompactionEvent compaction)
@@ -355,6 +410,8 @@ internal sealed class PiEventMapper
             var mapped = MapContent(assistant.Content[index]);
             if (mapped != null)
             {
+                mapped.AdditionalProperties ??= [];
+                mapped.AdditionalProperties["blockId"] = $"block:{index}";
                 contents.Add(mapped);
             }
         }
@@ -501,10 +558,17 @@ internal sealed class PiEventMapper
             || evt is PiTurnEndEvent && role == ChatRole.Assistant
         )
         {
-            return _activeAssistantMessageId ??= CreateMessageId("assistant");
+            return _activeAssistantMessageId ?? (_lastAssistantMessageId ??= CreateMessageId("assistant"));
         }
 
-        return CreateMessageId(evt is PiToolExecutionEvent ? "tool" : "event");
+        return evt is PiToolExecutionEvent tool ? GetToolMessageId(tool.ToolCallId) : CreateMessageId("event");
+    }
+
+    private string GetToolMessageId(string callId)
+    {
+        if (!_toolMessageIds.TryGetValue(callId, out var id))
+            _toolMessageIds.Add(callId, id = CreateMessageId("tool"));
+        return id;
     }
 
     private void ResetAssistantTracking()

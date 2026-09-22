@@ -167,7 +167,12 @@ public static class AgwAgentExtensions
         }
 
         // 每次请求 Model 前处理历史，包括加入新消息、整理顺序、保存进度和 Compaction。
-        ConfigureHistoryPipeline(chatClientBuilder, definition, loggerFactory);
+        ConfigureHistoryPipeline(
+            chatClientBuilder,
+            definition,
+            loggerFactory,
+            services.GetService(typeof(TimeProvider)) as TimeProvider
+        );
 
         // 移除空消息和已处理的 Function 审批响应，避免发送 Model 无法接收的内容；MCP 审批响应仍保留。
         chatClientBuilder.Use(static innerClient => new ModelInputFilteringChatClient(innerClient));
@@ -186,7 +191,8 @@ public static class AgwAgentExtensions
     private static void ConfigureHistoryPipeline(
         ChatClientBuilder chatClientBuilder,
         ResolvedAgentDefinition definition,
-        ILoggerFactory loggerFactory
+        ILoggerFactory loggerFactory,
+        TimeProvider? timeProvider
     )
     {
         var compactionStateKey = definition.CompactionProvider is CompactionProvider compactionProvider
@@ -204,7 +210,11 @@ public static class AgwAgentExtensions
         if (definition.ChatHistoryProvider?.GetService<IStreamingConversationHistoryProvider>() is { } streamingHistory)
         {
             // Streaming 响应每收到一段内容就先保存再转发，避免必须等完整响应结束才能保存。
-            chatClientBuilder.Use(innerClient => new StreamingChatHistoryClient(innerClient, streamingHistory));
+            chatClientBuilder.Use(innerClient => new StreamingChatHistoryClient(
+                innerClient,
+                streamingHistory,
+                timeProvider
+            ));
         }
         if (definition.CompactionProvider != null)
         {

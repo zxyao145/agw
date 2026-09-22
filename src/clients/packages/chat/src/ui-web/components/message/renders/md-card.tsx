@@ -100,7 +100,7 @@ function MarkdownCodeBlock({ children }: { children: React.ReactNode }) {
             variant="ghost"
             size="icon-sm"
             className={
-              "size-8 rounded-lg text-[#71757a] hover:bg-black/5 hover:text-[#17191d] dark:text-[#aeb2b8] dark:hover:bg-white/10 dark:hover:text-white" +
+              "size-6 rounded-md text-[#71757a] hover:bg-black/5 hover:text-[#17191d] dark:text-[#aeb2b8] dark:hover:bg-white/10 dark:hover:text-white" +
               (isWrapped ? " bg-black/5 text-[#17191d] dark:bg-white/10 dark:text-white" : "")
             }
             aria-label={wrapLabel}
@@ -108,22 +108,22 @@ function MarkdownCodeBlock({ children }: { children: React.ReactNode }) {
             title={wrapLabel}
             onClick={() => setIsWrapped((current) => !current)}
           >
-            <WrapText className="size-4" aria-hidden="true" />
+            <WrapText className="size-3.5" aria-hidden="true" />
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="size-8 rounded-lg text-[#71757a] hover:bg-black/5 hover:text-[#17191d] dark:text-[#aeb2b8] dark:hover:bg-white/10 dark:hover:text-white"
+            className="size-6 rounded-md text-[#71757a] hover:bg-black/5 hover:text-[#17191d] dark:text-[#aeb2b8] dark:hover:bg-white/10 dark:hover:text-white"
             aria-label={copyLabel}
             title={copyLabel}
             disabled={!code}
             onClick={handleCopy}
           >
             {copied ? (
-              <Check className="size-4" aria-hidden="true" />
+              <Check className="size-3.5" aria-hidden="true" />
             ) : (
-              <Copy className="size-4" aria-hidden="true" />
+              <Copy className="size-3.5" aria-hidden="true" />
             )}
           </Button>
         </div>
