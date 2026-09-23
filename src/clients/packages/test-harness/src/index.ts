@@ -114,6 +114,21 @@ export async function setupDomEnvironment(
 
   const testingLibrary = await import("@testing-library/react");
 
+  // A browser hands focus back to the body when the focused element leaves the DOM; jsdom hands
+  // it to the document instead, and a later element.focus() then dispatches blur on the window.
+  // Radix closes an open menu on that blur, so every render starts from the body as focus host.
+  // 浏览器在获得焦点的元素离开 DOM 后把焦点交还给 body；jsdom 则交给 document，之后的
+  // element.focus() 便向 window 派发 blur。Radix 收到该 blur 会关闭已打开的菜单，
+  // 因此每次渲染都先让 body 充当焦点宿主。
+  window.document.body.tabIndex = -1;
+  const render = ((
+    ui: Parameters<typeof testingLibrary.render>[0],
+    options?: Parameters<typeof testingLibrary.render>[1],
+  ) => {
+    window.document.body.focus();
+    return testingLibrary.render(ui, options);
+  }) as typeof TestingLibrary.render;
+
   afterEach(() => {
     testingLibrary.cleanup();
     // Testing Library restores the flag to its pre-render value; keep it on so late
@@ -133,7 +148,7 @@ export async function setupDomEnvironment(
     cleanup: testingLibrary.cleanup,
     createEvent: testingLibrary.createEvent,
     fireEvent: testingLibrary.fireEvent,
-    render: testingLibrary.render,
+    render,
     screen: testingLibrary.screen,
     waitFor: testingLibrary.waitFor,
     within: testingLibrary.within,
