@@ -1,4 +1,5 @@
 using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.Definitions.Domain.Decisions;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
@@ -191,7 +192,13 @@ public class AgentBehaviorTests
         };
 
         var exception = Assert.Throws<AgwException>(() =>
-            new AgentBehavior(agent).ApplyUpdate(current => current.ModelProviderId = null)
+            new AgentBehavior(agent).ApplyUpdate(
+                new AgentUpdateDecision
+                {
+                    SpecifiedFields = new HashSet<AgentUpdateField> { AgentUpdateField.ModelProviderId },
+                    ModelProviderId = null,
+                }
+            )
         );
 
         Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
@@ -219,19 +226,26 @@ public class AgentBehaviorTests
         var updatedModelProviderId = Guid.CreateVersion7();
         var updatedSummaryModelProviderId = Guid.CreateVersion7();
 
-        new AgentBehavior(agent).ApplyUpdate(current =>
-        {
-            current.Id = Guid.CreateVersion7();
-            current.Name = "updated-name";
-            current.SystemPrompt = "updated-prompt";
-            current.Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }];
-            current.EnableSummary = true;
-            current.Type = AgentType.System;
-            current.ExternalAgentKind = ExternalAgentKind.Codex;
-            current.DisplayName = "After";
-            current.ModelProviderId = updatedModelProviderId;
-            current.SummaryModelProviderId = updatedSummaryModelProviderId;
-        });
+        new AgentBehavior(agent).ApplyUpdate(
+            new AgentUpdateDecision
+            {
+                SpecifiedFields = new HashSet<AgentUpdateField>
+                {
+                    AgentUpdateField.DisplayName,
+                    AgentUpdateField.SystemPrompt,
+                    AgentUpdateField.Tools,
+                    AgentUpdateField.EnableSummary,
+                    AgentUpdateField.ModelProviderId,
+                    AgentUpdateField.SummaryModelProviderId,
+                },
+                DisplayName = "After",
+                SystemPrompt = "updated-prompt",
+                Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
+                EnableSummary = true,
+                ModelProviderId = updatedModelProviderId,
+                SummaryModelProviderId = updatedSummaryModelProviderId,
+            }
+        );
 
         Assert.Equal(originalId, agent.Id);
         Assert.Equal("original-name", agent.Name);
@@ -261,7 +275,13 @@ public class AgentBehaviorTests
             Extra = "{\"before\":true}",
         };
 
-        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "{\"sandbox\":false}");
+        new AgentBehavior(agent).ApplyUpdate(
+            new AgentUpdateDecision
+            {
+                SpecifiedFields = new HashSet<AgentUpdateField> { AgentUpdateField.Extra },
+                Extra = "{\"sandbox\":false}",
+            }
+        );
 
         Assert.Equal("{\"sandbox\":false}", agent.Extra);
     }
@@ -269,16 +289,28 @@ public class AgentBehaviorTests
     [Fact]
     public void ApplyUpdate_SystemAgent_PreservesExtra()
     {
+        var modelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            ModelProviderId = Guid.CreateVersion7(),
+            ModelProviderId = modelProviderId,
             Extra = "{\"managed\":true}",
         };
 
-        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "{\"managed\":false}");
+        new AgentBehavior(agent).ApplyUpdate(
+            new AgentUpdateDecision
+            {
+                SpecifiedFields = new HashSet<AgentUpdateField>
+                {
+                    AgentUpdateField.Extra,
+                    AgentUpdateField.ModelProviderId,
+                },
+                Extra = "{\"managed\":false}",
+                ModelProviderId = modelProviderId,
+            }
+        );
 
         Assert.Equal("{\"managed\":true}", agent.Extra);
     }
@@ -286,17 +318,27 @@ public class AgentBehaviorTests
     [Fact]
     public void ApplyUpdate_SystemAgent_UpdatesEnvironmentVariables()
     {
+        var modelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            ModelProviderId = Guid.CreateVersion7(),
+            ModelProviderId = modelProviderId,
             EnvironmentVariables = new Dictionary<string, string> { ["BEFORE"] = "value" },
         };
 
-        new AgentBehavior(agent).ApplyUpdate(current =>
-            current.EnvironmentVariables = new Dictionary<string, string> { ["AFTER"] = "" }
+        new AgentBehavior(agent).ApplyUpdate(
+            new AgentUpdateDecision
+            {
+                SpecifiedFields = new HashSet<AgentUpdateField>
+                {
+                    AgentUpdateField.EnvironmentVariables,
+                    AgentUpdateField.ModelProviderId,
+                },
+                EnvironmentVariables = new Dictionary<string, string> { ["AFTER"] = "" },
+                ModelProviderId = modelProviderId,
+            }
         );
 
         Assert.Single(agent.EnvironmentVariables);

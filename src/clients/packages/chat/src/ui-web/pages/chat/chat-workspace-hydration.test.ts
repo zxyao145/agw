@@ -6,18 +6,15 @@ import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import * as React from "react";
 import { createRoot } from "react-dom/client";
-import ts from "typescript";
+import { transformSync } from "esbuild";
 
 import { buildChatHref } from "../../../lib/chat-route";
 import * as sessionRouting from "./lib/session-routing";
 import type { ChatProps } from "../../components/message/chat";
 import type { ChatWorkspaceProps } from "./chat-workspace";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
-import type {
-  ExecutionHubHandlers,
-  ExecutionRequest,
-  ExecutionSetting,
-} from "@agw/chat-runtime/execution-session";
+import * as chatRuntime from "@agw/chat-runtime";
+import type { ExecutionHubHandlers, ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime";
 
 async function checkConversationSession(kind: string, strictMode = false) {
   const failHistory = kind === "restore-failure";
@@ -125,10 +122,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
       isTransitioning: boolean;
       isExecuting: boolean;
       onExecute: (text: string, attachments: []) => void;
+      topLeft?: React.ReactNode;
     };
     newChat?: () => void;
     refreshSignal?: number;
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
+    selectTab?: (value: string) => void;
   } = {};
   const attachedContexts = new Set<string>();
   const executions: (ExecutionRequest & { contextId: string })[] = [];
@@ -185,8 +184,15 @@ async function checkConversationSession(kind: string, strictMode = false) {
         children,
         inert,
         "aria-hidden": ariaHidden,
-      }: React.HTMLAttributes<HTMLDivElement>) =>
-        React.createElement("div", { inert, "aria-hidden": ariaHidden }, children),
+        onValueChange,
+      }: React.HTMLAttributes<HTMLDivElement> & {
+        onValueChange?: (value: string) => void;
+      }) => {
+        // The sidebar renders the conversation list or the explorer by active tab,
+        // so expose the switch to let tests pick one.
+        observed.selectTab = onValueChange;
+        return React.createElement("div", { inert, "aria-hidden": ariaHidden }, children);
+      },
     },
     { get: (target, key) => Reflect.get(target, key) ?? Container },
   );
@@ -266,7 +272,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "./components/split-layout": { default: splitLayout, __esModule: true },
     "./lib/chat-settings": {},
     "./lib/session-routing": sessionRouting,
-    "../../../services/execution-session-manager": {
+    "@agw/chat-runtime": {
+      ...chatRuntime,
       executionSessionManager: {
         has: (key: { contextId: string }) =>
           (kind === "restore-active" || kind.startsWith("work-close")) &&
@@ -309,19 +316,18 @@ async function checkConversationSession(kind: string, strictMode = false) {
     overrides: Record<string, unknown> = {},
   ) {
     const source = await readFile(url, "utf8");
-    const compiled = ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        jsx: ts.JsxEmit.ReactJSX,
-        esModuleInterop: true,
-        target: ts.ScriptTarget.ES2022,
-      },
-    }).outputText;
-    const exports: Record<string, React.ComponentType<Props>> = {};
+    const compiled = transformSync(source, {
+      loader: "tsx",
+      format: "cjs",
+      jsx: "automatic",
+      target: "es2022",
+    }).code;
+    const moduleRef: { exports: Record<string, React.ComponentType<Props>> } = { exports: {} };
     const require = createRequire(url);
     const dependencies = { ...modules, ...overrides };
     runInNewContext(compiled, {
-      exports,
+      module: moduleRef,
+      exports: moduleRef.exports,
       console,
       ResizeObserver: class {
         observe() {}
@@ -335,7 +341,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       requestAnimationFrame: (callback: () => void) => setTimeout(callback, 0),
       cancelAnimationFrame: clearTimeout,
     });
-    return exports;
+    return moduleRef.exports;
   }
   const { Chat } = await loadComponent<ChatProps>(
     new URL("../../components/message/chat.tsx", import.meta.url),
@@ -343,7 +349,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
       "./chat-input": {
         ChatInput: (props: NonNullable<typeof observed.input>) => {
           observed.input = props;
-          return null;
+          // The workspace passes the agent selector through the input's top-left slot,
+          // so mount it here to keep observing target changes.
+          return React.createElement(React.Fragment, null, props.topLeft ?? null);
         },
       },
       "./chat-aside": { ChatAside: () => null },
@@ -589,14 +597,15 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return;
       }
       if (kind === "directories") {
-        const contextId = observed.chat?.contextId;
+        await React.act(async () => observed.selectTab!("files"));
+        const contextId = observed.chat?.sessionSeed.contextId;
         assert.deepEqual(observed.chat?.searchDirectoryIds, [null, "extra"]);
         await React.act(async () => observed.explorer!.onFileSelected("README.md"));
         assert.equal(observed.file?.selectedFile, "README.md");
         await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
         assert.equal(observed.file?.selectedFile, null);
         assert.equal(observed.chat?.directoryId, "extra");
-        assert.equal(observed.chat?.contextId, contextId);
+        assert.equal(observed.chat?.sessionSeed.contextId, contextId);
         await React.act(async () => observed.explorer!.onFileSelected("README.md"));
         assert.equal(fileReads.at(-1)?.at(-1), "extra");
         hasAdditionalDirectory = false;

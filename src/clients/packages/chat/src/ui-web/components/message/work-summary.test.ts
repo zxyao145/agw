@@ -1,60 +1,14 @@
 import assert from "node:assert/strict";
-import { register } from "node:module";
-import test, { after, afterEach } from "node:test";
-import { JSDOM } from "jsdom";
-import * as React from "react";
+import test from "node:test";
+import { installLayoutMetrics, setupDomEnvironment } from "@agw/test-harness";
+
 import type { AiMessage } from "@agw/api";
 
-// Resolve the runtime package's React peer to this renderer's React, as app bundlers do.
-register(
-  "data:text/javascript," +
-    encodeURIComponent(`
-    let reactUrl;
-    export function initialize(data) { reactUrl = data.reactUrl; }
-    export function resolve(specifier, context, nextResolve) {
-      return specifier === "react" ? { url: reactUrl, shortCircuit: true } : nextResolve(specifier, context);
-    }
-  `),
-  { data: { reactUrl: import.meta.resolve("react") } },
-);
-
-const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-  pretendToBeVisual: true,
-  url: "http://localhost/",
-});
-const { window } = dom;
-for (const [name, value] of Object.entries({
-  window,
-  document: window.document,
-  navigator: window.navigator,
-  HTMLElement: window.HTMLElement,
-  Element: window.Element,
-  Node: window.Node,
-  getComputedStyle: window.getComputedStyle.bind(window),
-  requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-}))
-  Object.defineProperty(globalThis, name, { configurable: true, value });
-Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", {
-  configurable: true,
-  get() {
-    return this.dataset.index === undefined ? 600 : 72;
-  },
-});
-Object.defineProperty(window.HTMLElement.prototype, "offsetWidth", {
-  configurable: true,
-  get: () => 800,
-});
-window.HTMLElement.prototype.scrollTo = function (options) {
-  if (typeof options === "object") this.scrollTop = options.top ?? this.scrollTop;
-};
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
-const { act, cleanup, fireEvent, render, screen } = await import("@testing-library/react");
+const environment = await setupDomEnvironment();
+const { React, act, fireEvent, render, screen } = environment;
+installLayoutMetrics(environment.window);
 const { Conversation } = await import("./conversation");
 const { buildConversationRenderModel } = await import("@agw/chat-core");
-afterEach(cleanup);
-after(() => window.close());
 
 const messages: AiMessage[] = [
   {
@@ -133,14 +87,11 @@ test("expansion survives rerenders and virtual unmounts, resets for resumed turn
   fireEvent.click(await screen.findByRole("button", { name: "Worked for 17m 39s" }));
   const manyMessages = [
     ...messages,
-    ...Array.from(
-      { length: 80 },
-      (_, index): AiMessage => ({
-        messageId: `later-${index}`,
-        role: "user",
-        contents: [{ type: "TextContent", content: `Later ${index}` }],
-      }),
-    ),
+    ...Array.from({ length: 80 }, (_, index): AiMessage => ({
+      messageId: `later-${index}`,
+      role: "user",
+      contents: [{ type: "TextContent", content: `Later ${index}` }],
+    })),
   ];
   view.rerender(React.createElement(Harness, { history: manyMessages }));
   assert.ok(screen.getByText("Checking implementation"));

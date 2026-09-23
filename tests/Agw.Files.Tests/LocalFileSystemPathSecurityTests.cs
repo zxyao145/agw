@@ -1,5 +1,5 @@
-using Agw.Files.Application.Storage.Local;
-using Agw.Files.Exceptions;
+using Agw.Files.Infrastructure.Storage;
+using Agw.Shared.Exceptions;
 
 namespace Agw.Files.Tests;
 
@@ -30,11 +30,12 @@ public class LocalFileSystemPathSecurityTests
         using var scope = TempDirectoryScope.Create();
         var fileSystem = new LocalFileSystem(scope.Path);
 
-        var exception = await Assert.ThrowsAsync<AgwFilesException>(() =>
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
             fileSystem.ReadAllTextAsync(path, TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(FilesErrorCode.PathOutsideRoot, exception.ErrorCode);
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.StatusCode, exception.StatusCode);
     }
 
     [Fact]
@@ -43,14 +44,15 @@ public class LocalFileSystemPathSecurityTests
         using var scope = TempDirectoryScope.Create();
         var fileSystem = new LocalFileSystem(scope.Path);
 
-        var exception = await Assert.ThrowsAsync<AgwFilesException>(() =>
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
             fileSystem.ReadAllTextAsync(
                 Path.Combine(Path.GetPathRoot(scope.Path)!, "outside.txt"),
                 TestContext.Current.CancellationToken
             )
         );
 
-        Assert.Equal(FilesErrorCode.PathOutsideRoot, exception.ErrorCode);
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.StatusCode, exception.StatusCode);
     }
 
     private sealed class TempDirectoryScope : IDisposable

@@ -26,7 +26,15 @@ module.exports = {
       path.resolve(__dirname, "assets"),
       ...(flavor === "full" ? [path.resolve(__dirname, "resources", "server")] : []),
     ],
-    ignore: [/^\/src($|\/)/, /^\/scripts($|\/)/, /^\/renderer($|\/)/, /\.test\.(ts|js)$/],
+    // dist/ is a self-contained esbuild bundle, so node_modules stay out of the package.
+    // dist/ 是 esbuild 打包的自包含产物，因此 node_modules 不进入安装包。
+    ignore: [
+      /^\/src($|\/)/,
+      /^\/scripts($|\/)/,
+      /^\/renderer($|\/)/,
+      /^\/node_modules($|\/)/,
+      /\.test\.(ts|js)$/,
+    ],
   },
   rebuildConfig: {},
   makers: [

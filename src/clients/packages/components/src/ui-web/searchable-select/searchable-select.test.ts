@@ -1,86 +1,225 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { setupDomEnvironment } from "@agw/test-harness";
 
-const COMPONENT_URL = new URL("./searchable-select.tsx", import.meta.url);
-const PACKAGES_URL = new URL("../../../../", import.meta.url);
-const AGENT_SELECTOR_URL = new URL("chat/src/ui-web/components/agent-selector.tsx", PACKAGES_URL);
-const COMBOBOX_URL = new URL("components/src/ui-web/shadcn/combobox.tsx", PACKAGES_URL);
+import type { SearchableSelectOption } from "./searchable-select.tsx";
 
-test("SearchableSelect exposes type-safe single and multiple selection props", async () => {
-  const source = await readFile(COMPONENT_URL, "utf8");
+const { React, act, fireEvent, render, screen, waitFor } = await setupDomEnvironment();
+const { SearchableSelect } = await import("./searchable-select.tsx");
 
-  assert.match(source, /type SearchableSelectSingleProps = \{[\s\S]*multiple\?: false/);
-  assert.match(source, /value: string;[\s\S]*onValueChange: \(value: string\) => void/);
-  assert.match(source, /type SearchableSelectMultipleProps = \{[\s\S]*multiple: true/);
-  assert.match(source, /value: string\[\];[\s\S]*onValueChange: \(value: string\[\]\) => void/);
-  assert.match(
-    source,
-    /type SearchableSelectProps = SearchableSelectBaseProps &[\s\S]*SearchableSelectSingleProps \| SearchableSelectMultipleProps/,
+const options: SearchableSelectOption[] = [
+  { value: "sonnet", title: "Claude Sonnet", subtitle: "claude-sonnet-5", group: "Anthropic" },
+  {
+    value: "haiku",
+    title: "Claude Haiku",
+    subtitle: "claude-haiku-4-5",
+    group: "Anthropic",
+    keywords: ["fast", "small"],
+  },
+  { value: "local", title: "Local model", group: "Self hosted" },
+];
+
+function renderSingle(value = "", onValueChange: (next: string) => void = () => {}) {
+  return render(
+    React.createElement(SearchableSelect, {
+      id: "model",
+      label: "Model",
+      options,
+      placeholder: "Select a model",
+      searchPlaceholder: "Search models",
+      value,
+      onValueChange,
+    }),
+  );
+}
+
+async function openPopup(triggerName = "Model") {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("combobox", { name: triggerName }));
+  });
+  return screen.findByLabelText("Search models");
+}
+
+test("trigger shows the placeholder until an option is selected", async () => {
+  const view = renderSingle();
+  assert.equal(screen.getByRole("combobox", { name: "Model" }).textContent, "Select a model");
+  view.unmount();
+
+  renderSingle("haiku");
+  assert.equal(screen.getByRole("combobox", { name: "Model" }).textContent, "Claude Haiku");
+});
+
+test("selecting an option reports its value and closes the popup", async () => {
+  const selected: string[] = [];
+  renderSingle("", (next) => selected.push(next));
+  await openPopup();
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("option", { name: /Local model/ }));
+  });
+
+  assert.deepEqual(selected, ["local"]);
+  await waitFor(() => assert.equal(screen.queryByRole("listbox"), null));
+});
+
+test("search matches an option through its keywords", async () => {
+  renderSingle();
+  const searchBox = await openPopup();
+
+  await act(async () => {
+    fireEvent.change(searchBox, { target: { value: "fast" } });
+  });
+
+  await waitFor(() => {
+    assert.equal(screen.queryByRole("option", { name: /Claude Haiku/ }) !== null, true);
+    assert.equal(screen.queryByRole("option", { name: /Claude Sonnet/ }), null);
+  });
+});
+
+test("search without a match reports an empty result", async () => {
+  renderSingle();
+  await openPopup();
+
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Search models"), {
+      target: { value: "no such model" },
+    });
+  });
+
+  await waitFor(() => assert.ok(screen.getByText("No results.")));
+});
+
+test("options keep their group headings", async () => {
+  renderSingle();
+  await openPopup();
+
+  await waitFor(() => {
+    assert.ok(screen.getByText("Anthropic"));
+    assert.ok(screen.getByText("Self hosted"));
+  });
+});
+
+test("clearing a selection reports an empty value", async () => {
+  const selected: string[] = [];
+  renderSingle("haiku", (next) => selected.push(next));
+  await openPopup();
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+  });
+
+  assert.deepEqual(selected, [""]);
+});
+
+test("an unselected combobox offers no clear action", async () => {
+  renderSingle();
+  await openPopup();
+
+  assert.equal(screen.queryByRole("button", { name: "Clear selection" }), null);
+});
+
+test("multiple selection accumulates values and announces the count", async () => {
+  const selected: string[][] = [];
+  render(
+    React.createElement(SearchableSelect, {
+      id: "models",
+      label: "Models",
+      options,
+      placeholder: "Select models",
+      searchPlaceholder: "Search models",
+      multiple: true,
+      value: ["haiku"],
+      onValueChange: (next: string[]) => selected.push(next),
+    }),
+  );
+
+  assert.equal(screen.getByRole("combobox", { name: "Models" }).textContent, "1 selected");
+  await openPopup("Models");
+  assert.equal(
+    screen.getByRole("listbox", { name: "Models" }).getAttribute("aria-multiselectable"),
+    "true",
+  );
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("option", { name: /Claude Sonnet/ }));
+  });
+
+  assert.deepEqual(selected, [["haiku", "sonnet"]]);
+});
+
+test("multiple selection shows the caller's selection text", () => {
+  render(
+    React.createElement(SearchableSelect, {
+      id: "models",
+      label: "Models",
+      options,
+      placeholder: "Select models",
+      searchPlaceholder: "Search models",
+      multiple: true,
+      value: ["haiku", "sonnet"],
+      selectionText: "Claude Haiku, Claude Sonnet",
+      onValueChange: () => {},
+    }),
+  );
+
+  assert.equal(
+    screen.getByRole("combobox", { name: "Models" }).textContent,
+    "Claude Haiku, Claude Sonnet",
   );
 });
 
-test("SearchableSelect preserves controlled multiple selection behavior", async () => {
-  const source = await readFile(COMPONENT_URL, "utf8");
+test("loading and error states replace the option list", async () => {
+  const view = render(
+    React.createElement(SearchableSelect, {
+      id: "model",
+      label: "Model",
+      options,
+      placeholder: "Select a model",
+      searchPlaceholder: "Search models",
+      isLoading: true,
+      value: "",
+      onValueChange: () => {},
+    }),
+  );
+  await openPopup();
+  await waitFor(() => assert.ok(screen.getByText("Loading...")));
+  assert.equal(screen.queryByRole("option"), null);
+  view.unmount();
 
-  assert.match(source, /<Combobox<string, true>/);
-  assert.match(source, /multiple[\s\S]*value=\{props\.value\}/);
-  assert.match(source, /onValueChange=\{props\.onValueChange\}/);
-  assert.match(source, /aria-multiselectable=\{props\.multiple \|\| undefined\}/);
-  assert.match(source, /<ComboboxItem[\s\S]*value=\{option\.value\}/);
-  assert.match(source, /details\.reason !== "item-press"/);
+  render(
+    React.createElement(SearchableSelect, {
+      id: "model",
+      label: "Model",
+      options,
+      placeholder: "Select a model",
+      searchPlaceholder: "Search models",
+      errorMessage: "Model list unavailable",
+      value: "",
+      onValueChange: () => {},
+    }),
+  );
+  await openPopup();
+  await waitFor(() => assert.ok(screen.getByText("Model list unavailable")));
+  assert.equal(screen.queryByRole("option"), null);
 });
 
-test("SearchableSelect includes optional keywords in its search index", async () => {
-  const source = await readFile(COMPONENT_URL, "utf8");
+test("a disabled combobox does not open", async () => {
+  render(
+    React.createElement(SearchableSelect, {
+      id: "model",
+      label: "Model",
+      options,
+      placeholder: "Select a model",
+      searchPlaceholder: "Search models",
+      disabled: true,
+      value: "",
+      onValueChange: () => {},
+    }),
+  );
 
-  assert.match(source, /keywords\?: string\[\];/);
-  assert.match(source, /option\.keywords\?\.join\(" "\) \?\? ""/);
-});
+  await act(async () => {
+    fireEvent.click(screen.getByRole("combobox", { name: "Model" }));
+  });
 
-test("SearchableSelect composes the current Shadcn Combobox", async () => {
-  const source = await readFile(COMPONENT_URL, "utf8");
-  const comboboxSource = await readFile(COMBOBOX_URL, "utf8");
-
-  assert.match(source, /from "\.\.\/shadcn\/combobox";/);
-  assert.match(source, /<ComboboxTrigger/);
-  assert.match(source, /<ComboboxContent/);
-  assert.match(source, /<ComboboxInput/);
-  assert.match(source, /<ComboboxList/);
-  assert.match(source, /<ComboboxItem/);
-  assert.doesNotMatch(source, /from "\.\.\/shadcn\/popover"/);
-  assert.match(comboboxSource, /Combobox as ComboboxPrimitive.*from "@base-ui\/react"/);
-});
-
-test("SearchableSelect keeps its Combobox focus scope inside modal surfaces", async () => {
-  const source = await readFile(COMPONENT_URL, "utf8");
-  const comboboxSource = await readFile(COMBOBOX_URL, "utf8");
-
-  assert.match(source, /data-slot="dialog-content"/);
-  assert.match(source, /data-slot="sheet-content"/);
-  assert.match(source, /data-slot="drawer-content"/);
-  assert.match(source, /closest<HTMLElement>\(MODAL_CONTENT_SELECTOR\)/);
-  assert.match(source, /portalContainer=\{portalContainer\}/);
-  assert.match(source, /initialFocus=\{searchInputRef\}/);
-  assert.match(comboboxSource, /<ComboboxPrimitive\.Portal container=\{portalContainer\}>/);
-});
-
-test("SearchableSelect renders its popup in the document body outside modal surfaces", async () => {
-  const source = await readFile(COMPONENT_URL, "utf8");
-
-  assert.match(source, /useState<HTMLElement \| undefined>\(undefined\)/);
-  assert.match(source, /closest<HTMLElement>\(MODAL_CONTENT_SELECTOR\) \?\? undefined/);
-  assert.doesNotMatch(source, /useState<HTMLElement \| null>\(null\)/);
-});
-
-test("AgentSelector forwards the optional Select size to SearchableSelect", async () => {
-  const source = await readFile(COMPONENT_URL, "utf8");
-  const agentSelectorSource = await readFile(AGENT_SELECTOR_URL, "utf8");
-
-  assert.match(source, /size\?: "default" \| "sm"/);
-  assert.match(source, /size = "default"/);
-  assert.match(source, /<Button[\s\S]*size=\{size\}/);
-  assert.match(agentSelectorSource, /size\?: "default" \| "sm"/);
-  assert.match(agentSelectorSource, /size = "default"/);
-  assert.match(agentSelectorSource, /<SearchableSelect[\s\S]*size=\{size\}/);
+  assert.equal(screen.queryByLabelText("Search models"), null);
 });

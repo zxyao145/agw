@@ -3,8 +3,7 @@
 import * as React from "react";
 import { Check, ShieldCheck, X } from "lucide-react";
 
-import type { PendingInteraction } from "../../../services/execution-hub";
-import type { ApprovalScope, PermissionMode } from "../../../services/execution-hub";
+import type { ApprovalScope, PendingInteraction, PermissionMode } from "@agw/chat-runtime";
 import { Button } from "@agw/components";
 import { Badge } from "@agw/components";
 import { Textarea } from "@agw/components";

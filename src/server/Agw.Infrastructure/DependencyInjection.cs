@@ -20,7 +20,6 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
-using Agw.Settings;
 using Agw.Settings.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Persistence;
@@ -112,7 +111,6 @@ public static class DependencyInjection
         services.AddScoped<EfApiTokenStore>();
         services.AddScoped<IApiTokenStore>(serviceProvider => serviceProvider.GetRequiredService<EfApiTokenStore>());
         services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();
-        services.AddSettings();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddScoped<ISettingsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
 

@@ -2,8 +2,7 @@
 
 import * as React from "react";
 
-import { executionSessionManager } from "../services/execution-session-manager";
-import type { ExecutionStatus } from "../state/execution";
+import { executionSessionManager, type ExecutionStatus } from "@agw/chat-runtime";
 import { useExecutionPlatform } from "./execution-platform";
 
 export function useExecutionActivity() {

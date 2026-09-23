@@ -23,7 +23,7 @@ import {
   type ChatImageAttachment,
   validateImageFiles,
 } from "../../../lib/chat/image-attachments";
-import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
+import type { AgentMode, PermissionMode } from "@agw/chat-runtime";
 import { ChatInputToolbar } from "./chat-input-toolbar";
 import { UserInput, type UserInputRef } from "./user-input";
 
@@ -56,6 +56,8 @@ interface ChatInputProps {
   onClearPendingFileComments: () => void;
   placeholder?: string;
   userInputRef?: React.RefObject<UserInputRef | null>;
+  /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
+  topLeft?: React.ReactNode;
 }
 
 export function ChatInput({
@@ -87,6 +89,7 @@ export function ChatInput({
   onClearPendingFileComments,
   placeholder,
   userInputRef: externalUserInputRef,
+  topLeft,
 }: ChatInputProps) {
   const internalUserInputRef = React.useRef<UserInputRef | null>(null);
   const userInputRef = externalUserInputRef ?? internalUserInputRef;
@@ -230,6 +233,7 @@ export function ChatInput({
           </div>
         </UserInput.Context>
       ) : null}
+      {topLeft ? <UserInput.TopLeft>{topLeft}</UserInput.TopLeft> : null}
       <UserInput.BottomLeft>
         <ChatInputToolbar
           commandSource={commandSource}

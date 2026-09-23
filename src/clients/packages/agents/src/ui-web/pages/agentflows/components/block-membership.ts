@@ -1,5 +1,7 @@
 import type { Edge, Node, XYPosition } from "reactflow";
 
+import { readConfigJson, readString, readStringArray, updateConfigJson } from "./config-json";
+
 type MembershipNodeData = {
   kind: number;
   title?: string;
@@ -245,51 +247,6 @@ export function isBlockNodeKind(kind: number) {
   );
 }
 
-function readConfigJson(value: string): Record<string, unknown> | null {
-  if (!value.trim()) return {};
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isPlainObject(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function updateConfigJson(currentJson: string, update: Record<string, unknown>) {
-  const config = readConfigJson(currentJson) ?? {};
-  for (const [key, value] of Object.entries(update)) {
-    if (shouldRemoveConfigValue(value)) {
-      delete config[key];
-    } else {
-      config[key] = value;
-    }
-  }
-
-  return Object.keys(config).length > 0 ? JSON.stringify(config, null, 2) : "";
-}
-
-function shouldRemoveConfigValue(value: unknown) {
-  if (value === undefined || value === null) return true;
-  if (typeof value === "string" && value.trim() === "") return true;
-  if (Array.isArray(value) && value.length === 0) return true;
-  return false;
-}
-
-function readString(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
-function readStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

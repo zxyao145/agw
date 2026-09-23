@@ -20,7 +20,7 @@ import {
   cn,
 } from "@agw/components";
 import type { AgentCommandSuggestion, CommandSource } from "../../../lib/chat/search-command";
-import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
+import type { AgentMode, PermissionMode } from "@agw/chat-runtime";
 
 type ChatInputToolbarProps = {
   commandSource: CommandSource;

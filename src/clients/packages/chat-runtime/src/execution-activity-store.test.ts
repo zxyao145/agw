@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// @ts-expect-error Node's type stripping requires the explicit TypeScript extension.
 import { ExecutionActivityStore } from "./execution-activity-store.ts";
 
 test("detaching a running project keeps it active and records unread completion", () => {

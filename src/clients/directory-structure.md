@@ -65,9 +65,12 @@ clients/
 │
 ├── tools/
 │   └── scripts/
-│       └── check-client-boundaries.mjs
+│       └── check-client-boundaries.mjs # manifest-level boundaries, then runs dependency-cruiser
+├── .dependency-cruiser.cjs           # import-level boundaries between workspaces
+├── .oxlintrc.json                    # shared lint configuration
+├── .oxfmtrc.json                     # shared formatter configuration
 ├── package.json
-├── pnpm-workspace.yaml
+├── pnpm-workspace.yaml               # workspace list, dependency catalog, build permissions
 ├── pnpm-lock.yaml
 ├── turbo.json
 ├── tsconfig.json

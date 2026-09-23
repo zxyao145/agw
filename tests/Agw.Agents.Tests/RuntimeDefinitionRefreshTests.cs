@@ -5,7 +5,6 @@ using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.HumanInteraction;
-using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
@@ -13,7 +12,7 @@ using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
-using Agw.Files.Application.Storage.Local;
+using Agw.Files.Infrastructure.Storage;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Providers.Contracts;
@@ -329,12 +328,29 @@ public sealed class RuntimeDefinitionRefreshTests
                 summaryService: null!,
                 services: _services,
                 projectDefaults: new TestProjectDefaultResolver(),
-                turnExecutor: null!,
-                configuration: configuration
+                configuration: configuration,
+                skillRegistrations: [],
+                remoteSkillContentResolver: null,
+                loggerFactory: NullLoggerFactory.Instance,
+                conversationHistoryWriter: null,
+                humanInteractionContextAccessor: null,
+                turnContextAccessor: null,
+                timeProvider: TimeProvider.System,
+                generatedToolCatalog: null
             );
             Service = new RecordingRuntimeService(Db, checker, configuration);
+            var turnExecutor = new AgentTurnExecutor(
+                null!,
+                new AgentSessionStateStore(
+                    _services.GetRequiredService<IServiceScopeFactory>(),
+                    TimeProvider.System,
+                    NullLogger<AgentSessionStateStore>.Instance
+                ),
+                null!
+            );
             var factory = new RuntimeFactory(
                 Service,
+                turnExecutor,
                 null!,
                 this,
                 new RuntimeTurnContextAccessor(),
@@ -447,7 +463,7 @@ public sealed class RuntimeDefinitionRefreshTests
             var definition = await _db
                 .Agents.AsNoTracking()
                 .SingleAsync(agent => agent.Id == agentId, cancellationToken);
-            var agent = new RecordingAgent(definition);
+            var agent = new RecordingAgent(definition, this, task.ProjectId);
             CreatedAgents.Add(agent);
             return new AgentRuntime(
                 NullLogger.Instance,
@@ -469,52 +485,22 @@ public sealed class RuntimeDefinitionRefreshTests
             };
         }
 
-        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            IInteractionHandler? approvalHandler,
-            CancellationToken cancellationToken = default
-        ) => ExecuteAsync(session, input, cancellationToken);
+        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+            Guid agentId,
+            Guid? projectId,
+            Guid conversationId,
+            IReadOnlyDictionary<string, string>? environmentVariables,
+            bool deferHumanInteractions,
+            CancellationToken cancellationToken = default,
+            AgwPermissionMode? permissionMode = null
+        ) => throw new NotSupportedException();
 
-        public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            CancellationToken cancellationToken = default
-        )
-        {
-            if (HoldTurn != null)
-                await HoldTurn.Task.WaitAsync(cancellationToken);
-            ExecutedWorkspaces.Add(ProjectWorkspaceContext.Get(session.SessionStateScope!.ProjectId));
-            ChildWorkspaces.Add(
-                await Task.Run(
-                    () => ProjectWorkspaceContext.Get(session.SessionStateScope.ProjectId),
-                    cancellationToken
-                )
-            );
-            return [];
-        }
-
-        public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
+        public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            AgentRuntime session,
-            AgwUserInput input,
+        public Task SetPermissionModeAsync(
+            AgentRuntime runtime,
+            AgwPermissionMode permissionMode,
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
@@ -526,12 +512,17 @@ public sealed class RuntimeDefinitionRefreshTests
 
     private sealed class RecordingAgent : AIAgent, IAsyncDisposable
     {
+        private readonly RecordingRuntimeService _owner;
+        private readonly Guid _projectId;
+
         public Agent Definition { get; }
         public bool Disposed { get; private set; }
 
-        public RecordingAgent(Agent definition)
+        public RecordingAgent(Agent definition, RecordingRuntimeService owner, Guid projectId)
         {
             Definition = definition;
+            _owner = owner;
+            _projectId = projectId;
         }
 
         protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
@@ -549,12 +540,26 @@ public sealed class RuntimeDefinitionRefreshTests
             CancellationToken cancellationToken
         ) => throw new NotSupportedException();
 
-        protected override Task<AgentResponse> RunCoreAsync(
+        // 在真实执行位置观察工作区上下文：Agent 运行期间当前上下文与派生任务看到的快照都记录下来。
+        // Observe the workspace context where the turn actually runs: both the ambient snapshot and the one a derived task sees are recorded.
+        protected override async Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
             CancellationToken cancellationToken
-        ) => throw new NotSupportedException();
+        )
+        {
+            if (_owner.HoldTurn != null)
+            {
+                await _owner.HoldTurn.Task.WaitAsync(cancellationToken);
+            }
+
+            _owner.ExecutedWorkspaces.Add(ProjectWorkspaceContext.Get(_projectId));
+            _owner.ChildWorkspaces.Add(
+                await Task.Run(() => ProjectWorkspaceContext.Get(_projectId), cancellationToken)
+            );
+            return new AgentResponse();
+        }
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,

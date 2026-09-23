@@ -178,42 +178,27 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             return NormalizedResponseAggregation.Aggregate(updates);
         }
 
-        options = CreateInteractionOptions(options);
-        var interactionNodeId = (
-            (InteractionSource)options.AdditionalProperties![HumanInteractionToolMetadata.SourceKey]!
-        ).NodeId;
-        // 在节点作用域中准备会话，并恢复待完成调用，确保审批继续执行沿用同一状态。
-        // Prepare the node-scoped session and restore pending calls so approval continuations keep the same state.
-        var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
-        var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
-        var input = AgentflowMessageTransforms.ApplyInstructions(
-            AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
-            _instructions
-        );
-        if (!_isWorkflow)
-            input = AgentflowMessageTransforms.PrepareNodeInputs(input);
-        UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
-        SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
-        using var activity = StartExecutionActivity(input);
-        var turnPersistence = new ToolTurnPersistence(InnerAgent, scopedSession, PersistToolBlockMessagesAsync);
+        var turn = await PrepareTurnAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
+        using var activity = turn.Activity;
+        var turnPersistence = turn.TurnPersistence;
         Exception? executionFailure = null;
         try
         {
-            await ObserveInputsAsync(input, cancellationToken).ConfigureAwait(false);
+            await ObserveInputsAsync(turn.Input, cancellationToken).ConfigureAwait(false);
             var response = await InnerAgent
-                .RunAsync(input, scopedSession, options, cancellationToken)
+                .RunAsync(turn.Input, turn.Session, turn.Options, cancellationToken)
                 .ConfigureAwait(false);
-            AddNodeAttribution(response.Messages, interactionNodeId);
+            AddNodeAttribution(response.Messages, turn.InteractionNodeId);
             turnPersistence.RecordRange(response.Messages);
             UpdatePendingFunctionCallIds(
                 response.Messages.SelectMany(message => message.Contents),
-                pendingFunctionCallIds
+                turn.PendingFunctionCallIds
             );
-            SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
+            SavePendingFunctionCallIds(turn.Session, turn.PendingFunctionCallIds);
             var snapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             foreach (var snapshot in snapshots)
             {
-                AddNodeAttribution(snapshot, interactionNodeId);
+                AddNodeAttribution(snapshot, turn.InteractionNodeId);
                 response.Messages.Add(snapshot);
             }
             activity?.Complete();
@@ -233,7 +218,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         }
         finally
         {
-            await FinalizeTurnAsync(turnPersistence, scopedSession, activity, executionFailure).ConfigureAwait(false);
+            await FinalizeTurnAsync(turnPersistence, turn.Session, activity, executionFailure).ConfigureAwait(false);
         }
     }
 
@@ -268,32 +253,17 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
-        options = CreateInteractionOptions(options);
-        var interactionNodeId = (
-            (InteractionSource)options.AdditionalProperties![HumanInteractionToolMetadata.SourceKey]!
-        ).NodeId;
-        // 在节点作用域中准备会话，并恢复待完成调用，确保审批继续执行沿用同一状态。
-        // Prepare the node-scoped session and restore pending calls so approval continuations keep the same state.
-        var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
-        var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
-        var input = AgentflowMessageTransforms.ApplyInstructions(
-            AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
-            _instructions
-        );
-        if (!_isWorkflow)
-            input = AgentflowMessageTransforms.PrepareNodeInputs(input);
-        UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
-        SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
-        using var activity = StartExecutionActivity(input);
-        var turnPersistence = new ToolTurnPersistence(InnerAgent, scopedSession, PersistToolBlockMessagesAsync);
+        var turn = await PrepareTurnAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
+        using var activity = turn.Activity;
+        var turnPersistence = turn.TurnPersistence;
         Exception? executionFailure = null;
         var observedCalls = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
         var normalizedResponse = new NormalizedResponseAggregation.Accumulator();
         try
         {
-            await ObserveInputsAsync(input, cancellationToken).ConfigureAwait(false);
+            await ObserveInputsAsync(turn.Input, cancellationToken).ConfigureAwait(false);
             await using var enumerator = InnerAgent
-                .RunStreamingAsync(input, scopedSession, options, cancellationToken)
+                .RunStreamingAsync(turn.Input, turn.Session, turn.Options, cancellationToken)
                 .GetAsyncEnumerator(cancellationToken);
             while (true)
             {
@@ -306,12 +276,12 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     }
 
                     update = ProjectWorkflowObservation(enumerator.Current, observedCalls);
-                    AddNodeAttribution(update, interactionNodeId);
+                    AddNodeAttribution(update, turn.InteractionNodeId);
                     var responseMessage = ToolStateSnapshots.ToMessage(update);
                     turnPersistence.Record(responseMessage);
 
-                    UpdatePendingFunctionCallIds(update.Contents, pendingFunctionCallIds);
-                    SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
+                    UpdatePendingFunctionCallIds(update.Contents, turn.PendingFunctionCallIds);
+                    SavePendingFunctionCallIds(turn.Session, turn.PendingFunctionCallIds);
                 }
                 catch (OperationCanceledException exception)
                 {
@@ -358,7 +328,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             foreach (var stateSnapshot in stateSnapshots)
             {
                 var stateSnapshotUpdate = ToolStateSnapshots.ToUpdate(stateSnapshot);
-                AddNodeAttribution(stateSnapshotUpdate, interactionNodeId);
+                AddNodeAttribution(stateSnapshotUpdate, turn.InteractionNodeId);
                 yield return stateSnapshotUpdate;
             }
 
@@ -366,8 +336,66 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         }
         finally
         {
-            await FinalizeTurnAsync(turnPersistence, scopedSession, activity, executionFailure).ConfigureAwait(false);
+            await FinalizeTurnAsync(turnPersistence, turn.Session, activity, executionFailure).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// <para>为一次节点调用准备执行选项、节点会话、输入消息、跟踪活动与工具持久化收尾对象。</para>
+    /// <para>Prepares the run options, node session, input messages, tracing activity, and tool-persistence finalizer for one node turn.</para>
+    /// </summary>
+    /// <param name="messages">
+    /// <para>按调用顺序提供的聊天消息。</para>
+    /// <para>Chat messages in invocation order.</para>
+    /// </param>
+    /// <param name="session">
+    /// <para>已有 SDK 会话；按节点作用域规则加载、复用或创建。</para>
+    /// <para>Existing SDK session, loaded, reused, or created according to node-scope rules.</para>
+    /// </param>
+    /// <param name="options">
+    /// <para>本次调用选项；为空时由后续执行层处理默认值。</para>
+    /// <para>Options for this call; downstream execution handles defaults when null.</para>
+    /// </param>
+    /// <param name="cancellationToken">
+    /// <para>用于取消当前异步操作的令牌。</para>
+    /// <para>Token used to cancel the current asynchronous operation.</para>
+    /// </param>
+    /// <returns>
+    /// <para>本轮调用共用的前置准备结果；跟踪活动交由调用方持有并在其方法作用域结束时释放。</para>
+    /// <para>Prepared state shared by this turn; the caller holds the tracing activity and disposes it when its method scope ends.</para>
+    /// </returns>
+    private async Task<NodeTurn> PrepareTurnAsync(
+        IEnumerable<ChatMessage> messages,
+        AgentSession? session,
+        AgentRunOptions? options,
+        CancellationToken cancellationToken
+    )
+    {
+        var scopedOptions = CreateInteractionOptions(options);
+        var interactionNodeId = (
+            (InteractionSource)scopedOptions.AdditionalProperties![HumanInteractionToolMetadata.SourceKey]!
+        ).NodeId;
+        // 在节点作用域中准备会话，并恢复待完成调用，确保审批继续执行沿用同一状态。
+        // Prepare the node-scoped session and restore pending calls so approval continuations keep the same state.
+        var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
+        var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
+        var input = AgentflowMessageTransforms.ApplyInstructions(
+            AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
+            _instructions
+        );
+        if (!_isWorkflow)
+            input = AgentflowMessageTransforms.PrepareNodeInputs(input);
+        UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
+        SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
+        return new NodeTurn(
+            scopedOptions,
+            interactionNodeId,
+            scopedSession,
+            pendingFunctionCallIds,
+            input,
+            StartExecutionActivity(input),
+            new ToolTurnPersistence(InnerAgent, scopedSession, PersistToolBlockMessagesAsync)
+        );
     }
 
     /// <summary>
@@ -848,5 +876,45 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 pendingFunctionCallIds.Remove(functionResult.CallId);
             }
         }
+    }
+
+    /// <summary>
+    /// <para>一次节点调用的前置准备结果；跟踪活动只在此传递，由调用方决定释放时机。</para>
+    /// <para>Prepared state for one node turn; the tracing activity is only carried here and the caller decides when it is disposed.</para>
+    /// </summary>
+    private sealed class NodeTurn
+    {
+        public NodeTurn(
+            AgentRunOptions options,
+            string? interactionNodeId,
+            AgentSession session,
+            HashSet<string> pendingFunctionCallIds,
+            IReadOnlyList<ChatMessage> input,
+            AgentflowNodeExecutionActivityScope? activity,
+            ToolTurnPersistence turnPersistence
+        )
+        {
+            Options = options;
+            InteractionNodeId = interactionNodeId;
+            Session = session;
+            PendingFunctionCallIds = pendingFunctionCallIds;
+            Input = input;
+            Activity = activity;
+            TurnPersistence = turnPersistence;
+        }
+
+        public AgentRunOptions Options { get; }
+
+        public string? InteractionNodeId { get; }
+
+        public AgentSession Session { get; }
+
+        public HashSet<string> PendingFunctionCallIds { get; }
+
+        public IReadOnlyList<ChatMessage> Input { get; }
+
+        public AgentflowNodeExecutionActivityScope? Activity { get; }
+
+        public ToolTurnPersistence TurnPersistence { get; }
     }
 }

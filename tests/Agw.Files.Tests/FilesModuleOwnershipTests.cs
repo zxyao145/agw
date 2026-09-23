@@ -43,8 +43,7 @@ public class FilesModuleOwnershipTests
     [InlineData("Agw.Files.Abstracts.IAgwFileSystem")]
     [InlineData("Agw.Files.Abstracts.IAgwFileSystemResolver")]
     [InlineData("Agw.Files.Abstracts.IProjectFileSystemConfigurationProvider")]
-    [InlineData("Agw.Files.Services.IGitCommandService")]
-    [InlineData("Agw.Files.Exceptions.AgwFilesException")]
+    [InlineData("Agw.Files.Abstracts.IGitCommandService")]
     public void SdkType_LivesInAgwFilesAssembly(string typeName)
     {
         var sdkType = typeof(FilesController).Assembly.GetType(typeName);

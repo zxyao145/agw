@@ -3,12 +3,13 @@ using Agw.Settings.Application.Persistence;
 using Agw.Settings.Contracts;
 using Agw.Shared.Contracts;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 
 namespace Agw.Settings.Application;
 
 public sealed class SettingsStore : ISettingsStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
     private readonly ISettingsPersistence _persistence;
     private readonly ICurrentUser _currentUser;
 

@@ -1,18 +1,34 @@
+using System.Reflection;
 using Agw.A2A.Extensions;
+using Agw.Agents;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Auth.Contracts;
+using Agw.Auth.Extensions;
 using Agw.ControlPlane.Host;
 using Agw.DataPlane.Host;
+using Agw.Files;
+using Agw.Host.Data;
 using Agw.Host.Hosting;
+using Agw.Infrastructure;
+using Agw.Integrations.Extensions;
 using Agw.Jobs;
 using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Projects;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Providers;
+using Agw.Settings;
+using Agw.Setup.Services;
+using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Runtime;
+using Agw.Skills;
+using Agw.Tools;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Routing;
@@ -112,6 +128,64 @@ public sealed class HostModuleCompositionTests
                         or "AgentflowNodeExecutionTraceCollector"
         );
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType.Name == "ExecutionConnectionRegistry");
+    }
+
+    [Fact]
+    public void AgentRuntimeService_ResolvedFromModuleComposition_UsesNormalizedHistoryProvider()
+    {
+        // 注册处负责装饰历史写入链路，解析结果必须是 Normalized 装饰器。
+        // The registration owns the history write chain decoration, so the resolved provider must be the Normalized decorator.
+        var dataPaths = AgwDataPaths.Resolve(
+            Path.Combine(Path.GetTempPath(), $"agw-runtime-composition-{Guid.CreateVersion7():N}"),
+            "/unused"
+        );
+        dataPaths.EnsureCreated();
+        try
+        {
+            using var configuration = new ConfigurationManager();
+            configuration.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Database:ConnectionString"] = "Data Source=composition.db" }
+            );
+            ServerDeploymentConfiguration.Apply(configuration);
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSingleton(dataPaths);
+            services.AddSingleton<IConfiguration>(configuration);
+            services.AddSingleton(TimeProvider.System);
+            services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
+            services.AddHybridCache();
+            services
+                .AddTools(configuration)
+                .AddAgents(configuration)
+                .AddAgentExecution(configuration)
+                .AddFiles(configuration)
+                .AddInfrastructure(configuration)
+                .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
+                .AddProviders(configuration)
+                .AddSkills(configuration)
+                .AddProjects(configuration)
+                .AddAuth()
+                .AddSettings()
+                .AddSetup(configuration, readOnly: false)
+                .AddIntegrations(configuration);
+
+            using var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var runtimeService = Assert.IsType<AgentRuntimeService>(
+                scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>()
+            );
+
+            var historyField = typeof(AgentRuntimeService).GetField(
+                "_chatHistoryProvider",
+                BindingFlags.Instance | BindingFlags.NonPublic
+            );
+            Assert.NotNull(historyField);
+            Assert.Equal("NormalizedChatHistoryProvider", historyField.GetValue(runtimeService)?.GetType().Name);
+        }
+        finally
+        {
+            Directory.Delete(dataPaths.Root, recursive: true);
+        }
     }
 
     [Fact]

@@ -3,11 +3,11 @@
 import { ArrowRight, Brain, X } from "lucide-react";
 
 import { Button, cn } from "@agw/components";
-import type { PendingInteraction } from "../../../services/execution-hub";
+import type { PendingInteraction } from "@agw/chat-runtime";
 import type {
   HumanInteractionModeChange as ModeChange,
   HumanInteractionModeChangeResponse,
-} from "../../../services/human-interaction";
+} from "@agw/chat-core";
 
 type HumanInteractionModeChangeProps = {
   request: PendingInteraction & { modeChange: ModeChange };

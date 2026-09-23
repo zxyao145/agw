@@ -1,13 +1,15 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using System.Text.Unicode;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.History;
-using Agw.Projects.Domain.Services;
+using Agw.Projects.Domain.Rules;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
@@ -41,6 +43,9 @@ public sealed partial class EfCoreChatHistoryProvider
             ChatHistoryProviderStateJsonContext.Default,
             new DefaultJsonTypeInfoResolver()
         ),
+        // 中文等非 ASCII 字符按原样写入 conversation_payload。
+        // Write CJK and other non-ASCII characters as-is into conversation_payload.
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
     };
 
     private static readonly Meter HistoryMeter = new("Agw.ConversationHistory.Persistence");
@@ -389,7 +394,7 @@ public sealed partial class EfCoreChatHistoryProvider
                 Id = Guid.CreateVersion7(),
                 ProjectId = projectId,
                 ContextId = contextId,
-                Title = TaskTitleFactory.Create(firstUserText),
+                Title = TaskTitleRules.Create(firstUserText),
                 CreateBy = ResolveCurrentUserId(),
                 CreateTime = now,
                 UpdateBy = ResolveCurrentUserId(),
@@ -399,10 +404,10 @@ public sealed partial class EfCoreChatHistoryProvider
         }
         else
         {
-            var titleFromUser = TaskTitleFactory.Create(firstUserText);
+            var titleFromUser = TaskTitleRules.Create(firstUserText);
             if (
-                string.Equals(projectConversation.Title, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal)
-                && !string.Equals(titleFromUser, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal)
+                string.Equals(projectConversation.Title, TaskTitleRules.DefaultTitle, StringComparison.Ordinal)
+                && !string.Equals(titleFromUser, TaskTitleRules.DefaultTitle, StringComparison.Ordinal)
             )
             {
                 projectConversation.Title = titleFromUser;

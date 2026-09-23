@@ -48,10 +48,16 @@ test("processMessages reuses preprocessing for unchanged messages only", () => {
   const first = processMessages([stableMessage, activeMessage]);
   const second = processMessages([stableMessage, nextActiveMessage]);
 
-  assert.equal(first[0].type, "normal");
-  assert.equal(second[0].type, "normal");
-  assert.equal(first[0].message, second[0].message);
-  assert.notEqual(first[1].message, second[1].message);
+  const [firstStable, firstActive] = first;
+  const [secondStable, secondActive] = second;
+  if (firstStable.type !== "normal" || secondStable.type !== "normal") {
+    assert.fail("the stable message must stay a normal item");
+  }
+  if (firstActive.type !== "normal" || secondActive.type !== "normal") {
+    assert.fail("the active message must stay a normal item");
+  }
+  assert.equal(firstStable.message, secondStable.message);
+  assert.notEqual(firstActive.message, secondActive.message);
 });
 
 test("processMessages restores persisted authorless assistant and tool messages", () => {

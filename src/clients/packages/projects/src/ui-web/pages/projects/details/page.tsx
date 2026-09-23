@@ -10,7 +10,7 @@ import {
   getProjectConversations,
   type ConversationSummary,
 } from "../../../../services/task-client";
-import { ApiError, apiGet, apiPost } from "@agw/api";
+import { apiGet, apiPost, getApiErrorMessage } from "@agw/api";
 import { buildChatTargetOptions } from "@agw/api";
 import { formatLocalDateTime } from "@agw/components";
 import { Button } from "@agw/components";
@@ -42,56 +42,6 @@ type AgentflowDto = {
   id: string;
   name: string;
 };
-
-function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length > 0) {
-      return error.body;
-    }
-
-    if (error.body && typeof error.body === "object") {
-      const candidateBody = error.body as {
-        message?: unknown;
-        error?: unknown;
-        title?: unknown;
-        detail?: unknown;
-      };
-
-      if (typeof candidateBody.message === "string" && candidateBody.message.trim().length > 0) {
-        return candidateBody.message;
-      }
-
-      if (typeof candidateBody.error === "string" && candidateBody.error.trim().length > 0) {
-        return candidateBody.error;
-      }
-
-      if (typeof candidateBody.detail === "string" && candidateBody.detail.trim().length > 0) {
-        return candidateBody.detail;
-      }
-
-      if (typeof candidateBody.title === "string" && candidateBody.title.trim().length > 0) {
-        return candidateBody.title;
-      }
-
-      try {
-        const serializedBody = JSON.stringify(error.body);
-        if (serializedBody && serializedBody !== "{}") {
-          return serializedBody;
-        }
-      } catch {
-        // ignore JSON serialization errors and fall back to status text below
-      }
-    }
-
-    return `${error.status} ${error.statusText}`;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unknown error";
-}
 
 function statusLabel(status: number): string {
   switch (status) {

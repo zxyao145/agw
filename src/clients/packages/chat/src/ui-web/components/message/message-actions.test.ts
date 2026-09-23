@@ -1,28 +1,14 @@
 import assert from "node:assert/strict";
-import test, { after, afterEach } from "node:test";
-import { JSDOM } from "jsdom";
-import * as React from "react";
+import test from "node:test";
+import { setupDomEnvironment } from "@agw/test-harness";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const [name, value] of Object.entries({
-  window: dom.window,
-  document: dom.window.document,
-  navigator: dom.window.navigator,
-  HTMLElement: dom.window.HTMLElement,
-  Node: dom.window.Node,
-})) {
-  Object.defineProperty(globalThis, name, { configurable: true, value });
-}
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
-
-const { act, cleanup, fireEvent, render, screen } = await import("@testing-library/react");
+const environment = await setupDomEnvironment();
+const { React, act, cleanup, fireEvent, render, screen } = environment;
+const { navigator } = environment.window;
 const { presentMessage } = await import("@agw/chat-core");
 const { PresentedMessageComponent } = await import("./presented-message");
 const { MessageActions } = await import("./message-actions");
 const { toast } = await import("sonner");
-afterEach(cleanup);
-after(() => dom.window.close());
 
 function renderMessage(
   role = "user",

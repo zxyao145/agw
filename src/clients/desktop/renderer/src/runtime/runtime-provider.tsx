@@ -9,11 +9,8 @@ import type {
   ServerProfile,
 } from "@desktop/shared/contracts";
 import { configureApiRuntime, resetApiRuntime } from "@agw/api";
-import {
-  configureExecutionRuntime,
-  executionSessionManager,
-  ExecutionPlatformProvider,
-} from "@agw/chat";
+import { ExecutionPlatformProvider } from "@agw/chat";
+import { configureExecutionRuntime, executionSessionManager } from "@agw/chat-runtime";
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type InfiniteData, type QueryClient } from "@agw/components/query";
 import { getProjectConversations, type ConversationPage } from "@agw/projects";
@@ -364,7 +361,6 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
     <DesktopRuntimeContext.Provider value={value}>
       <QueryClientProvider client={queryClient}>
         <ExecutionPlatformProvider
-          isDesktop={isDesktop}
           serverId={activeProfile?.id ?? "browser"}
           onActiveCountChange={handleActiveCountChange}
         >

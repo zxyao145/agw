@@ -6,29 +6,19 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@agw/components/query";
 import {
   ArrowLeft,
-  Blocks,
-  BookOpenText,
-  Bot,
-  Boxes,
-  Cable,
   Check,
   ChevronDown,
   Clock3,
   Cloud,
-  FolderKanban,
-  Gauge,
-  GitBranch,
   Info,
-  KeyRound,
   LoaderCircle,
   Moon,
-  Network,
   Server,
   Settings,
   Sparkles,
   Sun,
-  Workflow,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -37,6 +27,8 @@ import { apiGet, apiPost } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
 import {
   AgwLogo,
+  APP_ROUTES,
+  type AppRoute,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -45,9 +37,8 @@ import {
   DropdownMenuTrigger,
 } from "@agw/components";
 import { Popover, PopoverContent, PopoverTrigger } from "@agw/components";
-import { useExecutionActivity } from "@agw/chat";
-import type { ExecutionStatus } from "@agw/chat";
-import { buildChatHref } from "@agw/chat";
+import { buildChatHref, useExecutionActivity } from "@agw/chat";
+import type { ExecutionStatus } from "@agw/chat-runtime";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
 import { useDesktopRuntime } from "../runtime-provider";
@@ -60,51 +51,55 @@ import {
 
 type ProjectSummary = DesktopProjectOption;
 
-const SETTINGS_GROUPS = [
+type SettingsNavItem = { href: string; label: string; icon: LucideIcon };
+
+// The renderer is a static export, so its hrefs carry a trailing slash.
+// renderer 是静态导出，因此 href 带结尾斜杠。
+function settingsItem(
+  route: AppRoute,
+  overrides: Partial<Omit<SettingsNavItem, "href">> = {},
+): SettingsNavItem {
+  return {
+    href: `${route.href}/`,
+    label: overrides.label ?? route.title,
+    icon: overrides.icon ?? route.icon,
+  };
+}
+
+const SETTINGS_GROUPS: ReadonlyArray<{ label: string; items: SettingsNavItem[] }> = [
   {
     label: "Operations",
     items: [
-      { href: "/dashboard/", label: "Overview", icon: Gauge },
-      { href: "/jobs/", label: "Jobs", icon: Clock3 },
+      settingsItem(APP_ROUTES.dashboard, { label: "Overview" }),
+      settingsItem(APP_ROUTES.jobs, { icon: Clock3 }),
     ],
   },
-  {
-    label: "Workspace",
-    items: [
-      { href: "/projects/", label: "Projects", icon: FolderKanban },
-      // { href: "/projects/conversations/details/", label: "Conversations", icon: MessagesSquare },
-    ],
-  },
+  { label: "Workspace", items: [settingsItem(APP_ROUTES.projects)] },
   {
     label: "AI runtime",
-    items: [
-      { href: "/agents/", label: "Agents", icon: Bot },
-      { href: "/agentflows/", label: "Agentflows", icon: Workflow },
-      { href: "/providers/", label: "Providers", icon: Boxes },
-      { href: "/models/", label: "Models", icon: Sparkles },
-    ],
+    items: [APP_ROUTES.agents, APP_ROUTES.agentflows, APP_ROUTES.providers, APP_ROUTES.models].map(
+      (route) => settingsItem(route),
+    ),
   },
   {
     label: "Capabilities",
     items: [
-      { href: "/user-memory/", label: "User Memory", icon: BookOpenText },
-      // { href: "/skills/", label: "Skills", icon: GitBranch },
-      { href: "/skills/", label: "Skills", icon: Blocks },
-      { href: "/mcp-tool-servers/", label: "MCP servers", icon: Network },
-      { href: "/integrations/", label: "Integrations", icon: Cable },
+      settingsItem(APP_ROUTES.userMemory),
+      settingsItem(APP_ROUTES.skills),
+      settingsItem(APP_ROUTES.mcpToolServers, { label: "MCP servers" }),
+      settingsItem(APP_ROUTES.integrations),
     ],
   },
   {
     label: "Desktop & Server",
     items: [
-      { href: "/quick-prompts/", label: "Quick prompts", icon: Sparkles },
-      { href: "/settings/", label: "Connections & app", icon: Server },
-      // { href: "/settings/#local-server", label: "Local server", icon: KeyRound },
+      settingsItem(APP_ROUTES.quickPrompts, { icon: Sparkles }),
+      settingsItem(APP_ROUTES.settings, { label: "Connections & app", icon: Server }),
       { href: "/settings/#appearance", label: "Appearance & close", icon: Moon },
       { href: "/settings/#about", label: "About", icon: Info },
     ],
   },
-] as const;
+];
 
 const STATUS_LABEL: Record<ExecutionStatus, string> = {
   idle: "Idle",

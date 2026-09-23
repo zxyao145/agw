@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 
@@ -8,7 +9,7 @@ namespace Agw.Agents.Execution.Agentflows.Workflows.Builders;
 
 internal static class AgentflowBlockBuildSupport
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     /// <summary>
     /// 读取 Block 配置；配置为空或 JSON 无效时返回默认配置。

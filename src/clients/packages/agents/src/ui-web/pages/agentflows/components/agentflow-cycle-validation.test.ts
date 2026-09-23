@@ -4,11 +4,11 @@ import test from "node:test";
 import { AgentflowEdgeKind, AgentflowNodeKind } from "../../../../types/agentflow";
 import { validateAgentflowCycles } from "./agentflow-cycle-validation";
 
-function node(id: string, kind = AgentflowNodeKind.PromptAdapter) {
+function node(id: string, kind: AgentflowNodeKind = AgentflowNodeKind.PromptAdapter) {
   return { id, data: { kind, title: id } };
 }
 
-function edge(source: string, target: string, kind = AgentflowEdgeKind.Direct) {
+function edge(source: string, target: string, kind: AgentflowEdgeKind = AgentflowEdgeKind.Direct) {
   return { source, target, data: { kind } };
 }
 

@@ -615,10 +615,15 @@ public class AgentRuntimeServiceSystemCompositionTests
             summaryService: null!,
             services: new ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
-            turnExecutor: null!,
             configuration: new AgentRuntimeConfiguration(appService, projectRuntimeFacade),
-            skillRegistrations: skillRegistrations,
-            remoteSkillContentResolver: remoteSkillContentResolver
+            skillRegistrations: skillRegistrations ?? [],
+            remoteSkillContentResolver: remoteSkillContentResolver,
+            loggerFactory: NullLoggerFactory.Instance,
+            conversationHistoryWriter: null,
+            humanInteractionContextAccessor: null,
+            turnContextAccessor: null,
+            timeProvider: TimeProvider.System,
+            generatedToolCatalog: null
         );
     }
 

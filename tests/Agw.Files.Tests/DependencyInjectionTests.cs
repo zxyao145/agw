@@ -1,8 +1,7 @@
 using System.Reflection;
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
-using Agw.Files.Application.Storage.Local;
-using Agw.Files.Application.Storage.Resolver;
+using Agw.Files.Infrastructure.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

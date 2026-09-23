@@ -1199,6 +1199,50 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task AppendAsync_ChineseText_PersistsUnescapedCharacters()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System
+        );
+
+        await writer.AppendAsync(
+            projectId,
+            "context-1",
+            [new ChatMessage(ChatRole.Assistant, "中文内容") { MessageId = "assistant-1" }],
+            cancellationToken
+        );
+
+        await using var verifyContext = new AgwDbContext(options);
+        var record = await verifyContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
+        Assert.Contains("中文内容", record.ConversationPayload);
+        Assert.DoesNotContain("\\u", record.ConversationPayload);
+    }
+
+    [Fact]
     public async Task AppendAsync_WithLegacyUppercaseGuidContext_LeavesOldContextUntouched()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

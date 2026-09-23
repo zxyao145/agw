@@ -17,6 +17,8 @@ function createExecutionClient() {
     configure: async () => ({ restoredDurableExecution: false }),
     hasActiveExecution: () => false,
     execute: async () => undefined,
+    listAgentflowCheckpoints: async () => [],
+    resumeCheckpoint: async () => "execution-resumed",
     setMode: async () => undefined,
     setPermissionMode: async () => undefined,
     interrupt: async () => undefined,

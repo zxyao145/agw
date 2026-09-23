@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.Definitions.Domain.Decisions;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Integrations.Contracts.References;
@@ -249,20 +250,13 @@ public class AgentAppService
                 return null;
             }
             await GetExternalModelRuntimeConfigurationAsync(existing.ExternalAgentKind, modelProviderId);
-            var extra = AgentExtraSettings.Normalize(
-                command.IsSpecified(AgentUpdateField.Extra) ? command.Extra : existing.Extra
-            );
-            new AgentBehavior(existing).ApplyUpdate(agent =>
-            {
-                ApplyExternalAgentUpdate(agent, command);
-                agent.Extra = extra;
-            });
         }
         else
         {
             ValidateSystemAgentUpdate(command);
-            new AgentBehavior(existing).ApplyUpdate(agent => ApplySystemAgentUpdate(agent, command));
         }
+
+        new AgentBehavior(existing).ApplyUpdate(CreateUpdateDecision(command));
 
         if (
             await HasInvalidModelProviderAsync(existing.ModelProviderId)
@@ -387,49 +381,27 @@ public class AgentAppService
         }
     }
 
-    private static void ApplyExternalAgentUpdate(Agent agent, AgentUpdateCommand command)
-    {
-        if (command.IsSpecified(AgentUpdateField.DisplayName))
+    // 归一化已指定的取值后交给 AgentBehavior，由它按 Agent 类型决定哪些字段写入实体。
+    // Normalize the specified values and hand them to AgentBehavior, which decides per agent type which fields reach the entity.
+    private static AgentUpdateDecision CreateUpdateDecision(AgentUpdateCommand command) =>
+        new()
         {
-            agent.DisplayName = command.DisplayName!;
-        }
-
-        if (command.IsSpecified(AgentUpdateField.Description))
-        {
-            agent.Description = command.Description!;
-        }
-
-        if (command.IsSpecified(AgentUpdateField.ModelProviderId))
-        {
-            agent.ModelProviderId = command.ModelProviderId;
-        }
-
-        if (command.IsSpecified(AgentUpdateField.Extra))
-        {
-            agent.Extra = command.Extra;
-        }
-
-        if (command.IsSpecified(AgentUpdateField.EnvironmentVariables))
-        {
-            agent.EnvironmentVariables = command.EnvironmentVariables ?? new Dictionary<string, string>();
-        }
-
-        ApplyResponseSchemaUpdate(agent, command);
-    }
-
-    private static void ApplySystemAgentUpdate(Agent agent, AgentUpdateCommand command)
-    {
-        agent.DisplayName = command.DisplayName!;
-        agent.Description = command.Description!;
-        agent.SystemPrompt = command.SystemPrompt!;
-        agent.ModelProviderId = command.ModelProviderId;
-        agent.SummaryModelProviderId = command.SummaryModelProviderId;
-        agent.EnableSummary = command.EnableSummary ?? false;
-        agent.Tools = command.Tools ?? [];
-        agent.Extra = command.Extra;
-        agent.EnvironmentVariables = command.EnvironmentVariables ?? new Dictionary<string, string>();
-        ApplyResponseSchemaUpdate(agent, command);
-    }
+            SpecifiedFields = command.SpecifiedFields,
+            DisplayName = command.DisplayName,
+            Description = command.Description,
+            SystemPrompt = command.SystemPrompt,
+            ModelProviderId = command.ModelProviderId,
+            Tools = command.Tools,
+            Extra = command.IsSpecified(AgentUpdateField.Extra)
+                ? AgentExtraSettings.Normalize(command.Extra)
+                : command.Extra,
+            EnvironmentVariables = command.EnvironmentVariables,
+            EnableSummary = command.EnableSummary,
+            SummaryModelProviderId = command.SummaryModelProviderId,
+            ResponseSchema = command.IsSpecified(AgentUpdateField.ResponseSchema)
+                ? AgentResponseSchema.Normalize(command.ResponseSchema)
+                : command.ResponseSchema,
+        };
 
     // Pi runs cannot enforce a response schema, so configuration is rejected instead of degrading silently.
     private static void EnsureResponseSchemaSupported(ExternalAgentKind kind, string? responseSchema)
@@ -437,15 +409,6 @@ public class AgentAppService
         if (kind == ExternalAgentKind.Pi && responseSchema != null)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Pi agents do not support responseSchema.");
-        }
-    }
-
-    // Missing field keeps the current value; null or whitespace clears it; a non-blank value replaces it.
-    private static void ApplyResponseSchemaUpdate(Agent agent, AgentUpdateCommand command)
-    {
-        if (command.IsSpecified(AgentUpdateField.ResponseSchema))
-        {
-            agent.ResponseSchema = AgentResponseSchema.Normalize(command.ResponseSchema);
         }
     }
 

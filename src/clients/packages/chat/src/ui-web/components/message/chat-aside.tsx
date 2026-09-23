@@ -21,7 +21,7 @@ export interface ChatAsideProps {
 export function ChatAside({ usage, todos }: ChatAsideProps) {
   return (
     <aside
-      className="sticky top-0 hidden w-75 shrink-0 self-start border-border/60 bg-background py-10 @min-[64rem]:block"
+      className="sticky top-0 right-2 hidden w-75 shrink-0 self-start border-border/60 bg-background py-10 @min-[64rem]:block"
       aria-label="Current conversation details"
     >
       <div className="space-y-2 rounded-2xl border border-border bg-background/50 px-3 py-3 shadow-xs">

@@ -2,10 +2,10 @@ FROM node:24-bookworm-slim AS web-build
 WORKDIR /src/src/clients
 RUN corepack enable
 COPY src/clients/package.json src/clients/pnpm-lock.yaml src/clients/pnpm-workspace.yaml ./
-# pnpm resolves workspace patchedDependencies during fetch, even for filtered builds.
+# pnpm resolves workspace patchedDependencies during fetch.
 COPY src/clients/patches ./patches
-COPY src/clients/turbo.json src/clients/tsconfig.json src/clients/tsconfig.react.json ./
-RUN pnpm fetch --frozen-lockfile --filter @agw/clients --filter @agw/web...
+COPY src/clients/turbo.json src/clients/tsconfig.json src/clients/tsconfig.react.json src/clients/tsconfig.next.json ./
+RUN pnpm fetch
 COPY src/clients/web ./web
 COPY src/clients/packages ./packages
 RUN pnpm install --offline --frozen-lockfile --filter @agw/clients --filter @agw/web...

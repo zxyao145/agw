@@ -9,6 +9,7 @@ using Agw.Integrations.Mcp;
 using Agw.Integrations.Tools.GitHub;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Tooling;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -619,7 +620,7 @@ public class ConnectionCapabilityResolverTests : IDisposable
             return Task.FromResult<IReadOnlyList<Tools.GitHub.Dtos.GitHubRepoInfo>>([]);
         }
 
-        public Task<Tools.GitHub.Dtos.CloneResult> CloneRepositoryAsync(
+        public Task<CloneResult> CloneRepositoryAsync(
             Guid connectionId,
             Guid projectId,
             string owner,
@@ -629,7 +630,7 @@ public class ConnectionCapabilityResolverTests : IDisposable
         )
         {
             ConnectionIds.Add(connectionId);
-            return Task.FromResult(new Tools.GitHub.Dtos.CloneResult(true, null, null, null));
+            return Task.FromResult(new CloneResult(true, null, null, null));
         }
     }
 

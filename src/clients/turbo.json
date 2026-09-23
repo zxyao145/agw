@@ -5,42 +5,42 @@
     "enabled": false
   },
   "tasks": {
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
+    },
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "@agw/web#build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "outputs": [".next/**", "!.next/cache/**", "out/**"],
       "env": ["BACKEND_API_BASE_URL", "CI", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
     },
     "@agw/desktop#build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "outputs": ["dist/**", "renderer/.next/**", "!renderer/.next/cache/**", "renderer/out/**"],
       "env": ["AGW_*", "CI"]
     },
     "@agw/mobile#build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "outputs": ["dist/**"]
     },
     "lint": {},
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["typecheck"],
       "env": ["CI", "TZ"]
     },
     "test:e2e": {
-      "dependsOn": ["^build"],
       "cache": false,
       "env": ["CI", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
     },
     "dev": {
-      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true,
       "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
     },
     "dev:renderer": {
-      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true,
       "env": ["AGW_*", "CI"]
@@ -53,19 +53,19 @@
       "cache": false
     },
     "prepare:resources": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "cache": false,
       "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
       "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
     },
     "package": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "cache": false,
       "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
       "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
     },
     "make": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "cache": false,
       "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
       "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]

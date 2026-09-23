@@ -265,7 +265,7 @@ turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 
 
 在 `InProcess` 模式中，Tool 直接进入进程内 channel。`Distributed` 模式则只在 durable runtime 构造时，再套一层 MAF `ApprovalRequiredAIFunction`，把 Tool 调用截断在可 checkpoint 的 `ToolApprovalRequestContent` 边界；恢复 segment 后，持久化回答先还原为 `ToolApprovalResponseContent`，随后由预回答 channel 注入真正的 `ask_user_question` Tool。两种模式复用同一个 Tool 和交互协议，普通执行路径没有行为变化。
 
-所有 Agw 进程内可执行的 `AIFunction` 都经过统一的函数调用异常边界。Tool 抛出 `AgwException` 或 `AgwFilesException` 时，函数结果保留其错误码和可公开消息；其他异常返回脱敏结果 `{"isError":true,"code":5000026,"message":"Tool execution failed."}`，完整异常只写入结构化日志并标记当前 Activity 为失败。调用方已经请求取消时仍传播 `OperationCanceledException`，不会将取消伪装成 Tool 结果。该边界覆盖内置 Tool、Tool Block、Connection Native/MCP、独立 MCP，以及所有 Agent 运行模式；Tool 物化/配置阶段、Hosted Tool 和外部 Agent CLI 的异常仍由各自协议处理。
+所有 Agw 进程内可执行的 `AIFunction` 都经过统一的函数调用异常边界。Tool 抛出 `AgwException` 时，函数结果保留其错误码和可公开消息；其他异常返回脱敏结果 `{"isError":true,"code":5000026,"message":"Tool execution failed."}`，完整异常只写入结构化日志并标记当前 Activity 为失败。调用方已经请求取消时仍传播 `OperationCanceledException`，不会将取消伪装成 Tool 结果。该边界覆盖内置 Tool、Tool Block、Connection Native/MCP、独立 MCP，以及所有 Agent 运行模式；Tool 物化/配置阶段、Hosted Tool 和外部 Agent CLI 的异常仍由各自协议处理。
 
 `TurnPipeline` 统一输出协议：
 
@@ -445,11 +445,13 @@ Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内
 
 每个模型必须配置 `MaxContextWindowTokens` 和 `MaxOutputTokens`，且两者均为正数、输出上限小于上下文窗口。有效输入预算为 `MaxContextWindowTokens - MaxOutputTokens`；`ChatOptions.MaxOutputTokens` 同时使用模型的输出上限。新建、自动发现和默认种子模型的回退值分别为 `256_000` 与 `64_000`，管理员应按模型提供方的真实规格修正。
 
-运行时使用 MAF 核心包的 `ContextWindowCompactionStrategy` 和默认两阶段阈值，不调用额外的总结模型：
+运行时使用 `ContextWindowCompactionPipeline` 构建两阶段策略，不调用额外的总结模型：
 
-- 达到有效输入预算的 50% 时，优先把较旧的 Tool call/result 组折叠为精简内容；
-- 达到 80% 时，截断较旧的消息；
+- 达到有效输入预算的 50% 时，`ToolResultEvictionCompactionStrategy` 由旧到新把 Tool call 组中的每个 result 正文替换为占位文本 `[Tool result removed from context by compaction]`，直到回到阈值以下；Assistant 消息中的推理、调用和 `CallId` 配对原样保留，最近 2 个非 System 组不处理；
+- 达到 80% 时，MAF 的 `TruncationCompactionStrategy` 截断较旧的消息组，同样保留最近 2 个组；
 - Tool call 与对应 result 始终作为原子消息组处理。
+
+模型服务按各自协议校验回放的 Assistant 输出：DeepSeek thinking 模式要求带 tools 的请求把本轮 Assistant 输出的 `reasoning_text` 传回，空字符串视为缺失并返回 400；OpenAI Responses 要求推理条目后紧跟其原始条目。压缩只改写 Tool result 正文，不生成新的 Assistant 消息，因此压缩后的请求在所有协议下都保持合法。
 
 `CompactionProvider` 位于函数调用循环内部，并在逐次历史持久化层之后执行，所以同一轮中的每次模型请求都会重新评估上下文。`FunctionLoopMessageIsolationChatClient` 会为每次实际注入的动态上下文消息副本补充唯一 `MessageId`，同时继续移除同一函数循环中的未变化副本；这避免压缩索引按内容匹配到上一轮相同上下文并跳过其间的新消息。`LocalHistoryCompactionScopeChatClient` 仅在本地历史 sentinel 存在时为该 provider 暴露共享 `StateBag` 的本地 session 视图，避免后续 Tool iteration 被误判为远程服务托管历史。压缩结果只传给当前模型请求；`EfCoreChatHistoryProvider` 仍保存未压缩的原始消息，不会把合成或裁剪后的请求历史写回数据库。
 

@@ -4,6 +4,11 @@ using Microsoft.Extensions.Logging;
 
 namespace Agw.Shared.Utils;
 
+/// <summary>
+/// <para>静态 Service Locator，已弃用：服务依赖通过显式构造函数注入获取。</para>
+/// <para>Static Service Locator, obsolete: resolve dependencies through explicit constructor injection.</para>
+/// </summary>
+[Obsolete("IocUtil is a static Service Locator without callers; resolve dependencies through constructor injection.")]
 public class IocUtil
 {
     public static ILoggerFactory LoggerFactory { get; private set; } = default!;

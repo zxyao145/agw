@@ -1,9 +1,9 @@
 using Agw.Files.Abstracts;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Api;
 using Agw.Files.Api.Dtos;
 using Agw.Files.Application.Files;
-using Agw.Files.Application.Storage.Local;
-using Agw.Files.Services;
+using Agw.Files.Infrastructure.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 

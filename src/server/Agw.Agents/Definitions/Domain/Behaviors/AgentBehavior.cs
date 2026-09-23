@@ -1,4 +1,6 @@
+using Agw.Agents.Definitions.Domain.Decisions;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Domain.Rules;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
@@ -25,43 +27,83 @@ public sealed class AgentBehavior
         agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.Normalize() : agent.Name;
     }
 
-    public void ApplyUpdate(Action<Agent> updateAction)
+    public void ApplyUpdate(AgentUpdateDecision decision)
     {
         var existing = _agent;
-        ArgumentNullException.ThrowIfNull(updateAction);
-
-        var originalExtra = existing.Extra;
+        ArgumentNullException.ThrowIfNull(decision);
 
         if (existing.Type == AgentType.External)
         {
-            var originalId = existing.Id;
-            var originalName = existing.Name;
-            var originalSystemPrompt = existing.SystemPrompt;
-            var originalTools = existing.Tools;
-            var originalType = existing.Type;
-            var originalExternalAgentKind = existing.ExternalAgentKind;
-
-            updateAction(existing);
-
-            existing.Id = originalId;
-            existing.Name = originalName;
-            existing.SystemPrompt = originalSystemPrompt;
-            existing.Tools = originalTools;
-            existing.Type = originalType;
-            existing.ExternalAgentKind = originalExternalAgentKind;
-            existing.EnableSummary = false;
-            existing.SummaryModelProviderId = null;
+            ApplyExternalUpdate(existing, decision);
         }
         else
         {
-            updateAction(existing);
-            existing.Extra = originalExtra;
+            ApplySystemUpdate(existing, decision);
         }
 
         NormalizeEnvironmentVariables(existing);
         EnsureAgentKindIsValid(existing);
         EnsureModelProviderIsPresentWhenRequired(existing);
         existing.Name = string.IsNullOrWhiteSpace(existing.Name) ? existing.Id.Normalize() : existing.Name;
+    }
+
+    // External Agent 只接受这里写入的字段；身份、名称、提示词与 Tools 属于外部运行时，摘要配置也不可开启。
+    // An External agent accepts only the fields written here; identity, name, prompt and Tools belong to the external runtime, and summary settings cannot be enabled.
+    private static void ApplyExternalUpdate(Agent agent, AgentUpdateDecision decision)
+    {
+        if (decision.SpecifiedFields.Contains(AgentUpdateField.DisplayName))
+        {
+            agent.DisplayName = decision.DisplayName!;
+        }
+
+        if (decision.SpecifiedFields.Contains(AgentUpdateField.Description))
+        {
+            agent.Description = decision.Description!;
+        }
+
+        if (decision.SpecifiedFields.Contains(AgentUpdateField.ModelProviderId))
+        {
+            agent.ModelProviderId = decision.ModelProviderId;
+        }
+
+        if (decision.SpecifiedFields.Contains(AgentUpdateField.Extra))
+        {
+            agent.Extra = decision.Extra;
+        }
+
+        if (decision.SpecifiedFields.Contains(AgentUpdateField.EnvironmentVariables))
+        {
+            agent.EnvironmentVariables = decision.EnvironmentVariables ?? new Dictionary<string, string>();
+        }
+
+        ApplyResponseSchemaUpdate(agent, decision);
+        agent.EnableSummary = false;
+        agent.SummaryModelProviderId = null;
+    }
+
+    // System Agent 的更新是整体替换，必填字段由 Application 校验；Extra 只对 External Agent 有意义，保持创建时的取值。
+    // A System agent update replaces the whole configuration after Application validation; Extra only applies to External agents and keeps the value it got at creation.
+    private static void ApplySystemUpdate(Agent agent, AgentUpdateDecision decision)
+    {
+        agent.DisplayName = decision.DisplayName!;
+        agent.Description = decision.Description!;
+        agent.SystemPrompt = decision.SystemPrompt!;
+        agent.ModelProviderId = decision.ModelProviderId;
+        agent.SummaryModelProviderId = decision.SummaryModelProviderId;
+        agent.EnableSummary = decision.EnableSummary ?? false;
+        agent.Tools = decision.Tools ?? [];
+        agent.EnvironmentVariables = decision.EnvironmentVariables ?? new Dictionary<string, string>();
+        ApplyResponseSchemaUpdate(agent, decision);
+    }
+
+    // 缺省字段保留当前值；已指定的取值由 Application 归一化后写入，空白归一化为 null 表示关闭结构化输出。
+    // A missing field keeps the current value; a specified value arrives normalized, and blank normalizes to null to disable structured output.
+    private static void ApplyResponseSchemaUpdate(Agent agent, AgentUpdateDecision decision)
+    {
+        if (decision.SpecifiedFields.Contains(AgentUpdateField.ResponseSchema))
+        {
+            agent.ResponseSchema = decision.ResponseSchema;
+        }
     }
 
     private static void EnsureAgentKindIsValid(Agent agent)
@@ -109,21 +151,9 @@ public sealed class AgentBehavior
 
     private static void NormalizeEnvironmentVariables(Agent agent)
     {
-        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, value) in agent.EnvironmentVariables ?? [])
-        {
-            var normalizedName = name.Trim();
-            if (
-                string.IsNullOrEmpty(normalizedName)
-                || normalizedName.Contains('=')
-                || normalizedName.Contains('\0')
-                || !normalized.TryAdd(normalizedName, value ?? string.Empty)
-            )
-            {
-                throw new AgwException(ErrorCodes.InvalidAgentEnvironmentVariableName);
-            }
-        }
-
-        agent.EnvironmentVariables = normalized;
+        agent.EnvironmentVariables = EnvironmentVariableRules.Normalize(
+            agent.EnvironmentVariables,
+            ErrorCodes.InvalidAgentEnvironmentVariableName
+        );
     }
 }

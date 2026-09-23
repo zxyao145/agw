@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { FileText, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from "lucide-react";
+import {
+  FileText,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Settings,
+  Trash2,
+  Info,
+} from "lucide-react";
 import { useQuery } from "@agw/components/query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -45,10 +53,11 @@ import {
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@agw/components";
 import { Input } from "@agw/components";
 import { Label } from "@agw/components";
+import { formatFriendlyLocalDateTime } from "@agw/components";
 import { SearchableSelect, type SearchableSelectOption } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
-import { buildChatHref, type ChatRouteBasePath } from "../../../lib/chat-route";
+import { buildChatHref } from "../../../lib/chat-route";
 import { cn } from "@agw/components";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -69,10 +78,10 @@ import {
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 import { getApiErrorMessage } from "@agw/api";
 import {
+  executionSessionManager,
   getExecutionReconnectProgress,
   type ExecutionReconnectState,
-} from "../../../services/execution-hub";
-import { executionSessionManager } from "../../../services/execution-session-manager";
+} from "@agw/chat-runtime";
 import { useExecutionPlatform } from "../../execution-platform";
 
 type ProjectDto = {
@@ -100,7 +109,7 @@ const DEFAULT_PROJECT_VALUE = "default-built-in";
 const DEFAULT_AGENT_LABEL = "Hello";
 
 export type ChatWorkspaceProps = {
-  routeBasePath: ChatRouteBasePath;
+  routeBasePath: string;
   showProjectSelect: boolean;
   compactToolbar?: boolean;
   showUserInputNavigation?: boolean;
@@ -140,11 +149,19 @@ function areEnvVarsEqual(left: EnvVar[], right: EnvVar[]): boolean {
 
 type ChatSettingsDialogProps = {
   selectedProjectId: string | null;
+  conversationId: string | null;
+  currentConversation: ConversationSummary | null;
   getDraft: (projectId: string | null) => ChatSettingsDraft;
   onSave: (draft: ChatSettingsDraft) => boolean;
 };
 
-function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSettingsDialogProps) {
+function ChatSettingsDialog({
+  selectedProjectId,
+  conversationId,
+  currentConversation,
+  getDraft,
+  onSave,
+}: ChatSettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [draftEnvVars, setDraftEnvVars] = React.useState<EnvVar[]>([]);
 
@@ -193,19 +210,52 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
           aria-label="Open chat settings"
           disabled={!selectedProjectId}
         >
-          <Settings className="h-4 w-4" />
+          <Info className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent size="md" className={CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME}>
         <DialogHeader>
-          <DialogTitle>Chat Settings</DialogTitle>
-          <DialogDescription>
-            Configure execution settings for the currently selected project.
-          </DialogDescription>
+          <DialogTitle>Conversation Settings</DialogTitle>
         </DialogHeader>
 
         <div className={CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME}>
           <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>Conversation Information</Label>
+              {conversationId === null ? (
+                <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                  No active conversation.
+                </div>
+              ) : (
+                <div className="rounded-md border text-xs">
+                  <div className="flex items-start justify-between gap-3 border-b p-2">
+                    <span className="text-muted-foreground">ID</span>
+                    <span className="font-mono break-all text-right">{conversationId}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 border-b p-2">
+                    <span className="text-muted-foreground">Messages</span>
+                    <span className="text-right">{currentConversation?.messageCount ?? "—"}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 border-b p-2">
+                    <span className="text-muted-foreground">Created</span>
+                    <span className="text-right">
+                      {currentConversation
+                        ? formatFriendlyLocalDateTime(currentConversation.createTime)
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 p-2">
+                    <span className="text-muted-foreground">Updated</span>
+                    <span className="text-right">
+                      {currentConversation?.updateTime
+                        ? formatFriendlyLocalDateTime(currentConversation.updateTime)
+                        : "—"}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label>Environment Variables</Label>
@@ -1029,13 +1079,15 @@ export function ChatWorkspace({
         }}
         onNewConversation={handleNewConversation}
         onAllConversationsDeleted={handleAllConversationsDeleted}
-        headerActions={
+        headerActions={(currentConversation) => (
           <ChatSettingsDialog
             selectedProjectId={selectedProjectId}
+            conversationId={conversationId}
+            currentConversation={currentConversation}
             getDraft={getActiveSettingsDraft}
             onSave={handleSaveChatSettings}
           />
-        }
+        )}
       />
     ),
     [
@@ -1091,8 +1143,71 @@ export function ChatWorkspace({
       });
   }, [contextId, executionServerId, selectedProjectId]);
 
+  /** Chat/Files 切换与侧栏折叠按钮，桌面端常驻左列顶部，移动端落在主区域顶部。 */
+  const sidebarControls = (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 mb-2 ">
+      <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
+        <TabsTrigger
+          value="chat"
+          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
+        >
+          Chat
+        </TabsTrigger>
+        <TabsTrigger
+          value="files"
+          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
+        >
+          Files
+        </TabsTrigger>
+      </TabsList>
+      <Button
+        variant="ghost"
+        className="cursor-pointer"
+        size="sm"
+        onClick={handleSidebarToggle}
+        title={sidebarToggleTitle}
+        aria-label={sidebarToggleTitle}
+        disabled={isSidebarToggleDisabled}
+      >
+        {activeSidebarVisible ? (
+          <PanelLeftClose className="h-4 w-4" />
+        ) : (
+          <PanelLeftOpen className="h-4 w-4" />
+        )}
+      </Button>
+    </div>
+  );
+
+  /** 桌面端折叠左列时收起项目选择器，移动端的工具条始终保留它。 */
+  const showToolbarProjectSelect = showProjectSelect && (isMobile || activeSidebarVisible);
+
+  /** Web 左列顶部多一个项目选择器，默认宽度比 Desktop 宽 40px。 */
+  const sidebarDefaultWidth = showProjectSelect ? 360 : 320;
+
+  /** 项目选择器与 Chat/Files 工具条，桌面端位于左列顶部，移动端位于主区域顶部。 */
+  const workspaceToolbar = (
+    <div className="flex shrink-0 flex-wrap items-center pt-2">
+      {showToolbarProjectSelect ? (
+        <div className="w-50 mr-2 mb-2">
+          <SearchableSelect
+            id="chat-project-select"
+            ariaLabel="Select project"
+            value={selectedProjectId ?? ""}
+            onValueChange={handleProjectChange}
+            options={projectSelectOptions}
+            placeholder="Select project"
+            searchPlaceholder="Search projects..."
+            clearable={false}
+          />
+        </div>
+      ) : null}
+
+      {sidebarControls}
+    </div>
+  );
+
   return (
-    <div className="relative flex h-full w-full min-w-0 flex-col gap-3 pt-2">
+    <div className="relative flex h-full w-full min-w-0 flex-col gap-3">
       {projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError ? (
         <div className="text-sm text-destructive">
           Failed to load chat dependencies:{" "}
@@ -1107,184 +1222,137 @@ export function ChatWorkspace({
         aria-hidden={showReconnect}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {showProjectSelect ? (
-              <div className="w-[220px]">
-                <SearchableSelect
-                  id="chat-project-select"
-                  ariaLabel="Select project"
-                  value={selectedProjectId ?? ""}
-                  onValueChange={handleProjectChange}
-                  options={projectSelectOptions}
-                  placeholder="Select project"
-                  searchPlaceholder="Search projects..."
-                  clearable={false}
-                />
-              </div>
-            ) : null}
-
-            <div className="w-65">
-              <AgentSelector
-                id="chat-target-select"
-                size={compactToolbar ? "sm" : "default"}
-                projectId={selectedProjectId}
-                value={
-                  selectedTarget
-                    ? {
-                        agentType: selectedTarget.type === "agent" ? 0 : 1,
-                        agentId: selectedTarget.id,
-                      }
-                    : null
-                }
-                onSelect={handleAgentSelect}
-              />
-            </div>
-          </div>
-          <div className="flex-1" />
-
-          <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
-            <TabsTrigger
-              value="chat"
-              className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
+        <ColResizeSplit>
+          {isMobile ? null : (
+            <ColResizeSplit.Left
+              defaultPanelWidth={sidebarDefaultWidth}
+              minWidth={268}
+              maxWidth={420}
+              collapsed={!activeSidebarVisible}
             >
-              Chat
-            </TabsTrigger>
-            <TabsTrigger
-              value="files"
-              className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
-            >
-              Files
-            </TabsTrigger>
-          </TabsList>
-          <Button
-            variant="ghost"
-            className="cursor-pointer"
-            size="sm"
-            onClick={handleSidebarToggle}
-            title={sidebarToggleTitle}
-            aria-label={sidebarToggleTitle}
-            disabled={isSidebarToggleDisabled}
-          >
-            {activeSidebarVisible ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeftOpen className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
+              <div className="flex h-full min-h-0 flex-col">
+                {workspaceToolbar}
 
-        <TabsContent
-          value="chat"
-          forceMount
-          className="mt-2 flex min-h-0 flex-1 data-[state=inactive]:hidden"
-        >
-          <ColResizeSplit>
-            {!isMobile && isChatTab && showChatHistory ? (
-              <ColResizeSplit.Left minWidth={260} maxWidth={520}>
-                {renderConversationList()}
-              </ColResizeSplit.Left>
-            ) : null}
-
-            <ColResizeSplit.Right>
-              <div className="relative flex flex-col min-h-105 flex-1 overflow-hidden">
-                {/* <div className="border-b px-4 py-3">
-                  <div className="text-xs text-muted-foreground">
-                    {selectedProjectId
-                      ? `Project: ${projects.find((project) => project.id === selectedProjectId)?.name ?? selectedProjectId}`
-                      : "Select a project to begin"}
-                    {selectedTarget ? ` · Target: ${selectedTarget.type}` : ""}
+                {activeSidebarVisible ? (
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    {isChatTab ? renderConversationList() : null}
+                    {isFilesTab && hasProjectFileSystem ? (
+                      <Explorer
+                        key={`${selectedProjectId}:${selectedDirectory?.id ?? "primary"}:${resolvedWorkspace}`}
+                        projectId={selectedProjectId!}
+                        directoryId={selectedDirectory?.id}
+                        directories={projectDirectories}
+                        onDirectoryChange={setSelectedDirectoryId}
+                        rootDirectory={resolvedWorkspace || "/"}
+                        onlyDiff={onlyDiff}
+                        recursiveMode={recursiveMode}
+                        onOnlyDiffChange={setOnlyDiff}
+                        onFileDeleted={handleOnFileDeleted}
+                        onFileSelected={handleOnFileSelected}
+                        onFileReseted={handleOnFileReseted}
+                        onFileGitScopeChanged={handleOnFileGitScopeChanged}
+                      />
+                    ) : null}
                   </div>
-                </div> */}
+                ) : null}
+              </div>
+            </ColResizeSplit.Left>
+          )}
 
-                <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
-                  <Chat
-                    target={selectedTarget}
-                    agentResultFormats={agentsQuery.data}
-                    projectId={selectedProjectId}
-                    conversationId={conversationId}
-                    sessionSeed={chatSessionSeed}
-                    isLoadingConversation={
-                      isLoadingConversation ||
-                      Boolean(
-                        queryConversationId &&
-                        (queryProjectId !== selectedProjectId ||
-                          queryConversationId !== conversationId),
-                      )
-                    }
-                    showUserInputNavigation={showUserInputNavigation}
-                    restoreExecution={
-                      Number(chatSessionSeed.revision) > 0 &&
-                      queryProjectId === selectedProjectId &&
-                      queryConversationId === conversationId &&
-                      chatSessionSeed.contextId === contextId
-                    }
-                    environmentVariables={environmentVariables}
-                    onConversationIdChange={handleChatConversationIdChange}
-                    onConversationAccepted={handleConversationAccepted}
-                    onContextIdChange={handleChatContextIdChange}
-                    onConversationChange={refreshConversationList}
-                    directoryId={selectedDirectory?.id}
-                    searchDirectoryIds={searchDirectoryIds}
-                    directories={projectDirectories}
-                    pendingFileComments={comments}
-                    onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
-                    onReconnectStateChange={setExecutionReconnectState}
-                  />
+          <ColResizeSplit.Right>
+            <div className="flex h-full min-h-0 w-full flex-col">
+              {isMobile ? workspaceToolbar : null}
+
+              <TabsContent
+                value="chat"
+                forceMount
+                className="flex min-h-0 flex-1 data-[state=inactive]:hidden"
+              >
+                <div className="relative flex flex-col min-h-105 flex-1 overflow-hidden">
+                  <div className="relative flex min-h-0 flex-1 flex-col">
+                    <Chat
+                      target={selectedTarget}
+                      agentResultFormats={agentsQuery.data}
+                      projectId={selectedProjectId}
+                      inputTopLeft={
+                        <div className="w-44">
+                          <AgentSelector
+                            id="chat-target-select"
+                            size={compactToolbar ? "sm" : "default"}
+                            height={34}
+                            projectId={selectedProjectId}
+                            value={
+                              selectedTarget
+                                ? {
+                                    agentType: selectedTarget.type === "agent" ? 0 : 1,
+                                    agentId: selectedTarget.id,
+                                  }
+                                : null
+                            }
+                            onSelect={handleAgentSelect}
+                          />
+                        </div>
+                      }
+                      conversationId={conversationId}
+                      sessionSeed={chatSessionSeed}
+                      isLoadingConversation={
+                        isLoadingConversation ||
+                        Boolean(
+                          queryConversationId &&
+                          (queryProjectId !== selectedProjectId ||
+                            queryConversationId !== conversationId),
+                        )
+                      }
+                      showUserInputNavigation={showUserInputNavigation}
+                      restoreExecution={
+                        Number(chatSessionSeed.revision) > 0 &&
+                        queryProjectId === selectedProjectId &&
+                        queryConversationId === conversationId &&
+                        chatSessionSeed.contextId === contextId
+                      }
+                      environmentVariables={environmentVariables}
+                      onConversationIdChange={handleChatConversationIdChange}
+                      onConversationAccepted={handleConversationAccepted}
+                      onContextIdChange={handleChatContextIdChange}
+                      onConversationChange={refreshConversationList}
+                      directoryId={selectedDirectory?.id}
+                      searchDirectoryIds={searchDirectoryIds}
+                      directories={projectDirectories}
+                      pendingFileComments={comments}
+                      onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
+                      onReconnectStateChange={setExecutionReconnectState}
+                    />
+                  </div>
                 </div>
-              </div>
-            </ColResizeSplit.Right>
-          </ColResizeSplit>
-        </TabsContent>
+              </TabsContent>
 
-        <TabsContent value="files" className="mt-2 flex min-h-0 flex-1">
-          <ColResizeSplit>
-            {!isMobile && hasProjectFileSystem && showFileExplorer ? (
-              <ColResizeSplit.Left minWidth={260} maxWidth={520}>
-                <Explorer
-                  key={`${selectedProjectId}:${selectedDirectory?.id ?? "primary"}:${resolvedWorkspace}`}
-                  projectId={selectedProjectId!}
-                  directoryId={selectedDirectory?.id}
-                  directories={projectDirectories}
-                  onDirectoryChange={setSelectedDirectoryId}
-                  rootDirectory={resolvedWorkspace || "/"}
-                  onlyDiff={onlyDiff}
-                  recursiveMode={recursiveMode}
-                  onOnlyDiffChange={setOnlyDiff}
-                  onFileDeleted={handleOnFileDeleted}
-                  onFileSelected={handleOnFileSelected}
-                  onFileReseted={handleOnFileReseted}
-                  onFileGitScopeChanged={handleOnFileGitScopeChanged}
-                />
-              </ColResizeSplit.Left>
-            ) : null}
-
-            <ColResizeSplit.Right>
-              <div className="flex justify-center flex-1 overflow-hidden">
-                {hasProjectFileSystem ? (
-                  <FileContent
-                    projectId={selectedProjectId!}
-                    directoryId={selectedDirectory?.id}
-                    directoryName={
-                      projectDirectories.length > 1 ? selectedDirectory?.path : undefined
-                    }
-                    selectedFile={selectedFile}
-                    isLoadingContent={isLoadingContent}
-                    contentError={contentError}
-                    onlyDiff={onlyDiff}
-                    diffContentData={diffContentData}
-                    comments={comments}
-                    setComments={setComments}
-                    fileContent={fileContent}
-                    diffScope={selectedDiffScope}
-                  />
-                ) : (
-                  <ProjectRequiredState />
-                )}
-              </div>
-            </ColResizeSplit.Right>
-          </ColResizeSplit>
-        </TabsContent>
+              <TabsContent value="files" className="flex min-h-0 flex-1">
+                <div className="flex justify-center flex-1 overflow-hidden">
+                  {hasProjectFileSystem ? (
+                    <FileContent
+                      projectId={selectedProjectId!}
+                      directoryId={selectedDirectory?.id}
+                      directoryName={
+                        projectDirectories.length > 1 ? selectedDirectory?.path : undefined
+                      }
+                      selectedFile={selectedFile}
+                      isLoadingContent={isLoadingContent}
+                      contentError={contentError}
+                      onlyDiff={onlyDiff}
+                      diffContentData={diffContentData}
+                      comments={comments}
+                      setComments={setComments}
+                      fileContent={fileContent}
+                      diffScope={selectedDiffScope}
+                    />
+                  ) : (
+                    <ProjectRequiredState />
+                  )}
+                </div>
+              </TabsContent>
+            </div>
+          </ColResizeSplit.Right>
+        </ColResizeSplit>
       </Tabs>
 
       <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>

@@ -1,53 +1,24 @@
 using Agw.Shared.Data.Abstractions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Agw.Infrastructure.Data.Interceptors;
 
-public sealed class EntitySoftDeleteInterceptor : SaveChangesInterceptor
+public sealed class EntitySoftDeleteInterceptor : EntityAuditInterceptorBase
 {
-    private readonly IEntityAuditUserIdProvider _entityAuditUserIdProvider;
-    private readonly TimeProvider _timeProvider;
-
     public EntitySoftDeleteInterceptor(IEntityAuditUserIdProvider entityAuditUserIdProvider, TimeProvider timeProvider)
-    {
-        _entityAuditUserIdProvider = entityAuditUserIdProvider;
-        _timeProvider = timeProvider;
-    }
+        : base(entityAuditUserIdProvider, timeProvider) { }
 
-    public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+    protected override void OnSavingEntry(EntityEntry entry, string userId, DateTimeOffset now)
     {
-        BeforeSaveChanges(eventData, _entityAuditUserIdProvider.GetUserId(), _timeProvider.GetUtcNow());
-        return base.SavingChanges(eventData, result);
-    }
-
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-        DbContextEventData eventData,
-        InterceptionResult<int> result,
-        CancellationToken cancellationToken = new CancellationToken()
-    )
-    {
-        BeforeSaveChanges(eventData, _entityAuditUserIdProvider.GetUserId(), _timeProvider.GetUtcNow());
-        return base.SavingChangesAsync(eventData, result, cancellationToken);
-    }
-
-    private static void BeforeSaveChanges(DbContextEventData eventData, string userId, DateTimeOffset now)
-    {
-        if (eventData.Context is null)
+        if (entry.State == EntityState.Deleted)
         {
-            return;
-        }
-        foreach (var entry in eventData.Context.ChangeTracker.Entries())
-        {
-            if (entry.State == EntityState.Deleted)
+            if (entry.Entity is ISoftDelete entity)
             {
-                if (entry.Entity is ISoftDelete entity)
-                {
-                    entity.IsDeleted = true;
-                    EntityAuditStamping.StampDeleted(entry, userId, now);
+                entity.IsDeleted = true;
+                EntityAuditStamping.StampDeleted(entry, userId, now);
 
-                    entry.State = EntityState.Modified;
-                }
+                entry.State = EntityState.Modified;
             }
         }
     }

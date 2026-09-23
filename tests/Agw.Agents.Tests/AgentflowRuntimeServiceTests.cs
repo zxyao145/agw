@@ -1344,38 +1344,10 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             _agentFactory = agentFactory;
         }
 
-        public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
-            CreateAiAgentAsync(agentId, null, false, cancellationToken);
-
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            CancellationToken cancellationToken = default
-        )
-        {
-            return CreateAiAgentAsync(agentId, projectId, resume, environmentVariables: null, cancellationToken);
-        }
-
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default
-        )
-        {
-            LastEnvironmentVariables = environmentVariables;
-            AIAgent? agent = _agentFactory?.Invoke(agentId) ?? (agentId == _agentId ? new TrackingAIAgent() : null);
-            if (agent is TrackingAIAgent trackingAgent)
-            {
-                CreatedAgents.Add(trackingAgent);
-            }
-
-            return Task.FromResult(agent);
-        }
-
         public Agw.Agents.Contracts.Execution.AgwPermissionMode? LastPermissionMode { get; private set; }
+
+        public Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
         public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
             Guid agentId,
@@ -1388,25 +1360,15 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
         )
         {
             LastPermissionMode = permissionMode;
-            return CreateAgentflowNodeAgentAsync(
-                agentId,
-                projectId,
-                conversationId,
-                environmentVariables,
-                cancellationToken
-            );
-        }
-
-        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            Guid conversationId,
-            IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default
-        )
-        {
             LastConversationId = conversationId;
-            return CreateAiAgentAsync(agentId, projectId, resume: false, environmentVariables, cancellationToken);
+            LastEnvironmentVariables = environmentVariables;
+            AIAgent? agent = _agentFactory?.Invoke(agentId) ?? (agentId == _agentId ? new TrackingAIAgent() : null);
+            if (agent is TrackingAIAgent trackingAgent)
+            {
+                CreatedAgents.Add(trackingAgent);
+            }
+
+            return Task.FromResult(agent);
         }
 
         public Task<AgentRuntime?> CreateRuntimeAsync(
@@ -1416,15 +1378,12 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
 
-        public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            CancellationToken cancellationToken = default
-        ) => throw new NotImplementedException();
+        public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
 
-        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
+        public Task SetPermissionModeAsync(
+            AgentRuntime runtime,
+            Agw.Agents.Contracts.Execution.AgwPermissionMode permissionMode,
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
 

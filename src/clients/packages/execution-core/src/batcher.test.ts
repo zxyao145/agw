@@ -11,7 +11,7 @@ test("the batcher commits a burst once and drops an old generation", () => {
     (callback, delay) => {
       assert.equal(delay, STREAMING_MESSAGE_BATCH_INTERVAL_MS);
       scheduled.push(callback);
-      return scheduled.length;
+      return scheduled.length as unknown as ReturnType<typeof setTimeout>;
     },
     () => undefined,
   );
@@ -37,7 +37,7 @@ test("discard cancels a scheduled flush", () => {
     (messages) => flushed.push(messages),
     (callback) => {
       scheduled.push(callback);
-      return scheduled.length;
+      return scheduled.length as unknown as ReturnType<typeof setTimeout>;
     },
     () => {
       cancelCount += 1;

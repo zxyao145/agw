@@ -1,7 +1,7 @@
 global using System.ComponentModel;
 global using System.Diagnostics.CodeAnalysis;
 global using Agw.Agents.Contracts.Execution;
-global using Agw.Files.Services;
+global using Agw.Files.Abstracts;
 global using Agw.Shared.Data.Entities.Tools;
 global using Agw.Shared.Tooling;
 global using Agw.Shared.Utils;

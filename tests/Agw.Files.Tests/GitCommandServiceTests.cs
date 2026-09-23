@@ -1,5 +1,6 @@
 using System.Diagnostics;
-using Agw.Files.Services;
+using Agw.Files.Abstracts.Dtos;
+using Agw.Files.Infrastructure.Git;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Files.Tests;

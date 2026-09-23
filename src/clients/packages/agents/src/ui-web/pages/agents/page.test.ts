@@ -1,85 +1,214 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import test from "node:test";
+import test, { afterEach } from "node:test";
+import { setupDomEnvironment, startApiServer, type ApiRequestRecord } from "@agw/test-harness";
 
-const PAGE_URL = new URL("./page.tsx", import.meta.url);
+const { React, act, fireEvent, render, screen, waitFor } = await setupDomEnvironment();
+const { configureApiRuntime, resetApiRuntime } = await import("@agw/api");
+const { QueryClient, QueryClientProvider } = await import("@agw/components/query");
+const { TooltipProvider } = await import("@agw/components");
+const { default: AgentsPage } = await import("./page.tsx");
 
-test("agents page loads connections and passes connection selection state into both dialogs", async () => {
-  const source = await readFile(PAGE_URL, "utf8");
+const agent = {
+  id: "11111111-1111-1111-1111-000000000001",
+  name: "reviewer",
+  displayName: "Reviewer",
+  description: "Reviews the current diff",
+  systemPrompt: "You review code.",
+  type: 0,
+  enable: true,
+  tools: [],
+  skills: [],
+  mcpToolServers: [],
+  connections: [],
+  environmentVariables: {},
+  modelProviderId: "provider-1",
+  summaryModelProviderId: null,
+  enableSummary: false,
+  responseSchema: null,
+  extra: null,
+  createTime: "2026-09-20T01:00:00Z",
+  updateTime: "2026-09-21T01:00:00Z",
+};
+const modelProvider = {
+  id: "provider-1",
+  modelName: "claude-opus-5",
+  providerName: "anthropic",
+  providerType: "Anthropic",
+};
 
-  assert.match(source, /queryKey: \["connections"\]/);
-  assert.match(source, /apiGet\("\/api\/integrations\/connections"\)/);
-  assert.match(source, /selectedConnectionIds/);
-  assert.match(source, /toggleConnection/);
-  assert.match(source, /selectedConnectionIds=\{selectedConnectionIds\}/);
-  assert.match(source, /selectedConnectionIds=\{editSelectedConnectionIds\}/);
-  assert.match(source, /setEditModelProviderId\(agent\.modelProviderId \?\? ""\)/);
+const api = await startApiServer({
+  "GET /api/agents/paged": { items: [agent], total: 1, pageIndex: 1, pageSize: 20 },
+  "GET /api/model-providers": [modelProvider],
+  "GET /api/agents/external-options": [],
+  "GET /api/tools": [],
+  "GET /api/mcp-tool-servers": [],
+  "GET /api/skills": [],
+  "GET /api/integrations/connections": [],
+  "POST /api/agents": agent,
+  "PUT /api/agents/{id}": agent,
+  "PUT /api/agents/enabled": agent,
+  "DELETE /api/agents/{id}": true,
+});
+configureApiRuntime({ baseUrl: api.baseUrl, token: null });
+test.after(() => resetApiRuntime());
+
+let activeClient: InstanceType<typeof QueryClient> | null = null;
+afterEach(() => {
+  activeClient?.clear();
+  activeClient = null;
+  api.requests.length = 0;
 });
 
-test("agents page owns Create and Edit response-schema state with backfill and reset", async () => {
-  const source = await readFile(PAGE_URL, "utf8");
+function writes(method: string, path: string): ApiRequestRecord[] {
+  return api.requests.filter((request) => request.method === method && request.path === path);
+}
 
-  assert.match(source, /const \[responseSchema, setResponseSchema\] = React\.useState\(""\)/);
-  assert.match(
-    source,
-    /const \[editResponseSchema, setEditResponseSchema\] = React\.useState\(""\)/,
+async function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      // The default five-minute mutation garbage-collection timer keeps the test
+      // process alive long after the last assertion.
+      // 默认五分钟的 mutation 垃圾回收计时器会在最后一个断言之后长时间维持测试进程。
+      mutations: { gcTime: 0 },
+    },
+  });
+  activeClient = client;
+  const view = render(
+    React.createElement(
+      QueryClientProvider,
+      { client },
+      React.createElement(TooltipProvider, null, React.createElement(AgentsPage)),
+    ),
   );
-  assert.match(
-    source,
-    /agent\.externalAgentKind === ExternalAgentKind\.Pi \? "" : \(agent\.responseSchema \?\? ""\)/,
-  );
-  assert.match(source, /setResponseSchema\(""\)/);
-  assert.match(source, /responseSchema=\{responseSchema\}/);
-  assert.match(source, /responseSchema=\{editResponseSchema\}/);
+  await screen.findByText("reviewer");
+  return view;
+}
+
+async function openDialog(name: string) {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  });
+  return screen.findByRole("dialog");
+}
+
+test("the page lists the agents the server returns", async () => {
+  await renderPage();
+
+  assert.ok(screen.getByRole("heading", { name: "Agents", level: 1 }));
+  assert.ok(screen.getByText("Reviewer"));
+  assert.deepEqual(writes("GET", "/api/agents/paged")[0].query.get("pageSize"), "20");
 });
 
-test("agents page owns Create and Edit environment-variable state", async () => {
-  const source = await readFile(PAGE_URL, "utf8");
+test("creating an agent sends the metadata the operator filled in", async () => {
+  await renderPage();
+  await openDialog("Create");
 
-  assert.match(source, /const \[environmentVariables, setEnvironmentVariables\]/);
-  assert.match(source, /const \[editEnvironmentVariables, setEditEnvironmentVariables\]/);
-  assert.match(
-    source,
-    /setEditEnvironmentVariables\(toAgentEnvironmentVariableEntries\(agent\.environmentVariables\)\)/,
-  );
-  assert.match(source, /environmentVariables=\{environmentVariables\}/);
-  assert.match(source, /environmentVariables=\{editEnvironmentVariables\}/);
-  assert.match(source, /setEnvironmentVariables\(\[\]\)/);
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText(/Display Name/), { target: { value: "Summarizer" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("combobox", { name: "Model Provider" }));
+  });
+  const provider = await screen.findByRole("option", { name: /claude-opus-5/ });
+  await act(async () => {
+    fireEvent.click(provider);
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  });
+
+  await waitFor(() => assert.equal(writes("POST", "/api/agents").length, 1));
+  const body = writes("POST", "/api/agents")[0].body as Record<string, unknown>;
+  assert.equal(body.displayName, "Summarizer");
+  assert.equal(body.modelProviderId, "provider-1");
 });
 
-test("agents page owns and initializes Create and Edit summary state", async () => {
-  const source = await readFile(PAGE_URL, "utf8");
+test("an agent without a model provider cannot be created", async () => {
+  await renderPage();
+  await openDialog("Create");
 
-  assert.match(source, /const \[enableSummary, setEnableSummary\] = React\.useState\(false\)/);
-  assert.match(
-    source,
-    /const \[editEnableSummary, setEditEnableSummary\] = React\.useState\(false\)/,
-  );
-  assert.match(source, /setEditEnableSummary\(agent\.enableSummary\)/);
-  assert.match(
-    source,
-    /const \[summaryModelProviderId, setSummaryModelProviderId\] = React\.useState\(""\)/,
-  );
-  assert.match(
-    source,
-    /const \[editSummaryModelProviderId, setEditSummaryModelProviderId\] = React\.useState\(""\)/,
-  );
-  assert.match(source, /setEditSummaryModelProviderId\(agent\.summaryModelProviderId \?\? ""\)/);
-  assert.match(source, /enableSummary=\{enableSummary\}/);
-  assert.match(source, /enableSummary=\{editEnableSummary\}/);
-  assert.match(source, /summaryModelProviderId=\{summaryModelProviderId\}/);
-  assert.match(source, /summaryModelProviderId=\{editSummaryModelProviderId\}/);
-  assert.match(source, /setEnableSummary\(false\)/);
-  assert.match(source, /setSummaryModelProviderId\(""\)/);
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText(/Display Name/), { target: { value: "Summarizer" } });
+  });
+
+  assert.equal(screen.getByRole("button", { name: "Create" }).hasAttribute("disabled"), true);
 });
 
-test("agents page loads External Agent defaults and keeps creation identity state", async () => {
-  const source = await readFile(PAGE_URL, "utf8");
+test("editing an agent starts from its stored values and sends an update", async () => {
+  await renderPage();
+  const editAction = document.querySelectorAll("tbody button")[2];
+  await act(async () => {
+    fireEvent.click(editAction);
+  });
+  await screen.findByRole("dialog");
 
-  assert.match(source, /apiGet\("\/api\/agents\/external-options"\)/);
-  assert.match(source, /const \[agentType, setAgentType\]/);
-  assert.match(source, /const \[externalAgentKind, setExternalAgentKind\]/);
-  assert.match(source, /const \[extra, setExtra\]/);
-  assert.match(source, /Changing the external agent kind will replace the current Extra Settings/);
-  assert.match(source, /setExtra\(nextOption\?\.defaultExtra \?\? ""\)/);
+  assert.equal((screen.getByLabelText(/Display Name/) as HTMLInputElement).value, "Reviewer");
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText(/Display Name/), { target: { value: "Reviewer 2" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+  });
+
+  await waitFor(() => assert.equal(writes("PUT", `/api/agents/${agent.id}`).length, 1));
+  const body = writes("PUT", `/api/agents/${agent.id}`)[0].body as Record<string, unknown>;
+  assert.equal(body.displayName, "Reviewer 2");
+});
+
+test("copying an agent asks for a unique name before creating it", async () => {
+  await renderPage();
+  await openDialog("Copy agent");
+
+  assert.ok(screen.getByRole("heading", { name: "Copy agent" }));
+  assert.equal(writes("POST", "/api/agents").length, 0);
+  assert.notEqual((screen.getByLabelText("Name") as HTMLInputElement).value, agent.name);
+
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: " reviewer-copy " } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Copy agent" }));
+  });
+
+  await waitFor(() => assert.equal(writes("POST", "/api/agents").length, 1));
+  assert.equal(
+    (writes("POST", "/api/agents")[0].body as Record<string, unknown>).name,
+    "reviewer-copy",
+  );
+});
+
+test("deleting an agent confirms first and then removes it", async () => {
+  await renderPage();
+  const deleteAction = document.querySelectorAll("tbody button")[4];
+  await act(async () => {
+    fireEvent.click(deleteAction);
+  });
+  await screen.findByRole("dialog");
+
+  assert.match(
+    screen.getByText(/Are you sure you want to delete agent/).textContent ?? "",
+    /"reviewer"/,
+  );
+  assert.equal(writes("DELETE", `/api/agents/${agent.id}`).length, 0);
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  });
+
+  await waitFor(() => assert.equal(writes("DELETE", `/api/agents/${agent.id}`).length, 1));
+});
+
+test("toggling the enabled switch sends the new state", async () => {
+  await renderPage();
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("switch", { name: "Reviewer enabled" }));
+  });
+
+  await waitFor(() => assert.equal(writes("PUT", "/api/agents/enabled").length, 1));
+  assert.deepEqual(writes("PUT", "/api/agents/enabled")[0].body, {
+    agentId: agent.id,
+    enable: false,
+  });
 });

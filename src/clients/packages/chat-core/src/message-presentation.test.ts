@@ -293,7 +293,6 @@ test("uses the persisted agent name when historical Agentflow messages have no a
     getMessageMeta({
       messageId: "message-1",
       role: "assistant",
-      author: null,
       contents: [],
       additionalProperties: { nodeName: "Review Node", agentName: "general-agent" },
     }),
@@ -306,7 +305,6 @@ test("does not duplicate a standalone agent name", () => {
     getMessageMeta({
       messageId: "message-1",
       role: "assistant",
-      author: null,
       contents: [],
       additionalProperties: { agentName: "general-agent" },
     }),
@@ -332,7 +330,6 @@ test("does not add historical agent metadata to tool messages", () => {
     getMessageMeta({
       messageId: "message-1",
       role: "tool",
-      author: null,
       contents: [],
       additionalProperties: { nodeName: "Review Node", agentName: "general-agent" },
     }),

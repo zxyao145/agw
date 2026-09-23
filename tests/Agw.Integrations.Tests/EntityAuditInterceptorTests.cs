@@ -3,7 +3,9 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Providers.Contracts;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -126,6 +128,117 @@ public class EntityAuditInterceptorTests
         Assert.NotNull(deleted.DeletionTime);
     }
 
+    [Fact]
+    public async Task SaveChanges_AddedEntityWithoutUserId_FillsCurrentUser()
+    {
+        using var userScope = PushUser("user-1");
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var context = CreateOwnedContext(connection);
+        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+
+        var entity = new OwnedEntity { Name = "owned" };
+        context.Entities.Add(entity);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("user-1", entity.UserId);
+    }
+
+    [Fact]
+    public async Task SaveChanges_ModifiedEntityWithoutUserId_Throws()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var context = CreateOwnedContext(connection);
+        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+
+        // 无用户上下文时写入的行保留空 UserId，供修改阶段校验。
+        // A row written without a user context keeps an empty UserId for the modification stage to validate.
+        var entity = new OwnedEntity { Name = "owned" };
+        context.Entities.Add(entity);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        Assert.Null(entity.UserId);
+
+        using var userScope = PushUser("user-1");
+        entity.Name = "updated";
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            context.SaveChangesAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.Equal("UserId is required.", exception.Message);
+    }
+
+    [Fact]
+    public async Task SaveChanges_AddedEntityOwnedByAnotherUser_Throws()
+    {
+        using var userScope = PushUser("user-1");
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var context = CreateOwnedContext(connection);
+        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+
+        context.Entities.Add(new OwnedEntity { Name = "owned", CreateBy = "user-2" });
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            context.SaveChangesAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.Equal("CreateBy must match the current user.", exception.Message);
+    }
+
+    [Fact]
+    public async Task SaveChanges_JobLogOwnedByAnotherUser_IsAllowedOnCreateAndRejectedOnUpdate()
+    {
+        using var userScope = PushUser("user-1");
+        // 生产迁移不生成外键，测试连接同样关闭外键强制。
+        // Production migrations emit no foreign keys, so the test connection disables their enforcement too.
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var context = CreateOwnedContext(connection);
+        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+
+        // JobLog 由调度上下文代写，新建放行；同一条规则在修改阶段不放行。
+        // JobLog rows are written on behalf of the scheduler, so creation passes while modification does not.
+        var log = new JobLog
+        {
+            Id = Guid.CreateVersion7(),
+            JobId = Guid.CreateVersion7(),
+            TaskId = Guid.CreateVersion7(),
+            StartTime = DateTimeOffset.UnixEpoch,
+            CreateBy = "user-2",
+        };
+        context.JobLogs.Add(log);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("user-2", log.CreateBy);
+
+        log.Success = true;
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            context.SaveChangesAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.Equal("CreateBy must match the current user.", exception.Message);
+    }
+
+    private static IDisposable PushUser(string userId) =>
+        UserInfoUtil.Push(
+            new ClaimsPrincipal(
+                new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], authenticationType: "Test")
+            )
+        );
+
+    private static OwnedDbContext CreateOwnedContext(SqliteConnection connection)
+    {
+        var userIdProvider = new TestUserIdProvider("user-1");
+        var options = new DbContextOptionsBuilder<OwnedDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(userIdProvider, TimeProvider.System),
+                new EntityModifierInterceptor(userIdProvider, TimeProvider.System),
+                new EntitySoftDeleteInterceptor(userIdProvider, TimeProvider.System)
+            )
+            .Options;
+        return new OwnedDbContext(options);
+    }
+
     private sealed class TestUserIdProvider : IEntityAuditUserIdProvider
     {
         private readonly string _userId;
@@ -136,6 +249,34 @@ public class EntityAuditInterceptorTests
         }
 
         public string GetUserId() => _userId;
+    }
+
+    private sealed class OwnedDbContext : DbContext
+    {
+        public OwnedDbContext(DbContextOptions<OwnedDbContext> options)
+            : base(options) { }
+
+        public DbSet<OwnedEntity> Entities => Set<OwnedEntity>();
+
+        public DbSet<JobLog> JobLogs => Set<JobLog>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<OwnedEntity>();
+            modelBuilder.Entity<JobLog>().Ignore(entity => entity.Job);
+        }
+    }
+
+    private sealed class OwnedEntity : IEntityCreator, IEntityModifier
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? UserId { get; set; }
+        public DateTimeOffset CreateTime { get; set; }
+        public string? CreateBy { get; set; }
+        public DateTimeOffset? UpdateTime { get; set; }
+        public string? UpdateBy { get; set; }
     }
 
     private sealed class AuditDbContext : DbContext

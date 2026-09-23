@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Rules;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -177,7 +176,7 @@ public class TaskExecutionAppService
                 : Guid.CreateVersion7();
         var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
         var title = string.IsNullOrWhiteSpace(request.Title)
-            ? TaskTitleFactory.Create(request.Input)
+            ? TaskTitleRules.Create(request.Input)
             : request.Title.Trim();
 
         var (conversation, conversationCreated) = await GetOrCreateConversationAsync(

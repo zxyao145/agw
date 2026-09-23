@@ -4,7 +4,7 @@ import * as React from "react";
 import { ChevronDown, ChevronUp, CircleHelp } from "lucide-react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@agw/components";
-import type { HumanInteractionQuestionResult } from "../../../services/human-interaction";
+import type { HumanInteractionQuestionResult } from "@agw/chat-core";
 
 type HumanInteractionQuestionResultProps = {
   result: HumanInteractionQuestionResult;

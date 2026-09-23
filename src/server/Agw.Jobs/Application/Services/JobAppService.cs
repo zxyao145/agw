@@ -1,8 +1,8 @@
 using System.Globalization;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
-using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Persistence;
+using Agw.Jobs.Contracts;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;

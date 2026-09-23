@@ -9,7 +9,7 @@ import {
   getMessageTextContent,
   mergeStreamingMessage,
   mergeStreamingMessagesById,
-} from "@agw/chat";
+} from "@agw/execution-core";
 
 export function getTextContent(message: AiMessage): string {
   return getMessageTextContent(message);

@@ -3,6 +3,15 @@ import test from "node:test";
 import { ExecutionSession, type ExecutionHubHandlers } from "@agw/chat-runtime/execution-session";
 import { NativeExecutionSession } from "./native-execution-session";
 
+type ExecutionOutcome = "pending" | "completed" | Error;
+
+// Reads the outcome after asynchronous settlement; a direct property read would keep the
+// narrowing from an earlier assertion.
+// 在异步落定后读取结果；直接读取属性会沿用此前断言留下的类型收窄。
+function currentOutcome(result: { outcome: ExecutionOutcome }): ExecutionOutcome {
+  return result.outcome;
+}
+
 const request = {
   conversationId: "conversation",
   agentId: "agent",
@@ -27,7 +36,7 @@ test("native execution settles with an unknown-outcome error when reconnect conf
   });
   const handlers = (native as unknown as { session: { handlers: ExecutionHubHandlers } }).session
     .handlers;
-  const result: { outcome: "pending" | "completed" | Error } = { outcome: "pending" };
+  const result: { outcome: ExecutionOutcome } = { outcome: "pending" };
   const execution = native.execute(request).then(
     () => {
       result.outcome = "completed";
@@ -43,11 +52,12 @@ test("native execution settles with an unknown-outcome error when reconnect conf
     active = false;
     handlers.onReconnected?.();
     for (let i = 0; i < 10; i++) await Promise.resolve();
+    const outcome = currentOutcome(result);
     assert.ok(
-      result.outcome instanceof Error,
+      outcome instanceof Error,
       "idle recovery must release the waiter without claiming success",
     );
-    assert.match(result.outcome.message, /outcome.*unknown/i);
+    assert.match(outcome.message, /outcome.*unknown/i);
     assert.equal(reconnectStates.at(-1), null);
   } finally {
     await native.dispose();
@@ -88,7 +98,7 @@ test("native execution keeps waiting after an unacknowledged start while the cor
   });
   const handlers = (native as unknown as { session: { handlers: ExecutionHubHandlers } }).session
     .handlers;
-  const result: { outcome: "pending" | "completed" | Error } = { outcome: "pending" };
+  const result: { outcome: ExecutionOutcome } = { outcome: "pending" };
   const execution = native.execute(request).then(
     () => {
       result.outcome = "completed";
@@ -110,8 +120,9 @@ test("native execution keeps waiting after an unacknowledged start while the cor
     active = false;
     handlers.onReconnected?.();
     for (let i = 0; i < 10; i++) await Promise.resolve();
-    assert.ok(result.outcome instanceof Error);
-    assert.match(result.outcome.message, /outcome.*unknown/i);
+    const outcome = currentOutcome(result);
+    assert.ok(outcome instanceof Error);
+    assert.match(outcome.message, /outcome.*unknown/i);
   } finally {
     await native.dispose();
     await execution;
@@ -129,7 +140,7 @@ test("native rejects a pre-existing active execution instead of adopting it as a
     token: "token",
     onMessage() {},
   });
-  const result: { outcome: "pending" | "completed" | Error } = { outcome: "pending" };
+  const result: { outcome: ExecutionOutcome } = { outcome: "pending" };
   const execution = native.execute(request).then(
     () => {
       result.outcome = "completed";

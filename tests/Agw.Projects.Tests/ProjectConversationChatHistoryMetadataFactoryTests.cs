@@ -1,5 +1,5 @@
 using Agw.Projects.Application.History;
-using Agw.Projects.Domain.Services;
+using Agw.Projects.Domain.Rules;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
@@ -63,7 +63,7 @@ public class ProjectConversationChatHistoryMetadataFactoryTests
     [Fact]
     public void Create_UsesTrimmedInputPrefix()
     {
-        var title = TaskTitleFactory.Create("  this is a chat title  ");
+        var title = TaskTitleRules.Create("  this is a chat title  ");
 
         Assert.Equal("this is a chat title", title);
     }

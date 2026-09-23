@@ -67,7 +67,9 @@ public sealed class AgentRuntime : RuntimeBase
         _conversationHistoryWriter = conversationHistoryWriter;
     }
 
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+    // 生产路径的逐轮入口是 AgentTurnExecutor；这里的重载只在本程序集内直接驱动 runtime。
+    // AgentTurnExecutor is the per-turn entry on the production path; these overloads drive the runtime directly inside this assembly only.
+    internal async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgwUserInput input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
@@ -89,7 +91,7 @@ public sealed class AgentRuntime : RuntimeBase
         }
     }
 
-    public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+    internal async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgwUserInput input,
         CancellationToken cancellationToken = default
     )
@@ -97,7 +99,7 @@ public sealed class AgentRuntime : RuntimeBase
         return await ExecuteAsync(input, approvalHandler: null, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+    internal async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgwUserInput input,
         IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
@@ -220,7 +222,7 @@ public sealed class AgentRuntime : RuntimeBase
         }
     }
 
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+    internal async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgwUserInput input,
         IInteractionHandler? approvalHandler,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
@@ -243,7 +245,7 @@ public sealed class AgentRuntime : RuntimeBase
         }
     }
 
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+    internal async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         List<AgwContent> contents,
         string? messageId,
         string? author,

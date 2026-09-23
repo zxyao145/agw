@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Agw.Projects.Contracts.History;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Agents.History;
@@ -39,7 +40,7 @@ internal interface IAgentMessageAdapter<in TEvent>
 /// <summary>One producer's protocol state. Transport batches and persistence acknowledgements never reset it.</summary>
 internal sealed class AgentMessageProjection : IConversationMessageSource
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
     private static readonly Meter Meter = new("Agw.ConversationHistory");
     private static readonly Histogram<double> Duration = Meter.CreateHistogram<double>(
         "agw.history.normalize.duration",

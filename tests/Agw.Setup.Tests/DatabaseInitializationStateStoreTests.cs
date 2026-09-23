@@ -32,6 +32,7 @@ public sealed class DatabaseInitializationStateStoreTests : IAsyncLifetime
         services.AddAuth();
         services.AddSettings();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<ISettingsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddDbContext<AgwDbContext>(options => options.UseSqlite(ConnectionString));
         services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();
         _services = services.BuildServiceProvider();
@@ -203,6 +204,7 @@ public sealed class DatabaseInitializationStateStoreTests : IAsyncLifetime
         services.AddAuth();
         services.AddSettings();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<ISettingsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddDbContext<AgwDbContext>(options => options.UseSqlite(ConnectionString));
         services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();
         services.AddSetup(new ConfigurationBuilder().Build(), readOnly: true);

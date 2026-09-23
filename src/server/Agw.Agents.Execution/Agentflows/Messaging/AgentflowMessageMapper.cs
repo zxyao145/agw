@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -16,7 +17,7 @@ internal static class AgentflowMessageMapper
 {
     private const string DefaultHumanGateMode = "approval";
     private const string DefaultHumanGatePrompt = "Human approval is required to continue.";
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     internal static IReadOnlyList<AgwMessage> CreateWorkflowOutputMessages(object? data)
     {

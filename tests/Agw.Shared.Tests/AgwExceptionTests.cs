@@ -91,11 +91,6 @@ public class AgwExceptionTests
             return true;
         }
 
-        if (file.StartsWith("src/server/Agw.Files/", StringComparison.Ordinal) && type == "AgwFilesException")
-        {
-            return true;
-        }
-
         // Source generators are compiler components and may emit framework exceptions into
         // projects that intentionally have no dependency on Agw.Shared.
         if (

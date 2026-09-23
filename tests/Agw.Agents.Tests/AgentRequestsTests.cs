@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Agents.Definitions.Domain.Decisions;
 using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.Agents.Tests;

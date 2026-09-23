@@ -13,6 +13,9 @@ interface SlotProps {
 interface LeftSlotProps extends SlotProps {
   minWidth?: number;
   maxWidth?: number;
+  /** 折叠态下左列收窄到内容宽度，并隐藏拖拽手柄。 */
+  collapsed?: boolean;
+  defaultPanelWidth?: number;
 }
 
 // 定义组件类型，包含命名插槽
@@ -45,8 +48,7 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }: ColSplitProps) =>
 
   const [isResizing, setIsResizing] = React.useState(false);
   const resizeRef = React.useRef<HTMLDivElement>(null);
-  const [panelWidth, setPanelWidth] = React.useState(320);
-
+  const [panelWidth, setPanelWidth] = React.useState(leftProps?.defaultPanelWidth ?? 320);
   // Handle resize
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -90,23 +92,25 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }: ColSplitProps) =>
             <div
               className="flex flex-col min-h-0 overflow-hidden h-full"
               ref={resizeRef}
-              style={{ width: panelWidth }}
+              style={{ width: leftProps.collapsed ? "auto" : panelWidth }}
             >
               {left}
             </div>
             {/* Resize handle */}
-            <div
-              className={cn(
-                "w-[2px] cursor-col-resize flex items-center justify-center bg-primary/20 transition-colors group",
-                isResizing && "bg-primary/30",
-              )}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setIsResizing(true);
-              }}
-            >
-              <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
+            {leftProps.collapsed ? null : (
+              <div
+                className={cn(
+                  "w-px cursor-col-resize flex items-center justify-center bg-primary/10 hover:bg-primary/30 transition-colors group",
+                  isResizing && "bg-primary/30",
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setIsResizing(true);
+                }}
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
           </>
         )}
 

@@ -30,7 +30,16 @@ import {
   type ExecutionReconnectState,
   type PendingInteraction,
   type PermissionMode,
-} from "../../../services/execution-hub";
+  createStreamingMessageBatcher,
+  createUserMessage,
+  mergeStreamingMessages,
+  replaceStreamingScope,
+  scopeStreamingMessage,
+  toExecutionUserInput,
+  type StreamingMessageBatcher,
+  executionSessionManager,
+  type ManagedExecutionHandle,
+} from "@agw/chat-runtime";
 import {
   clearProjectConversationRecords,
   getProjectConversationMessages,
@@ -47,23 +56,10 @@ import {
   type AgentSuggestionsResponse,
 } from "../../../lib/chat/agent-suggestions";
 import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/ai-message-handlers";
-import {
-  createStreamingMessageBatcher,
-  createUserMessage,
-  mergeStreamingMessages,
-  replaceStreamingScope,
-  scopeStreamingMessage,
-  toExecutionUserInput,
-  type StreamingMessageBatcher,
-} from "../../../services/execution-stream";
 import { addTokenUsage, EMPTY_TOKEN_USAGE, getMessageTokenUsage, type TokenUsage } from "@agw/api";
 import { createUuidV7 } from "@agw/api";
 import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
-import {
-  executionSessionManager,
-  type ManagedExecutionHandle,
-} from "../../../services/execution-session-manager";
 import type { AiMessage } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
@@ -97,6 +93,8 @@ export interface ChatProps {
   environmentVariables?: Record<string, string>;
   placeholder?: string;
   className?: string;
+  /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
+  inputTopLeft?: React.ReactNode;
   onConversationIdChange?: (conversationId: string | null) => void;
   onConversationAccepted?: (conversationId: string) => void;
   onContextIdChange?: (contextId: string | null) => void;
@@ -174,6 +172,7 @@ export function Chat({
   environmentVariables,
   placeholder = "Type your message...",
   className,
+  inputTopLeft,
   onConversationIdChange,
   onConversationAccepted,
   onContextIdChange,
@@ -1649,91 +1648,100 @@ export function Chat({
         onScroll={handleConversationScroll}
       >
         <div ref={conversationContentRef} className="mx-auto flex min-h-full w-full justify-center">
+          {/* UserInputNavigation */}
           {showUserInputNavigation ? (
             <div
               ref={setUserInputNavigationHost}
               className="pointer-events-none sticky top-0 z-20 hidden h-0 w-6 shrink-0 self-start @min-[56rem]:block"
             />
           ) : null}
+
           <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
-            {/* 对话列表 */}
-            <ToolDirectoriesContext.Provider value={directories}>
-              <Conversation
-                items={renderItems}
-                conversationKey={JSON.stringify([
-                  executionServerId,
-                  projectId,
-                  contextId,
-                  conversationId,
-                ])}
-                onWorkSummaryToggle={handleUserInputNavigate}
-                scrollElementRef={conversationScrollRef}
-                userInputNavigationHost={userInputNavigationHost}
-                onUserInputNavigate={handleUserInputNavigate}
-                hasOlderMessages={hasOlderMessages}
-                isLoadingOlderMessages={isLoadingOlderMessages}
-                isInitialLoading={isLoadingConversation}
-                onLoadOlderMessages={() => void loadOlderMessages()}
-                permissionMode={activePermissionMode ?? undefined}
-                onHumanResponse={submitInteractionResponse}
-                showCheckpointResume={target?.type === "agentflow"}
-                checkpointResumeDisabled={checkpointResumeDisabled}
-                onCheckpointResume={handleResumeCheckpoint}
-              />
-            </ToolDirectoriesContext.Provider>
+            {/* 对话列表和输入框共用同一个宽度容器，保证两者严格对齐 */}
+            <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col">
+              <ToolDirectoriesContext.Provider value={directories}>
+                {/* 对话列表 */}
+                <Conversation
+                  items={renderItems}
+                  conversationKey={JSON.stringify([
+                    executionServerId,
+                    projectId,
+                    contextId,
+                    conversationId,
+                  ])}
+                  onWorkSummaryToggle={handleUserInputNavigate}
+                  scrollElementRef={conversationScrollRef}
+                  userInputNavigationHost={userInputNavigationHost}
+                  onUserInputNavigate={handleUserInputNavigate}
+                  hasOlderMessages={hasOlderMessages}
+                  isLoadingOlderMessages={isLoadingOlderMessages}
+                  isInitialLoading={isLoadingConversation}
+                  onLoadOlderMessages={() => void loadOlderMessages()}
+                  permissionMode={activePermissionMode ?? undefined}
+                  onHumanResponse={submitInteractionResponse}
+                  showCheckpointResume={target?.type === "agentflow"}
+                  checkpointResumeDisabled={checkpointResumeDisabled}
+                  onCheckpointResume={handleResumeCheckpoint}
+                />
+              </ToolDirectoriesContext.Provider>
+
+              <div
+                inert={showReconnect}
+                aria-hidden={showReconnect}
+                className="pointer-events-none sticky bottom-0 z-10 min-h-30 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-2"
+              >
+                {/* 输入框 */}
+                <div className="pointer-events-auto">
+                  <ChatInput
+                    isExecuting={isExecuting}
+                    isTransitioning={
+                      isTransitioning ||
+                      isHydratingSession ||
+                      isLoadingConversation ||
+                      isRestoringExecution
+                    }
+                    isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
+                    hasMessages={renderItems.length > 0}
+                    onExecute={(value, imageAttachments) => {
+                      void handleExecute(value, imageAttachments);
+                    }}
+                    onInterrupt={handleInterrupt}
+                    onClearSession={handleClear}
+                    onScrollToBottom={handleScrollToBottom}
+                    onScrollToTop={handleScrollToTop}
+                    showResume={target?.type === "agentflow"}
+                    canResume={!checkpointResumeDisabled && latestAvailableCheckpoint !== null}
+                    onResume={() => handleResumeCheckpoint()}
+                    projectId={projectId}
+                    directoryIds={
+                      searchDirectoryIds?.length ? searchDirectoryIds : [directoryId ?? null]
+                    }
+                    commandSource={commandSource}
+                    permissionMode={permissionMode}
+                    activePermissionMode={activePermissionMode}
+                    permissionChangePending={permissionChangePending && isExecuting}
+                    supportedPermissionModes={supportedPermissionModes}
+                    permissionReason={permissionCapabilities.data?.reason ?? undefined}
+                    permissionUnavailable={permissionUnavailable}
+                    agentMode={agentMode}
+                    onPermissionModeChange={handlePermissionModeChange}
+                    onAgentModeChange={handleAgentModeChange}
+                    pendingFileCommentCount={pendingFileComments.length}
+                    onClearPendingFileComments={handleClearPendingFileComments}
+                    placeholder={placeholder}
+                    topLeft={inputTopLeft}
+                    userInputRef={userInputRef}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
+          {/* usage 等 panel */}
           {renderItems.length > 0 ? (
             <ChatAside usage={conversationUsage} todos={currentTurnTodos} />
           ) : null}
         </div>
-      </div>
-
-      <div
-        inert={showReconnect}
-        aria-hidden={showReconnect}
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center"
-      >
-        <div className="relative min-h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-6">
-          {/* 输入框 */}
-          <ChatInput
-            isExecuting={isExecuting}
-            isTransitioning={
-              isTransitioning || isHydratingSession || isLoadingConversation || isRestoringExecution
-            }
-            isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
-            hasMessages={renderItems.length > 0}
-            onExecute={(value, imageAttachments) => {
-              void handleExecute(value, imageAttachments);
-            }}
-            onInterrupt={handleInterrupt}
-            onClearSession={handleClear}
-            onScrollToBottom={handleScrollToBottom}
-            onScrollToTop={handleScrollToTop}
-            showResume={target?.type === "agentflow"}
-            canResume={!checkpointResumeDisabled && latestAvailableCheckpoint !== null}
-            onResume={() => handleResumeCheckpoint()}
-            projectId={projectId}
-            directoryIds={searchDirectoryIds?.length ? searchDirectoryIds : [directoryId ?? null]}
-            commandSource={commandSource}
-            permissionMode={permissionMode}
-            activePermissionMode={activePermissionMode}
-            permissionChangePending={permissionChangePending && isExecuting}
-            supportedPermissionModes={supportedPermissionModes}
-            permissionReason={permissionCapabilities.data?.reason ?? undefined}
-            permissionUnavailable={permissionUnavailable}
-            agentMode={agentMode}
-            onPermissionModeChange={handlePermissionModeChange}
-            onAgentModeChange={handleAgentModeChange}
-            pendingFileCommentCount={pendingFileComments.length}
-            onClearPendingFileComments={handleClearPendingFileComments}
-            placeholder={placeholder}
-            userInputRef={userInputRef}
-          />
-        </div>
-        {renderItems.length > 0 ? (
-          <div className="hidden w-75 shrink-0 @min-[64rem]:block" aria-hidden="true" />
-        ) : null}
       </div>
     </div>
   );

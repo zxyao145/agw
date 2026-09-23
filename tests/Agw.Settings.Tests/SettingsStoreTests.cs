@@ -34,6 +34,7 @@ public sealed class SettingsStoreTests : IAsyncLifetime
         services.AddScoped<EntityCreatorInterceptor>();
         services.AddScoped<EntityModifierInterceptor>();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<ISettingsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddDbContext<AgwDbContext>(
             (provider, options) =>
                 options

@@ -38,11 +38,14 @@ Common workspace-wide checks from `src/clients` are:
 
 ```bash
 pnpm build
+pnpm typecheck
 pnpm lint
 pnpm test
 pnpm fmt
 pnpm fmt:check
 ```
+
+`pnpm --filter @agw/desktop build:main` bundles the Electron main and preload entry points with esbuild into `dist/`, so the packaged application carries no runtime `node_modules`.
 
 For a Desktop-only check, use `pnpm exec turbo run <task> --filter=@agw/desktop`.
 

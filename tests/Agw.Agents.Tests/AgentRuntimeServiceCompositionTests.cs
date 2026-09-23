@@ -385,10 +385,10 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Fact]
-    public void WrapClaudeCodeAgent_MessageWritingHistoryProvider_UsesNormalizedHistoryAgent()
+    public void WrapClaudeCodeAgent_NormalizedHistoryProvider_UsesNormalizedHistoryAgent()
     {
-        // 历史 Provider 能按消息写入时，Claude Code 走归并链路而非逐条追加。
-        // A provider that writes messages puts Claude Code on the normalizing path.
+        // 历史 Provider 经过 Normalized 装饰后，Claude Code 走归并链路。
+        // Once the history provider carries the Normalized decorator, Claude Code takes the normalizing path.
         using var connection = new SqliteConnection("Data Source=:memory:");
         var services = new ServiceCollection()
             .AddScoped<IProjectsDbContext>(_ => new AgwDbContext(
@@ -396,9 +396,12 @@ public class AgentRuntimeServiceCompositionTests
             ))
             .BuildServiceProvider();
         var service = CreateRuntimeService(
-            new EfCoreChatHistoryProvider(
-                services.GetRequiredService<IServiceScopeFactory>(),
-                NullLogger<EfCoreChatHistoryProvider>.Instance,
+            new NormalizedChatHistoryProvider(
+                new EfCoreChatHistoryProvider(
+                    services.GetRequiredService<IServiceScopeFactory>(),
+                    NullLogger<EfCoreChatHistoryProvider>.Instance,
+                    TimeProvider.System
+                ),
                 TimeProvider.System
             )
         );
@@ -1072,9 +1075,15 @@ public class AgentRuntimeServiceCompositionTests
             summaryService: null!,
             services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
-            turnExecutor: null!,
             configuration: null!,
-            timeProvider: TimeProvider.System
+            skillRegistrations: [],
+            remoteSkillContentResolver: null,
+            loggerFactory: NullLoggerFactory.Instance,
+            conversationHistoryWriter: null,
+            humanInteractionContextAccessor: null,
+            turnContextAccessor: null,
+            timeProvider: TimeProvider.System,
+            generatedToolCatalog: null
         );
 
     private class StubAIAgent : AIAgent

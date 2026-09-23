@@ -4,10 +4,7 @@ import * as React from "react";
 import { RefreshCw } from "lucide-react";
 
 import { Button, cn } from "@agw/components";
-import {
-  getExecutionReconnectProgress,
-  type ExecutionReconnectState,
-} from "../../../services/execution-hub";
+import { getExecutionReconnectProgress, type ExecutionReconnectState } from "@agw/chat-runtime";
 
 /** 计算距离下一次自动重连的剩余毫秒数。 */
 function useReconnectCountdown(state: ExecutionReconnectState): number {

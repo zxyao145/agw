@@ -9,49 +9,41 @@
     "./ui-tokens.css": "./src/ui-tokens/tokens.css"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "lint": "oxlint ./src",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../.oxlintrc.json ./src",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "format": "oxfmt ./src *.json",
-    "format:check": "oxfmt --check ./src *.json"
+    "format": "oxfmt -c ../../.oxfmtrc.json ./src *.json",
+    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src *.json"
   },
   "dependencies": {
-    "@base-ui/react": "1.7.0",
-    "@radix-ui/react-accordion": "1.2.12",
-    "@radix-ui/react-checkbox": "1.3.3",
-    "@radix-ui/react-collapsible": "1.1.12",
-    "@radix-ui/react-label": "2.1.8",
-    "@radix-ui/react-radio-group": "1.3.8",
-    "@radix-ui/react-scroll-area": "1.2.10",
-    "@radix-ui/react-separator": "1.1.8",
-    "@radix-ui/react-slot": "1.2.4",
-    "@radix-ui/react-switch": "1.2.6",
-    "@radix-ui/react-tabs": "1.1.13",
-    "@tanstack/react-query": "5.94.5",
+    "@base-ui/react": "1.8.0",
+    "@radix-ui/react-accordion": "1.2.20",
+    "@radix-ui/react-checkbox": "1.3.11",
+    "@radix-ui/react-collapsible": "1.1.20",
+    "@radix-ui/react-label": "2.1.15",
+    "@radix-ui/react-radio-group": "1.4.7",
+    "@radix-ui/react-scroll-area": "1.2.18",
+    "@radix-ui/react-separator": "1.1.15",
+    "@radix-ui/react-slot": "1.3.3",
+    "@radix-ui/react-switch": "1.3.7",
+    "@radix-ui/react-tabs": "1.1.21",
+    "@tanstack/react-query": "catalog:",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "date-fns": "4.4.0",
-    "lucide-react": "0.577.0",
-    "next-themes": "0.4.6",
-    "radix-ui": "1.6.2",
+    "radix-ui": "1.6.7",
     "react-day-picker": "10.0.1",
-    "react-resizable-panels": "4.12.4",
-    "sonner": "2.0.7",
-    "tailwind-merge": "3.5.0",
+    "react-resizable-panels": "4.13.1",
+    "tailwind-merge": "3.7.0",
     "vaul": "1.1.2"
   },
   "devDependencies": {
-    "@types/node": "25.5.0",
-    "oxfmt": "0.41.0",
-    "oxlint": "1.56.0",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "tsx": "4.21.0",
-    "typescript": "5.9.3"
+    "@agw/test-harness": "workspace:*"
   },
   "peerDependencies": {
-    "next": "16.2.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "lucide-react": "catalog:",
+    "next-themes": "catalog:",
+    "react": "catalog:",
+    "sonner": "catalog:"
   }
 }

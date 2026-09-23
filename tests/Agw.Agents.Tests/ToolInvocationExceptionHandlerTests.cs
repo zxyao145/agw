@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Files.Exceptions;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -85,23 +84,6 @@ public sealed class ToolInvocationExceptionHandlerTests
         // Assert
         var error = Assert.IsType<ToolExecutionErrorResult>(result);
         Assert.Equal(ErrorCodes.InvalidUrl.Code, error.Code);
-        Assert.Equal(exception.Message, error.Message);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_AgwFilesException_ReturnsOriginalCodeAndMessage()
-    {
-        // Arrange
-        var exception = new AgwFilesException(FilesErrorCode.PathOutsideRoot, "The path is outside the workspace.");
-        var handler = CreateHandler();
-        var context = CreateContext(CreateThrowingFunction(exception));
-
-        // Act
-        var result = await handler.InvokeAsync(context, CancellationToken.None);
-
-        // Assert
-        var error = Assert.IsType<ToolExecutionErrorResult>(result);
-        Assert.Equal(exception.Code, error.Code);
         Assert.Equal(exception.Message, error.Message);
     }
 

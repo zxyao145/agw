@@ -1,5 +1,6 @@
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Tools.GitHub.Dtos;
+using Agw.Shared.Tooling;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
