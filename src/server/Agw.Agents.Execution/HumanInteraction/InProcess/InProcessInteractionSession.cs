@@ -12,6 +12,7 @@ public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInt
     private readonly IExecutionMessageSink _sink;
     private readonly InteractionPermissionState _permissions;
     private readonly Action<int>? _pendingCountChanged;
+    private readonly bool _allowInteraction;
     private bool _closed;
     public IInteractionRequestRegistry Requests { get; } = new InteractionRequestRegistry();
     internal InteractionPermissionState PermissionState => _permissions;
@@ -19,19 +20,22 @@ public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInt
     public InProcessInteractionSession(
         IExecutionMessageSink sink,
         AgwPermissionMode? permissionMode = null,
-        Action<int>? pendingCountChanged = null
+        Action<int>? pendingCountChanged = null,
+        bool allowInteraction = true
     )
-        : this(sink, new InteractionPermissionState(permissionMode), pendingCountChanged) { }
+        : this(sink, new InteractionPermissionState(permissionMode), pendingCountChanged, allowInteraction) { }
 
     internal InProcessInteractionSession(
         IExecutionMessageSink sink,
         InteractionPermissionState permissions,
-        Action<int>? pendingCountChanged = null
+        Action<int>? pendingCountChanged = null,
+        bool allowInteraction = true
     )
     {
         _sink = sink;
         _permissions = permissions;
         _pendingCountChanged = pendingCountChanged;
+        _allowInteraction = allowInteraction;
     }
 
     public async ValueTask<InteractionResolution> ResolveAsync(
@@ -48,6 +52,10 @@ public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInt
                 throw new AgwException(ErrorCodes.AgentExecutionFailed, "The interaction session has ended.");
             if (InteractionRules.AutomaticallyApprove(request, _permissions.Current) is { } automatic)
                 return new InteractionResolution.Resolved(automatic);
+            // 交互不可用时就地拒绝，不挂起也不推送请求；Agent 拿到结果后继续本轮。
+            // Decline in place when interaction is unavailable: nothing is queued or streamed, and the Agent continues.
+            if (!_allowInteraction)
+                return new InteractionResolution.Resolved(InteractionRules.Decline(request));
 
             pending = new PendingInteraction(request, new(TaskCreationOptions.RunContinuationsAsynchronously));
             if (!_pending.TryAdd(request.InteractionId, pending))

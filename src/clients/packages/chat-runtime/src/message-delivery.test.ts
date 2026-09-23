@@ -4,14 +4,13 @@ import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 import { ExecutionSession } from "./execution-session";
 
-function update(text: string, operation = "AppendText"): AiMessage {
+function update(text: string): AiMessage {
   return {
     messageId: "message",
     role: "assistant",
     author: "test",
     contents: [{ type: "TextContent", content: text, additionalProperties: { blockId: "text" } }],
     additionalProperties: {
-      messageOperation: operation,
       conversationGeneration: 3,
     },
   };

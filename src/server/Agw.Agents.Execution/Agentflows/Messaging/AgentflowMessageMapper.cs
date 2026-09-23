@@ -31,10 +31,7 @@ internal static class AgentflowMessageMapper
                 .SelectMany(response => ConvertChatMessages(response.Messages))
                 .ToList(),
             AgentResponseUpdate update => update.ToAiMessage() is { } message ? [message] : [],
-            IEnumerable<AgentResponseUpdate> updates => updates
-                .Select(update => update.ToAiMessage())
-                .OfType<AgwMessage>()
-                .ToList(),
+            IEnumerable<AgentResponseUpdate> updates => ConvertChatMessages(updates.ToAgentResponse().Messages),
             _ => [],
         };
     }
@@ -240,4 +237,27 @@ internal static class AgentflowMessageMapper
             WorkflowOutputEvent output => CreateWorkflowOutputMessages(output.Data),
             _ => [],
         };
+
+    internal static IEnumerable<AgwMessage> MapEvent(
+        WorkflowEvent evt,
+        ISet<(string ExecutorId, string MessageId, AiRole Role, string? Author)> deliveredMessages
+    )
+    {
+        var executorId = evt switch
+        {
+            AgentResponseUpdateEvent update => update.ExecutorId,
+            AgentResponseEvent response => response.ExecutorId,
+            WorkflowOutputEvent output => output.ExecutorId,
+            _ => string.Empty,
+        };
+        foreach (var message in MapEvent(evt))
+        {
+            var firstDelivery =
+                string.IsNullOrWhiteSpace(message.MessageId)
+                || message.Contents.Count == 0
+                || deliveredMessages.Add((executorId, message.MessageId, message.Role, message.Author));
+            if (evt is AgentResponseUpdateEvent || firstDelivery)
+                yield return message;
+        }
+    }
 }

@@ -270,7 +270,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
     },
     "../../components/message/execution-reconnecting-dialog": { ExecutionReconnectingDialog },
     "../../../lib/chat-route": { buildChatHref },
-    "./settings-storage": { chatSettingsStorage: { get: () => ({}), set() {} } },
+    "./settings-storage": {
+      chatSettingsStorage: {
+        get: () => (kind === "result-only" ? { resultOnly: true } : {}),
+        set() {},
+      },
+    },
     "./components/split-layout": { default: splitLayout, __esModule: true },
     "./lib/chat-settings": {},
     "./lib/session-routing": sessionRouting,
@@ -547,6 +552,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
         );
         return;
       }
+      if (kind === "result-only") {
+        assert.equal(observed.chat?.resultOnly, true);
+        assert.equal(configurations.at(-1)?.resultOnly, true);
+        return;
+      }
       if (kind === "result-schema") {
         const resultContent = () => {
           const item = observed.items?.find((item) => item.type === "result");
@@ -784,6 +794,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
 
 test("Web and Desktop pass the Agent list schema flag through Chat to Result rendering", () =>
   checkConversationSession("result-schema"));
+
+test("the stored result-only setting reaches Chat and the execution setting command", () =>
+  checkConversationSession("result-only"));
 
 test("Web and Desktop hydrate reasoning fragments as one message in completed work", () =>
   checkConversationSession("reasoning-history"));

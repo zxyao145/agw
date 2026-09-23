@@ -2,7 +2,7 @@
 title: "Projects、文件与工作目录"
 description: "设置主目录与附加目录，区分文件浏览目录与 Agent 默认工作目录。"
 weight: 50
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/guides/projects
 ---
 
@@ -42,5 +42,5 @@ Project 更新会使本机文件系统缓存失效，文件浏览立即刷新。
 
 ## 实现与参考
 
-- [Filesystem resolver](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Files/Application/Storage/Resolver/ProjectScopedFileSystemResolver.cs)
+- [Filesystem resolver](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Files/Infrastructure/Storage/ProjectScopedFileSystemResolver.cs)
 - [Directory snapshots](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/README.md)

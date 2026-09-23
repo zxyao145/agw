@@ -2,7 +2,6 @@ using System.Runtime.ExceptionServices;
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows;
-using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Tools.HumanInteraction;
@@ -175,7 +174,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 var update in RunCoreStreamingAsync(messages, session, options, cancellationToken).ConfigureAwait(false)
             )
                 updates.Add(update);
-            return NormalizedResponseAggregation.Aggregate(updates);
+            return updates.ToAgentResponse();
         }
 
         var turn = await PrepareTurnAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
@@ -258,7 +257,6 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         var turnPersistence = turn.TurnPersistence;
         Exception? executionFailure = null;
         var observedCalls = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
-        var normalizedResponse = new NormalizedResponseAggregation.Accumulator();
         try
         {
             await ObserveInputsAsync(turn.Input, cancellationToken).ConfigureAwait(false);
@@ -296,33 +294,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     throw;
                 }
 
-                // 没有观察通道时按原路下发，规范化更新不能因此丢失。
-                // Without an observation channel the update travels the ordinary path: routing it
-                // nowhere would silently drop the live response.
-                if (
-                    NormalizedResponseAggregation.IsNormalized(update.AdditionalProperties)
-                    && _sessionScope?.OutputObserver is { } observer
-                )
-                {
-                    normalizedResponse.Add(update);
-                    await observer(update, cancellationToken).ConfigureAwait(false);
-                }
-                else
-                    yield return update;
+                yield return update;
             }
-
-            // The framework only understands concatenating updates. Give it one final snapshot per message;
-            // normalized live updates have already reached the runner's observation channel.
-            foreach (var message in normalizedResponse.ReadMessages())
-                yield return new AgentResponseUpdate
-                {
-                    MessageId = message.MessageId,
-                    Role = message.Role,
-                    AuthorName = message.AuthorName,
-                    Contents = message.Contents,
-                    CreatedAt = message.CreatedAt,
-                    AdditionalProperties = message.AdditionalProperties,
-                };
 
             var stateSnapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             foreach (var stateSnapshot in stateSnapshots)

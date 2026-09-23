@@ -108,4 +108,48 @@ public class InteractionIdentityTests
         Assert.Equal(1, refreshed);
         Assert.Equal(AgwPermissionMode.AlwaysAsk, permissions.Current);
     }
+
+    [Fact]
+    public async Task ResolveAsync_InteractionDisallowed_DeclinesWithoutWaitingForHuman()
+    {
+        var handler = new DurableInteractionHandler(
+            new InteractionPermissionState(AgwPermissionMode.AlwaysAsk),
+            HumanInteractionPolicy.Allow,
+            new InteractionRequestRegistry(),
+            allowInteraction: false
+        );
+
+        var approval = await handler.ResolveAsync(
+            InteractionTestData.Tool("tool"),
+            TestContext.Current.CancellationToken
+        );
+        var input = await handler.ResolveAsync(
+            InteractionTestData.Input("input"),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.False(
+            Assert
+                .IsType<ToolApprovalDecision>(Assert.IsType<InteractionResolution.Resolved>(approval).Response)
+                .Approved
+        );
+        Assert.True(
+            Assert.IsType<UserInputResponse>(Assert.IsType<InteractionResolution.Resolved>(input).Response).Cancelled
+        );
+        Assert.Empty(handler.Pending);
+    }
+
+    [Fact]
+    public async Task ResolvedChannel_InteractionDisallowed_AnswersWithCancellation()
+    {
+        var channel = new ResolvedHumanInteractionChannel([], allowInteraction: false);
+        var request = InteractionTestData.Input("input");
+
+        var response = await channel.RequestAsync(
+            new UserInputRequest(request.InputKind, request.Prompt, request.Payload) { Source = request.Source },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.True(response.Cancelled);
+    }
 }

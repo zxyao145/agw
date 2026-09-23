@@ -8,6 +8,7 @@ export interface EnvVar {
 export interface ChatProjectSettingsStorageValues {
   targetValue?: string | null;
   envVars?: EnvVar[];
+  resultOnly?: boolean;
 }
 
 export interface InitMessageContent {

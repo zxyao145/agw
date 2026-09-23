@@ -1,3 +1,4 @@
+import { getStreamingIdentity } from "./message";
 import type { ExecutionMessage, ExecutionMessageContent } from "./types";
 
 export const FunctionCallContent = "FunctionCallContent";
@@ -195,12 +196,32 @@ export function processMessages<T extends ExecutionMessage>(
     renderedGroups.add(group);
     items.push({
       type: "accordion",
-      messages: [...group.calls, ...group.results].map((item) => item.message),
+      messages: coalesceFragmentMessages([...group.calls, ...group.results]),
       toolName: group.calls[0].toolName,
     });
   }
 
   return items;
+}
+
+// 同一条源消息可能向同一个 Tool 组贡献多个内容片段，合并回一条消息，保持消息身份唯一
+// One source message may contribute several fragments to one Tool group; fold them back
+// into one message so message identity stays unique.
+function coalesceFragmentMessages<T extends ExecutionMessage>(
+  fragments: MessageFragment<T>[],
+): T[] {
+  const messagesByIdentity = new Map<string, T>();
+  for (const fragment of fragments) {
+    const identity = getStreamingIdentity(fragment.message);
+    const existing = messagesByIdentity.get(identity);
+    messagesByIdentity.set(
+      identity,
+      existing
+        ? { ...existing, contents: [...existing.contents, ...fragment.message.contents] }
+        : fragment.message,
+    );
+  }
+  return [...messagesByIdentity.values()];
 }
 
 function findClosestCallGroup<T extends ExecutionMessage>(

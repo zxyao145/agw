@@ -2,7 +2,7 @@
 title: "AGW 是什么"
 description: "理解 Agent、Project、Chat、Agentflow 与 Job 的关系。"
 weight: 10
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/start/overview
 ---
 
@@ -61,7 +61,7 @@ AGW 是面向个人和小型研发团队的自托管 Agent 工作平台，也可
 
 ## 当前边界
 
-AGW 尚未达到 1.0。它适合清晰、可拆分的任务与人机协作；复杂任务仍需要清楚的输入、完成标准和人工检查。当前使用管理员登录及命名访问 Token，尚不提供多个登录账号、角色管理或按 Token 分配权限范围。
+AGW 尚未达到 1.0。它适合清晰、可拆分的任务与人机协作；复杂任务仍需要清楚的输入、完成标准和人工检查。当前使用管理员登录、第三方账号登录及 API Key，尚不提供角色管理或按 API Key 分配权限范围。
 
 ## 实现与参考
 

@@ -2,14 +2,6 @@ using System.Text.Json;
 
 namespace Agw.Projects.Contracts.History;
 
-public enum ConversationMessageState : short
-{
-    Open,
-    Completed,
-    Interrupted,
-    Failed,
-}
-
 public sealed record ConversationMessageWriteScope
 {
     public required Guid ProjectId { get; init; }
@@ -27,7 +19,6 @@ public sealed record ConversationMessageWriteScope
 public sealed record ConversationMessageSnapshot
 {
     public required Guid MessageId { get; init; }
-    public required ConversationMessageState State { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
     public required string Payload { get; init; }
     public string? Author { get; init; }

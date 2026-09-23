@@ -199,7 +199,6 @@ public partial class EfCoreChatHistoryProviderTests
         new()
         {
             MessageId = id,
-            State = ConversationMessageState.Open,
             CreatedAt = new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero),
             Metadata = [],
             Payload = JsonSerializer.Serialize(

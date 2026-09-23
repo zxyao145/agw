@@ -2,7 +2,7 @@
 title: "Multiple clients"
 description: "Access your AGW Server from a browser, desktop, or mobile device."
 weight: 60
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/features/clients
 ---
 
@@ -28,7 +28,7 @@ Different Servers keep separate configuration and records. If a Project disappea
 ## Get started
 
 1. Initialize the Server and make sure the device can reach its address.
-2. Sign in to Web with the administrator password; connect Desktop and Mobile with named Bearer Tokens.
+2. Sign in to Web with the administrator password or a [third-party account]({{< relref "/docs/features/oidc-login" >}}); connect Desktop and Mobile with API Keys.
 3. Confirm the Server and Project, then open an existing conversation or create one.
 4. Check history and execution status to avoid starting the same task again after switching devices.
 

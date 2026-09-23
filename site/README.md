@@ -1,8 +1,8 @@
 # AGW website / 首页与文档站
 
-独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。中文首页在 `/`、文档在 `/docs/`；英文对应 `/en/` 和 `/en/docs/`。内容依据当前代码整理，中英文各 33 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
+独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。中文首页在 `/`、文档在 `/docs/`；英文对应 `/en/` 和 `/en/docs/`。内容依据当前代码整理，中英文各 35 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
 
-An independent bilingual Hugo site. Chinese is the default language; English lives under `/en/`. Each language has 33 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace. GitHub Actions builds, validates, and deploys it to GitHub Pages.
+An independent bilingual Hugo site. Chinese is the default language; English lives under `/en/`. Each language has 35 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace. GitHub Actions builds, validates, and deploys it to GitHub Pages.
 
 ## 工具链 / Toolchain
 

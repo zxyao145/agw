@@ -15,6 +15,27 @@ internal static class InteractionRules
             }
             : null;
 
+    /// <summary>
+    /// 构造 ResultOnly 下的拒绝答复，让 Agent 拿到结果后继续本轮。
+    /// Builds the declining response used under ResultOnly so the Agent continues the turn with a result in hand.
+    /// </summary>
+    public static InteractionResponse Decline(InteractionRequest request) =>
+        request switch
+        {
+            ToolApprovalInteraction => new ToolApprovalDecision
+            {
+                InteractionId = request.InteractionId,
+                Approved = false,
+                Scope = ApprovalScope.Once,
+            },
+            WorkflowGateInteraction => new WorkflowGateDecision
+            {
+                InteractionId = request.InteractionId,
+                Approved = false,
+            },
+            _ => new UserInputResponse { InteractionId = request.InteractionId, Cancelled = true },
+        };
+
     public static InteractionResponse ValidateAndNormalize(
         InteractionRequest request,
         InteractionResponse response,

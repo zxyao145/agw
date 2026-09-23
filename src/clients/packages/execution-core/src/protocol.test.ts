@@ -73,6 +73,23 @@ test("shared execution commands match the server contract", () => {
     },
   );
   assert.deepEqual(
+    buildSettingCommand({
+      projectId: "project-1",
+      contextId: "context-1",
+      resultOnly: true,
+    }),
+    {
+      type: "SettingCommand",
+      projectId: "project-1",
+      contextId: "context-1",
+      resultOnly: true,
+    },
+  );
+  assert.deepEqual(buildSettingCommand({ projectId: "project-1" }), {
+    type: "SettingCommand",
+    projectId: "project-1",
+  });
+  assert.deepEqual(
     buildExecCommand({
       conversationId: "conversation-1",
       agentId: "agent-1",

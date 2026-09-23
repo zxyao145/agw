@@ -85,3 +85,29 @@ export function formatFriendlyLocalDateTime(value: string, now = new Date()): st
 
   return formatLocalDateTimeExact(date);
 }
+
+export function formatFriendlyLocalDateTime2(value: string, now = new Date()): string {
+  const date = parseApiDateTime(value);
+  if (!date) {
+    return value;
+  }
+
+  const diffMs = now.getTime() - date.getTime();
+  let friendly = "";
+  if (diffMs >= 0) {
+    const diffMinutes = Math.floor(diffMs / 60_000);
+    if (diffMinutes < 1) {
+      friendly = "Just now";
+    } else if (diffMinutes < 60) {
+      friendly = `${diffMinutes}m ago`;
+    } else {
+      const diffHours = Math.floor(diffMs / 3_600_000);
+      if (diffHours < 24) friendly = `${diffHours}h ago`;
+    }
+  }
+
+  if (friendly) {
+    return formatLocalDateTimeExact(date) + ` (${friendly})`;
+  }
+  return formatLocalDateTimeExact(date);
+}

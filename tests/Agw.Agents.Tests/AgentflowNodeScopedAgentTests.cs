@@ -10,51 +10,6 @@ namespace Agw.Agents.Tests;
 public sealed class AgentflowNodeScopedAgentTests
 {
     [Fact]
-    public async Task RunStreamingAsync_CompleteUpdates_ObservesLiveUpdatesAndForwardsOneCompleteMessage()
-    {
-        var id = Guid.CreateVersion7().ToString("D");
-        var updates = new[] { "a", "ab", "abc" }
-            .Select(text => new AgentResponseUpdate(ChatRole.Assistant, text)
-            {
-                MessageId = id,
-                AuthorName = "test",
-                AdditionalProperties = new()
-                {
-                    ["messageOperation"] = "PutMessage",
-                    ["messageState"] = "open",
-                    ["conversationGeneration"] = 3,
-                    ["producerScopeId"] = "original-producer",
-                },
-            })
-            .ToArray();
-        var observed = new List<AgentResponseUpdate>();
-        var scope = new AgentflowAgentSessionScope(new StubProviderSessionState(), Guid.NewGuid(), "context", null)
-        {
-            OutputObserver = (update, _) =>
-            {
-                observed.Add(update);
-                return ValueTask.CompletedTask;
-            },
-        };
-        var agent = new AgentflowNodeScopedAgent(new ToolMessageAgent(updates: updates), "node", "Node", null, scope);
-
-        var response = await agent
-            .RunStreamingAsync(
-                [new ChatMessage(ChatRole.User, "run")],
-                cancellationToken: TestContext.Current.CancellationToken
-            )
-            .ToAgentResponseAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Equal(["a", "ab", "abc"], observed.Select(update => update.Text));
-        var message = Assert.Single(response.Messages);
-        Assert.Equal("abc", message.Text);
-        Assert.Equal(id, message.MessageId);
-        Assert.Equal(3, message.AdditionalProperties!["conversationGeneration"]);
-        Assert.Equal("original-producer", message.AdditionalProperties["producerScopeId"]);
-        Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(message));
-    }
-
-    [Fact]
     public async Task RunStreamingAsync_ConsumerStopsEarly_PersistsCapturedToolMessages()
     {
         var writer = new RecordingConversationHistoryWriter();

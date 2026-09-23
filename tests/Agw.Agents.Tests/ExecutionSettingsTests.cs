@@ -86,4 +86,32 @@ public class ExecutionSettingsTests
         );
         Assert.Equal("\"fullAccess\"", JsonSerializer.Serialize(AgwPermissionMode.FullAccess));
     }
+
+    [Fact]
+    public void ResultOnly_IsPreservedAndExcludedFromEquality()
+    {
+        var projectId = Guid.CreateVersion7();
+
+        var settings = SettingCommandMapper.FromCommand(
+            new SettingCommand(projectId, contextId: "context", resultOnly: true)
+        );
+
+        Assert.True(settings.ResultOnly);
+        Assert.Equal(settings, SettingCommandMapper.FromCommand(new SettingCommand(projectId, contextId: "context")));
+        Assert.False(settings.WithResultOnly(false).ResultOnly);
+    }
+
+    [Fact]
+    public void ResultOnly_SurvivesDerivedSettingsAndDurableRoundTrip()
+    {
+        var settings = ExecutionSettings.CreateDefault().WithResultOnly(true);
+
+        Assert.True(settings.WithPermissionMode(AgwPermissionMode.FullAccess).ResultOnly);
+        Assert.True(settings.WithHumanInteractionPolicy(HumanInteractionPolicy.Reject).ResultOnly);
+
+        var snapshot = DurableExecutionMapper.FromSettings(settings);
+        var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
+
+        Assert.True(restored.ToRuntimeSettings(Guid.CreateVersion7(), "context").ResultOnly);
+    }
 }

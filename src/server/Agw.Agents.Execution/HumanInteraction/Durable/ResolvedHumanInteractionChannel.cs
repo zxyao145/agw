@@ -9,13 +9,26 @@ namespace Agw.Agents.Execution.HumanInteraction.Durable;
 internal sealed class ResolvedHumanInteractionChannel : IHumanInteractionChannel
 {
     private readonly IReadOnlyList<DurableResolvedInteraction> _interactions;
+    private readonly bool _allowInteraction;
 
-    public ResolvedHumanInteractionChannel(IReadOnlyList<DurableResolvedInteraction> interactions) =>
+    public ResolvedHumanInteractionChannel(
+        IReadOnlyList<DurableResolvedInteraction> interactions,
+        bool allowInteraction = true
+    )
+    {
         _interactions = interactions;
+        _allowInteraction = allowInteraction;
+    }
 
     public ValueTask<UserInputResponse> RequestAsync(UserInputRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        // 交互不可用时答复取消，调用方按协议返回取消结果并继续本轮。
+        // Answer with a cancellation when interaction is unavailable; the caller returns its cancelled result and continues.
+        if (!_allowInteraction)
+            return ValueTask.FromResult(
+                new UserInputResponse { InteractionId = Guid.CreateVersion7().ToString("N"), Cancelled = true }
+            );
         if (string.IsNullOrWhiteSpace(request.Source.CallId) || string.IsNullOrWhiteSpace(request.Source.NodeId))
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,

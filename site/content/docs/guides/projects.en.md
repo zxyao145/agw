@@ -2,7 +2,7 @@
 title: "Projects, files, and workspaces"
 description: "Set primary and additional directories and understand file browsing versus the agent’s working directory."
 weight: 50
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/guides/projects
 ---
 
@@ -42,5 +42,5 @@ For missing files, verify the selected browsing root, mount, execution account, 
 
 ## Implementation and references
 
-- [Filesystem resolver](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Files/Application/Storage/Resolver/ProjectScopedFileSystemResolver.cs)
+- [Filesystem resolver](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Files/Infrastructure/Storage/ProjectScopedFileSystemResolver.cs)
 - [Directory snapshots](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/README.md)

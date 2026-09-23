@@ -39,7 +39,7 @@ import {
 } from "../../components/message/chat";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { ConversationList } from "@agw/projects";
-import { Button } from "@agw/components";
+import { Button, formatFriendlyLocalDateTime2 } from "@agw/components";
 import {
   Dialog,
   DialogClose,
@@ -53,8 +53,8 @@ import {
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@agw/components";
 import { Input } from "@agw/components";
 import { Label } from "@agw/components";
-import { formatFriendlyLocalDateTime } from "@agw/components";
 import { SearchableSelect, type SearchableSelectOption } from "@agw/components";
+import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import { buildChatHref } from "../../../lib/chat-route";
@@ -125,6 +125,7 @@ function isAbortError(error: unknown): boolean {
 
 type ChatSettingsDraft = {
   envVars: EnvVar[];
+  resultOnly: boolean;
 };
 
 function normalizeEnvVars(envVars: EnvVar[]): EnvVar[] {
@@ -164,6 +165,7 @@ function ChatSettingsDialog({
 }: ChatSettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [draftEnvVars, setDraftEnvVars] = React.useState<EnvVar[]>([]);
+  const [draftResultOnly, setDraftResultOnly] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
@@ -172,6 +174,7 @@ function ChatSettingsDialog({
 
     const draft = getDraft(selectedProjectId);
     setDraftEnvVars(draft.envVars);
+    setDraftResultOnly(draft.resultOnly);
   }, [getDraft, open, selectedProjectId]);
 
   const handleAddEnvVar = () => {
@@ -193,6 +196,7 @@ function ChatSettingsDialog({
   const handleSave = () => {
     const didSave = onSave({
       envVars: normalizeEnvVars(draftEnvVars),
+      resultOnly: draftResultOnly,
     });
 
     if (didSave) {
@@ -240,7 +244,7 @@ function ChatSettingsDialog({
                     <span className="text-muted-foreground">Created</span>
                     <span className="text-right">
                       {currentConversation
-                        ? formatFriendlyLocalDateTime(currentConversation.createTime)
+                        ? formatFriendlyLocalDateTime2(currentConversation.createTime)
                         : "—"}
                     </span>
                   </div>
@@ -248,12 +252,29 @@ function ChatSettingsDialog({
                     <span className="text-muted-foreground">Updated</span>
                     <span className="text-right">
                       {currentConversation?.updateTime
-                        ? formatFriendlyLocalDateTime(currentConversation.updateTime)
+                        ? formatFriendlyLocalDateTime2(currentConversation.updateTime)
                         : "—"}
                     </span>
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
+              <div className="space-y-1">
+                <Label htmlFor="chat-settings-result-only" className="cursor-pointer">
+                  Only Stream Turn Result
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Stream only the result message and decline questions and tool approvals. Applies
+                  to external Agents and to system Agents with Generate Turn Summary enabled.
+                </p>
+              </div>
+              <Switch
+                id="chat-settings-result-only"
+                checked={draftResultOnly}
+                onCheckedChange={setDraftResultOnly}
+              />
             </div>
 
             <div className="grid gap-2">
@@ -390,6 +411,7 @@ export function ChatWorkspace({
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
+  const [resultOnly, setResultOnly] = React.useState(false);
 
   const hydratedConversationKeyRef = React.useRef<string | null>(null);
   const conversationLoadAbortRef = React.useRef<AbortController | null>(null);
@@ -522,6 +544,7 @@ export function ChatWorkspace({
 
       return {
         envVars: storedSettings.envVars ?? [],
+        resultOnly: storedSettings.resultOnly ?? false,
       };
     },
     [],
@@ -532,12 +555,13 @@ export function ChatWorkspace({
       if (projectId && projectId === selectedProjectId) {
         return {
           envVars,
+          resultOnly,
         };
       }
 
       return getProjectSettingsDraft(projectId);
     },
-    [envVars, getProjectSettingsDraft, selectedProjectId],
+    [envVars, getProjectSettingsDraft, resultOnly, selectedProjectId],
   );
 
   const environmentVariables = React.useMemo(() => {
@@ -755,11 +779,13 @@ export function ChatWorkspace({
   React.useEffect(() => {
     if (!selectedProjectId) {
       setEnvVars((current) => (current.length === 0 ? current : []));
+      setResultOnly(false);
       return;
     }
 
     const draft = getProjectSettingsDraft(selectedProjectId);
     setEnvVars((current) => (areEnvVarsEqual(current, draft.envVars) ? current : draft.envVars));
+    setResultOnly(draft.resultOnly);
   }, [getProjectSettingsDraft, selectedProjectId]);
 
   React.useEffect(() => {
@@ -1057,11 +1083,13 @@ export function ChatWorkspace({
 
       const normalizedSettings: ChatProjectSettingsStorageValues = {
         envVars: normalizeEnvVars(draft.envVars),
+        resultOnly: draft.resultOnly,
       };
 
       chatSettingsStorage.set(selectedProjectId, normalizedSettings);
       const nextDraft = getProjectSettingsDraft(selectedProjectId);
       setEnvVars(nextDraft.envVars);
+      setResultOnly(nextDraft.resultOnly);
 
       toast.success("Chat settings saved");
       return true;
@@ -1314,6 +1342,7 @@ export function ChatWorkspace({
                         chatSessionSeed.contextId === contextId
                       }
                       environmentVariables={environmentVariables}
+                      resultOnly={resultOnly}
                       onConversationIdChange={handleChatConversationIdChange}
                       onConversationAccepted={handleConversationAccepted}
                       onContextIdChange={handleChatContextIdChange}

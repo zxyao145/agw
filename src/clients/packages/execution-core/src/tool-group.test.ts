@@ -243,6 +243,28 @@ test("processMessages falls back to call id when a result scope differs", () => 
   );
 });
 
+test("a tool group keeps one message per source message when a message repeats a call id", () => {
+  const items = processMessages([
+    toolContentsMessage("FunctionCallContent", "user-1", ["call-1", "call-1"]),
+    toolContentsMessage("FunctionResultContent", "user-1", ["call-1", "call-1"]),
+  ]);
+
+  assert.equal(items.length, 1);
+  const [item] = items;
+  if (item.type !== "accordion") assert.fail("the tool contents must form one accordion");
+  assert.deepEqual(
+    item.messages.map((message) => message.messageId),
+    ["FunctionCallContent-user-1", "FunctionResultContent-user-1"],
+  );
+  assert.deepEqual(
+    item.messages.map((message) => message.contents.map((content) => content.type)),
+    [
+      ["FunctionCallContent", "FunctionCallContent"],
+      ["FunctionResultContent", "FunctionResultContent"],
+    ],
+  );
+});
+
 test("createMessageFragments returns stable fragment references for the same message", () => {
   const message = toolMessage("FunctionCallContent", "user-1", "call-1");
 

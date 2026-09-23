@@ -118,4 +118,82 @@ public class InProcessInteractionSessionTests
         Assert.True(await turn.TrySubmitHumanResponseAsync(decision, TestContext.Current.CancellationToken));
         Assert.Same(decision, forwarded);
     }
+
+    [Fact]
+    public async Task ResolveAsync_InteractionDisallowed_DeclinesToolApprovalWithoutPublishing()
+    {
+        var waiting = -1;
+        var sink = new InteractionTestSink();
+        var session = new InProcessInteractionSession(
+            sink,
+            pendingCountChanged: count => waiting = count,
+            allowInteraction: false
+        );
+
+        var result = await session.ResolveAsync(
+            InteractionTestData.Tool("tool"),
+            TestContext.Current.CancellationToken
+        );
+
+        var decision = Assert.IsType<ToolApprovalDecision>(
+            Assert.IsType<InteractionResolution.Resolved>(result).Response
+        );
+        Assert.False(decision.Approved);
+        Assert.Equal(ApprovalScope.Once, decision.Scope);
+        Assert.Empty(sink.Messages);
+        Assert.Equal(-1, waiting);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_InteractionDisallowed_CancelsUserInputAndGate()
+    {
+        var sink = new InteractionTestSink();
+        var session = new InProcessInteractionSession(sink, allowInteraction: false);
+
+        var input = await session.ResolveAsync(
+            InteractionTestData.Input("input"),
+            TestContext.Current.CancellationToken
+        );
+        var gate = await session.ResolveAsync(InteractionTestData.Gate("gate"), TestContext.Current.CancellationToken);
+
+        Assert.True(
+            Assert.IsType<UserInputResponse>(Assert.IsType<InteractionResolution.Resolved>(input).Response).Cancelled
+        );
+        Assert.False(
+            Assert.IsType<WorkflowGateDecision>(Assert.IsType<InteractionResolution.Resolved>(gate).Response).Approved
+        );
+        Assert.Empty(sink.Messages);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_InteractionDisallowedWithFullAccess_StillApprovesTools()
+    {
+        var sink = new InteractionTestSink();
+        var session = new InProcessInteractionSession(sink, AgwPermissionMode.FullAccess, allowInteraction: false);
+
+        var result = await session.ResolveAsync(
+            InteractionTestData.Tool("tool"),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.True(
+            Assert.IsType<ToolApprovalDecision>(Assert.IsType<InteractionResolution.Resolved>(result).Response).Approved
+        );
+    }
+
+    [Fact]
+    public async Task RequestAsync_InteractionDisallowed_ReturnsCancelledResponse()
+    {
+        var sink = new InteractionTestSink();
+        var session = new InProcessInteractionSession(sink, allowInteraction: false);
+        var request = InteractionTestData.Input("input");
+
+        var response = await session.RequestAsync(
+            new UserInputRequest(request.InputKind, request.Prompt, request.Payload) { Source = request.Source },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.True(response.Cancelled);
+        Assert.Empty(sink.Messages);
+    }
 }

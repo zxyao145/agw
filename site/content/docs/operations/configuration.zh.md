@@ -2,7 +2,7 @@
 title: "配置与认证"
 description: "了解各项设置的用途、默认值，以及如何配置服务和登录认证。"
 weight: 30
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/operations/configuration
 ---
 
@@ -14,7 +14,7 @@ translationKey: docs/operations/configuration
 
 只在本机开始使用时，可以先保留默认配置并完成初始化。准备长期运行前，确认数据库和数据目录在哪里，按[备份指南]({{< relref "/docs/operations/backup" >}})保存数据。
 
-远程访问遇到问题时，优先检查“服务地址与数据目录”“初始化、来源与反向代理”和“认证与 Token”。分离部署则先看两端的必需配置；后面的轮询和批量参数是调优参考，无需在首次部署时逐一修改。
+远程访问遇到问题时，优先检查“服务地址与数据目录”“初始化、来源与反向代理”和“认证与 API Key”。分离部署则先看两端的必需配置；后面的轮询和批量参数是调优参考，无需在首次部署时逐一修改。
 
 ## 配置方法与优先级
 
@@ -234,17 +234,118 @@ WriteTo 的 Name、Using 和 Enrich 是插件名称，不是固定枚举；上�
 [{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] [ThreadId:{ThreadId}] {Message:lj}{NewLine}{Exception}
 ```
 
-### 认证与 Token
+### 认证与 API Key
 
-在浏览器中使用远程 Web 时，用管理员密码登录，浏览器会通过 Cookie 记住登录状态。Desktop、Mobile 和自动化程序则使用 Token（访问令牌），它相当于这些客户端连接 Server 的钥匙。请求格式为：
+在浏览器中使用远程 Web 时，用管理员密码登录，浏览器会通过 Cookie 记住登录状态。Desktop、Mobile 和自动化程序则使用 API Key（访问密钥），它相当于这些客户端连接 Server 的钥匙。请求格式为：
 
 ```http
 Authorization: Bearer agw_<your-token>
 ```
 
-创建 Token 时为它起一个便于识别的名称，并保存当时显示的完整值；之后不会再次显示。自动化程序可以从环境变量或机密配置中读取它。不再使用时撤销该 Token。Server 会按创建者的身份判断它能访问哪些资源。当前不提供多账号登录、角色、Token 权限范围（scopes）或 JWT 的配置。
+创建 API Key 时为它起一个便于识别的名称，并保存当时显示的完整值；之后不会再次显示。自动化程序可以从环境变量或机密配置中读取它。不再使用时撤销该 API Key。Server 会按创建者的身份判断它能访问哪些资源。多账号登录通过下一节的第三方登录配置；当前不提供角色、API Key 权限范围（scopes）或 JWT 的配置。
 
-密码和 Token 都以用于验证的哈希值保存在数据库中，不保存原文。管理员认证信息位于 `setting` 表的 `auth` 分组，Token 信息位于 `api_token` 表，由管理功能自动维护，无需在 appsettings 中填写。修改管理员密码后，各 Server 会检查新的登录状态版本；检查每秒进行一次，读取失败时不再沿用缓存的认证信息。忘记密码可先停止 Server，再运行 `agw-server auth reset-password`。
+密码和 API Key 都以用于验证的哈希值保存在数据库中，不保存原文。管理员认证信息位于 `setting` 表的 `auth` 分组，API Key 信息位于 `api_token` 表，由管理功能自动维护，无需在 appsettings 中填写。修改管理员密码后，各 Server 会检查新的登录状态版本；检查每秒进行一次，读取失败时不再沿用缓存的认证信息。忘记密码可先停止 Server，再运行 `agw-server auth reset-password`。
+
+### 第三方登录
+
+启用第三方登录后，用户可以用组织账号进入 Web 和 Desktop。每个账号首次登录时创建一个独立的本地用户，编号从 `10000` 开始，管理员仍是 `1001`。未配置提供商时，管理员密码和 API Key 继续可用。行为说明见[第三方账号登录]({{< relref "/docs/features/oidc-login" >}})。
+
+在提供商侧把 AGW 登记为 Web 应用（保密客户端），回调地址按提供商 ID 组成。Desktop 用户同样使用这个地址，提供商把浏览器送回 Server，不直接送回桌面程序：
+
+```text
+https://agw.example.com/api/auth/oidc/callback/company
+```
+
+下表配置项的完整名称都以 `Auth:Oidc:` 开头，`{id}` 是你为提供商起的编号。
+
+| 配置项 | 默认值 | 用途与可选值 |
+| --- | --- | --- |
+| `PublicBaseUrl` | 空 | 浏览器访问 Server 的地址，验证完成后返回这里。程序在它后面加上 `api/auth/oidc/callback/{id}`。必须是不带路径的完整地址，生产环境使用 HTTPS，开发环境允许本机 HTTP。启用任一提供商后必填。 |
+| `WebBaseUrl` | 空 | 登录结束后返回的 Web 界面地址。Web 与 Server 同源时留空；源码开发中 Web 在 `3001`、后端在 `30816` 时需要填写。 |
+| `Providers:{id}:Enabled` | false | 是否启用该提供商。 |
+| `Providers:{id}:Type` | Oidc | `Oidc`：按 Authority 自动读取端点，请求 `openid profile email`。`OAuth2`：逐项填写端点和字段名称。 |
+| `Providers:{id}:DisplayName` | 提供商 ID | 登录按钮上显示的名称。 |
+| `Providers:{id}:ClientId` | 空 | 在提供商侧登记 AGW 得到的客户端编号，必填。 |
+| `Providers:{id}:ClientSecret` | 空 | 对应的客户端密钥，必填，通过环境变量或机密配置注入。 |
+| `Providers:{id}:Authority` | 空 | Type 为 `Oidc` 时必填，例如 `https://sso.example.com/realms/company`。 |
+| `Providers:{id}:AuthorizationEndpoint` | 空 | Type 为 `OAuth2` 时必填，用户跳转到提供商的授权地址。 |
+| `Providers:{id}:TokenEndpoint` | 空 | Type 为 `OAuth2` 时必填，Server 换取访问令牌的地址。 |
+| `Providers:{id}:Issuer` | 空 | Type 为 `OAuth2` 时必填，用于标识账号来源，与账号编号一起确定用户身份。 |
+| `Providers:{id}:IdentitySource` | UserInfo | `UserInfo`：调用用户信息接口读取账号。`AccessToken`：从签名的 JWT 访问令牌读取账号。 |
+| `Providers:{id}:UserInfoEndpoint` | 空 | `IdentitySource` 为 `UserInfo` 时必填。 |
+| `Providers:{id}:AccessTokenIssuer` | 空 | `IdentitySource` 为 `AccessToken` 时必填，校验令牌的签发者。 |
+| `Providers:{id}:AccessTokenAudience` | 空 | `IdentitySource` 为 `AccessToken` 时必填，校验令牌的接收方。 |
+| `Providers:{id}:AccessTokenJwksUri` | 空 | `IdentitySource` 为 `AccessToken` 时必填，读取验签公钥的地址。 |
+| `Providers:{id}:ClientAuthMethod` | Post | OAuth2 换取令牌时提交客户端凭据的方式：`Post` 放在请求体，`Basic` 放在请求头。 |
+| `Providers:{id}:UsePkce` | false | OAuth2 是否启用 S256 校验。Type 为 `Oidc` 时固定启用。 |
+| `Providers:{id}:Scopes` | 空 | OAuth2 申请的权限范围，按数字下标配置，例如 `Scopes__0=read:user`。 |
+| `Providers:{id}:SubjectClaim` | sub | 账号编号对应的字段名称，例如 GitHub 使用 `id`。 |
+| `Providers:{id}:DisplayNameClaim` | name | 显示名称对应的字段名称，例如 GitHub 使用 `login`。 |
+| `Providers:{id}:EmailClaim` | email | 邮箱对应的字段名称。缺少显示名称或邮箱不影响登录。 |
+
+提供商 ID 使用小写字母、数字和连字符，最长 64 个字符，例如 `company`、`entra-id`。每个 ID 对应各自的回调地址，登记后不要再修改。
+
+不含密钥的配置示例：
+
+```json
+{
+  "Auth": {
+    "Oidc": {
+      "PublicBaseUrl": "https://agw.example.com",
+      "Providers": {
+        "company": {
+          "Enabled": true,
+          "Type": "Oidc",
+          "DisplayName": "公司账号",
+          "Authority": "https://sso.example.com/realms/company",
+          "ClientId": "agw"
+        }
+      }
+    }
+  }
+}
+```
+
+对应的密钥通过 `Auth__Oidc__Providers__company__ClientSecret` 注入，不要写入 appsettings、前端环境文件或截图。GitHub 这类只提供 OAuth2 的服务改用下面的写法：
+
+```json
+{
+  "Auth": {
+    "Oidc": {
+      "Providers": {
+        "github": {
+          "Enabled": true,
+          "Type": "OAuth2",
+          "DisplayName": "GitHub",
+          "AuthorizationEndpoint": "https://github.com/login/oauth/authorize",
+          "TokenEndpoint": "https://github.com/login/oauth/access_token",
+          "UserInfoEndpoint": "https://api.github.com/user",
+          "Issuer": "https://github.com/login/oauth",
+          "IdentitySource": "UserInfo",
+          "UsePkce": true,
+          "ClientAuthMethod": "Post",
+          "Scopes": ["read:user"],
+          "SubjectClaim": "id",
+          "DisplayNameClaim": "login",
+          "EmailClaim": "email",
+          "ClientId": "github-client-id"
+        }
+      }
+    }
+  }
+}
+```
+
+常见提供商的 Authority：
+
+| 平台 | Authority |
+| --- | --- |
+| Google | `https://accounts.google.com` |
+| Microsoft Entra ID | `https://login.microsoftonline.com/<租户 ID>/v2.0` |
+| Keycloak | `https://sso.example.com/realms/<realm>` |
+| Authentik | `https://sso.example.com/application/o/<应用标识>/` |
+
+修改这些配置后重启相应的 Server 程序。分离部署把登录相关请求指向 Control Plane，数据面使用由此得到的本地凭据；所有副本共用同一套数据库和数据保护密钥，Desktop 的一次性代码可以在不同副本上完成换取。停用某个提供商会阻止新的登录和尚未完成的 Desktop 换取，已经签发的 Cookie 和 API Key 需要单独撤销。
 
 ## 配置示例与验证
 
@@ -260,7 +361,7 @@ agw-server --urls http://127.0.0.1:30816
 
 分离部署将相同数据库和执行配置传给各 Host，先初始化 Control Plane，再启动 Data Plane。上面的 `agw-server` 是 Standalone 程序，分离部署使用相应 Host 程序。
 
-重启后检查启动日志、访问地址、数据库连接和客户端登录。调整执行参数后，先运行一个小任务，观察开始速度、完成时间和资源占用。启动报错时，先检查选项名称是否拼写正确、数值是否在允许范围内、数据库地址和凭据是否正确，以及 Distributed 所需的数据库和锁是否已配置。排查日志时不要公开密码或 Token。
+重启后检查启动日志、访问地址、数据库连接和客户端登录。调整执行参数后，先运行一个小任务，观察开始速度、完成时间和资源占用。启动报错时，先检查选项名称是否拼写正确、数值是否在允许范围内、数据库地址和凭据是否正确，以及 Distributed 所需的数据库和锁是否已配置。排查日志时不要公开密码或 API Key。
 
 ## 实现与参考
 

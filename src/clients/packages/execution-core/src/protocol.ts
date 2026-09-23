@@ -15,6 +15,8 @@ export type ExecutionSettingCommandInput = {
   contextId?: string | null;
   environmentVariables?: Record<string, string> | null;
   permissionMode?: PermissionMode | null;
+  /** 只接收 result 消息，并拒绝本轮的人机交互。 */
+  resultOnly?: boolean | null;
 };
 
 export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
@@ -87,6 +89,7 @@ export function buildSettingCommand(setting: ExecutionSettingCommandInput) {
       ? {}
       : { environmentVariables: setting.environmentVariables }),
     ...(setting.permissionMode === undefined ? {} : { permissionMode: setting.permissionMode }),
+    ...(setting.resultOnly === undefined ? {} : { resultOnly: setting.resultOnly }),
   };
 }
 

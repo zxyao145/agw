@@ -1,7 +1,5 @@
 import type { ExecutionMessage, ExecutionMessageContent } from "./types";
 
-import { applyMessageOperation, isNormalizedMessage } from "./message-operations";
-
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 const FUNCTION_RESULT_CONTENT_TYPE = "FunctionResultContent";
 
@@ -41,6 +39,11 @@ function normalizeStreamingScopeId(message: ExecutionMessage): string | null {
 }
 
 function hasSameStreamingIdentity(message: ExecutionMessage, incoming: ExecutionMessage): boolean {
+  const producer = readString(message.additionalProperties?.producerScopeId);
+  const incomingProducer = readString(incoming.additionalProperties?.producerScopeId);
+  if (producer || incomingProducer) {
+    return producer === incomingProducer && message.messageId === incoming.messageId;
+  }
   return (
     normalizeStreamingScopeId(message) === normalizeStreamingScopeId(incoming) &&
     message.messageId === incoming.messageId &&
@@ -50,7 +53,8 @@ function hasSameStreamingIdentity(message: ExecutionMessage, incoming: Execution
 }
 
 export function getStreamingIdentity(message: ExecutionMessage): string {
-  if (isNormalizedMessage(message)) return JSON.stringify(["normalized", message.messageId]);
+  if (readString(message.additionalProperties?.producerScopeId))
+    return JSON.stringify([message.additionalProperties?.producerScopeId, message.messageId]);
   return JSON.stringify([
     normalizeStreamingScopeId(message),
     message.messageId,
@@ -101,22 +105,37 @@ export function appendStreamingContents(
     existing.createdAt = incoming.createdAt;
   }
   for (const incomingContent of incoming.contents) {
-    const previousContent = existing.contents.at(-1);
+    const blockId = readString(incomingContent.additionalProperties?.blockId);
+    const previousContent = blockId
+      ? existing.contents.find((content) => content.additionalProperties?.blockId === blockId)
+      : existing.contents.at(-1);
     const canAppendText =
       previousContent &&
+      readString(previousContent.additionalProperties?.blockId) === blockId &&
       ((isTextContent(previousContent) && isTextContent(incomingContent)) ||
         (isReasoningContent(previousContent) && isReasoningContent(incomingContent)));
     if (canAppendText) {
       previousContent.content += incomingContent.content;
+      if (incomingContent.additionalProperties) {
+        previousContent.additionalProperties = {
+          ...previousContent.additionalProperties,
+          ...incomingContent.additionalProperties,
+        };
+      }
       continue;
     }
 
     existing.contents.push(cloneMessageContent(incomingContent));
   }
+  if (incoming.additionalProperties) {
+    existing.additionalProperties = {
+      ...existing.additionalProperties,
+      ...incoming.additionalProperties,
+    };
+  }
 }
 
 function cloneStreamingMessage<T extends ExecutionMessage>(message: T): T {
-  if (isNormalizedMessage(message)) return cloneMessage(message);
   const cloned = cloneMessage(message);
   cloned.contents = [];
   appendStreamingContents(cloned, message);
@@ -176,16 +195,6 @@ export function mergeStreamingMessages<T extends ExecutionMessage>(
             );
             return indexByIdentity.get(getStreamingIdentity(incoming));
           })();
-    if (isNormalizedMessage(incoming)) {
-      const current = existingIndex === undefined ? undefined : updated[existingIndex];
-      const projected = applyMessageOperation(current, incoming);
-      if (existingIndex === undefined) {
-        const index = updated.length;
-        updated.push(projected);
-        indexByIdentity?.set(getStreamingIdentity(incoming), index);
-      } else updated[existingIndex] = projected;
-      continue;
-    }
     if (existingIndex === undefined) {
       const appendedIndex = updated.length;
       updated.push(cloneStreamingMessage(incoming));

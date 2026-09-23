@@ -33,6 +33,14 @@ public sealed class AgentRuntime : RuntimeBase
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     public AgentSessionStateScope? SessionStateScope { get; }
     public AgentType AgentType { get; }
+
+    /// <summary>
+    /// 本轮结束时是否会产生 result 消息，决定 ResultOnly 能否生效。
+    /// Whether the turn produces a result message, which decides if ResultOnly can take effect.
+    /// </summary>
+    internal bool EmitsTurnResult =>
+        AgentType == AgentType.External || (AgentType == AgentType.System && _enableSummary);
+
     internal string? ConfigurationVersion { get; init; }
     internal bool IsDisposed => _disposed;
     public readonly Guid _projectId;
@@ -345,20 +353,12 @@ public sealed class AgentRuntime : RuntimeBase
                     approvals.AddRange(update.Contents.OfType<ToolApprovalRequestContent>());
 
                     var aiMessage = update.ToAiMessage();
-                    if (
-                        aiMessage != null
-                        && (
-                            aiMessage.Contents.Count > 0
-                            || aiMessage.AdditionalProperties?.ContainsKey("messageOperation") == true
-                        )
-                    )
+                    if (aiMessage?.Contents.Count > 0)
                     {
                         yield return aiMessage;
                     }
                 }
-                finalResponseMessages = Agw
-                    .Agents.Execution.Agents.History.NormalizedResponseAggregation.Aggregate(responseUpdates)
-                    .Messages.ToList();
+                finalResponseMessages = responseUpdates.ToAgentResponse().Messages.ToList();
 
                 if (approvals.Count == 0)
                 {

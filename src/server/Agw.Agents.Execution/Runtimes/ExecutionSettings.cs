@@ -13,7 +13,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         AgwPermissionMode? permissionMode = null,
         bool resume = false,
         HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow,
-        long permissionVersion = 0
+        long permissionVersion = 0,
+        bool resultOnly = false
     )
     {
         ProjectId = projectId;
@@ -25,6 +26,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         PermissionVersion = permissionVersion;
         Resume = resume;
         HumanInteractionPolicy = humanInteractionPolicy;
+        ResultOnly = resultOnly;
     }
 
     public Guid ProjectId { get; }
@@ -41,6 +43,16 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
     public HumanInteractionPolicy HumanInteractionPolicy { get; }
 
+    /// <summary>
+    /// 只向客户端推送 result 消息，并拒绝本轮的人机交互请求。
+    /// Streams only result messages to the client and declines human interaction for the turn.
+    /// </summary>
+    /// <remarks>
+    /// 这是展示与交互开关，不参与相等判定，切换它不会重建 runtime。
+    /// This is a presentation and interaction switch, excluded from equality so toggling it keeps the runtime.
+    /// </remarks>
+    public bool ResultOnly { get; }
+
     public static ExecutionSettings CreateDefault() => new(ProjectDefaults.DefaultBuiltInId);
 
     public ExecutionSettings WithPermissionMode(AgwPermissionMode permissionMode) =>
@@ -51,14 +63,27 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             permissionMode,
             Resume,
             HumanInteractionPolicy,
-            PermissionMode == permissionMode ? PermissionVersion : checked(PermissionVersion + 1)
+            PermissionMode == permissionMode ? PermissionVersion : checked(PermissionVersion + 1),
+            ResultOnly
         );
 
     internal ExecutionSettings WithPermissionSnapshot(AgwPermissionMode? mode, long version) =>
-        new(ProjectId, ContextId, _environmentVariables, mode, Resume, HumanInteractionPolicy, version);
+        new(ProjectId, ContextId, _environmentVariables, mode, Resume, HumanInteractionPolicy, version, ResultOnly);
 
     public ExecutionSettings WithHumanInteractionPolicy(HumanInteractionPolicy policy) =>
-        new(ProjectId, ContextId, _environmentVariables, PermissionMode, Resume, policy, PermissionVersion);
+        new(ProjectId, ContextId, _environmentVariables, PermissionMode, Resume, policy, PermissionVersion, ResultOnly);
+
+    public ExecutionSettings WithResultOnly(bool resultOnly) =>
+        new(
+            ProjectId,
+            ContextId,
+            _environmentVariables,
+            PermissionMode,
+            Resume,
+            HumanInteractionPolicy,
+            PermissionVersion,
+            resultOnly
+        );
 
     public bool Equals(ExecutionSettings? other)
     {

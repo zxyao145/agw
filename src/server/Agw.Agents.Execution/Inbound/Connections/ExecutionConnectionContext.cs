@@ -131,6 +131,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(settings);
         if (settings.Equals(Settings))
         {
+            // ResultOnly 不参与相等判定，单独切换它时保留 runtime，下一轮生效。
+            // ResultOnly is excluded from equality, so toggling it alone keeps the runtime and applies next turn.
+            Settings = Settings?.WithResultOnly(settings.ResultOnly);
             return;
         }
 

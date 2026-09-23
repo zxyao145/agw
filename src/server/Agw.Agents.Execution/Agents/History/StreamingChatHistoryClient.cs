@@ -113,8 +113,8 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
                         ModelId = update.ModelId,
                         ResponseId = update.ResponseId,
                     };
-                // 未被任何操作认领的更新原样下发，避免归并链路吞掉内容。
-                // An update no operation claimed still has to reach the consumer untouched.
+                // 历史累积器未接收的更新继续传递给调用方。
+                // Forward updates that the history accumulator did not capture.
                 if (!handled)
                     yield return update;
                 else if (update.Contents.OfType<UsageContent>().Any())

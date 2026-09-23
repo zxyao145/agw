@@ -2,7 +2,7 @@
 title: "Testing and contribution"
 description: "Validate the affected behavior and follow formatting, boundary, and migration rules."
 weight: 50
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/development/testing
 ---
 
@@ -19,6 +19,8 @@ dotnet csharpier check .
 ```
 
 Start with relevant tests when investigating a failure, such as `dotnet test tests/Agw.Files.Tests`. Use fake `AIAgent` instances. Default unit/composition tests must not create Codex/Claude agents that probe CLIs. Real CLI tests require opt-in and executable availability.
+
+For sign-in changes, run `dotnet test tests/Agw.Auth.Tests`. These tests use a controlled provider and per-test SQLite databases by default. To verify against PostgreSQL, set `AGW_TEST_OIDC_POSTGRES` to an isolated test server's admin connection string with a role that can create databases; never point it at a production server. Desktop main-process sign-in and credential-storage tests run with `pnpm --filter @agw/desktop test`.
 
 ## Client checks
 

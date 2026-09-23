@@ -54,8 +54,6 @@ internal sealed class AgentflowAgentSessionScope
 
     public Func<ChatMessage, CancellationToken, ValueTask>? InputObserver { get; set; }
 
-    public Func<AgentResponseUpdate, CancellationToken, ValueTask>? OutputObserver { get; set; }
-
     private AgentSessionStateStore? SessionStateStore { get; }
 
     private IConversationHistoryWriter? ConversationHistoryWriter { get; }

@@ -2,7 +2,7 @@
 title: "Install and configure Server"
 description: "Choose an installation, initialize Server, and connect clients."
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/start/install
 aliases: ["/en/docs/start/setup/"]
 ---
@@ -62,11 +62,11 @@ After initialization, authentication settings are saved in the database, so late
 
 ### Connect clients
 
-- Remote Web signs in with the administrator password and receives a session Cookie.
-- Desktop, Mobile, and automation use named `Authorization: Bearer agw_...` Tokens. Plaintext is shown only once when a Token is created.
-- Desktop Full uses the Server-owned setup page, then provisions its own Token and protects it with the operating system credential store.
+- Remote Web signs in with the administrator password and receives a session Cookie. With identity providers configured, the sign-in page also shows third-party account buttons, and Desktop can obtain its API Key through them; see [Configuration and authentication]({{< relref "/docs/operations/configuration" >}}).
+- Desktop, Mobile, and automation use API Keys, sent in the `Authorization: Bearer agw_...` header. Plaintext is shown only once when a key is created.
+- Desktop Full uses the Server-owned setup page, then provisions its own API Key and protects it with the operating system credential store.
 
-A Token is the client’s access key to Server. To connect Desktop Client or Mobile remotely, create a named Token in the signed-in management interface, then enter the Server URL and full Token in the client. On a phone, `localhost` refers to the phone, not your computer.
+An API Key is the client’s access key to Server. To connect Desktop Client or Mobile remotely, create a named API Key in the signed-in management interface, then enter the Server URL and full key in the client. On a phone, `localhost` refers to the phone, not your computer.
 
 ### Unattended initialization
 

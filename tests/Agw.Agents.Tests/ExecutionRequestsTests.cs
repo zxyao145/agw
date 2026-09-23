@@ -92,6 +92,51 @@ public class ExecutionRequestsTests
     }
 
     [Fact]
+    public void Deserialize_SettingCommand_ReturnsResultOnly()
+    {
+        var projectId = Guid.CreateVersion7();
+        var payload = $$"""
+            {
+              "type": "SettingCommand",
+              "projectId": "{{projectId}}",
+              "resultOnly": true
+            }
+            """;
+
+        var request = Deserialize(payload);
+
+        var settingRequest = Assert.IsType<SettingCommand>(request);
+        Assert.True(settingRequest.ResultOnly);
+    }
+
+    [Fact]
+    public void Deserialize_SettingCommand_WithoutResultOnly_DefaultsToFalse()
+    {
+        var projectId = Guid.CreateVersion7();
+        var payload = $$"""
+            {
+              "type": "SettingCommand",
+              "projectId": "{{projectId}}"
+            }
+            """;
+
+        var request = Deserialize(payload);
+
+        Assert.False(Assert.IsType<SettingCommand>(request).ResultOnly);
+    }
+
+    [Fact]
+    public void Equals_WhenResultOnlyDiffers_ReturnsFalse()
+    {
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7().ToString("D");
+        var left = new SettingCommand(projectId, contextId: contextId, resultOnly: false);
+        var right = new SettingCommand(projectId, contextId: contextId, resultOnly: true);
+
+        Assert.NotEqual(left, right);
+    }
+
+    [Fact]
     public void Equals_WhenEnvironmentVariablesDiffer_ReturnsFalse()
     {
         var projectId = Guid.CreateVersion7();
