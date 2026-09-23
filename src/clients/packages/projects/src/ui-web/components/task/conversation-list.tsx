@@ -37,6 +37,8 @@ interface ConversationListProps {
   projectId: string;
   currentConversationId: string | null;
   refreshSignal?: number;
+  /** the current conversation has a running turn; its record may not be persisted yet. 当前会话正在执行，记录可能尚未写入数据库。 */
+  isExecuting?: boolean;
   onConversationSelect: (conversation: ConversationSummary) => void;
   onNewConversation: () => void;
   onAllConversationsDeleted: () => void;
@@ -46,11 +48,13 @@ interface ConversationListProps {
 const CONVERSATION_PAGE_SIZE = 20;
 const CONVERSATION_STALE_TIME_MS = 30_000;
 const CONVERSATION_GC_TIME_MS = 30 * 60_000;
+const CONVERSATION_RESOLVE_INTERVAL_MS = 5_000;
 
 export function ConversationList({
   projectId,
   currentConversationId,
   refreshSignal,
+  isExecuting = false,
   onConversationSelect,
   onNewConversation,
   onAllConversationsDeleted,
@@ -188,6 +192,10 @@ export function ConversationList({
       }
     },
     retry: false,
+    // 新建会话的记录由服务端在第一次历史写入时创建，取到之后立即停止重试。
+    // A new conversation row appears on the first history write; stop retrying once it is fetched.
+    refetchInterval: (query) =>
+      isExecuting && !query.state.data ? CONVERSATION_RESOLVE_INTERVAL_MS : false,
     staleTime: CONVERSATION_STALE_TIME_MS,
     gcTime: CONVERSATION_GC_TIME_MS,
   });
@@ -206,14 +214,14 @@ export function ConversationList({
   React.useEffect(() => {
     const root = listScrollRef.current;
     const target = loadMoreRef.current;
-    if (!root || !target || !conversationsQuery.hasNextPage) return;
+    // 刷新期间不观察哨兵：fetchNextPage 默认会中断进行中的刷新请求。
+    // Skip while a fetch runs: fetchNextPage cancels the in-flight refresh by default.
+    if (!root || !target || !conversationsQuery.hasNextPage || conversationsQuery.isFetching)
+      return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (
-          entries.some((entry) => entry.isIntersecting) &&
-          !conversationsQuery.isFetchingNextPage
-        ) {
+        if (entries.some((entry) => entry.isIntersecting)) {
           void conversationsQuery.fetchNextPage();
         }
       },
@@ -224,7 +232,7 @@ export function ConversationList({
   }, [
     conversationsQuery.fetchNextPage,
     conversationsQuery.hasNextPage,
-    conversationsQuery.isFetchingNextPage,
+    conversationsQuery.isFetching,
   ]);
 
   const isRefreshing = conversationsQuery.isFetching && !conversationsQuery.isFetchingNextPage;

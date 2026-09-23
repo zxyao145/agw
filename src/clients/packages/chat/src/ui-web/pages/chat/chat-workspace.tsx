@@ -377,6 +377,7 @@ export function ChatWorkspace({
   });
   const [isLoadingConversation, setIsLoadingConversation] = React.useState(false);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
+  const [isExecutingTurn, setIsExecutingTurn] = React.useState(false);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
@@ -1074,6 +1075,7 @@ export function ChatWorkspace({
         projectId={selectedProjectId ?? ""}
         currentConversationId={conversationId}
         refreshSignal={conversationListRefreshSignal}
+        isExecuting={isExecutingTurn}
         onConversationSelect={(nextConversation) => {
           void handleConversationSelect(nextConversation);
         }}
@@ -1098,6 +1100,7 @@ export function ChatWorkspace({
       handleConversationSelect,
       handleNewConversation,
       handleSaveChatSettings,
+      isExecutingTurn,
       selectedProjectId,
     ],
   );
@@ -1321,6 +1324,7 @@ export function ChatWorkspace({
                       pendingFileComments={comments}
                       onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
                       onReconnectStateChange={setExecutionReconnectState}
+                      onExecutingChange={setIsExecutingTurn}
                     />
                   </div>
                 </div>
