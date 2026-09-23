@@ -72,8 +72,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       configurable: true,
       value: "visible",
     });
-    dom.window.setInterval = ((callback: () => void, delay: number) => {
-      assert.equal(delay, 5_000);
+    dom.window.setInterval = ((callback: () => void) => {
       refreshTimers.set(1, callback);
       return 1;
     }) as typeof dom.window.setInterval;
@@ -126,6 +125,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
     };
     newChat?: () => void;
     refreshSignal?: number;
+    historyExecuting?: boolean;
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
     selectTab?: (value: string) => void;
   } = {};
@@ -249,10 +249,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
       // workspace's route hydration effect. A summary is not a hydrated session.
       ConversationList: (props: {
         refreshSignal?: number;
+        isExecuting?: boolean;
         onNewConversation?: () => void;
         onActiveConversationResolved?: (value: unknown) => void;
       }) => {
         observed.refreshSignal = props.refreshSignal;
+        observed.historyExecuting = props.isExecuting;
         observed.newChat = props.onNewConversation;
         React.useEffect(() => {
           props.onActiveConversationResolved?.(conversation);
@@ -640,28 +642,27 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return;
       }
       if (kind === "history-refresh") {
-        assert.equal(refreshTimers.size, 0, "idle history does not poll");
-        await React.act(async () => observed.input!.onExecute("long answer", []));
-        assert.equal(refreshTimers.size, 1);
+        assert.equal(observed.historyExecuting, false, "idle history waits for nothing");
         const before = observed.refreshSignal!;
-        await React.act(async () => {
-          refreshTimers.get(1)!();
-        });
+        await React.act(async () => observed.input!.onExecute("long answer", []));
+        assert.equal(refreshTimers.size, 0, "a running turn does not poll the conversation list");
+        assert.equal(observed.refreshSignal, before + 1, "starting a turn refreshes history once");
         assert.equal(
-          observed.refreshSignal,
-          before + 1,
-          "running history refreshes before turn end",
+          observed.historyExecuting,
+          true,
+          "history fetches the conversation a running turn creates",
         );
-        Object.defineProperty(dom.window.document, "visibilityState", {
-          configurable: true,
-          value: "hidden",
-        });
-        await React.act(async () => {
-          refreshTimers.get(1)!();
-        });
-        assert.equal(observed.refreshSignal, before + 1, "hidden history does not poll");
-        await React.act(async () => observed.input!.onClearSession());
-        assert.equal(refreshTimers.size, 0, "ending execution removes its timer");
+        await React.act(async () =>
+          reconnectHandlers!.onMessage({
+            messageId: "history-refresh-finished",
+            role: "system",
+            additionalProperties: { type: "turn-finished", status: "completed" },
+            contents: [],
+          }),
+        );
+        assert.equal(refreshTimers.size, 0, "ending a turn leaves no timer behind");
+        assert.equal(observed.refreshSignal, before + 2, "ending a turn refreshes history once");
+        assert.equal(observed.historyExecuting, false, "history stops fetching once the turn ends");
         return;
       }
       if (kind === "restore" || kind === "restore-failure") {
@@ -815,7 +816,7 @@ for (const [kind, name] of [
   ["new-chat", "New Chat replaces both conversation and context identities"],
   ["project-switch", "switching projects starts a fresh conversation and context"],
   ["clear-history", "clearing history preserves conversation and context identities"],
-  ["history-refresh", "running conversations refresh persisted history until execution stops"],
+  ["history-refresh", "a running turn refreshes history at its boundaries without polling"],
 ]) {
   test(name, () => checkConversationSession(kind));
 }
