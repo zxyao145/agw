@@ -2,7 +2,7 @@
 title: "安装与配置 Server"
 description: "选择安装方式，完成 Server 初始化并连接客户端。"
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/start/install
 aliases: ["/docs/start/setup/"]
 ---
@@ -62,11 +62,11 @@ Docker 镜像不包含 Claude Code、Codex、Pi 等任何外部 Agent；如需�
 
 ### 连接客户端
 
-- 远程 Web 使用管理员密码登录，获得会话 Cookie。
-- Desktop、Mobile 和自动化使用命名 `Authorization: Bearer agw_...` Token。Token 明文只在创建时显示一次。
-- Desktop Full 的本地初始化由 Server 页面完成，主进程随后配置自己的 Token，并使用操作系统凭据存储保护它。
+- 远程 Web 使用管理员密码登录，获得会话 Cookie。Server 配置了身份提供商时，登录页还会显示第三方账号按钮，Desktop 可由此自动获得 API Key，见[配置与认证]({{< relref "/docs/operations/configuration" >}})。
+- Desktop、Mobile 和自动化使用 API Key，通过 `Authorization: Bearer agw_...` 请求头发送。API Key 明文只在创建时显示一次。
+- Desktop Full 的本地初始化由 Server 页面完成，主进程随后配置自己的 API Key，并使用操作系统凭据存储保护它。
 
-Token（访问令牌）相当于客户端连接 Server 的钥匙。给 Desktop Client 或 Mobile 配置远程连接时，先在已登录的管理界面创建命名 Token，再将 Server 地址和完整 Token 填入客户端。手机上的 `localhost` 指手机本身，不能用它访问电脑上的 Server。
+API Key（访问密钥）相当于客户端连接 Server 的钥匙。给 Desktop Client 或 Mobile 配置远程连接时，先在已登录的管理界面创建一个带名称的 API Key，再将 Server 地址和完整的 API Key 填入客户端。手机上的 `localhost` 指手机本身，不能用它访问电脑上的 Server。
 
 ### 无人值守初始化
 

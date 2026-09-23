@@ -1,8 +1,8 @@
 ---
 title: "Configuration and authentication"
-description: "Understand configuration precedence, deployment defaults, and Token behavior."
+description: "Understand configuration precedence, deployment defaults, and API Key behavior."
 weight: 30
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/operations/configuration
 ---
 
@@ -228,17 +228,118 @@ WriteTo Name, Using, and Enrich values are plugin names, not fixed enums. The ta
 [{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] [ThreadId:{ThreadId}] {Message:lj}{NewLine}{Exception}
 ```
 
-### Authentication and Tokens
+### Authentication and API Keys
 
-Remote Web signs in with the administrator password and receives a Cookie. Desktop, Mobile, and automation use named Bearer Tokens:
+Remote Web signs in with the administrator password and receives a Cookie. Desktop, Mobile, and automation use API Keys, sent as Bearer credentials:
 
 ```http
 Authorization: Bearer agw_<your-token>
 ```
 
-Token plaintext is returned only on creation. Store and supply it through the environment or Secrets, and revoke unused Tokens. Authentication uses the Token creator’s stable ID. There are currently no configuration keys for multiple login accounts, roles, Token scopes, or JWT.
+API Key plaintext is returned only on creation. Store and supply it through the environment or Secrets, and revoke unused keys. Authentication uses the key creator’s stable ID. Multiple login accounts come from the third-party sign-in configuration below; there are currently no configuration keys for roles, API Key scopes, or JWT.
 
-Administrator password hashes, initialization state, and session versions are stored in the database’s global `auth` group in `setting`; Token hashes are in `api_token`. Management features maintain these values; they are not appsettings entries. Password changes update the session version. Hosts refresh every second and discard cached credentials if refresh fails. To recover a forgotten password, stop Server and run `agw-server auth reset-password`.
+Administrator password hashes, initialization state, and session versions are stored in the database’s global `auth` group in `setting`; API Key hashes are in `api_token`. Management features maintain these values; they are not appsettings entries. Password changes update the session version. Hosts refresh every second and discard cached credentials if refresh fails. To recover a forgotten password, stop Server and run `agw-server auth reset-password`.
+
+### Third-party sign-in
+
+Third-party sign-in lets people reach Web and Desktop with an organization account. The first sign-in with an account creates an isolated local user numbered from `10000`; the administrator remains `1001`. With no provider configured, the administrator password and API Keys continue to work. See [Third-party account sign-in]({{< relref "/docs/features/oidc-login" >}}) for the resulting behavior.
+
+Register AGW at the provider as a web application (confidential client). The callback URL is built from the provider ID. Desktop users go through the same URL: the provider returns the browser to Server, not to the desktop application:
+
+```text
+https://agw.example.com/api/auth/oidc/callback/company
+```
+
+The following keys are all prefixed with `Auth:Oidc:`, where `{id}` is the ID you choose for a provider.
+
+| Setting | Default | Purpose and values |
+| --- | --- | --- |
+| `PublicBaseUrl` | Empty | The browser-visible Server origin the provider returns to. `api/auth/oidc/callback/{id}` is appended to it. Use a full origin without a path: HTTPS in production, loopback HTTP allowed in development. Required once any provider is enabled. |
+| `WebBaseUrl` | Empty | Where the browser lands after sign-in. Leave empty when Web shares the Server origin; set it during source development, where Web runs on `3001` and the backend on `30816`. |
+| `Providers:{id}:Enabled` | false | Whether this provider is available. |
+| `Providers:{id}:Type` | Oidc | `Oidc` discovers endpoints from Authority and requests `openid profile email`. `OAuth2` uses explicit endpoints and claim names. |
+| `Providers:{id}:DisplayName` | Provider ID | The name shown on the sign-in button. |
+| `Providers:{id}:ClientId` | Empty | Client ID issued when registering AGW at the provider. Required. |
+| `Providers:{id}:ClientSecret` | Empty | Matching client secret. Required; inject it through the environment or Secrets. |
+| `Providers:{id}:Authority` | Empty | Required for `Oidc`, such as `https://sso.example.com/realms/company`. |
+| `Providers:{id}:AuthorizationEndpoint` | Empty | Required for `OAuth2`: where the user authorizes AGW. |
+| `Providers:{id}:TokenEndpoint` | Empty | Required for `OAuth2`: where Server exchanges the authorization code. |
+| `Providers:{id}:Issuer` | Empty | Required for `OAuth2`: identifies the account source and, with the account ID, determines the user. |
+| `Providers:{id}:IdentitySource` | UserInfo | `UserInfo` reads the account from the user information endpoint. `AccessToken` reads it from a signed JWT access token. |
+| `Providers:{id}:UserInfoEndpoint` | Empty | Required when `IdentitySource` is `UserInfo`. |
+| `Providers:{id}:AccessTokenIssuer` | Empty | Required when `IdentitySource` is `AccessToken`: validates who issued the token. |
+| `Providers:{id}:AccessTokenAudience` | Empty | Required when `IdentitySource` is `AccessToken`: validates the intended recipient. |
+| `Providers:{id}:AccessTokenJwksUri` | Empty | Required when `IdentitySource` is `AccessToken`: where signing keys are published. |
+| `Providers:{id}:ClientAuthMethod` | Post | How OAuth2 client credentials are sent: `Post` in the request body, `Basic` in the header. |
+| `Providers:{id}:UsePkce` | false | Enables S256 for OAuth2. `Oidc` always uses it. |
+| `Providers:{id}:Scopes` | Empty | OAuth2 scopes, configured by index, such as `Scopes__0=read:user`. |
+| `Providers:{id}:SubjectClaim` | sub | Field holding the account ID; GitHub uses `id`. |
+| `Providers:{id}:DisplayNameClaim` | name | Field holding the display name; GitHub uses `login`. |
+| `Providers:{id}:EmailClaim` | email | Field holding the email address. A missing display name or email does not block sign-in. |
+
+Provider IDs use lowercase letters, digits, and hyphens, up to 64 characters, such as `company` or `entra-id`. Each ID owns its callback URL; keep it stable after registration.
+
+Example configuration without secrets:
+
+```json
+{
+  "Auth": {
+    "Oidc": {
+      "PublicBaseUrl": "https://agw.example.com",
+      "Providers": {
+        "company": {
+          "Enabled": true,
+          "Type": "Oidc",
+          "DisplayName": "Company account",
+          "Authority": "https://sso.example.com/realms/company",
+          "ClientId": "agw"
+        }
+      }
+    }
+  }
+}
+```
+
+Inject the matching secret as `Auth__Oidc__Providers__company__ClientSecret`. Keep it out of appsettings, frontend environment files, and screenshots. Services that offer OAuth2 only, such as GitHub, use explicit endpoints:
+
+```json
+{
+  "Auth": {
+    "Oidc": {
+      "Providers": {
+        "github": {
+          "Enabled": true,
+          "Type": "OAuth2",
+          "DisplayName": "GitHub",
+          "AuthorizationEndpoint": "https://github.com/login/oauth/authorize",
+          "TokenEndpoint": "https://github.com/login/oauth/access_token",
+          "UserInfoEndpoint": "https://api.github.com/user",
+          "Issuer": "https://github.com/login/oauth",
+          "IdentitySource": "UserInfo",
+          "UsePkce": true,
+          "ClientAuthMethod": "Post",
+          "Scopes": ["read:user"],
+          "SubjectClaim": "id",
+          "DisplayNameClaim": "login",
+          "EmailClaim": "email",
+          "ClientId": "github-client-id"
+        }
+      }
+    }
+  }
+}
+```
+
+Authority values for common platforms:
+
+| Platform | Authority |
+| --- | --- |
+| Google | `https://accounts.google.com` |
+| Microsoft Entra ID | `https://login.microsoftonline.com/<tenant-id>/v2.0` |
+| Keycloak | `https://sso.example.com/realms/<realm>` |
+| Authentik | `https://sso.example.com/application/o/<application-slug>/` |
+
+Restart the relevant Server after changing these values. In a split deployment, route sign-in requests to Control Plane; Data Plane runs executions with the resulting local credentials. All replicas share one database and Data Protection keys, so a Desktop one-time code can be exchanged on a different replica. Disabling a provider blocks new sign-ins and pending Desktop exchanges; Cookies and API Keys already issued are revoked separately.
 
 ## Example and verification
 
@@ -254,7 +355,7 @@ agw-server --urls http://127.0.0.1:30816
 
 For split deployment, supply matching database and execution settings to each Host, initialize Control Plane first, then start Data Plane. The example’s `agw-server` is Standalone; split deployment uses the corresponding Host executables.
 
-After restarting, inspect startup logs, the listening URL, database connectivity, and client sign-in. Validate execution tuning with a small task while observing latency and load. For startup errors, check enum names, numeric ranges, connection strings, and Distributed dependencies. Do not expose passwords or Tokens when sharing logs.
+After restarting, inspect startup logs, the listening URL, database connectivity, and client sign-in. Validate execution tuning with a small task while observing latency and load. For startup errors, check enum names, numeric ranges, connection strings, and Distributed dependencies. Do not expose passwords or API Keys when sharing logs.
 
 ## Implementation and references
 

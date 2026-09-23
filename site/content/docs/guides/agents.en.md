@@ -2,7 +2,7 @@
 title: "Create a custom agent"
 description: "Define an agent with a model, instructions, and the capabilities it needs."
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/guides/agents
 ---
 
@@ -33,6 +33,18 @@ Preserve facts and limits. Flag uncertain claims instead of inventing features.
 ```
 
 Test with a short pasted passage. To read project documents directly, add file-reading tools and run it in the correct Project. Instructions describe the task; actual tool configuration and permissions determine access.
+
+## Return replies as JSON
+
+When a program reads the result, paste a JSON Schema object into the Response Schema tab of the create or edit dialog:
+
+```json
+{"type":"object","properties":{"summary":{"type":"string"},"issues":{"type":"array","items":{"type":"string"}}},"required":["summary","issues"]}
+```
+
+Saving requires valid JSON whose root is an object; an empty value turns structured output off. Anthropic models additionally require `type` set to `object`, `properties` as an object, and `required` as an array. The final reply then follows that structure, and a turn that cannot produce a conforming result fails instead of returning text. With “Generate Turn Summary” enabled, a custom agent reuses that final JSON and does not call the Summary Model Provider.
+
+Among external agents, Claude Code and Codex support this configuration; Pi does not show the tab. See [Structured responses with JSON Schema]({{< relref "/docs/features/structured-output" >}}) for details.
 
 ## Edit and reuse
 

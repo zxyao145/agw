@@ -2,7 +2,7 @@
 title: "多端客户端"
 description: "通过浏览器、桌面和移动设备访问自己的 AGW 服务。"
 weight: 60
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/features/clients
 ---
 
@@ -28,7 +28,7 @@ AGW 提供 Web、Desktop 和 Mobile 客户端。连接同一个 Server 并使用
 ## 开始使用
 
 1. 完成 Server 初始化，确保设备能够访问服务地址。
-2. Web 使用管理员密码登录；Desktop 和 Mobile 使用命名 Bearer Token 连接。
+2. Web 使用管理员密码或[第三方账号]({{< relref "/docs/features/oidc-login" >}})登录；Desktop 和 Mobile 使用 API Key 连接。
 3. 确认 Server 和 Project，打开已有会话或创建新会话。
 4. 检查历史记录和执行状态，避免因设备切换重复发起同一任务。
 

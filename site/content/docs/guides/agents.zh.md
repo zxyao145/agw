@@ -2,7 +2,7 @@
 title: "创建自定义 Agent"
 description: "用模型、指令与必要能力定义 Agent。"
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/guides/agents
 ---
 
@@ -33,6 +33,18 @@ Agent 是一份可重复使用的助手配置：模型决定它如何理解问�
 ```
 
 先粘贴一小段文字验证输出。需要它直接读取项目文档时，再添加文件读取工具，并在对应 Project 中运行。能力是否可用取决于实际工具配置和权限，写在指令里的要求本身不会授予访问权。
+
+## 让回复按 JSON 结构返回
+
+需要由程序读取结果时，在创建或编辑对话框的 Response Schema 中粘贴一个 JSON Schema 对象：
+
+```json
+{"type":"object","properties":{"summary":{"type":"string"},"issues":{"type":"array","items":{"type":"string"}}},"required":["summary","issues"]}
+```
+
+保存要求内容是合法 JSON，且根节点为对象；留空表示关闭结构化响应。Anthropic 模型还要求写明 `type` 为 `object`、`properties` 为对象、`required` 为数组。配置后最终回复按该结构返回；无法产生符合结构的结果时，该回合报错结束。自定义 Agent 开启“Generate Turn Summary”时，直接使用这份最终 JSON，不再调用 Summary Model Provider。
+
+外部 Agent 中，Claude Code 和 Codex 支持该配置，Pi 不显示该 Tab。完整说明见 [JSON Schema 结构化响应]({{< relref "/docs/features/structured-output" >}})。
 
 ## 修改与复用
 

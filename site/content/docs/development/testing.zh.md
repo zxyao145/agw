@@ -2,7 +2,7 @@
 title: "测试与贡献约定"
 description: "按影响范围验证改动，遵守格式、边界和迁移规则。"
 weight: 50
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/development/testing
 ---
 
@@ -19,6 +19,8 @@ dotnet csharpier check .
 ```
 
 定位问题时先运行相关测试，例如 `dotnet test tests/Agw.Files.Tests`。使用 fake `AIAgent`，不要在默认单元或组合测试中创建会探测 CLI 的 Codex/Claude Agent。真实 CLI 测试需明确启用并检查可执行文件。
+
+改动登录相关代码时，运行 `dotnet test tests/Agw.Auth.Tests`。这些测试默认使用受控的提供商和各自独立的 SQLite 数据库。需要在 PostgreSQL 上验证时，把 `AGW_TEST_OIDC_POSTGRES` 设为测试服务器的管理连接字符串，该账号需要能够创建数据库；不要指向生产服务器。Desktop 主进程的登录与凭据存储测试使用 `pnpm --filter @agw/desktop test`。
 
 ## 客户端检查
 

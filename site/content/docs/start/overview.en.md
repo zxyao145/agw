@@ -2,7 +2,7 @@
 title: "What is AGW?"
 description: "Understand agents, projects, chat, agentflows, and jobs."
 weight: 10
-lastmod: 2026-09-15
+lastmod: 2026-09-23
 translationKey: docs/start/overview
 ---
 
@@ -61,7 +61,7 @@ Execution records live in your server database. Self-hosting does not mean infer
 
 ## Current boundaries
 
-AGW is pre-1.0. It suits clearly defined tasks and human-agent collaboration. Complex work still needs clear inputs, completion criteria, and human review. Authentication uses an administrator login and named access Tokens; multiple login accounts, roles, and per-Token permission scopes are not available.
+AGW is pre-1.0. It suits clearly defined tasks and human-agent collaboration. Complex work still needs clear inputs, completion criteria, and human review. Authentication uses an administrator login, third-party account sign-in, and API Keys; roles and per-key permission scopes are not available.
 
 ## Implementation and references
 
