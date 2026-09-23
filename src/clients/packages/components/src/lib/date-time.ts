@@ -106,7 +106,7 @@ export function formatFriendlyLocalDateTime2(value: string, now = new Date()): s
     }
   }
 
-  if(friendly){
+  if (friendly) {
     return formatLocalDateTimeExact(date) + ` (${friendly})`;
   }
   return formatLocalDateTimeExact(date);

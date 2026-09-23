@@ -240,15 +240,22 @@ internal static class AgentflowMessageMapper
 
     internal static IEnumerable<AgwMessage> MapEvent(
         WorkflowEvent evt,
-        ISet<(string MessageId, AiRole Role, string? Author)> deliveredMessages
+        ISet<(string ExecutorId, string MessageId, AiRole Role, string? Author)> deliveredMessages
     )
     {
+        var executorId = evt switch
+        {
+            AgentResponseUpdateEvent update => update.ExecutorId,
+            AgentResponseEvent response => response.ExecutorId,
+            WorkflowOutputEvent output => output.ExecutorId,
+            _ => string.Empty,
+        };
         foreach (var message in MapEvent(evt))
         {
             var firstDelivery =
                 string.IsNullOrWhiteSpace(message.MessageId)
                 || message.Contents.Count == 0
-                || deliveredMessages.Add((message.MessageId, message.Role, message.Author));
+                || deliveredMessages.Add((executorId, message.MessageId, message.Role, message.Author));
             if (evt is AgentResponseUpdateEvent || firstDelivery)
                 yield return message;
         }

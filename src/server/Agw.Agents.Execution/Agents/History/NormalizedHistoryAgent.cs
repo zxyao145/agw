@@ -112,7 +112,7 @@ internal sealed class NormalizedHistoryAgent : DelegatingAIAgent
             }
             if (capture != null)
             {
-                await capture.FinishAsync(CancellationToken.None).ConfigureAwait(false);
+                await capture.FinishAsync(true, CancellationToken.None).ConfigureAwait(false);
                 completed = true;
                 foreach (var normalized in capture.Drain())
                     yield return normalized;
@@ -137,7 +137,7 @@ internal sealed class NormalizedHistoryAgent : DelegatingAIAgent
                     }
                 }
                 if (capture != null && !completed)
-                    await capture.FinishAsync(CancellationToken.None).ConfigureAwait(false);
+                    await capture.FinishAsync(false, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception exception) when (failure != null)
             {

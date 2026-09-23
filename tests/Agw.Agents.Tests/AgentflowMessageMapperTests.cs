@@ -13,7 +13,7 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void MapEvent_StreamedAndCompletedResponses_DeliversEachContentOnce()
     {
-        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var delivered = new HashSet<(string ExecutorId, string MessageId, AiRole Role, string? Author)>();
         var updates = new[] { "a", "a", " ", "b" }
             .Select(text => new AgentResponseUpdate(ChatRole.Assistant, text)
             {
@@ -40,7 +40,7 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void MapEvent_FinalResponseContainsNewMessage_DeliversNewContent()
     {
-        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var delivered = new HashSet<(string ExecutorId, string MessageId, AiRole Role, string? Author)>();
         var update = new AgentResponseUpdate(ChatRole.Assistant, "answer") { MessageId = "answer" };
         Assert.Single(AgentflowMessageMapper.MapEvent(new AgentResponseUpdateEvent("worker", update), delivered));
         var response = new[] { update }.ToAgentResponse();
@@ -57,7 +57,7 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void MapEvent_HeaderBeforeResponse_DeliversResponseContents()
     {
-        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var delivered = new HashSet<(string ExecutorId, string MessageId, AiRole Role, string? Author)>();
         var header = new AgentResponseUpdate { MessageId = "answer", Role = ChatRole.Assistant };
         Assert.Single(AgentflowMessageMapper.MapEvent(new AgentResponseUpdateEvent("worker", header), delivered));
         var response = new AgentResponse([new ChatMessage(ChatRole.Assistant, "answer") { MessageId = "answer" }]);
@@ -72,7 +72,7 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void MapEvent_OutputWithoutMessageIds_PreservesEveryMessage()
     {
-        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var delivered = new HashSet<(string ExecutorId, string MessageId, AiRole Role, string? Author)>();
         var response = new AgentResponse([
             new ChatMessage(ChatRole.Assistant, "first"),
             new ChatMessage(ChatRole.Assistant, "second"),
@@ -89,7 +89,7 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void MapEvent_OutputUpdatesWithoutPriorDelivery_AggregatesEveryDelta()
     {
-        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var delivered = new HashSet<(string ExecutorId, string MessageId, AiRole Role, string? Author)>();
         var updates = new[] { "a", "b" }.Select(text => new AgentResponseUpdate(ChatRole.Assistant, text)
         {
             MessageId = "answer",

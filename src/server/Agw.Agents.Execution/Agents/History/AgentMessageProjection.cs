@@ -23,6 +23,7 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
     private readonly ConversationMessageWriteScope _scope;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, MessageEntry> _messages = new(StringComparer.Ordinal);
+    private bool _completed;
 
     internal AgentMessageProjection(ConversationMessageWriteScope scope, TimeProvider timeProvider)
     {
@@ -114,6 +115,19 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
                 .ToArray();
     }
 
+    internal void Complete()
+    {
+        lock (_gate)
+        {
+            _completed = true;
+            foreach (var entry in _messages.Values)
+            {
+                entry.Dirty = true;
+                entry.Cached = null;
+            }
+        }
+    }
+
     public IReadOnlyList<Guid> GetPendingMessageIds()
     {
         lock (_gate)
@@ -158,6 +172,8 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
             })
             .ToList();
         Stamp(message, entry);
+        if (!_completed)
+            ConversationHistoryMetadata.ExcludeFromModelHistory(message);
         return new ConversationMessageSnapshot
         {
             MessageId = entry.Id,

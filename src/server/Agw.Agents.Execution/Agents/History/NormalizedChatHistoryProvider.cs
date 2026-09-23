@@ -37,7 +37,7 @@ internal sealed class NormalizedChatHistoryProvider
         try
         {
             if (_captures.TryGetValue(session, out var capture))
-                await capture.FinishAsync(cancellationToken).ConfigureAwait(false);
+                await capture.FinishAsync(false, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -127,7 +127,9 @@ internal sealed class NormalizedChatHistoryProvider
             {
                 try
                 {
-                    await capture.FinishAsync(CancellationToken.None).ConfigureAwait(false);
+                    await capture
+                        .FinishAsync(context.InvokeException == null, CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
                 finally
                 {
@@ -155,7 +157,7 @@ internal sealed class NormalizedChatHistoryProvider
                     await created
                         .CompleteAsync(context.ResponseMessages.ToList(), cancellationToken)
                         .ConfigureAwait(false);
-                    await created.FinishAsync(cancellationToken).ConfigureAwait(false);
+                    await created.FinishAsync(true, cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -180,6 +182,7 @@ internal sealed class NormalizedChatHistoryProvider
         private readonly AgentMessageProjection _projection;
         private readonly ConcurrentQueue<ChatMessage> _outgoing = new();
         private readonly bool _streaming;
+        private bool _failed;
         private readonly string? _agentName;
         public bool External { get; }
 
@@ -204,6 +207,11 @@ internal sealed class NormalizedChatHistoryProvider
 
         internal async ValueTask<bool> ProcessAsync(AgentResponseUpdate update, CancellationToken token)
         {
+            _failed |= update
+                .Contents.OfType<ErrorContent>()
+                .Any(error =>
+                    error.AdditionalProperties?.GetValueOrDefault("isFatalError")?.ToString() == bool.TrueString
+                );
             if (_adapter.Map(update) is not { } message)
                 return false;
             PrepareHeader(message);
@@ -265,8 +273,14 @@ internal sealed class NormalizedChatHistoryProvider
                 await _writer.ScheduleAsync(_scope, _projection, bytes, cancellationToken).ConfigureAwait(false);
         }
 
-        internal async ValueTask FinishAsync(CancellationToken token) =>
+        internal ValueTask FinishAsync(CancellationToken token) => FinishAsync(true, token);
+
+        internal async ValueTask FinishAsync(bool completed, CancellationToken token)
+        {
+            if (completed && !_failed)
+                _projection.Complete();
             await _writer.ScheduleAsync(_scope, _projection, 1, token).ConfigureAwait(false);
+        }
 
         internal IEnumerable<AgentResponseUpdate> Drain()
         {

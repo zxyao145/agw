@@ -61,6 +61,9 @@ public sealed class AgentMessageProjectionTests
         var final = Assert.Single(projection.ReadMessages());
         Assert.Equal(expected, final.Text);
         Assert.Equal(id, final.MessageId);
+        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(final));
+        projection.Complete();
+        final = Assert.Single(projection.ReadMessages());
         Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(final));
     }
 

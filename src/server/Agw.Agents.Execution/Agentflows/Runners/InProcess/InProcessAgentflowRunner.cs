@@ -94,7 +94,8 @@ public sealed class InProcessAgentflowRunner
         {
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         }
-        var deliveredMessages = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var deliveredMessages = new HashSet<(string ExecutorId, string MessageId, AiRole Role, string? Author)>();
+        var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
         var pendingCheckpointRequests = new Dictionary<string, PendingCheckpointRequest>(StringComparer.Ordinal);
         // 每次显式 InProcess 恢复都携带本次 occurrence 的 Marker。
         var resumedCheckpointNodeIds =
@@ -225,6 +226,7 @@ public sealed class InProcessAgentflowRunner
                     }
 
                     case AgentResponseUpdateEvent updateEvt when updateEvt.Data is AgentResponseUpdate update:
+                        executorsWithUpdates.Add(updateEvt.ExecutorId);
                         _logger.LogInformation(
                             "AgentResponseUpdateEvent {ExecutorId}, {Data}",
                             updateEvt.ExecutorId,
@@ -243,6 +245,13 @@ public sealed class InProcessAgentflowRunner
                             responseEvt.ExecutorId,
                             responseEvt.Data
                         );
+                        if (
+                            executorsWithUpdates.Contains(responseEvt.ExecutorId)
+                            && response.Messages.All(message =>
+                                message.Contents.All(content => content is ToolApprovalRequestContent)
+                            )
+                        )
+                            break;
                         foreach (var responseMsg in MapEvent(evt, deliveredMessages))
                         {
                             yield return responseMsg;

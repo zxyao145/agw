@@ -19,7 +19,8 @@ internal sealed class ResultOnlyMessageSink : IExecutionMessageSink
 
     public ResultOnlyMessageSink(IExecutionMessageSink inner)
     {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        ArgumentNullException.ThrowIfNull(inner);
+        _inner = inner;
     }
 
     /// <summary>

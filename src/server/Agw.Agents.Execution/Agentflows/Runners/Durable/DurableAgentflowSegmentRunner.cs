@@ -14,6 +14,7 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
 using static Agw.Agents.Execution.Agentflows.Checkpoints.AgentflowCheckpointSupport;
 using static Agw.Agents.Execution.Agentflows.Messaging.AgentflowMessageMapper;
 
@@ -147,7 +148,8 @@ public sealed class DurableAgentflowSegmentRunner
             );
             var consumed = new HashSet<string>(StringComparer.Ordinal);
             var pending = new Dictionary<string, InteractionRequest>(StringComparer.Ordinal);
-            var deliveredMessages = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+            var deliveredMessages = new HashSet<(string ExecutorId, string MessageId, AiRole Role, string? Author)>();
+            var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
             var pendingCheckpointRequests = new Dictionary<string, PendingCheckpointRequest>(StringComparer.Ordinal);
             // Manifest 的 Marker 只用于新恢复分支的首段，后续 HITL 分段不能再次跳过。
             var resumedCheckpointNodeIds =
@@ -249,6 +251,7 @@ public sealed class DurableAgentflowSegmentRunner
                     }
 
                     case AgentResponseUpdateEvent updateEvent when updateEvent.Data is AgentResponseUpdate update:
+                        executorsWithUpdates.Add(updateEvent.ExecutorId);
                         foreach (var updateMessage in MapEvent(evt, deliveredMessages))
                         {
                             await sink.WriteAsync(updateMessage, cancellationToken).ConfigureAwait(false);
@@ -256,6 +259,13 @@ public sealed class DurableAgentflowSegmentRunner
                         break;
 
                     case AgentResponseEvent responseEvent when responseEvent.Data is AgentResponse response:
+                        if (
+                            executorsWithUpdates.Contains(responseEvent.ExecutorId)
+                            && response.Messages.All(message =>
+                                message.Contents.All(content => content is ToolApprovalRequestContent)
+                            )
+                        )
+                            break;
                         foreach (var message in MapEvent(evt, deliveredMessages))
                         {
                             await sink.WriteAsync(message, cancellationToken).ConfigureAwait(false);

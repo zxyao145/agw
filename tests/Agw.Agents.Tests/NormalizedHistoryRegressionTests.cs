@@ -202,7 +202,7 @@ public sealed class NormalizedHistoryRegressionTests
         Assert.Equal(text, string.Concat(stored.Select(message => message.Text)));
         Assert.All(
             stored.Where(message => message.Role == ChatRole.Assistant),
-            message => Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(message))
+            message => Assert.Equal(error != null, ConversationHistoryMetadata.IsModelHistoryExcluded(message))
         );
         Assert.Equal(
             error,
