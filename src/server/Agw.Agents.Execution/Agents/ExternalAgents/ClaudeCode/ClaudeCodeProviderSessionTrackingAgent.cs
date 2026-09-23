@@ -76,11 +76,25 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
             await CaptureProviderSessionIdAsync(message.AdditionalProperties).ConfigureAwait(false);
         }
 
-        response.Messages = response
-            .Messages.Where(message =>
+        var forwardedToolCalls = new HashSet<string>(StringComparer.Ordinal);
+        var retained = new List<ChatMessage>(response.Messages.Count);
+        foreach (
+            var message in response.Messages.Where(message =>
                 !ClaudeCodeMessagePolicy.IsTransportEvent(message.Role, message.AdditionalProperties, message.Contents)
             )
-            .ToList();
+        )
+        {
+            var contents = RetainFirstToolCall(forwardedToolCalls, message.MessageId, message.Contents);
+            if (contents.Count == 0 && message.Contents.Count > 0)
+            {
+                continue;
+            }
+
+            message.Contents = contents;
+            retained.Add(message);
+        }
+
+        response.Messages = retained;
         return response;
     }
 
@@ -115,6 +129,7 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
+        var forwardedToolCalls = new HashSet<string>(StringComparer.Ordinal);
         await foreach (
             var update in InnerAgent
                 .RunStreamingAsync(messages, session, options, cancellationToken)
@@ -122,11 +137,68 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
         )
         {
             await CaptureProviderSessionIdAsync(update.AdditionalProperties).ConfigureAwait(false);
-            if (!ClaudeCodeMessagePolicy.IsTransportEvent(update.Role, update.AdditionalProperties, update.Contents))
+            if (ClaudeCodeMessagePolicy.IsTransportEvent(update.Role, update.AdditionalProperties, update.Contents))
             {
-                yield return update;
+                continue;
             }
+
+            var contents = RetainFirstToolCall(forwardedToolCalls, update.MessageId, update.Contents);
+            if (contents.Count == 0 && update.Contents.Count > 0)
+            {
+                continue;
+            }
+
+            update.Contents = contents;
+            yield return update;
         }
+    }
+
+    /// <summary>
+    /// <para>同一条消息里重复出现的同一次工具调用只保留首次到达的那一份。Claude Code 在流式增量之外还会整体重述助手消息，同一个 CallId 因此会多次到达；重复转发会让待回答的提问渲染出多个面板，也会把同一次调用多次写入历史。</para>
+    /// <para>Keeps only the first arrival of a tool call restated within one message. Claude Code re-states an assistant message alongside its streaming deltas, so one CallId arrives several times; forwarding the repeats renders several panels for a pending question and stores the same call several times in history.</para>
+    /// </summary>
+    /// <param name="forwardedToolCalls">
+    /// <para>本次执行已转发的消息与调用标识集合。</para>
+    /// <para>Message and call identifiers already forwarded during this run.</para>
+    /// </param>
+    /// <param name="messageId">
+    /// <para>承载这些内容的消息标识；不同消息的同名调用互不影响。</para>
+    /// <para>Identifier of the message carrying the contents; same-named calls in different messages stay independent.</para>
+    /// </param>
+    /// <param name="contents">
+    /// <para>当前消息或更新携带的内容。</para>
+    /// <para>Contents carried by the current message or update.</para>
+    /// </param>
+    /// <returns>
+    /// <para>去掉重复工具调用后的内容；没有重复时返回原集合。</para>
+    /// <para>The contents without restated tool calls, or the original collection when nothing repeats.</para>
+    /// </returns>
+    private static IList<AIContent> RetainFirstToolCall(
+        HashSet<string> forwardedToolCalls,
+        string? messageId,
+        IList<AIContent> contents
+    )
+    {
+        if (!contents.Any(content => content is FunctionCallContent { CallId.Length: > 0 }))
+        {
+            return contents;
+        }
+
+        var retained = new List<AIContent>(contents.Count);
+        foreach (var content in contents)
+        {
+            if (
+                content is FunctionCallContent { CallId.Length: > 0 } call
+                && !forwardedToolCalls.Add($"{messageId}:{call.CallId}")
+            )
+            {
+                continue;
+            }
+
+            retained.Add(content);
+        }
+
+        return retained;
     }
 
     /// <summary>
