@@ -121,6 +121,12 @@ public sealed record DurableExecutionSettings
     public HumanInteractionPolicy HumanInteractionPolicy { get; init; } = HumanInteractionPolicy.Allow;
 
     /// <summary>
+    /// 获取是否只向客户端推送 result 消息并拒绝本轮人机交互。
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ResultOnly { get; init; }
+
+    /// <summary>
     /// 获取是否恢复已有 Agent 会话。
     /// </summary>
     public required bool Resume { get; init; }

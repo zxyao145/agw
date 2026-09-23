@@ -100,7 +100,6 @@ public sealed class ConversationMessagePostgresTests
                 new()
                 {
                     MessageId = id,
-                    State = ConversationMessageState.Open,
                     CreatedAt = now,
                     Metadata = [],
                     Payload = JsonSerializer.Serialize(

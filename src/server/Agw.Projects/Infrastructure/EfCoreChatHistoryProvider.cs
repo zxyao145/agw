@@ -561,53 +561,51 @@ public sealed partial class EfCoreChatHistoryProvider
         IReadOnlyList<ChatMessage> followingMessages
     )
     {
-        // Per-service-call persistence stores the assistant function call before invoking the tool.
-        // Its result arrives as the next service call's request, so pairing must cross that boundary.
-        // 一次模型响应可以拆成多条 assistant 消息，配对只能依据 callId。
-        // One model response can span several assistant messages, so pairing follows the callId
-        // instead of the distance between a call and the next assistant message.
-        var answeredCallIds = messages
-            .Concat(followingMessages)
-            .SelectMany(message => message.Contents)
-            .OfType<FunctionResultContent>()
-            .Select(content => content.CallId)
-            .ToHashSet(StringComparer.Ordinal);
-        var pendingCallIds = new HashSet<string>(StringComparer.Ordinal);
-        var result = new List<ChatMessage>(messages.Count);
-        foreach (var message in messages)
+        // 按出现顺序配对每次调用，结果也可以来自下一次模型请求。
+        // Pair individual calls in arrival order, including results in the next model request.
+        var pendingCalls = new Dictionary<string, Queue<(int Message, int Content)>>(StringComparer.Ordinal);
+        var pairedContents = new HashSet<(int Message, int Content)>();
+        foreach (
+            var (message, messageIndex) in messages
+                .Concat(followingMessages)
+                .Select((message, index) => (message, index))
+        )
         {
-            if (message.Role == ChatRole.Assistant && message.Contents.OfType<FunctionCallContent>().Any())
+            for (var contentIndex = 0; contentIndex < message.Contents.Count; contentIndex++)
             {
-                var keptContents = message
-                    .Contents.Where(content =>
-                        content is not FunctionCallContent functionCall || answeredCallIds.Contains(functionCall.CallId)
-                    )
-                    .ToList();
-                foreach (var functionCall in keptContents.OfType<FunctionCallContent>())
+                var position = (messageIndex, contentIndex);
+                if (message.Role == ChatRole.Assistant && message.Contents[contentIndex] is FunctionCallContent call)
                 {
-                    pendingCallIds.Add(functionCall.CallId);
+                    if (!pendingCalls.TryGetValue(call.CallId, out var calls))
+                        pendingCalls.Add(call.CallId, calls = new());
+                    calls.Enqueue(position);
                 }
-
-                AddFilteredMessage(result, message, keptContents);
-                continue;
+                else if (
+                    message.Role == ChatRole.Tool
+                    && message.Contents[contentIndex] is FunctionResultContent response
+                    && pendingCalls.TryGetValue(response.CallId, out var calls)
+                    && calls.TryDequeue(out var callPosition)
+                )
+                {
+                    pairedContents.Add(callPosition);
+                    pairedContents.Add(position);
+                }
             }
-
-            if (message.Role == ChatRole.Tool)
-            {
-                AddFilteredMessage(
-                    result,
-                    message,
-                    message
-                        .Contents.Where(content =>
-                            content is not FunctionResultContent functionResult
-                            || pendingCallIds.Remove(functionResult.CallId)
-                        )
-                        .ToList()
-                );
-                continue;
-            }
-
-            result.Add(message);
+        }
+        var result = new List<ChatMessage>(messages.Count);
+        for (var messageIndex = 0; messageIndex < messages.Count; messageIndex++)
+        {
+            var message = messages[messageIndex];
+            var contents = message
+                .Contents.Where(
+                    (content, contentIndex) =>
+                        !(
+                            message.Role == ChatRole.Assistant && content is FunctionCallContent
+                            || message.Role == ChatRole.Tool && content is FunctionResultContent
+                        ) || pairedContents.Contains((messageIndex, contentIndex))
+                )
+                .ToList();
+            AddFilteredMessage(result, message, contents);
         }
 
         return result;

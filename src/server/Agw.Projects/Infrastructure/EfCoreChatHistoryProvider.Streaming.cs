@@ -136,15 +136,6 @@ public sealed partial class EfCoreChatHistoryProvider
                 if (message == null)
                     continue;
                 MessageTimestampMetadata.EnsureCreatedAt(message, Timestamp);
-                if (!_completed)
-                {
-                    message = message.Clone();
-                    message.AdditionalProperties =
-                        message.AdditionalProperties == null
-                            ? []
-                            : new AdditionalPropertiesDictionary(message.AdditionalProperties);
-                    ConversationHistoryMetadata.ExcludeFromModelHistory(message);
-                }
                 _pendingRecords[index] = new PendingHistoryRecord(
                     _recordIds[index],
                     TaskId,

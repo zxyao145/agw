@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Agw.Agents.Execution.Agentflows.Workflows;
-using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
@@ -32,7 +31,6 @@ internal sealed class AgentflowInputMessages : IDisposable
     {
         _scope = scope;
         scope.InputObserver = PublishAsync;
-        scope.OutputObserver = PublishUpdateAsync;
     }
 
     private async ValueTask PublishAsync(ChatMessage input, CancellationToken cancellationToken)
@@ -42,23 +40,6 @@ internal sealed class AgentflowInputMessages : IDisposable
         var message = snapshot.ToAiMessage();
         if (message == null || message.Contents.Count == 0)
             return;
-        await PublishMessageAsync(message, waitForObservation: true, cancellationToken).ConfigureAwait(false);
-    }
-
-    private ValueTask PublishUpdateAsync(AgentResponseUpdate update, CancellationToken cancellationToken) =>
-        update.ToAiMessage() is { } message
-            // 输出增量在通道内已是先进先出，不能让每个 token 等待读取方。
-            // Output deltas already keep their channel order; holding a node per token would pace
-            // the whole response on the reader.
-            ? PublishMessageAsync(message, waitForObservation: false, cancellationToken)
-            : ValueTask.CompletedTask;
-
-    private async ValueTask PublishMessageAsync(
-        AgwMessage message,
-        bool waitForObservation,
-        CancellationToken cancellationToken
-    )
-    {
         var notification = new AgentflowInputEvent(message);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopped.Token);
         try
@@ -66,8 +47,7 @@ internal sealed class AgentflowInputMessages : IDisposable
             await _inputs.Writer.WriteAsync(notification, linked.Token).ConfigureAwait(false);
             // Hold this node until its input has reached the display stream. This also lets the
             // reader drain preceding workflow output before releasing the downstream response.
-            if (waitForObservation)
-                await notification.Observed.Task.WaitAsync(linked.Token).ConfigureAwait(false);
+            await notification.Observed.Task.WaitAsync(linked.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
             when (_stopped.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -123,7 +103,6 @@ internal sealed class AgentflowInputMessages : IDisposable
     public void Dispose()
     {
         _scope.InputObserver = null;
-        _scope.OutputObserver = null;
         _stopped.Cancel();
         _inputs.Writer.TryComplete();
         _stopped.Dispose();

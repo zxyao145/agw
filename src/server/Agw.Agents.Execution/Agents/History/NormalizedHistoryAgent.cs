@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using Agw.Projects.Contracts.History;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -38,8 +37,7 @@ internal sealed class NormalizedHistoryAgent : DelegatingAIAgent
             var update in RunCoreStreamingAsync(messages, session, options, cancellationToken).ConfigureAwait(false)
         )
             updates.Add(update);
-        // Normalized updates include replacements. The framework's concatenating aggregator is not used for history.
-        return NormalizedResponseAggregation.Aggregate(updates);
+        return updates.ToAgentResponse();
     }
 
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
@@ -114,9 +112,7 @@ internal sealed class NormalizedHistoryAgent : DelegatingAIAgent
             }
             if (capture != null)
             {
-                await capture
-                    .FinishAsync(ConversationMessageState.Completed, CancellationToken.None)
-                    .ConfigureAwait(false);
+                await capture.FinishAsync(CancellationToken.None).ConfigureAwait(false);
                 completed = true;
                 foreach (var normalized in capture.Drain())
                     yield return normalized;
@@ -141,14 +137,7 @@ internal sealed class NormalizedHistoryAgent : DelegatingAIAgent
                     }
                 }
                 if (capture != null && !completed)
-                    await capture
-                        .FinishAsync(
-                            failure is not null and not OperationCanceledException
-                                ? ConversationMessageState.Failed
-                                : ConversationMessageState.Interrupted,
-                            CancellationToken.None
-                        )
-                        .ConfigureAwait(false);
+                    await capture.FinishAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception exception) when (failure != null)
             {

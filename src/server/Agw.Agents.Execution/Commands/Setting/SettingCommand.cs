@@ -14,13 +14,15 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         Guid projectId,
         Dictionary<string, string>? environmentVariables = null,
         string? contextId = null,
-        AgwPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null,
+        bool resultOnly = false
     )
     {
         ProjectId = projectId;
         ContextId = contextId;
         EnvironmentVariables = environmentVariables ?? new Dictionary<string, string>();
         PermissionMode = permissionMode;
+        ResultOnly = resultOnly;
     }
 
     public Guid ProjectId { get; set; }
@@ -34,6 +36,12 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     }
 
     public AgwPermissionMode? PermissionMode { get; set; }
+
+    /// <summary>
+    /// 只向客户端推送 result 消息，并拒绝本轮的人机交互请求。
+    /// Streams only result messages to the client and declines human interaction for the turn.
+    /// </summary>
+    public bool ResultOnly { get; set; }
 
     [JsonIgnore]
     public bool Resume { get; set; }
@@ -53,6 +61,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         return left.ProjectId == right.ProjectId
             && string.Equals(left.ContextId, right.ContextId, StringComparison.Ordinal)
             && left.PermissionMode == right.PermissionMode
+            && left.ResultOnly == right.ResultOnly
             && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
     }
 
@@ -63,7 +72,13 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public override bool Equals(object? obj) => obj is SettingCommand other && Equals(other);
 
     public override int GetHashCode() =>
-        HashCode.Combine(ProjectId, ContextId, PermissionMode, GetEnvironmentVariablesHashCode(EnvironmentVariables));
+        HashCode.Combine(
+            ProjectId,
+            ContextId,
+            PermissionMode,
+            ResultOnly,
+            GetEnvironmentVariablesHashCode(EnvironmentVariables)
+        );
 
     private static bool EnvironmentVariablesEqual(
         IReadOnlyDictionary<string, string>? left,

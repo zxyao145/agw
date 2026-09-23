@@ -101,7 +101,7 @@ public sealed partial class EfCoreChatHistoryProvider : IConversationMessageWrit
         ConversationMessageSnapshot snapshot
     )
     {
-        if (scope.ProducerId == Guid.Empty || snapshot.MessageId == Guid.Empty || !Enum.IsDefined(snapshot.State))
+        if (scope.ProducerId == Guid.Empty || snapshot.MessageId == Guid.Empty)
             throw new AgwException(ErrorCodes.InvalidParam);
         var message = JsonSerializer.Deserialize<Microsoft.Extensions.AI.ChatMessage>(
             snapshot.Payload,

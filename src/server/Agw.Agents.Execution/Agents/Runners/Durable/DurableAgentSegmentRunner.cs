@@ -81,12 +81,17 @@ internal sealed class DurableAgentSegmentRunner
                 )
         );
         permissions.Register(runtime.Session);
+        // ResultOnly 只在本轮会产生 result 消息时生效：过滤出站消息并拒绝人机交互。
+        // ResultOnly applies only when the turn produces a result: outbound messages are filtered and interaction is declined.
+        var resultOnly = manifest.Settings.ResultOnly && runtime.EmitsTurnResult;
+        sink = ResultOnlyMessageSink.Wrap(sink, resultOnly);
         var registry = new InteractionRequestRegistry(input.InputCatalog);
         var approvalHandler = new DurableInteractionHandler(
             permissions.Permissions,
             manifest.Settings.HumanInteractionPolicy,
             registry,
-            _humanInteractionContextAccessor!.RefreshPermissionsAsync
+            _humanInteractionContextAccessor!.RefreshPermissionsAsync,
+            allowInteraction: !resultOnly
         );
         using var interactionScope = _humanInteractionContextAccessor.Push(
             new ResolvedHumanInteractionChannel(
@@ -95,7 +100,8 @@ internal sealed class DurableAgentSegmentRunner
                         input.ResolvedInteractions.Where(item => item.Request is UserInputInteraction)
                     )
                     .DistinctBy(item => item.Request.InteractionId)
-                    .ToArray()
+                    .ToArray(),
+                allowInteraction: !resultOnly
             ),
             registry,
             permissions.Permissions

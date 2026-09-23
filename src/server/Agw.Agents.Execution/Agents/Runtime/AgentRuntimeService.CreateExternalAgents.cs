@@ -287,7 +287,7 @@ public partial class AgentRuntimeService
         new ResourceOwningAIAgent(
             DecorateExternalAgent(
                 historyProvider.GetService<NormalizedChatHistoryProvider>() is { } normalized
-                    ? new NormalizedHistoryAgent(aiAgent, normalized, () => new PiMessageAdapter())
+                    ? new NormalizedHistoryAgent(aiAgent, normalized, () => new ModelMessageAdapter())
                     : aiAgent,
                 historyProvider,
                 isBackground,
@@ -525,10 +525,7 @@ public partial class AgentRuntimeService
         }
 
         options = ExternalAgentModelOptions.ApplyPi(options, modelConfiguration);
-        options = options with
-        {
-            EmitMessageSnapshots = historyProvider.GetService<NormalizedChatHistoryProvider>() != null,
-        };
+        options = options with { };
         var piAgent = new PiAgentAIAgent(options, _logger);
         var interactionAgent = piAgent
             .AsBuilder()

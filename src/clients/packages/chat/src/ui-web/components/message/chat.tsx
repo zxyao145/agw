@@ -91,6 +91,8 @@ export interface ChatProps {
   sessionSeed: ChatSessionSeed;
   isLoadingConversation?: boolean;
   environmentVariables?: Record<string, string>;
+  /** 只接收 result 消息，并拒绝本轮的人机交互。 */
+  resultOnly?: boolean;
   placeholder?: string;
   className?: string;
   /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
@@ -172,6 +174,7 @@ export function Chat({
   sessionSeed,
   isLoadingConversation = false,
   environmentVariables,
+  resultOnly = false,
   placeholder = "Type your message...",
   className,
   inputTopLeft,
@@ -891,6 +894,7 @@ export function Chat({
         projectId,
         contextId: nextContextId,
         environmentVariables,
+        resultOnly,
       });
       if (configuredSessionRef.current !== configurationKey) {
         await client.configure({
@@ -898,6 +902,7 @@ export function Chat({
           contextId: nextContextId,
           environmentVariables,
           permissionMode: nextPermissionMode,
+          resultOnly,
         });
         if (
           generation !== executionGenerationRef.current ||
@@ -921,6 +926,7 @@ export function Chat({
       projectId,
       refreshAgentflowCheckpoints,
       restoreActiveTurnSnapshot,
+      resultOnly,
     ],
   );
 

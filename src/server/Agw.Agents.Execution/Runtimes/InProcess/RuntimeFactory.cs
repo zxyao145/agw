@@ -205,10 +205,15 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     )
                 );
                 permissionState.Register(session.Session);
+                // ResultOnly 只在本轮会产生 result 消息时生效：过滤出站消息并拒绝人机交互。
+                // ResultOnly applies only when the turn produces a result: outbound messages are filtered and interaction is declined.
+                var resultOnly = request.TurnContext.Settings.ResultOnly && session.EmitsTurnResult;
+                var agentSink = ResultOnlyMessageSink.Wrap(request.TurnContext.MessageSink, resultOnly);
                 var interactions = new InProcessInteractionSession(
-                    request.TurnContext.MessageSink,
+                    agentSink,
                     permissionState.Permissions,
-                    request.TurnContext.PendingInteractionCountChanged
+                    request.TurnContext.PendingInteractionCountChanged,
+                    allowInteraction: !resultOnly
                 );
                 return StartTurn(
                     session,
@@ -219,8 +224,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         session.CancelActiveRequest();
                         interactions.CancelAll();
                     },
-                    ct =>
-                        ExecuteAgentAsync(session, request.Command, interactions, request.TurnContext.MessageSink, ct),
+                    ct => ExecuteAgentAsync(session, request.Command, interactions, agentSink, ct),
                     interactions.TrySubmitAsync,
                     (mode, _) =>
                     {

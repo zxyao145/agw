@@ -126,6 +126,7 @@ export type ExecutionSetting = {
   contextId: string;
   environmentVariables?: Record<string, string> | null;
   permissionMode?: PermissionMode;
+  resultOnly?: boolean;
 };
 
 export type ExecutionConfigurationResult = {

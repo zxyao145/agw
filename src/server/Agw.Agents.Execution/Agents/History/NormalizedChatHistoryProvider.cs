@@ -37,14 +37,7 @@ internal sealed class NormalizedChatHistoryProvider
         try
         {
             if (_captures.TryGetValue(session, out var capture))
-                await capture
-                    .FinishAsync(
-                        ConversationHistoryPersistenceContext.HasExecutionFailure
-                            ? ConversationMessageState.Failed
-                            : ConversationMessageState.Interrupted,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
+                await capture.FinishAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -70,7 +63,8 @@ internal sealed class NormalizedChatHistoryProvider
         IReadOnlyList<ChatMessage> input,
         IAgentMessageAdapter<AgentResponseUpdate> adapter,
         bool external,
-        CancellationToken token
+        CancellationToken token,
+        bool streaming = true
     )
     {
         var writer = _inner.GetService<IConversationMessageWriter>();
@@ -84,7 +78,7 @@ internal sealed class NormalizedChatHistoryProvider
             await inputs.PersistInputsAsync(session, input, scope.ProducerId, token).ConfigureAwait(false);
         else
             await _inner.InvokedAsync(new InvokedContext(agent, session, input, []), token).ConfigureAwait(false);
-        var capture = new Capture(scope, writer, adapter, _timeProvider, external, agent.Name);
+        var capture = new Capture(scope, writer, adapter, _timeProvider, external, agent.Name, streaming);
         if (!_captures.TryAdd(session, capture))
             throw new AgwException(ErrorCodes.ConversationSessionConflict);
         return capture;
@@ -133,15 +127,7 @@ internal sealed class NormalizedChatHistoryProvider
             {
                 try
                 {
-                    await capture
-                        .FinishAsync(
-                            context.InvokeException == null ? ConversationMessageState.Completed
-                                : context.InvokeException is OperationCanceledException
-                                    ? ConversationMessageState.Interrupted
-                                : ConversationMessageState.Failed,
-                            CancellationToken.None
-                        )
-                        .ConfigureAwait(false);
+                    await capture.FinishAsync(CancellationToken.None).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -158,7 +144,8 @@ internal sealed class NormalizedChatHistoryProvider
                     context.RequestMessages.ToList(),
                     new ModelMessageAdapter(),
                     false,
-                    cancellationToken
+                    cancellationToken,
+                    streaming: false
                 )
                 .ConfigureAwait(false);
             if (created != null)
@@ -168,9 +155,7 @@ internal sealed class NormalizedChatHistoryProvider
                     await created
                         .CompleteAsync(context.ResponseMessages.ToList(), cancellationToken)
                         .ConfigureAwait(false);
-                    await created
-                        .FinishAsync(ConversationMessageState.Completed, cancellationToken)
-                        .ConfigureAwait(false);
+                    await created.FinishAsync(cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -194,7 +179,7 @@ internal sealed class NormalizedChatHistoryProvider
         private readonly IAgentMessageAdapter<AgentResponseUpdate> _adapter;
         private readonly AgentMessageProjection _projection;
         private readonly ConcurrentQueue<ChatMessage> _outgoing = new();
-        private bool _failed;
+        private readonly bool _streaming;
         private readonly string? _agentName;
         public bool External { get; }
 
@@ -204,7 +189,8 @@ internal sealed class NormalizedChatHistoryProvider
             IAgentMessageAdapter<AgentResponseUpdate> adapter,
             TimeProvider timeProvider,
             bool external,
-            string? agentName
+            string? agentName,
+            bool streaming = true
         )
         {
             _scope = scope;
@@ -213,35 +199,27 @@ internal sealed class NormalizedChatHistoryProvider
             _projection = new AgentMessageProjection(scope, timeProvider);
             External = external;
             _agentName = agentName;
+            _streaming = streaming;
         }
 
         internal async ValueTask<bool> ProcessAsync(AgentResponseUpdate update, CancellationToken token)
         {
-            _failed |= update
-                .Contents.OfType<ErrorContent>()
-                .Any(error =>
-                    error.AdditionalProperties?.GetValueOrDefault("isFatalError")?.ToString() == bool.TrueString
-                );
-            var changedBytes = 0L;
-            var operations = _adapter.Map(update);
-            foreach (var operation in operations)
-            {
-                PrepareHeader(operation.Header);
-                if (_projection.Apply(operation) is { } changed)
-                {
-                    _outgoing.Enqueue(changed);
-                    changedBytes += EstimateBytes(changed);
-                }
-            }
-            if (changedBytes > 0)
-                await _writer.ScheduleAsync(_scope, _projection, changedBytes, token).ConfigureAwait(false);
-            return operations.Count > 0;
+            if (_adapter.Map(update) is not { } message)
+                return false;
+            PrepareHeader(message);
+            var appended = _projection.Append(message);
+            _outgoing.Enqueue(appended);
+            await _writer.ScheduleAsync(_scope, _projection, EstimateBytes(appended), token).ConfigureAwait(false);
+            return true;
         }
 
         public async ValueTask AppendAsync(ChatResponseUpdate update, CancellationToken cancellationToken) =>
             await AppendUpdateAsync(update, cancellationToken).ConfigureAwait(false);
 
-        /// <summary>Returns false when no operation claimed the update, so the caller keeps delivering it.</summary>
+        /// <summary>
+        /// <para>返回是否接收了更新正文，调用方继续传递其他更新。</para>
+        /// <para>Returns whether the content was captured; callers continue delivering other updates.</para>
+        /// </summary>
         internal async ValueTask<bool> AppendUpdateAsync(
             ChatResponseUpdate update,
             CancellationToken cancellationToken
@@ -262,39 +240,33 @@ internal sealed class NormalizedChatHistoryProvider
 
         public async ValueTask CompleteAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken)
         {
+            if (_streaming)
+                return;
             var bytes = 0L;
             foreach (var message in messages)
             {
-                foreach (var operation in _adapter.MapSnapshot(message))
-                {
-                    PrepareHeader(operation.Header);
-                    if (_projection.Apply(operation) is { } changed)
+                var appended = _adapter.Map(
+                    new AgentResponseUpdate
                     {
-                        if (External)
-                            _outgoing.Enqueue(changed);
-                        bytes += EstimateBytes(changed);
+                        MessageId = message.MessageId ?? Guid.CreateVersion7().ToString("D"),
+                        Role = message.Role,
+                        AuthorName = message.AuthorName,
+                        Contents = message.Contents,
+                        CreatedAt = message.CreatedAt,
+                        AdditionalProperties = message.AdditionalProperties,
                     }
-                }
+                );
+                if (appended == null)
+                    continue;
+                PrepareHeader(appended);
+                bytes += EstimateBytes(_projection.Append(appended, newMessage: true));
             }
             if (bytes > 0)
                 await _writer.ScheduleAsync(_scope, _projection, bytes, cancellationToken).ConfigureAwait(false);
         }
 
-        internal async ValueTask FinishAsync(ConversationMessageState state, CancellationToken token)
-        {
-            if (_failed && state == ConversationMessageState.Completed)
-                state = ConversationMessageState.Failed;
-            foreach (var operation in _adapter.MapFinalization())
-            {
-                PrepareHeader(operation.Header);
-                if (_projection.Apply(operation) is { } completed && External)
-                    _outgoing.Enqueue(completed);
-            }
-            foreach (var message in _projection.SealOpen(state))
-                if (External)
-                    _outgoing.Enqueue(message);
+        internal async ValueTask FinishAsync(CancellationToken token) =>
             await _writer.ScheduleAsync(_scope, _projection, 1, token).ConfigureAwait(false);
-        }
 
         internal IEnumerable<AgentResponseUpdate> Drain()
         {

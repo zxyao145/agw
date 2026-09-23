@@ -30,13 +30,13 @@ public sealed class NormalizedHistoryRegressionTests
     {
         using var owner = EnterOwner();
         await using var fixture = await HistoryDatabase.CreateAsync();
-        var capture = fixture.CreateCapture(new ModelMessageAdapter());
+        var capture = fixture.CreateCapture(new ModelMessageAdapter(), streaming: false);
         var messages = new[] { "first", "second", "first" }
             .Select(text => new ChatMessage(ChatRole.Assistant, text) { MessageId = messageId })
             .ToArray();
 
         await capture.CompleteAsync(messages, TestContext.Current.CancellationToken);
-        await capture.FinishAsync(ConversationMessageState.Completed, TestContext.Current.CancellationToken);
+        await capture.FinishAsync(TestContext.Current.CancellationToken);
 
         var stored = await fixture.ReadAsync();
         Assert.Equal(["first", "second", "first"], stored.Select(message => message.Text));
@@ -67,13 +67,14 @@ public sealed class NormalizedHistoryRegressionTests
             Assert.Equal(messageId, message.MessageId);
         }
         await capture.CompleteAsync(capture.Drain().ToAgentResponse().Messages.ToList(), token);
-        await capture.FinishAsync(ConversationMessageState.Completed, token);
+        await capture.FinishAsync(token);
         await ConversationHistoryPersistenceContext.FlushAsync(token);
 
         var stored = Assert.Single(await fixture.ReadAsync());
         Assert.Equal(messageId, stored.MessageId);
         Assert.Equal("The user user", stored.Text);
-        Assert.Equal("completed", stored.AdditionalProperties!["messageState"]!.ToString());
+        Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(stored));
+        Assert.Empty(capture.Drain());
     }
 
     [Fact]
@@ -83,7 +84,7 @@ public sealed class NormalizedHistoryRegressionTests
         // The notification after an approval repeats one call id and one message id.
         using var owner = EnterOwner();
         await using var fixture = await HistoryDatabase.CreateAsync();
-        var capture = fixture.CreateCapture(new ModelMessageAdapter());
+        var capture = fixture.CreateCapture(new ModelMessageAdapter(), streaming: false);
         var token = TestContext.Current.CancellationToken;
 
         await capture.CompleteAsync(
@@ -95,7 +96,7 @@ public sealed class NormalizedHistoryRegressionTests
             ],
             token
         );
-        await capture.FinishAsync(ConversationMessageState.Completed, token);
+        await capture.FinishAsync(token);
 
         var stored = await fixture.ReadAsync();
         Assert.Equal(4, stored.Select(message => message.MessageId).Distinct().Count());
@@ -108,10 +109,6 @@ public sealed class NormalizedHistoryRegressionTests
         Assert.Equal(
             ["first", "second"],
             stored.Where(message => message.Role == ChatRole.Assistant).Select(message => message.Text)
-        );
-        Assert.All(
-            stored,
-            message => Assert.Equal("completed", message.AdditionalProperties!["messageState"]!.ToString())
         );
     }
 
@@ -148,7 +145,7 @@ public sealed class NormalizedHistoryRegressionTests
         );
 
         await ApplyClaudeHistoryAsync(capture, processor.GetType().GetMethod("CompleteRun")!.Invoke(processor, null));
-        await capture.FinishAsync(ConversationMessageState.Interrupted, TestContext.Current.CancellationToken);
+        await capture.FinishAsync(TestContext.Current.CancellationToken);
 
         var stored = await fixture.ReadAsync();
         Assert.Equal(2, stored.Count);
@@ -162,25 +159,23 @@ public sealed class NormalizedHistoryRegressionTests
     [InlineData("complete answer", null)]
     [InlineData("partial", "model failed")]
     [InlineData("", "model failed")]
-    public async Task ProcessAsync_PiSnapshotAfterHistoryCallback_HandlesDuplicateAndPreservesOneMessage(
-        string text,
-        string? error
-    )
+    public async Task ProcessAsync_PiHistoryCallbackAndTurnEnd_PreservesOneMessage(string text, string? error)
     {
         using var owner = EnterOwner();
         await using var fixture = await HistoryDatabase.CreateAsync();
-        var capture = fixture.CreateCapture(new PiMessageAdapter());
+        var capture = fixture.CreateCapture(new ModelMessageAdapter());
         var type = typeof(PiAgentAIAgent).Assembly.GetType(
             "PiAgentSdk.MAF.Internal.PiEventMapper",
             throwOnError: true
         )!;
-        var mapper = Activator.CreateInstance(type, [null, true])!;
+        var mapper = Activator.CreateInstance(type, [null])!;
         var toUpdate = type.GetMethod("ToUpdate")!.CreateDelegate<Func<PiEvent, AgentResponseUpdate?>>(mapper);
         var toHistory = type.GetMethod("ToHistoryMessages")!
             .CreateDelegate<Func<PiTurnEndEvent, IReadOnlyList<ChatMessage>>>(mapper);
         var assistant = new PiAssistantMessage
         {
             Content = text.Length == 0 ? [] : [new PiTextContent { Text = text }],
+            StopReason = error == null ? "stop" : "error",
             ErrorMessage = error,
         };
         toUpdate(new PiMessageEvent("message_start") { Message = assistant });
@@ -189,11 +184,7 @@ public sealed class NormalizedHistoryRegressionTests
             var delta = toUpdate(
                 new PiMessageUpdateEvent
                 {
-                    AssistantMessageEvent = new PiTextDelta
-                    {
-                        ContentIndex = 0,
-                        Delta = text[..Math.Min(4, text.Length)],
-                    },
+                    AssistantMessageEvent = new PiTextDelta { ContentIndex = 0, Delta = text },
                 }
             );
             Assert.NotNull(delta);
@@ -204,22 +195,25 @@ public sealed class NormalizedHistoryRegressionTests
         var turnEnd = new PiTurnEndEvent { Message = assistant };
 
         await capture.CompleteAsync(toHistory(turnEnd), TestContext.Current.CancellationToken);
-        var snapshot = toUpdate(turnEnd);
-        Assert.NotNull(snapshot);
-        var handled = await capture.ProcessAsync(snapshot, TestContext.Current.CancellationToken);
-        await capture.FinishAsync(ConversationMessageState.Completed, TestContext.Current.CancellationToken);
+        Assert.Null(toUpdate(turnEnd));
+        await capture.FinishAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(handled);
-        var stored = Assert.Single(await fixture.ReadAsync(), message => message.Role == ChatRole.Assistant);
-        Assert.Equal(text, stored.Text);
-        Assert.Equal(error == null ? "completed" : "failed", stored.AdditionalProperties!["messageState"]!.ToString());
-        Assert.Equal(error, stored.Contents.OfType<ErrorContent>().SingleOrDefault()?.Message);
-        var live = Assert.Single(
-            NormalizedResponseAggregation.Aggregate(capture.Drain()).Messages,
-            message => message.Role == ChatRole.Assistant
+        var stored = await fixture.ReadAsync();
+        Assert.Equal(text, string.Concat(stored.Select(message => message.Text)));
+        Assert.All(
+            stored.Where(message => message.Role == ChatRole.Assistant),
+            message => Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(message))
         );
-        Assert.Equal(text, live.Text);
-        Assert.Equal(error, live.Contents.OfType<ErrorContent>().SingleOrDefault()?.Message);
+        Assert.Equal(
+            error,
+            stored.SelectMany(message => message.Contents).OfType<ErrorContent>().SingleOrDefault()?.Message
+        );
+        var live = capture.Drain().ToAgentResponse().Messages;
+        Assert.Equal(text, string.Concat(live.Select(message => message.Text)));
+        Assert.Equal(
+            error,
+            live.SelectMany(message => message.Contents).OfType<ErrorContent>().SingleOrDefault()?.Message
+        );
     }
 
     [Fact]
@@ -253,7 +247,7 @@ public sealed class NormalizedHistoryRegressionTests
                 ],
             }
         );
-        await capture.FinishAsync(ConversationMessageState.Completed, TestContext.Current.CancellationToken);
+        await capture.FinishAsync(TestContext.Current.CancellationToken);
 
         var stored = Assert.Single(await fixture.ReadAsync());
         Assert.Collection(
@@ -261,17 +255,14 @@ public sealed class NormalizedHistoryRegressionTests
             content => Assert.Equal("Checking ", Assert.IsType<TextContent>(content).Text),
             content => Assert.Equal("call", Assert.IsType<FunctionCallContent>(content).CallId)
         );
-        Assert.Equal("completed", stored.AdditionalProperties!["messageState"]!.ToString());
-        var live = Assert.Single(NormalizedResponseAggregation.Aggregate(capture.Drain()).Messages);
+        var live = Assert.Single(capture.Drain().ToAgentResponse().Messages);
         Assert.Equal(stored.MessageId, live.MessageId);
         Assert.Equal(stored.Text, live.Text);
         Assert.Single(live.Contents.OfType<FunctionCallContent>());
     }
 
-    [Theory]
-    [InlineData(ConversationMessageState.Interrupted)]
-    [InlineData(ConversationMessageState.Failed)]
-    public async Task FinishAsync_ClaudePartialCleanupCallback_PreservesIncompleteState(ConversationMessageState state)
+    [Fact]
+    public async Task FinishAsync_ClaudePartialCleanupCallback_PreservesModelHistory()
     {
         using var owner = EnterOwner();
         await using var fixture = await HistoryDatabase.CreateAsync();
@@ -281,16 +272,16 @@ public sealed class NormalizedHistoryRegressionTests
 
         var batch = processor.GetType().GetMethod("CompleteRun")!.Invoke(processor, null);
         await ApplyClaudeHistoryAsync(capture, batch);
-        await capture.FinishAsync(state, TestContext.Current.CancellationToken);
+        await capture.FinishAsync(TestContext.Current.CancellationToken);
 
         var stored = Assert.Single(await fixture.ReadAsync());
         Assert.Equal("partial", stored.Text);
-        Assert.Equal(state.ToString().ToLowerInvariant(), stored.AdditionalProperties!["messageState"]!.ToString());
-        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(stored));
+        Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(stored));
+        Assert.Equal("partial", capture.Drain().ToAgentResponse().Text);
     }
 
     [Fact]
-    public async Task FinishAsync_ClaudeCompletedMessageThenInterruption_PreservesBothStates()
+    public async Task FinishAsync_ClaudeCompletedMessageThenInterruption_PreservesBothMessages()
     {
         using var owner = EnterOwner();
         await using var fixture = await HistoryDatabase.CreateAsync();
@@ -318,16 +309,12 @@ public sealed class NormalizedHistoryRegressionTests
         await StartClaudeMessageAsync(processor, capture, "second", "partial");
 
         await ApplyClaudeHistoryAsync(capture, processor.GetType().GetMethod("CompleteRun")!.Invoke(processor, null));
-        await capture.FinishAsync(ConversationMessageState.Interrupted, TestContext.Current.CancellationToken);
+        await capture.FinishAsync(TestContext.Current.CancellationToken);
 
         var stored = await fixture.ReadAsync();
         Assert.Equal(["completed", "partial"], stored.Select(message => message.Text));
-        Assert.Equal(
-            ["completed", "interrupted"],
-            stored.Select(message => message.AdditionalProperties!["messageState"]!.ToString())
-        );
         Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(stored[0]));
-        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(stored[1]));
+        Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(stored[1]));
     }
 
     private static IDisposable EnterOwner() =>
@@ -412,7 +399,7 @@ public sealed class NormalizedHistoryRegressionTests
         );
     }
 
-    private sealed class HistoryDatabase : IAsyncDisposable
+    internal sealed class HistoryDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
         private readonly DbContextOptions<AgwDbContext> _options;
@@ -465,7 +452,10 @@ public sealed class NormalizedHistoryRegressionTests
             return fixture;
         }
 
-        public NormalizedChatHistoryProvider.Capture CreateCapture(IAgentMessageAdapter<AgentResponseUpdate> adapter) =>
+        public NormalizedChatHistoryProvider.Capture CreateCapture(
+            IAgentMessageAdapter<AgentResponseUpdate> adapter,
+            bool streaming = true
+        ) =>
             new(
                 new ConversationMessageWriteScope
                 {
@@ -478,7 +468,8 @@ public sealed class NormalizedHistoryRegressionTests
                 adapter,
                 TimeProvider.System,
                 true,
-                "test"
+                "test",
+                streaming
             );
 
         public IAsyncDisposable BeginPersistenceScope() =>

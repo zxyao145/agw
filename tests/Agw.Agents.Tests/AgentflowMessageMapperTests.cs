@@ -10,6 +10,98 @@ namespace Agw.Agents.Tests;
 
 public class AgentflowMessageMapperTests
 {
+    [Fact]
+    public void MapEvent_StreamedAndCompletedResponses_DeliversEachContentOnce()
+    {
+        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var updates = new[] { "a", "a", " ", "b" }
+            .Select(text => new AgentResponseUpdate(ChatRole.Assistant, text)
+            {
+                MessageId = "message",
+                AuthorName = "worker",
+            })
+            .ToArray();
+        var response = updates.ToAgentResponse();
+        var messages = updates
+            .SelectMany(update =>
+                AgentflowMessageMapper.MapEvent(new AgentResponseUpdateEvent("worker", update), delivered)
+            )
+            .ToList();
+
+        messages.AddRange(AgentflowMessageMapper.MapEvent(new AgentResponseEvent("worker", response), delivered));
+        messages.AddRange(AgentflowMessageMapper.MapEvent(new WorkflowOutputEvent(response, "worker"), delivered));
+
+        Assert.Equal(
+            ["a", "a", " ", "b"],
+            messages.Select(message => Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content)
+        );
+    }
+
+    [Fact]
+    public void MapEvent_FinalResponseContainsNewMessage_DeliversNewContent()
+    {
+        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var update = new AgentResponseUpdate(ChatRole.Assistant, "answer") { MessageId = "answer" };
+        Assert.Single(AgentflowMessageMapper.MapEvent(new AgentResponseUpdateEvent("worker", update), delivered));
+        var response = new[] { update }.ToAgentResponse();
+        response.Messages.Add(new ChatMessage(ChatRole.Assistant, "result") { MessageId = "result" });
+
+        var result = Assert.Single(
+            AgentflowMessageMapper.MapEvent(new AgentResponseEvent("worker", response), delivered)
+        );
+
+        Assert.Equal("result", result.MessageId);
+        Assert.Empty(AgentflowMessageMapper.MapEvent(new WorkflowOutputEvent(response, "worker"), delivered));
+    }
+
+    [Fact]
+    public void MapEvent_HeaderBeforeResponse_DeliversResponseContents()
+    {
+        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var header = new AgentResponseUpdate { MessageId = "answer", Role = ChatRole.Assistant };
+        Assert.Single(AgentflowMessageMapper.MapEvent(new AgentResponseUpdateEvent("worker", header), delivered));
+        var response = new AgentResponse([new ChatMessage(ChatRole.Assistant, "answer") { MessageId = "answer" }]);
+
+        var message = Assert.Single(
+            AgentflowMessageMapper.MapEvent(new AgentResponseEvent("worker", response), delivered)
+        );
+
+        Assert.Equal("answer", Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content);
+    }
+
+    [Fact]
+    public void MapEvent_OutputWithoutMessageIds_PreservesEveryMessage()
+    {
+        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var response = new AgentResponse([
+            new ChatMessage(ChatRole.Assistant, "first"),
+            new ChatMessage(ChatRole.Assistant, "second"),
+        ]);
+
+        var messages = AgentflowMessageMapper.MapEvent(new WorkflowOutputEvent(response, "worker"), delivered);
+
+        Assert.Equal(
+            ["first", "second"],
+            messages.Select(message => Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content)
+        );
+    }
+
+    [Fact]
+    public void MapEvent_OutputUpdatesWithoutPriorDelivery_AggregatesEveryDelta()
+    {
+        var delivered = new HashSet<(string MessageId, AiRole Role, string? Author)>();
+        var updates = new[] { "a", "b" }.Select(text => new AgentResponseUpdate(ChatRole.Assistant, text)
+        {
+            MessageId = "answer",
+        });
+
+        var message = Assert.Single(
+            AgentflowMessageMapper.MapEvent(new WorkflowOutputEvent(updates, "worker"), delivered)
+        );
+
+        Assert.Equal("ab", Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content);
+    }
+
     [Theory]
     [InlineData("message")]
     [InlineData("messages")]

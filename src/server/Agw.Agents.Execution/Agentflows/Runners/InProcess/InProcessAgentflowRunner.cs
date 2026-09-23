@@ -94,7 +94,7 @@ public sealed class InProcessAgentflowRunner
         {
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         }
-        var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
+        var deliveredMessages = new HashSet<(string MessageId, AiRole Role, string? Author)>();
         var pendingCheckpointRequests = new Dictionary<string, PendingCheckpointRequest>(StringComparer.Ordinal);
         // 每次显式 InProcess 恢复都携带本次 occurrence 的 Marker。
         var resumedCheckpointNodeIds =
@@ -230,8 +230,7 @@ public sealed class InProcessAgentflowRunner
                             updateEvt.ExecutorId,
                             updateEvt.Data
                         );
-                        executorsWithUpdates.Add(updateEvt.ExecutorId);
-                        foreach (var chatMsg in MapEvent(evt))
+                        foreach (var chatMsg in MapEvent(evt, deliveredMessages))
                         {
                             yield return chatMsg;
                         }
@@ -244,12 +243,7 @@ public sealed class InProcessAgentflowRunner
                             responseEvt.ExecutorId,
                             responseEvt.Data
                         );
-                        if (executorsWithUpdates.Contains(responseEvt.ExecutorId))
-                        {
-                            break;
-                        }
-
-                        foreach (var responseMsg in MapEvent(evt))
+                        foreach (var responseMsg in MapEvent(evt, deliveredMessages))
                         {
                             yield return responseMsg;
                         }
@@ -258,7 +252,7 @@ public sealed class InProcessAgentflowRunner
 
                     case WorkflowOutputEvent outputEvt:
                         _logger.LogInformation("Workflow output: {Data}", outputEvt.Data);
-                        foreach (var outputMessage in MapEvent(evt))
+                        foreach (var outputMessage in MapEvent(evt, deliveredMessages))
                         {
                             yield return outputMessage;
                         }
