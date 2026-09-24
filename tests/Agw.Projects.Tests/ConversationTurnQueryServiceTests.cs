@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 
@@ -64,6 +66,7 @@ public sealed class ConversationTurnQueryServiceTests : IAsyncLifetime
                 ConversationId = _conversationId,
                 Limit = 2,
                 BeforeSequence = first!.NextBeforeSequence,
+                BeforeTurnId = first.NextBeforeTurnId,
             },
             token
         );
@@ -72,9 +75,11 @@ public sealed class ConversationTurnQueryServiceTests : IAsyncLifetime
         Assert.Equal([_turnIds[2], _turnIds[1]], first.Items.Select(item => item.TurnId));
         Assert.True(first.HasMore);
         Assert.Equal(2, first.NextBeforeSequence);
+        Assert.Equal(_turnIds[1], first.NextBeforeTurnId);
         Assert.Equal([_turnIds[0]], second!.Items.Select(item => item.TurnId));
         Assert.False(second.HasMore);
         Assert.Null(second.NextBeforeSequence);
+        Assert.Null(second.NextBeforeTurnId);
         var latest = first.Items[0];
         Assert.Equal("completed", latest.Status);
         Assert.Equal("agent", latest.AgentType);
@@ -82,6 +87,96 @@ public sealed class ConversationTurnQueryServiceTests : IAsyncLifetime
         Assert.Equal(4, latest.FirstSequence);
         Assert.Equal(5, latest.LastSequence);
         Assert.Equal(_turnIds[2], latest.InputMessageId);
+    }
+
+    [Fact]
+    public async Task ListAsync_TurnsSharingFirstSequence_PagesReturnEveryTurnOnce()
+    {
+        // Arrange: turns without input write no message, so they and the next input turn share first_sequence 0.
+        var token = TestContext.Current.CancellationToken;
+        var conversationId = Guid.CreateVersion7();
+        await using (var seed = new AgwDbContext(_options))
+        {
+            Seed(seed, "tester", conversationId, turns: 0);
+            await seed.SaveChangesAsync(token);
+        }
+        var accepted = new List<Guid>();
+        for (var index = 0; index < 4; index++)
+        {
+            await using var context = new AgwDbContext(_options);
+            var turnId = Guid.CreateVersion7();
+            var input = index == 3 ? CreateInput(turnId) : null;
+            await new ConversationTurnStore(context, TimeProvider.System).AcceptAsync(
+                new AcceptConversationTurnRequest
+                {
+                    TurnId = turnId,
+                    ProjectId = await context
+                        .ProjectConversations.Where(conversation => conversation.Id == conversationId)
+                        .Select(conversation => conversation.ProjectId)
+                        .SingleAsync(token),
+                    ContextId = conversationId.ToString("N"),
+                    ConversationId = conversationId,
+                    Generation = 0,
+                    TargetId = Guid.CreateVersion7(),
+                    TargetType = ConversationTurnTargetType.Agentflow,
+                    Input = input,
+                },
+                token
+            );
+            accepted.Add(turnId);
+        }
+        await using var queryContext = new AgwDbContext(_options);
+        var service = new ConversationTurnQueryService(queryContext, _user);
+
+        // Act
+        var pages = new List<ConversationTurnPageResponse>();
+        ConversationTurnPageResponse? page = null;
+        do
+        {
+            page = await service.ListAsync(
+                new()
+                {
+                    ConversationId = conversationId,
+                    Limit = 1,
+                    BeforeSequence = page?.NextBeforeSequence,
+                    BeforeTurnId = page?.NextBeforeTurnId,
+                },
+                token
+            );
+            pages.Add(page!);
+        } while (page!.HasMore);
+
+        // Assert
+        var items = pages.SelectMany(item => item.Items).ToList();
+        Assert.All(items, item => Assert.Equal(0, item.FirstSequence));
+        Assert.Equal(accepted.Order(), items.Select(item => item.TurnId).Order());
+        Assert.Equal(4, pages.Count);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ListAsync_IncompleteCursor_ThrowsInvalidParam(bool withSequence, bool withTurnId)
+    {
+        // Arrange
+        await using var context = new AgwDbContext(_options);
+        var service = new ConversationTurnQueryService(context, _user);
+
+        // Act
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            service.ListAsync(
+                new()
+                {
+                    ConversationId = _conversationId,
+                    BeforeSequence = withSequence ? 2 : null,
+                    BeforeTurnId = withTurnId ? _turnIds[1] : null,
+                },
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        // Assert
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
     }
 
     [Fact]
@@ -217,6 +312,20 @@ public sealed class ConversationTurnQueryServiceTests : IAsyncLifetime
         if (owner == _user.UserId)
             _turnIds.AddRange(ids);
         return ids;
+    }
+
+    private ConversationTurnInput CreateInput(Guid turnId)
+    {
+        var messageId = Guid.CreateVersion7();
+        return new ConversationTurnInput(
+            messageId,
+            _started,
+            "user",
+            JsonSerializer.Serialize(
+                new ChatMessage(ChatRole.User, $"request for {turnId:N}") { MessageId = messageId.ToString("D") },
+                PayloadJsonOptions
+            )
+        );
     }
 
     private ProjectConversationChatHistory CreateRow(

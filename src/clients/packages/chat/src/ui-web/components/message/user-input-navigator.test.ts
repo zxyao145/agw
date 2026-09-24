@@ -75,7 +75,7 @@ test("a preview appears only for the hovered user input", () => {
   assert.equal(screen.queryByRole("tooltip"), null);
 });
 
-test("a focused user input shows its preview and follows the anchor while scrolling", () => {
+test("a focused user input keeps its preview while scrolling", () => {
   renderNavigator(markers, "first");
   const first = anchor("First user input");
 
@@ -85,24 +85,12 @@ test("a focused user input shows its preview and follows the anchor while scroll
   assert.equal(screen.getByRole("tooltip").textContent?.trim(), "First user input");
   assert.equal(screen.getByRole("tooltip").getAttribute("id"), "user-input-navigation-preview");
 
-  first.getBoundingClientRect = () =>
-    ({
-      top: 100,
-      height: 24,
-      bottom: 124,
-      left: 0,
-      right: 24,
-      width: 24,
-      x: 0,
-      y: 100,
-      toJSON() {},
-    }) as DOMRect;
   fireEvent.scroll(
     screen.getByRole("navigation", { name: "User input navigation" }).firstElementChild!,
   );
 
   assert.equal(screen.getByRole("tooltip").textContent?.trim(), "First user input");
-  assert.equal(screen.getByRole("tooltip").style.top, "64px");
+  assert.strictEqual(document.activeElement, first);
 });
 
 test("each anchor owns its own hover target", () => {

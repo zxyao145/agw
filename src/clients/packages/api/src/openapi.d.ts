@@ -2973,6 +2973,7 @@ export interface paths {
         query?: {
           conversationId?: string;
           beforeSequence?: number | string;
+          beforeTurnId?: string;
           limit?: number;
         };
         header?: never;
@@ -5538,13 +5539,15 @@ export interface components {
       items: components["schemas"]["ConversationTurnMessageResponse"][];
     };
     /**
-     * @description 按 first_sequence 倒序的一页 Turn；NextBeforeSequence 用作下一页的 beforeSequence。
-     *     One page of turns in descending first_sequence order; NextBeforeSequence is the beforeSequence of the next page.
+     * @description 按 first_sequence 倒序、同一序号内按 turnId 倒序的一页 Turn；NextBeforeSequence 与 NextBeforeTurnId 分别用作下一页的 beforeSequence 与 beforeTurnId。
+     *     One page of turns in descending first_sequence order, then descending turnId within one sequence; NextBeforeSequence and NextBeforeTurnId are the beforeSequence and beforeTurnId of the next page.
      */
     ConversationTurnPageResponse: {
       items: components["schemas"]["ConversationTurnResponse"][];
       /** Format: int64 */
       nextBeforeSequence: null | number | string;
+      /** Format: uuid */
+      nextBeforeTurnId: null | string;
       hasMore: boolean;
     };
     /**

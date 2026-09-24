@@ -2,6 +2,7 @@ using Agw.Auth.Contracts;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -29,13 +30,23 @@ public sealed class ConversationTurnQueryService
     )
     {
         ArgumentNullException.ThrowIfNull(query);
+        if (query.BeforeSequence.HasValue != query.BeforeTurnId.HasValue)
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "beforeSequence and beforeTurnId must be provided together."
+            );
         if (!await IsOwnedConversationAsync(query.ConversationId, cancellationToken).ConfigureAwait(false))
             return null;
         var turns = _dbContext
             .ProjectConversationTurns.AsNoTracking()
             .Where(turn => turn.ProjectConversationId == query.ConversationId);
-        if (query.BeforeSequence is { } before)
-            turns = turns.Where(turn => turn.FirstSequence < before);
+        // 没有输入的 Turn 不写入消息，后续 Turn 可能与它共用 first_sequence；游标按 (first_sequence, turnId) 与排序一致。
+        // A turn without input writes no message, so a later turn can share its first_sequence; the cursor follows the (first_sequence, turnId) order.
+        if (query.BeforeSequence is { } beforeSequence && query.BeforeTurnId is { } beforeTurnId)
+            turns = turns.Where(turn =>
+                turn.FirstSequence < beforeSequence
+                || turn.FirstSequence == beforeSequence && turn.Id.CompareTo(beforeTurnId) < 0
+            );
         var page = await turns
             .OrderByDescending(turn => turn.FirstSequence)
             .ThenByDescending(turn => turn.Id)
@@ -55,6 +66,7 @@ public sealed class ConversationTurnQueryService
         return new ConversationTurnPageResponse(
             page.Select(turn => ToResponse(turn, inputs.GetValueOrDefault(turn.InputMessageId))).ToList(),
             hasMore ? page[^1].FirstSequence : null,
+            hasMore ? page[^1].Id : null,
             hasMore
         );
     }

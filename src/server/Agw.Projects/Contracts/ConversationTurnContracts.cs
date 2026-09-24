@@ -9,11 +9,18 @@ public sealed record ConversationTurnListQuery
     public Guid ConversationId { get; init; }
 
     /// <summary>
-    /// 只返回 first_sequence 小于该值的 Turn；为空时从最近的 Turn 开始。
-    /// Returns only turns whose first_sequence is below this value; empty starts from the latest turn.
+    /// 与 BeforeTurnId 一起组成游标，取自上一页的 NextBeforeSequence；只返回排在该游标之后的 Turn。两者都为空时从最近的 Turn 开始。
+    /// Forms the cursor together with BeforeTurnId, taken from the previous page's NextBeforeSequence; only turns ordered after the cursor are returned. Both empty starts from the latest turn.
     /// </summary>
     [FromQuery(Name = "beforeSequence")]
     public long? BeforeSequence { get; init; }
+
+    /// <summary>
+    /// 游标中的 Turn ID，取自上一页的 NextBeforeTurnId；必须与 BeforeSequence 同时提供。
+    /// The turn ID of the cursor, taken from the previous page's NextBeforeTurnId; must be provided together with BeforeSequence.
+    /// </summary>
+    [FromQuery(Name = "beforeTurnId")]
+    public Guid? BeforeTurnId { get; init; }
 
     [FromQuery(Name = "limit")]
     [Range(1, 100)]
@@ -50,12 +57,13 @@ public sealed record ConversationTurnResponse(
 );
 
 /// <summary>
-/// 按 first_sequence 倒序的一页 Turn；NextBeforeSequence 用作下一页的 beforeSequence。
-/// One page of turns in descending first_sequence order; NextBeforeSequence is the beforeSequence of the next page.
+/// 按 first_sequence 倒序、同一序号内按 turnId 倒序的一页 Turn；NextBeforeSequence 与 NextBeforeTurnId 分别用作下一页的 beforeSequence 与 beforeTurnId。
+/// One page of turns in descending first_sequence order, then descending turnId within one sequence; NextBeforeSequence and NextBeforeTurnId are the beforeSequence and beforeTurnId of the next page.
 /// </summary>
 public sealed record ConversationTurnPageResponse(
     IReadOnlyList<ConversationTurnResponse> Items,
     long? NextBeforeSequence,
+    Guid? NextBeforeTurnId,
     bool HasMore
 );
 
