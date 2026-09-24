@@ -597,7 +597,7 @@ div[role="option"]:hover {
 }
 
 .agw-msg-user {
-  @apply max-w-[80%] rounded-lg bg-[#f3f3f4] px-3 py-3 text-[#17191d];
+  @apply max-w-[80%] rounded-lg bg-[#f3f5fc] px-3 py-3 text-[#17191d];
 }
 
 .agw-msg-result {
