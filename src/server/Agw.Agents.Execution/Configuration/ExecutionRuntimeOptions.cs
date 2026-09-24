@@ -16,6 +16,12 @@ public sealed class ExecutionRuntimeOptions
     public ExecutionProvider Provider { get; set; } = ExecutionProvider.InProcess;
 
     /// <summary>
+    /// Turn 结束后回放缓冲在实例内保留的秒数。
+    /// Seconds the replay buffer of a finished turn stays in the instance.
+    /// </summary>
+    public int TurnBroadcastRetentionSeconds { get; set; } = 300;
+
+    /// <summary>
     /// 获取或设置分布式执行协调配置。
     /// </summary>
     public DistributedExecutionOptions Distributed { get; set; } = new();
@@ -37,15 +43,16 @@ public sealed class DistributedExecutionOptions
     public int MaxConcurrentExecutions { get; set; } = 4;
 
     /// <summary>
-    /// 获取或设置 Running 状态在允许其他 Server 尝试恢复前的静默秒数。
-    /// PostgreSQL 分布式锁仍是最终排他依据，因此长任务不会因超过该时间而并发执行。
+    /// Segment 租约时长秒数；租约到期后其他实例可以接管。
+    /// The segment lease duration in seconds; another instance may take over once it expires.
     /// </summary>
-    public int RecoveryProbeSeconds { get; set; } = 30;
+    public int LeaseSeconds { get; set; } = 30;
 
     /// <summary>
-    /// 获取或设置竞争 execution 分布式锁时的最长等待毫秒数。
+    /// 续期间隔秒数，必须小于租约时长。
+    /// The renewal interval in seconds, which must be shorter than the lease duration.
     /// </summary>
-    public int LockAcquireTimeoutMilliseconds { get; set; } = 500;
+    public int LeaseRenewSeconds { get; set; } = 10;
 
     /// <summary>
     /// 获取或设置 distributed execution 的消息回放实现及其公共参数。
@@ -54,28 +61,33 @@ public sealed class DistributedExecutionOptions
 }
 
 /// <summary>
-/// Distributed execution 可选的消息回放实现。
+/// Distributed execution 事件的读取来源。事件总是在 PostgreSQL 中随租约检查事务提交。
+/// The read source of distributed execution events. Events always commit in PostgreSQL within lease-checked transactions.
 /// </summary>
 public enum ExecutionEventStreamProvider
 {
     /// <summary>
-    /// 使用 PostgreSQL append-only 表持久化并回放消息。
+    /// 只从 PostgreSQL 读取已提交的事件。
+    /// Reads committed events from PostgreSQL only.
     /// </summary>
     Postgres = 0,
 
     /// <summary>
-    /// 使用 Redis Stream 持久化并回放消息。
+    /// 已提交的事件同时投影到 Redis Stream，读取优先使用投影，缺少的部分从 PostgreSQL 补齐。
+    /// Committed events are also projected to a Redis Stream; reads prefer the projection and fill missing parts from PostgreSQL.
     /// </summary>
     Redis = 1,
 }
 
 /// <summary>
-/// Distributed execution 消息回放的实现选择与公共读取参数。
+/// Distributed execution 事件的读取来源、批量提交与读取参数。
+/// The read source, batched commits and read settings of distributed execution events.
 /// </summary>
 public sealed class ExecutionEventStreamOptions
 {
     /// <summary>
-    /// 获取或设置消息回放实现；默认使用 PostgreSQL，因此集群部署不强制引入 Redis。
+    /// 获取或设置事件读取来源；默认只使用 PostgreSQL，因此集群部署不强制引入 Redis。
+    /// Gets or sets the event read source; PostgreSQL alone is the default, so cluster deployments do not require Redis.
     /// </summary>
     public ExecutionEventStreamProvider Provider { get; set; } = ExecutionEventStreamProvider.Postgres;
 

@@ -518,7 +518,7 @@ public class ProjectConversationAppServiceTests
             AuthorName = "tools",
             AdditionalProperties = new AdditionalPropertiesDictionary
             {
-                ["type"] = ToolMessageTypes.TodoSnapshot,
+                ["type"] = AgwMessageTypes.ToolTodoSnapshot,
                 ["items"] = Array.Empty<object>(),
             },
         };
@@ -544,7 +544,7 @@ public class ProjectConversationAppServiceTests
 
         var message = Assert.Single(page!.Items);
         Assert.Equal("tools", message.Author);
-        Assert.Equal(ToolMessageTypes.TodoSnapshot, message.AdditionalProperties!["type"]?.ToString());
+        Assert.Equal(AgwMessageTypes.ToolTodoSnapshot, message.AdditionalProperties!["type"]?.ToString());
     }
 
     [Fact]

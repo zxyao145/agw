@@ -3,8 +3,8 @@ using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
-using Agw.Tools.HumanInteraction;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -36,6 +36,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     private readonly Guid? _agentflowId;
     private readonly string? _traceNodeId;
     private readonly Guid? _agentId;
+    private readonly EngineKind? _engineKind;
     private readonly bool _isWorkflow;
 
     /// <summary>
@@ -86,6 +87,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     /// <para>是否包装嵌套 Workflow，决定输入转换和输出观察的处理路径。</para>
     /// <para>Whether a nested workflow is wrapped, selecting input conversion and output-observation behavior.</para>
     /// </param>
+    /// <param name="engineKind">
+    /// <para>节点引用的 Agent 的 Engine 种类；嵌套 Workflow 为空。</para>
+    /// <para>Engine kind of the Agent referenced by the node; null for nested workflows.</para>
+    /// </param>
     public AgentflowNodeScopedAgent(
         AIAgent innerAgent,
         string nodeId,
@@ -97,10 +102,12 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         string? traceNodeId = null,
         Guid? agentId = null,
         string? historyNodeId = null,
-        bool isWorkflow = false
+        bool isWorkflow = false,
+        EngineKind? engineKind = null
     )
         : base(innerAgent)
     {
+        _engineKind = engineKind;
         _nodeId = nodeId;
         _historyNodeId = historyNodeId ?? nodeId;
         _name = name;
@@ -184,9 +191,13 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         try
         {
             await ObserveInputsAsync(turn.Input, cancellationToken).ConfigureAwait(false);
-            var response = await InnerAgent
-                .RunAsync(turn.Input, turn.Session, turn.Options, cancellationToken)
-                .ConfigureAwait(false);
+            AgentResponse response;
+            using (turn.Scope.Push())
+            {
+                response = await InnerAgent
+                    .RunAsync(turn.Input, turn.Session, turn.Options, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             AddNodeAttribution(response.Messages, turn.InteractionNodeId);
             turnPersistence.RecordRange(response.Messages);
             UpdatePendingFunctionCallIds(
@@ -260,8 +271,12 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         try
         {
             await ObserveInputsAsync(turn.Input, cancellationToken).ConfigureAwait(false);
-            await using var enumerator = InnerAgent
-                .RunStreamingAsync(turn.Input, turn.Session, turn.Options, cancellationToken)
+            // 节点作用域覆盖内层调用的完整流式枚举，每次推进后恢复父作用域。
+            // The node scope covers the whole streaming enumeration of the inner call and restores the parent after each step.
+            await using var enumerator = turn
+                .Scope.RunStreaming(
+                    InnerAgent.RunStreamingAsync(turn.Input, turn.Session, turn.Options, cancellationToken)
+                )
                 .GetAsyncEnumerator(cancellationToken);
             while (true)
             {
@@ -344,10 +359,9 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         CancellationToken cancellationToken
     )
     {
-        var scopedOptions = CreateInteractionOptions(options);
-        var interactionNodeId = (
-            (InteractionSource)scopedOptions.AdditionalProperties![HumanInteractionToolMetadata.SourceKey]!
-        ).NodeId;
+        var nodeScope = CreateNodeScope();
+        var scopedOptions = ExecutionRunOptions.With(options, nodeScope.Context);
+        var interactionNodeId = nodeScope.Context.Node!.NodeId;
         // 在节点作用域中准备会话，并恢复待完成调用，确保审批继续执行沿用同一状态。
         // Prepare the node-scoped session and restore pending calls so approval continuations keep the same state.
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
@@ -361,6 +375,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
         return new NodeTurn(
+            nodeScope,
             scopedOptions,
             interactionNodeId,
             scopedSession,
@@ -462,33 +477,28 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// <para>复制执行选项，并把当前节点追加到父交互路径，同时写入 Provider 审批作用域。</para>
-    /// <para>Clones run options, appends the current node to the parent interaction path, and records the provider approval scope.</para>
+    /// <para>从父执行作用域派生本次节点执行的子作用域：节点路径追加到父节点之后，并带上 Provider 审批作用域。</para>
+    /// <para>Derives this node execution's child scope from the parent execution scope, appending the node to the parent path and carrying the provider approval scope.</para>
     /// </summary>
-    /// <param name="options">
-    /// <para>本次调用选项；为空时由后续执行层处理默认值。</para>
-    /// <para>Options for this call; downstream execution handles defaults when null.</para>
-    /// </param>
     /// <returns>
-    /// <para>包含节点交互来源及 Provider 审批作用域的选项副本。</para>
-    /// <para>Options copy containing node interaction attribution and provider approval scope.</para>
+    /// <para>当前执行者为节点引用 Agent 的子作用域。</para>
+    /// <para>Child scope whose executor is the Agent referenced by the node.</para>
     /// </returns>
-    private AgentRunOptions CreateInteractionOptions(AgentRunOptions? options)
+    private ExecutionScope CreateNodeScope()
     {
-        var scoped = options?.Clone() ?? new AgentRunOptions();
-        scoped.AdditionalProperties ??= [];
-        var parent =
-            scoped.AdditionalProperties.TryGetValue(HumanInteractionToolMetadata.SourceKey, out var value)
-            && value is InteractionSource source
-                ? source.NodeId
-                : null;
-        scoped.AdditionalProperties[HumanInteractionToolMetadata.SourceKey] = new InteractionSource
-        {
-            NodeId = string.IsNullOrWhiteSpace(parent) ? _nodeId : $"{parent}/{_nodeId}",
-            NodeName = _name,
-            ProviderScopeId = MafApprovalAdapter.GetWorkflowRequestScope(this),
-        };
-        return scoped;
+        var parent = ExecutionScope.Required;
+        var parentNodeId = parent.Context.Node?.NodeId;
+        return parent.CreateNodeScope(
+            new AgentflowNodeExecution(
+                _agentflowId ?? parent.Context.TurnTargetId,
+                string.IsNullOrWhiteSpace(parentNodeId) ? _nodeId : $"{parentNodeId}/{_nodeId}",
+                _name,
+                ActivationIndex: 0,
+                MafApprovalAdapter.GetWorkflowRequestScope(this)
+            ),
+            _agentId,
+            _engineKind
+        );
     }
 
     /// <summary>
@@ -858,6 +868,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     private sealed class NodeTurn
     {
         public NodeTurn(
+            ExecutionScope scope,
             AgentRunOptions options,
             string? interactionNodeId,
             AgentSession session,
@@ -867,6 +878,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             ToolTurnPersistence turnPersistence
         )
         {
+            Scope = scope;
             Options = options;
             InteractionNodeId = interactionNodeId;
             Session = session;
@@ -875,6 +887,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             Activity = activity;
             TurnPersistence = turnPersistence;
         }
+
+        public ExecutionScope Scope { get; }
 
         public AgentRunOptions Options { get; }
 

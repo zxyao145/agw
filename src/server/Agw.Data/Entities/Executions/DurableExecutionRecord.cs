@@ -10,12 +10,12 @@ namespace Agw.Shared.Data.Entities.Executions;
 public enum DurableExecutionStatus
 {
     /// <summary>
-    /// 已登记，等待任一 Server 获取分布式锁并开始执行。
+    /// 已登记但入口没有本地执行能力，等待 Worker 领取。
     /// </summary>
     Queued = 0,
 
     /// <summary>
-    /// 某个 Server 正持有分布式锁并执行当前分段。
+    /// 某个实例持有租约并执行当前分段。
     /// </summary>
     Running = 1,
 
@@ -54,7 +54,7 @@ public enum DurableExecutionStatus
 public sealed class DurableExecutionRecord : BaseEntity
 {
     /// <summary>
-    /// 获取或设置业务 executionId，同时也是跨 Server 分布式锁的资源标识。
+    /// 获取或设置 turnId，与 project_conversation_turn.id 相同。
     /// </summary>
     public Guid Id { get; set; }
 
@@ -112,7 +112,7 @@ public sealed class DurableExecutionRecord : BaseEntity
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// 获取或设置最近一次状态转换的 UTC 时间，用于发现进程退出后遗留的 Running 记录。
+    /// 获取或设置最近一次状态转换的 UTC 时间，Worker 按它的先后领取可运行记录。
     /// </summary>
     public DateTimeOffset StateChangedAt { get; set; }
 
@@ -120,4 +120,35 @@ public sealed class DurableExecutionRecord : BaseEntity
     /// 获取或设置状态行的乐观并发版本，用于避免中断请求被执行结果覆盖。
     /// </summary>
     public Guid StateVersion { get; set; }
+
+    /// <summary>
+    /// 当前持有 Segment 的实例标识；与 LeaseEpoch 一起定义租约持有者。
+    /// The instance currently holding the segment; together with LeaseEpoch it defines the lease holder.
+    /// </summary>
+    public string? WorkerId { get; set; }
+
+    /// <summary>
+    /// 领取编号，每次领取加一；全部执行写入以 WorkerId + LeaseEpoch 与有效租约为条件。
+    /// The claim number, incremented on every claim; every execution write is conditional on WorkerId + LeaseEpoch and a valid lease.
+    /// </summary>
+    public long LeaseEpoch { get; set; }
+
+    /// <summary>
+    /// 租约到期时间，按数据库时间计算。
+    /// The lease expiry, computed in database time.
+    /// </summary>
+    public DateTimeOffset? LeaseExpiresAt { get; set; }
+
+    /// <summary>
+    /// 本 Turn 已提交的最大事件序号，与对应事件在同一事务中递增和提交。
+    /// The largest committed event sequence of the turn, incremented and committed in the same transaction as its events.
+    /// </summary>
+    public long LastEventSequence { get; set; }
+
+    /// <summary>
+    /// Agent Turn 在 Step 边界的存档。
+    /// The Agent turn checkpoint at a Step boundary.
+    /// </summary>
+    [Encrypted]
+    public string? TurnCheckpointJson { get; set; }
 }

@@ -61,9 +61,6 @@ internal sealed class InteractionRequestRegistry : IInteractionRequestRegistry
     public UserInputInteraction? Find(string providerRequestId, string scopeId) =>
         _requests.GetValueOrDefault((scopeId, providerRequestId));
 
-    public bool IsUserInputCall(string nodeId, string callId) =>
-        _requests.Values.Any(request => request.Source.NodeId == nodeId && request.Source.CallId == callId);
-
     public IReadOnlyList<UserInputInteraction> Snapshot() =>
         _requests.Values.OrderBy(item => item.InteractionId, StringComparer.Ordinal).ToArray();
 }

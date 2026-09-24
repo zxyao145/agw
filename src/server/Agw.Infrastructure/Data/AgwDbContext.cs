@@ -24,6 +24,7 @@ using Agw.Tools.Application.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Agw.Infrastructure.Data;
 
@@ -122,6 +123,7 @@ public partial class AgwDbContext
     public DbSet<ProjectConversationBinding> ProjectConversationBindings => Set<ProjectConversationBinding>();
     public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories =>
         Set<ProjectConversationChatHistory>();
+    public DbSet<ProjectConversationTurn> ProjectConversationTurns => Set<ProjectConversationTurn>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
 
@@ -272,6 +274,15 @@ public partial class AgwDbContext
                 .Entity<ProjectConversationChatHistory>()
                 .Property(history => history.Metadata)
                 .HasColumnType("jsonb");
+        }
+        else
+        {
+            // SQLite 不能比较文本形式的 DateTimeOffset；租约到期时间保存为可比较的 64 位整数。
+            // SQLite cannot compare DateTimeOffset text; the lease expiry is stored as a comparable 64-bit integer.
+            modelBuilder
+                .Entity<DurableExecutionRecord>()
+                .Property(execution => execution.LeaseExpiresAt)
+                .HasConversion(new DateTimeOffsetToBinaryConverter());
         }
     }
 

@@ -9,14 +9,14 @@ namespace Agw.Agents.Tests;
 public class AgentRequestsTests
 {
     [Theory]
-    [InlineData(ExternalAgentKind.None, false)]
-    [InlineData(ExternalAgentKind.None, true)]
-    [InlineData(ExternalAgentKind.ClaudeCode, true)]
-    [InlineData(ExternalAgentKind.Codex, true)]
-    [InlineData(ExternalAgentKind.Pi, true)]
-    [InlineData(ExternalAgentKind.Pi, false)]
+    [InlineData(EngineKind.Maf, false)]
+    [InlineData(EngineKind.Maf, true)]
+    [InlineData(EngineKind.ClaudeCode, true)]
+    [InlineData(EngineKind.Codex, true)]
+    [InlineData(EngineKind.Pi, true)]
+    [InlineData(EngineKind.Pi, false)]
     public void FromDomain_AgentResponses_ReportEffectiveSummaryWithoutChangingStoredConfiguration(
-        ExternalAgentKind kind,
+        EngineKind kind,
         bool enableSummary
     )
     {
@@ -24,7 +24,7 @@ public class AgentRequestsTests
         var summaryModelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
-            Type = kind == ExternalAgentKind.None ? AgentType.System : AgentType.External,
+            Type = kind == EngineKind.Maf ? AgentType.System : AgentType.External,
             ExternalAgentKind = kind,
             EnableSummary = enableSummary,
             SummaryModelProviderId = summaryModelProviderId,
@@ -110,21 +110,21 @@ public class AgentRequestsTests
             "",
             null,
             Type: AgentType.External,
-            ExternalAgentKind: ExternalAgentKind.ClaudeCode,
+            ExternalAgentKind: EngineKind.ClaudeCode,
             Extra: "{\"model\":\"claude-sonnet\"}"
         );
         var response = AgentResponse.FromDomain(
             new Agent
             {
                 Type = AgentType.External,
-                ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+                ExternalAgentKind = EngineKind.ClaudeCode,
                 Extra = createRequest.Extra,
             }
         );
 
         Assert.Equal(AgentType.External, createRequest.Type);
-        Assert.Equal(ExternalAgentKind.ClaudeCode, createRequest.ExternalAgentKind);
-        Assert.Equal(ExternalAgentKind.ClaudeCode, response.ExternalAgentKind);
+        Assert.Equal(EngineKind.ClaudeCode, createRequest.ExternalAgentKind);
+        Assert.Equal(EngineKind.ClaudeCode, response.ExternalAgentKind);
         Assert.Equal(createRequest.Extra, response.Extra);
     }
 

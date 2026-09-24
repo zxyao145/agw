@@ -803,6 +803,7 @@ public sealed partial class BackendArchitectureTests
         ["ProjectConnectionRelation"] = "Agw.Projects",
         ["ProjectConversation"] = "Agw.Projects",
         ["ProjectConversationChatHistory"] = "Agw.Projects",
+        ["ProjectConversationTurn"] = "Agw.Projects",
         ["ProjectMcpServerRelation"] = "Agw.Projects",
         ["ProjectSkillRelation"] = "Agw.Projects",
         ["ProjectConversationBinding"] = "Agw.Projects",

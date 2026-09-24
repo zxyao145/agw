@@ -5,8 +5,8 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 
 /// <summary>
-/// <para>在 SDK 调用边界刷新权限、同步会话审批状态并记录可复用授权。</para>
-/// <para>Refreshes permissions, synchronizes session approval state, and records reusable grants at the SDK call boundary.</para>
+/// <para>在 SDK 调用边界按本轮权限快照同步会话审批状态并记录可复用授权。</para>
+/// <para>Synchronizes session approval state from the turn permission snapshot and records reusable grants at the SDK call boundary.</para>
 /// </summary>
 /// <remarks>
 /// <para>不改写 SDK 审批队列；只持久化带有效授权范围的已批准函数响应。权限同步发生在转发内层调用之前。</para>
@@ -35,8 +35,8 @@ internal sealed class MafApprovalGrantAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// <para>在执行前刷新权限和可复用授权，然后转发原始请求。</para>
-    /// <para>Refreshes permissions and reusable grants before forwarding the original request.</para>
+    /// <para>在执行前同步权限和可复用授权，然后转发原始请求。</para>
+    /// <para>Synchronizes permissions and reusable grants before forwarding the original request.</para>
     /// </summary>
     /// <param name="messages">
     /// <para>按调用顺序提供的聊天消息。</para>
@@ -66,13 +66,13 @@ internal sealed class MafApprovalGrantAgent : DelegatingAIAgent
     )
     {
         var input = messages.ToArray();
-        await ApplyAsync(input, session, cancellationToken).ConfigureAwait(false);
+        Apply(input, session);
         return await InnerAgent.RunAsync(input, session, options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// <para>在执行前刷新权限和可复用授权，然后转发原始请求。</para>
-    /// <para>Refreshes permissions and reusable grants before forwarding the original request.</para>
+    /// <para>在执行前同步权限和可复用授权，然后转发原始请求。</para>
+    /// <para>Synchronizes permissions and reusable grants before forwarding the original request.</para>
     /// </summary>
     /// <param name="messages">
     /// <para>按调用顺序提供的聊天消息。</para>
@@ -102,7 +102,7 @@ internal sealed class MafApprovalGrantAgent : DelegatingAIAgent
     )
     {
         var input = messages.ToArray();
-        await ApplyAsync(input, session, cancellationToken).ConfigureAwait(false);
+        Apply(input, session);
         await foreach (
             var update in InnerAgent.RunStreamingAsync(input, session, options, cancellationToken).ConfigureAwait(false)
         )
@@ -110,8 +110,8 @@ internal sealed class MafApprovalGrantAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// <para>刷新交互权限、同步并应用会话权限模式，再记录带有效范围的已批准函数响应。</para>
-    /// <para>Refreshes interaction permissions, synchronizes and applies the session permission mode, then records approved function responses with valid scopes.</para>
+    /// <para>按本轮权限快照同步并应用会话权限模式，再记录带有效范围的已批准函数响应。</para>
+    /// <para>Synchronizes and applies the session permission mode from the turn snapshot, then records approved function responses with valid scopes.</para>
     /// </summary>
     /// <param name="messages">
     /// <para>按调用顺序提供的聊天消息。</para>
@@ -121,22 +121,8 @@ internal sealed class MafApprovalGrantAgent : DelegatingAIAgent
     /// <para>当前 SDK 会话；可以为空，相关状态处理会按方法规则跳过或委托内层。</para>
     /// <para>Current SDK session; may be null, with state handling skipped or delegated according to the method contract.</para>
     /// </param>
-    /// <param name="cancellationToken">
-    /// <para>用于取消当前异步操作的令牌。</para>
-    /// <para>Token used to cancel the current asynchronous operation.</para>
-    /// </param>
-    /// <returns>
-    /// <para>表示上述异步处理完成的任务。</para>
-    /// <para>Task representing completion of the asynchronous operation described above.</para>
-    /// </returns>
-    private async ValueTask ApplyAsync(
-        IEnumerable<ChatMessage> messages,
-        AgentSession? session,
-        CancellationToken cancellationToken
-    )
+    private void Apply(IEnumerable<ChatMessage> messages, AgentSession? session)
     {
-        if (_interactions is not null)
-            await _interactions.RefreshPermissionsAsync(cancellationToken).ConfigureAwait(false);
         if (session is null)
             return;
         // 先同步最新权限模式，再应用或记录授权，避免旧模式的授权继续生效。

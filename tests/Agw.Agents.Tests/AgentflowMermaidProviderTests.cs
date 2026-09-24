@@ -4,7 +4,7 @@ using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Theory]
     [InlineData(true)]

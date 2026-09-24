@@ -16,6 +16,10 @@ internal static class MafApprovalAdapter
 {
     internal const string GrantScopeProperty = "Agw.ToolApproval.Grant";
 
+    // 用户输入的结构化回答随原生批准响应一起保存在审批批次中。
+    // The structured user-input answer travels with the native approval response and is saved in the approval batch.
+    internal const string UserInputResponseProperty = "Agw.HumanInteraction.Response";
+
     // MAF names an agent's request port after its executor binding, not its business node ID.
     internal static string GetWorkflowRequestScope(AIAgent agent) => $"{agent.BindAsExecutor().Id}_UserInput";
 
@@ -81,8 +85,15 @@ internal static class MafApprovalAdapter
     {
         // The approval envelope is a resume mechanism for input tools. A cancelled input
         // must still reach that tool's cancellation branch, without invoking its inner action.
-        if (response is UserInputResponse)
-            return request.CreateResponse(approved: true);
+        if (response is UserInputResponse input)
+        {
+            var resume = request.CreateResponse(approved: true);
+            resume.AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                [UserInputResponseProperty] = JsonSerializer.SerializeToElement(input, WebJsonOptions.Default),
+            };
+            return resume;
+        }
         if (response is not ToolApprovalDecision decision)
             throw new AgwException(ErrorCodes.InvalidParam, "A tool interaction response is required.");
         var approval = request.CreateResponse(approved: decision.Approved);

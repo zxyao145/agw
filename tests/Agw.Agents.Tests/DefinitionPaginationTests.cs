@@ -276,7 +276,7 @@ public class DefinitionPaginationTests
             new Agent
             {
                 Type = AgentType.External,
-                ExternalAgentKind = ExternalAgentKind.Pi,
+                ExternalAgentKind = EngineKind.Pi,
                 Name = "",
                 DisplayName = "before",
             },
@@ -289,7 +289,7 @@ public class DefinitionPaginationTests
         Assert.NotNull(agent);
         Assert.NotEqual(Guid.Empty, agent.Id);
         Assert.Equal(agent.Id.ToString(), agent.Name);
-        Assert.Equal(ExternalAgentKind.Pi, agent.ExternalAgentKind);
+        Assert.Equal(EngineKind.Pi, agent.ExternalAgentKind);
         Assert.False(string.IsNullOrWhiteSpace(agent.Extra));
         Assert.Equal("tester", agent.CreateBy);
         Assert.Equal(createdAt, agent.CreateTime);
@@ -345,7 +345,7 @@ public class DefinitionPaginationTests
             new Agent
             {
                 Type = AgentType.External,
-                ExternalAgentKind = ExternalAgentKind.Codex,
+                ExternalAgentKind = EngineKind.Codex,
                 Name = "codex-reviewer",
                 DisplayName = "Codex Reviewer",
             },
@@ -357,7 +357,7 @@ public class DefinitionPaginationTests
             new Agent
             {
                 Type = AgentType.External,
-                ExternalAgentKind = ExternalAgentKind.Codex,
+                ExternalAgentKind = EngineKind.Codex,
                 Name = "codex-coder",
                 DisplayName = "Codex Coder",
                 Extra = "{}",
@@ -370,8 +370,8 @@ public class DefinitionPaginationTests
         Assert.NotNull(reviewer);
         Assert.NotNull(coder);
         Assert.NotEqual(reviewer.Id, coder.Id);
-        Assert.Equal(ExternalAgentKind.Codex, reviewer.ExternalAgentKind);
-        Assert.Equal(ExternalAgentKind.Codex, coder.ExternalAgentKind);
+        Assert.Equal(EngineKind.Codex, reviewer.ExternalAgentKind);
+        Assert.Equal(EngineKind.Codex, coder.ExternalAgentKind);
         Assert.False(string.IsNullOrWhiteSpace(reviewer.Extra));
         Assert.Equal(reviewer.Extra, coder.Extra);
         Assert.Equal(

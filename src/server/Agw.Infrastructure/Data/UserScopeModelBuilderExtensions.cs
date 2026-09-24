@@ -273,6 +273,21 @@ internal static class UserScopeModelBuilderExtensions
                             )
             );
         modelBuilder
+            .Entity<ProjectConversationTurn>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                turn =>
+                    context.UserScopeBypass
+                    || context.UserScopeIsActive
+                        && context
+                            .Set<ProjectConversation>()
+                            .Any(conversation =>
+                                conversation.Id == turn.ProjectConversationId
+                                && conversation.CreateBy == context.CurrentUserId
+                                && conversation.Project!.CreateBy == context.CurrentUserId
+                            )
+            );
+        modelBuilder
             .Entity<ProjectConversationBinding>()
             .HasQueryFilter(
                 UserScopeQueryFilterNames.UserScope,
@@ -400,9 +415,7 @@ internal static class UserScopeModelBuilderExtensions
                     || context.UserScopeIsActive
                         && context
                             .Set<DurableExecutionRecord>()
-                            .Any(execution =>
-                                execution.Id == entry.ExecutionId && execution.UserId == context.CurrentUserId
-                            )
+                            .Any(execution => execution.Id == entry.TurnId && execution.UserId == context.CurrentUserId)
             );
     }
 

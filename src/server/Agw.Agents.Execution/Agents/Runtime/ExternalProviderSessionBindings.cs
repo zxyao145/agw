@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Runtime;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
@@ -19,8 +20,7 @@ public sealed class ExternalProviderSessionBindings
         _logger = logger;
     }
 
-    internal static bool UsesProviderSessionBinding(Agent agent) =>
-        ExternalAgentKindResolver.Resolve(agent) is not ExternalAgentKind.None;
+    internal static bool UsesProviderSessionBinding(Agent agent) => EngineKinds.Resolve(agent) is not EngineKind.Maf;
 
     public async Task<Guid?> GetExternalProviderSessionIdAsync(
         Agent agent,
@@ -40,7 +40,7 @@ public sealed class ExternalProviderSessionBindings
                 contextId,
                 agent.Id,
                 agent.Name,
-                ConversationSessionContext.GetGeneration(projectId, contextId)
+                ExecutionContextSlot.FindBound(projectId, contextId)?.Generation ?? 0
             ),
             cancellationToken
         );
@@ -71,13 +71,13 @@ public sealed class ExternalProviderSessionBindings
         bool requestedResume
     )
     {
-        var kind = ExternalAgentKindResolver.Resolve(agent);
-        if (kind == ExternalAgentKind.ClaudeCode)
+        var kind = EngineKinds.Resolve(agent);
+        if (kind == EngineKind.ClaudeCode)
         {
             return (persistedProviderSessionId ?? Guid.NewGuid(), persistedProviderSessionId.HasValue);
         }
 
-        if (kind is ExternalAgentKind.Codex or ExternalAgentKind.Pi)
+        if (kind is EngineKind.Codex or EngineKind.Pi)
         {
             return (persistedProviderSessionId, persistedProviderSessionId.HasValue);
         }

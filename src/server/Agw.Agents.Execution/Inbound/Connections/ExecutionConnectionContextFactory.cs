@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
+using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
@@ -20,32 +21,32 @@ internal sealed class ExecutionConnectionContextFactory : IAsyncDisposable
     private readonly IServiceProvider _serviceProvider;
     private AsyncServiceScope? _runtimeScope;
     private readonly IProjectTaskFacade _projectTasks;
-    private readonly IProjectRuntimeFacade _projects;
     private readonly ExecutionProvider _executionProvider;
     private readonly DurableExecutionCoordinator? _durableCoordinator;
     private readonly AgentflowCheckpointStore _checkpointStore;
     private readonly IProjectDefaultResolver _projectDefaults;
     private readonly ExecutionPermissionService _permissions;
+    private readonly TurnAcceptanceService _acceptance;
 
     /// <summary>
     /// 初始化连接上下文工厂，并只在启用 Distributed 时解析其协调器。
     /// </summary>
     public ExecutionConnectionContextFactory(
         IProjectTaskFacade projectTasks,
-        IProjectRuntimeFacade projects,
         IProjectDefaultResolver projectDefaults,
         IOptions<ExecutionRuntimeOptions> executionOptions,
+        TurnAcceptanceService acceptance,
         IServiceProvider serviceProvider
     )
     {
         _permissions = serviceProvider.GetRequiredService<ExecutionPermissionService>();
         _serviceProvider = serviceProvider;
         _projectTasks = projectTasks;
-        _projects = projects;
         _projectDefaults = projectDefaults;
         _executionProvider = executionOptions.Value.Provider;
         _durableCoordinator = serviceProvider.GetService<DurableExecutionCoordinator>();
         _checkpointStore = serviceProvider.GetRequiredService<AgentflowCheckpointStore>();
+        _acceptance = acceptance;
     }
 
     /// <summary>
@@ -57,34 +58,34 @@ internal sealed class ExecutionConnectionContextFactory : IAsyncDisposable
         CancellationToken hostToken
     )
     {
-        var durableSession =
-            _executionProvider == ExecutionProvider.Distributed
-                ? new DurableExecutionSession(
-                    userId,
-                    messageSink,
-                    hostToken,
-                    _durableCoordinator
-                        ?? throw new AgwException(
-                            ErrorCodes.DurableExecutionUnavailable,
-                            "Durable execution services are not configured."
-                        )
-                )
-                : null;
-        // Commands remain on the connection scope while an InProcess turn runs in the background.
-        // Keep their scoped persistence services separate so both paths can query concurrently.
-        if (_executionProvider == ExecutionProvider.InProcess)
+        InProcessExecutionCoordinatorFactory? inProcessCoordinators = null;
+        DurableExecutionCoordinator? durableCoordinator = null;
+        if (_executionProvider == ExecutionProvider.Distributed)
         {
-            _runtimeScope ??= _serviceProvider.CreateAsyncScope();
+            durableCoordinator =
+                _durableCoordinator
+                ?? throw new AgwException(
+                    ErrorCodes.DurableExecutionUnavailable,
+                    "Durable execution services are not configured."
+                );
         }
-        var runtimeFactory = (_runtimeScope?.ServiceProvider ?? _serviceProvider).GetRequiredService<IRuntimeFactory>();
+        else
+        {
+            // Commands remain on the connection scope while an InProcess turn runs in the background.
+            // Keep their scoped persistence services separate so both paths can query concurrently.
+            _runtimeScope ??= _serviceProvider.CreateAsyncScope();
+            inProcessCoordinators =
+                _runtimeScope.Value.ServiceProvider.GetRequiredService<InProcessExecutionCoordinatorFactory>();
+        }
+
         return new ExecutionConnectionContext(
             userId,
             messageSink,
             hostToken,
-            runtimeFactory,
+            _acceptance,
             _projectTasks,
-            _projects,
-            durableSession,
+            inProcessCoordinators,
+            durableCoordinator,
             _checkpointStore,
             _projectDefaults,
             _permissions

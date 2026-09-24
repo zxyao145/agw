@@ -192,11 +192,11 @@ public class AgentSuggestionAppServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode, "custom-claude", AgentSuggestionMode.ClaudeCode)]
-    [InlineData(ExternalAgentKind.Codex, AgentNames.ClaudeCode, AgentSuggestionMode.Unsupported)]
-    [InlineData(ExternalAgentKind.Pi, "custom-pi", AgentSuggestionMode.Unsupported)]
+    [InlineData(EngineKind.ClaudeCode, "custom-claude", AgentSuggestionMode.ClaudeCode)]
+    [InlineData(EngineKind.Codex, AgentNames.ClaudeCode, AgentSuggestionMode.Unsupported)]
+    [InlineData(EngineKind.Pi, "custom-pi", AgentSuggestionMode.Unsupported)]
     public async Task GetSuggestionsAsync_ExternalAgent_ReturnsExpectedMode(
-        ExternalAgentKind externalAgentKind,
+        EngineKind externalAgentKind,
         string agentName,
         AgentSuggestionMode expectedMode
     )

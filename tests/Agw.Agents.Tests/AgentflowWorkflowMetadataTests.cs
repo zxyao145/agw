@@ -3,7 +3,7 @@ using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Theory]
     [InlineData("streaming")]
@@ -41,7 +41,7 @@ public partial class AgentflowRuntimeServiceTests
                 break;
             case "durable":
                 var manifest = CreateManifest(fixture.Flow.Id);
-                var result = await fixture.Service.ExecuteDurableSegmentAsync(
+                var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                     manifest,
                     new(manifest.ExecutionId, 0, [], null),
                     new RecordingSegmentSink(),

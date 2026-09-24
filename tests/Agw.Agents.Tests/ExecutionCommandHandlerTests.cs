@@ -1,6 +1,3 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
@@ -11,25 +8,35 @@ using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable;
-using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Utils;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public partial class ExecutionCommandHandlerTests
+public partial class ExecutionCommandHandlerTests : IAsyncLifetime
 {
+    private static readonly TimeSpan TurnTimeout = TimeSpan.FromSeconds(10);
+    private readonly TestExecutionAgents _agents = new();
+    private readonly InProcessCoordinatorTestKit _kit = new();
+    private TurnPersistenceTestKit _persistence = null!;
+
+    public async ValueTask InitializeAsync() => _persistence = await TurnPersistenceTestKit.CreateAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        _agents.Dispose();
+        await _persistence.DisposeAsync();
+    }
+
+    private TestAgentRuntimeFactory Runtimes => _kit.Runtimes;
+
     [Fact]
     public async Task SettingCommand_ChangedSettings_ReleasesRuntimeAndClearsResolvedState()
     {
         var task = CreateTask("old");
-        var runtimeFactory = new FakeRuntimeFactory();
-        var context = CreateContext(runtimeFactory, task);
+        var context = CreateContext(task);
         var handler = new SettingCommandHandler();
         await handler.HandleAsync(
             new SettingCommand(task.ProjectId, contextId: "old"),
@@ -37,9 +44,8 @@ public partial class ExecutionCommandHandlerTests
             TestContext.Current.CancellationToken
         );
         await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
-        var runtime = Assert.IsType<TestRuntime>(
-            runtimeFactory.StartRequests[0].CurrentRuntime ?? runtimeFactory.CreatedRuntimes[0]
-        );
+        await context.WhenIdleAsync();
+        var runtime = Assert.Single(Runtimes.Created);
 
         await handler.HandleAsync(
             new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
@@ -47,7 +53,7 @@ public partial class ExecutionCommandHandlerTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.True(runtime.Disposed);
+        Assert.True(runtime.IsDisposed);
         Assert.Null(context.ResolvedTask);
         Assert.Null(context.Workspace);
         Assert.Null(context.Target);
@@ -60,14 +66,15 @@ public partial class ExecutionCommandHandlerTests
     {
         var sink = new CapturingSink();
         var task = CreateTask("current");
-        var runtimeFactory = new FakeRuntimeFactory { HoldTurnOpen = true };
-        var context = CreateContext(runtimeFactory, task, sink: sink);
+        Runtimes.HoldTurnOpen = true;
+        var context = CreateContext(task, sink: sink);
         var current = new SettingCommand(task.ProjectId, contextId: "current");
         await context.ApplySettingsAsync(
             SettingCommandMapper.FromCommand(current),
             TestContext.Current.CancellationToken
         );
         await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await new SettingCommandHandler().HandleAsync(
             new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
@@ -80,8 +87,8 @@ public partial class ExecutionCommandHandlerTests
             Assert.Single(sink.Messages, message => message.Contents[0] is AgwErrorContent).Contents[0]
         );
 
-        runtimeFactory.CompleteHeldTurn();
-        await runtimeFactory.CreatedRuntimes[0].WhenIdleAsync();
+        Runtimes.ReleaseHeldTurns();
+        await context.WhenIdleAsync();
         await context.DisposeAsync();
     }
 
@@ -90,8 +97,8 @@ public partial class ExecutionCommandHandlerTests
     {
         var sink = new CapturingSink();
         var task = CreateTask("current");
-        var runtimeFactory = new FakeRuntimeFactory { HoldTurnOpen = true };
-        var context = CreateContext(runtimeFactory, task, sink: sink);
+        Runtimes.HoldTurnOpen = true;
+        var context = CreateContext(task, sink: sink);
         var handler = new SettingCommandHandler();
         await handler.HandleAsync(
             new SettingCommand(task.ProjectId, contextId: "current"),
@@ -99,6 +106,7 @@ public partial class ExecutionCommandHandlerTests
             TestContext.Current.CancellationToken
         );
         await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await handler.HandleAsync(
             new SettingCommand(task.ProjectId, contextId: "current"),
@@ -108,8 +116,8 @@ public partial class ExecutionCommandHandlerTests
 
         Assert.DoesNotContain(sink.Messages, message => message.Contents.Any(content => content is AgwErrorContent));
 
-        runtimeFactory.CompleteHeldTurn();
-        await runtimeFactory.CreatedRuntimes[0].WhenIdleAsync();
+        Runtimes.ReleaseHeldTurns();
+        await context.WhenIdleAsync();
         await context.DisposeAsync();
     }
 
@@ -117,7 +125,7 @@ public partial class ExecutionCommandHandlerTests
     public async Task InterruptCommand_WithoutActiveTurn_SendsSystemMessageAndInterruptedFinish()
     {
         var sink = new CapturingSink();
-        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("unused"), sink: sink);
+        await using var context = CreateContext(CreateTask("unused"), sink: sink);
 
         await new InterruptCommandHandler().HandleAsync(
             new InterruptCommand { Reason = "nothing running" },
@@ -131,24 +139,24 @@ public partial class ExecutionCommandHandlerTests
                 Assert.Equal("nothing running", Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
             message =>
             {
-                Assert.Equal("turn-finished", message.AdditionalProperties!["type"]);
+                Assert.Equal(AgwMessageTypes.TurnFinished, message.AdditionalProperties!["type"]);
                 Assert.Equal("interrupted", message.AdditionalProperties["status"]);
             }
         );
     }
 
     [Fact]
-    public async Task DurableSession_InterruptWithoutActiveExecution_SendsInterruptedFinish()
+    public async Task DurableAttachment_InterruptWithoutActiveExecution_SendsInterruptedFinish()
     {
         var sink = new CapturingSink();
-        await using var session = new DurableExecutionSession(
+        await using var attachment = new DurableExecutionAttachment(
             "user-id",
             sink,
             CancellationToken.None,
             coordinator: null!
         );
 
-        await session.InterruptAsync(executionId: null, "nothing running", TestContext.Current.CancellationToken);
+        await attachment.InterruptAsync(executionId: null, "nothing running", TestContext.Current.CancellationToken);
 
         Assert.Collection(
             sink.Messages,
@@ -156,7 +164,7 @@ public partial class ExecutionCommandHandlerTests
                 Assert.Equal("nothing running", Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
             message =>
             {
-                Assert.Equal("turn-finished", message.AdditionalProperties!["type"]);
+                Assert.Equal(AgwMessageTypes.TurnFinished, message.AdditionalProperties!["type"]);
                 Assert.Equal("interrupted", message.AdditionalProperties["status"]);
             }
         );
@@ -165,26 +173,29 @@ public partial class ExecutionCommandHandlerTests
     [Fact]
     public async Task InterruptCommand_WithActiveTurn_ForwardsCancellation()
     {
-        var runtimeFactory = new FakeRuntimeFactory { HoldTurnOpen = true };
-        await using var context = CreateContext(runtimeFactory, CreateTask("active"));
+        var sink = new CapturingSink();
+        Runtimes.HoldTurnOpen = true;
+        await using var context = CreateContext(CreateTask("active"), sink: sink);
         await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await new InterruptCommandHandler().HandleAsync(
             new InterruptCommand { Reason = "stop" },
             context,
             TestContext.Current.CancellationToken
         );
+        await context.WhenIdleAsync();
 
-        Assert.True(runtimeFactory.HeldTurnCancellation!.IsCancellationRequested);
-        runtimeFactory.CompleteHeldTurn();
-        await runtimeFactory.CreatedRuntimes[0].WhenIdleAsync();
+        Assert.True(Assert.Single(Runtimes.Agents).Canceled);
+        var finished = Assert.Single(sink.Messages, AgwMessageClassifier.IsTurnFinished);
+        Assert.Equal("interrupted", finished.AdditionalProperties!["status"]);
     }
 
     [Fact]
     public async Task HumanResponseCommand_WithoutPendingGate_SendsExistingSystemMessage()
     {
         var sink = new CapturingSink();
-        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("unused"), sink: sink);
+        await using var context = CreateContext(CreateTask("unused"), sink: sink);
 
         await new HumanResponseCommandHandler().HandleAsync(
             new HumanResponseCommand(new WorkflowGateDecision { InteractionId = "missing", Approved = true }),
@@ -200,9 +211,8 @@ public partial class ExecutionCommandHandlerTests
     public async Task SetModeCommand_BeforeRuntime_IsAppliedBeforeFirstTurn()
     {
         var sink = new CapturingSink();
-        var runtimeFactory = new FakeRuntimeFactory();
         var agentId = Guid.CreateVersion7();
-        await using var context = CreateContext(runtimeFactory, CreateTask("mode-context"), sink: sink);
+        await using var context = CreateContext(CreateTask("mode-context"), sink: sink);
 
         await new SetModeCommandHandler().HandleAsync(
             new SetModeCommand { AgentId = agentId, Mode = "execute" },
@@ -210,13 +220,13 @@ public partial class ExecutionCommandHandlerTests
             TestContext.Current.CancellationToken
         );
         await context.StartTurnAsync(CreateExecCommand(agentId), TestContext.Current.CancellationToken);
+        await context.WhenIdleAsync();
 
-        Assert.Equal("execute", Assert.Single(runtimeFactory.StartRequests).RequestedMode);
+        Assert.Equal(["execute"], Runtimes.ModeChanges);
         var status = Assert.Single(
             sink.Messages,
-            message => message.AdditionalProperties?["type"]?.ToString() == "mode-status"
+            message => AgwMessageClassifier.GetMessageType(message) == AgwMessageTypes.ModeStatus
         );
-        Assert.Equal("mode-status", status.AdditionalProperties?["type"]?.ToString());
         Assert.Equal("execute", status.AdditionalProperties?["mode"]?.ToString());
     }
 
@@ -224,10 +234,11 @@ public partial class ExecutionCommandHandlerTests
     public async Task SetModeCommand_DuringActiveTurn_AppliesLatestModeAfterTurnFinishes()
     {
         var sink = new CapturingSink();
-        var runtimeFactory = new ModeTestRuntimeFactory();
         var agentId = Guid.CreateVersion7();
-        await using var context = CreateContext(runtimeFactory, CreateTask("mode-context"), sink: sink);
+        Runtimes.HoldTurnOpen = true;
+        await using var context = CreateContext(CreateTask("mode-context"), sink: sink);
         await context.StartTurnAsync(CreateExecCommand(agentId), TestContext.Current.CancellationToken);
+        await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var handler = new SetModeCommandHandler();
 
         await handler.HandleAsync(
@@ -241,16 +252,15 @@ public partial class ExecutionCommandHandlerTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.Empty(runtimeFactory.ModeChanges);
-        runtimeFactory.CompleteHeldTurn();
-        await runtimeFactory.Runtime.WhenIdleAsync();
+        Assert.Empty(Runtimes.ModeChanges);
+        Runtimes.ReleaseHeldTurns();
+        await context.WhenIdleAsync();
 
-        Assert.Equal(["execute"], runtimeFactory.ModeChanges);
+        Assert.Equal(["execute"], Runtimes.ModeChanges);
         var status = Assert.Single(
             sink.Messages,
-            message => message.AdditionalProperties?["type"]?.ToString() == "mode-status"
+            message => AgwMessageClassifier.GetMessageType(message) == AgwMessageTypes.ModeStatus
         );
-        Assert.Equal("mode-status", status.AdditionalProperties?["type"]?.ToString());
         Assert.Equal("execute", status.AdditionalProperties?["mode"]?.ToString());
     }
 
@@ -259,7 +269,7 @@ public partial class ExecutionCommandHandlerTests
     [InlineData("unknown")]
     public async Task SetModeCommand_InvalidMode_ThrowsInvalidParam(string mode)
     {
-        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("mode-context"));
+        await using var context = CreateContext(CreateTask("mode-context"));
 
         var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
             new SetModeCommandHandler().HandleAsync(
@@ -275,7 +285,7 @@ public partial class ExecutionCommandHandlerTests
     [Fact]
     public async Task SetPermissionModeCommand_BeforeRuntime_UpdatesSettings()
     {
-        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("permission-context"));
+        await using var context = CreateContext(CreateTask("permission-context"));
 
         await new SetPermissionModeCommandHandler().HandleAsync(
             new SetPermissionModeCommand { PermissionMode = AgwPermissionMode.AllowSameArguments },
@@ -289,9 +299,10 @@ public partial class ExecutionCommandHandlerTests
     [Fact]
     public async Task SetPermissionModeCommand_DuringActiveTurn_OnlyUpdatesNextTurn()
     {
-        var runtimeFactory = new PermissionTestRuntimeFactory();
-        await using var context = CreateContext(runtimeFactory, CreateTask("permission-context"));
+        Runtimes.HoldTurnOpen = true;
+        await using var context = CreateContext(CreateTask("permission-context"));
         await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await new SetPermissionModeCommandHandler().HandleAsync(
             new SetPermissionModeCommand { PermissionMode = AgwPermissionMode.FullAccess },
@@ -300,46 +311,49 @@ public partial class ExecutionCommandHandlerTests
         );
 
         Assert.Equal(AgwPermissionMode.FullAccess, context.Settings!.PermissionMode);
-        Assert.Empty(runtimeFactory.ActiveChanges);
-        Assert.Empty(runtimeFactory.RuntimeChanges);
+        var active = Assert.Single(Runtimes.TurnContexts);
+        Assert.Null(active.PermissionMode);
 
-        runtimeFactory.CompleteHeldTurn();
-        await runtimeFactory.Runtime.WhenIdleAsync();
+        Runtimes.ReleaseHeldTurns();
+        await context.WhenIdleAsync();
     }
 
     [Fact]
     public async Task PermissionChanges_ApplyOnNextTurnAndRevokeOnReturnToOriginalMode()
     {
         var sink = new CapturingSink();
-        var factory = new PermissionTestRuntimeFactory();
         var task = CreateTask("permission-snapshot");
-        await using var context = CreateContext(factory, task, sink: sink);
+        Runtimes.HoldTurnOpen = true;
+        await using var context = CreateContext(task, sink: sink);
         await context.ApplySettingsAsync(
             ExecutionSettings.CreateDefault().WithPermissionMode(AgwPermissionMode.AlwaysAsk),
             TestContext.Current.CancellationToken
         );
         var command = CreateExecCommand(Guid.NewGuid());
         await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
-        var original = Assert.Single(factory.TurnSettings);
+        await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
+        var original = Assert.Single(Runtimes.TurnContexts);
         await context.SetPermissionModeAsync(AgwPermissionMode.FullAccess, TestContext.Current.CancellationToken);
         await context.SetPermissionModeAsync(AgwPermissionMode.AlwaysAsk, TestContext.Current.CancellationToken);
-        factory.CompleteHeldTurn();
-        await factory.Runtime.WhenIdleAsync();
-        Assert.Equal(AgwPermissionMode.AlwaysAsk, original.PermissionMode);
-        Assert.Empty(factory.ActiveChanges);
-        Assert.Equal(original.PermissionVersion + 2, context.Settings!.PermissionVersion);
         var status = sink.Messages.Last(message =>
-            message.AdditionalProperties?["type"]?.ToString() == "permission-status"
+            AgwMessageClassifier.GetMessageType(message) == AgwMessageTypes.PermissionStatus
         );
+        Runtimes.HoldTurnOpen = false;
+        Runtimes.ReleaseHeldTurns();
+        await context.WhenIdleAsync();
+
+        Assert.Equal(AgwPermissionMode.AlwaysAsk, original.PermissionMode);
+        Assert.Equal(original.PermissionVersion + 2, context.Settings!.PermissionVersion);
         Assert.Equal(true, status.AdditionalProperties!["permissionChangePending"]);
-        await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
-        Assert.Equal(context.Settings.PermissionVersion, factory.TurnSettings[1].PermissionVersion);
+        await context.StartTurnAsync(CreateNextCommand(command), TestContext.Current.CancellationToken);
+        await context.WhenIdleAsync();
+        Assert.Equal(context.Settings.PermissionVersion, Runtimes.TurnContexts[1].PermissionVersion);
     }
 
     [Fact]
     public async Task SetPermissionModeCommand_MissingMode_ThrowsInvalidParam()
     {
-        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("permission-context"));
+        await using var context = CreateContext(CreateTask("permission-context"));
 
         var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
             new SetPermissionModeCommandHandler().HandleAsync(
@@ -356,50 +370,49 @@ public partial class ExecutionCommandHandlerTests
     public async Task ExecCommand_ReusesTaskAndRuntimeButReloadsWorkspaceEachTurn()
     {
         var task = CreateTask("resolved");
-        var projectTasks = new FakeProjectTaskFacade(task);
-        var projects = new FakeProjectRuntimeFacade("~/.agw/temp");
-        var runtimeFactory = new FakeRuntimeFactory();
-        await using var context = CreateContext(runtimeFactory, task, projectTasks: projectTasks, projects: projects);
+        var projectTasks = new FakeProjectTaskFacade(task, _persistence);
+        var projects = new FakeProjectRuntimeFacade(AppContext.BaseDirectory);
+        await using var context = CreateContext(task, projectTasks: projectTasks, projects: projects);
         var command = CreateExecCommand(Guid.CreateVersion7());
         var handler = new ExecCommandHandler();
 
         await handler.HandleAsync(command, context, TestContext.Current.CancellationToken);
-        await handler.HandleAsync(command, context, TestContext.Current.CancellationToken);
+        await context.WhenIdleAsync();
+        await handler.HandleAsync(CreateNextCommand(command), context, TestContext.Current.CancellationToken);
+        await context.WhenIdleAsync();
 
         Assert.Equal(1, projectTasks.ResolveCount);
         Assert.Equal(2, projects.GetCount);
-        Assert.Equal(2, runtimeFactory.StartRequests.Count);
-        Assert.Null(runtimeFactory.StartRequests[0].CurrentRuntime);
-        Assert.Same(runtimeFactory.CreatedRuntimes[0], runtimeFactory.StartRequests[1].CurrentRuntime);
+        Assert.Equal(2, Runtimes.TurnContexts.Count);
+        Assert.Single(Runtimes.Created);
     }
 
     [Fact]
     public async Task ExecCommand_ChangedTarget_ReleasesPreviousRuntime()
     {
-        var runtimeFactory = new FakeRuntimeFactory();
-        await using var context = CreateContext(runtimeFactory, CreateTask("resolved"));
+        await using var context = CreateContext(CreateTask("resolved"));
         var handler = new ExecCommandHandler();
         var firstCommand = CreateExecCommand(Guid.CreateVersion7());
 
         await handler.HandleAsync(firstCommand, context, TestContext.Current.CancellationToken);
-        var previous = runtimeFactory.CreatedRuntimes[0];
+        await context.WhenIdleAsync();
+        var previous = Assert.Single(Runtimes.Created);
         var secondCommand = CreateExecCommand(Guid.CreateVersion7());
         secondCommand.ConversationId = firstCommand.ConversationId;
         await handler.HandleAsync(secondCommand, context, TestContext.Current.CancellationToken);
+        await context.WhenIdleAsync();
 
-        Assert.True(previous.Disposed);
-        Assert.Null(runtimeFactory.StartRequests[1].CurrentRuntime);
+        Assert.True(previous.IsDisposed);
+        Assert.Equal(2, Runtimes.Created.Count);
     }
 
     [Fact]
-    public async Task ExecCommand_ProjectWorkspaceWithTilde_AddsExpandedAbsoluteWorkspaceToTurnContext()
+    public async Task ExecCommand_ProjectWorkspaceWithTilde_AddsExpandedAbsoluteWorkspaceToExecutionContext()
     {
-        var runtimeFactory = new FakeRuntimeFactory();
         var task = CreateTask("resolved");
-        var projectTasks = new FakeProjectTaskFacade(task);
-        const string configuredWorkspace = "~/.agw/runtime-context-test";
+        var projectTasks = new FakeProjectTaskFacade(task, _persistence);
+        const string configuredWorkspace = "~";
         await using var context = CreateContext(
-            runtimeFactory,
             task,
             projectTasks: projectTasks,
             projects: new FakeProjectRuntimeFacade(configuredWorkspace)
@@ -407,17 +420,22 @@ public partial class ExecutionCommandHandlerTests
         var command = CreateExecCommand(Guid.CreateVersion7());
 
         await new ExecCommandHandler().HandleAsync(command, context, TestContext.Current.CancellationToken);
+        await context.WhenIdleAsync();
 
         var expectedWorkspace = Path.GetFullPath(PathUtil.ExpandTilde(configuredWorkspace));
-        var turnContext = Assert.Single(runtimeFactory.StartRequests).TurnContext;
-        Assert.Equal(expectedWorkspace, turnContext.Workspace);
-        Assert.Equal(turnContext.Task.ProjectId, turnContext.ProjectId);
-        Assert.Equal(turnContext.Target.AgentId, turnContext.AgentId);
-        Assert.Equal(turnContext.ProjectId, context.ProjectId);
-        Assert.Equal(turnContext.ProjectConversationId, context.ProjectConversationId);
-        Assert.Equal(turnContext.AgentId, context.AgentId);
+        var execution = Assert.Single(Runtimes.TurnContexts);
+        Assert.Equal(expectedWorkspace, execution.WorkspaceSnapshot.Workspace);
+        Assert.Equal(task.ProjectId, execution.ProjectId);
+        Assert.Equal(command.AgentId, execution.AgentId);
+        Assert.Equal(command.AgentId, execution.TurnTargetId);
+        Assert.Equal(command.ExecutionId, execution.TurnId);
+        Assert.Equal(EngineKind.Maf, execution.EngineKind);
+        Assert.Equal(ExecutionProvider.InProcess, execution.Provider);
+        Assert.Equal(execution.ProjectId, context.ProjectId);
+        Assert.Equal(execution.ProjectConversationId, context.ProjectConversationId);
+        Assert.Equal(execution.AgentId, context.AgentId);
         Assert.Equal("user-id", context.UserId);
-        Assert.Equal("user-id", turnContext.UserId);
+        Assert.Equal("user-id", execution.UserId);
         Assert.Equal("user-id", projectTasks.LastRequest?.OwnerUserId);
         Assert.Equal(command.ConversationId, projectTasks.LastRequest?.ConversationId);
     }
@@ -426,9 +444,8 @@ public partial class ExecutionCommandHandlerTests
     public async Task ExecCommand_WithoutConversationId_DoesNotResolveTaskOrStartRuntime()
     {
         var task = CreateTask("resolved");
-        var projectTasks = new FakeProjectTaskFacade(task);
-        var runtimeFactory = new FakeRuntimeFactory();
-        await using var context = CreateContext(runtimeFactory, task, projectTasks: projectTasks);
+        var projectTasks = new FakeProjectTaskFacade(task, _persistence);
+        await using var context = CreateContext(task, projectTasks: projectTasks);
         var command = CreateExecCommand(Guid.CreateVersion7());
         command.ConversationId = null;
 
@@ -438,16 +455,15 @@ public partial class ExecutionCommandHandlerTests
 
         Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
         Assert.Equal(0, projectTasks.ResolveCount);
-        Assert.Empty(runtimeFactory.StartRequests);
+        Assert.Empty(Runtimes.Created);
     }
 
     [Fact]
     public async Task ExecCommand_WithEmptyConversationId_DoesNotResolveTaskOrStartRuntime()
     {
         var task = CreateTask("resolved");
-        var projectTasks = new FakeProjectTaskFacade(task);
-        var runtimeFactory = new FakeRuntimeFactory();
-        await using var context = CreateContext(runtimeFactory, task, projectTasks: projectTasks);
+        var projectTasks = new FakeProjectTaskFacade(task, _persistence);
+        await using var context = CreateContext(task, projectTasks: projectTasks);
         var command = CreateExecCommand(Guid.CreateVersion7());
         command.ConversationId = Guid.Empty;
 
@@ -457,30 +473,47 @@ public partial class ExecutionCommandHandlerTests
 
         Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
         Assert.Equal(0, projectTasks.ResolveCount);
-        Assert.Empty(runtimeFactory.StartRequests);
+        Assert.Empty(Runtimes.Created);
     }
 
-    private static ExecutionConnectionContext CreateContext(
-        IRuntimeFactory runtimeFactory,
+    private ExecutionConnectionContext CreateContext(
         AgentExecutionTask task,
         IExecutionMessageSink? sink = null,
         IProjectTaskFacade? projectTasks = null,
         IProjectRuntimeFacade? projects = null
-    ) =>
-        new(
+    )
+    {
+        projectTasks ??= new FakeProjectTaskFacade(task, _persistence);
+        return new(
             "user-id",
             sink ?? new CapturingSink(),
             CancellationToken.None,
-            runtimeFactory,
-            projectTasks ?? new FakeProjectTaskFacade(task),
-            projects ?? new FakeProjectRuntimeFacade("~/.agw/temp")
+            _persistence.CreateAcceptance(
+                projectTasks,
+                projects ?? new FakeProjectRuntimeFacade(AppContext.BaseDirectory)
+            ),
+            projectTasks,
+            _kit.CreateFactory(_agents.ContextFactory, _persistence),
+            durableCoordinator: null
         );
+    }
 
-    private static ExecCommand CreateExecCommand(Guid agentId) =>
+    private ExecCommand CreateExecCommand(Guid agentId) =>
         new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [new AgwTextContent { Content = "hello" }] })
         {
-            AgentId = agentId,
+            AgentId = _agents.Add(agentId),
             ConversationId = Guid.CreateVersion7(),
+        };
+
+    /// <summary>
+    /// 同一对话的下一条命令：客户端每个 Turn 发送新的 ExecCommand，不带 turnId 时由服务端分配。
+    /// The next command of the same conversation: clients send a new ExecCommand per turn, and the server assigns the turnId when it is absent.
+    /// </summary>
+    private static ExecCommand CreateNextCommand(ExecCommand previous) =>
+        new(previous.AgentType, new AgwUserInput { Contents = [new AgwTextContent { Content = "hello" }] })
+        {
+            AgentId = previous.AgentId,
+            ConversationId = previous.ConversationId,
         };
 
     private static AgentExecutionTask CreateTask(string contextId) =>
@@ -494,45 +527,6 @@ public partial class ExecutionCommandHandlerTests
             CreateTime = TimeProvider.System.GetUtcNow(),
         };
 
-    private sealed class FakeRuntimeFactory : IRuntimeFactory
-    {
-        private TaskCompletionSource? _heldTurnCompletion;
-
-        public bool HoldTurnOpen { get; init; }
-
-        public CancellationTokenSource? HeldTurnCancellation { get; private set; }
-
-        public List<RuntimeStartRequest> StartRequests { get; } = [];
-
-        public List<TestRuntime> CreatedRuntimes { get; } = [];
-
-        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
-        {
-            StartRequests.Add(request);
-            var runtime = request.CurrentRuntime as TestRuntime;
-            if (runtime == null)
-            {
-                runtime = new TestRuntime();
-                CreatedRuntimes.Add(runtime);
-            }
-
-            if (!HoldTurnOpen)
-            {
-                return Task.FromResult(
-                    new RuntimeStartResult(runtime, new ActiveTurn(Task.CompletedTask, new CancellationTokenSource()))
-                );
-            }
-
-            _heldTurnCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            HeldTurnCancellation = new CancellationTokenSource();
-            var activeTurn = new ActiveTurn(_heldTurnCompletion.Task, HeldTurnCancellation);
-            runtime.TryStartTurn(activeTurn);
-            return Task.FromResult(new RuntimeStartResult(runtime, activeTurn));
-        }
-
-        public void CompleteHeldTurn() => _heldTurnCompletion!.TrySetResult();
-    }
-
     private sealed class FakeProjectTaskFacade : IProjectTaskFacade
     {
         public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
@@ -541,30 +535,43 @@ public partial class ExecutionCommandHandlerTests
         public int? Generation { get; set; } = 0;
 
         private readonly ProjectTaskSnapshot _task;
+        private readonly TurnPersistenceTestKit _persistence;
 
-        public FakeProjectTaskFacade(AgentExecutionTask task)
+        public FakeProjectTaskFacade(AgentExecutionTask task, TurnPersistenceTestKit persistence)
         {
             _task = ToSnapshot(task);
+            _persistence = persistence;
         }
 
         public int ResolveCount { get; private set; }
 
         public ResolveProjectTaskRequest? LastRequest { get; private set; }
 
-        public Task<ProjectTaskSnapshot> ResolveAsync(
+        /// <summary>
+        /// 解析出的任务属于请求的对话；对话行与它的 Generation 写入测试数据库，受理事务按真实规则校验它。
+        /// The resolved task belongs to the requested conversation; the conversation row and its generation are written to the test database so the acceptance transaction checks it by the real rules.
+        /// </summary>
+        public async Task<ProjectTaskSnapshot> ResolveAsync(
             ResolveProjectTaskRequest request,
             CancellationToken cancellationToken = default
         )
         {
             ResolveCount++;
             LastRequest = request;
-            return Task.FromResult(
-                _task with
+            var resolved = _task with { ProjectConversationId = request.ConversationId, Generation = Generation ?? 0 };
+            await _persistence.SeedConversationAsync(
+                new AgentExecutionTask
                 {
-                    ProjectConversationId = request.ConversationId,
-                    Generation = Generation ?? 0,
-                }
+                    TaskId = resolved.TaskId,
+                    ProjectId = resolved.ProjectId,
+                    ProjectConversationId = resolved.ProjectConversationId,
+                    ContextId = resolved.ContextId,
+                    Generation = resolved.Generation,
+                },
+                request.OwnerUserId
             );
+            await _persistence.SetGenerationAsync(resolved.ProjectConversationId, resolved.Generation);
+            return resolved;
         }
 
         public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
@@ -585,123 +592,6 @@ public partial class ExecutionCommandHandlerTests
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
     }
-
-    private sealed class ModeTestRuntimeFactory : IRuntimeFactory
-    {
-        private readonly TaskCompletionSource _turnCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ModeTestRuntimeFactory()
-        {
-            Runtime = new AgentRuntime(
-                NullLogger.Instance,
-                new ModeTestAgent(),
-                new ModeTestSession(),
-                Guid.CreateVersion7(),
-                "mode-context",
-                sessionStateScope: null
-            );
-        }
-
-        public AgentRuntime Runtime { get; }
-
-        public List<string> ModeChanges { get; } = [];
-
-        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
-        {
-            var activeTurn = new ActiveTurn(_turnCompletion.Task, new CancellationTokenSource());
-            Runtime.TryStartTurn(activeTurn);
-            return Task.FromResult(new RuntimeStartResult(Runtime, activeTurn));
-        }
-
-        public Task SetModeAsync(RuntimeBase runtime, string mode, CancellationToken cancellationToken)
-        {
-            Assert.Same(Runtime, runtime);
-            ModeChanges.Add(mode);
-            return Task.CompletedTask;
-        }
-
-        public void CompleteHeldTurn() => _turnCompletion.TrySetResult();
-    }
-
-    private sealed class PermissionTestRuntimeFactory : IRuntimeFactory
-    {
-        private readonly TaskCompletionSource _turnCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public TestRuntime Runtime { get; } = new();
-
-        public List<ExecutionSettings> TurnSettings { get; } = [];
-
-        public List<AgwPermissionMode> ActiveChanges { get; } = [];
-
-        public List<AgwPermissionMode> RuntimeChanges { get; } = [];
-
-        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
-        {
-            TurnSettings.Add(request.TurnContext.Settings);
-            var activeTurn = new ActiveTurn(
-                _turnCompletion.Task,
-                new CancellationTokenSource(),
-                setPermissionModeAsync: (permissionMode, _) =>
-                {
-                    ActiveChanges.Add(permissionMode);
-                    return ValueTask.CompletedTask;
-                }
-            );
-            Runtime.TryStartTurn(activeTurn);
-            return Task.FromResult(new RuntimeStartResult(Runtime, activeTurn));
-        }
-
-        public Task SetPermissionModeAsync(
-            RuntimeBase runtime,
-            AgwPermissionMode permissionMode,
-            CancellationToken cancellationToken
-        )
-        {
-            Assert.Same(Runtime, runtime);
-            RuntimeChanges.Add(permissionMode);
-            return Task.CompletedTask;
-        }
-
-        public void CompleteHeldTurn() => _turnCompletion.TrySetResult();
-    }
-
-    private sealed class ModeTestAgent : AIAgent
-    {
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new ModeTestSession());
-
-        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
-            AgentSession session,
-            JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken
-        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
-
-        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
-            JsonElement sessionState,
-            JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken
-        ) => ValueTask.FromResult<AgentSession>(new ModeTestSession());
-
-        protected override Task<AgentResponse> RunCoreAsync(
-            IEnumerable<ChatMessage> messages,
-            AgentSession? session,
-            AgentRunOptions? options,
-            CancellationToken cancellationToken
-        ) => throw new NotSupportedException();
-
-        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
-            IEnumerable<ChatMessage> messages,
-            AgentSession? session,
-            AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken
-        )
-        {
-            await Task.Yield();
-            yield break;
-        }
-    }
-
-    private sealed class ModeTestSession : AgentSession;
 
     private sealed class FakeProjectRuntimeFacade : IProjectRuntimeFacade
     {
@@ -754,24 +644,28 @@ public partial class ExecutionCommandHandlerTests
             task.FinishedTime
         );
 
-    private sealed class TestRuntime : RuntimeBase
-    {
-        public bool Disposed { get; private set; }
-
-        public override async ValueTask DisposeAsync()
-        {
-            await base.DisposeAsync();
-            Disposed = true;
-        }
-    }
-
     private sealed class CapturingSink : IExecutionMessageSink
     {
-        public List<AgwMessage> Messages { get; } = [];
+        private readonly object _lock = new();
+        private readonly List<AgwMessage> _messages = [];
+
+        public List<AgwMessage> Messages
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return [.. _messages];
+                }
+            }
+        }
 
         public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
         {
-            Messages.Add(message);
+            lock (_lock)
+            {
+                _messages.Add(message);
+            }
             return ValueTask.CompletedTask;
         }
     }

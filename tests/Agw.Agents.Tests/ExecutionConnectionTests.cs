@@ -1,12 +1,18 @@
 using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Turns;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Inbound.SignalR;
 using Agw.Agents.Execution.Outbound;
@@ -14,6 +20,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Application;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Persistence;
@@ -23,9 +30,11 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
+using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,6 +43,8 @@ namespace Agw.Agents.Tests;
 
 public class ExecutionConnectionTests
 {
+    private static readonly TimeSpan TurnTimeout = TimeSpan.FromSeconds(10);
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -53,7 +64,8 @@ public class ExecutionConnectionTests
             ContextId = "context",
         };
         var command = CreateExecCommand();
-        var factories = new List<DatabaseRuntimeFactory>();
+        var factories = new List<DatabaseAgentRuntimeFactory>();
+        var kit = new InProcessCoordinatorTestKit();
         var services = new ServiceCollection();
         services.AddOptions<ExecutionRuntimeOptions>();
         services.AddDbContext<AgwDbContext>(options => options.UseSqlite(connectionString).AddInterceptors(blocker));
@@ -66,14 +78,43 @@ public class ExecutionConnectionTests
         services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<AgentflowCheckpointStore>();
-        services.AddSingleton<IProjectTaskFacade>(new FakeProjectTaskFacade(task));
+        services.AddSingleton<IProjectTaskFacade>(provider => new FakeProjectTaskFacade(
+            task,
+            async resolved =>
+            {
+                await using var seedScope = provider.CreateAsyncScope();
+                var seedDb = seedScope.ServiceProvider.GetRequiredService<AgwDbContext>();
+                seedDb.ProjectConversations.Add(
+                    new ProjectConversation
+                    {
+                        Id = resolved.ProjectConversationId,
+                        ProjectId = resolved.ProjectId,
+                        ContextId = resolved.ContextId,
+                        CreateBy = "user-id",
+                    }
+                );
+                await seedDb.SaveChangesAsync(ct);
+            }
+        ));
+        services.AddScoped<
+            Agw.Projects.Contracts.History.IConversationTurnStore,
+            Agw.Projects.Infrastructure.ConversationTurnStore
+        >();
+        services.AddScoped<ITurnAcceptanceWriter, Agw.Infrastructure.Agents.TurnAcceptanceWriter>();
+        services.AddSingleton<TurnBroadcastRegistry>();
         services.AddSingleton<IProjectRuntimeFacade>(new FakeProjectRuntimeFacade());
-        services.AddScoped<IRuntimeFactory>(sp =>
+        services.AddSingleton<IAgwFileSystemResolver>(kit);
+        services.AddScoped<IAgentRuntimeFactory>(sp =>
         {
-            var factory = new DatabaseRuntimeFactory(sp.GetRequiredService<AgwDbContext>(), blocker);
+            var factory = new DatabaseAgentRuntimeFactory(sp.GetRequiredService<AgwDbContext>(), blocker);
             factories.Add(factory);
             return factory;
         });
+        services.AddScoped(_ => new AgentTurnExecutor(null, null, null, NullLogger<AgentTurnExecutor>.Instance));
+        services.AddScoped(_ => new AgentflowTurnExecutor(null!, null!, NullLogger<AgentflowTurnExecutor>.Instance));
+        services.AddScoped<ExecutionContextFactory>();
+        services.AddScoped<InProcessExecutionCoordinatorFactory>();
+        services.AddScoped<TurnAcceptanceService>();
         services.AddScoped<ExecutionConnectionContextFactory>();
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using (var seedScope = provider.CreateAsyncScope())
@@ -113,7 +154,7 @@ public class ExecutionConnectionTests
         );
         await context.ApplySettingsAsync(ExecutionSettings.CreateDefault(), ct);
         await context.StartTurnAsync(command, ct);
-        await blocker.Started.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        await blocker.Started.Task.WaitAsync(TurnTimeout, ct);
         var runtimeFactory = Assert.Single(factories);
         try
         {
@@ -134,13 +175,13 @@ public class ExecutionConnectionTests
         finally
         {
             blocker.Release.TrySetResult();
-            await runtimeFactory.Runtime.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(10), ct);
+            await context.WhenIdleAsync().WaitAsync(TurnTimeout, ct);
         }
 
         // Assert: the runtime scope remains valid through completion and is released with the connection.
         Assert.Equal(1, runtimeFactory.AgentCount);
         await connection.DisposeAsync();
-        Assert.True(runtimeFactory.Runtime.Disposed);
+        Assert.True(Assert.Single(runtimeFactory.Created).IsDisposed);
         Assert.True(runtimeFactory.Disposed);
     }
 
@@ -166,35 +207,61 @@ public class ExecutionConnectionTests
         }
     }
 
-    private sealed class DatabaseRuntimeFactory : IRuntimeFactory, IAsyncDisposable
+    /// <summary>
+    /// 在运行作用域的 DbContext 上构造 Runtime；模型调用读取数据库，查询在拦截器中暂停。
+    /// Builds Runtimes on the runtime scope's DbContext; the model call reads the database and the query pauses in the interceptor.
+    /// </summary>
+    private sealed class DatabaseAgentRuntimeFactory : IAgentRuntimeFactory, IAsyncDisposable
     {
         private readonly AgwDbContext _db;
         private readonly BlockingQueryInterceptor _blocker;
-        public TestRuntime Runtime { get; } = new();
-        public bool Disposed { get; private set; }
-        public int AgentCount { get; private set; }
 
-        public DatabaseRuntimeFactory(AgwDbContext db, BlockingQueryInterceptor blocker)
+        public DatabaseAgentRuntimeFactory(AgwDbContext db, BlockingQueryInterceptor blocker)
         {
             _db = db;
             _blocker = blocker;
         }
 
-        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
+        public List<AgentRuntime> Created { get; } = [];
+        public bool Disposed { get; private set; }
+        public int AgentCount { get; set; }
+
+        public async Task<AgentRuntime?> CreateRuntimeAsync(
+            Guid agentId,
+            AgentExecutionTask task,
+            ExecutionSettings settings,
+            CancellationToken cancellationToken = default
+        )
         {
             _blocker.RuntimeContext = _db;
-            var turn = Runtime.StartTurn(
-                request.TurnContext,
-                new RuntimeTurnContextAccessor(),
-                new CancellationTokenSource(),
-                () => { },
-                async ct =>
-                {
-                    AgentCount = await _db.Agents.CountAsync(ct);
-                }
+            var agent = new CountingAgent(this, _db);
+            var runtime = new AgentRuntime(
+                NullLogger.Instance,
+                agent,
+                await agent.CreateSessionAsync(cancellationToken),
+                task.ProjectId,
+                task.ContextId,
+                sessionStateScope: null
             );
-            return Task.FromResult(new RuntimeStartResult(Runtime, turn));
+            Created.Add(runtime);
+            return runtime;
         }
+
+        public Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default) =>
+            Task.FromResult(!runtime.IsDisposed);
+
+        public Task<AgentflowNodeAgent?> CreateAgentflowNodeAgentAsync(
+            Guid agentId,
+            Guid? projectId,
+            Guid conversationId,
+            IReadOnlyDictionary<string, string>? environmentVariables,
+            bool deferHumanInteractions,
+            CancellationToken cancellationToken = default,
+            AgwPermissionMode? permissionMode = null
+        ) => throw new NotSupportedException();
+
+        public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public ValueTask DisposeAsync()
         {
@@ -203,78 +270,131 @@ public class ExecutionConnectionTests
         }
     }
 
+    private sealed class CountingAgent : AIAgent
+    {
+        private readonly DatabaseAgentRuntimeFactory _owner;
+        private readonly AgwDbContext _db;
+
+        public CountingAgent(DatabaseAgentRuntimeFactory owner, AgwDbContext db)
+        {
+            _owner = owner;
+            _db = db;
+        }
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new CountingSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement sessionState,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new CountingSession());
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
+        {
+            _owner.AgentCount = await _db.Agents.CountAsync(cancellationToken);
+            yield return new AgentResponseUpdate(ChatRole.Assistant, "done");
+        }
+
+        private sealed class CountingSession : AgentSession;
+    }
+
     [Fact]
     public async Task DetachAsync_IdleRuntime_DisposesAndRemovesImmediately()
     {
-        var fixture = CreateFixture(holdTurnOpen: false);
+        await using var fixture = await CreateFixtureAsync();
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.WhenIdleAsync();
         var removed = false;
 
         await connection.DetachAsync(() => removed = true);
 
-        Assert.True(fixture.RuntimeFactory.Runtime.Disposed);
+        Assert.True(Assert.Single(fixture.Runtimes.Created).IsDisposed);
         Assert.True(removed);
     }
 
     [Fact]
     public async Task DetachAsync_RunningTurn_RemovesAfterTurnCompletes()
     {
-        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await connection.DetachAsync(() => removed.TrySetResult());
         Assert.False(removed.Task.IsCompleted);
 
-        fixture.RuntimeFactory.CompleteTurn();
-        await removed.Task.WaitAsync(TestContext.Current.CancellationToken);
+        fixture.Runtimes.ReleaseHeldTurns();
+        await removed.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
-        Assert.True(fixture.RuntimeFactory.Runtime.Disposed);
+        Assert.True(Assert.Single(fixture.Runtimes.Created).IsDisposed);
+        Assert.False(Assert.Single(fixture.Runtimes.Agents).Canceled);
     }
 
     [Fact]
     public async Task DetachAsync_WaitingForHuman_InterruptsTurn()
     {
-        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var fixture = await CreateFixtureAsync(requestsApproval: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
-        fixture.RuntimeFactory.StartRequest!.TurnContext.PendingInteractionCountChanged!(1);
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Sink.InteractionRequested.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await connection.DetachAsync(() => removed.TrySetResult());
 
-        Assert.True(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
-        fixture.RuntimeFactory.CompleteTurn();
-        await removed.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await removed.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
+        var finished = Assert.Single(fixture.Sink.Messages, AgwMessageClassifier.IsTurnFinished);
+        Assert.Equal("interrupted", finished.AdditionalProperties!["status"]);
     }
 
     [Fact]
     public async Task RecoverInProcessExecution_RunningAfterDetach_StaysBusyUntilCompletion()
     {
-        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
+        var agent = Assert.Single(fixture.Runtimes.Agents);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await connection.DetachAsync(() => removed.TrySetResult());
 
         Assert.True(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
-        Assert.False(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
+        Assert.False(agent.Canceled);
         Assert.True(await connection.RecoverInProcessExecutionAsync(true, TestContext.Current.CancellationToken));
-        Assert.True(fixture.RuntimeFactory.TurnCancellation.IsCancellationRequested);
+        await agent.Cancellation.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
-        fixture.RuntimeFactory.CompleteTurn();
-        await removed.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await removed.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         Assert.False(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task RecoverInProcessExecution_ForeignOrMissingConnection_DoesNotExposeOrInterruptTurn()
     {
-        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
+        var agent = Assert.Single(fixture.Runtimes.Agents);
         await using var registry = new ExecutionConnectionRegistry(
             null!,
             null!,
@@ -304,7 +424,7 @@ public class ExecutionConnectionTests
                 TestContext.Current.CancellationToken
             )
         );
-        Assert.False(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
+        Assert.False(agent.Canceled);
         Assert.True(
             await registry.RecoverInProcessExecutionAsync(
                 "old-connection",
@@ -313,16 +433,16 @@ public class ExecutionConnectionTests
                 TestContext.Current.CancellationToken
             )
         );
-        Assert.True(fixture.RuntimeFactory.TurnCancellation.IsCancellationRequested);
-        fixture.RuntimeFactory.CompleteTurn();
+        await agent.Cancellation.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
     }
 
     [Fact]
     public async Task FindInProcessExecution_OwnActiveConversation_ReturnsOriginalConnectionOnly()
     {
-        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), TestContext.Current.CancellationToken);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         await using var registry = new ExecutionConnectionRegistry(
             null!,
             null!,
@@ -374,12 +494,12 @@ public class ExecutionConnectionTests
                     TestContext.Current.CancellationToken
                 )
             );
-            Assert.False(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
+            Assert.False(Assert.Single(fixture.Runtimes.Agents).Canceled);
         }
         finally
         {
-            fixture.RuntimeFactory.CompleteTurn();
-            await removed.Task.WaitAsync(TestContext.Current.CancellationToken);
+            fixture.Runtimes.ReleaseHeldTurns();
+            await removed.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         }
         Assert.Null(
             await registry.FindInProcessExecutionAsync(
@@ -400,10 +520,18 @@ public class ExecutionConnectionTests
         public void StopApplication() { }
     }
 
-    private static ConnectionFixture CreateFixture(bool holdTurnOpen)
+    private static async Task<ConnectionFixture> CreateFixtureAsync(
+        bool holdTurnOpen = false,
+        bool requestsApproval = false
+    )
     {
         var provider = new ServiceCollection().BuildServiceProvider();
-        var runtimeFactory = new FakeRuntimeFactory(holdTurnOpen);
+        var persistence = await TurnPersistenceTestKit.CreateAsync();
+        var kit = new InProcessCoordinatorTestKit();
+        kit.Runtimes.HoldTurnOpen = holdTurnOpen;
+        kit.Runtimes.RequestsApproval = requestsApproval;
+        var agents = new TestExecutionAgents();
+        var sink = new RecordingSink();
         var task = new AgentExecutionTask
         {
             TaskId = Guid.CreateVersion7(),
@@ -412,13 +540,15 @@ public class ExecutionConnectionTests
             ContextId = "context",
             CreateTime = TimeProvider.System.GetUtcNow(),
         };
+        var projectTasks = new FakeProjectTaskFacade(task, resolved => persistence.SeedConversationAsync(resolved));
         var context = new ExecutionConnectionContext(
             "user-id",
-            new NullSink(),
+            sink,
             CancellationToken.None,
-            runtimeFactory,
-            new FakeProjectTaskFacade(task),
-            new FakeProjectRuntimeFacade()
+            persistence.CreateAcceptance(projectTasks, new FakeProjectRuntimeFacade()),
+            projectTasks,
+            kit.CreateFactory(agents.ContextFactory, persistence),
+            durableCoordinator: null
         );
         var connection = new ExecutionConnection(
             "connection",
@@ -429,7 +559,7 @@ public class ExecutionConnectionTests
             NullLogger.Instance
         );
         Assert.Equal("user-id", connection.UserId);
-        return new ConnectionFixture(connection, context, runtimeFactory);
+        return new ConnectionFixture(connection, context, kit.Runtimes, agents, sink, persistence);
     }
 
     private static ExecCommand CreateExecCommand() =>
@@ -439,46 +569,27 @@ public class ExecutionConnectionTests
             ConversationId = Guid.CreateVersion7(),
         };
 
+    /// <summary>
+    /// 连接测试环境；释放时删除它的测试数据库，连接本身由测试先行释放。
+    /// The connection test environment; disposing it deletes its test database, after the test disposes the connection.
+    /// </summary>
     private sealed record ConnectionFixture(
         ExecutionConnection Connection,
         ExecutionConnectionContext Context,
-        FakeRuntimeFactory RuntimeFactory
-    );
-
-    private sealed class FakeRuntimeFactory : IRuntimeFactory
+        TestAgentRuntimeFactory Runtimes,
+        TestExecutionAgents Agents,
+        RecordingSink Sink,
+        TurnPersistenceTestKit Persistence
+    ) : IAsyncDisposable
     {
-        private readonly bool _holdTurnOpen;
-        private TaskCompletionSource? _completion;
-
-        public FakeRuntimeFactory(bool holdTurnOpen)
+        public ExecCommand CreateExecCommand()
         {
-            _holdTurnOpen = holdTurnOpen;
+            var command = ExecutionConnectionTests.CreateExecCommand();
+            Agents.Add(command.AgentId!.Value);
+            return command;
         }
 
-        public TestRuntime Runtime { get; } = new();
-
-        public CancellationTokenSource? TurnCancellation { get; private set; }
-
-        public RuntimeStartRequest? StartRequest { get; private set; }
-
-        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
-        {
-            StartRequest = request;
-            if (!_holdTurnOpen)
-            {
-                return Task.FromResult(
-                    new RuntimeStartResult(Runtime, new ActiveTurn(Task.CompletedTask, new CancellationTokenSource()))
-                );
-            }
-
-            _completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            TurnCancellation = new CancellationTokenSource();
-            var turn = new ActiveTurn(_completion.Task, TurnCancellation);
-            Runtime.TryStartTurn(turn);
-            return Task.FromResult(new RuntimeStartResult(Runtime, turn));
-        }
-
-        public void CompleteTurn() => _completion!.TrySetResult();
+        public ValueTask DisposeAsync() => Persistence.DisposeAsync();
     }
 
     private sealed class FakeProjectTaskFacade : IProjectTaskFacade
@@ -487,16 +598,35 @@ public class ExecutionConnectionTests
             Task.FromResult<int?>(0);
 
         private readonly ProjectTaskSnapshot _task;
+        private readonly Func<AgentExecutionTask, Task> _seed;
 
-        public FakeProjectTaskFacade(AgentExecutionTask task)
+        /// <summary>
+        /// seed 写入解析出的任务所属的对话，受理事务按真实规则校验它。
+        /// seed writes the conversation of the resolved task so the acceptance transaction checks it by the real rules.
+        /// </summary>
+        public FakeProjectTaskFacade(AgentExecutionTask task, Func<AgentExecutionTask, Task> seed)
         {
             _task = ToSnapshot(task);
+            _seed = seed;
         }
 
-        public Task<ProjectTaskSnapshot> ResolveAsync(
+        public async Task<ProjectTaskSnapshot> ResolveAsync(
             ResolveProjectTaskRequest request,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult(_task with { ProjectConversationId = request.ConversationId });
+        )
+        {
+            var resolved = _task with { ProjectConversationId = request.ConversationId };
+            await _seed(
+                new AgentExecutionTask
+                {
+                    TaskId = resolved.TaskId,
+                    ProjectId = resolved.ProjectId,
+                    ProjectConversationId = resolved.ProjectConversationId,
+                    ContextId = resolved.ContextId,
+                }
+            );
+            return resolved;
+        }
 
         public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -527,7 +657,7 @@ public class ExecutionConnectionTests
                 new ProjectRuntimeSnapshot(
                     projectId,
                     "project",
-                    "/workspace",
+                    AppContext.BaseDirectory,
                     null,
                     [],
                     new Dictionary<string, string>(),
@@ -538,7 +668,7 @@ public class ExecutionConnectionTests
             );
 
         public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>("/workspace");
+            Task.FromResult<string?>(AppContext.BaseDirectory);
     }
 
     private static ProjectTaskSnapshot ToSnapshot(AgentExecutionTask task) =>
@@ -556,19 +686,26 @@ public class ExecutionConnectionTests
             task.FinishedTime
         );
 
-    private sealed class TestRuntime : RuntimeBase
-    {
-        public bool Disposed { get; private set; }
-
-        public override async ValueTask DisposeAsync()
-        {
-            await base.DisposeAsync();
-            Disposed = true;
-        }
-    }
-
     private sealed class NullSink : IExecutionMessageSink
     {
         public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingSink : IExecutionMessageSink
+    {
+        private readonly ConcurrentQueue<AgwMessage> _messages = new();
+
+        public TaskCompletionSource InteractionRequested { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IReadOnlyList<AgwMessage> Messages => _messages.ToArray();
+
+        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
+        {
+            _messages.Enqueue(message);
+            if (AgwMessageClassifier.IsInteractionRequest(message))
+                InteractionRequested.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
     }
 }

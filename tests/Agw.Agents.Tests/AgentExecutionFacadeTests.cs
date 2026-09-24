@@ -1,43 +1,182 @@
-using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using Agw.Agents.Contracts.Catalog;
-using Agw.Agents.Execution.Agentflows.Runtime;
-using Agw.Agents.Execution.Agentflows.Workflows;
-using Agw.Agents.Execution.Agents.Runtime;
-using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Inbound.Facades;
-using Agw.Agents.Execution.Runtimes;
-using Agw.Agents.Execution.Runtimes.Durable.Contracts;
+using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Data.Entities.Executions;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using AgentsDtos = Agw.Agents.Execution.Agents.Contracts;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgentExecutionFacadeTests
+public sealed class AgentExecutionFacadeTests : IAsyncLifetime
 {
-    [Fact]
-    public async Task ExecuteAsync_Distributed_WaitsForOutcomeWithoutReadingEventStream()
+    private readonly TestAgentDatabase _database = new();
+    private readonly InProcessCoordinatorTestKit _kit = new();
+    private TurnPersistenceTestKit _persistence = null!;
+
+    public async ValueTask InitializeAsync() => _persistence = await TurnPersistenceTestKit.CreateAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        _database.Dispose();
+        await _persistence.DisposeAsync();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(AgentExecutionPermissionMode.FullAccess)]
+    public async Task ExecuteAsync_InProcess_RunsTurnAndRestoresUserContext(
+        AgentExecutionPermissionMode? permissionMode
+    )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var client = new RecordingDurableExecutionClient();
-        await using var services = new ServiceCollection()
-            .AddSingleton<IDurableExecutionClient>(client)
-            .BuildServiceProvider();
-        var facade = new AgentExecutionFacade(
-            new DurableAgentExecutionRunner(client),
-            new AlwaysOwnedAgentCatalog(),
-            client
-        );
+        var agentId = await AddAgentAsync("owner", cancellationToken);
+        var facade = CreateInProcessFacade();
         var executionId = Guid.CreateVersion7();
-        var request = new AgentExecutionRequest(
+        var previousUser = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "owner")], "Test")
+        );
+        UserInfoUtil.Current = previousUser;
+        try
+        {
+            var result = await facade.ExecuteAsync(
+                await SeedAsync(CreateRequest(executionId, agentId, permissionMode: permissionMode)),
+                cancellationToken
+            );
+
+            Assert.Equal(AgentExecutionState.Completed, result.State);
+            Assert.Contains(
+                result.Messages,
+                message => message.Contents.OfType<AgwTextContent>().Any(content => content.Content == "done")
+            );
+            Assert.DoesNotContain(result.Messages, AgwMessageClassifier.IsTurnFinished);
+            Assert.Equal(
+                Agw.Shared.Data.Entities.Projects.ProjectConversationTurnStatus.Completed,
+                (await _persistence.ReadTurnAsync(executionId)).Status
+            );
+            var execution = Assert.Single(_kit.Runtimes.TurnContexts);
+            Assert.Equal("owner", execution.UserId);
+            Assert.Equal(executionId, execution.TurnId);
+            Assert.Equal(permissionMode == null ? null : AgwPermissionMode.FullAccess, execution.PermissionMode);
+            Assert.Same(previousUser, UserInfoUtil.Current);
+            Assert.True(Assert.Single(_kit.Runtimes.Created).IsDisposed);
+        }
+        finally
+        {
+            UserInfoUtil.Current = null;
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_InProcessApprovalWithoutPermission_FailsUnattendedExecution()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var agentId = await AddAgentAsync("owner", cancellationToken);
+        _kit.Runtimes.RequestsApproval = true;
+        var facade = CreateInProcessFacade();
+        var events = new List<AgentExecutionEvent>();
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+        {
+            await foreach (
+                var item in facade.ExecuteStreamingAsync(
+                    await SeedAsync(CreateRequest(Guid.CreateVersion7(), agentId, HumanInteractionPolicy.Reject)),
+                    cancellationToken
+                )
+            )
+            {
+                events.Add(item);
+            }
+        });
+
+        Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
+        Assert.Contains("unattended", exception.Message, StringComparison.OrdinalIgnoreCase);
+        var finished = Assert.Single(events, item => AgwMessageClassifier.IsTurnFinished(item.Message));
+        Assert.Equal("failed", finished.Message.AdditionalProperties!["status"]);
+        Assert.DoesNotContain(events, item => AgwMessageClassifier.IsTurnStart(item.Message));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InProcessAllowPolicy_StillUsesUnattendedRules()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var agentId = await AddAgentAsync("owner", cancellationToken);
+        _kit.Runtimes.RequestsApproval = true;
+        var facade = CreateInProcessFacade();
+
+        var result = await facade.ExecuteAsync(
+            await SeedAsync(
+                CreateRequest(
+                    Guid.CreateVersion7(),
+                    agentId,
+                    HumanInteractionPolicy.Allow,
+                    AgentExecutionPermissionMode.FullAccess
+                )
+            ),
+            cancellationToken
+        );
+
+        Assert.Equal(AgentExecutionState.Completed, result.State);
+        Assert.Equal(2, _kit.Runtimes.TurnContexts.Count);
+    }
+
+    private AgentExecutionFacade CreateInProcessFacade() =>
+        new(
+            _persistence.CreateAcceptance(projectTasks: null, new WorkspaceProjects()),
+            new AlwaysOwnedAgentCatalog(),
+            _kit.CreateFactory(
+                new Agw.Agents.Execution.Context.ExecutionContextFactory(_database.Context),
+                _persistence
+            )
+        );
+
+    /// <summary>
+    /// 写入请求任务所属的项目与对话，受理事务按真实规则校验它们。
+    /// Writes the project and conversation of the request's task so the acceptance transaction checks them by the real rules.
+    /// </summary>
+    private async Task<AgentExecutionRequest> SeedAsync(AgentExecutionRequest request)
+    {
+        await _persistence.SeedConversationAsync(
+            new AgentExecutionTask
+            {
+                TaskId = request.Task.TaskId,
+                ProjectId = request.Task.ProjectId,
+                ProjectConversationId = request.Task.ProjectConversationId,
+                ContextId = request.Task.ContextId,
+            },
+            request.OwnerUserId
+        );
+        return request;
+    }
+
+    private async Task<Guid> AddAgentAsync(string owner, CancellationToken cancellationToken)
+    {
+        var agentId = Guid.CreateVersion7();
+        using (UserInfoUtil.PushSystemScope())
+        {
+            _database.Context.Agents.Add(
+                new Agw.Shared.Data.Entities.Agents.Agent
+                {
+                    Id = agentId,
+                    Name = $"agent-{agentId:N}",
+                    CreateBy = owner,
+                }
+            );
+            await _database.Context.SaveChangesAsync(cancellationToken);
+        }
+        return agentId;
+    }
+
+    private static AgentExecutionRequest CreateRequest(
+        Guid executionId,
+        Guid agentId,
+        HumanInteractionPolicy policy = HumanInteractionPolicy.Allow,
+        AgentExecutionPermissionMode? permissionMode = null
+    ) =>
+        new(
             executionId,
             "owner",
-            new AgentTarget(AgentTargetKind.Agent, Guid.CreateVersion7()),
+            new AgentTarget(AgentTargetKind.Agent, agentId),
             new ProjectTaskSnapshot(
                 executionId,
                 Guid.CreateVersion7(),
@@ -57,161 +196,35 @@ public sealed class AgentExecutionFacadeTests
                 Author = "user",
                 Contents = [new AgwTextContent { Content = "run" }],
             },
-            HumanInteractionPolicy: HumanInteractionPolicy.Reject,
-            PermissionMode: AgentExecutionPermissionMode.FullAccess
+            HumanInteractionPolicy: policy,
+            PermissionMode: permissionMode
         );
 
-        var result = await facade.ExecuteAsync(request, cancellationToken);
-
-        Assert.Equal(AgentExecutionState.Completed, result.State);
-        Assert.Equal(1, client.StartCount);
-        Assert.Equal(AgwPermissionMode.FullAccess, client.Request!.Settings.PermissionMode);
-        Assert.Equal(HumanInteractionPolicy.Reject, client.Request.Settings.HumanInteractionPolicy);
-        Assert.Equal(1, client.WaitCount);
-        Assert.Equal(0, client.ReadCount);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData(AgentExecutionPermissionMode.FullAccess)]
-    public async Task ExecuteAsync_InProcess_RestoresUserContext(AgentExecutionPermissionMode? permissionMode)
+    internal sealed class WorkspaceProjects : IProjectRuntimeFacade
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        var runtime = new RecordingAgentRuntimeService();
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        var facade = new AgentExecutionFacade(
-            new InProcessAgentExecutionRunner(runtime, null!, null!),
-            new AlwaysOwnedAgentCatalog()
-        );
-        var executionId = Guid.CreateVersion7();
-        var previousUser = new ClaimsPrincipal(
-            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "owner")], "Test")
-        );
-        UserInfoUtil.Current = previousUser;
-        try
-        {
-            var request = new AgentExecutionRequest(
-                executionId,
-                "owner",
-                new AgentTarget(AgentTargetKind.Agent, Guid.CreateVersion7()),
-                CreateTaskSnapshot(executionId),
-                new AgwUserInput
-                {
-                    MessageId = executionId.ToString("D"),
-                    Author = "user",
-                    Contents = [new AgwTextContent { Content = "run" }],
-                },
-                PermissionMode: permissionMode
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult<ProjectRuntimeSnapshot?>(
+                new ProjectRuntimeSnapshot(
+                    projectId,
+                    "project",
+                    AppContext.BaseDirectory,
+                    null,
+                    [],
+                    new Dictionary<string, string>(),
+                    [],
+                    [],
+                    []
+                )
             );
 
-            await facade.ExecuteAsync(request, cancellationToken);
-
-            Assert.Equal("owner", runtime.CapturedUserId);
-            Assert.Equal(permissionMode == null ? null : AgwPermissionMode.FullAccess, runtime.CapturedPermissionMode);
-            Assert.Same(previousUser, UserInfoUtil.Current);
-        }
-        finally
-        {
-            UserInfoUtil.Current = null;
-        }
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(AppContext.BaseDirectory);
     }
 
-    [Fact]
-    public async Task ExecuteStreamingAsync_InProcess_RejectsHumanInteraction()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        var agentflowRuntime = new RejectingAgentflowRuntimeService();
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        var facade = new AgentExecutionFacade(
-            new InProcessAgentExecutionRunner(null!, null!, agentflowRuntime),
-            new AlwaysOwnedAgentCatalog()
-        );
-        var executionId = Guid.CreateVersion7();
-        var request = new AgentExecutionRequest(
-            executionId,
-            "owner",
-            new AgentTarget(AgentTargetKind.Agentflow, Guid.CreateVersion7()),
-            CreateTaskSnapshot(executionId),
-            new AgwUserInput
-            {
-                MessageId = executionId.ToString("D"),
-                Author = "user",
-                Contents = [new AgwTextContent { Content = "run" }],
-            },
-            HumanInteractionPolicy: HumanInteractionPolicy.Reject,
-            PermissionMode: AgentExecutionPermissionMode.FullAccess
-        );
-
-        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
-        {
-            await foreach (var _ in facade.ExecuteStreamingAsync(request, cancellationToken)) { }
-        });
-
-        Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
-    }
-
-    private static ProjectTaskSnapshot CreateTaskSnapshot(Guid executionId) =>
-        new(
-            executionId,
-            Guid.CreateVersion7(),
-            Guid.CreateVersion7(),
-            "context",
-            null,
-            "Task",
-            ProjectTaskStatus.Running,
-            null,
-            DateTimeOffset.UtcNow,
-            null,
-            null
-        );
-
-    private sealed class RecordingAgentRuntimeService : IAgentRuntimeService
-    {
-        public string? CapturedUserId { get; private set; }
-        public AgwPermissionMode? CapturedPermissionMode { get; private set; }
-
-        public Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default) =>
-            Task.FromResult(false);
-
-        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            Guid conversationId,
-            IReadOnlyDictionary<string, string>? environmentVariables,
-            bool deferHumanInteractions,
-            CancellationToken cancellationToken = default,
-            AgwPermissionMode? permissionMode = null
-        ) => Task.FromResult<AIAgent?>(null);
-
-        public Task<AgentRuntime?> CreateRuntimeAsync(
-            Guid agentId,
-            AgentExecutionTask task,
-            ExecutionSettings settings,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<AgentRuntime?>(null);
-
-        public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public Task SetPermissionModeAsync(
-            AgentRuntime runtime,
-            AgwPermissionMode permissionMode,
-            CancellationToken cancellationToken = default
-        ) => Task.CompletedTask;
-
-        public Task<AgentsDtos.AgentExecutionResult?> ExecuteByIdAsync(
-            AgentsDtos.AgentExecuteByIdRequest request,
-            CancellationToken cancellationToken = default
-        )
-        {
-            CapturedUserId = UserInfoUtil.UserId;
-            CapturedPermissionMode = request.PermissionMode;
-            var taskId = request.TaskId?.ToString("D") ?? string.Empty;
-            return Task.FromResult<AgentsDtos.AgentExecutionResult?>(new AgentsDtos.AgentExecutionResult(taskId, []));
-        }
-    }
-
-    private sealed class AlwaysOwnedAgentCatalog : IAgentCatalogFacade
+    internal sealed class AlwaysOwnedAgentCatalog : IAgentCatalogFacade
     {
         public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
             CancellationToken cancellationToken = default
@@ -236,109 +249,5 @@ public sealed class AgentExecutionFacadeTests
 
         public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentCatalogMetrics(0, 0));
-    }
-
-    private sealed class RejectingAgentflowRuntimeService : IAgentflowRuntimeService
-    {
-        public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            Guid agentflowId,
-            string input,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default,
-            Guid? projectId = null,
-            string? contextId = null,
-            Guid? taskId = null,
-            IInteractionHandler? interactionHandler = null,
-            IReadOnlyDictionary<string, string>? environmentVariables = null,
-            Guid? conversationId = null,
-            AgwPermissionMode? permissionMode = null
-        )
-        {
-            await Task.CompletedTask;
-            yield return new AgwMessage(
-                "m1",
-                "agent",
-                AiRole.Assistant,
-                [],
-                new Dictionary<string, object?> { ["type"] = "interaction-request" }
-            );
-        }
-
-        public Task<AgentflowExecutionResult?> ExecuteAsync(
-            Guid agentflowId,
-            Guid taskId,
-            string input,
-            CancellationToken cancellationToken = default,
-            Guid? projectId = null,
-            string? contextId = null,
-            AgwPermissionMode? permissionMode = null
-        ) => Task.FromResult<AgentflowExecutionResult?>(null);
-
-        public Task<AgentflowExecutionResult?> ExecuteAsync(
-            Guid agentflowId,
-            Guid taskId,
-            List<ChatMessage> messages,
-            CancellationToken cancellationToken = default,
-            Guid? projectId = null,
-            string? contextId = null,
-            AgwPermissionMode? permissionMode = null
-        ) => Task.FromResult<AgentflowExecutionResult?>(null);
-
-        public Task<AgentflowWorkflowLease?> CreateAiWorkflow(
-            Guid agentflowId,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<AgentflowWorkflowLease?>(null);
-
-        public Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
-    }
-
-    private sealed class RecordingDurableExecutionClient : IDurableExecutionClient
-    {
-        public DurableExecutionRequest? Request { get; private set; }
-        public int StartCount { get; private set; }
-        public int WaitCount { get; private set; }
-        public int ReadCount { get; private set; }
-
-        public Task StartAsync(DurableExecutionRequest request, CancellationToken cancellationToken)
-        {
-            Request = request;
-            StartCount++;
-            return Task.CompletedTask;
-        }
-
-        public Task<DurableExecutionOutcome> GetOutcomeAsync(
-            Guid executionId,
-            string userId,
-            CancellationToken cancellationToken
-        ) => Task.FromResult(new DurableExecutionOutcome(executionId, DurableExecutionStatus.Completed, null));
-
-        public Task<DurableExecutionOutcome> WaitForActionableOutcomeAsync(
-            Guid executionId,
-            string userId,
-            CancellationToken cancellationToken
-        )
-        {
-            WaitCount++;
-            return Task.FromResult(new DurableExecutionOutcome(executionId, DurableExecutionStatus.Completed, null));
-        }
-
-        public async IAsyncEnumerable<DurableExecutionEvent> ReadAsync(
-            Guid executionId,
-            string userId,
-            string? afterCursor,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken
-        )
-        {
-            ReadCount++;
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<bool> InterruptAsync(
-            Guid executionId,
-            string userId,
-            string? reason,
-            CancellationToken cancellationToken
-        ) => Task.FromResult(true);
     }
 }

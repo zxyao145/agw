@@ -18,7 +18,7 @@ internal static class InteractionMessageMapper
     {
         var properties = new AdditionalPropertiesDictionary
         {
-            ["type"] = "interaction-request",
+            ["type"] = AgwMessageTypes.InteractionRequest,
             ["interaction"] = JsonSerializer.SerializeToElement<InteractionRequest>(
                 request is UserInputInteraction input ? input with { Arguments = null } : request,
                 JsonOptions

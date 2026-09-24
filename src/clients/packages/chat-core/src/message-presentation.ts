@@ -3,6 +3,8 @@ import {
   getStreamingIdentity,
   mergeStreamingMessagesById,
   scopeMessagesByUserTurn,
+  TURN_FINISHED_MESSAGE_TYPE,
+  TURN_START_MESSAGE_TYPE,
 } from "@agw/execution-core";
 import { parseClaudeInitCommands } from "./claude-commands";
 import { isSystemInjectedMessage } from "./message-source";
@@ -16,8 +18,8 @@ export type MessageMeta = {
 export const MESSAGE_PREVIEW_MAX_LENGTH = 72;
 const DISPLAY_NAME_KEYS = ["name", "displayName", "agentDisplayName"];
 const HISTORY_CONTROL_MESSAGE_TYPES = new Set([
-  "turn-start",
-  "turn-finished",
+  TURN_START_MESSAGE_TYPE,
+  TURN_FINISHED_MESSAGE_TYPE,
   "interaction-request",
 ]);
 const STANDALONE_SYSTEM_MESSAGE_TYPES = new Set([

@@ -1,27 +1,38 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Outbound;
-using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 
 namespace Agw.Agents.Tests;
 
 public class TurnPipelineTests
 {
+    private static readonly TurnEnvelope Envelope = new(
+        Guid.CreateVersion7(),
+        Guid.CreateVersion7(),
+        Guid.CreateVersion7(),
+        AgentRuntimeType.Agent,
+        "input-1"
+    );
+
     [Fact]
-    public async Task RunAsync_Streaming_EmitsStartContentAndCompletedFinish()
+    public async Task RunAsync_Streaming_EmitsContentAndCompletedFinishWithTurnFields()
     {
         var sink = new CapturingSink();
         var content = CreateMessage("content");
 
-        await TurnPipeline.RunAsync(
-            ToStream(content, cancellationToken: TestContext.Current.CancellationToken),
-            true,
-            sink,
-            TestContext.Current.CancellationToken
-        );
+        await RunAsync(ToStream(content, cancellationToken: TestContext.Current.CancellationToken), true, sink);
 
-        Assert.Equal(["turn-start", null, "turn-finished"], sink.Messages.Select(GetType));
-        Assert.Equal("completed", sink.Messages[^1].AdditionalProperties!["status"]);
+        Assert.Equal([null, AgwMessageTypes.TurnFinished], sink.Messages.Select(GetType));
+        var finished = sink.Messages[^1].AdditionalProperties!;
+        Assert.Equal(AgwTurnStatus.Completed, finished["status"]);
+        Assert.Equal(Envelope.TurnId.ToString("D"), finished["turnId"]);
+        Assert.Equal(Envelope.ConversationId.ToString("D"), finished["conversationId"]);
+        Assert.Equal(Envelope.AgentId.ToString("D"), finished["agentId"]);
+        Assert.Equal("agent", finished["agentType"]);
+        Assert.Equal("input-1", finished["streamingScopeId"]);
+        Assert.Equal(0, finished["stepCount"]);
+        Assert.False(finished.ContainsKey("errorCode"));
     }
 
     [Fact]
@@ -31,14 +42,9 @@ public class TurnPipelineTests
         var content = CreateMessage("content");
         var gate = CreateMessage("gate", "human-gate-request");
 
-        await TurnPipeline.RunAsync(
-            ToStream(content, gate, TestContext.Current.CancellationToken),
-            false,
-            sink,
-            TestContext.Current.CancellationToken
-        );
+        await RunAsync(ToStream(content, gate, TestContext.Current.CancellationToken), false, sink);
 
-        Assert.Equal(["turn-start", "human-gate-request", null, "turn-finished"], sink.Messages.Select(GetType));
+        Assert.Equal(["human-gate-request", null, AgwMessageTypes.TurnFinished], sink.Messages.Select(GetType));
     }
 
     [Fact]
@@ -48,14 +54,9 @@ public class TurnPipelineTests
         var content = CreateMessage("content");
         var approval = CreateMessage("approval", "tool-approval-request");
 
-        await TurnPipeline.RunAsync(
-            ToStream(content, approval, TestContext.Current.CancellationToken),
-            false,
-            sink,
-            TestContext.Current.CancellationToken
-        );
+        await RunAsync(ToStream(content, approval, TestContext.Current.CancellationToken), false, sink);
 
-        Assert.Equal(["turn-start", "tool-approval-request", null, "turn-finished"], sink.Messages.Select(GetType));
+        Assert.Equal(["tool-approval-request", null, AgwMessageTypes.TurnFinished], sink.Messages.Select(GetType));
     }
 
     [Fact]
@@ -63,33 +64,27 @@ public class TurnPipelineTests
     {
         var sink = new CapturingSink();
         var content = CreateMessage("content");
-        var checkpoint = CreateMessage("saved", "agentflow-checkpoint");
+        var checkpoint = CreateMessage("saved", AgwMessageTypes.AgentflowCheckpoint);
 
-        await TurnPipeline.RunAsync(
-            ToStream(content, checkpoint, TestContext.Current.CancellationToken),
-            false,
-            sink,
-            TestContext.Current.CancellationToken
+        await RunAsync(ToStream(content, checkpoint, TestContext.Current.CancellationToken), false, sink);
+
+        Assert.Equal(
+            [AgwMessageTypes.AgentflowCheckpoint, null, AgwMessageTypes.TurnFinished],
+            sink.Messages.Select(GetType)
         );
-
-        Assert.Equal(["turn-start", "agentflow-checkpoint", null, "turn-finished"], sink.Messages.Select(GetType));
     }
 
     [Fact]
-    public async Task RunAsync_FatalErrorContent_EmitsFailedFinish()
+    public async Task RunAsync_FatalErrorContent_EmitsFailedFinishWithErrorCode()
     {
         var sink = new CapturingSink();
         var error = CreateErrorMessage("model unavailable", fatal: true);
 
-        await TurnPipeline.RunAsync(
-            ToStream(error, cancellationToken: TestContext.Current.CancellationToken),
-            true,
-            sink,
-            TestContext.Current.CancellationToken
-        );
+        await RunAsync(ToStream(error, cancellationToken: TestContext.Current.CancellationToken), true, sink);
 
-        Assert.Same(error, sink.Messages[1]);
-        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
+        Assert.Same(error, sink.Messages[0]);
+        Assert.Equal(AgwTurnStatus.Failed, sink.Messages[^1].AdditionalProperties!["status"]);
+        Assert.NotNull(sink.Messages[^1].AdditionalProperties!["errorCode"]);
     }
 
     [Fact]
@@ -98,15 +93,10 @@ public class TurnPipelineTests
         var sink = new CapturingSink();
         var error = CreateErrorMessage("tool failed", fatal: false);
 
-        await TurnPipeline.RunAsync(
-            ToStream(error, cancellationToken: TestContext.Current.CancellationToken),
-            true,
-            sink,
-            TestContext.Current.CancellationToken
-        );
+        await RunAsync(ToStream(error, cancellationToken: TestContext.Current.CancellationToken), true, sink);
 
-        Assert.Same(error, sink.Messages[1]);
-        Assert.Equal("completed", sink.Messages[^1].AdditionalProperties!["status"]);
+        Assert.Same(error, sink.Messages[0]);
+        Assert.Equal(AgwTurnStatus.Completed, sink.Messages[^1].AdditionalProperties!["status"]);
     }
 
     [Theory]
@@ -117,15 +107,10 @@ public class TurnPipelineTests
         var sink = new CapturingSink();
         var error = CreateErrorMessage("model unavailable", fatal: true);
 
-        await TurnPipeline.RunAsync(
-            ThrowingStream(error, TestContext.Current.CancellationToken),
-            stream,
-            sink,
-            TestContext.Current.CancellationToken
-        );
+        await RunAsync(ThrowingStream(error, TestContext.Current.CancellationToken), stream, sink);
 
         Assert.Single(sink.Messages.SelectMany(message => message.Contents).OfType<AgwErrorContent>());
-        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
+        Assert.Equal(AgwTurnStatus.Failed, sink.Messages[^1].AdditionalProperties!["status"]);
     }
 
     [Fact]
@@ -133,34 +118,46 @@ public class TurnPipelineTests
     {
         var sink = new CapturingSink();
 
-        await TurnPipeline.RunAsync(
-            ThrowingStream(null, TestContext.Current.CancellationToken),
-            true,
+        await RunAsync(ThrowingStream(null, TestContext.Current.CancellationToken), true, sink);
+
+        var error = Assert.IsType<AgwErrorContent>(Assert.Single(sink.Messages[0].Contents));
+        Assert.Equal("stream failed", error.Content);
+        Assert.Equal(AgwTurnStatus.Failed, sink.Messages[^1].AdditionalProperties!["status"]);
+    }
+
+    /// <summary>
+    /// 遍历全部消息类型常量：非流式立即转发与只输出结果的连接对控制消息的判定一致。
+    /// Walks every message type constant: non-streaming immediate forwarding and result-only connections agree on control messages.
+    /// </summary>
+    [Fact]
+    public void ControlClassification_EveryMessageType_MatchesResultOnlySink()
+    {
+        var types = typeof(AgwMessageTypes)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .ToArray();
+        Assert.Contains(AgwMessageTypes.StepDiscarded, types);
+
+        foreach (var type in types)
+        {
+            var message = CreateMessage("content", type);
+            var forwarded = TurnPipeline.IsForwardedImmediately(message);
+            var resultOnly = ResultOnlyMessageSink.ShouldWrite(message);
+            Assert.Equal(AgwMessageClassifier.IsControl(message), forwarded);
+            Assert.Equal(forwarded || type == AgwMessageTypes.Result, resultOnly);
+        }
+    }
+
+    private static Task RunAsync(IAsyncEnumerable<AgwMessage> messages, bool stream, CapturingSink sink) =>
+        TurnPipeline.RunAsync(
+            Envelope,
+            ExecutionTestScopes.Scope(),
+            messages,
+            stream,
             sink,
             TestContext.Current.CancellationToken
         );
-
-        var error = Assert.IsType<AgwErrorContent>(Assert.Single(sink.Messages[1].Contents));
-        Assert.Equal("stream failed", error.Content);
-        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
-    }
-
-    [Fact]
-    public async Task RunAsync_LazyNonStreamingExecutionFails_EmitsSyntheticErrorAndFinish()
-    {
-        var sink = new CapturingSink();
-        var messages = RuntimeFactory.ToAsyncEnumerable(() =>
-            Task.FromException<IReadOnlyList<AgwMessage>>(new InvalidOperationException("non-streaming failed"))
-        );
-
-        Assert.Empty(sink.Messages);
-
-        await TurnPipeline.RunAsync(messages, false, sink, TestContext.Current.CancellationToken);
-
-        var error = Assert.IsType<AgwErrorContent>(Assert.Single(sink.Messages[1].Contents));
-        Assert.Equal("non-streaming failed", error.Content);
-        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
-    }
 
     private static async IAsyncEnumerable<AgwMessage> ToStream(
         AgwMessage first,

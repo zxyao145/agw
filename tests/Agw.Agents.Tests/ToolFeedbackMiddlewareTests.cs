@@ -34,8 +34,8 @@ public sealed class ToolFeedbackMiddlewareTests
                 "mode warning",
                 "todo warning",
                 "message",
-                ToolMessageTypes.TodoSnapshot,
-                ToolMessageTypes.ModeStatus,
+                AgwMessageTypes.ToolTodoSnapshot,
+                AgwMessageTypes.ToolModeStatus,
                 "message",
             ];
             Assert.Equal(expected, output.Select(Describe));
@@ -96,7 +96,10 @@ public sealed class ToolFeedbackMiddlewareTests
 
         var output = await RunAsync(middleware, agent, new TestSession(), true, [input]);
 
-        Assert.Equal(["message", ToolMessageTypes.TodoSnapshot, ToolMessageTypes.ModeStatus], output.Select(Describe));
+        Assert.Equal(
+            ["message", AgwMessageTypes.ToolTodoSnapshot, AgwMessageTypes.ToolModeStatus],
+            output.Select(Describe)
+        );
     }
 
     [Fact]
@@ -160,7 +163,10 @@ public sealed class ToolFeedbackMiddlewareTests
         }
 
         Assert.False(await second.MoveNextAsync());
-        Assert.Equal(["message", "mode warning", "message", ToolMessageTypes.ModeStatus], firstOutput.Select(Describe));
+        Assert.Equal(
+            ["message", "mode warning", "message", AgwMessageTypes.ToolModeStatus],
+            firstOutput.Select(Describe)
+        );
         Assert.Equal(firstOutput.Select(Describe), secondOutput.Select(Describe));
         Assert.Equal("plan", firstOutput[^1].AdditionalProperties!["mode"]);
         Assert.Equal("execute", secondOutput[^1].AdditionalProperties!["mode"]);

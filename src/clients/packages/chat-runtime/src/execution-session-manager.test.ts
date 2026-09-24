@@ -191,7 +191,7 @@ function createTurnFinishedMessage(): AiMessage {
     role: "system",
     author: "$agw",
     contents: [],
-    additionalProperties: { type: "turn-finished", status: "completed" },
+    additionalProperties: { type: "agw-turn-finished", status: "completed" },
   };
 }
 
@@ -250,7 +250,7 @@ test("manager restores the complete active turn instead of replaying capped delt
     author: "$agw",
     contents: [],
     streamingScopeId: "user-1",
-    additionalProperties: { type: "turn-start" },
+    additionalProperties: { type: "agw-turn-start" },
   });
 
   const deltas = Array.from({ length: 250 }, (_, index) => String(index % 10));
@@ -287,7 +287,7 @@ test("manager restores the complete active turn instead of replaying capped delt
     author: "$agw",
     contents: [],
     streamingScopeId: "user-1",
-    additionalProperties: { type: "turn-finished", status: "completed" },
+    additionalProperties: { type: "agw-turn-finished", status: "completed" },
   });
   assert.equal(second.getActiveTurnSnapshot(), null);
 });
@@ -523,7 +523,7 @@ function createTurnStartMessage(): AiMessage {
     role: "system",
     author: "$agw",
     contents: [],
-    additionalProperties: { type: "turn-start" },
+    additionalProperties: { type: "agw-turn-start" },
   };
 }
 
@@ -559,7 +559,7 @@ test("manager notifies with the failed status", () => {
   clientHandlers?.onMessage(createTurnStartMessage());
   clientHandlers?.onMessage({
     ...createTurnFinishedMessage(),
-    additionalProperties: { type: "turn-finished", status: "failed" },
+    additionalProperties: { type: "agw-turn-finished", status: "failed" },
   });
 
   assert.deepEqual(events, [{ key: sessionKey, status: "failed" }]);

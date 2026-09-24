@@ -1,7 +1,6 @@
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Outbound;
-using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -236,20 +235,5 @@ public class AgentflowMessageMapperTests
 
         Assert.All(first, message => Assert.Equal("fixed-id", message.MessageId));
         Assert.Equal(first.Select(message => message.Serialize()), second.Select(message => message.Serialize()));
-    }
-
-    [Fact]
-    public void CreateDurableFailure_PreservesSegmentIdentity()
-    {
-        var input = new DurableExecutionSegmentInput(Guid.CreateVersion7(), 3, [], null);
-
-        var result = AgentflowMessageMapper.CreateDurableFailure(input, "failure");
-
-        Assert.Equal(input.ExecutionId, result.ExecutionId);
-        Assert.Equal(3, result.SegmentIndex);
-        Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
-        Assert.Equal("failure", result.ErrorMessage);
-        Assert.Null(result.Checkpoint);
-        Assert.Empty(result.PendingInteractions);
     }
 }

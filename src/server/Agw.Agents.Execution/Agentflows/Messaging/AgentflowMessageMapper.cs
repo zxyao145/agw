@@ -2,7 +2,6 @@ using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
-using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -64,21 +63,6 @@ internal static class AgentflowMessageMapper
             : null;
     }
 
-    /// <summary>
-    /// 创建与当前 execution 和 segment 对齐的 Agentflow 失败结果。
-    /// </summary>
-    internal static DurableExecutionSegmentResult CreateDurableFailure(
-        DurableExecutionSegmentInput input,
-        string error
-    ) =>
-        new()
-        {
-            ExecutionId = input.ExecutionId,
-            SegmentIndex = input.SegmentIndex,
-            Status = DurableExecutionSegmentStatus.Failed,
-            ErrorMessage = error,
-        };
-
     internal static WorkflowGateInteraction CreateWorkflowGateInteraction(
         ExternalRequest externalRequest,
         AgentflowHumanGateNode node
@@ -137,7 +121,7 @@ internal static class AgentflowMessageMapper
     {
         var additionalProperties = new AdditionalPropertiesDictionary
         {
-            { "type", "human-gate-rejected" },
+            { "type", AgwMessageTypes.HumanGateRejected },
             { "requestId", request.InteractionId },
             { "nodeId", request.Source.NodeId },
         };
@@ -155,7 +139,7 @@ internal static class AgentflowMessageMapper
     {
         var additionalProperties = new AdditionalPropertiesDictionary
         {
-            { "type", "human-gate-unavailable" },
+            { "type", AgwMessageTypes.HumanGateUnavailable },
             { "nodeId", node.NodeId },
         };
 
@@ -175,7 +159,7 @@ internal static class AgentflowMessageMapper
     {
         var properties = new AdditionalPropertiesDictionary
         {
-            { "type", "tool-approval-unavailable" },
+            { "type", AgwMessageTypes.ToolApprovalUnavailable },
             { "providerRequestId", request.RequestId },
         };
         return new AgwMessage(
@@ -189,7 +173,7 @@ internal static class AgentflowMessageMapper
 
     internal static AgwMessage CreateWorkflowErrorMessage(Exception? exception, string messageId)
     {
-        var additionalProperties = new AdditionalPropertiesDictionary { { "type", "workflow-error" } };
+        var additionalProperties = new AdditionalPropertiesDictionary { { "type", AgwMessageTypes.WorkflowError } };
 
         return new AgwMessage(
             messageId,

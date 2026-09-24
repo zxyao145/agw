@@ -49,7 +49,7 @@ public sealed class ProjectAgentFileStore : AgentFileStore
     {
         _resolver = resolver;
         _projectId = projectId;
-        _workspaceSnapshot = workspaceSnapshot ?? ProjectWorkspaceContext.Get(projectId);
+        _workspaceSnapshot = workspaceSnapshot ?? ExecutionContextSlot.GetWorkspaceSnapshot(projectId);
         _directoryId = directoryId;
         _rootPath = string.IsNullOrWhiteSpace(rootPath) ? null : NormalizeScopedPath(rootPath, allowEmpty: false);
     }

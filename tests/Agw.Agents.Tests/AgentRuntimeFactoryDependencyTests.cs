@@ -1,0 +1,56 @@
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.Agents.Turns;
+using Agw.Shared.Data.Repositories;
+
+namespace Agw.Agents.Tests;
+
+public class AgentRuntimeFactoryDependencyTests
+{
+    [Fact]
+    public void Constructor_DoesNotDependOnRepositories()
+    {
+        var constructor = Assert.Single(typeof(AgentRuntimeFactory).GetConstructors());
+        var repositoryParameters = constructor
+            .GetParameters()
+            .Where(parameter =>
+                parameter.ParameterType.IsGenericType
+                && parameter.ParameterType.GetGenericTypeDefinition() == typeof(IRepository<>)
+            )
+            .Select(parameter => parameter.Name)
+            .ToArray();
+
+        Assert.Empty(repositoryParameters);
+    }
+
+    [Fact]
+    public void Constructor_UsesAgentAppServiceForAgentDataAccess()
+    {
+        var constructor = Assert.Single(typeof(AgentRuntimeFactory).GetConstructors());
+
+        Assert.Contains(constructor.GetParameters(), parameter => parameter.ParameterType == typeof(AgentAppService));
+    }
+
+    [Fact]
+    public void Constructor_UsesAgentSessionStateStoreForSessionPersistence()
+    {
+        var constructor = Assert.Single(typeof(AgentRuntimeFactory).GetConstructors());
+
+        Assert.Contains(
+            constructor.GetParameters(),
+            parameter => parameter.ParameterType == typeof(AgentSessionStateStore)
+        );
+    }
+
+    [Fact]
+    public void TurnExecutor_UsesConversationHandoffProviderForCrossTargetContext()
+    {
+        var constructor = Assert.Single(typeof(AgentTurnExecutor).GetConstructors());
+
+        Assert.Contains(
+            constructor.GetParameters(),
+            parameter => parameter.ParameterType == typeof(IConversationHandoffProvider)
+        );
+    }
+}

@@ -1,27 +1,34 @@
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Outbound;
 
 namespace Agw.Agents.Execution.Turns;
 
-public static class TurnPipeline
+/// <summary>
+/// Turn 的输出阶段：非流式时缓冲普通消息、即时转发控制消息；结束时先写入 Turn 行的结局，再写出结束消息。开始消息由受理写出。
+/// The output stage of a turn: without streaming ordinary messages are buffered while control messages pass through at once; at the end the turn row's outcome is written before the finish message. Acceptance writes the start message.
+/// </summary>
+internal static class TurnPipeline
 {
     public static async Task RunAsync(
+        TurnEnvelope envelope,
+        ExecutionScope scope,
         IAsyncEnumerable<AgwMessage> messages,
         bool stream,
         IExecutionMessageSink sink,
         CancellationToken cancellationToken
     )
     {
-        await sink.WriteAsync(TurnMessageFactory.CreateStarted(), CancellationToken.None);
+        ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(scope);
         var bufferedMessages = new List<AgwMessage>();
-        var status = "completed";
+        var status = AgwTurnStatus.Completed;
         var fatalErrorReceived = false;
 
         try
         {
             await foreach (var message in messages.WithCancellation(cancellationToken))
             {
-                var messageType = TurnMessageProtocol.GetMessageType(message);
-                if (TurnMessageProtocol.IsFinished(message))
+                if (AgwMessageClassifier.IsTurnFinished(message))
                 {
                     continue;
                 }
@@ -30,7 +37,7 @@ public static class TurnPipeline
                 if (isFatalError)
                 {
                     fatalErrorReceived = true;
-                    status = "failed";
+                    status = AgwTurnStatus.Failed;
 
                     if (!stream)
                     {
@@ -45,7 +52,7 @@ public static class TurnPipeline
                     }
                 }
 
-                if (stream || IsControlMessage(messageType))
+                if (stream || IsForwardedImmediately(message))
                 {
                     await sink.WriteAsync(message, cancellationToken);
                 }
@@ -62,11 +69,12 @@ public static class TurnPipeline
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            status = fatalErrorReceived ? "failed" : "interrupted";
+            status = fatalErrorReceived ? AgwTurnStatus.Failed : AgwTurnStatus.Interrupted;
         }
         catch (Exception exception)
         {
-            status = "failed";
+            status = AgwTurnStatus.Failed;
+            scope.RecordFailure(exception);
             if (!fatalErrorReceived)
             {
                 await sink.WriteAsync(CreateErrorMessage(exception.Message), CancellationToken.None);
@@ -74,15 +82,33 @@ public static class TurnPipeline
         }
         finally
         {
-            await sink.WriteAsync(TurnMessageFactory.CreateFinished(status), CancellationToken.None);
+            var stepCount = scope.Outcome?.StepCount ?? 0;
+            var errorCode = TurnMessageFactory.GetErrorCode(status, scope.Failure);
+            try
+            {
+                if (scope.Turn is { } turn)
+                    await turn.FinishAsync(
+                        TurnRecord.ToTerminalStatus(status),
+                        stepCount,
+                        errorCode,
+                        CancellationToken.None
+                    );
+            }
+            finally
+            {
+                await sink.WriteAsync(
+                    TurnMessageFactory.CreateFinished(envelope, status, stepCount, errorCode),
+                    CancellationToken.None
+                );
+            }
         }
     }
 
-    private static bool IsControlMessage(string? messageType) =>
-        messageType == "interaction-request"
-        || messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true
-        || messageType?.StartsWith("tool-approval-", StringComparison.Ordinal) == true
-        || string.Equals(messageType, "agentflow-checkpoint", StringComparison.Ordinal);
+    /// <summary>
+    /// 非流式输出中立即转发的消息：控制消息。
+    /// Messages forwarded at once in non-streaming output: control messages.
+    /// </summary>
+    internal static bool IsForwardedImmediately(AgwMessage message) => AgwMessageClassifier.IsControl(message);
 
     private static bool IsFatalError(AgwMessage message) =>
         message

@@ -3441,6 +3441,114 @@
         }
       }
     },
+    "/api/projects/conversation-turns": {
+      "get": {
+        "tags": [
+          "ConversationTurns"
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "beforeSequence",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationTurnPageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationTurnPageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationTurnPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/conversation-turn-messages": {
+      "get": {
+        "tags": [
+          "ConversationTurns"
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turnId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationTurnMessagesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationTurnMessagesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationTurnMessagesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/conversations": {
       "get": {
         "tags": [
@@ -5513,7 +5621,7 @@
             "$ref": "#/components/schemas/AgentType"
           },
           "externalAgentKind": {
-            "$ref": "#/components/schemas/ExternalAgentKind"
+            "$ref": "#/components/schemas/EngineKind"
           },
           "extra": {
             "type": [
@@ -5733,7 +5841,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ExternalAgentKind"
+                "$ref": "#/components/schemas/EngineKind"
               }
             ]
           },
@@ -6360,7 +6468,7 @@
             "$ref": "#/components/schemas/AgentType"
           },
           "externalAgentKind": {
-            "$ref": "#/components/schemas/ExternalAgentKind"
+            "$ref": "#/components/schemas/EngineKind"
           },
           "extra": {
             "type": [
@@ -6534,7 +6642,7 @@
             "$ref": "#/components/schemas/AgentType"
           },
           "externalAgentKind": {
-            "$ref": "#/components/schemas/ExternalAgentKind"
+            "$ref": "#/components/schemas/EngineKind"
           },
           "extra": {
             "type": [
@@ -7592,6 +7700,70 @@
             "items": {
               "$ref": "#/components/schemas/ConnectionResponse"
             }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfConversationTurnMessagesResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConversationTurnMessagesResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfConversationTurnPageResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConversationTurnPageResponse"
+              }
+            ]
           },
           "code": {
             "type": "integer",
@@ -9353,6 +9525,164 @@
           }
         }
       },
+      "ConversationTurnMessageResponse": {
+        "required": [
+          "sequence",
+          "stepIndex",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "stepIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "$ref": "#/components/schemas/AgwMessage"
+          }
+        },
+        "description": "Turn 内的一条消息。StepIndex 只用于同一节点内分组，排序使用 Sequence。\nOne message of a turn. StepIndex only groups messages within one node; ordering uses Sequence."
+      },
+      "ConversationTurnMessagesResponse": {
+        "required": [
+          "turnId",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConversationTurnMessageResponse"
+            }
+          }
+        }
+      },
+      "ConversationTurnPageResponse": {
+        "required": [
+          "items",
+          "nextBeforeSequence",
+          "hasMore"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConversationTurnResponse"
+            }
+          },
+          "nextBeforeSequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "description": "按 first_sequence 倒序的一页 Turn；NextBeforeSequence 用作下一页的 beforeSequence。\nOne page of turns in descending first_sequence order; NextBeforeSequence is the beforeSequence of the next page."
+      },
+      "ConversationTurnResponse": {
+        "required": [
+          "turnId",
+          "conversationId",
+          "status",
+          "agentId",
+          "agentType",
+          "startedAt",
+          "finishedAt",
+          "stepCount",
+          "firstSequence",
+          "lastSequence",
+          "errorCode",
+          "inputMessageId",
+          "inputSummary"
+        ],
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "conversationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agentType": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "stepCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "firstSequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "lastSequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "errorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inputMessageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inputSummary": {
+            "type": "string"
+          }
+        },
+        "description": "一个 Turn 的摘要。Status 取 accepted / running / completed / failed / interrupted，AgentType 取 agent / agentflow。\nThe summary of one turn. Status is accepted / running / completed / failed / interrupted, AgentType is agent / agentflow."
+      },
       "CreateTokenRequest": {
         "required": [
           "name"
@@ -9522,6 +9852,10 @@
       "EmptyToolOptions": {
         "type": "object"
       },
+      "EngineKind": {
+        "type": "integer",
+        "description": "执行 Agent 的程序种类；数值与持久化的外部 Agent 种类保持一致。\nThe kind of program that executes an Agent; values match the persisted external Agent kind."
+      },
       "ExecutionPermissionCapabilities": {
         "required": [
           "supportedPermissionModes"
@@ -9542,9 +9876,6 @@
           }
         }
       },
-      "ExternalAgentKind": {
-        "type": "integer"
-      },
       "ExternalAgentOptionResponse": {
         "required": [
           "kind",
@@ -9555,7 +9886,7 @@
         "type": "object",
         "properties": {
           "kind": {
-            "$ref": "#/components/schemas/ExternalAgentKind"
+            "$ref": "#/components/schemas/EngineKind"
           },
           "displayName": {
             "type": "string"
@@ -13169,6 +13500,9 @@
     },
     {
       "name": "Plugins"
+    },
+    {
+      "name": "ConversationTurns"
     },
     {
       "name": "ProjectConversations"

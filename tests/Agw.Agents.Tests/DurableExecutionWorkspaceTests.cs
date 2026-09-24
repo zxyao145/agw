@@ -1,8 +1,7 @@
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Shared.Coordination;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Tests;
@@ -10,62 +9,29 @@ namespace Agw.Agents.Tests;
 public sealed partial class DurableExecutionStoreTests
 {
     [Fact]
-    public async Task RegisterAsync_DirectoryConfigurationChanges_RetryKeepsOriginalSnapshot()
+    public async Task AcceptAsync_DirectoryConfigurationChanges_ResendKeepsOriginalSnapshot()
     {
-        await using var database = await TestDatabase.CreateAsync();
-        var task = CreateTask(database);
-        var projects = new WorkspaceProjectFacade(task.ProjectId);
-        var store = new DurableExecutionStore(
-            database.Context,
-            TimeProvider.System,
-            InMemoryApplicationLock.Shared,
-            TestDurablePersistence.Create(database.Context),
-            projects
-        );
-        var executionId = Guid.CreateVersion7();
-        var agentId = Guid.CreateVersion7();
+        // Arrange
         var token = TestContext.Current.CancellationToken;
-        var first = await store.RegisterAsync(
-            executionId,
-            "user-id",
-            agentId,
-            AgentRuntimeType.Agent,
-            CreateInput("hello"),
-            task,
-            CreateSettings(task.ProjectId, task.ContextId),
-            token
-        );
-        var original = first.Manifest.WorkspaceSnapshot!;
+        var task = await _kit.SeedConversationAsync();
+        var projects = new WorkspaceProjectFacade(task.ProjectId);
+        var turnId = Guid.CreateVersion7();
+        await AcceptAsync(task, turnId, projects: projects);
+        var original = (await Store.GetAsync(turnId, token)).Manifest.WorkspaceSnapshot!;
         projects.Project = projects.Project with { AdditionalDirectories = [] };
-        using var nextTurn = ProjectWorkspaceContext.Push(
-            task.ProjectId,
-            ProjectWorkspacePaths.CreateSnapshot(task.ProjectId, projects.Project.Workspace)
-        );
 
-        var retry = await store.RegisterAsync(
-            executionId,
-            "user-id",
-            agentId,
-            AgentRuntimeType.Agent,
-            CreateInput("hello"),
-            task,
-            CreateSettings(task.ProjectId, task.ContextId),
-            token
-        );
-        Assert.Equal(original.Fingerprint, retry.Manifest.WorkspaceSnapshot!.Fingerprint);
-        Assert.Single(retry.Manifest.WorkspaceSnapshot.AdditionalDirectories);
-        var next = await store.RegisterAsync(
-            Guid.CreateVersion7(),
-            "user-id",
-            agentId,
-            AgentRuntimeType.Agent,
-            CreateInput("hello"),
-            task,
-            CreateSettings(task.ProjectId, task.ContextId),
-            token
-        );
-        Assert.Empty(next.Manifest.WorkspaceSnapshot!.AdditionalDirectories);
-        Assert.NotEqual(original.Fingerprint, next.Manifest.WorkspaceSnapshot.Fingerprint);
+        // Act
+        var resend = await AcceptAsync(task, turnId, projects: projects);
+        var next = await AcceptAsync(task, projects: projects);
+
+        // Assert
+        Assert.False(resend.Created);
+        var retained = (await Store.GetAsync(turnId, token)).Manifest.WorkspaceSnapshot!;
+        Assert.Equal(original.Fingerprint, retained.Fingerprint);
+        Assert.Single(retained.AdditionalDirectories);
+        var nextSnapshot = (await Store.GetAsync(next.Request.TurnId, token)).Manifest.WorkspaceSnapshot!;
+        Assert.Empty(nextSnapshot.AdditionalDirectories);
+        Assert.NotEqual(original.Fingerprint, nextSnapshot.Fingerprint);
     }
 
     [Theory]
@@ -73,41 +39,27 @@ public sealed partial class DurableExecutionStoreTests
     [InlineData("userId")]
     public async Task GetAsync_MissingManifestField_RejectsWithoutCapturingOrPersisting(string field)
     {
-        await using var database = await TestDatabase.CreateAsync();
-        var task = CreateTask(database);
-        var projects = new WorkspaceProjectFacade(task.ProjectId);
-        var store = new DurableExecutionStore(
-            database.Context,
-            TimeProvider.System,
-            InMemoryApplicationLock.Shared,
-            TestDurablePersistence.Create(database.Context),
-            projects
-        );
+        // Arrange
         var token = TestContext.Current.CancellationToken;
-        var registered = await store.RegisterAsync(
-            Guid.CreateVersion7(),
-            "user-id",
-            Guid.CreateVersion7(),
-            AgentRuntimeType.Agentflow,
-            CreateInput("hello"),
-            task,
-            CreateSettings(task.ProjectId, task.ContextId),
-            token
-        );
+        var accepted = await AcceptAsync(agentType: AgentRuntimeType.Agentflow);
+        var id = accepted.Request.TurnId;
+        var registered = await Store.GetAsync(id, token);
         var json = System.Text.Json.Nodes.JsonNode.Parse(DurableExecutionJson.Serialize(registered.Manifest))!;
         Assert.True(json.AsObject().Remove(field));
         var unsupportedJson = json.ToJsonString();
-        var record = await database.Context.DurableExecutions.SingleAsync(token);
-        record.ManifestJson = unsupportedJson;
-        await database.Context.SaveChangesAsync(token);
+        await using (var context = _kit.CreateContext())
+        {
+            var record = await context.DurableExecutions.SingleAsync(item => item.Id == id, token);
+            record.ManifestJson = unsupportedJson;
+            await context.SaveChangesAsync(token);
+        }
 
-        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
-            store.GetAsync(registered.Manifest.ExecutionId, token)
-        );
-        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.DurableExecutionConflict.Code, exception.Code);
-        database.Context.ChangeTracker.Clear();
-        var unchanged = await database.Context.DurableExecutions.SingleAsync(token);
-        Assert.Equal(unsupportedJson, unchanged.ManifestJson);
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(() => Store.GetAsync(id, token));
+
+        // Assert
+        Assert.Equal(ErrorCodes.DurableExecutionConflict.Code, exception.Code);
+        Assert.Equal(unsupportedJson, (await _kit.ReadExecutionAsync(id)).ManifestJson);
     }
 
     private sealed class WorkspaceProjectFacade : IProjectRuntimeFacade
@@ -119,14 +71,19 @@ public sealed partial class DurableExecutionStoreTests
             Project = new ProjectRuntimeSnapshot(
                 projectId,
                 "project",
-                Path.GetTempPath(),
+                AppContext.BaseDirectory,
                 null,
                 [],
                 new Dictionary<string, string>(),
                 [],
                 [],
                 [],
-                [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), Path.Combine(Path.GetTempPath(), "additional"))]
+                [
+                    new ProjectWorkspaceDirectory(
+                        Guid.CreateVersion7(),
+                        Path.Combine(AppContext.BaseDirectory, "additional")
+                    ),
+                ]
             );
         }
 

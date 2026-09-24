@@ -60,7 +60,7 @@ public sealed class HumanInteractionDescriptionChatClient : DelegatingChatClient
                 new AIFunctionArguments(call.Arguments ?? new Dictionary<string, object?>())
             ) with
             {
-                Source = HumanInteractionToolMetadata.ReadSource(options) with
+                Source = HumanInteractionToolMetadata.CurrentSource(_interactions) with
                 {
                     ToolName = call.Name,
                     CallId = call.CallId,

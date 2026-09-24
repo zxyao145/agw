@@ -113,17 +113,14 @@ public sealed class AgentBehavior
             throw new AgwException(ErrorCodes.InvalidParam, $"Agent type '{agent.Type}' is not supported.");
         }
 
-        if (agent.Type == AgentType.System && agent.ExternalAgentKind != ExternalAgentKind.None)
+        if (agent.Type == AgentType.System && agent.ExternalAgentKind != EngineKind.Maf)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "System agents cannot specify an external agent kind.");
         }
 
         if (
             agent.Type == AgentType.External
-            && agent.ExternalAgentKind
-                is not ExternalAgentKind.ClaudeCode
-                    and not ExternalAgentKind.Codex
-                    and not ExternalAgentKind.Pi
+            && agent.ExternalAgentKind is not EngineKind.ClaudeCode and not EngineKind.Codex and not EngineKind.Pi
         )
         {
             throw new AgwException(ErrorCodes.InvalidParam, "External agents require a supported external agent kind.");

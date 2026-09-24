@@ -725,8 +725,8 @@ public class AgentHandlerFactoryTests
             AiRole.System,
             [new AgwTextContent { Content = string.Empty }],
             status == null
-                ? new AdditionalPropertiesDictionary { ["type"] = "turn-finished" }
-                : new AdditionalPropertiesDictionary { ["type"] = "turn-finished", ["status"] = status }
+                ? new AdditionalPropertiesDictionary { ["type"] = AgwMessageTypes.TurnFinished }
+                : new AdditionalPropertiesDictionary { ["type"] = AgwMessageTypes.TurnFinished, ["status"] = status }
         );
 
     private static async Task<List<StreamResponse>> DrainAsync(

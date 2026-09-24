@@ -58,7 +58,11 @@ public sealed class AgentflowCheckpointPersistenceTests
         var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
         await using var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-        var persistence = new AgentflowCheckpointPersistence(dbContext, TestDurablePersistence.Create(dbContext));
+        var persistence = new AgentflowCheckpointPersistence(
+            dbContext,
+            TestDurablePersistence.Create(dbContext),
+            new Agw.Projects.Infrastructure.ConversationTurnStore(dbContext, TimeProvider.System)
+        );
         var checkpointId = Guid.CreateVersion7();
 
         // Act

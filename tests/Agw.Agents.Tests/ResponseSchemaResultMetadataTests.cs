@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -11,25 +10,28 @@ namespace Agw.Agents.Tests;
 public sealed class ResponseSchemaResultMetadataTests
 {
     [Theory]
-    [InlineData("system", true)]
-    [InlineData("claude-code", true)]
-    [InlineData("codex", true)]
-    [InlineData("pi", true)]
-    [InlineData("system", false)]
-    [InlineData("claude-code", false)]
-    [InlineData("codex", false)]
-    [InlineData("pi", false)]
-    public async Task Run_WithSchema_MarksLiveAndPersistedResultsOnly(string author, bool streaming)
+    [InlineData(EngineKind.Maf, true)]
+    [InlineData(EngineKind.ClaudeCode, true)]
+    [InlineData(EngineKind.Codex, true)]
+    [InlineData(EngineKind.Pi, true)]
+    [InlineData(EngineKind.Maf, false)]
+    [InlineData(EngineKind.ClaudeCode, false)]
+    [InlineData(EngineKind.Codex, false)]
+    [InlineData(EngineKind.Pi, false)]
+    public async Task Run_WithSchema_MarksLiveAndPersistedResultsOnly(EngineKind engine, bool streaming)
     {
+        using var owner = HistoryTestFixture.EnterUser();
         foreach (var configured in new[] { false, true })
         {
-            var storage = new RecordingHistoryProvider();
-            ChatHistoryProvider history = configured ? new ResponseSchemaChatHistoryProvider(storage) : storage;
+            await using var fixture = await HistoryTestFixture.CreateAsync();
+            var history = fixture.CreateProvider(engine, structuredResult: configured);
+            var author = engine.ToString();
             AIAgent agent = new CallbackAgent(history, author);
             if (configured)
             {
                 agent = new AgentResponseSchemaExecutionAgent(agent, "test", author, "test");
             }
+            var session = await fixture.CreateSessionAsync(agent);
 
             var input = new ChatMessage(ChatRole.User, "Review");
             List<AgwMessage> output;
@@ -39,6 +41,7 @@ public sealed class ResponseSchemaResultMetadataTests
                 await foreach (
                     var update in agent.RunStreamingAsync(
                         [input],
+                        session,
                         cancellationToken: TestContext.Current.CancellationToken
                     )
                 )
@@ -48,7 +51,11 @@ public sealed class ResponseSchemaResultMetadataTests
             }
             else
             {
-                var response = await agent.RunAsync([input], cancellationToken: TestContext.Current.CancellationToken);
+                var response = await agent.RunAsync(
+                    [input],
+                    session,
+                    cancellationToken: TestContext.Current.CancellationToken
+                );
                 output = response.Messages.Select(message => message.ToAiMessage()!).ToList();
             }
 
@@ -58,16 +65,16 @@ public sealed class ResponseSchemaResultMetadataTests
             Assert.Equal("success", output[1].AdditionalProperties!["subtype"]);
             Assert.Equal("{\"approved\":false}", Assert.IsType<AgwTextContent>(output[1].Contents[0]).Content);
 
-            // Serialization happens inside the SDK history callback, before the outer execution wrapper sees output.
-            using var persisted = JsonDocument.Parse(storage.Messages[1]);
-            var properties = persisted.RootElement.GetProperty("additionalProperties");
-            Assert.Equal(configured, properties.TryGetProperty("resultFormat", out var format));
-            if (configured)
-                Assert.Equal("json", format.GetString());
-            using var ordinary = JsonDocument.Parse(storage.Messages[0]);
-            Assert.False(
-                ordinary.RootElement.GetProperty("additionalProperties").TryGetProperty("resultFormat", out _)
+            // SDK 的历史回调在外层执行包装看到输出之前完成持久化；持久化的 Result 总带有格式，没有 ResponseSchema 时为 markdown。
+            // Persistence happens inside the SDK history callback, before the outer execution wrapper sees output; a persisted Result always carries its format, markdown without a ResponseSchema.
+            var stored = await fixture.ReadMessagesAsync();
+            var persisted = Assert.Single(stored, message => message.Text == "{\"approved\":false}");
+            Assert.Equal(
+                configured ? "json" : "markdown",
+                persisted.AdditionalProperties?.GetValueOrDefault("resultFormat")?.ToString()
             );
+            var ordinary = Assert.Single(stored, message => message.Text == "Reviewing...");
+            Assert.False(ordinary.AdditionalProperties?.ContainsKey("resultFormat") ?? false);
         }
     }
 
@@ -101,24 +108,10 @@ public sealed class ResponseSchemaResultMetadataTests
         Assert.Equal("not valid JSON", content.Text);
     }
 
-    private sealed class RecordingHistoryProvider : ChatHistoryProvider
-    {
-        public List<string> Messages { get; } = [];
-
-        protected override ValueTask StoreChatHistoryAsync(InvokedContext context, CancellationToken cancellationToken)
-        {
-            Messages.AddRange(
-                (context.ResponseMessages ?? []).Select(message =>
-                    JsonSerializer.Serialize(
-                        message.ToAiMessage(),
-                        new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                    )
-                )
-            );
-            return ValueTask.CompletedTask;
-        }
-    }
-
+    /// <summary>
+    /// 像 SDK 一样先在运行开始时调用 InvokingAsync，再在输出之前交出完整响应。
+    /// Like SDKs, calls InvokingAsync when the run starts and hands over the complete response before emitting output.
+    /// </summary>
     private sealed class CallbackAgent : AIAgent
     {
         private readonly ChatHistoryProvider _history;
@@ -184,6 +177,10 @@ public sealed class ResponseSchemaResultMetadataTests
         )
         {
             session ??= await CreateSessionAsync(cancellationToken);
+            await _history.InvokingAsync(
+                new ChatHistoryProvider.InvokingContext(this, session, input),
+                cancellationToken
+            );
             await _history.InvokedAsync(
                 new ChatHistoryProvider.InvokedContext(this, session, input, CreateMessages()),
                 cancellationToken

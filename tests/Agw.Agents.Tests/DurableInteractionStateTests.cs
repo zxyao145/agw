@@ -20,11 +20,9 @@ public sealed partial class DurableExecutionStoreTests
         ApprovalScope expected
     )
     {
-        await using var database = await TestDatabase.CreateAsync();
-        var store = database.CreateStore();
-        var id = await RegisterExecutionAsync(database, store, permissionMode: mode);
-        await WaitForInteractionsAsync(store, id, [InteractionTestData.Tool("tool")]);
-        var saved = await store.SubmitHumanResponseAsync(
+        var id = await RegisterAsync(permissionMode: mode);
+        await WaitForInteractionsAsync(id, [InteractionTestData.Tool("tool")]);
+        var saved = await Store.SubmitHumanResponseAsync(
             new(
                 id,
                 new ToolApprovalDecision
@@ -34,7 +32,7 @@ public sealed partial class DurableExecutionStoreTests
                     Scope = ApprovalScope.AlwaysTool,
                 }
             ),
-            "user-id",
+            UserId,
             TestContext.Current.CancellationToken
         );
         Assert.Equal(expected, Assert.IsType<ToolApprovalDecision>(Assert.Single(saved.Responses)).Scope);
@@ -43,17 +41,14 @@ public sealed partial class DurableExecutionStoreTests
     [Fact]
     public async Task SetPermissionModeAsync_MixedPending_DoesNotResolveCurrentTurnInteractions()
     {
-        await using var database = await TestDatabase.CreateAsync();
-        var store = database.CreateStore();
-        var id = await RegisterExecutionAsync(database, store);
+        var id = await RegisterAsync();
         await WaitForInteractionsAsync(
-            store,
             id,
             [InteractionTestData.Tool("tool"), InteractionTestData.Input("input"), InteractionTestData.Gate("gate")]
         );
-        var result = await store.SetPermissionModeAsync(
+        var result = await Store.SetPermissionModeAsync(
             id,
-            "user-id",
+            UserId,
             AgwPermissionMode.FullAccess,
             TestContext.Current.CancellationToken
         );
@@ -63,7 +58,7 @@ public sealed partial class DurableExecutionStoreTests
         Assert.Null(result.Manifest.Settings.PermissionMode);
         Assert.Equal(AgwPermissionMode.FullAccess, result.Manifest.Settings.NextPermissionMode);
         await Assert.ThrowsAsync<AgwException>(() =>
-            store.SetPermissionModeAsync(
+            Store.SetPermissionModeAsync(
                 id,
                 "foreign-owner",
                 AgwPermissionMode.AlwaysAsk,
@@ -76,12 +71,9 @@ public sealed partial class DurableExecutionStoreTests
     public async Task SetPermissionModeAsync_Running_PreservesCurrentTurnIncludingNewBoundaries()
     {
         var token = TestContext.Current.CancellationToken;
-        await using var database = await TestDatabase.CreateAsync();
-        var store = database.CreateStore();
-        var id = await RegisterExecutionAsync(database, store);
-        var running = Assert.IsType<DurableExecutionSnapshot>(
-            await store.TryBeginSegmentAsync(id, DateTimeOffset.MaxValue, token)
-        );
+        var id = await RegisterAsync();
+        var lease = await ClaimAsync(id);
+        var running = await Store.GetAsync(id, token);
         var reconnect = Agw.Agents.Execution.Runtimes.Durable.DurableExecutionCoordinator.ToStatus(
             running with
             {
@@ -93,20 +85,19 @@ public sealed partial class DurableExecutionStoreTests
         );
         Assert.Equal(5, reconnect.ActivePermissionVersion);
         Assert.Equal(5, reconnect.NextPermissionVersion);
-        var updated = await store.SetPermissionModeAsync(id, "user-id", AgwPermissionMode.FullAccess, token);
+        var updated = await Store.SetPermissionModeAsync(id, UserId, AgwPermissionMode.FullAccess, token);
         Assert.Equal(running.StateVersion, updated.StateVersion);
         Assert.Equal(0, updated.Manifest.Settings.PermissionVersion);
         Assert.Equal(1, updated.Manifest.Settings.NextPermissionVersion);
-        var saved = await store.SaveSegmentResultAsync(
+        var saved = await ApplyAsync(
+            lease,
             new()
             {
                 ExecutionId = id,
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [InteractionTestData.Tool("late-tool")],
-            },
-            running.StateVersion,
-            token
+            }
         );
         Assert.Equal(DurableExecutionStatus.WaitingForHuman, saved.Status);
         Assert.Empty(saved.Responses);
@@ -115,16 +106,14 @@ public sealed partial class DurableExecutionStoreTests
     }
 
     [Fact]
-    public async Task SaveSegmentResultAsync_NextApproval_PreservesUnconsumedInputAnswersAndCatalog()
+    public async Task ApplySegmentResultAsync_NextApproval_PreservesUnconsumedInputAnswersAndCatalog()
     {
         var token = TestContext.Current.CancellationToken;
-        await using var database = await TestDatabase.CreateAsync();
-        var store = database.CreateStore();
-        var id = await RegisterExecutionAsync(database, store);
+        var id = await RegisterAsync();
         var first = InteractionTestData.Input("a");
         var second = InteractionTestData.Input("b");
-        await WaitForInteractionsAsync(store, id, [first], [first, second]);
-        await store.SubmitHumanResponseAsync(
+        await WaitForInteractionsAsync(id, [first], [first, second]);
+        await Store.SubmitHumanResponseAsync(
             new(
                 id,
                 new UserInputResponse
@@ -134,13 +123,13 @@ public sealed partial class DurableExecutionStoreTests
                     ResponseData = JsonSerializer.SerializeToElement(new { answer = "A" }),
                 }
             ),
-            "user-id",
+            UserId,
             token
         );
-        var running = Assert.IsType<DurableExecutionSnapshot>(
-            await store.TryBeginSegmentAsync(id, DateTimeOffset.MaxValue, token)
-        );
-        var next = await store.SaveSegmentResultAsync(
+        var lease = await ClaimAsync(id);
+        var running = await Store.GetAsync(id, token);
+        var next = await ApplyAsync(
+            lease,
             new()
             {
                 ExecutionId = id,
@@ -148,16 +137,14 @@ public sealed partial class DurableExecutionStoreTests
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [second],
                 InputCatalog = running.InputCatalog,
-            },
-            running.StateVersion,
-            token
+            }
         );
         Assert.Empty(next.Responses);
         Assert.Equal("a", Assert.Single(next.ResolvedInputs).Request.InteractionId);
         Assert.Equal(2, next.InputCatalog.Count);
-        var answered = await store.SubmitHumanResponseAsync(
+        var answered = await Store.SubmitHumanResponseAsync(
             new(id, new UserInputResponse { InteractionId = "b", Cancelled = true }),
-            "user-id",
+            UserId,
             token
         );
         var resume = answered.CreateSegmentInput();
@@ -165,18 +152,20 @@ public sealed partial class DurableExecutionStoreTests
         Assert.Equal(["a", "b"], resume.ResolvedInputs.Select(item => item.Request.InteractionId));
     }
 
-    private static async Task WaitForInteractionsAsync(
-        DurableExecutionStore store,
+    /// <summary>
+    /// 领取租约并提交一个等待人工的 Segment 结果。
+    /// Claims the lease and commits a segment result that waits for humans.
+    /// </summary>
+    private async Task WaitForInteractionsAsync(
         Guid id,
         IReadOnlyList<InteractionRequest> requests,
         IReadOnlyList<UserInputInteraction>? catalog = null
     )
     {
-        var token = TestContext.Current.CancellationToken;
-        var running = Assert.IsType<DurableExecutionSnapshot>(
-            await store.TryBeginSegmentAsync(id, DateTimeOffset.MaxValue, token)
-        );
-        await store.SaveSegmentResultAsync(
+        var lease = await ClaimAsync(id);
+        var running = await Store.GetAsync(id, TestContext.Current.CancellationToken);
+        await ApplyAsync(
+            lease,
             new()
             {
                 ExecutionId = id,
@@ -184,9 +173,7 @@ public sealed partial class DurableExecutionStoreTests
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = requests,
                 InputCatalog = catalog ?? [],
-            },
-            running.StateVersion,
-            token
+            }
         );
     }
 }
@@ -194,16 +181,15 @@ public sealed partial class DurableExecutionStoreTests
 public class InteractionPermissionVersionTests
 {
     [Fact]
-    public void Synchronize_ModeReturnsToOriginal_RevokesPreviousGrant()
+    public void Synchronize_LaterTurnReturnsToOriginalMode_RevokesPreviousGrant()
     {
-        var permissions = new InteractionPermissionState(AgwPermissionMode.AllowSameArguments);
+        var firstTurn = new InteractionPermissionState(AgwPermissionMode.AllowSameArguments);
         var session = new PermissionSession();
         var call = new FunctionCallContent("call", "tool", new Dictionary<string, object?> { ["path"] = "a" });
-        MafSessionApprovalState.Synchronize(session, permissions);
-        MafSessionApprovalState.Record(session, call, ApprovalScope.AlwaysArguments, permissions.Current);
-        permissions.Set(AgwPermissionMode.AlwaysAsk, 1);
-        permissions.Set(AgwPermissionMode.AllowSameArguments, 2);
-        MafSessionApprovalState.Synchronize(session, permissions);
+        MafSessionApprovalState.Synchronize(session, firstTurn);
+        MafSessionApprovalState.Record(session, call, ApprovalScope.AlwaysArguments, firstTurn.Current);
+        var laterTurn = new InteractionPermissionState(AgwPermissionMode.AllowSameArguments, version: 2);
+        MafSessionApprovalState.Synchronize(session, laterTurn);
         Assert.True(
             session.StateBag.TryGetValue<MafSessionGrantState>(MafSessionApprovalState.GrantStateKey, out var grants)
         );

@@ -1,6 +1,3 @@
-using Agw.Agents.Execution.Turns;
-using Microsoft.Extensions.AI;
-
 namespace Agw.Agents.Execution.Outbound;
 
 /// <summary>
@@ -13,8 +10,6 @@ namespace Agw.Agents.Execution.Outbound;
 /// </remarks>
 internal sealed class ResultOnlyMessageSink : IExecutionMessageSink
 {
-    private const string ResultType = "result";
-
     private readonly IExecutionMessageSink _inner;
 
     public ResultOnlyMessageSink(IExecutionMessageSink inner)
@@ -33,24 +28,8 @@ internal sealed class ResultOnlyMessageSink : IExecutionMessageSink
     public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) =>
         ShouldWrite(message) ? _inner.WriteAsync(message, cancellationToken) : ValueTask.CompletedTask;
 
-    private static bool ShouldWrite(AgwMessage message) =>
-        IsResult(message) || IsControl(TurnMessageProtocol.GetMessageType(message)) || HasError(message);
-
-    private static bool IsResult(AgwMessage message) =>
-        ReadType(message.AdditionalProperties) == ResultType
-        || message.Contents.Any(content => ReadType(content.AdditionalProperties) == ResultType);
-
-    private static bool IsControl(string? messageType) =>
-        messageType
-            is TurnMessageProtocol.StartedType
-                or TurnMessageProtocol.FinishedType
-                or "interaction-request"
-                or "agentflow-checkpoint"
-        || messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true
-        || messageType?.StartsWith("tool-approval-", StringComparison.Ordinal) == true;
+    internal static bool ShouldWrite(AgwMessage message) =>
+        AgwMessageClassifier.IsResult(message) || AgwMessageClassifier.IsControl(message) || HasError(message);
 
     private static bool HasError(AgwMessage message) => message.Contents.OfType<AgwErrorContent>().Any();
-
-    private static string? ReadType(AdditionalPropertiesDictionary? properties) =>
-        properties?.TryGetValue("type", out var value) == true ? value?.ToString() : null;
 }

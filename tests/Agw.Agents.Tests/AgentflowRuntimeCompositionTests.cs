@@ -1,10 +1,8 @@
 using System.Reflection;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
-using Agw.Agents.Execution.Agentflows.Context;
-using Agw.Agents.Execution.Agentflows.Runners.Durable;
-using Agw.Agents.Execution.Agentflows.Runners.InProcess;
 using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
@@ -21,7 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Theory]
     [InlineData("InProcess")]
@@ -50,6 +48,13 @@ public partial class AgentflowRuntimeServiceTests
             new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(false, false, false)
         );
         services.AddSingleton<IApplicationLock, InMemoryApplicationLock>();
+        services.AddSingleton<Agw.Projects.Contracts.History.IConversationHistoryStore>(
+            provider => new ConversationHistoryStore(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ConversationHistoryStore>.Instance,
+                TimeProvider.System
+            )
+        );
         services.AddScoped<IRepository<Agentflow>>(_ => new TestRepository<Agentflow>([], flow => flow.Id));
         services.AddScoped<IRepository<AgentflowNode>>(_ => new TestRepository<AgentflowNode>([], node => node.NodeId));
         services.AddScoped<IRepository<AgentflowEdge>>(_ => new TestRepository<AgentflowEdge>([], edge => edge.EdgeId));
@@ -59,7 +64,7 @@ public partial class AgentflowRuntimeServiceTests
             provider.GetRequiredService<IRepository<AgentflowEdge>>()
         ));
         services.AddScoped<Agw.Auth.Contracts.IUserInfoService>(_ => new TestUserInfoService());
-        services.AddScoped<IAgentRuntimeService>(_ => new StubAgentRuntimeService(Guid.CreateVersion7()));
+        services.AddScoped<IAgentRuntimeFactory>(_ => new StubAgentRuntimeFactory(Guid.CreateVersion7()));
         services.AddScoped<IProviderSessionState>(_ => new StubProviderSessionState());
         services.AddScoped<IAgentTurnSummaryService>(_ => new RecordingSummaryService());
         services.AddScoped<Agw.Projects.Contracts.Runtime.IProjectDefaultResolver>(
@@ -68,12 +73,9 @@ public partial class AgentflowRuntimeServiceTests
         services.AddScoped<Agw.Projects.Contracts.Runtime.IProjectRuntimeFacade>(_ => new TestProjectRuntimeFacade());
         var types = new[]
         {
-            typeof(AgentflowWorkflowFactory),
-            typeof(AgentflowExecutionContextFactory),
+            typeof(AgentflowRuntimeFactory),
             typeof(AgentflowCheckpointSupport),
-            typeof(DurableAgentflowSegmentRunner),
-            typeof(InProcessAgentflowRunner),
-            typeof(AgentflowRuntimeService),
+            typeof(AgentflowTurnExecutor),
         };
         foreach (var type in types)
             Assert.Equal(
@@ -84,9 +86,6 @@ public partial class AgentflowRuntimeServiceTests
         await using var first = provider.CreateAsyncScope();
         await using var second = provider.CreateAsyncScope();
 
-        var runtime = first.ServiceProvider.GetRequiredService<AgentflowRuntimeService>();
-
-        Assert.Same(runtime, first.ServiceProvider.GetRequiredService<IAgentflowRuntimeService>());
         Assert.IsType<AgentflowMermaidProvider>(
             first.ServiceProvider.GetRequiredService<Agw.Agents.Contracts.Catalog.IAgentflowMermaidProvider>()
         );
@@ -101,30 +100,26 @@ public partial class AgentflowRuntimeServiceTests
     }
 
     [Fact]
-    public void RuntimeConstructor_DependsOnlyOnCollaboratorsAndProjectResolution()
+    public void TurnExecutorConstructor_DependsOnlyOnRuntimeFactoryCheckpointsAndHistory()
     {
         var types = Assert
-            .Single(typeof(AgentflowRuntimeService).GetConstructors())
+            .Single(typeof(AgentflowTurnExecutor).GetConstructors())
             .GetParameters()
             .Select(parameter => parameter.ParameterType)
             .ToHashSet();
 
-        Assert.Equal(7, types.Count);
-        Assert.Contains(typeof(IConversationHistoryPersistence), types);
-        Assert.Contains(typeof(AgentflowExecutionContextFactory), types);
-        Assert.Contains(typeof(AgentflowWorkflowFactory), types);
-        Assert.Contains(typeof(InProcessAgentflowRunner), types);
-        Assert.Contains(typeof(DurableAgentflowSegmentRunner), types);
-        Assert.Contains(typeof(Agw.Projects.Contracts.Runtime.IProjectDefaultResolver), types);
-        Assert.Contains(typeof(Agw.Projects.Contracts.Runtime.IProjectRuntimeFacade), types);
+        Assert.Equal(4, types.Count);
+        Assert.Contains(typeof(AgentflowRuntimeFactory), types);
+        Assert.Contains(typeof(AgentflowCheckpointSupport), types);
+        Assert.Contains(typeof(Microsoft.Extensions.Logging.ILogger<AgentflowTurnExecutor>), types);
+        Assert.Contains(typeof(Agw.Projects.Contracts.History.IConversationHistoryStore), types);
     }
 
     [Theory]
-    [InlineData(typeof(InProcessAgentflowRunner))]
-    [InlineData(typeof(DurableAgentflowSegmentRunner))]
+    [InlineData(typeof(AgentflowTurnExecutor))]
+    [InlineData(typeof(AgentflowRuntimeFactory))]
     [InlineData(typeof(AgentflowCheckpointSupport))]
-    [InlineData(typeof(AgentflowExecutionContextFactory))]
-    public void RunnerFields_DoNotRetainPerExecutionState(Type type)
+    public void TurnCollaboratorFields_DoNotRetainPerExecutionState(Type type)
     {
         var fields = type.GetFields(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
 
@@ -209,7 +204,7 @@ public partial class AgentflowRuntimeServiceTests
         var failure = new InvalidOperationException("sink failed");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            fixture.Service.ExecuteDurableSegmentAsync(
+            fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
                 new(manifest.ExecutionId, 0, [], null),
                 new FailingSegmentSink(failure),

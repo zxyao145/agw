@@ -14,7 +14,6 @@ internal static class TestProjectPersistence
             InMemoryApplicationLock.Shared,
             new DurableExecutionScopeMaintenance(
                 context,
-                InMemoryApplicationLock.Shared,
                 TimeProvider.System,
                 NullLogger<DurableExecutionScopeMaintenance>.Instance
             ),

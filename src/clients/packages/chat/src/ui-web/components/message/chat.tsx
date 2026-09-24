@@ -1,6 +1,10 @@
 "use client";
 
-import { getPermissionStatus, type InteractionResponse } from "@agw/execution-core";
+import {
+  getPermissionStatus,
+  isTurnStartMessage,
+  type InteractionResponse,
+} from "@agw/execution-core";
 
 import * as React from "react";
 import { useQuery } from "@agw/components/query";
@@ -629,7 +633,7 @@ export function Chat({
         return;
       }
 
-      if (message.additionalProperties?.type === "turn-start") {
+      if (isTurnStartMessage(message)) {
         streamingMessageBatcherRef.current?.flush(generation);
         activeStreamingScopeRef.current =
           getMessageStreamingScopeId(message) ??

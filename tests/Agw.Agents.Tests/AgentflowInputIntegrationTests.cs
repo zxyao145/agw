@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
@@ -6,13 +7,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Fact]
     public async Task ExecuteDurableSegmentAsync_CustomInput_UsesNodeIdentityAcrossEveryResume()
     {
         var token = TestContext.Current.CancellationToken;
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         await using var services = new ServiceCollection()
             .AddSingleton(accessor)
             .AddSingleton<IHumanInteractionContextAccessor>(accessor)
@@ -26,8 +27,7 @@ public partial class AgentflowRuntimeServiceTests
                     services,
                     completed,
                     deferred: true
-                ),
-            interactionAccessor: accessor
+                )
         );
         var manifest = CreateManifest(fixture.Flow.Id);
         manifest = manifest with
@@ -40,7 +40,7 @@ public partial class AgentflowRuntimeServiceTests
         DurableExecutionSegmentResult? result = null;
         for (var segment = 0; segment < 4; segment++)
         {
-            result = await fixture.Service.ExecuteDurableSegmentAsync(manifest, input, sink, token);
+            result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(manifest, input, sink, token);
             if (result.Status != DurableExecutionSegmentStatus.WaitingForHuman)
                 break;
             Assert.NotEmpty(result.PendingInteractions);

@@ -15,6 +15,7 @@ internal sealed class AgentflowBlockBuildContext
         AgentflowNode blockNode,
         IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
+        IReadOnlyDictionary<string, EngineKind> nodeEngineKinds,
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext,
         AIAgentHostOptions agentHostOptions
@@ -24,6 +25,7 @@ internal sealed class AgentflowBlockBuildContext
         BlockNode = blockNode;
         NodeMap = nodeMap;
         NodeIdToAgent = nodeIdToAgent;
+        NodeEngineKinds = nodeEngineKinds;
         SessionScope = sessionScope;
         ExecutionTraceContext = executionTraceContext;
         AgentHostOptions = agentHostOptions;
@@ -36,6 +38,8 @@ internal sealed class AgentflowBlockBuildContext
     public IReadOnlyDictionary<string, AgentflowNode> NodeMap { get; }
 
     public IReadOnlyDictionary<string, AIAgent> NodeIdToAgent { get; }
+
+    public IReadOnlyDictionary<string, EngineKind> NodeEngineKinds { get; }
 
     public AgentflowAgentSessionScope? SessionScope { get; }
 

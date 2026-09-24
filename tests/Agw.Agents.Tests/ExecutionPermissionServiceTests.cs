@@ -12,9 +12,9 @@ namespace Agw.Agents.Tests;
 public sealed class ExecutionPermissionServiceTests
 {
     [Theory]
-    [InlineData(ExternalAgentKind.Codex)]
-    [InlineData(ExternalAgentKind.Pi)]
-    public void ExternalSdk_WithoutApprovalChannel_OnlyAllowsFullAccess(ExternalAgentKind kind)
+    [InlineData(EngineKind.Codex)]
+    [InlineData(EngineKind.Pi)]
+    public void ExternalSdk_WithoutApprovalChannel_OnlyAllowsFullAccess(EngineKind kind)
     {
         var agent = new Agent { Type = AgentType.External, ExternalAgentKind = kind };
         Assert.Equal(
@@ -46,7 +46,7 @@ public sealed class ExecutionPermissionServiceTests
             Id = Guid.NewGuid(),
             Name = "codex",
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.Codex,
+            ExternalAgentKind = EngineKind.Codex,
             CreateBy = "owner",
         };
         var foreign = new Agent
@@ -112,7 +112,7 @@ public sealed class ExecutionPermissionServiceTests
             var agent in new[]
             {
                 new Agent { Type = AgentType.System },
-                new Agent { Type = AgentType.External, ExternalAgentKind = ExternalAgentKind.ClaudeCode },
+                new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.ClaudeCode },
             }
         )
             Assert.Equal(

@@ -154,7 +154,7 @@ public sealed class ToolFeedbackModeTests
 
     private static void AssertModeSnapshot(AgentResponseUpdate update, string mode)
     {
-        Assert.Equal(ToolMessageTypes.ModeStatus, update.AdditionalProperties!["type"]);
+        Assert.Equal(AgwMessageTypes.ToolModeStatus, update.AdditionalProperties!["type"]);
         Assert.Equal("mode_set", update.AdditionalProperties["toolName"]);
         Assert.Equal("mode-call-1", update.AdditionalProperties["callId"]);
         Assert.Equal(mode, update.AdditionalProperties["mode"]);

@@ -23,8 +23,8 @@ public class AgentNames
             Name = ClaudeCode,
             Description = "External agent for Claude Code integration with AI-powered coding assistance",
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
-            Extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.ClaudeCode),
+            ExternalAgentKind = EngineKind.ClaudeCode,
+            Extra = ExternalAgentDefaults.GetDefaultExtra(EngineKind.ClaudeCode),
         },
         new Agent
         {
@@ -33,8 +33,8 @@ public class AgentNames
             Name = Codex,
             Description = "External agent for OpenAI Codex integration",
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.Codex,
-            Extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Codex),
+            ExternalAgentKind = EngineKind.Codex,
+            Extra = ExternalAgentDefaults.GetDefaultExtra(EngineKind.Codex),
         },
         new Agent
         {
@@ -43,8 +43,8 @@ public class AgentNames
             Name = Pi,
             Description = "External agent for the Pi agent integration",
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.Pi,
-            Extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Pi),
+            ExternalAgentKind = EngineKind.Pi,
+            Extra = ExternalAgentDefaults.GetDefaultExtra(EngineKind.Pi),
         },
         //new Agent
         //{

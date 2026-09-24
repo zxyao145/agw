@@ -30,6 +30,17 @@ export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
 
 export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
 
+/** Turn 生命周期控制消息的类型，与服务端 AgwMessageTypes 一致。 */
+export const TURN_START_MESSAGE_TYPE = "agw-turn-start";
+export const TURN_FINISHED_MESSAGE_TYPE = "agw-turn-finished";
+export const STEP_DISCARDED_MESSAGE_TYPE = "agw-step-discarded";
+
+/** 服务端给 Turn 内每条消息加上的 Turn ID 与 Turn 内序号；序号用作断线恢复的游标。 */
+export type TurnPosition = {
+  turnId: string;
+  turnSequence: number;
+};
+
 export type ApprovalScope = "Once" | "AlwaysTool" | "AlwaysArguments";
 export type InteractionSource = {
   nodeId?: string;
@@ -153,9 +164,26 @@ export function buildResumeCheckpointCommand(input: ResumeCheckpointCommandInput
   };
 }
 
-/** 读取服务端 message 级 turn-finished 标记；未知状态按兼容性的 completed 处理。 */
+export function isTurnStartMessage(message: ExecutionMessage): boolean {
+  return message.additionalProperties?.type === TURN_START_MESSAGE_TYPE;
+}
+
+/** 读取消息所属的 Turn 与它在 Turn 内的序号；不属于 Turn 的消息返回 null。 */
+export function getTurnPosition(message: ExecutionMessage): TurnPosition | null {
+  const turnId = message.additionalProperties?.turnId;
+  const turnSequence = message.additionalProperties?.turnSequence;
+  return typeof turnId === "string" &&
+    turnId.length > 0 &&
+    typeof turnSequence === "number" &&
+    Number.isSafeInteger(turnSequence) &&
+    turnSequence > 0
+    ? { turnId, turnSequence }
+    : null;
+}
+
+/** 读取服务端 message 级 Turn 结束标记；未知状态按兼容性的 completed 处理。 */
 export function getTurnFinishedStatus(message: ExecutionMessage): TurnFinishedStatus | null {
-  if (message.additionalProperties?.type !== "turn-finished") return null;
+  if (message.additionalProperties?.type !== TURN_FINISHED_MESSAGE_TYPE) return null;
   const status = message.additionalProperties.status;
   return status === "completed" || status === "interrupted" || status === "failed"
     ? status

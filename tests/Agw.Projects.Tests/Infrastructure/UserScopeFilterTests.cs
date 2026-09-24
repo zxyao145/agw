@@ -63,6 +63,7 @@ public sealed class UserScopeFilterTests
             typeof(ProjectMemoryEntry),
             typeof(ProjectSkillRelation),
             typeof(ProjectConversationBinding),
+            typeof(ProjectConversationTurn),
         };
         var expectedIndirectProjectScopedTypes = new[]
         {
@@ -560,17 +561,17 @@ public sealed class UserScopeFilterTests
                 new DurableExecutionEventRecord
                 {
                     Id = Guid.CreateVersion7(),
-                    ExecutionId = executionA.Id,
+                    TurnId = executionA.Id,
                     SegmentIndex = 0,
-                    Sequence = 0,
+                    TurnSequence = 1,
                     PayloadJson = "a",
                 },
                 new DurableExecutionEventRecord
                 {
                     Id = Guid.CreateVersion7(),
-                    ExecutionId = executionB.Id,
+                    TurnId = executionB.Id,
                     SegmentIndex = 0,
-                    Sequence = 0,
+                    TurnSequence = 1,
                     PayloadJson = "b",
                 }
             );

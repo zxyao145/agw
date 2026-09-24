@@ -93,6 +93,12 @@ public interface IHumanInteractionContextAccessor
 {
     IHumanInteractionChannel? Current { get; }
     IInteractionRequestRegistry? Requests { get; }
+
+    /// <summary>
+    /// 当前执行上下文投影出的交互来源（节点与 SDK 请求作用域）。
+    /// The interaction source (node and SDK request scope) projected from the current execution context.
+    /// </summary>
+    InteractionSource Source { get; }
 }
 
 /// <summary>Execution-owned descriptions survive SDK approval queues and durable boundaries.</summary>
@@ -100,5 +106,4 @@ public interface IInteractionRequestRegistry
 {
     UserInputInteraction Register(string providerRequestId, UserInputRequest request);
     UserInputInteraction? Find(string providerRequestId, string scopeId);
-    bool IsUserInputCall(string nodeId, string callId);
 }

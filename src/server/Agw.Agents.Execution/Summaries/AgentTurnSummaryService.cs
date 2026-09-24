@@ -122,9 +122,9 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
     {
         var additionalProperties = new AdditionalPropertiesDictionary
         {
-            ["type"] = "result",
+            [AgwMessageClassifier.TypeKey] = AgwMessageClassifier.ResultType,
             [MessageTimestampMetadata.CreatedAtKey] = createdAt ?? TimeProvider.System.GetUtcNow(),
-            ["resultFormat"] = JsonSerializer.SerializeToElement(resultFormat).GetString()!,
+            [AgwMessageClassifier.ResultFormatKey] = JsonSerializer.SerializeToElement(resultFormat).GetString()!,
         };
 
         return new ChatMessage(ChatRole.Assistant, [new TextContent(text)])

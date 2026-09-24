@@ -1,46 +1,77 @@
+using System.Globalization;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Turns;
 
 /// <summary>
-/// 创建客户端可识别的 Turn 生命周期控制消息。
+/// 一个 Turn 的身份：开始与结束消息的字段来源。StreamingScopeId 是客户端输入消息的原始 ID，本 Turn 的输出显示在这条输入下。
+/// The identity of one turn: the source of the start and finish message fields. StreamingScopeId is the client's original input message ID that the turn's output renders under.
+/// </summary>
+internal sealed record TurnEnvelope(
+    Guid TurnId,
+    Guid ConversationId,
+    Guid AgentId,
+    AgentRuntimeType AgentType,
+    string StreamingScopeId
+);
+
+/// <summary>
+/// 创建 Turn 生命周期控制消息，并定义 Turn 内消息携带的标识字段。
+/// Creates turn lifecycle control messages and defines the identity fields carried by messages inside a turn.
 /// </summary>
 internal static class TurnMessageFactory
 {
-    /// <summary>
-    /// 创建 Turn 已启动消息，并在 durable 模式下携带稳定的 executionId 与渲染作用域。
-    /// </summary>
-    public static AgwMessage CreateStarted(Guid? executionId = null, string? streamingScopeId = null) =>
-        CreateState(TurnMessageProtocol.StartedType, status: null, executionId, streamingScopeId);
+    public const string TurnIdKey = "turnId";
+    public const string TurnSequenceKey = "turnSequence";
+    public const string StepIndexKey = "stepIndex";
 
-    /// <summary>
-    /// 创建 Turn 已结束消息，并在 durable 模式下携带最终状态和 executionId。
-    /// </summary>
-    public static AgwMessage CreateFinished(
-        string status = TurnMessageProtocol.CompletedStatus,
-        Guid? executionId = null
-    ) => CreateState(TurnMessageProtocol.FinishedType, status, executionId, streamingScopeId: null);
+    public static AgwMessage CreateStarted(TurnEnvelope envelope) =>
+        Create(AgwMessageTypes.TurnStart, CreateTurnProperties(envelope));
 
-    /// <summary>
-    /// 按统一协议构造 Turn 状态消息，避免启动与结束消息的字段发生漂移。
-    /// </summary>
-    private static AgwMessage CreateState(string type, string? status, Guid? executionId, string? streamingScopeId)
+    public static AgwMessage CreateFinished(TurnEnvelope envelope, string status, int stepCount, string? errorCode)
     {
-        var properties = new AdditionalPropertiesDictionary { ["type"] = type };
-        if (status != null)
-        {
-            properties["status"] = status;
-        }
-        if (executionId.HasValue)
-        {
-            properties["executionId"] = executionId.Value.ToString("D");
-        }
-        if (!string.IsNullOrWhiteSpace(streamingScopeId))
-        {
-            properties["streamingScopeId"] = streamingScopeId;
-        }
+        var properties = CreateTurnProperties(envelope);
+        properties[AgwMessageClassifier.StatusKey] = status;
+        properties["stepCount"] = stepCount;
+        if (!string.IsNullOrWhiteSpace(errorCode))
+            properties["errorCode"] = errorCode;
+        return Create(AgwMessageTypes.TurnFinished, properties);
+    }
 
+    /// <summary>
+    /// 连接上没有进行中的 Turn 时，用结束消息让客户端退出等待状态。
+    /// With no turn running on the connection, a finish message lets the client leave its waiting state.
+    /// </summary>
+    public static AgwMessage CreateFinished(string status) =>
+        Create(
+            AgwMessageTypes.TurnFinished,
+            new AdditionalPropertiesDictionary { [AgwMessageClassifier.StatusKey] = status }
+        );
+
+    /// <summary>
+    /// 结束消息的 errorCode：AgwException 取其七位错误码，其他异常归为执行失败。
+    /// The errorCode of a finish message: an AgwException contributes its seven-digit code, other exceptions count as an execution failure.
+    /// </summary>
+    public static string? GetErrorCode(string status, Exception? failure) =>
+        status != AgwTurnStatus.Failed ? null
+        : failure is AgwException exception ? exception.Code.ToString(CultureInfo.InvariantCulture)
+        : ErrorCodes.AgentExecutionFailed.Code.ToString(CultureInfo.InvariantCulture);
+
+    private static AdditionalPropertiesDictionary CreateTurnProperties(TurnEnvelope envelope) =>
+        new()
+        {
+            [TurnIdKey] = envelope.TurnId.ToString("D"),
+            ["conversationId"] = envelope.ConversationId.ToString("D"),
+            ["agentId"] = envelope.AgentId.ToString("D"),
+            ["agentType"] = envelope.AgentType == AgentRuntimeType.Agentflow ? "agentflow" : "agent",
+            ["streamingScopeId"] = envelope.StreamingScopeId,
+        };
+
+    private static AgwMessage Create(string type, AdditionalPropertiesDictionary properties)
+    {
+        properties[AgwMessageClassifier.TypeKey] = type;
         return new AgwMessage(
             Guid.CreateVersion7().Normalize(),
             Constants.DefaultAgentAuthor,

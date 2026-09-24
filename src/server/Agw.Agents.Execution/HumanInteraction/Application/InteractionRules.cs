@@ -5,13 +5,21 @@ namespace Agw.Agents.Execution.HumanInteraction.Application;
 /// <summary>Shared permission and response rules, independent of SDK, transport and persistence.</summary>
 internal static class InteractionRules
 {
-    public static ToolApprovalDecision? AutomaticallyApprove(InteractionRequest request, AgwPermissionMode? mode) =>
-        request is ToolApprovalInteraction && mode == AgwPermissionMode.FullAccess
+    /// <summary>
+    /// 自动决定只作用于工具审批：FullAccess 或已有有效授权时批准；用户输入与 HumanGate 永远需要用户。自动批准不产生新的授权。
+    /// Automatic decisions apply to tool approvals only: FullAccess or an effective grant approves; user input and HumanGate always need the user. Automatic approvals create no new grant.
+    /// </summary>
+    public static ToolApprovalDecision? AutomaticallyApprove(
+        InteractionRequest request,
+        AgwPermissionMode? mode,
+        bool granted
+    ) =>
+        request is ToolApprovalInteraction && (mode == AgwPermissionMode.FullAccess || granted)
             ? new ToolApprovalDecision
             {
                 InteractionId = request.InteractionId,
                 Approved = true,
-                Scope = ApprovalScope.AlwaysTool,
+                Scope = ApprovalScope.Once,
             }
             : null;
 

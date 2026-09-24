@@ -6,7 +6,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Theory]
     [InlineData(false, false)]
@@ -39,7 +39,7 @@ public partial class AgentflowRuntimeServiceTests
         {
             var manifest = CreateManifest(fixture.Flow.Id);
             var sink = new RecordingSegmentSink();
-            var result = await fixture.Service.ExecuteDurableSegmentAsync(
+            var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
                 new(manifest.ExecutionId, 0, [], null),
                 sink,

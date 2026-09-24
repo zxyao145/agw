@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
@@ -693,6 +694,10 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
+            services.AddScoped<IConversationTurnStore>(provider => new ConversationTurnStore(
+                provider.GetRequiredService<AgwDbContext>(),
+                TimeProvider.System
+            ));
             services.AddScoped<IDurableExecutionScopeMaintenance>(provider =>
                 TestDurablePersistence.Create(provider.GetRequiredService<AgwDbContext>())
             );

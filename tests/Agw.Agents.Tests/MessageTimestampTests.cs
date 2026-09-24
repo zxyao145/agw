@@ -1,9 +1,10 @@
 using System.Text.Json;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
 using Agw.Projects.Application;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Projects;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
@@ -33,22 +34,23 @@ public sealed class MessageTimestampTests
     }
 
     [Fact]
-    public void Stamp_StreamAdvances_PreservesFirstTimestampThroughAggregationAndJson()
+    public void Append_StreamAdvances_PreservesFirstTimestampThroughAggregationAndJson()
     {
         // Arrange
         var clock = new TestClock(CreatedAt.AddMinutes(1));
-        var timestamps = new ResponseMessageTimestamps(clock);
-        var first = new ChatResponseUpdate(ChatRole.Assistant, "first ") { MessageId = "item", CreatedAt = CreatedAt };
-        var second = new ChatResponseUpdate(ChatRole.Assistant, "second") { MessageId = "item" };
+        var projection = new AgentMessageProjection(CreateWriteScope(), clock);
 
         // Act
-        timestamps.Stamp(first);
+        var first = projection.Append(
+            new ChatMessage(ChatRole.Assistant, "first ") { MessageId = "item", CreatedAt = CreatedAt }
+        );
         clock.Now = CreatedAt.AddHours(1);
-        timestamps.Stamp(second);
-        var message = new[] { first, second }.ToChatResponse().Messages.Single();
+        var second = projection.Append(new ChatMessage(ChatRole.Assistant, "second") { MessageId = "item" });
+        var message = Assert.Single(projection.ReadMessages());
         var restored = JsonSerializer.Deserialize<ChatMessage>(JsonSerializer.Serialize(message))!;
 
         // Assert
+        Assert.Equal(first.MessageId, second.MessageId);
         Assert.Equal(CreatedAt, second.CreatedAt);
         Assert.Equal(CreatedAt, restored.ToAiMessage()!.CreatedAt);
         Assert.Equal(CreatedAt, MessageTimestampMetadata.GetCreatedAt(restored.AdditionalProperties));
@@ -56,22 +58,34 @@ public sealed class MessageTimestampTests
     }
 
     [Fact]
-    public void Stamp_ExternalResultAndNextRun_UsesIndependentTimestamps()
+    public void Append_NextRun_UsesIndependentTimestamps()
     {
         // Arrange
         var clock = new TestClock(CreatedAt);
-        var first = new AgentResponseUpdate(ChatRole.Assistant, "answer") { MessageId = "item" };
-        var second = new AgentResponseUpdate(ChatRole.Assistant, "next answer") { MessageId = "item" };
 
         // Act
-        new ResponseMessageTimestamps(clock).Stamp(first);
+        var first = new AgentMessageProjection(CreateWriteScope(), clock).Append(
+            new ChatMessage(ChatRole.Assistant, "answer") { MessageId = "item" }
+        );
         clock.Now = CreatedAt.AddHours(1);
-        new ResponseMessageTimestamps(clock).Stamp(second);
+        var second = new AgentMessageProjection(CreateWriteScope(), clock).Append(
+            new ChatMessage(ChatRole.Assistant, "next answer") { MessageId = "item" }
+        );
 
         // Assert
         Assert.Equal(CreatedAt, first.ToAiMessage()!.CreatedAt);
         Assert.Equal(clock.Now, second.ToAiMessage()!.CreatedAt);
+        Assert.NotEqual(first.MessageId, second.MessageId);
     }
+
+    private static ConversationMessageWriteScope CreateWriteScope() =>
+        new()
+        {
+            ProjectId = Guid.CreateVersion7(),
+            ContextId = "context",
+            Generation = 0,
+            ProducerId = Guid.CreateVersion7(),
+        };
 
     [Theory]
     [InlineData(true)]

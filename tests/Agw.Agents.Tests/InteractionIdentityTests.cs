@@ -1,7 +1,5 @@
 using System.Text.Json;
-using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
-using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Shared.Exceptions;
 
@@ -62,7 +60,14 @@ public class InteractionIdentityTests
             request,
             new UserInputResponse { InteractionId = "saved", Cancelled = true }
         );
-        var replay = new ResolvedHumanInteractionChannel(duplicate ? [saved, saved] : [saved]);
+        var sameCall = new DurableResolvedInteraction(
+            request with
+            {
+                InteractionId = "saved-again",
+            },
+            new UserInputResponse { InteractionId = "saved-again", Cancelled = true }
+        );
+        var replay = ExecutionTestScopes.ResolvedChannel(duplicate ? [saved, sameCall] : [saved]);
         var declaration = new UserInputRequest(
             request.InputKind,
             request.Prompt,
@@ -77,43 +82,28 @@ public class InteractionIdentityTests
     }
 
     [Fact]
-    public async Task DurableResolution_RefreshesPermissionsBeforeAuthorizingInsideNestedScope()
+    public async Task PendingHandler_EveryRequestKind_WaitsForPendingSet()
     {
-        var accessor = new HumanInteractionContextAccessor();
-        var permissions = new InteractionPermissionState(AgwPermissionMode.FullAccess);
-        var refreshed = 0;
-        using var worker = accessor.Push(
-            null,
-            permissions: permissions,
-            refreshPermissions: _ =>
+        var handler = new PendingInteractionHandler(HumanInteractionPolicy.Allow, new InteractionRequestRegistry());
+
+        foreach (
+            var request in new InteractionRequest[]
             {
-                refreshed++;
-                permissions.Set(AgwPermissionMode.AlwaysAsk, 1);
-                return ValueTask.CompletedTask;
+                InteractionTestData.Tool("tool"),
+                InteractionTestData.Input("input"),
+                InteractionTestData.Gate("gate"),
             }
-        );
-        var registry = new InteractionRequestRegistry();
-        using var segment = accessor.Push(new ResolvedHumanInteractionChannel([]), registry, permissions);
-        var handler = new DurableInteractionHandler(
-            permissions,
-            HumanInteractionPolicy.Allow,
-            registry,
-            accessor.RefreshPermissionsAsync
-        );
-        var result = await handler.ResolveAsync(
-            InteractionTestData.Tool("tool"),
-            TestContext.Current.CancellationToken
-        );
-        Assert.IsType<InteractionResolution.Pending>(result);
-        Assert.Equal(1, refreshed);
-        Assert.Equal(AgwPermissionMode.AlwaysAsk, permissions.Current);
+        )
+        {
+            var result = await handler.ResolveAsync(request, TestContext.Current.CancellationToken);
+            Assert.Same(request, Assert.IsType<InteractionResolution.Pending>(result).Request);
+        }
     }
 
     [Fact]
     public async Task ResolveAsync_InteractionDisallowed_DeclinesWithoutWaitingForHuman()
     {
-        var handler = new DurableInteractionHandler(
-            new InteractionPermissionState(AgwPermissionMode.AlwaysAsk),
+        var handler = new PendingInteractionHandler(
             HumanInteractionPolicy.Allow,
             new InteractionRequestRegistry(),
             allowInteraction: false
@@ -136,13 +126,12 @@ public class InteractionIdentityTests
         Assert.True(
             Assert.IsType<UserInputResponse>(Assert.IsType<InteractionResolution.Resolved>(input).Response).Cancelled
         );
-        Assert.Empty(handler.Pending);
     }
 
     [Fact]
     public async Task ResolvedChannel_InteractionDisallowed_AnswersWithCancellation()
     {
-        var channel = new ResolvedHumanInteractionChannel([], allowInteraction: false);
+        var channel = ExecutionTestScopes.ResolvedChannel([], allowInteraction: false);
         var request = InteractionTestData.Input("input");
 
         var response = await channel.RequestAsync(

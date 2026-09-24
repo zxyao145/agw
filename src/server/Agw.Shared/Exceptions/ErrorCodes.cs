@@ -655,6 +655,16 @@ public static class ErrorCodes
         "Failed to process file request.",
         HttpStatusCode.InternalServerError
     );
+    public static readonly ErrorCode ExecutionContextMissing = new(
+        500_0028,
+        "The execution context is not available.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode ExecutionOwnerMismatch = new(
+        500_0029,
+        "The execution owner does not match the current user.",
+        HttpStatusCode.InternalServerError
+    );
 
     public static readonly ErrorCode UnsupportedTransportType = new(
         501_0001,

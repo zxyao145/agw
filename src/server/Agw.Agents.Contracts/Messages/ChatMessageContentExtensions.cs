@@ -39,5 +39,5 @@ public static class ChatMessageContentExtensions
         preserveWhitespaceOnlyText ? !string.IsNullOrEmpty(text) : !string.IsNullOrWhiteSpace(text);
 
     public static bool IsToolMessage(this AdditionalPropertiesDictionary? properties) =>
-        properties?.TryGetValue("type", out var type) == true && ToolMessageTypes.IsToolMessage(type?.ToString());
+        AgwMessageClassifier.IsToolMessage(AgwMessageClassifier.GetMessageType(properties));
 }

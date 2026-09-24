@@ -98,7 +98,7 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     {
         var message = new ChatMessage(ChatRole.System, [new TextContent(string.Empty)])
         {
-            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = ToolMessageTypes.TodoSnapshot },
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = AgwMessageTypes.ToolTodoSnapshot },
         };
 
         var result = message.ToAiMessage();

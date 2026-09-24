@@ -180,7 +180,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
     {
         var service = CreateService();
         var agent = CreateExternalAgent();
-        agent.ExternalAgentKind = ExternalAgentKind.Pi;
+        agent.ExternalAgentKind = EngineKind.Pi;
         agent.ResponseSchema = Schema;
 
         Assert.Equal(
@@ -193,7 +193,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
     public async Task UpdateAgentAsync_PiAgent_WithSchema_ThrowsSharedError()
     {
         var agent = CreateExternalAgent();
-        agent.ExternalAgentKind = ExternalAgentKind.Pi;
+        agent.ExternalAgentKind = EngineKind.Pi;
         var service = CreateService(agent);
         var request = Deserialize("""{"responseSchema": "{\"type\":\"object\"}"}""");
 
@@ -207,7 +207,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
     public async Task UpdateAgentAsync_PiAgent_NullSchema_IsAllowed()
     {
         var agent = CreateExternalAgent();
-        agent.ExternalAgentKind = ExternalAgentKind.Pi;
+        agent.ExternalAgentKind = EngineKind.Pi;
         var service = CreateService(agent);
         var request = Deserialize("""{"responseSchema": null}""");
 
@@ -260,7 +260,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             Name = "external-agent",
             DisplayName = "External Agent",
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            ExternalAgentKind = EngineKind.ClaudeCode,
             CreateBy = "tester",
         };
 

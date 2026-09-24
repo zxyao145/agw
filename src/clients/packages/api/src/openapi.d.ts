@@ -2961,6 +2961,87 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/conversation-turns": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          conversationId?: string;
+          beforeSequence?: number | string;
+          limit?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfConversationTurnPageResponse"];
+            "application/json": components["schemas"]["ApiResultOfConversationTurnPageResponse"];
+            "text/json": components["schemas"]["ApiResultOfConversationTurnPageResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/conversation-turn-messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          conversationId?: string;
+          turnId?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfConversationTurnMessagesResponse"];
+            "application/json": components["schemas"]["ApiResultOfConversationTurnMessagesResponse"];
+            "text/json": components["schemas"]["ApiResultOfConversationTurnMessagesResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/conversations": {
     parameters: {
       query?: never;
@@ -4502,7 +4583,7 @@ export interface components {
       /** Format: uuid */
       summaryModelProviderId?: null | string;
       type: components["schemas"]["AgentType"];
-      externalAgentKind: components["schemas"]["ExternalAgentKind"];
+      externalAgentKind: components["schemas"]["EngineKind"];
       /** @description JSON object for additional external agent settings. */
       extra?: null | string;
       /**
@@ -4556,7 +4637,7 @@ export interface components {
       /** Format: uuid */
       summaryModelProviderId?: null | string;
       type?: null | components["schemas"]["AgentType"];
-      externalAgentKind?: null | components["schemas"]["ExternalAgentKind"];
+      externalAgentKind?: null | components["schemas"]["EngineKind"];
       extra?: null | string;
       responseSchema?: null | string;
     };
@@ -4708,7 +4789,7 @@ export interface components {
       enableSummary: boolean;
       tools: components["schemas"]["ToolValueObject"][];
       type: components["schemas"]["AgentType"];
-      externalAgentKind: components["schemas"]["ExternalAgentKind"];
+      externalAgentKind: components["schemas"]["EngineKind"];
       extra: null | string;
       environmentVariables: {
         [key: string]: string;
@@ -4753,7 +4834,7 @@ export interface components {
       enableSummary: boolean;
       tools: components["schemas"]["ToolValueObject"][];
       type: components["schemas"]["AgentType"];
-      externalAgentKind: components["schemas"]["ExternalAgentKind"];
+      externalAgentKind: components["schemas"]["EngineKind"];
       extra: null | string;
       environmentVariables: {
         [key: string]: string;
@@ -5008,6 +5089,20 @@ export interface components {
     };
     "ApiResultOfConnectionResponse[]": {
       data?: null | components["schemas"]["ConnectionResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfConversationTurnMessagesResponse: {
+      data?: null | components["schemas"]["ConversationTurnMessagesResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfConversationTurnPageResponse: {
+      data?: null | components["schemas"]["ConversationTurnPageResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -5426,6 +5521,60 @@ export interface components {
       authSchemes?: components["schemas"]["AuthSchemeResponse"][];
       capabilitySources?: components["schemas"]["CapabilitySourceResponse"][];
     };
+    /**
+     * @description Turn 内的一条消息。StepIndex 只用于同一节点内分组，排序使用 Sequence。
+     *     One message of a turn. StepIndex only groups messages within one node; ordering uses Sequence.
+     */
+    ConversationTurnMessageResponse: {
+      /** Format: int64 */
+      sequence: number | string;
+      /** Format: int32 */
+      stepIndex: number;
+      message: components["schemas"]["AgwMessage"];
+    };
+    ConversationTurnMessagesResponse: {
+      /** Format: uuid */
+      turnId: string;
+      items: components["schemas"]["ConversationTurnMessageResponse"][];
+    };
+    /**
+     * @description 按 first_sequence 倒序的一页 Turn；NextBeforeSequence 用作下一页的 beforeSequence。
+     *     One page of turns in descending first_sequence order; NextBeforeSequence is the beforeSequence of the next page.
+     */
+    ConversationTurnPageResponse: {
+      items: components["schemas"]["ConversationTurnResponse"][];
+      /** Format: int64 */
+      nextBeforeSequence: null | number | string;
+      hasMore: boolean;
+    };
+    /**
+     * @description 一个 Turn 的摘要。Status 取 accepted / running / completed / failed / interrupted，AgentType 取 agent / agentflow。
+     *     The summary of one turn. Status is accepted / running / completed / failed / interrupted, AgentType is agent / agentflow.
+     */
+    ConversationTurnResponse: {
+      /** Format: uuid */
+      turnId: string;
+      /** Format: uuid */
+      conversationId: string;
+      status: string;
+      /** Format: uuid */
+      agentId: string;
+      agentType: string;
+      /** Format: date-time */
+      startedAt: string;
+      /** Format: date-time */
+      finishedAt: null | string;
+      /** Format: int32 */
+      stepCount: number;
+      /** Format: int64 */
+      firstSequence: number | string;
+      /** Format: int64 */
+      lastSequence: null | number | string;
+      errorCode: null | string;
+      /** Format: uuid */
+      inputMessageId: string;
+      inputSummary: string;
+    };
     CreateTokenRequest: {
       name: string;
     };
@@ -5474,13 +5623,17 @@ export interface components {
       loginProvider: string;
     };
     EmptyToolOptions: Record<string, never>;
+    /**
+     * @description 执行 Agent 的程序种类；数值与持久化的外部 Agent 种类保持一致。
+     *     The kind of program that executes an Agent; values match the persisted external Agent kind.
+     */
+    EngineKind: number;
     ExecutionPermissionCapabilities: {
       supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
       reason?: null | string;
     };
-    ExternalAgentKind: number;
     ExternalAgentOptionResponse: {
-      kind: components["schemas"]["ExternalAgentKind"];
+      kind: components["schemas"]["EngineKind"];
       displayName: string;
       defaultExtra: string;
       supportedProviderTypes: components["schemas"]["ProviderType"][];

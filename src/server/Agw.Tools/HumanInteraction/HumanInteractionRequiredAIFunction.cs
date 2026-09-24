@@ -39,7 +39,7 @@ public sealed class HumanInteractionRequiredAIFunction : DelegatingAIFunction
         var currentCall = FunctionInvokingChatClient.CurrentContext?.CallContent;
         var request = _protocol.CreateRequest(arguments) with
         {
-            Source = HumanInteractionToolMetadata.ReadSource(FunctionInvokingChatClient.CurrentContext?.Options) with
+            Source = HumanInteractionToolMetadata.CurrentSource(accessor) with
             {
                 ToolName = currentCall?.Name ?? Name,
                 CallId = currentCall?.CallId,

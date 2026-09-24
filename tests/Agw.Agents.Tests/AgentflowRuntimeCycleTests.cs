@@ -1,11 +1,11 @@
-using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Fact]
     public async Task GetMermaidAsync_IndirectCycle_RejectsAndDisposesCreatedAgents()
@@ -83,9 +83,9 @@ public partial class AgentflowRuntimeServiceTests
                 TargetNodeId = "output",
             },
         };
-        var agents = new StubAgentRuntimeService(agentId);
-        var service = CreateRuntimeService(
-            NullLogger<AgentflowRuntimeService>.Instance,
+        var agents = new StubAgentRuntimeFactory(agentId);
+        var service = CreateTestHost(
+            NullLogger<AgentflowCheckpointSupport>.Instance,
             new TestRepository<Agentflow>([first, second], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),

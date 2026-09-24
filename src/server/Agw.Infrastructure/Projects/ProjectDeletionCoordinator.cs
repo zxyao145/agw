@@ -281,6 +281,10 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
         await _dbContext
+            .ProjectConversationTurns.Where(turn => conversationIds.Contains(turn.ProjectConversationId))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await _dbContext
             .ProjectConversationBindings.Where(binding => conversationIds.Contains(binding.ProjectConversationId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -336,7 +340,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         );
         var executionIds = executions.Select(execution => execution.Id);
         await _dbContext
-            .DurableExecutionEvents.Where(entry => executionIds.Contains(entry.ExecutionId))
+            .DurableExecutionEvents.Where(entry => executionIds.Contains(entry.TurnId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
         await executions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);

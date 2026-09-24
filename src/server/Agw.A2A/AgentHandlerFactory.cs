@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using A2A;
-using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Contracts.Messages;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,7 +71,7 @@ public class CommonAgentHandler : IAgentHandler
                         .ConfigureAwait(false)
                 )
                 {
-                    if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
+                    if (AgwMessageClassifier.TryGetTurnFinishedStatus(message, out var status))
                     {
                         terminalStatus = status;
                         continue;
@@ -89,7 +88,7 @@ public class CommonAgentHandler : IAgentHandler
 
                 foreach (var message in result.Messages)
                 {
-                    if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
+                    if (AgwMessageClassifier.TryGetTurnFinishedStatus(message, out var status))
                     {
                         terminalStatus = status;
                         continue;
@@ -167,7 +166,7 @@ public class CommonAgentHandler : IAgentHandler
         CancellationToken cancellationToken
     )
     {
-        if (AgentExecutionMessageProtocol.IsFinished(message))
+        if (AgwMessageClassifier.IsTurnFinished(message))
         {
             return;
         }
@@ -240,20 +239,17 @@ public class CommonAgentHandler : IAgentHandler
         CancellationToken cancellationToken
     )
     {
-        if (
-            status is null
-            || string.Equals(status, AgentExecutionMessageProtocol.CompletedStatus, StringComparison.Ordinal)
-        )
+        if (status is null || string.Equals(status, AgwTurnStatus.Completed, StringComparison.Ordinal))
         {
             return updater.CompleteAsync(CreateStatusMessage(context, "Completed"), cancellationToken).AsTask();
         }
 
-        if (string.Equals(status, AgentExecutionMessageProtocol.InterruptedStatus, StringComparison.Ordinal))
+        if (string.Equals(status, AgwTurnStatus.Interrupted, StringComparison.Ordinal))
         {
             return updater.CancelAsync(cancellationToken).AsTask();
         }
 
-        var message = string.Equals(status, AgentExecutionMessageProtocol.FailedStatus, StringComparison.Ordinal)
+        var message = string.Equals(status, AgwTurnStatus.Failed, StringComparison.Ordinal)
             ? "The agent execution failed."
             : $"The agent execution ended with unsupported status '{status}'.";
         return updater.FailAsync(CreateStatusMessage(context, message), cancellationToken).AsTask();

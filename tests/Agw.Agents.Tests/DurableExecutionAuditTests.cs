@@ -1,13 +1,12 @@
-using System.Security.Claims;
-using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
-using Agw.Infrastructure.Data;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
+using Agw.Agents.Execution.Turns;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Projects;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
 
@@ -16,85 +15,79 @@ public sealed class DurableExecutionAuditTests
     [Fact]
     public async Task StateTransition_UsesPersistedExecutionOwnerForAudit()
     {
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
         var auditProvider = new CurrentUserAuditProvider();
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .AddInterceptors(
+        await using var kit = await TurnPersistenceTestKit.CreateAsync(
+            interceptors:
+            [
                 new EntityCreatorInterceptor(auditProvider, TimeProvider.System),
                 new EntityModifierInterceptor(auditProvider, TimeProvider.System),
-                new EntitySoftDeleteInterceptor(auditProvider, TimeProvider.System)
-            )
-            .Options;
-        await using var context = new AgwDbContext(options);
-        await context.Database.EnsureCreatedAsync(cancellationToken);
-        var store = new DurableExecutionStore(
-            context,
-            TimeProvider.System,
-            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
-            TestDurablePersistence.Create(context)
+                new EntitySoftDeleteInterceptor(auditProvider, TimeProvider.System),
+            ]
         );
-        var executionId = Guid.CreateVersion7();
-        var projectId = Guid.CreateVersion7();
-        var conversationId = Guid.CreateVersion7();
-
-        using (UserInfoUtil.Push(CreatePrincipal("owner")))
+        Guid executionId;
+        using (TurnPersistenceTestKit.EnterUser("owner"))
         {
-            context.Projects.Add(new Project { Id = projectId, CreateBy = "owner" });
-            context.ProjectConversations.Add(
-                new ProjectConversation
-                {
-                    Id = conversationId,
-                    ProjectId = projectId,
-                    ContextId = "context-1",
-                    CreateBy = "owner",
-                }
-            );
-            await context.SaveChangesAsync(cancellationToken);
-            await store.RegisterAsync(
-                executionId,
-                "owner",
-                Guid.CreateVersion7(),
-                AgentRuntimeType.Agent,
-                new AgwUserInput { MessageId = "message-1", Contents = [new AgwTextContent { Content = "run" }] },
-                new AgentExecutionTask
-                {
-                    TaskId = Guid.CreateVersion7(),
-                    ProjectConversationId = conversationId,
-                    ProjectId = projectId,
-                    ContextId = "context-1",
-                    Title = "Audit test",
-                    CreateTime = TimeProvider.System.GetUtcNow(),
-                },
-                SettingCommandMapper.FromCommand(new SettingCommand(projectId, contextId: "context-1")),
-                cancellationToken
-            );
+            var task = await kit.SeedConversationAsync("owner");
+            var accepted = await kit.CreateAcceptance(
+                    projectTasks: null,
+                    new AgentExecutionFacadeTests.WorkspaceProjects(),
+                    kit.Coordinator
+                )
+                .AcceptAsync(
+                    new TurnAcceptanceRequest(
+                        "owner",
+                        TurnId: null,
+                        new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
+                        task.ProjectConversationId,
+                        TurnPersistenceTestKit.CreateInput("run"),
+                        TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ContextId),
+                        Stream: true
+                    )
+                    {
+                        Task = task,
+                    },
+                    cancellationToken
+                );
+            executionId = accepted.Request.TurnId;
         }
 
+        // Act
         using (UserInfoUtil.PushSystemScope())
         {
-            var running = await store.TryBeginSegmentAsync(
+            var lease = await kit.Leases.TryClaimAsync(
                 executionId,
-                TimeProvider.System.GetUtcNow(),
+                "worker-a",
+                TimeSpan.FromSeconds(30),
                 cancellationToken
             );
-            Assert.NotNull(running);
+            using var ownership = new CancellationTokenSource();
+            await kit
+                .Leases.CreateGuard(Assert.IsType<DurableLease>(lease), ownership)
+                .RunAsync(
+                    (services, token) =>
+                        services
+                            .GetRequiredService<DurableExecutionStore>()
+                            .ApplySegmentResultAsync(
+                                new DurableExecutionSegmentResult
+                                {
+                                    ExecutionId = executionId,
+                                    SegmentIndex = 0,
+                                    Status = DurableExecutionSegmentStatus.WaitingForHuman,
+                                    PendingInteractions = [InteractionTestData.Input("request-1")],
+                                },
+                                token
+                            ),
+                    cancellationToken
+                );
         }
 
-        context.ChangeTracker.Clear();
-        using (UserInfoUtil.PushSystemScope())
-        {
-            var persisted = await context.DurableExecutions.SingleAsync(cancellationToken);
-            Assert.Equal("owner", persisted.CreateBy);
-            Assert.Equal("owner", persisted.UpdateBy);
-        }
+        // Assert
+        var persisted = await kit.ReadExecutionAsync(executionId);
+        Assert.Equal("owner", persisted.CreateBy);
+        Assert.Equal("owner", persisted.UpdateBy);
     }
-
-    private static ClaimsPrincipal CreatePrincipal(string userId) =>
-        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "test"));
 
     private sealed class CurrentUserAuditProvider : IEntityAuditUserIdProvider
     {

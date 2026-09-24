@@ -72,7 +72,7 @@ test("Claude intermediate results stay ordinary messages live and after history 
 test("visible messages remove usage and controls before collapsing ordinary system runs", () => {
   const visible = prepareVisibleMessages([
     message("system-1", "system", "first"),
-    message("start", "system", "", { type: "turn-start" }),
+    message("start", "system", "", { type: "agw-turn-start" }),
     message("system-2", "system", "latest"),
     {
       ...message("usage", "assistant", "visible"),

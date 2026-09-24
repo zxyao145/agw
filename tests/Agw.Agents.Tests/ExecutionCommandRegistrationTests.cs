@@ -5,7 +5,6 @@ using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Mode;
 using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Inbound.Connections;
-using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
@@ -115,10 +114,14 @@ public class ExecutionCommandRegistrationTests
     }
 
     [Fact]
-    public void RuntimeTurnContextAccessorContract_IsReadOnly()
+    public void AgentExecutionContextAccessorContract_IsReadOnly()
     {
-        Assert.Single(typeof(IRuntimeTurnContextAccessor).GetProperties());
-        Assert.DoesNotContain(typeof(IRuntimeTurnContextAccessor).GetMethods(), method => method.Name == "Push");
+        Assert.Equal(
+            ["Current", "Required"],
+            typeof(IAgentExecutionContextAccessor).GetProperties().Select(property => property.Name).Order()
+        );
+        Assert.All(typeof(IAgentExecutionContextAccessor).GetProperties(), property => Assert.False(property.CanWrite));
+        Assert.DoesNotContain(typeof(IAgentExecutionContextAccessor).GetMethods(), method => !method.IsSpecialName);
     }
 
     private sealed class StatusCommand : AgentRunCommand

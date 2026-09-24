@@ -146,7 +146,7 @@ export class NativeExecutionSession {
 
   private handleMessage(message: AiMessage): void {
     const status = getTurnFinishedStatus(message);
-    if (status) this.finishTerminal(readExecutionId(message), terminalError(status, message));
+    if (status) this.finishTerminal(readTurnId(message), terminalError(status, message));
     this.options.onMessage(message);
   }
 
@@ -172,8 +172,9 @@ export class NativeExecutionSession {
   }
 }
 
-function readExecutionId(message: AiMessage): string | null {
-  const value = message.additionalProperties?.executionId;
+/** 结束消息的 turnId 即发起执行时的 executionId；连接层的结束消息没有 turnId。 */
+function readTurnId(message: AiMessage): string | null {
+  const value = message.additionalProperties?.turnId;
   return typeof value === "string" && value.trim() ? value : null;
 }
 

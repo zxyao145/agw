@@ -4,7 +4,6 @@ using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.ExternalAgents;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
 using OpenAI.CodexSdk;
@@ -17,22 +16,20 @@ namespace Agw.Agents.Tests;
 public class ExternalAgentModelOptionsTests
 {
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode, "model")]
-    [InlineData(ExternalAgentKind.ClaudeCode, "provider")]
-    [InlineData(ExternalAgentKind.ClaudeCode, "default")]
-    [InlineData(ExternalAgentKind.Codex, "model")]
-    [InlineData(ExternalAgentKind.Codex, "provider")]
-    [InlineData(ExternalAgentKind.Codex, "default")]
-    [InlineData(ExternalAgentKind.Pi, "model")]
-    [InlineData(ExternalAgentKind.Pi, "provider")]
-    [InlineData(ExternalAgentKind.Pi, "default")]
-    public void Apply_RebuiltForExistingSession_UpdatesModelAndProviderTogether(ExternalAgentKind kind, string change)
+    [InlineData(EngineKind.ClaudeCode, "model")]
+    [InlineData(EngineKind.ClaudeCode, "provider")]
+    [InlineData(EngineKind.ClaudeCode, "default")]
+    [InlineData(EngineKind.Codex, "model")]
+    [InlineData(EngineKind.Codex, "provider")]
+    [InlineData(EngineKind.Codex, "default")]
+    [InlineData(EngineKind.Pi, "model")]
+    [InlineData(EngineKind.Pi, "provider")]
+    [InlineData(EngineKind.Pi, "default")]
+    public void Apply_RebuiltForExistingSession_UpdatesModelAndProviderTogether(EngineKind kind, string change)
     {
         // Arrange
         var sessionId = Guid.CreateVersion7();
-        var original = Configuration(
-            kind == ExternalAgentKind.Codex ? ProviderType.OpenAIResponses : ProviderType.Anthropic
-        );
+        var original = Configuration(kind == EngineKind.Codex ? ProviderType.OpenAIResponses : ProviderType.Anthropic);
         var oldRouting = ReadResumedRouting(kind, sessionId, original);
         AgentModelRuntimeConfiguration? updated =
             change == "default"
@@ -73,14 +70,14 @@ public class ExternalAgentModelOptionsTests
     }
 
     private static (string? Model, string? Endpoint, string? ApiKey) ReadResumedRouting(
-        ExternalAgentKind kind,
+        EngineKind kind,
         Guid sessionId,
         AgentModelRuntimeConfiguration? configuration
     )
     {
         switch (kind)
         {
-            case ExternalAgentKind.ClaudeCode:
+            case EngineKind.ClaudeCode:
                 var claude = ExternalAgentModelOptions.ApplyClaudeCode(
                     new ClaudeCodeAIAgentOptions { Resume = sessionId.ToString("N") },
                     configuration
@@ -91,7 +88,7 @@ public class ExternalAgentModelOptionsTests
                     claude.BaseUrl,
                     claude.EnvironmentVariables?.GetValueOrDefault("ANTHROPIC_API_KEY")
                 );
-            case ExternalAgentKind.Codex:
+            case EngineKind.Codex:
                 var codex = ExternalAgentModelOptions.ApplyCodex(
                     new CodexAIAgentOptions { ThreadId = sessionId, IsResume = true },
                     configuration
@@ -99,7 +96,7 @@ public class ExternalAgentModelOptionsTests
                 Assert.Equal(sessionId, codex.ThreadId);
                 Assert.True(codex.IsResume);
                 return (codex.ThreadOptions?.Model, codex.CodexOptions?.BaseUrl, codex.CodexOptions?.ApiKey);
-            case ExternalAgentKind.Pi:
+            case EngineKind.Pi:
                 var pi = ExternalAgentModelOptions.ApplyPi(
                     new PiAgentAIAgentOptions { SessionId = sessionId.ToString("D"), IsResume = true },
                     configuration
@@ -132,20 +129,16 @@ public class ExternalAgentModelOptionsTests
     }
 
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.Anthropic, true)]
-    [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.OpenAIResponses, false)]
-    [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.OpenAIChatCompletions, false)]
-    [InlineData(ExternalAgentKind.Codex, ProviderType.Anthropic, false)]
-    [InlineData(ExternalAgentKind.Codex, ProviderType.OpenAIResponses, true)]
-    [InlineData(ExternalAgentKind.Codex, ProviderType.OpenAIChatCompletions, false)]
-    [InlineData(ExternalAgentKind.Pi, ProviderType.Anthropic, true)]
-    [InlineData(ExternalAgentKind.Pi, ProviderType.OpenAIResponses, true)]
-    [InlineData(ExternalAgentKind.Pi, ProviderType.OpenAIChatCompletions, true)]
-    public void ValidateProviderType_ProtocolMatrix_MatchesCatalog(
-        ExternalAgentKind kind,
-        ProviderType type,
-        bool supported
-    )
+    [InlineData(EngineKind.ClaudeCode, ProviderType.Anthropic, true)]
+    [InlineData(EngineKind.ClaudeCode, ProviderType.OpenAIResponses, false)]
+    [InlineData(EngineKind.ClaudeCode, ProviderType.OpenAIChatCompletions, false)]
+    [InlineData(EngineKind.Codex, ProviderType.Anthropic, false)]
+    [InlineData(EngineKind.Codex, ProviderType.OpenAIResponses, true)]
+    [InlineData(EngineKind.Codex, ProviderType.OpenAIChatCompletions, false)]
+    [InlineData(EngineKind.Pi, ProviderType.Anthropic, true)]
+    [InlineData(EngineKind.Pi, ProviderType.OpenAIResponses, true)]
+    [InlineData(EngineKind.Pi, ProviderType.OpenAIChatCompletions, true)]
+    public void ValidateProviderType_ProtocolMatrix_MatchesCatalog(EngineKind kind, ProviderType type, bool supported)
     {
         Assert.Equal(supported, ExternalAgentDefaults.GetSupportedProviderTypes(kind).Contains(type));
         if (supported)

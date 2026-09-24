@@ -57,6 +57,13 @@ public sealed record DurableExecutionManifest
     public ProjectWorkspaceSnapshot? WorkspaceSnapshot { get; init; }
 
     /// <summary>
+    /// 客户端输入消息的原始 ID，Turn 的开始与结束消息用它关联输入。
+    /// The client's original input message ID, which the turn's start and finish messages use to relate to the input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StreamingScopeId { get; init; }
+
+    /// <summary>
     /// 获取创建当前分支的历史 Agentflow checkpoint occurrence。
     /// </summary>
     public Guid? ResumeCheckpointOccurrenceId { get; init; }

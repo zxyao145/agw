@@ -237,7 +237,7 @@ public sealed partial class BackendArchitectureTests
         var allowed = new HashSet<string>(
             [
                 "Agw.Agents.Execution/Runtimes/Durable/DistributedExecutionWorker.cs",
-                "Agw.Agents.Execution/Runtimes/Durable/DurableExecutionSegmentExecutor.cs",
+                "Agw.Agents.Execution/Runtimes/Durable/DurableExecutionCoordinator.cs",
                 "Agw.Agents.Execution/Persistence/Durable/DurableExecutionStore.cs",
                 "Agw.Auth/Contracts/UserInfoUtil.cs",
                 "Agw.Infrastructure/Data/DbSeeder.cs",

@@ -175,6 +175,7 @@ public sealed class SkillToolCompositionTests
         using var services = new ServiceCollection().BuildServiceProvider();
         var agent = CreateAgent(client, capabilities, services);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        using var executionScope = ExecutionTestScopes.Scope().Push();
 
         // Act
         var first = await agent.RunAsync(
@@ -233,11 +234,6 @@ public sealed class SkillToolCompositionTests
             new AgentResourceLease(),
             declaredToolNames
         );
-
-    private sealed class EmptyTurn : ICurrentAgentTurn
-    {
-        public AgentTurnSnapshot? Current => null;
-    }
 
     private sealed class TestRegistration : IAgentSkillRegistration
     {

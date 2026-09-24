@@ -2,9 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
-using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Shared.Data.Entities.Agents;
@@ -41,7 +41,7 @@ public sealed class BuiltInInteractionIntegrationTests
     )
     {
         var token = TestContext.Current.CancellationToken;
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         await using var services = new ServiceCollection()
             .AddSingleton(accessor)
             .AddSingleton<IHumanInteractionContextAccessor>(accessor)
@@ -127,7 +127,7 @@ public sealed class BuiltInInteractionIntegrationTests
             var registry = new InteractionRequestRegistry();
             ToolApprovalRequestContent approval;
             UserInputInteraction request;
-            using (accessor.Push(new ResolvedHumanInteractionChannel([]), registry, permissions))
+            using (ExecutionTestScopes.PushInteractions(ExecutionTestScopes.ResolvedChannel([]), registry, permissions))
             {
                 var response = await agent.RunAsync("run", session, cancellationToken: token);
                 approval = Assert.Single(
@@ -147,8 +147,8 @@ public sealed class BuiltInInteractionIntegrationTests
                 cancellationToken: token
             );
             using (
-                accessor.Push(
-                    new ResolvedHumanInteractionChannel([new(request, answer)]),
+                ExecutionTestScopes.PushInteractions(
+                    ExecutionTestScopes.ResolvedChannel([new(request, answer)]),
                     new InteractionRequestRegistry(registry.Snapshot()),
                     permissions
                 )
@@ -168,7 +168,9 @@ public sealed class BuiltInInteractionIntegrationTests
                     Answer(Assert.IsType<UserInputInteraction>(InteractionTestData.Read(message))),
                     ct
                 );
-            using (accessor.Push(interactions, interactions.Requests, interactions.PermissionState))
+            using (
+                ExecutionTestScopes.PushInteractions(interactions, interactions.Requests, interactions.PermissionState)
+            )
                 finalResponse = await agent.RunAsync("run", session, cancellationToken: token);
             Assert.Single(sink.Messages);
         }
@@ -185,7 +187,7 @@ public sealed class BuiltInInteractionIntegrationTests
                     finalResponse.Messages,
                     message =>
                         message.AdditionalProperties?.GetValueOrDefault("type")?.ToString()
-                        == ToolMessageTypes.ModeStatus
+                        == AgwMessageTypes.ToolModeStatus
                 );
             }
         }

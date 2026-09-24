@@ -3,9 +3,9 @@ using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
-using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
@@ -29,7 +29,7 @@ public sealed class MafInteractionIntegrationTests : IDisposable
     [Fact]
     public async Task InProcess_CustomProtocol_PublishesAndBindsEveryInput()
     {
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var completed = new List<string>();
         await using var services = new ServiceCollection()
             .AddSingleton(accessor)
@@ -45,7 +45,11 @@ public sealed class MafInteractionIntegrationTests : IDisposable
             var request = Assert.IsType<UserInputInteraction>(InteractionTestData.Read(message));
             await interactions.TrySubmitAsync(Answer(request, cancelled: false), token);
         };
-        using var scope = accessor.Push(interactions, interactions.Requests, interactions.PermissionState);
+        using var scope = ExecutionTestScopes.PushInteractions(
+            interactions,
+            interactions.Requests,
+            interactions.PermissionState
+        );
         await agent.RunAsync("run", session, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(["a:A:keep", "b:B:keep"], completed);
         Assert.Equal(2, sink.Messages.Count);
@@ -57,7 +61,7 @@ public sealed class MafInteractionIntegrationTests : IDisposable
     public async Task Durable_BatchedCustomInputs_RestoreDescriptionsAnswersAndCancellation(bool cancelSecond)
     {
         var token = TestContext.Current.CancellationToken;
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var completed = new List<string>();
         await using var services = new ServiceCollection()
             .AddSingleton(accessor)
@@ -68,74 +72,90 @@ public sealed class MafInteractionIntegrationTests : IDisposable
         var session = await agent.CreateSessionAsync(token);
         var registry = new InteractionRequestRegistry();
         var permissions = new InteractionPermissionState(AgwPermissionMode.FullAccess);
-        ToolApprovalRequestContent firstApproval;
-        UserInputInteraction first;
-        using (accessor.Push(new ResolvedHumanInteractionChannel([]), registry, permissions))
+        List<ToolApprovalRequestContent> approvals;
+        using (ExecutionTestScopes.PushInteractions(ExecutionTestScopes.ResolvedChannel([]), registry, permissions))
         {
             var response = await agent.RunAsync("run", session, cancellationToken: token);
-            firstApproval = Assert.Single(
-                response.Messages.SelectMany(message => message.Contents).OfType<ToolApprovalRequestContent>()
-            );
-            first = Assert.IsType<UserInputInteraction>(
-                MafApprovalAdapter.CreateRequest(firstApproval, "standalone", registry: registry)
-            );
+            approvals = response
+                .Messages.SelectMany(message => message.Contents)
+                .OfType<ToolApprovalRequestContent>()
+                .ToList();
         }
+
+        // 两个输入作为同一个批次交出；FullAccess 不回答用户输入。
+        // Both inputs leave as one batch; FullAccess never answers user input.
+        Assert.Equal(["ficc_call-a", "ficc_call-b"], approvals.Select(approval => approval.RequestId));
         Assert.Empty(completed);
         Assert.Equal(2, registry.Snapshot().Count);
+        var first = Assert.IsType<UserInputInteraction>(
+            MafApprovalAdapter.CreateRequest(approvals[0], "standalone", registry: registry)
+        );
+        var second = Assert.IsType<UserInputInteraction>(
+            MafApprovalAdapter.CreateRequest(approvals[1], "standalone", registry: registry)
+        );
+        Assert.NotEqual(first.InteractionId, second.InteractionId);
         Assert.Equal("keep", first.Arguments!.Value.GetProperty("marker").GetString());
         var firstAnswer = Answer(first, cancelled: false);
-        var state = RoundTrip(
-            new DurableInteractionState
-            {
-                InputCatalog = registry.Snapshot(),
-                ResolvedInputs = [new(first, firstAnswer)],
-            }
-        );
-        session = await agent.DeserializeSessionAsync(
-            await agent.SerializeSessionAsync(session, cancellationToken: token),
-            cancellationToken: token
-        );
-        registry = new InteractionRequestRegistry(state.InputCatalog);
-        ToolApprovalRequestContent secondApproval;
-        UserInputInteraction second;
-        using (accessor.Push(new ResolvedHumanInteractionChannel(state.ResolvedInputs), registry, permissions))
+        var state = RoundTrip(new DurableInteractionState { InputCatalog = registry.Snapshot() });
+        session = await RoundTripAsync(agent, session, token);
+
+        // 第一个回答只保存在批次中，不调用模型也不执行工具。
+        // The first answer is only saved in the batch; neither the model nor a tool runs.
+        using (
+            ExecutionTestScopes.PushInteractions(
+                ExecutionTestScopes.ResolvedChannel([new(first, firstAnswer)]),
+                new InteractionRequestRegistry(state.InputCatalog),
+                permissions
+            )
+        )
         {
-            var response = await agent.RunAsync(
-                [new ChatMessage(ChatRole.User, [MafApprovalAdapter.CreateResponse(firstApproval, firstAnswer)])],
+            var partial = await agent.RunAsync(
+                [new ChatMessage(ChatRole.User, [MafApprovalAdapter.CreateResponse(approvals[0], firstAnswer)])],
                 session,
                 cancellationToken: token
             );
-            secondApproval = Assert.Single(
-                response.Messages.SelectMany(message => message.Contents).OfType<ToolApprovalRequestContent>()
-            );
-            second = Assert.IsType<UserInputInteraction>(
-                MafApprovalAdapter.CreateRequest(secondApproval, "standalone", registry: registry)
-            );
+            Assert.Empty(partial.Messages);
         }
         Assert.Empty(completed);
-        Assert.NotEqual(first.InteractionId, second.InteractionId);
-        Assert.Equal("sample", second.InputKind);
+        Assert.Equal(1, model.CallCount);
+        session = await RoundTripAsync(agent, session, token);
+        var batch = Assert.IsType<MafApprovalBatchState>(MafApprovalBatchAgent.ReadBatch(session));
+        Assert.Equal(InteractionIdentity.ForBatch("standalone", ["ficc_call-a", "ficc_call-b"]), batch.BatchId);
+        Assert.All(batch.Items, item => Assert.True(item.RequiresHuman));
+        Assert.NotNull(batch.Items[0].Response!.AdditionalProperties![MafApprovalAdapter.UserInputResponseProperty]);
+        Assert.Null(batch.Items[1].Response);
+        Assert.NotNull(HumanInteractionToolMetadata.Read(batch.Items[1].Request));
+
+        // 第二个回答使批次齐全，两个输入工具读取各自的结构化回答。
+        // The second answer completes the batch and each input tool reads its own structured answer.
         var secondAnswer = Answer(second, cancelSecond);
-        state = RoundTrip(state with { ResolvedInputs = [.. state.ResolvedInputs, new(second, secondAnswer)] });
-        session = await agent.DeserializeSessionAsync(
-            await agent.SerializeSessionAsync(session, cancellationToken: token),
-            cancellationToken: token
-        );
+        state = RoundTrip(state with { ResolvedInputs = [new(first, firstAnswer), new(second, secondAnswer)] });
         using (
-            accessor.Push(
-                new ResolvedHumanInteractionChannel(state.ResolvedInputs),
+            ExecutionTestScopes.PushInteractions(
+                ExecutionTestScopes.ResolvedChannel(state.ResolvedInputs),
                 new InteractionRequestRegistry(state.InputCatalog),
                 permissions
             )
         )
             await agent.RunAsync(
-                [new ChatMessage(ChatRole.User, [MafApprovalAdapter.CreateResponse(secondApproval, secondAnswer)])],
+                [new ChatMessage(ChatRole.User, [MafApprovalAdapter.CreateResponse(approvals[1], secondAnswer)])],
                 session,
                 cancellationToken: token
             );
         Assert.Equal(cancelSecond ? ["a:A:keep"] : new[] { "a:A:keep", "b:B:keep" }, completed);
         Assert.Equal(2, model.CallCount);
+        Assert.Null(MafApprovalBatchAgent.ReadBatch(session));
     }
+
+    private static async Task<AgentSession> RoundTripAsync(
+        AIAgent agent,
+        AgentSession session,
+        CancellationToken cancellationToken
+    ) =>
+        await agent.DeserializeSessionAsync(
+            await agent.SerializeSessionAsync(session, cancellationToken: cancellationToken),
+            cancellationToken: cancellationToken
+        );
 
     internal static AIAgent CreateAgent(
         IChatClient model,

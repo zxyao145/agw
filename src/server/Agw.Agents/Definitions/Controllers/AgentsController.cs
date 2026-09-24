@@ -108,7 +108,7 @@ public class AgentsController : ControllerBase
             Tools = request.Tools ?? [],
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>(),
             Type = request.Type ?? AgentType.System,
-            ExternalAgentKind = request.ExternalAgentKind ?? ExternalAgentKind.None,
+            ExternalAgentKind = request.ExternalAgentKind ?? EngineKind.Maf,
             Extra = request.Extra,
             ResponseSchema = request.ResponseSchema,
         };

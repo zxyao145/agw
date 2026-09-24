@@ -458,7 +458,7 @@ internal sealed class ToolFeedbackMiddleware
         {
             MessageId = Guid.CreateVersion7().ToString("N"),
             AuthorName = "tools",
-            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = ToolMessageTypes.Warning },
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = AgwMessageTypes.ToolWarning },
         };
 
     /// <summary>

@@ -229,6 +229,7 @@ public sealed class ModeToolBlockTests
 
         public IHumanInteractionChannel? Current { get; }
         public IInteractionRequestRegistry? Requests => null;
+        public InteractionSource Source { get; } = new() { NodeId = "standalone" };
     }
 
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel

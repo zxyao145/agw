@@ -17,6 +17,7 @@ import type { AiMessage } from "@agw/api";
 import {
   cloneMessage,
   getMessageStreamingScopeId,
+  isTurnStartMessage,
   mergeStreamingMessages,
   scopeStreamingMessage,
 } from "@agw/execution-core";
@@ -265,7 +266,7 @@ export class ExecutionSessionManager {
   private handleMessage(entry: Entry, message: AiMessage): void {
     this.captureActiveTurnMessage(entry, message);
     const interaction = getPendingInteraction(message);
-    if (message.additionalProperties?.type === "turn-start") {
+    if (isTurnStartMessage(message)) {
       this.clearPendingInteraction(entry);
       this.activity.turnStarted(entry.key);
     } else if (interaction) {
@@ -325,7 +326,7 @@ export class ExecutionSessionManager {
 
   private captureActiveTurnMessage(entry: Entry, message: AiMessage): void {
     const explicitScopeId = getMessageStreamingScopeId(message);
-    if (message.additionalProperties?.type === "turn-start" && explicitScopeId) {
+    if (isTurnStartMessage(message) && explicitScopeId) {
       if (!entry.activeTurn || entry.activeTurn.streamingScopeId !== explicitScopeId) {
         entry.activeTurn = {
           streamingScopeId: explicitScopeId,

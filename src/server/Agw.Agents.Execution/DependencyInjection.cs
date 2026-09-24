@@ -1,20 +1,19 @@
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
-using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Agents.Execution.Agentflows.Observability;
-using Agw.Agents.Execution.Agentflows.Runners.Durable;
-using Agw.Agents.Execution.Agentflows.Runners.InProcess;
 using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
-using Agw.Agents.Execution.Agents.Runners.Durable;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Inbound.Facades;
@@ -22,12 +21,10 @@ using Agw.Agents.Execution.Inbound.SignalR;
 using Agw.Agents.Execution.Messaging.Durable;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable;
-using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -62,6 +59,7 @@ public static class DependencyInjection
             ?? new ExecutionRuntimeOptions();
         services.Configure<ExecutionRuntimeOptions>(configuration.GetSection(ExecutionRuntimeOptions.SectionName));
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
         services.AddScoped<IAgentflowMermaidProvider, AgentflowMermaidProvider>();
         services.AddSingleton<AgentflowCheckpointStore>();
         if (!registrationOptions.AddRuntime && executionOptions.Provider != ExecutionProvider.Distributed)
@@ -72,40 +70,31 @@ public static class DependencyInjection
         if (registrationOptions.AddRuntime)
         {
             services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
-            services.AddScoped<AgentflowWorkflowFactory>();
-            services.AddScoped<AgentflowExecutionContextFactory>();
+            services.AddScoped<AgentflowRuntimeFactory>();
             services.AddScoped<AgentflowCheckpointSupport>();
-            services.AddScoped<DurableAgentflowSegmentRunner>();
-            services.AddScoped<InProcessAgentflowRunner>();
-            services.AddScoped<AgentflowRuntimeService>();
-            services.AddScoped<IAgentflowRuntimeService>(provider =>
-                provider.GetRequiredService<AgentflowRuntimeService>()
-            );
+            services.AddScoped<AgentflowTurnExecutor>();
             services.TryAddSingleton(TimeProvider.System);
+            services.AddSingleton<HistorySessionState>();
+            services.AddSingleton<IProviderSessionState>(serviceProvider =>
+                serviceProvider.GetRequiredService<HistorySessionState>()
+            );
+            services.AddSingleton<IConversationHistoryWriter, ConversationHistoryWriter>();
             services.AddScoped<AgentSessionStateStore>();
             services.AddScoped<AgentCapabilityComposer>();
             services.AddScoped<AgentTurnExecutor>();
             services.AddScoped<ExternalProviderSessionBindings>();
             services.AddScoped<AgentRuntimeConfiguration>();
             services.AddScoped(serviceProvider =>
-            {
-                // Agent 运行时的历史写入链路：Normalized 装饰器包住 Projects 注册的 ChatHistoryProvider。
-                // History write chain of the Agent runtime: the Normalized decorator wraps the ChatHistoryProvider registered by Projects.
-                var normalizedHistory = new NormalizedChatHistoryProvider(
-                    serviceProvider.GetRequiredService<ChatHistoryProvider>(),
-                    serviceProvider.GetRequiredService<TimeProvider>(),
-                    serviceProvider.GetRequiredService<IRuntimeTurnContextAccessor>()
-                );
-                return ActivatorUtilities.CreateInstance<AgentRuntimeService>(serviceProvider, normalizedHistory);
-            });
-            services.AddScoped<IAgentRuntimeService>(serviceProvider =>
-                serviceProvider.GetRequiredService<AgentRuntimeService>()
+                ActivatorUtilities.CreateInstance<AgentRuntimeFactory>(serviceProvider)
             );
+            services.AddScoped<IAgentRuntimeFactory>(serviceProvider =>
+                serviceProvider.GetRequiredService<AgentRuntimeFactory>()
+            );
+            if (executionOptions.Provider == ExecutionProvider.InProcess)
+                services.AddScoped<InProcessExecutionCoordinatorFactory>();
         }
-        if (executionOptions.Provider == ExecutionProvider.Distributed)
-            services.AddScoped<IAgentExecutionRunner, DurableAgentExecutionRunner>();
-        else
-            services.AddScoped<IAgentExecutionRunner, InProcessAgentExecutionRunner>();
+        services.AddSingleton<TurnBroadcastRegistry>();
+        services.AddScoped<TurnAcceptanceService>();
         services.AddScoped<AgentExecutionFacade>();
         services.AddScoped<IAgentExecutionFacade>(provider => provider.GetRequiredService<AgentExecutionFacade>());
         services.AddScoped<IDurableAgentExecutionFacade>(provider =>
@@ -115,7 +104,6 @@ public static class DependencyInjection
         {
             services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
             services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
-            services.AddScoped<IRuntimeFactory, RuntimeFactory>();
             if (registrationOptions.AddExecutionTransport)
             {
                 services.AddExecutionCommands();
@@ -123,13 +111,7 @@ public static class DependencyInjection
                 services.AddScoped<ExecutionConnectionContextFactory>();
                 services.AddSingleton<ExecutionConnectionRegistry>();
             }
-            services.AddSingleton<RuntimeTurnContextAccessor>();
-            services.AddSingleton<IRuntimeTurnContextAccessor>(provider =>
-                provider.GetRequiredService<RuntimeTurnContextAccessor>()
-            );
-            services.AddSingleton<ICurrentAgentTurn>(provider =>
-                provider.GetRequiredService<RuntimeTurnContextAccessor>()
-            );
+            services.AddScoped<ExecutionContextFactory>();
             services.AddSingleton<HumanInteractionContextAccessor>();
             services.AddSingleton<IHumanInteractionContextAccessor>(serviceProvider =>
                 serviceProvider.GetRequiredService<HumanInteractionContextAccessor>()
@@ -149,19 +131,13 @@ public static class DependencyInjection
         {
             ValidateDistributedConfiguration(configuration, executionOptions);
             services.AddScoped<DurableExecutionStore>();
-            if (registrationOptions.AddRuntime)
-            {
-                services.AddScoped<DurableAgentSegmentRunner>();
-                services.AddScoped<DurableExecutionSegmentExecutor>();
-                services.AddScoped<IDurableExecutionSegmentExecutor>(sp =>
-                    sp.GetRequiredService<DurableExecutionSegmentExecutor>()
-                );
-            }
-            AddExecutionEventStream(services, executionOptions);
+            services.AddSingleton<DurableWorkerIdentity>();
+            services.AddSingleton<DurableExecutionEventLog>();
+            AddEventProjection(services, executionOptions);
             services.AddSingleton<DurableExecutionCoordinator>();
-            services.AddSingleton<IDurableExecutionClient, DurableExecutionClient>();
             if (registrationOptions.AddRuntime && registrationOptions.AddDistributedWorker)
             {
+                services.AddSingleton<DurableSegmentScheduler>();
                 services.AddHostedService<DistributedExecutionWorker>();
             }
         }
@@ -170,13 +146,13 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// 按 distributed event stream provider 注册 PostgreSQL 或 Redis Stream 实现。
+    /// 事件提供方为 Redis 时注册 PostgreSQL 已提交事件的 Redis 投影。
+    /// Registers the Redis projection of events committed in PostgreSQL when the event provider is Redis.
     /// </summary>
-    private static void AddExecutionEventStream(IServiceCollection services, ExecutionRuntimeOptions options)
+    private static void AddEventProjection(IServiceCollection services, ExecutionRuntimeOptions options)
     {
-        if (options.Distributed.EventStream.Provider == ExecutionEventStreamProvider.Postgres)
+        if (options.Distributed.EventStream.Provider != ExecutionEventStreamProvider.Redis)
         {
-            services.AddSingleton<IExecutionEventStream, PostgresExecutionEventStream>();
             return;
         }
 
@@ -186,7 +162,7 @@ public static class DependencyInjection
             redisOptions.AbortOnConnectFail = false;
             return ConnectionMultiplexer.Connect(redisOptions);
         });
-        services.AddSingleton<IExecutionEventStream, RedisExecutionEventStream>();
+        services.AddSingleton<RedisExecutionEventProjection>();
     }
 
     /// <summary>
@@ -234,8 +210,8 @@ public static class DependencyInjection
         if (
             options.Distributed.WorkerPollingMilliseconds <= 0
             || options.Distributed.MaxConcurrentExecutions <= 0
-            || options.Distributed.RecoveryProbeSeconds <= 0
-            || options.Distributed.LockAcquireTimeoutMilliseconds <= 0
+            || options.Distributed.LeaseRenewSeconds <= 0
+            || options.Distributed.LeaseSeconds <= options.Distributed.LeaseRenewSeconds
             || eventStream.ReadPollingMilliseconds <= 0
             || eventStream.ReadBatchSize <= 0
             || eventStream.WriteIntervalMilliseconds < 0
@@ -245,7 +221,7 @@ public static class DependencyInjection
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionUnavailable,
-                "Distributed execution worker, lock, event stream polling, batch, and Redis TTL settings must be positive."
+                "Distributed execution worker, event stream polling, batch, and Redis TTL settings must be positive, and LeaseSeconds must exceed LeaseRenewSeconds."
             );
         }
     }

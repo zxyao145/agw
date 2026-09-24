@@ -20,9 +20,15 @@ using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 namespace Agw.Agents.Tests;
 
 [Collection(AgentflowExecutionTraceTestCollection.Name)]
-public class AgentflowWorkflowCompilerTests
+public class AgentflowWorkflowCompilerTests : IDisposable
 {
     private readonly AgentflowWorkflowCompiler _compiler = new();
+
+    private readonly IDisposable _executionScope = ExecutionTestScopes
+        .Scope(ExecutionTestScopes.Context(runtimeType: AgentRuntimeType.Agentflow))
+        .Push();
+
+    public void Dispose() => _executionScope.Dispose();
 
     [Fact]
     public void BlockBuilders_AreDedicatedInternalStaticTypes()
@@ -1830,6 +1836,7 @@ public class AgentflowWorkflowCompilerTests
             new AgentflowNode { NodeId = "group", Kind = AgentflowNodeKind.GroupChatBlock },
             new Dictionary<string, AgentflowNode> { [participantNode.NodeId] = participantNode },
             new Dictionary<string, AIAgent> { [participantNode.NodeId] = CreateAgent("participant", "Participant") },
+            new Dictionary<string, EngineKind> { [participantNode.NodeId] = EngineKind.Maf },
             new AgentflowAgentSessionScope(providerSessionState, projectId, "context-1", null),
             executionTraceContext: null,
             new AIAgentHostOptions()

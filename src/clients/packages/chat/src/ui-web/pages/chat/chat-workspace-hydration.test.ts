@@ -438,7 +438,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
           reconnectHandlers!.onMessage({
             messageId: "drawer-finished",
             role: "system",
-            additionalProperties: { type: "turn-finished", status: "completed" },
+            additionalProperties: { type: "agw-turn-finished", status: "completed" },
             contents: [],
           }),
         );
@@ -540,7 +540,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
             reconnectHandlers!.onMessage({
               messageId: "finished",
               role: "system",
-              additionalProperties: { type: "turn-finished", status: "completed" },
+              additionalProperties: { type: "agw-turn-finished", status: "completed" },
               contents: [],
             });
           }
@@ -666,7 +666,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
           reconnectHandlers!.onMessage({
             messageId: "history-refresh-finished",
             role: "system",
-            additionalProperties: { type: "turn-finished", status: "completed" },
+            additionalProperties: { type: "agw-turn-finished", status: "completed" },
             contents: [],
           }),
         );

@@ -8,19 +8,19 @@ public partial class ExecutionCommandHandlerTests
         // Arrange
         var token = TestContext.Current.CancellationToken;
         var task = CreateTask("new-context");
-        var tasks = new FakeProjectTaskFacade(task) { Generation = null };
-        var factory = new FakeRuntimeFactory();
-        await using var connection = CreateContext(factory, task, projectTasks: tasks);
+        var tasks = new FakeProjectTaskFacade(task, _persistence) { Generation = null };
+        await using var connection = CreateContext(task, projectTasks: tasks);
         var command = CreateExecCommand(Guid.NewGuid());
 
         // Act
         await connection.StartTurnAsync(command, token);
+        await connection.WhenIdleAsync();
 
         // Assert
         Assert.Equal(1, tasks.ResolveCount);
-        Assert.Single(factory.StartRequests);
-        Assert.Equal(command.ConversationId, factory.StartRequests[0].Task.ProjectConversationId);
-        Assert.Equal(0, factory.StartRequests[0].Task.Generation);
+        var execution = Assert.Single(Runtimes.TurnContexts);
+        Assert.Equal(command.ConversationId, execution.ProjectConversationId);
+        Assert.Equal(0, execution.Generation);
     }
 
     [Fact]
@@ -29,12 +29,12 @@ public partial class ExecutionCommandHandlerTests
         // Arrange
         var token = TestContext.Current.CancellationToken;
         var task = CreateTask("deleted-context");
-        var tasks = new FakeProjectTaskFacade(task);
-        var factory = new FakeRuntimeFactory();
-        await using var connection = CreateContext(factory, task, projectTasks: tasks);
+        var tasks = new FakeProjectTaskFacade(task, _persistence);
+        await using var connection = CreateContext(task, projectTasks: tasks);
         var command = CreateExecCommand(Guid.NewGuid());
         await connection.StartTurnAsync(command, token);
-        var oldRuntime = Assert.Single(factory.CreatedRuntimes);
+        await connection.WhenIdleAsync();
+        var oldRuntime = Assert.Single(Runtimes.Created);
         tasks.Generation = null;
 
         // Act
@@ -44,10 +44,10 @@ public partial class ExecutionCommandHandlerTests
 
         // Assert
         Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.ResourceNotFound.Code, exception.Code);
-        Assert.True(oldRuntime.Disposed);
+        Assert.True(oldRuntime.IsDisposed);
         Assert.Null(connection.ResolvedTask);
         Assert.Equal(1, tasks.ResolveCount);
-        Assert.Single(factory.StartRequests);
+        Assert.Single(Runtimes.TurnContexts);
     }
 
     [Fact]
@@ -55,20 +55,20 @@ public partial class ExecutionCommandHandlerTests
     {
         var token = TestContext.Current.CancellationToken;
         var task = CreateTask("reset-context");
-        var tasks = new FakeProjectTaskFacade(task);
-        var factory = new FakeRuntimeFactory();
-        await using var connection = CreateContext(factory, task, projectTasks: tasks);
+        var tasks = new FakeProjectTaskFacade(task, _persistence);
+        await using var connection = CreateContext(task, projectTasks: tasks);
         var command = CreateExecCommand(Guid.NewGuid());
         await connection.StartTurnAsync(command, token);
-        var oldRuntime = Assert.Single(factory.CreatedRuntimes);
+        await connection.WhenIdleAsync();
+        var oldRuntime = Assert.Single(Runtimes.Created);
 
         tasks.Generation = 1; // A reset committed on another Control/Data Plane process.
-        await connection.StartTurnAsync(command, token);
+        await connection.StartTurnAsync(CreateNextCommand(command), token);
+        await connection.WhenIdleAsync();
 
-        Assert.True(oldRuntime.Disposed);
+        Assert.True(oldRuntime.IsDisposed);
         Assert.Equal(2, tasks.ResolveCount);
-        Assert.Equal(2, factory.CreatedRuntimes.Count);
-        Assert.Null(factory.StartRequests[1].CurrentRuntime);
-        Assert.Equal(1, factory.StartRequests[1].Task.Generation);
+        Assert.Equal(2, Runtimes.Created.Count);
+        Assert.Equal(1, Runtimes.TurnContexts[1].Generation);
     }
 }

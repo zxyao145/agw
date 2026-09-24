@@ -231,14 +231,14 @@ test("history removes init and control messages and restores the latest valid co
       role: "assistant",
       author: "Agw",
       contents: [{ type: "TextContent", content: "started" }],
-      additionalProperties: { type: "turn-start" },
+      additionalProperties: { type: "agw-turn-start" },
     },
     {
       messageId: "turn-finished",
       role: "assistant",
       author: "Agw",
       contents: [{ type: "TextContent", content: "finished" }],
-      additionalProperties: { type: "turn-finished", status: "completed" },
+      additionalProperties: { type: "agw-turn-finished", status: "completed" },
     },
     {
       messageId: "human-interaction",

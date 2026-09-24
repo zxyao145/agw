@@ -1,10 +1,11 @@
+using Agw.Agents.Execution.Context;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Agents.Middleware.ModelInput;
 
 /// <summary>
-/// <para>过滤模型无法接收的临时内容，同时保留仍需发送给 Provider 的 MCP 审批响应。</para>
-/// <para>Filters transient content that cannot be sent to the model while retaining provider-facing MCP approval responses.</para>
+/// <para>过滤模型无法接收的临时内容与 Agw 执行数据，同时保留仍需发送给 Provider 的 MCP 审批响应。</para>
+/// <para>Filters transient content and Agw execution data that cannot be sent to the model while retaining provider-facing MCP approval responses.</para>
 /// </summary>
 internal sealed class ModelInputFilteringChatClient : DelegatingChatClient
 {
@@ -43,7 +44,12 @@ internal sealed class ModelInputFilteringChatClient : DelegatingChatClient
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
         CancellationToken cancellationToken = default
-    ) => base.GetResponseAsync(FilterMessages(messages), options, cancellationToken);
+    ) =>
+        base.GetResponseAsync(
+            FilterMessages(messages),
+            ExecutionRunOptions.WithoutExecution(options),
+            cancellationToken
+        );
 
     /// <summary>
     /// <para>过滤空文本和已消费的函数审批响应，再转发模型调用。</para>
@@ -69,7 +75,12 @@ internal sealed class ModelInputFilteringChatClient : DelegatingChatClient
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
         CancellationToken cancellationToken = default
-    ) => base.GetStreamingResponseAsync(FilterMessages(messages), options, cancellationToken);
+    ) =>
+        base.GetStreamingResponseAsync(
+            FilterMessages(messages),
+            ExecutionRunOptions.WithoutExecution(options),
+            cancellationToken
+        );
 
     /// <summary>
     /// <para>移除不适合模型输入的内容及因此变空的消息，仅在内容变化时复制消息。</para>

@@ -18,17 +18,16 @@ internal static class ResponseSchemaResultMetadata
         IEnumerable<AIContent> contents
     )
     {
-        if (
-            properties?.GetValueOrDefault("type")?.ToString() != "result"
-            && !contents.Any(content => content.AdditionalProperties?.GetValueOrDefault("type")?.ToString() == "result")
-        )
+        if (!AgwMessageClassifier.IsResult(properties, contents))
         {
             return properties;
         }
 
         var result =
             properties == null ? new AdditionalPropertiesDictionary() : new AdditionalPropertiesDictionary(properties);
-        result["resultFormat"] = JsonSerializer.SerializeToElement(ResultFormat.Json).GetString()!;
+        result[AgwMessageClassifier.ResultFormatKey] = JsonSerializer
+            .SerializeToElement(ResultFormat.Json)
+            .GetString()!;
         return result;
     }
 }

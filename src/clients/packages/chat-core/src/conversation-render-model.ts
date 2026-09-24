@@ -9,6 +9,8 @@ import {
   isResultMessage,
   isUserTurnMessage,
   processMessages,
+  TURN_FINISHED_MESSAGE_TYPE,
+  TURN_START_MESSAGE_TYPE,
 } from "@agw/execution-core";
 
 import { parseClaudeInitCommands } from "./claude-commands";
@@ -36,8 +38,8 @@ import { formatStructuredResult, normalizeStructuredResult } from "./structured-
 import { collapseCompletedWork } from "./work-summary";
 
 const HIDDEN_CONTROL_TYPES = new Set([
-  "turn-start",
-  "turn-finished",
+  TURN_START_MESSAGE_TYPE,
+  TURN_FINISHED_MESSAGE_TYPE,
   "mode-status",
   "mode-change-failed",
   "interaction-request",

@@ -4,7 +4,10 @@ using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Execution.HumanInteraction.InProcess;
 
-/// <summary>Owns the complete interaction lifecycle for one in-process turn.</summary>
+/// <summary>
+/// 进程内的即时交互通道：发出请求并在内存等待回答，供 Agentflow 与 External Agent 桥接使用。
+/// The in-process live interaction channel: publishes a request and waits in memory for its answer, used by Agentflow and External Agent bridges.
+/// </summary>
 public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInteractionChannel
 {
     private readonly object _sync = new();
@@ -50,8 +53,6 @@ public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInt
         {
             if (_closed)
                 throw new AgwException(ErrorCodes.AgentExecutionFailed, "The interaction session has ended.");
-            if (InteractionRules.AutomaticallyApprove(request, _permissions.Current) is { } automatic)
-                return new InteractionResolution.Resolved(automatic);
             // 交互不可用时就地拒绝，不挂起也不推送请求；Agent 拿到结果后继续本轮。
             // Decline in place when interaction is unavailable: nothing is queued or streamed, and the Agent continues.
             if (!_allowInteraction)
@@ -121,22 +122,6 @@ public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInt
             pending.Completion.TrySetResult(decision);
             _pendingCountChanged?.Invoke(_pending.Count);
             return ValueTask.FromResult(true);
-        }
-    }
-
-    public void SetPermissionMode(AgwPermissionMode mode)
-    {
-        lock (_sync)
-        {
-            _permissions.Set(mode);
-            foreach (var (id, pending) in _pending.ToArray())
-            {
-                if (InteractionRules.AutomaticallyApprove(pending.Request, mode) is not { } decision)
-                    continue;
-                _pending.Remove(id);
-                pending.Completion.TrySetResult(decision);
-            }
-            _pendingCountChanged?.Invoke(_pending.Count);
         }
     }
 

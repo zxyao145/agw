@@ -68,7 +68,21 @@ internal sealed record DurableExecutionSegmentResult
     /// 获取分段失败时的错误说明。
     /// </summary>
     public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// 失败时结束消息与 Turn 行使用的错误码。
+    /// The error code used by the finish message and turn row on failure.
+    /// </summary>
+    public string? ErrorCode { get; init; }
+
+    /// <summary>
+    /// Turn 结束时已完成的 Step（Agentflow 为 Superstep）数。
+    /// The number of completed Steps (Supersteps for an Agentflow) when the turn ends.
+    /// </summary>
+    public int StepCount { get; init; }
 }
+
+internal sealed record DurableExecutionOutcome(Guid ExecutionId, DurableExecutionStatus Status, string? ErrorMessage);
 
 /// <summary>
 /// 协调层返回给 connection attachment 的最小执行状态。

@@ -13,7 +13,6 @@ namespace Agw.Projects.Infrastructure;
 public sealed class ConversationHandoffProvider : IConversationHandoffProvider
 {
     private const int MaxCharacters = 32_000;
-    private const string HistoryScopeMetadataKey = "historyScope";
     private const string TargetTypeMetadataKey = "targetType";
     private const string TargetIdMetadataKey = "targetId";
 
@@ -189,21 +188,10 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         }
 
         var message = record.ToChatMessage();
-        return message == null || !HasMessageType(message, "result");
+        return message == null || !AgwMessageClassifier.IsResult(message);
     }
 
-    private static string? GetHistoryScope(ProjectConversationChatHistory record)
-    {
-        if (
-            record.Metadata?.TryGetValue(HistoryScopeMetadataKey, out var scopeElement) != true
-            || scopeElement.ValueKind != JsonValueKind.String
-        )
-        {
-            return null;
-        }
-
-        return scopeElement.GetString();
-    }
+    private static string? GetHistoryScope(ProjectConversationChatHistory record) => record.HistoryScope;
 
     private static HandoffCandidate? CreateCandidate(AttributedRecord item)
     {
@@ -217,7 +205,7 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
             return null;
         }
 
-        var isResult = HasMessageType(message, "result");
+        var isResult = AgwMessageClassifier.IsResult(message);
         if (message.Role == ChatRole.User)
         {
             if (!IsRealUserMessage(message, item.Record.Metadata))
@@ -269,25 +257,8 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         string.Equals(message.AuthorName, Constants.DefaultInputAuthor, StringComparison.Ordinal)
         || metadata?.ContainsKey(TargetTypeMetadataKey) == true;
 
-    private static bool IsControlMessage(ChatMessage message)
-    {
-        if (message.AdditionalProperties.IsToolMessage())
-        {
-            return true;
-        }
-
-        return GetMessageType(message)
-            is "agentflow-checkpoint"
-                or "interaction-request"
-                or "turn-start"
-                or "turn-finished";
-    }
-
-    private static bool HasMessageType(ChatMessage message, string expected) =>
-        string.Equals(GetMessageType(message), expected, StringComparison.Ordinal);
-
-    private static string? GetMessageType(ChatMessage message) =>
-        message.AdditionalProperties?.TryGetValue("type", out var value) == true ? value?.ToString() : null;
+    private static bool IsControlMessage(ChatMessage message) =>
+        message.AdditionalProperties.IsToolMessage() || AgwMessageClassifier.IsControl(message);
 
     private static List<HandoffCandidate> DeduplicateByMessageId(IReadOnlyList<HandoffCandidate> candidates)
     {

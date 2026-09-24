@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using Agw.Agents.Execution.HumanInteraction;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -7,33 +6,18 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.Execution.Agents.Middleware.Approval;
 
 /// <summary>
-/// <para>限制后台 Agent 的交互能力，拒绝执行期间产生的新工具审批请求。</para>
-/// <para>Restricts background-agent interaction and rejects new tool approval requests emitted during execution.</para>
+/// <para>拒绝后台 Agent 执行期间产生的新工具审批请求。</para>
+/// <para>Rejects new tool approval requests emitted while a background Agent runs.</para>
 /// </summary>
 /// <remarks>
-/// <para>执行期间抑制当前交互通道；流式响应在转发前检查审批内容，遇到审批请求即失败，不等待人工处理。</para>
-/// <para>Suppresses the current interaction channel during execution. Streaming updates are checked before forwarding; an approval request fails the run instead of waiting for a person.</para>
+/// <para>后台 Agent 的执行作用域没有交互通道；流式响应在转发前检查审批内容，遇到审批请求即失败，不等待人工处理。</para>
+/// <para>The background Agent's execution scope has no interaction channel. Streaming updates are checked before forwarding; an approval request fails the run instead of waiting for a person.</para>
 /// </remarks>
 internal sealed class BackgroundAgentApprovalMiddleware
 {
-    private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
-
     /// <summary>
-    /// <para>创建 BackgroundAgentApprovalMiddleware 实例并保存本包装层使用的依赖和配置。</para>
-    /// <para>Initializes BackgroundAgentApprovalMiddleware with the dependencies and configuration used by this wrapper.</para>
-    /// </summary>
-    /// <param name="humanInteractionContextAccessor">
-    /// <para>用于抑制当前交互通道的访问器；可以为空。</para>
-    /// <para>Accessor used to suppress the current interaction channel; may be null.</para>
-    /// </param>
-    public BackgroundAgentApprovalMiddleware(HumanInteractionContextAccessor? humanInteractionContextAccessor)
-    {
-        _humanInteractionContextAccessor = humanInteractionContextAccessor;
-    }
-
-    /// <summary>
-    /// <para>抑制交互通道，执行普通调用，并在返回前拒绝响应中的新审批请求。</para>
-    /// <para>Suppresses interaction, executes a non-streaming call, and rejects new approval requests before returning.</para>
+    /// <para>执行普通调用，并在返回前拒绝响应中的新审批请求。</para>
+    /// <para>Executes a non-streaming call and rejects new approval requests before returning.</para>
     /// </summary>
     /// <param name="messages">
     /// <para>按调用顺序提供的聊天消息。</para>
@@ -67,17 +51,14 @@ internal sealed class BackgroundAgentApprovalMiddleware
         CancellationToken cancellationToken
     )
     {
-        // 暂时抑制交互通道；作用域释放会恢复原通道，即使调用取消或抛出异常。
-        // Suppress interaction temporarily; disposing the scope restores the prior channel even on cancellation or failure.
-        using var interactionScope = _humanInteractionContextAccessor?.Suppress();
         var response = await innerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
         ThrowIfApprovalRequested(response.Messages.SelectMany(static message => message.Contents));
         return response;
     }
 
     /// <summary>
-    /// <para>在流的整个生命周期内抑制交互，并在每段转发前拒绝新审批请求。</para>
-    /// <para>Suppresses interaction for the stream lifetime and rejects new approvals before forwarding each update.</para>
+    /// <para>在每段转发前拒绝新审批请求。</para>
+    /// <para>Rejects new approvals before forwarding each update.</para>
     /// </summary>
     /// <param name="messages">
     /// <para>按调用顺序提供的聊天消息。</para>
@@ -111,9 +92,6 @@ internal sealed class BackgroundAgentApprovalMiddleware
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        // 暂时抑制交互通道；作用域释放会恢复原通道，即使调用取消或抛出异常。
-        // Suppress interaction temporarily; disposing the scope restores the prior channel even on cancellation or failure.
-        using var interactionScope = _humanInteractionContextAccessor?.Suppress();
         await foreach (
             var update in innerAgent
                 .RunStreamingAsync(messages, session, options, cancellationToken)

@@ -60,12 +60,12 @@ public sealed class AgentResponseSchemaTests
     [InlineData("{\"type\":\"object\"}", ResultFormat.Json)]
     public void FromDomain_AgentResponses_ReportSameResultFormatForEveryAgentKind(string? schema, ResultFormat expected)
     {
-        foreach (var kind in Enum.GetValues<ExternalAgentKind>())
+        foreach (var kind in Enum.GetValues<EngineKind>())
         {
             var agent = new Agent
             {
                 Id = Guid.CreateVersion7(),
-                Type = kind == ExternalAgentKind.None ? AgentType.System : AgentType.External,
+                Type = kind == EngineKind.Maf ? AgentType.System : AgentType.External,
                 ExternalAgentKind = kind,
                 ResponseSchema = schema,
             };

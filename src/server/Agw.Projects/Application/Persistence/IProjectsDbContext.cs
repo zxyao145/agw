@@ -24,6 +24,8 @@ public interface IProjectsDbContext : IModuleDbContext
 
     DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories { get; }
 
+    DbSet<ProjectConversationTurn> ProjectConversationTurns { get; }
+
     DbSet<ProjectConversationBinding> ProjectConversationBindings { get; }
 
     DbSet<AgentUsage> AgentUsages { get; }

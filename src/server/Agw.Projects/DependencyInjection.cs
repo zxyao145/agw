@@ -4,7 +4,6 @@ using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Metrics;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Projects.Infrastructure;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -45,25 +44,12 @@ public static class DependencyInjection
             )
             .Validate(options => options.MaxBufferedBytes > 0, "History buffer limit must be positive.")
             .ValidateOnStart();
-        services.AddSingleton<EfCoreChatHistoryProvider>();
-        services.AddSingleton<Agw.Projects.Contracts.History.IConversationMessageWriter>(sp =>
-            sp.GetRequiredService<EfCoreChatHistoryProvider>()
+        services.AddSingleton<ConversationHistoryStore>();
+        services.AddSingleton<Agw.Projects.Contracts.History.IConversationHistoryStore>(sp =>
+            sp.GetRequiredService<ConversationHistoryStore>()
         );
-        services.AddSingleton<IConversationHistoryPersistence>(sp =>
-            sp.GetRequiredService<EfCoreChatHistoryProvider>()
-        );
-        services.AddSingleton<ChatHistoryProvider>(sp =>
-        {
-            return sp.GetRequiredService<EfCoreChatHistoryProvider>();
-        });
-        services.AddSingleton<IProviderSessionState>(sp =>
-        {
-            return sp.GetRequiredService<EfCoreChatHistoryProvider>();
-        });
-        services.AddSingleton<IConversationHistoryWriter>(sp =>
-        {
-            return sp.GetRequiredService<EfCoreChatHistoryProvider>();
-        });
+        services.AddScoped<Agw.Projects.Contracts.History.IConversationTurnStore, ConversationTurnStore>();
+        services.AddScoped<ConversationTurnQueryService>();
         services.AddSingleton<IAgentUsageRecorder, AgentUsageRecorder>();
 
         return services;

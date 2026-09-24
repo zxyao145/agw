@@ -30,7 +30,7 @@ public sealed partial class InitialMigrationTests
         Assert.False(dbContext.Database.HasPendingModelChanges());
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(18, migrations.Length);
+        Assert.Equal(19, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -49,6 +49,7 @@ public sealed partial class InitialMigrationTests
         Assert.EndsWith("_AddSettings", migrations[15], StringComparison.Ordinal);
         Assert.EndsWith("_AddOidcLogin", migrations[16], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentResponseSchema", migrations[17], StringComparison.Ordinal);
+        Assert.EndsWith("_AddConversationTurns", migrations[18], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -73,6 +74,13 @@ public sealed partial class InitialMigrationTests
         Assert.Contains("response_schema", script, StringComparison.OrdinalIgnoreCase);
         var directoryScript = dbContext.GetService<IMigrator>().GenerateScript(migrations[13], migrations[14]);
         Assert.DoesNotContain("FOREIGN KEY", directoryScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("project_conversation_turn", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("turn_sequence", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("last_event_sequence", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("lease_expires_at", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("history_scope", script, StringComparison.OrdinalIgnoreCase);
+        var turnScript = dbContext.GetService<IMigrator>().GenerateScript(migrations[17], migrations[18]);
+        Assert.DoesNotContain("FOREIGN KEY", turnScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("api_token", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("user_memory", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("normalized_name", script, StringComparison.OrdinalIgnoreCase);
@@ -149,7 +157,7 @@ public sealed partial class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(18, appliedMigrations.Length);
+        Assert.Equal(19, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -174,6 +182,25 @@ public sealed partial class InitialMigrationTests
         Assert.EndsWith("_AddOidcLogin", appliedMigrations[16], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentResponseSchema", appliedMigrations[17], StringComparison.Ordinal);
         Assert.True(await ColumnExistsAsync(connection, "agent", "response_schema", cancellationToken));
+        Assert.EndsWith("_AddConversationTurns", appliedMigrations[18], StringComparison.Ordinal);
+        Assert.True(await TableExistsAsync(connection, "project_conversation_turn", cancellationToken));
+        Assert.True(
+            await ColumnExistsAsync(connection, "project_conversation_chat_history", "turn_id", cancellationToken)
+        );
+        Assert.True(
+            await ColumnIsNotNullAsync(connection, "project_conversation_chat_history", "purpose", cancellationToken)
+        );
+        Assert.True(await ColumnExistsAsync(connection, "durable_execution", "lease_epoch", cancellationToken));
+        Assert.False(await ColumnExistsAsync(connection, "execution_stream_entry", "sequence", cancellationToken));
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "execution_stream_entry",
+                "ix_execution_stream_entry_turn_id_turn_sequence",
+                ["turn_id", "turn_sequence"],
+                cancellationToken
+            )
+        );
         Assert.True(await TableExistsAsync(connection, "setting", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "server_auth_state", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "project_id", cancellationToken));
@@ -294,16 +321,27 @@ public sealed partial class InitialMigrationTests
 
         // Act
         await migrator.MigrateAsync(migrations[scopeMigrationIndex], token);
-        var pending = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
-        Assert.Null(pending.ProjectId);
-        Assert.False(pending.ScopeBackfilled);
-        // Assert
-        var row = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
+
+        // Assert: the intermediate schema only has the columns of that migration, so they are read by projection.
+        var row = await context
+            .DurableExecutions.AsNoTracking()
+            .Select(item => new
+            {
+                item.ProjectId,
+                item.ProjectConversationId,
+                item.ScopeBackfilled,
+                item.ManifestJson,
+            })
+            .SingleAsync(token);
         Assert.Null(row.ProjectId);
         Assert.Null(row.ProjectConversationId);
         Assert.False(row.ScopeBackfilled);
-        Assert.Equal(manifest, row.ManifestJson);
-        Assert.Equal(ciphertext, await context.DurableExecutions.Select(item => item.ManifestJson).SingleAsync(token));
+        Assert.Equal(ciphertext, row.ManifestJson);
+        await migrator.MigrateAsync(migrations[^1], token);
+        var migrated = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
+        Assert.Null(migrated.ProjectId);
+        Assert.False(migrated.ScopeBackfilled);
+        Assert.Equal(manifest, migrated.ManifestJson);
         Assert.False(context.Database.HasPendingModelChanges());
         await migrator.MigrateAsync(migrations[scopeMigrationIndex - 1], token);
         Assert.False(await ColumnExistsAsync(connection, "durable_execution", "project_id", token));

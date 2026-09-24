@@ -3,10 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
-using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-using Agw.Tools.HumanInteraction;
 using Agw.Tools.Impl.Tools.Basic;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
@@ -34,7 +32,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
     private readonly AgwPermissionMode? _permissionMode;
     private readonly string? _workingDirectory;
     private readonly Guid _agentId;
-    private readonly IRuntimeTurnContextAccessor? _turnContext;
+    private readonly IAgentExecutionContextAccessor? _executionContext;
     private readonly ClaudeToolApprovalCache _cache;
     private string? _scope;
     private long _version;
@@ -64,9 +62,9 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
     /// <para>用于会话、授权或跟踪归属的 Agent 标识。</para>
     /// <para>Agent identifier used for session, approval, or trace attribution.</para>
     /// </param>
-    /// <param name="turnContext">
-    /// <para>提供当前用户、项目、会话和权限版本的回合上下文访问器。</para>
-    /// <para>Turn-context accessor supplying user, project, conversation, and permission version.</para>
+    /// <param name="executionContext">
+    /// <para>提供当前用户、项目、会话和权限版本的执行上下文访问器。</para>
+    /// <para>Execution-context accessor supplying user, project, conversation, and permission version.</para>
     /// </param>
     /// <param name="cache">
     /// <para>可复用的同参数授权缓存；为空时为此桥接实例创建缓存。</para>
@@ -78,7 +76,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         AgwPermissionMode? permissionMode = null,
         string? workingDirectory = null,
         Guid agentId = default,
-        IRuntimeTurnContextAccessor? turnContext = null,
+        IAgentExecutionContextAccessor? executionContext = null,
         ClaudeToolApprovalCache? cache = null
     )
     {
@@ -87,7 +85,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         _permissionMode = permissionMode;
         _workingDirectory = workingDirectory;
         _agentId = agentId;
-        _turnContext = turnContext;
+        _executionContext = executionContext;
         _cache = cache ?? new ClaudeToolApprovalCache();
     }
 
@@ -127,7 +125,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         CancellationToken cancellationToken
     )
     {
-        using var binding = BindCurrentChannel(options);
+        using var binding = BindCurrentChannel();
         return await innerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
     }
 
@@ -167,7 +165,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        using var binding = BindCurrentChannel(options);
+        using var binding = BindCurrentChannel();
         await foreach (
             var update in innerAgent
                 .RunStreamingAsync(messages, session, options, cancellationToken)
@@ -238,7 +236,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
             );
             var request = new UserInputRequest("questions", Prompt, payload)
             {
-                Source = new InteractionSource { ToolName = ToolName, CallId = context.ToolUseId },
+                Source = _source with { ToolName = ToolName, CallId = context.ToolUseId },
             };
             var response = await channel.RequestAsync(request, cancellationToken).ConfigureAwait(false);
             if (response.Cancelled)
@@ -337,13 +335,9 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
     }
 
     /// <summary>
-    /// <para>原子占用桥接实例，捕获来源、当前回合和权限版本，并绑定允许使用的交互通道。</para>
-    /// <para>Atomically claims the bridge, captures attribution, turn context, and permission version, and binds the permitted interaction channel.</para>
+    /// <para>原子占用桥接实例，捕获来源、当前执行上下文和权限版本，并绑定允许使用的交互通道。</para>
+    /// <para>Atomically claims the bridge, captures attribution, execution context, and permission version, and binds the permitted interaction channel.</para>
     /// </summary>
-    /// <param name="options">
-    /// <para>本次调用选项；为空时由后续执行层处理默认值。</para>
-    /// <para>Options for this call; downstream execution handles defaults when null.</para>
-    /// </param>
     /// <returns>
     /// <para>释放时解除当前执行绑定的句柄。</para>
     /// <para>Handle that unbinds the current run on disposal.</para>
@@ -352,7 +346,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
     /// <para>此实例已绑定另一条正在执行的调用。</para>
     /// <para>This instance is already bound to another active run.</para>
     /// </exception>
-    private IDisposable BindCurrentChannel(AgentRunOptions? options)
+    private IDisposable BindCurrentChannel()
     {
         // 在捕获活动通道前占用桥接实例，防止并发 SDK 回调关联到错误回合。
         // Claim the bridge before capturing the channel so concurrent SDK callbacks cannot bind to the wrong turn.
@@ -364,30 +358,26 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
             );
         }
 
-        _source =
-            options?.AdditionalProperties?.TryGetValue(HumanInteractionToolMetadata.SourceKey, out var source) == true
-            && source is InteractionSource attribution
-                ? attribution
-                : new();
-        var turn = _turnContext?.Current;
+        _source = _contextAccessor?.Source ?? new InteractionSource { NodeId = InteractionIdentity.StandaloneNodeId };
+        var execution = _executionContext?.Current;
         // 缓存作用域绑定用户、项目、会话代次、Agent、节点和工作区，避免授权跨边界复用。
         // Scope cached grants to user, project, conversation generation, agent, node, and workspace.
         _scope =
-            turn == null
+            execution == null
                 ? null
                 : JsonSerializer.Serialize(
                     new
                     {
-                        turn.UserId,
-                        turn.ProjectId,
-                        turn.ProjectConversationId,
-                        turn.Task.Generation,
+                        execution.UserId,
+                        execution.ProjectId,
+                        execution.ProjectConversationId,
+                        execution.Generation,
                         AgentId = _agentId,
                         _source.NodeId,
                         Workspace = _workingDirectory,
                     }
                 );
-        _version = turn?.Settings.PermissionVersion ?? 0;
+        _version = execution?.PermissionVersion ?? 0;
         Volatile.Write(ref _activeChannel, _allowInteraction ? _contextAccessor?.Current : null);
         return new Binding(this);
     }

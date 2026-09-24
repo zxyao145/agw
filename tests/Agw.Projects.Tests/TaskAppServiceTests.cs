@@ -577,6 +577,7 @@ public partial class TaskAppServiceTests
         public DbSet<ProjectConversation> ProjectConversations => _dbContext.ProjectConversations;
         public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories =>
             _dbContext.ProjectConversationChatHistories;
+        public DbSet<ProjectConversationTurn> ProjectConversationTurns => _dbContext.ProjectConversationTurns;
         public DbSet<ProjectConversationBinding> ProjectConversationBindings => _dbContext.ProjectConversationBindings;
         public DbSet<AgentUsage> AgentUsages => _dbContext.AgentUsages;
 
