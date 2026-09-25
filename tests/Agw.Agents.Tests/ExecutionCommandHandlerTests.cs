@@ -587,7 +587,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
-        public Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+        public Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
             IReadOnlyCollection<Guid> taskIds,
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();

@@ -37,6 +37,16 @@ export function readString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * 未填写 humanMode 时 Server 按 approval 执行，编辑器显示同一个默认值。
+ * The Server runs a Human Gate without humanMode as approval, so the editor shows the same default.
+ */
+export const DEFAULT_HUMAN_STEP_MODE = "approval";
+
+export function readHumanStepMode(config: Record<string, unknown>) {
+  return readString(config.humanMode).trim() || DEFAULT_HUMAN_STEP_MODE;
+}
+
 export function readStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")

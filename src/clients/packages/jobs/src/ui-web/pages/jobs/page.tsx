@@ -35,6 +35,14 @@ import { Textarea } from "@agw/components";
 import { getApiErrorMessage } from "@agw/api";
 import { formatLocalDateTime, parseApiDateTime } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
+import {
+  getTriggerValueError,
+  isCronValue,
+  isPositiveIntervalValue,
+  TRIGGER_TYPE_CRON,
+  TRIGGER_TYPE_INTERVAL,
+  TRIGGER_TYPE_ONCE,
+} from "./trigger-value";
 
 type JobDto = {
   id: string;
@@ -56,7 +64,7 @@ type JobDto = {
 type JobExecutionLogDto = {
   id: string;
   jobId: string;
-  contextId: string | null;
+  conversationId: string | null;
   startTime: string;
   endTime: string | null;
   success: boolean;
@@ -116,9 +124,6 @@ const jobsPath = "/api/jobs";
 const jobEnabledPath = "/api/jobs/enabled";
 const jobItemPath = "/api/jobs/{id}";
 const jobLogsPath = "/api/jobs/{id}/logs";
-const TRIGGER_TYPE_ONCE = 1;
-const TRIGGER_TYPE_INTERVAL = 2;
-const TRIGGER_TYPE_CRON = 3;
 const DEFAULT_INTERVAL_TRIGGER_VALUE = "00:01:00";
 const DEFAULT_CRON_TRIGGER_VALUE = "*/1 * * * *";
 
@@ -163,6 +168,11 @@ function createEditFormState(job: JobDto): JobFormState {
 }
 
 function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobRequest {
+  const triggerValueError = getTriggerValueError(form.triggerType, form.triggerValue);
+  if (triggerValueError) {
+    throw new Error(triggerValueError);
+  }
+
   const triggerValue = resolveTriggerValue(form);
   const payload: JobRequest = {
     projectId: form.projectId.trim(),
@@ -214,33 +224,6 @@ function isValidDateTimeValue(value?: string | null): value is string {
   return parseApiDateTime(value) !== null;
 }
 
-function isPositiveIntervalValue(value?: string | null): value is string {
-  if (!value) {
-    return false;
-  }
-
-  const match = value.trim().match(/^(?:(\d+)\.)?(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/);
-  if (!match) {
-    return false;
-  }
-
-  const days = Number(match[1] ?? 0);
-  const hours = Number(match[2]);
-  const minutes = Number(match[3]);
-  const seconds = Number(match[4] ?? 0);
-  const totalMilliseconds = (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
-
-  return totalMilliseconds > 0;
-}
-
-function isCronValue(value?: string | null): value is string {
-  if (!value) {
-    return false;
-  }
-
-  return value.trim().split(/\s+/).length === 5;
-}
-
 function getNextRunTimeForOnce(form: JobFormState): string {
   if (isValidDateTimeValue(form.triggerValue)) {
     return form.triggerValue;
@@ -250,18 +233,9 @@ function getNextRunTimeForOnce(form: JobFormState): string {
 }
 
 function resolveTriggerValue(form: JobFormState): string {
-  switch (form.triggerType) {
-    case TRIGGER_TYPE_ONCE:
-      return getNextRunTimeForOnce(form).trim();
-    case TRIGGER_TYPE_INTERVAL:
-      return isPositiveIntervalValue(form.triggerValue)
-        ? form.triggerValue.trim()
-        : DEFAULT_INTERVAL_TRIGGER_VALUE;
-    case TRIGGER_TYPE_CRON:
-      return isCronValue(form.triggerValue) ? form.triggerValue.trim() : DEFAULT_CRON_TRIGGER_VALUE;
-    default:
-      return form.triggerValue.trim();
-  }
+  return form.triggerType === TRIGGER_TYPE_ONCE
+    ? getNextRunTimeForOnce(form).trim()
+    : form.triggerValue.trim();
 }
 
 function getTriggerTypeLabel(triggerType: number): string {
@@ -782,6 +756,7 @@ function JobDialog({
   const isOnceTrigger = form.triggerType === TRIGGER_TYPE_ONCE;
   const isIntervalTrigger = form.triggerType === TRIGGER_TYPE_INTERVAL;
   const isCronTrigger = form.triggerType === TRIGGER_TYPE_CRON;
+  const triggerValueError = getTriggerValueError(form.triggerType, form.triggerValue);
   const [isAdvanced, setIsAdvanced] = React.useState(false);
 
   React.useEffect(() => {
@@ -956,6 +931,7 @@ function JobDialog({
                 id={`${mode}-trigger-value`}
                 value={form.triggerValue}
                 placeholder={isIntervalTrigger ? DEFAULT_INTERVAL_TRIGGER_VALUE : "*/5 * * * *"}
+                aria-invalid={triggerValueError !== null}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
@@ -963,11 +939,15 @@ function JobDialog({
                   }))
                 }
               />
-              <p className="text-xs text-muted-foreground">
-                {isIntervalTrigger
-                  ? "Use a .NET TimeSpan value such as 00:01:00 for a one-minute interval."
-                  : "Use a standard cron string such as */5 * * * *."}
-              </p>
+              {triggerValueError ? (
+                <p className="text-xs text-destructive">{triggerValueError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {isIntervalTrigger
+                    ? "Use a .NET TimeSpan value such as 00:01:00 for a one-minute interval."
+                    : "Use a standard cron string such as */5 * * * *."}
+                </p>
+              )}
             </div>
           ) : null}
 
@@ -1066,7 +1046,12 @@ function JobDialog({
           >
             Cancel
           </Button>
-          <Button size="sm" type="button" onClick={onSubmit} disabled={isSubmitting}>
+          <Button
+            size="sm"
+            type="button"
+            onClick={onSubmit}
+            disabled={isSubmitting || triggerValueError !== null}
+          >
             {isSubmitting ? "Saving..." : submitLabel}
           </Button>
         </DialogFooter>

@@ -206,10 +206,10 @@ public class A2ADependencyInjectionTests
             CancellationToken cancellationToken = default
         ) => Task.FromResult<ProjectTaskSnapshot?>(null);
 
-        public Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+        public Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
             IReadOnlyCollection<Guid> taskIds,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult<IReadOnlyDictionary<Guid, string?>>(new Dictionary<Guid, string?>());
+        ) => Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(new Dictionary<Guid, Guid>());
     }
 
     private sealed class FakeExternalTaskSnapshotStore : IExternalTaskSnapshotStore

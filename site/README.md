@@ -124,6 +124,6 @@ Generated `public/`, `resources/`, `.cache/`, and `.hugo_build.lock` are ignored
 
 ## 界面截图
 
-`static/images/screenshots/` 保存通过 Computer 从实际 AGW Desktop 和 Server Setup 界面截取的 PNG（2026-09-14）。中英文页面共用原图，各自维护 alt 和图注；Desktop 截图不代表 Mobile 界面。表单使用未保存的展示内容，示例路径需由读者替换；工作流截图仅展示编辑器。
+`static/images/screenshots/` 保存通过 Computer 从实际 AGW Desktop 和 Server Setup 界面截取的 PNG。`desktop-chat.png` 截取于 2026-09-25，中英文 README 共用的 `../medias/desktop-chat.png` 使用同一张图片。中英文页面共用原图，各自维护 alt 和图注；Desktop 截图不代表 Mobile 界面。表单使用未保存的展示内容，示例路径需由读者替换；工作流截图仅展示编辑器。
 
 更新界面说明时同步复核截图，在对应操作步骤后用 Markdown 图片及 `{caption="图注"}` 插入。截图应避开 Token、密钥及私人内容，不为取图执行任务或提交示例配置。保留原始截图，使用主题的点击放大功能查看细节。技术架构和流量继续使用 Mermaid 图，避免用无关界面替代解释。

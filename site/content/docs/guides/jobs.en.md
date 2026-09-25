@@ -23,7 +23,7 @@ First verify the same task manually in Chat, including its model, tools, and dir
 | Interval | `00:15:00` | A positive duration in hours:minutes:seconds. The first run is 15 minutes after creation; each later run is 15 minutes after the previous successful run ends |
 | Cron | `0 1 * * *` | Standard five fields, evaluated in UTC; daily at 01:00 UTC |
 
-Clients display local time, but Cron uses UTC. A past Once timestamp does not mean “run immediately.” If an Interval is not a positive hours:minutes:seconds duration, or a Cron value does not have five fields, the client silently submits `00:01:00` or `*/1 * * * *` instead, so the job runs every minute. A five-field Cron with invalid content is rejected by the Server. Check **Next Run** in the job list after saving.
+Clients display local time, but Cron uses UTC. A past Once timestamp does not mean “run immediately.” If an Interval is not a positive hours:minutes:seconds duration, or a Cron value does not have five fields, an error appears below the field and the save button stays disabled. A five-field Cron with invalid field values is rejected by the Server on save with “Invalid cron trigger value”. After saving, check the next execution time in **Next Run** in the job list.
 
 ![AGW Desktop: an unsaved Cron Job example. Choose an execution target and confirm the schedule and prompt before creating it.](/images/screenshots/job-create.png)
 {caption="AGW Desktop: an unsaved Cron Job example. Choose an execution target and confirm the schedule and prompt before creating it."}
@@ -50,7 +50,7 @@ Job Logs records each execution attempt for a Job. Use it to check success, retr
 
 1. Find the task in Jobs and open its row’s logs action to enter **Job Logs**.
 2. Locate the relevant record by execution time and inspect its status, attempt number, and error.
-3. Select **Go to Chat** to open Chat for the Job's Project, then find the conversation this run created by its execution time to inspect the conversation and execution content.
+3. Select **Go to Chat** to open the conversation for that run and inspect its conversation and execution content. If the run has no conversation record yet, it opens the Job's Project instead.
 
 The task details view also exposes attempts and errors under **Execution Logs**. **Back to Jobs** returns to the task list.
 

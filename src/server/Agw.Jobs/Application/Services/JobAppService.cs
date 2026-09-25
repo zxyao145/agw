@@ -116,15 +116,15 @@ public class JobAppService
         }
 
         var taskIds = logs.Select(log => log.TaskId).ToHashSet();
-        var contextIdByTaskId = await _projectTasks
-            .ResolveContextIdsAsync(taskIds, cancellationToken)
+        var conversationIdByTaskId = await _projectTasks
+            .ResolveConversationIdsAsync(taskIds, cancellationToken)
             .ConfigureAwait(false);
 
         return logs.OrderByDescending(log => log.StartTime)
             .Select(log => new JobLogResponse(
                 log.Id,
                 log.JobId,
-                contextIdByTaskId.GetValueOrDefault(log.TaskId),
+                conversationIdByTaskId.TryGetValue(log.TaskId, out var conversationId) ? conversationId : null,
                 log.StartTime,
                 log.EndTime,
                 log.Success,

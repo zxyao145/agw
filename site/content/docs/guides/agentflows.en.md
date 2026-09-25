@@ -191,7 +191,7 @@ Human Gate example:
 }
 ```
 
-Use `input` to request information or `approval` for approval. Choose explicitly: the UI displays Input when unset, while the runtime defaults a missing mode to approval. `humanPrompt` is the text shown to the user.
+Use `input` to request information or `approval` for approval. When unset, both the editor and the runtime treat the mode as `approval`. `humanPrompt` is the text shown to the user.
 
 Checkpoint Name is stored as:
 

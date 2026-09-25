@@ -133,14 +133,14 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
         return task == null ? null : Map(task);
     }
 
-    public async Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+    public async Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
         IReadOnlyCollection<Guid> taskIds,
         CancellationToken cancellationToken = default
     )
     {
         if (taskIds.Count == 0)
         {
-            return new Dictionary<Guid, string?>();
+            return new Dictionary<Guid, Guid>();
         }
 
         var ids = taskIds.ToHashSet();
@@ -151,19 +151,17 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var conversationIds = histories.Select(record => record.ConversationId).ToHashSet();
-        var conversations = await _dbContext
+        var ownedConversationIds = await _dbContext
             .ProjectConversations.AsNoTracking()
             .Where(conversation => conversationIds.Contains(conversation.Id) && conversation.CreateBy == ownerUserId)
-            .ToDictionaryAsync(conversation => conversation.Id, cancellationToken)
+            .Select(conversation => conversation.Id)
+            .ToHashSetAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return histories
-            .Where(history => conversations.ContainsKey(history.ConversationId))
+            .Where(history => ownedConversationIds.Contains(history.ConversationId))
             .GroupBy(record => record.TaskId)
-            .ToDictionary(
-                group => group.Key,
-                group => conversations.GetValueOrDefault(group.First().ConversationId)?.ContextId
-            );
+            .ToDictionary(group => group.Key, group => group.First().ConversationId);
     }
 
     internal static ProjectTaskSnapshot Map(TaskProjection task) =>

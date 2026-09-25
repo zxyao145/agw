@@ -322,6 +322,11 @@ public static class ErrorCodes
         "User memory content is required.",
         HttpStatusCode.BadRequest
     );
+    public static readonly ErrorCode InvalidCronTriggerValue = new(
+        400_0076,
+        "Invalid cron trigger value.",
+        HttpStatusCode.BadRequest
+    );
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(
         401_0001,

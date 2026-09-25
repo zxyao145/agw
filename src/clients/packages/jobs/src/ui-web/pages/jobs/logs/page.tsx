@@ -8,6 +8,7 @@ import * as React from "react";
 
 import { apiGet } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
+import { buildChatHref } from "@agw/chat";
 import { StaticTable } from "@agw/components";
 import { Badge } from "@agw/components";
 import { Button } from "@agw/components";
@@ -24,7 +25,7 @@ type JobDto = {
 type JobLogDto = {
   id: string;
   jobId: string;
-  contextId: string | null;
+  conversationId: string | null;
   startTime: string;
   endTime: string | null;
   success: boolean;
@@ -32,7 +33,12 @@ type JobLogDto = {
   errorMessage: string | null;
 };
 
-export default function JobLogsPage() {
+export default function JobLogsPage({
+  chatBasePath,
+}: {
+  /** 宿主应用的 Chat 路由：Web 为 `/chat`，Desktop 为 `/desktop/chat`。Chat route of the host app. */
+  chatBasePath: string;
+}) {
   const searchParams = useSearchParams();
   const jobId = searchParams.get("jobId") ?? "";
 
@@ -57,19 +63,12 @@ export default function JobLogsPage() {
   const job = jobQuery.data;
 
   const getChatHref = React.useCallback(
-    (log: JobLogDto) => {
-      if (!job) {
-        return "/chat";
-      }
-
-      const params = new URLSearchParams({ projectId: job.projectId });
-      if (log.contextId) {
-        params.set("contextId", log.contextId);
-      }
-
-      return `/chat?${params.toString()}`;
-    },
-    [job],
+    (log: JobLogDto) =>
+      buildChatHref(chatBasePath, {
+        projectId: job?.projectId ?? null,
+        conversationId: log.conversationId,
+      }),
+    [chatBasePath, job],
   );
 
   return (

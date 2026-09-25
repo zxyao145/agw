@@ -36,7 +36,20 @@ public sealed class JobScheduleCalculator
                 return now.Add(interval);
 
             case TriggerType.Cron:
-                var cron = CronExpression.Parse(job.TriggerValue, CronFormat.Standard);
+                CronExpression cron;
+                try
+                {
+                    cron = CronExpression.Parse(job.TriggerValue, CronFormat.Standard);
+                }
+                catch (CronFormatException exception)
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidCronTriggerValue,
+                        $"Invalid cron trigger value: {job.TriggerValue}",
+                        exception
+                    );
+                }
+
                 return cron.GetNextOccurrence(now, TimeZoneInfo.Utc);
 
             default:

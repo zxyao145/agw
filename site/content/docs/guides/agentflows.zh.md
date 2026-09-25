@@ -191,7 +191,7 @@ Human Gate 示例：
 }
 ```
 
-`humanMode` 使用 `input`（补充信息）或 `approval`（审批）。建议明确选择模式：界面未填写时显示 Input，而运行时缺少该字段会采用 approval。`humanPrompt` 是用户看到的提示文字。
+`humanMode` 使用 `input`（补充信息）或 `approval`（审批）；未填写时，编辑器显示和运行时都按 `approval` 处理。`humanPrompt` 是用户看到的提示文字。
 
 Checkpoint Name 在保存的数据中对应：
 

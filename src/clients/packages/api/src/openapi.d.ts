@@ -5801,7 +5801,8 @@ export interface components {
       id: string;
       /** Format: uuid */
       jobId: string;
-      contextId: null | string;
+      /** Format: uuid */
+      conversationId: null | string;
       /** Format: date-time */
       startTime: string;
       /** Format: date-time */
