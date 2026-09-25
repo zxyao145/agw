@@ -6,7 +6,7 @@
 
 覆盖 `src/server/` 全部 33 个项目目录（其中 `Agw.Sandbox`、`Agw.Sandbox.Launcher` 只剩构建输出，Git 未跟踪任何源码），排除 `obj`、`bin` 与 EF Migrations。
 
-判定依据来自四类检查：`AGENTS.md`、[docs/rules.md](../rules.md)、[docs/2.Architecture.md](../2.Architecture.md)、[docs/3.Module Organization.md](../3.Module%20Organization.md) 声明的规则与实际代码的对照；`tests/Agw.Architecture.Tests` 守卫覆盖范围的阅读；项目引用图与源码 `using` 图的逐模块比对；单点符号的调用者枚举。
+判定依据来自四类检查：`AGENTS.md`、[docs/rules.md](../rules.md)、[docs/2.Architecture.md](../2.Architecture.md)、[docs/human/4.module-organization.md](../human/4.module-organization.md) 声明的规则与实际代码的对照；`tests/Agw.Architecture.Tests` 守卫覆盖范围的阅读；项目引用图与源码 `using` 图的逐模块比对；单点符号的调用者枚举。
 
 已运行 `dotnet test --project tests/Agw.Architecture.Tests`，49 项全部通过。`DateTime`、`new HttpClient()`、C# primary constructor、Controller 裸 `IActionResult` 四项全仓库扫描没有实例。[2026-09-21 审查](2026-09-21-architecture-duplication-review.md) 已记录并关闭的条目（中心 Infrastructure 项目、Controller 目录命名、`AgentRuntimeService` 构造与转发、JSON 序列化约定等）不再重复。
 
@@ -78,7 +78,7 @@
 
 **证据：** Projects、Jobs、Skills、Integrations、Providers 五个模块的 `Contracts/` 目录都声明 `Agw.<Module>.Contracts.*` 命名空间，例如 [ProviderRequests.cs](../../src/server/Agw.Providers/Contracts/Manager/ProviderRequests.cs)、[IAgentSkillRegistration.cs](../../src/server/Agw.Skills/Contracts/Registration/IAgentSkillRegistration.cs)，与独立的 `Agw.<Module>.Contracts` 项目共用前缀。[BackendArchitectureTests.cs](../../tests/Agw.Architecture.Tests/BackendArchitectureTests.cs) 第 245 行的 `ModuleSource_ReferencingSiblingInternalLayer_HasNoViolations` 经第 605 行的 `ContainsInternalLayer` 只按 `Application`、`Domain`、`Infrastructure` 路径段判定，任何模块导入 `Agw.Providers.Contracts.Manager` 这类 HTTP DTO 都会被放行。当前没有越界实例（`Agw.Agents.Execution` 与 `Agw.Infrastructure` 的使用在依赖矩阵允许范围内）。
 
-**后果：** [docs/3.Module Organization.md](../3.Module%20Organization.md) 声明"HTTP DTO 与可执行扩展注册保持所有者本地"，这条边界没有守卫。
+**后果：** [docs/human/4.module-organization.md](../human/4.module-organization.md) 声明"HTTP DTO 与可执行扩展注册保持所有者本地"，这条边界没有守卫。
 
 **修复：** 在该测试中使用已经构建好的 `namespaceOwners`（命名空间到声明项目的映射）判定：当命名空间前缀属于存在独立 `*.Contracts` 项目的模块，而实际声明位于具体程序集内时，视为内部命名空间，跨模块引用即报告违规；`Agw.Agents.Execution` 引用 `Agw.Agents`、`Agw.Infrastructure` 实现各模块 seam 两种情况维持现有豁免。
 

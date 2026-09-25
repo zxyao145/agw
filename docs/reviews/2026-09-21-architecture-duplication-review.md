@@ -6,7 +6,7 @@
 
 覆盖 `src/server/` 的 12 个业务模块与 `src/clients/` 的 22 个工作区包，约 17 万行 C# 与 8.5 万行 TypeScript；排除 `obj`、`bin`、`node_modules`、`.next`、EF Migrations 与生成文件 `packages/api/src/openapi.d.ts`。
 
-判定依据来自四类检查：`AGENTS.md` 与 [docs/rules.md](../rules.md)、[docs/3.Module Organization.md](../3.Module%20Organization.md) 声明的规则与实际代码的对照；`tests/Agw.Architecture.Tests` 守卫覆盖范围的阅读；跨文件规范化行块比对（14 行窗口，忽略空白与注释）；单点符号的调用者枚举。
+判定依据来自四类检查：`AGENTS.md` 与 [docs/rules.md](../rules.md)、[docs/human/4.module-organization.md](../human/4.module-organization.md) 声明的规则与实际代码的对照；`tests/Agw.Architecture.Tests` 守卫覆盖范围的阅读；跨文件规范化行块比对（14 行窗口，忽略空白与注释）；单点符号的调用者枚举。
 
 本次没有运行完整测试套件，没有做并发或故障注入实验，没有评估运行时性能。所有条目都以当前磁盘上的源码为准，标注的行号对应上述基线。编号 AD 表示架构设计，DUP 表示代码重复，RS 表示职责边界。
 
@@ -19,7 +19,7 @@
 
 依赖矩阵允许 `Agw.Infrastructure` 引用 10 个业务模块。`FindConcreteServiceAndRepositoryViolations` 与 `FindForeignPersistenceAccesses` 两个检查的第一条语句都是 `if (owningProject == "Agw.Infrastructure") yield break;`，因此这个项目完全不参与跨模块持久化访问与具体服务引用的判定；第 530 行另有一条针对 `.Application.Persistence` 结尾命名空间的定向豁免，那一条与实现各模块接缝的设计意图一致。
 
-项目内容包含两类代码。跨所有者事务属于 [docs/3.Module Organization.md](../3.Module%20Organization.md) 第 153 行承认的范围：`AgentDeletionCoordinator`、`ProjectDeletionCoordinator`、`JobOutcomeTransaction`、`ConversationExecutionGate`。另一类是单模块适配器：`EfApiTokenStore` 只访问 `ApiTokens`，`EfSettingsPersistence` 只访问 `Settings`，`ProjectMemoryPersistence` 与 `AgentSessionStatePersistence` 同样限于单个所有者。这四个类都在构造函数中注入具体的 `AgwDbContext`，没有使用本模块已经存在的接缝——`IAuthDbContext`、`ISettingsDbContext`、`IToolsDbContext`、`IAgentsDbContext` 均已定义，且由 `AgwDbContext` 实现。注入具体类型是它们必须位于这个项目的直接原因，业务模块不允许引用 `Agw.Infrastructure`。
+项目内容包含两类代码。跨所有者事务属于 [docs/human/4.module-organization.md](../human/4.module-organization.md) 第 153 行承认的范围：`AgentDeletionCoordinator`、`ProjectDeletionCoordinator`、`JobOutcomeTransaction`、`ConversationExecutionGate`。另一类是单模块适配器：`EfApiTokenStore` 只访问 `ApiTokens`，`EfSettingsPersistence` 只访问 `Settings`，`ProjectMemoryPersistence` 与 `AgentSessionStatePersistence` 同样限于单个所有者。这四个类都在构造函数中注入具体的 `AgwDbContext`，没有使用本模块已经存在的接缝——`IAuthDbContext`、`ISettingsDbContext`、`IToolsDbContext`、`IAgentsDbContext` 均已定义，且由 `AgwDbContext` 实现。注入具体类型是它们必须位于这个项目的直接原因，业务模块不允许引用 `Agw.Infrastructure`。
 
 **后果：** 需要跨越所有权约束的代码有一个不受守卫检查的合法去处。判断某段持久化代码属于哪个模块时，物理位置不再提供信息。
 
