@@ -4,7 +4,7 @@ description: "Choose an installation, initialize Server, and connect clients."
 weight: 20
 lastmod: 2026-09-25
 translationKey: docs/start/install
-aliases: ["/en/docs/start/setup/"]
+aliases: ["/docs/start/setup/"]
 ---
 
 AGW needs a running Server and a client to operate it. For a first local installation, choose Desktop Full. If Server already exists, use Desktop Client or a browser. After installation, configure a model service or external agent to start a conversation.

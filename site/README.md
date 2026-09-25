@@ -1,8 +1,8 @@
 # AGW website / 首页与文档站
 
-独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。中文首页在 `/`、文档在 `/docs/`；英文对应 `/en/` 和 `/en/docs/`。内容依据当前代码整理，中英文各 36 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
+独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。英文首页在 `/`、文档在 `/docs/`；中文对应 `/zh/` 和 `/zh/docs/`。内容依据当前代码整理，中英文各 36 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
 
-An independent bilingual Hugo site. Chinese is the default language; English lives under `/en/`. Each language has 36 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace. GitHub Actions builds, validates, and deploys it to GitHub Pages.
+An independent bilingual Hugo site. English is the default language; Chinese lives under `/zh/`. Each language has 36 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace. GitHub Actions builds, validates, and deploys it to GitHub Pages.
 
 ## 工具链 / Toolchain
 
@@ -24,7 +24,7 @@ cd site
   --disableFastRender --destination .cache/preview
 ```
 
-打开 <http://localhost:1313/> 或 <http://localhost:1313/en/>。预览产物放到缓存目录，避免覆盖生产 `public/`。已配置好系统 Go 时，也可直接运行 `hugo server --destination .cache/preview`。
+打开 <http://localhost:1313/> 或 <http://localhost:1313/zh/>。预览产物放到缓存目录，避免覆盖生产 `public/`。已配置好系统 Go 时，也可直接运行 `hugo server --destination .cache/preview`。
 
 Preview files are isolated from the production output. Stop the server with Ctrl+C. No application Server, model credentials, npm, or database initialization is needed.
 
