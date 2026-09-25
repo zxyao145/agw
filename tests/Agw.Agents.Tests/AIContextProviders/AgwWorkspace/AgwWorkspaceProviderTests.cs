@@ -95,11 +95,13 @@ public class AgwWorkspaceProviderTests
         );
 
         var result = await source.GetInstructionsAsync(context, TestContext.Current.CancellationToken);
+        var expandedWorkspace = PathUtil.ExpandTilde(workspace);
 
         var expected = $"""
-            # others
+            # Project Workspace
 
-            - Your default workspace or working directory is '{PathUtil.ExpandTilde(workspace)}'.
+            Your default workspace or working directory is '{expandedWorkspace}', alias 'context-provider-test'.
+            User can use alias to refer to a specific directory, and user can also use 'default' to refer to the default workspace or working directory.
             """;
         // Raw string literals embed each source file's checkout line endings, which differ
         // under mixed core.autocrlf states; the test targets tilde expansion, not EOL.
