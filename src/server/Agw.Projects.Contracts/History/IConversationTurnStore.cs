@@ -77,6 +77,12 @@ public interface IConversationTurnStore
 
     Task<ConversationTurnSnapshot?> GetAsync(Guid turnId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// 读取本 Turn 的执行输出，按持久化顺序返回。
+    /// Reads this turn's execution output in persisted order.
+    /// </summary>
+    Task<IReadOnlyList<ConversationHistoryEntry>> ReadOutputAsync(Guid turnId, CancellationToken cancellationToken);
+
     Task MarkRunningAsync(Guid turnId, CancellationToken cancellationToken);
 
     /// <summary>

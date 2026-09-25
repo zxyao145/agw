@@ -1,11 +1,13 @@
 using System.Text.Json;
+using Agw.Agents.Contracts.Execution;
+using Agw.Shared;
 using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Agents.Execution.Outbound;
+namespace Agw.Agents.Contracts.Messages;
 
 /// <summary>The single wire projection for live, persisted and replayed interactions.</summary>
-internal static class InteractionMessageMapper
+public static class InteractionMessageMapper
 {
     private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 

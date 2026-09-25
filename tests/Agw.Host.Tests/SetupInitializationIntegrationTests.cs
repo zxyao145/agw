@@ -4,6 +4,10 @@ using Agw.Auth.Extensions;
 using Agw.Host.Hosting;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Application;
+using Agw.Projects.Contracts;
+using Agw.Projects.Contracts.History;
+using Agw.Projects.Infrastructure;
 using Agw.Settings;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
@@ -188,6 +192,8 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         services.AddInfrastructure(configuration);
         services.AddAuth();
         services.AddSettings();
+        services.AddScoped<IUserProjectInitializer, UserProjectInitializer>();
+        services.AddScoped<IConversationTurnStore, ConversationTurnStore>();
         services.AddSetup(configuration, bootstrap);
         services.AddSingleton(new SetupCodeService("TEST-CODE"));
     }

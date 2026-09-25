@@ -128,6 +128,7 @@ public static class DependencyInjection
         services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
         services.AddScoped<ITurnAcceptanceWriter, TurnAcceptanceWriter>();
+        services.AddScoped<DurableTurnUpgrade>();
         services.AddSingleton<IDurableExecutionLeases, DurableExecutionLeases>();
         services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
         services.AddScoped<IAgentDeletionCoordinator, AgentDeletionCoordinator>();

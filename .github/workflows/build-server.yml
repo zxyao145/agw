@@ -68,10 +68,10 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build test project
         run: dotnet build tests/Agw.Agents.Tests -c Release
-      - name: Test PostgreSQL fencing and concurrent event writes
+      - name: Test PostgreSQL fencing, event ordering, upgrades and scheduler capacity
         run: >-
           tests/Agw.Agents.Tests/bin/Release/net10.0/Agw.Agents.Tests
-          -filterVSTest "FullyQualifiedName~PostgresExecutionFencingTests|FullyQualifiedName~PostgresBatch_ConcurrentOverlappingBatches"
+          -filterVSTest "FullyQualifiedName~DurableDistributedStoreTests.Postgres_|FullyQualifiedName~DurableTurnUpgradeTests.Postgres_|FullyQualifiedName~DurableSchedulerTests.Postgres_"
           -result-trx TestResults/Postgres/results.trx
           -failSkips
       - name: Require actual PostgreSQL test execution

@@ -34,9 +34,9 @@ using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
 namespace Agw.Agents.Execution.Runtimes.Durable;
 
 /// <summary>
-/// Durable 执行的协调：受理实例持有租约并在本地立即执行，失联或排队的记录由 Worker 领取。全部执行写入经租约检查事务提交，
+/// Durable 执行的协调：受理实例有并发名额时领取租约并执行，失联或排队的记录由 Worker 领取。全部执行写入经租约检查事务提交，
 /// 事件在提交后发布到本实例广播与 Redis 投影，订阅从已提交事件读取。
-/// Coordinates durable execution: the accepting instance holds the lease and runs locally at once, and lost or queued records are claimed by the worker. Every execution write commits through a lease-checked transaction,
+/// Coordinates durable execution: the accepting instance claims a lease when capacity is available, and lost or queued records are claimed by the worker. Every execution write commits through a lease-checked transaction,
 /// events are published to this instance's broadcast and the Redis projection after commit, and subscriptions read committed events.
 /// </summary>
 internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
@@ -47,7 +47,6 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     private readonly IDurableExecutionLeases _leases;
     private readonly DurableExecutionEventLog _eventLog;
     private readonly TurnBroadcastRegistry _broadcasts;
-    private readonly DurableWorkerIdentity _identity;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DurableExecutionCoordinator> _logger;
     private readonly DistributedExecutionOptions _options;
@@ -61,7 +60,6 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         IDurableExecutionLeases leases,
         DurableExecutionEventLog eventLog,
         TurnBroadcastRegistry broadcasts,
-        DurableWorkerIdentity identity,
         TimeProvider timeProvider,
         IOptions<ExecutionRuntimeOptions> options,
         ILogger<DurableExecutionCoordinator> logger,
@@ -73,7 +71,6 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         _leases = leases;
         _eventLog = eventLog;
         _broadcasts = broadcasts;
-        _identity = identity;
         _timeProvider = timeProvider;
         _logger = logger;
         _scheduler = scheduler;
@@ -85,8 +82,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     private TimeSpan LeaseDuration => TimeSpan.FromSeconds(_options.LeaseSeconds);
 
     /// <summary>
-    /// 受理事务中的 Durable 登记：有本地执行能力时带本实例的 WorkerId，记录写为 Running 并带租约；否则写为 Queued。
-    /// The durable registration of the acceptance transaction: with local execution capability it carries this instance's WorkerId and the record is Running with a lease; otherwise it is Queued.
+    /// 受理事务登记 Queued；调度器取得执行名额后领取租约。
+    /// Acceptance registers Queued; the scheduler claims a lease after reserving execution capacity.
     /// </summary>
     public DurableTurnRegistration CreateRegistration(ExecutionRequest request, AgwMessage start)
     {
@@ -99,7 +96,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         {
             UserId = request.UserId,
             ManifestJson = DurableExecutionStore.CreateManifestJson(request),
-            WorkerId = _scheduler == null ? null : _identity.Id,
+            WorkerId = null,
             LeaseDuration = LeaseDuration,
             StartEventId = Guid.CreateVersion7(),
             StartEventPayloadJson = JsonUtil.Serialize(start),
@@ -107,15 +104,15 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     }
 
     /// <summary>
-    /// 受理实例持有租约时在本地立即执行；Queued 记录由 Worker 领取。
-    /// Runs locally at once when the accepting instance holds the lease; a Queued record is left for the worker.
+    /// 受理实例有名额时立即领取执行；排队记录由 Worker 领取。
+    /// The accepting instance claims execution immediately when capacity is available; workers claim queued records.
     /// </summary>
-    public Task<ExecutionReceipt> StartAsync(ExecutionRequest request, CancellationToken cancellationToken)
+    public async Task<ExecutionReceipt> StartAsync(ExecutionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.Lease is { } lease)
-            (_scheduler ?? throw new AgwException(ErrorCodes.DurableExecutionUnavailable)).Start(lease);
-        return Task.FromResult(new ExecutionReceipt(request.TurnId, Accepted: true));
+        if (_scheduler != null)
+            await _scheduler.TryStartAsync(request.TurnId, cancellationToken).ConfigureAwait(false);
+        return new ExecutionReceipt(request.TurnId, Accepted: true);
     }
 
     /// <summary>

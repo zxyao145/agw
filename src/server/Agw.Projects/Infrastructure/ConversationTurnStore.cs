@@ -121,6 +121,33 @@ public sealed class ConversationTurnStore : IConversationTurnStore
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<ConversationHistoryEntry>> ReadOutputAsync(
+        Guid turnId,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = await LoadAsync(turnId, cancellationToken).ConfigureAwait(false);
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record =>
+                record.TurnId == turnId
+                && record.Purpose != ConversationMessagePurpose.Input
+                && record.ConversationPayload != null
+            )
+            .OrderBy(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return records
+            .Select(record => new ConversationHistoryEntry(
+                record.Id,
+                record.ConversationSequence,
+                record.ConversationPayload!,
+                record.Metadata,
+                record.CreateTime
+            ))
+            .ToArray();
+    }
+
     public async Task CompleteStepAsync(Guid turnId, int stepCount, CancellationToken cancellationToken)
     {
         var turn = await LoadAsync(turnId, cancellationToken).ConfigureAwait(false);

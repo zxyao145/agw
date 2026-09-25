@@ -22,6 +22,7 @@ public sealed partial class DurableExecutionStoreTests
                 _kit.Coordinator
             ),
             new AgentExecutionFacadeTests.AlwaysOwnedAgentCatalog(),
+            _kit.ResolveScoped<Agw.Projects.Contracts.History.IConversationTurnStore>(),
             durableCoordinator: _kit.Coordinator
         );
         var task = await _kit.SeedConversationAsync();

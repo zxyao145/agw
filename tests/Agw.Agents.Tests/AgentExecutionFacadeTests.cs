@@ -124,6 +124,7 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
         new(
             _persistence.CreateAcceptance(projectTasks: null, new WorkspaceProjects()),
             new AlwaysOwnedAgentCatalog(),
+            _persistence.ResolveScoped<Agw.Projects.Contracts.History.IConversationTurnStore>(),
             _kit.CreateFactory(
                 new Agw.Agents.Execution.Context.ExecutionContextFactory(_database.Context),
                 _persistence

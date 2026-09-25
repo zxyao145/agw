@@ -9,14 +9,13 @@ using Microsoft.Extensions.Options;
 namespace Agw.Agents.Execution.Runtimes.Durable;
 
 /// <summary>
-/// 扫描可领取的记录：没有本地执行入口的入口登记的 Queued、优雅关闭留下的 Resuming、租约到期的 Running。领取是一条条件更新，成功后交给本实例执行。
-/// Scans claimable records: Queued ones registered by entries without local execution, Resuming ones left by a graceful shutdown, and Running ones whose lease expired. A claim is one conditional update, after which this instance runs the segment.
+/// 扫描等待名额的 Queued、等待恢复的 Resuming 和租约到期的 Running，交给本实例的 Scheduler 预留名额并领取。
+/// Scans Queued records awaiting capacity, Resuming records awaiting recovery, and Running records with expired leases, then asks this instance's scheduler to reserve capacity and claim them.
 /// </summary>
 internal sealed class DistributedExecutionWorker : BackgroundService
 {
     private readonly IDurableExecutionLeases _leases;
     private readonly DurableSegmentScheduler _scheduler;
-    private readonly DurableWorkerIdentity _identity;
     private readonly IServerInitializationState _initializationState;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DistributedExecutionWorker> _logger;
@@ -25,7 +24,6 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     public DistributedExecutionWorker(
         IDurableExecutionLeases leases,
         DurableSegmentScheduler scheduler,
-        DurableWorkerIdentity identity,
         IServerInitializationState initializationState,
         TimeProvider timeProvider,
         IOptions<ExecutionRuntimeOptions> options,
@@ -34,7 +32,6 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     {
         _leases = leases;
         _scheduler = scheduler;
-        _identity = identity;
         _initializationState = initializationState;
         _timeProvider = timeProvider;
         _options = options.Value.Distributed;
@@ -87,15 +84,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                     break;
                 if (_scheduler.IsRunning(executionId))
                     continue;
-                var lease = await _leases
-                    .TryClaimAsync(
-                        executionId,
-                        _identity.Id,
-                        TimeSpan.FromSeconds(_options.LeaseSeconds),
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                if (lease != null && _scheduler.Start(lease))
+                if (await _scheduler.TryStartAsync(executionId, cancellationToken).ConfigureAwait(false))
                     claimed++;
             }
         }

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Channels;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Execution.Inbound.Connections;
@@ -10,8 +11,11 @@ using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
+using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Inbound.Facades;
 
@@ -26,18 +30,21 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
 
     private readonly TurnAcceptanceService _acceptance;
     private readonly IAgentCatalogFacade _catalog;
+    private readonly IConversationTurnStore _turns;
     private readonly InProcessExecutionCoordinatorFactory? _inProcessCoordinators;
     private readonly DurableExecutionCoordinator? _durableCoordinator;
 
     public AgentExecutionFacade(
         TurnAcceptanceService acceptance,
         IAgentCatalogFacade catalog,
+        IConversationTurnStore turns,
         InProcessExecutionCoordinatorFactory? inProcessCoordinators = null,
         DurableExecutionCoordinator? durableCoordinator = null
     )
     {
         _acceptance = acceptance;
         _catalog = catalog;
+        _turns = turns;
         _inProcessCoordinators = inProcessCoordinators;
         _durableCoordinator = durableCoordinator;
     }
@@ -229,7 +236,8 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
         var request = accepted.Request;
         if (_durableCoordinator != null)
         {
-            await StartOrReportAsync(_durableCoordinator, accepted, cancellationToken).ConfigureAwait(false);
+            if (accepted.Created)
+                await StartOrReportAsync(_durableCoordinator, accepted, cancellationToken).ConfigureAwait(false);
             await foreach (
                 var entry in _durableCoordinator
                     .ReadAsync(request.TurnId, request.UserId, afterSequence: 1, cancellationToken)
@@ -238,6 +246,15 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
             {
                 yield return entry.Message;
             }
+            yield break;
+        }
+
+        if (!accepted.Created)
+        {
+            await foreach (
+                var message in ReadExistingTurnAsync(accepted, _turns, cancellationToken).ConfigureAwait(false)
+            )
+                yield return message;
             yield break;
         }
 
@@ -252,17 +269,69 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
             accepted.Broadcast
             ?? throw new AgwException(ErrorCodes.AgentExecutionFailed, "The accepted turn has no output.");
         broadcast.AddSink(output);
-        await broadcast.WriteAsync(accepted.Start, CancellationToken.None).ConfigureAwait(false);
-        await using var coordinator = coordinators.Create(cancellationToken);
-        await StartOrReportAsync(coordinator, accepted, cancellationToken).ConfigureAwait(false);
-        await foreach (var message in output.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        try
         {
-            yield return message;
-            if (AgwMessageClassifier.IsTurnFinished(message))
+            await broadcast.WriteAsync(accepted.Start, CancellationToken.None).ConfigureAwait(false);
+            await using var coordinator = coordinators.Create(cancellationToken);
+            await StartOrReportAsync(coordinator, accepted, cancellationToken).ConfigureAwait(false);
+            await foreach (var message in output.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                yield break;
+                yield return message;
+                if (AgwMessageClassifier.IsTurnFinished(message))
+                    yield break;
             }
         }
+        finally
+        {
+            broadcast.RemoveSink(output);
+        }
+    }
+
+    internal static async IAsyncEnumerable<AgwMessage> ReadExistingTurnAsync(
+        AcceptedTurn accepted,
+        IConversationTurnStore turns,
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
+    {
+        var request = accepted.Request;
+        if (accepted.Broadcast is { } retained)
+        {
+            var replay = new ChannelMessageSink();
+            try
+            {
+                await retained.AttachAsync(replay, afterSequence: 0).ConfigureAwait(false);
+                await foreach (var message in replay.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    yield return message;
+                    if (AgwMessageClassifier.IsTurnFinished(message))
+                        yield break;
+                }
+            }
+            finally
+            {
+                retained.RemoveSink(replay);
+            }
+            yield break;
+        }
+
+        if (accepted.Turn.Status is ConversationTurnStatus.Accepted or ConversationTurnStatus.Running)
+            throw new AgwException(ErrorCodes.AgentExecutionFailed, "The active turn is unavailable on this instance.");
+        foreach (var entry in await turns.ReadOutputAsync(request.TurnId, cancellationToken).ConfigureAwait(false))
+        {
+            var message =
+                JsonSerializer.Deserialize<ChatMessage>(entry.Payload, WebJsonOptions.Default)?.ToAiMessage()
+                ?? throw new AgwException(ErrorCodes.AgentExecutionFailed, "The persisted turn output is invalid.");
+            yield return message with
+            {
+                CreatedAt = message.CreatedAt ?? entry.CreateTime,
+            };
+        }
+        yield return TurnMessageFactory.CreateFinished(
+            request.Envelope,
+            TurnAcceptanceService.ToFinishedStatus(accepted.Turn.Status),
+            accepted.Turn.StepCount,
+            accepted.Turn.ErrorCode
+        );
     }
 
     private async Task StartOrReportAsync(

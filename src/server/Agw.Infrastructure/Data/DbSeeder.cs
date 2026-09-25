@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts;
@@ -8,6 +9,7 @@ using Agw.Settings.Contracts;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Settings;
@@ -116,6 +118,36 @@ public class DbSeeder
             _logger.LogError(ex, "Error occurred during database seeding");
             throw;
         }
+    }
+
+    /// <summary>
+    /// 启动数据维护仅在系统作用域读取待升级记录的身份；记录转换由所属用户作用域执行。
+    /// Startup data maintenance reads only candidate identities in system scope; conversion runs in each owner's scope.
+    /// </summary>
+    internal static async Task<IReadOnlyList<(Guid Id, string UserId)>> ReadDurableTurnUpgradeCandidatesAsync(
+        AgwDbContext database,
+        CancellationToken cancellationToken
+    )
+    {
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        var rows = await database
+            .DurableExecutions.AsNoTracking()
+            .Where(DurableExecutionQueries.Active)
+            .Where(execution =>
+                !database.ProjectConversationTurns.Any(turn =>
+                    turn.Id == execution.Id
+                    && (
+                        turn.Status == ProjectConversationTurnStatus.Accepted
+                        || turn.Status == ProjectConversationTurnStatus.Running
+                    )
+                )
+                || execution.Status == DurableExecutionStatus.Running
+                    && execution.LeaseEpoch == 0
+                    && execution.LeaseExpiresAt == null
+            )
+            .Select(execution => new { execution.Id, execution.UserId })
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => (row.Id, row.UserId)).ToArray();
     }
 
     private async Task SeedQuickPromptsAsync()
