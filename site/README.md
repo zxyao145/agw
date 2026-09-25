@@ -1,8 +1,8 @@
 # AGW website / 首页与文档站
 
-独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。中文首页在 `/`、文档在 `/docs/`；英文对应 `/en/` 和 `/en/docs/`。内容依据当前代码整理，中英文各 35 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
+独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。英文首页在 `/`、文档在 `/docs/`；中文对应 `/zh/` 和 `/zh/docs/`。内容依据当前代码整理，中英文各 36 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
 
-An independent bilingual Hugo site. Chinese is the default language; English lives under `/en/`. Each language has 35 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace. GitHub Actions builds, validates, and deploys it to GitHub Pages.
+An independent bilingual Hugo site. English is the default language; Chinese lives under `/zh/`. Each language has 36 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace. GitHub Actions builds, validates, and deploys it to GitHub Pages.
 
 ## 工具链 / Toolchain
 
@@ -24,7 +24,7 @@ cd site
   --disableFastRender --destination .cache/preview
 ```
 
-打开 <http://localhost:1313/> 或 <http://localhost:1313/en/>。预览产物放到缓存目录，避免覆盖生产 `public/`。已配置好系统 Go 时，也可直接运行 `hugo server --destination .cache/preview`。
+打开 <http://localhost:1313/> 或 <http://localhost:1313/zh/>。预览产物放到缓存目录，避免覆盖生产 `public/`。已配置好系统 Go 时，也可直接运行 `hugo server --destination .cache/preview`。
 
 Preview files are isolated from the production output. Stop the server with Ctrl+C. No application Server, model credentials, npm, or database initialization is needed.
 
@@ -106,7 +106,7 @@ Technical articles end with implementation references; feature pages may link to
 | Getting started | Root README, Setup/Auth implementations, provider and agent UI |
 | User guide | Module READMEs and code for Agents.Execution, Jobs, Files, Tools, Integrations; client packages |
 | Operations | Host configuration, `deploy/`, Auth/Setup, execution persistence |
-| Development | `docs/rules.md`, Development/Architecture/Module Organization guides, client package scripts |
+| Development | `AGENTS.md`, `docs/human/` rules, Development/Architecture guides, client package scripts |
 
 站点只介绍当前受支持的功能、行为与操作步骤，不记录已退役的机制、历史实现，也不加入针对旧方案的提醒。中英文文档遵守同一规则。
 
@@ -124,6 +124,6 @@ Generated `public/`, `resources/`, `.cache/`, and `.hugo_build.lock` are ignored
 
 ## 界面截图
 
-`static/images/screenshots/` 保存通过 Computer 从实际 AGW Desktop 和 Server Setup 界面截取的 PNG（2026-09-14）。中英文页面共用原图，各自维护 alt 和图注；Desktop 截图不代表 Mobile 界面。表单使用未保存的展示内容，示例路径需由读者替换；工作流截图仅展示编辑器。
+`static/images/screenshots/` 保存通过 Computer 从实际 AGW Desktop 和 Server Setup 界面截取的 PNG。`desktop-chat.png` 截取于 2026-09-25，中英文 README 共用的 `../medias/desktop-chat.png` 使用同一张图片。中英文页面共用原图，各自维护 alt 和图注；Desktop 截图不代表 Mobile 界面。表单使用未保存的展示内容，示例路径需由读者替换；工作流截图仅展示编辑器。
 
 更新界面说明时同步复核截图，在对应操作步骤后用 Markdown 图片及 `{caption="图注"}` 插入。截图应避开 Token、密钥及私人内容，不为取图执行任务或提交示例配置。保留原始截图，使用主题的点击放大功能查看细节。技术架构和流量继续使用 Mermaid 图，避免用无关界面替代解释。

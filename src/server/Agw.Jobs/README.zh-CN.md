@@ -158,7 +158,7 @@ stateDiagram-v2
 
 ### `JobLog`
 
-进入执行阶段的每次尝试都会写入一条日志，包含开始/结束时间、成功状态、尝试序号和错误信息。数据库实体还保存内部 `TaskId`，查询 API 会通过 `ProjectConversationChatHistory` 和 `ProjectConversation` 将它转换为对外的 `ContextId`，不会直接暴露 `TaskId`。
+进入执行阶段的每次尝试都会写入一条日志，包含开始/结束时间、成功状态、尝试序号和错误信息。数据库实体还保存内部 `TaskId`，查询 API 会通过 `ProjectConversationChatHistory` 和 `ProjectConversation` 将它转换为当前用户所属会话的 `ConversationId`，不会直接暴露 `TaskId`。客户端的 Go to Chat 用这个 ID 打开对应会话；找不到所属会话时 `ConversationId` 为 `null`。
 
 ## 核心数据流
 
@@ -290,6 +290,8 @@ curl 'http://localhost:30816/api/jobs/33333333-3333-3333-3333-000000000001/logs'
 | `1` | Once | `2026-07-16T09:00:00Z` | 应使用可解析、晚于当前时间且带时区的 RFC 3339 时间 |
 | `2` | Interval | `00:15:00` | 使用 .NET `TimeSpan` 格式，且必须大于零 |
 | `3` | Cron | `0 1 * * *` | Cronos 标准 5 段表达式，按 UTC 计算 |
+
+三种触发值无法解析时，创建或更新分别返回 `InvalidOnceTriggerValue`、`InvalidIntervalTriggerValue` 或 `InvalidCronTriggerValue`（400）。客户端表单在 Interval 不是正数的 `TimeSpan`、或 Cron 不是 5 段时显示错误并禁止保存。
 
 过去的 `Once` 时间不会立即执行。创建或更新时，当前实现会把无法得到下一次运行时间的 Job 设为 `DateTimeOffset.MaxValue`，所以创建或恢复一次性任务时应始终传入未来时间。
 

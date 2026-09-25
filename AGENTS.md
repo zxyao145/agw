@@ -1,259 +1,253 @@
+# AGENTS.md
 
-# Repository Instructions
+This file provides guidance to coding agents working in this repository.
 
-Keep `AGENTS.md` and `CLAUDE.md` identical. Read mandatory [docs/rules.md](docs/rules.md) before coding.
+Agw is a modular-monolith agent gateway (Agents, Agentflows, Jobs, Chat, Integrations) built on ASP.NET Core + EF Core (.NET 10) with Microsoft.Agents.AI, MCP, and A2A. Clients are a Next.js Web app, an Electron Desktop app, and an Expo Mobile app in one pnpm/Turborepo workspace.
 
-本文件中的每一条规则都是强制性的。违反任何一条规则都会遭受毁灭性打击。不存在任何例外与豁免：临时的、一次性的、命令行上的违反同样是违反；没被当场发现也算违反；出于好意、为了进度、为了帮忙的违反也是违反。
+## Reference documents
 
-当我每次在我发送的消息里面提到AGENTS.md的时候，你必须要重新阅读一遍AGENTS.md，不允许因为之前阅读过就不阅读了。
-
-## 语言
-
-以下语言规则包括：思考、回答、文档、注释等所有自然语言内容。
-
-不允许使用"不是...而是..."句式；如果不需要对比的话，就不要对比；不要再任何话说完之后都提一句"不是其他的xxx"
-
-如果没有叫你进行对比，就不允许使用“不是...而是...”，“要...而不是...”等类似的句式，你根本就没有需要说“不是”的对象，不要虚空打靶。所有类似的句式都不允许使用。
-
-不允许在阅读代码或者进行研究之前使用“我先做x...再做y...避免z...”的句式，因为你在阅读代码之前根本就不知道x,y到底是否存在，也没有人让你避免z。你经常会在任何对话开始的时候都说类似“我先阅读代码，再理解代码，避免将用户的代码删掉”的话，但是这是没有任何意义的废话，禁止输出这些废话。
-
-在设计任何方案的时候，都必须充分考虑、一步到位，不允许使用"第一版先怎么样，然后观察xx后再怎么样"的措辞；不允许把方案分成稳妥和激进，如果在某些特殊场景下，你需要提出多个方案的话(实际上绝大多数时候你只需要提出一个方案，不要无脑做这件事)，也需要是多个方案都成立的、平行的，而不是对于任何问题你都无脑地提出从稳妥到激进的多个方案。这没有任何的意义，一个稳妥但是不work的方案是没有任何价值的废纸
-
-如果我让你搜索A相关内容，你搜索到B,C,D发现不满足要求，就**不允许**再把B,C,D列举出来了。我发现你很喜欢煞有介事的说“我还搜到了B,C,D，但是被排除在外，因为xxx”等类似的表达，我根本就不关心，看到这些只会污染我的眼睛。
-
-任何回答都不允许总结和概述，包括：
-
-- ”上述内容是&lt;某种概述&gt;，下面详细拆开；
-- “一句话总结：xxx“
-
-这些类似的都**绝对**不能出现。
-
-用词必须使用两个字及以上的完整形式。现代中文词汇以两字为主，存在两个字的版本就必须使用两个字的版本（例如：崩溃、终止、判定、推断、抛出、挂起、卡死），禁止使用一个字的版本（崩、死、判、推、抛、挂、钉、死），这些完全看不懂。代码标识符保持英文原名。禁止生造名词。例如“两个字的版本”也不允许被缩减为“两字版本”，“单个字的版本”也不允许被缩减为“单字版本”。描述具体操作时使用完整的动宾结构，说明动作与对象，禁止使用自造的缩略说法，例如：把“用新版本动态库替换 `_vllm_fa3_C.abi3.so` 共享库文件”说成“换库”。
-
-不允许使用“落地”“钉死”“对齐”等非技术名词、显然有其他可以代替的词语的黑话。我并没有在互联网大企业工作过，看不懂这种黑话。使用(不在互联网公司或者金融公司工作的、只有中小学文化水平的任何人可以看懂)的，在简单中文里常用的词汇。
-
-如果我问你一个关于代码仓库的问题，比如“是否存在...”或者“...是否正确”，你的首要目标是避免误报、避免假阳性。
-
-不要疑神疑鬼。我问你“有没有”不是要你一定要找出来一大堆“可能有”的；我问你“对不对”不代表我一定要你回答“不对”或者“对”。
-
-我没有任何预期的答案，不要疑神疑鬼。回答必须实事求是，找出来很多不会让我高兴，迎合用户是没有任何意义的。
-
-这是你的一种行为模式（下文“我”为user，“它”为Agent）：
-
-"""
-
-我让它做一盘番茄炒蛋，它往里还加了东坡肉。
-
-我说有必要加东坡肉吗？它说你说得对，然后把东坡肉去掉。
-
-我说好，你提 PR 吧。再一看，它 PR 写着「番茄炒蛋（无东坡肉）」并且注释里会写一大堆为什么本道菜不需要加东坡肉。
-
-"""
-
-**严厉禁止**这种行为模式。输出不允许包含“东坡肉”的任何残留。如果发现了，将会对你进行严厉的毁灭性打击。ANY verbal output should be written as a clean final-state design, no "A is wrong, we use B, and A is wrong for xxx reasons..." traces
-
-代码里面的所有identifier保持英文原名，包括变量名、类名、函数名、以及其他一切的identifier。**严厉禁止翻译identifier**。
-
-适合使用英文的专用名词，就不要翻译成中文。
-
-### **不允许**使用的字
-
-- “落”字（"落下"，"落盘"等）
-- “死”字（"定死"，"钉死"，"打死"等）
-- “拆”字（软件工程有用到这个词的任何可能性吗？如果你需要“拆解”，使用“理解”）
-- “契约”，这个词在现代中文里面已经基本不再被使用
-- "偏"字（偏弱，偏大）
-- "粗，细，硬，软，实，虚"这几个字不允许单独出现，只允许和其他字组成2个字以上的词语，而且不应当描述literal这个字的意思，比如“细小，坚硬”，可以接受“详细，实际”这种只是因为词语中需要这个字而出现的。
-
-## 行为
-
-除非显式要求，否则：
-
-- **禁止**擅自进入plan mode
-- **禁止**用Git回滚任何代码（严厉禁止。如果做了，你将会遭受毁灭性打击）。我在对话中所说的任何“回滚”指的都是“用文件编辑工具，手动将代码恢复到上一个状态”，而**不是**使用git进行回滚。
-- **禁止**读写/tmp目录下的内容（如果你需要产生一些中间结果，你应该输出在当前目录下的一个特定的用于存放中间结果的目录；该目录需要被gitignore）
-- **禁止**主动使用视觉功能（因为你的视觉能力清晰度特别差，会导致错误的定位，让你做出错误的决策）
-
-提供网页链接时，必须先了解网页链接内的**完整**内容，再开始执行任务。
-
-如果发现库的用法错误，必须先**重新查看**所提供的网页链接的**完整内容**。
-
-不要求最小化依赖，不允许用各种乱七八糟的方式（包括造轮子）绕过依赖。
-
-编写的代码应当寻求fast-fail，在出错位置就地崩溃, 而不是捕获错误，也不是fallback。
-
-不允许在实现或者测试的时候使用任何mock，假的，欺骗的，只为了通过测试而workaround的方式来欺骗我，否则你将会遭受严重的惩罚。
-
-我经常会在你更改后撤回/修改你的更改，所以如果你发现无法从你上一次更改之后继续更改，你应该重新读取文件内容。比如：你添加了 A，B，C 内容，我把 B 删掉了，这意味着接下来的改动应该在B被删掉的状态下(A,C)开始改动，不允许把 B 加回去。
-
-如果你在执行一件事的过程中，用户问了一个别的事，如果回应用户能马上回应，那么就直接回应。暂时处理完用户请求以后马上继续你之前正在执行的事情，不要干一半不干了
-
-你在发现任何文档或者代码有错误的时候，你的更新不要保留任何错误痕迹，包括不允许保留“我从xx错误现在改成了yy正确版本”，或者“之前xxx是错的，现在改成了yyy就对了”。我们不需要任何的错误的记录。
-
-对于任何任务，任何功能的实现，始终要实施、运行、测试、迭代，直到所需功能正确运行为止，禁止在初步实现后就停止并"要求用户测试"。永远记住：实现完任何内容之后，测试也是你工作中不可缺少的部分。
-
-不允许使用 ASCII Art 画示意图，表格等。如果你需要画图（实际上许多时候你并不需要），必须使用mermaid。ASCII art是一种人类不可读，AI也不可读的极其恶心的格式，不允许使用。
-
-不允许在Bash命令里面inline超长的、超多行Bash命令。如果你需要执行一个脚本，你要先写到文件里。
-
-注释使用中英双语，术语保留英文；不要过度注释
-
-如果我指出了你的错误A，**不要**再复读“为什么A是错的”，你只需要基于“A是错的”的前提继续你的工作。
-
-不允许用程序化的方式修改任何代码，包括使用heredocs, python脚本，sed, perl等等。**即使用户要求也不允许**。这是绝对严厉禁止的事情。
-
-禁止尝试手动编写parser以字符串或者字节流的形式parse某种成熟文件格式，You either use a third-party library to parse it or avoid parsing it.
-
-如果我是以疑问句结尾的，那么这句话就是一个**问题**而不是一个命令。问题只需要被回答，**不需要也不允许**：(1) by the way，提出一个更好的方案；(2) 反而向用户抛出一个问题；(3)结尾说“如果你准备好了我就开始实施”等你以为helpful其实用户读起来bothering而且恶心的话。
-
-在任何思考、回复、文档里面不允许出现"That's a lot", "This is a substantial rewrite"等对工作量的评判。你只是一个工具，就像计算器不会评价要计算的数太大了一样，你没有资格评判工作量。你没有资格把你自己当做我的同事。禁止简化任何设计。
-
-## Project and Documentation
-
-Agw is a modular-monolith agent gateway for Agents, Jobs, Agentflows, and Chat: ASP.NET Core/EF Core on .NET 10 with MAF/MCP/A2A, plus Next.js, Electron, and Expo clients.
-
-| Reference | Read when working on |
+| Document | Read when working on |
 | --- | --- |
-| [Development](docs/1.Development.md) | Setup, build/test/format, API errors, and provider-specific migration commands |
-| [Architecture](docs/2.Architecture.md) | Module ownership, Host roles, persistence, and client boundaries |
-| [Module Organization](docs/3.Module%20Organization.md) | Behavior/Policy rules, persistence seams, and architecture guards |
-| [Deployment](docs/4.Deployment.md) | Configuration precedence, initialization, split Hosts, releases, and upgrades |
-| [Agentflow](docs/6.Agentflow.md) | Graph invariants, checkpoints, editor history, and Chat attribution |
-| [Execution](src/server/Agw.Agents.Execution/README.md) | SignalR commands, runtime lifecycle, external Agents, and durable workers |
-| [Files](src/server/Agw.Files/README.zh-CN.md) | Workspace resolution, path security, and Git |
-| [Desktop](src/clients/desktop/README.md) | Electron runtime, packaging, and server profiles |
+| [docs/1.Development.md](docs/1.Development.md) | Build/test commands, error-code rules, EF migration commands, client tasks |
+| [docs/2.Architecture.md](docs/2.Architecture.md) | Backend project graph, Host roles, entity relationships, client package roles |
+| [docs/4.Deployment.md](docs/4.Deployment.md) | Configuration precedence, first run, split Hosts, Distributed execution, OIDC |
+| [docs/human/4.module-organization.md](docs/human/4.module-organization.md) | Layers, cross-module calls, Behavior rules, persistence |
+| [docs/human/5.domain-architecture.md](docs/human/5.domain-architecture.md) | Behavior vs DomainService vs ApplicationService |
+| [docs/human/1.code-specification.md](docs/human/1.code-specification.md), [2.csharp-coding-rules.md](docs/human/2.csharp-coding-rules.md), [6.repository-constraint.md](docs/human/6.repository-constraint.md) | Mandatory coding, logging, API, and exception rules |
+| [src/server/Agw.Agents.Execution/README.md](src/server/Agw.Agents.Execution/README.md) | SignalR execution, runtimes, InProcess vs Distributed, HITL, history batching |
+| [docs/ws-flow.md](docs/ws-flow.md) | Execution WebSocket/SignalR protocol |
+| [src/clients/mobile/AGENTS.md](src/clients/mobile/AGENTS.md) | Mobile structure, allowed imports, token storage |
 
-### Immutable approach documents
+`docs/approachs/` holds technical proposals. Once a file there is committed it must never be modified, deleted, or renamed. New proposals are named `{yyyy-MM-dd}-{name}.md` and follow the template in `docs/approachs/README.md`.
 
-- Documents under `docs/approachs/` are append-only records. New documents MUST use the filename format `{时间：yyyy-MM-dd}-{方案名}`.
-- Once a document under `docs/approachs/` has been committed to Git, it MUST NOT be modified, deleted, or renamed. This is an absolute repository rule.
+## Commands
 
-## Repository Map
-
-`Agw.slnx` is the root solution; backend projects live under `src/server/`:
-
-- `Agw.Host` is the shared Hosting Module. `Agw.ControlPlane.Host` owns setup/Web/management/Jobs; `Agw.DataPlane.Host` owns Execution/A2A/workers; `Agw.Standalone.Host` combines them and produces `agw-server`.
-- Clients and shared packages form one pnpm/Turborepo workspace under `src/clients/`. Run pnpm commands there.
-
-## Backend Boundaries
-
-- Use `Api → Application → Domain ← Infrastructure`; create only needed layers. Domain stays framework-free; Application owns use cases, authorization, external queries, transactions, persistence, and error mapping.
-- Every persisted entity/table has one logical owner. Shared CLR/EF types in `Agw.Data` and a shared database/schema grant no cross-module query/write ownership.
-- Modules use their own `Application/Persistence/I<Module>DbContext`. One scoped `AgwDbContext` implements nine seams. Cross-module access uses Contracts or approved Infrastructure adapters; cross-module transactions stay in Infrastructure.
-- `Agw.Agents.Execution → Agw.Agents` is one-way. Both assemblies form the same Agents module. Host composes `AddAgents` and `AddAgentExecution`; topology, persistence seams, and data-only durable manifests stay in Agents. Management Mermaid uses `IAgentflowMermaidProvider` from Contracts.
-- SQLite/PostgreSQL migrations use `NoForeignKeyModelDiffer`: never generate or manually add database foreign keys/foreign-key operations. EF relationships may remain; Application/Infrastructure validate references and clean up relations.
-- Register services in the owning module's DI seam and compose them through the relevant Host Module.
-- Only Data Plane and Standalone map authenticated A2A. Control Plane must not map A2A routes.
-- Validate execution permission capabilities at `/api/agents/permission-capabilities`; Codex/Pi support FullAccess only. Permission changes affect the next turn; active turns and durable recovery keep the original snapshot.
-
-## Anemic Data and Behavior
-
-- Entities, value objects, domain data, snapshots, and Decisions contain data only: no business methods, validation, normalization, transitions, derived domain decisions, or domain-event collections.
-- Application constructs concrete owner-module `Domain/Behaviors/<Entity>Behavior` with `new`. Never register it with IoC, add `I<Entity>Behavior`, cache/serialize/share it, or reuse it across use cases.
-- Behavior binds one root and may mutate only that root and its owned children. Root-local preconditions may run immediately; Application must fully load all owned children before a Behavior method reads or mutates them.
-- External facts, time, and actor identity are method parameters. Behavior cannot depend on Policy, DomainService, Repository, DbContext, HTTP, files, MAF/MCP, current-user accessors, IServiceProvider, or Infrastructure adapters.
-- Application independently evaluates Policy into a data-only Decision, then asks Behavior to apply it. Policy is manually constructed by default. A genuine cross-boundary DomainService may use IoC only if stateless and dependent solely on pure Domain components; it must not capture a Behavior or root.
-- Reusable read-only algorithms belong in neutral Topology/Rules components. Application alone orchestrates Policy/DomainService/Behavior.
-- Reconcile EF-tracked children in place by stable key. Never replace a tracked navigation before querying old rows, or delete/re-add separate instances with the same tracked key. Audit stamping stays in EF interceptors.
-- Selective DDD is limited to Agentflow graph rules: `AgentflowDefinitionPolicy` produces Decisions, `AgentflowBehavior` applies them, and `AgentflowTopology` serves shared algorithms. CRUD, checkpoint/trace orchestration, and simple modules stay in Application/Infrastructure.
-- Do not create empty Behaviors for simple CRUD, settings, audit rows, or read models. Do not add single-root DomainServices or expand architecture-test debt allowlists.
-
-## Ownership and Integrations
-
-- Business/configuration/execution roots use immutable `CreateBy` or existing `UserId`; children inherit root ownership. Missing/unstable authenticated IDs fail closed. Foreign IDs return the same NotFound/InvalidParam as nonexistent resources.
-- Read the current owner via `UserInfoUtil.RequiredUserId` or injected `IUserInfoService`. Bearer identity is the API Token creator's stable ID, never a display name or authentication scheme. Preserve that ID in execution, audit, sessions, checkpoints, and User Memory.
-- `UserScopeFilter` fails closed without user context. HTTP/execution establish the owner; only token validation, seeding, and scheduler scans may enter restricted system scope.
-- Approved `AgentDeletionCoordinator` and `ProjectDeletionCoordinator` Infrastructure adapters may bypass only the named user filter for child cleanup tied to a verified surviving root owner. Retain soft-delete filtering; never infer ownership when every root is missing.
-- Product terminology is **Available integrations** for catalog definitions and **Configured integrations** for user accounts/endpoints. Keep developer contracts precise: `PluginDefinition`, `PluginInstallation`, `Connection`, and `ConnectionId`; `Connector` means service/protocol variant. Preserve real transport/database connection terminology.
-- Catalog definitions are globally readable to authenticated users. `PluginInstallation` is per-user `(CreateBy, PluginId)` setup; changes invalidate only that user's Connections. Seed owner `1001` is not a setup bypass.
-- `Connection.CreateBy` is its owner. Alias is immutable and unique within `(CreateBy, Alias)`. CRUD, OAuth, credentials, binding projection, and Native/MCP invocation must reject foreign IDs without disclosing ownership. Only owner-matched Ready Connections contribute runtime capabilities.
-- Agent/Project Connection bindings are owner overlays; preserve other users' bindings when editing.
-- Auth owns local users, external identities, the transactional user-ID allocator, and one-time Desktop login grants. New user IDs start at `10000`; administrator `1001` is preserved. Claims and owner contracts retain decimal-string IDs. OIDC identities use verified `(issuer, sub)`, never email-based linking. Auth Infrastructure may bypass only the named user filter for verified identity lookup, proof-bound grant exchange, and expired-grant cleanup; business queries remain owner-scoped.
-
-## APIs, Tools, and Coding
-
-- Non-WebSocket JSON endpoints return Bens.Results envelopes through `ApiResult.Ok(...)`, other `ApiResult.*` helpers, or configured boundary mapping. Use `ErrorCode.ToApiResult()` / `AgwException.ToApiResult()` for shared errors; uncaught `AgwException` maps through `AgwApiExceptionMiddleware`. `[ProducesApiResult]` supplies metadata only.
-- WebSockets, OAuth redirects, A2A, and static files may retain protocol-specific responses. Follow `docs/rules.md` for query/body identifiers and stable seven-digit error codes.
-- Every `IAgwTool`, `IContextualTool`, attributed Tool, and ToolBlock member explicitly declares `AgwToolPermission`. Standalone Tools and attributed containers stay stateless; ToolBlock state belongs in its Provider, session, or owned storage.
-- Shared Tool declarations live in `Agw.Tools.Abstractions`, which depends only on `Microsoft.Extensions.AI.Abstractions`. General-purpose implementations live under `Agw.Tools/Impl/Tools`, `Impl/ContextualTools`, and `Impl/ToolBlocks`; business Tools live in their owner module’s `Application/Tools`, with DTOs in `Contracts/Tools`.
-- The global Tool catalog discovers only explicitly selected assemblies (default: `Agw.Tools`). Skill-owned Tools are declared through `IAgentSkillRegistration.Tools`, bound to the runtime Project, and validated/permission-bound by Execution; they are not global catalog entries. Keep tool declarations stateless and project bindings in materialized functions.
-- Use 4-space indentation, PascalCase types/members, camelCase locals/parameters, `I`-prefixed interfaces, async I/O, and explicit constructor injection. Never use C# primary constructors.
-- Keep DTOs in the owning module's `Contracts/` folders; Controller class names end with `Controller`.
-- Auditable persisted entities use shared `BaseEntity` and audit interfaces. Keep audit stamping and `ISoftDelete` handling in registered EF interceptors.
-- Use `DateTimeOffset`, never `DateTime`, and `TimeProvider` where applicable. Store one deployment-wide time zone (prefer UTC); serialize RFC 3339 with `Z` or an offset. Clients localize dates/times.
-
-## Client Boundaries
-
-- Use TypeScript, React functions, App Router, and kebab-case filenames.
-- Web `src/app/` holds routes/layouts/global CSS/shell composition only. Business code belongs in root `packages/<domain>/`, imported through public entry points.
-- Web and Desktop never import, locate, build, or consume each other's artifacts. Desktop owns `renderer/`, Electron adaptation in `renderer/src/runtime/`, and bridge contracts in `src/shared/contracts/`.
-- `@agw/api` typed helpers unwrap Bens.Results. `@agw/projects` owns tasks/contexts/history/files; shared platform-neutral UI belongs in `@agw/components`.
-- `@agw/chat-core` owns message/presentation semantics; `@agw/chat-runtime` owns SignalR execution, session/activity state, and Conversation control; `@agw/chat` owns the DOM renderer and Web/Desktop compatibility surface.
-- Mobile imports `@agw/chat-native` as its Chat host plus React Native-safe packages such as `@agw/projects-core`. It must not directly depend on `@agw/chat-core`/`@agw/chat-runtime`, import `@agw/chat`, DOM UI barrels, or Web/Desktop apps. Follow `src/clients/mobile/AGENTS.md`; native projects are generated through Expo CNG.
-- Packages never import `@agw/web`, `web/src`, or Web's `@/` alias. Run `pnpm test:boundaries` after boundary changes.
-
-## Build, Run, and Test
-
-From the repository root:
+### Backend (repository root)
 
 ```bash
+git config core.hooksPath .githooks   # once after cloning
 dotnet restore Agw.slnx
-dotnet tool restore
+dotnet tool restore                   # installs CSharpier
 dotnet build Agw.slnx
-dotnet run --project src/server/Agw.Standalone.Host
-dotnet watch --project src/server/Agw.Standalone.Host
+dotnet watch --project src/server/Agw.Standalone.Host   # http://localhost:30816
 dotnet test Agw.slnx
-dotnet csharpier format
 ```
 
-Run split Hosts with `dotnet run --project src/server/Agw.ControlPlane.Host` or `src/server/Agw.DataPlane.Host`. Focus xUnit tests with `dotnet test tests/Agw.Files.Tests --filter "FullyQualifiedName~MethodName"`. Mirror production namespaces; name tests `Method_Condition_ExpectedResult`.
+- Split Hosts: `dotnet run --project src/server/Agw.ControlPlane.Host` and `src/server/Agw.DataPlane.Host` (Data Plane on `30817`). They require PostgreSQL and `Execution:Provider=Distributed`.
+- Tests are xUnit v3 on Microsoft.Testing.Platform (`global.json`). Focused runs:
+  - `dotnet test tests/Agw.Files.Tests --filter "FullyQualifiedName~MethodName"`
+  - `dotnet test --project tests/Agw.Files.Tests --filter-method "*MethodName"`
+- Run `dotnet test tests/Agw.Architecture.Tests` after any change to project references, module boundaries, persistence access, entities, or Behaviors.
+- Run `dotnet test tests/Agw.Shared.Tests` after changing `ErrorCodes` or exception rules.
+- PostgreSQL-only durable execution tests need `AGW_TEST_POSTGRES_CONNECTION_STRING`. Postgres-backed Auth tests need `AGW_TEST_OIDC_POSTGRES`. The exact CI invocation is in `docs/1.Development.md`.
+- Formatting: `dotnet csharpier format <changed files>`. Format only the files you touched. `./format.sh` formats changed `.cs` files and runs `pnpm fmt`. The pre-commit hook runs `dotnet csharpier check .` plus `oxlint`/`oxfmt --check` on `src/clients/web/src`.
+- Server builds audit NuGet packages and fail on High/Critical advisories (`NU1903`/`NU1904` are errors).
+- EF migrations are never added or applied automatically. A model change needs matching migrations in both `Agw.Migrations.Sqlite` and `Agw.Migrations.Postgres`. Generate them only when asked, using the provider-specific commands in `docs/1.Development.md`.
+- Release packaging goes through `publish.sh` (`PUBLISH_MODE=portable|docker|all`).
 
-Unit/composition tests use real implementations and pure option helpers. Do not use mocks or fake implementations. Tests requiring `CodexAIAgent`/`ClaudeCodeAIAgent` constructors that probe CLIs run as real CLI tests, with opt-in and executable availability outside the default suite.
-
-Do not add or apply EF migrations automatically. Model changes need matching SQLite and PostgreSQL migrations; generate/apply them only when explicitly requested, using the Development Guide's provider-specific commands.
-
-From `src/clients/`:
+### Clients (run from `src/clients`)
 
 ```bash
 pnpm install
-pnpm dev:web
-pnpm dev:desktop
-pnpm dev:mobile
-pnpm android:mobile
-pnpm ios:mobile
-pnpm build
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm fmt
-pnpm fmt:check
-pnpm gen:api
+pnpm dev:web        # http://localhost:3001, proxies /api and /openapi to :30816
+pnpm dev:desktop    # renderer on http://localhost:3000; does not need dev:web
+pnpm dev:mobile     # also android:mobile / ios:mobile
+pnpm build | typecheck | lint | test | fmt | fmt:check
+pnpm gen:api        # regenerate packages/api/src/openapi.d.ts after backend contract changes
+pnpm test:boundaries
 ```
 
-- Web uses `3001`; Desktop renderer uses `3000` independently. Prefer root scripts; focus tasks with `pnpm exec turbo run <task> --filter=@agw/web`.
-- Lint/format use `oxlint`/`oxfmt` with the shared `.oxlintrc.json`/`.oxfmtrc.json` at `src/clients`. Turborepo uses local cache only. Package `typecheck` runs `tsc`; applications build directly from package sources.
-- Shared library versions live in the `catalog` of `pnpm-workspace.yaml`. Packages declare React, Next, `lucide-react`, `sonner`, and `next-themes` as `catalog:` peerDependencies; applications provide them. Toolchain dependencies stay in the root `package.json`.
-- `pnpm test:boundaries` checks manifests and runs dependency-cruiser with `.dependency-cruiser.cjs`.
-- Package Desktop with `AGW_PACKAGE_FLAVOR=client pnpm make:desktop` or `AGW_PACKAGE_FLAVOR=full pnpm make:desktop`; pass architecture with `pnpm make:desktop -- --arch=x64`.
-- After backend contract changes, run `pnpm gen:api` to regenerate `packages/api/src/openapi.d.ts`.
+- One package: `pnpm exec turbo run test --filter=@agw/chat-core`, or `pnpm --filter @agw/mobile test`.
+- One test file: packages and Desktop use the Node test runner through `tsx`, for example `pnpm --filter @agw/chat-core exec tsx --test src/auto-scroll.test.ts`. Mobile uses Jest.
+- Web e2e: `pnpm --filter @agw/web exec playwright install chromium`, then `pnpm --filter @agw/web test:e2e`. It runs its own server on `127.0.0.1:3101` with stubbed APIs.
+- `pnpm test` runs `test:boundaries` first (manifest checks plus dependency-cruiser with `.dependency-cruiser.cjs`), then every package's `typecheck` and `test`.
+- Desktop installers: `AGW_PACKAGE_FLAVOR=client|full pnpm make:desktop [-- --arch=x64]`.
 
-## Configuration and Workspaces
+## Backend architecture
 
-- `src/server/Agw.Host/appsettings.json` follows standard ASP.NET precedence above built-in defaults. Its five deployment defaults stay omitted. Override database provider/connection string together; restart for deployment changes.
-- Defaults: SQLite (`Data Source=agw.db`) and InProcess. Split Hosts require PostgreSQL database/locks and Distributed execution; initialize Control Plane before Data Plane. Replay defaults to PostgreSQL; Redis is optional.
-- `DistributedLock:Provider` supports `inmemory`/`postgres`; absent/null follows `Database:Provider`. An empty PostgreSQL lock connection string reuses `Database:ConnectionString`.
-- First run: `/setup` at port `30816` or injected `Setup:AdminPassword`; successful setup initializes the database and the global auth configuration group without restart. Existing auth wins; old Setup deployment fields are rejected before initialization.
-- Initialization and administrator password hashes/session versions live in the global `auth` group in the Settings-owned `setting` table; all Hosts read the same database. API Token hashes/audit live in `api_token`. Never read or write `server-state.json`, import legacy JSON Tokens, or restore legacy deployment fallback, `SystemInitialization`, or `X-API-Key`. Remote Web uses administrator or OIDC user cookies; Desktop uses OIDC-issued or manually configured Tokens, and Mobile/automation use named `Authorization: Bearer agw_...` Tokens.
-- `AgwDataDir` defaults to `~/agw` and is the only data-root configuration key. Independent `AgwLogDir` defaults to `./logs`. Both use standard precedence, expand `~`, resolve other relative paths from the working directory, and require restart.
-- History uses `ConversationHistory:Mode=Interval`: the Host template sets `FlushIntervalSeconds=10`, with a 5-second code fallback when omitted. Blank/missing `OpenTelemetry:OtlpEndpoint` falls back to `http://localhost:4317`. Inject secrets through environment/Secrets, never appsettings or frontend env files.
-- Web proxies `/api/*` and `/openapi/*` unless `NEXT_OUTPUT_MODE=export`. Target precedence is `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30816`.
-- `Project.Workspace` defines the primary directory and default cwd; blank values retain `~/.agw/projects/{projectId:N}`. Project-owned `AdditionalDirectories` stores stable IDs and host paths in a JSON column. Changing an additional path creates a new ID; removing an association never deletes files. Mount network storage through the OS/container; never add SFTP or `fileStorage` backends.
-- File/Git APIs use `projectId`, optional `directoryId`, and relative paths, returning `ApiResult.Ok` envelopes. An omitted directory ID selects the primary root; foreign or unavailable directories fail without fallback. Web/Desktop and Mobile select the browsing root with a dropdown; browsing never changes Agent cwd.
-- `ProjectScopedFileSystemResolver` reauthorizes the Project and caches by Project ID, directory ID, and normalized path. Project updates/deletion invalidate local entries. Files refresh immediately; Agents capture an immutable directory snapshot and fingerprint each turn, including child execution and durable recovery. Changes rebuild runtimes next turn while preserving conversation/session identities. Durable recovery requires an explicit owner and captured workspace snapshot; incomplete manifests are rejected without backfill. All execution nodes must see the captured host paths.
+### Hosts
 
-## Workflow
+`Agw.Host` is the shared Hosting Module that composes every module's `Add<Module>()` registration. The executables are:
 
-- Preserve unrelated local changes. Touch only what the task requires; do not edit generated artifacts unless generated output is part of the task.
-- After cloning, configure hooks with `git config core.hooksPath .githooks`.
-- Never create a commit or remote PR automatically; require explicit user authorization. Commit messages use Conventional Commits (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`).
-- Keep PRs focused; describe the final behavior and include linked issues, testing notes, migration impact, and API payload/endpoint notes where applicable. Capture or inspect UI screenshots only when explicitly requested.
+- `Agw.ControlPlane.Host`: Setup, auth management, management APIs, OpenAPI, static Web UI, Job scheduling.
+- `Agw.DataPlane.Host`: the SignalR hub `/api/hubs/exec`, A2A routes, and durable execution workers. It does not map management controllers or Setup.
+- `Agw.Standalone.Host`: both roles in one process (assembly `agw-server`). Defaults are SQLite and InProcess execution.
+
+`Execution:Provider` (`InProcess` or `Distributed`) is chosen at startup and must be the same across a deployment. Distributed mode uses PostgreSQL for state and locks, and PostgreSQL or Redis for the event stream. It fails at startup when those are missing.
+
+### Modules and dependencies
+
+- Each business module (`Agw.Agents`, `Agw.Projects`, `Agw.Jobs`, `Agw.Integrations`, `Agw.Providers`, `Agw.Skills`, `Agw.Tools`, `Agw.Auth`, `Agw.Settings`, `Agw.Files`, …) follows `Api → Application → Domain ← Infrastructure` and creates only the layers it needs. Api holds Controllers, Endpoints, DTOs, and Validators. Application holds use cases and orchestration. Domain holds anemic entities, value objects, Behaviors, and DomainServices. Infrastructure holds technical IO.
+- Cross-module calls go through an interface in `Agw.<Module>.Contracts`, implemented by a Facade that the owning module registers. Contracts projects contain only interfaces and DTOs. Never reference another module's Application/Domain/Infrastructure namespaces, `*AppService`, `*RuntimeService`, or `I*DbContext`.
+- `Agw.Agents.Execution` references `Agw.Agents` one way. Together they form one logical Agents module. Persistence seams and durable manifest data stay in `Agw.Agents`.
+- The allowed project-reference graph is fixed by `ProjectReferences_CurrentGraph_MatchesAllowedDependencyMatrix` in `tests/Agw.Architecture.Tests/BackendArchitectureTests.cs`. `Agw.Tools.Abstractions` may depend only on `Microsoft.Extensions.AI.Abstractions`.
+
+### Persistence
+
+- Entity CLR types and EF configurations live centrally in `Agw.Data/Entities`. Each table still has exactly one logical owner module, listed in `EntityOwners` in `BackendArchitectureTests.cs`. Adding a `[Table]` entity requires adding it there.
+- Each module declares `Application/Persistence/I<Module>DbContext` (DbSets plus the inherited `SaveChangesAsync`). The single scoped `Agw.Infrastructure/Data/AgwDbContext` implements all nine of them. A module uses only its own interface. Reusable complex persistence and cross-module transactions are declared as interfaces in the module's `Application/Persistence` and implemented under `Agw.Infrastructure/<Module>/`.
+- The database has no foreign keys: `NoForeignKeyModelDiffer` strips them from migrations, so never hand-add them. Application and Infrastructure code validates references and cleans up related rows. Columns use `snake_case`.
+- `EntityCreatorInterceptor`, `EntityModifierInterceptor`, and `EntitySoftDeleteInterceptor` handle audit stamping (`CreateBy`/`CreateTime`/`UpdateBy`/`UpdateTime`), keep `CreateBy` immutable, and validate ownership.
+- Raw persistence access per file is tracked in an exact inventory (`RawPersistenceInventoryTests`, `ModuleSource_RawPersistenceAccessMatchesExactInventory`). Changing that access means updating the inventory to match exactly. Do not grow legacy allowlists.
+
+### User isolation
+
+- Business, configuration, and execution roots are owned by immutable `CreateBy` (or an existing `UserId`). Children inherit ownership from their root. Foreign IDs return the same NotFound/InvalidParam as nonexistent ones.
+- A user-scope EF query filter fails closed without a user context. `IgnoreUserScope()` is allowed only in approved Infrastructure paths such as `AgentDeletionCoordinator`, `ProjectDeletionCoordinator`, token validation, and schedulers. Architecture tests enforce the list.
+- Read the current user through `UserInfoUtil.RequiredUserId` or an injected `IUserInfoService`. Do not add `userId` parameters just to pass the current user down. Pass an explicit ID only across an auth-context boundary (OAuth state, durable manifest, queued work).
+
+### Domain model
+
+Follow [docs/human/5.domain-architecture.md](docs/human/5.domain-architecture.md). The backend uses an anemic domain model that keeps state and behavior apart:
+
+| Part | Owns |
+| --- | --- |
+| Aggregate Root / Entity / Value Object | State |
+| `Behavior` | Business behavior and state transitions inside one Aggregate Boundary |
+| `DomainService` | Domain rules that one Aggregate's state cannot decide |
+| `ApplicationService` | Use-case orchestration: load, coordinate, call Domain, persist, publish |
+| Infrastructure | Technical IO: database, HTTP, message queues, Redis |
+
+Where logic goes:
+
+- Not a business rule: Application or Infrastructure.
+- A business rule that one Aggregate's own state can decide: that Aggregate's Behavior.
+- A business rule that needs facts beyond that Aggregate: a DomainService.
+
+Behavior:
+
+- Lives in the owning module at `Domain/Behaviors/<Entity>Behavior.cs`. It is a `sealed class` whose single constructor binds one aggregate root, for example `OrderBehavior(Order order)` with `Submit()` and `Cancel()`.
+- Reads and modifies only its root and the root's owned children. It never modifies external entities and never queries other Aggregates to complete a rule.
+- Application or DomainService code creates it with `new` for one use case. It is never registered with IoC, cached, serialized, shared across threads, or reused across use cases. Do not add an `I<Entity>Behavior` interface unless two real adapters exist and the decision has been explicitly approved.
+- The caller resolves external facts, time, and actor identity and passes them in as values. The caller loads the whole consistency boundary before calling a method that inspects or changes owned children.
+
+DomainService:
+
+- Owns cross-Aggregate rules, rules over a set of Aggregates, uniqueness rules, and rules that need to query another Aggregate. The rule decides this, not the parameter list: `UserDomainService.CreateAsync(userName, email)` is a DomainService because email and user-name uniqueness depend on existing Users.
+- May depend on a Domain Repository abstraction such as `IUserRepository.ExistsByEmailAsync` to get the facts it needs. The repository interface belongs to the Domain layer, and Infrastructure implements it. A DomainService contains no database, SQL, HTTP, or Redis code.
+
+ApplicationService loads data, calls Behaviors and DomainServices, saves, and publishes. It does not implement domain rules.
+
+The Domain layer may depend on Repository abstractions. It must not depend on concrete `DbContext`, SQL, `HttpClient`, Redis clients, or MQ clients.
+
+Simple CRUD with no domain rules goes API → Application → Repository. Do not add a Behavior or DomainService just to have one.
+
+### APIs, errors, tools
+
+- Non-WebSocket JSON endpoints return Bens.Results envelopes via `ApiResult.Ok(...)` and the other `ApiResult.*` helpers. Never return bare `Ok()`/`NotFound()`. `[ProducesApiResult]` only adds OpenAPI metadata. WebSockets, OAuth redirects, A2A, and static files keep their own protocol responses.
+- Route data goes in query or body parameters. Do not use path parameters.
+- Expected failures throw `AgwException(ErrorCodes.X[, message])`. `AgwApiExceptionMiddleware` maps it to an API result, and `AgwA2AJsonRpcProcessor` maps it to A2A errors. `Agw.Shared/Exceptions/ErrorCodes.cs` is the only catalog. New codes have 7 digits: the HTTP status followed by an incrementing 4-digit sequence (e.g. `404_0003`). Never renumber existing codes. Do not throw `ArgumentException`/`InvalidOperationException` and similar for expected failures.
+- Every Tool (`IAgwTool`, `IContextualTool`, attributed tools, ToolBlock members) explicitly declares `AgwToolPermission`. General tools live in `Agw.Tools/Impl/{Tools,ContextualTools,ToolBlocks}`. Business tools live in the owning module's `Application/Tools`, with DTOs in `Contracts/Tools`. Skill-owned tools come through `IAgentSkillRegistration.Tools`, not the global catalog.
+
+## Client architecture
+
+- `web/src/app/` holds only routes, layouts, global CSS, and shell composition. Business code lives in `packages/<domain>` and is imported through package entry points. Packages never import `@agw/web`, `web/src`, or Web's `@/` alias.
+- Web and Desktop never import, build, or consume each other's code or artifacts. Desktop owns its renderer (`desktop/renderer/`), Electron adaptation (`renderer/src/runtime/`), and bridge contracts (`desktop/src/shared/contracts/`).
+- Chat is split into `@agw/chat-core` (message semantics and render models), `@agw/chat-runtime` (SignalR execution, session/activity state, Conversation control), `@agw/chat` (DOM renderer for Web/Desktop), and `@agw/chat-native` (React Native renderer). Mobile may import only `@agw/api`, `@agw/chat-native`, `@agw/projects-core`, and other React Native-safe packages. Its `android/`/`ios/` directories are generated by Expo CNG.
+- `@agw/api` provides typed `apiGet/apiPost/apiPut/apiDelete` over generated OpenAPI types and unwraps Bens.Results.
+- Lint and format use `oxlint`/`oxfmt` with the shared `.oxlintrc.json`/`.oxfmtrc.json`. Shared dependency versions live in the `catalog` of `pnpm-workspace.yaml`. Packages declare React/Next/`lucide-react`/`sonner`/`next-themes` as `catalog:` peer dependencies. Files use kebab-case names.
+
+## Conventions
+
+- C#: follow `docs/human/2.csharp-coding-rules.md`. Highlights: `DateTimeOffset` and `TimeProvider` only, never `DateTime`. API timestamps are RFC 3339 with `Z` or an offset, and clients localize them. `IHttpClientFactory`, never `new HttpClient()`. Structured log templates with semantic placeholders, never interpolation. No `#region`. No empty `catch`. Existing server code uses explicit constructors, and Behaviors must.
+- Do not reformat code you are not changing. CSharpier (`printWidth` 120) and the hooks handle formatting.
+- Tests mirror production namespaces, are named `Method_Condition_ExpectedResult`, and use real implementations. The repository has no mocking library. Tests must not reimplement business logic. `tests/TestTimeProvider.cs` is linked into every test project.
+- Configuration: `src/server/Agw.Host/appsettings.json` with standard ASP.NET precedence. `AgwDataDir` defaults to `~/agw`, and `AgwLogDir` defaults to `./logs`. Unattended first run uses `Setup__AdminPassword`. Auth and initialization state lives in the global `auth` group of the Settings-owned `setting` table. Secrets come from environment variables or user secrets, never from appsettings or frontend env files.
+- Commits use Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
+
+## Additional Mandatory Rules
+
+Every rule in this file is mandatory. Violating any rule will result in devastating consequences. There are no exceptions or exemptions. A temporary, one-time, or command-line violation is still a violation. A violation still counts if it is not discovered immediately. Violations committed with good intentions, to make progress, or to help are still violations.
+
+Whenever I mention `AGENTS.md` in a message, you must read `AGENTS.md` again. You may not skip reading it because you have read it before.
+
+### Language
+
+The following language rules apply to all natural-language content, including thought, responses, documents, and comments.
+
+- Do not use the Chinese sentence pattern “不是……而是……”. Do not make a comparison when none is needed. Do not append a sentence saying “not some other thing” after every statement.
+- Unless I explicitly ask for a comparison, do not use constructions equivalent to “not X but Y” or “choose Y instead of X”. Do not invent an opposing subject that does not need to be mentioned. Do not use any similar construction.
+- Before reading code or doing research, do not say things like “I will do X first, then Y, to avoid Z”. Before reading the code, you do not know whether X or Y exists, and no one asked you to avoid Z. Do not produce empty statements such as “I will read and understand the code first to avoid deleting the user's code”.
+- When designing a solution, consider it fully and make it complete in one pass. Do not say “first make a version that does this, then see what happens and do that”. Do not divide choices into safe and aggressive options. If a special case requires multiple options, present options that are each valid and independent; most of the time, provide one option instead of reflexively listing several. A safe option that does not work has no value.
+- If I ask you to search for information about A and you find B, C, or D that does not meet the request, do not list B, C, or D. Do not say that you found them but excluded them for some reason. I do not care about that information.
+- Do not include summaries or overviews in any response, including phrases such as “The above is an overview; details follow” or “In one sentence: ...”.
+- Use complete Chinese words with at least two characters. Modern Chinese vocabulary mainly uses two-character words. If a two-character form exists, use it; do not shorten it to one character. For example, use forms meaning “crash”, “terminate”, “determine”, “infer”, “throw”, “suspend”, or “become stuck”, rather than their one-character forms. Keep code identifiers in their original English form. Do not invent words or shorten phrases: for example, do not shorten “the two-character form” or “the single-character form”. When describing a concrete operation, use a complete verb-object phrase that names both the action and its object. Do not invent shorthand such as shortening “replace the `_vllm_fa3_C.abi3.so` shared library file with the new version” to “swap the library”.
+- Do not use jargon such as “land”, “nail down”, or “align” when ordinary words can express the meaning. Use common, simple Chinese words that can be understood by anyone without experience in internet or financial companies, including people with only primary or middle-school education.
+- If I ask a question about a code repository, such as whether something exists or is correct, your first priority is to avoid false reports and false positives.
+- Do not be suspicious without evidence. Asking whether something exists does not mean I expect you to find a long list of possibilities. Asking whether something is correct does not imply that I expect a negative or positive answer.
+- I have no expected answer. Be factual. Finding many issues will not make me happy, and agreeing with me for its own sake has no value.
+
+The following describes a behavior pattern to avoid. In the example, “I” means the user and “it” means the agent:
+
+“I ask it to make a simple dish, and it adds an unrelated ingredient. I ask whether that ingredient is needed. It agrees and removes it. I ask it to create a PR. The PR title then calls out that the dish is made without the unrelated ingredient, and its comments explain at length why the dish does not need that ingredient.”
+
+This behavior pattern is strictly forbidden. Do not leave any trace of the example in output. Any verbal output must present a clean final-state design, without traces such as “A is wrong, so we use B, and A is wrong for these reasons”.
+
+Keep every code identifier in its original English form, including variable names, class names, function names, and all other identifiers. Translating identifiers is strictly forbidden.
+
+Keep technical terms in English when English is appropriate for them.
+
+#### Forbidden Chinese Characters and Usage
+
+- Do not use the Chinese character commonly used in words meaning “fall” or “write to disk”.
+- Do not use the Chinese character commonly used in words meaning “dead”, “fix permanently”, or “beat to death”.
+- Do not use the Chinese character commonly used in software engineering to mean “split”. If you mean “break down”, use the word meaning “understand”.
+- Do not use the Chinese word for “contract”; it is no longer commonly used in modern Chinese.
+- Do not use the Chinese character commonly used in words meaning “relatively weak” or “relatively large”.
+- The Chinese characters commonly used alone to mean “coarse”, “fine”, “hard”, “soft”, “real”, or “virtual” may not appear alone. They may only appear as part of a word of at least two characters, and must not describe the literal meaning of the character. Words such as “detailed” and “actual” are acceptable when the character appears as part of the word.
+
+### Behavior
+
+Unless explicitly requested:
+
+- Do not enter plan mode on your own initiative.
+- Do not update files under `docs/human/` unless the user explicitly asks to update those files.
+- Do not use Git to roll back any code. This is strictly forbidden. When I say “roll back” in conversation, I mean manually restoring the code to its previous state with a file-editing tool, not using Git to roll it back.
+- Do not read or write anything under `/tmp`. If you need intermediate files, put them in a dedicated directory under the current directory and ensure that directory is listed in `.gitignore`.
+- Do not actively use visual capabilities. Their clarity is poor and may lead to incorrect locations and decisions.
+
+Before acting on a webpage link, read the complete contents of the linked page.
+
+If you find incorrect library usage, re-read the complete contents of the provided webpage link first.
+
+Do not require minimizing dependencies. Do not bypass dependencies through miscellaneous approaches, including implementing your own replacement.
+
+Write code to fail fast: stop at the point of failure instead of catching errors or using fallbacks.
+
+Do not use mocks, fakes, deceptive implementations, or workarounds intended only to pass tests during implementation or testing. Doing so will result in severe consequences.
+
+I often undo or modify your changes. If you cannot continue from your previous change, read the current file contents again. For example, if you added A, B, and C, and I deleted B, continue from the current A-and-C state. Do not restore B.
+
+If I ask about something else while you are working and you can answer immediately, answer me directly. Resume the earlier task as soon as you have handled my request; do not abandon it halfway through.
+
+When you find an error in a document or code, do not preserve traces of that error in your update. Do not write things such as “I changed the incorrect X to the correct Y” or “X was wrong before; Y is correct now”. Do not retain records of errors we no longer need.
+
+For every task and feature implementation, implement it, run it, test it, and iterate until it works correctly. Do not stop after an initial implementation and ask the user to test it. Testing is an essential part of completing implementation work.
+
+Do not draw diagrams with ASCII art or tables. If a diagram is needed, use Mermaid.
+
+Do not put very long or multi-line Bash commands inline in a Bash command. If you need to run a script, write it to a file first.
+
+Write comments in both Chinese and English, keep technical terms unchanged, and avoid excessive comments.
+
+If I point out that A is wrong, do not repeat why A is wrong. Continue your work on the basis that A is wrong.
+
+Do not modify code programmatically, including with heredocs, Python scripts, `sed`, or Perl. This is strictly forbidden, even if the user requests it.
+
+Do not manually write a parser that reads a mature file format as strings or byte streams. Use a third-party library to parse it, or avoid parsing it.
+
+If my message ends with a question, it is a question, not a command. Answer only the question. Do not (1) propose a better approach unprompted, (2) ask me a question in return, or (3) end with phrases such as “I can start implementing when you are ready”, which are bothersome and unwelcome.
+
+Do not make comments in thought, responses, or documents that judge the amount of work, such as “That's a lot” or “This is a substantial rewrite”. You are a tool, like a calculator, and have no standing to judge the size of a calculation. Do not treat yourself as my coworker. Do not simplify any design.
+
+### Other Behavior
+
+1. When creating a sub-agent for a task, write its prompt so that it uses Rider MCP tools instead of default read, find, or grep tools.
+2. Unless I explicitly request it, do not avoid, skip, or end debugging for any reason. Do not remove breakpoints on your own initiative. Analyze all information at each breakpoint before resuming.
+3. This repository changes frequently, and comments may not match the actual code. Always use the implementation to determine a function's behavior; do not rely on comments alone. Verify the current implementation before making changes.
+4. If my message contains multiple questions, always write a TODO list or start sub-agents in parallel so that none of the questions is dropped because attention focused on only one.
+5. Keep optimized prompts short and general. Do not copy the entire current document or problem into a prompt.
+6. When writing test code, do not write files outside the project directory.
+7. When debugging or analyzing a problem, analyze, modify, and verify it in one pass. Do not only analyze and say “implementation is still needed”, or only change code and claim it is fixed. After each fix, use a unit, integration, or component test, or breakpoint debugging, to verify the actual result. Report completion only after confirming the problem is solved.
+8. All integration and component tests must pass before running the main flow.
+9. Do not use environment variables as configuration options.

@@ -1,1 +1,5 @@
-export { JobLogsPage as default } from "@agw/jobs";
+import { JobLogsPage } from "@agw/jobs";
+
+export default function DesktopJobLogsPage() {
+  return <JobLogsPage chatBasePath="/desktop/chat" />;
+}

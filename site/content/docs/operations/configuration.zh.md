@@ -2,7 +2,7 @@
 title: "配置与认证"
 description: "了解各项设置的用途、默认值，以及如何配置服务和登录认证。"
 weight: 30
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/operations/configuration
 ---
 
@@ -46,7 +46,7 @@ translationKey: docs/operations/configuration
 | 完整配置名 | 默认选择 | 含义 |
 | --- | --- | --- |
 | `Database:Provider` | `sqlite` | 使用本地数据库文件 |
-| `Database:ConnectionString` | `Data Source=agw.db` | SQLite 文件位置 |
+| `Database:ConnectionString` | `Data Source=agw.db` | SQLite 文件位置；相对路径以 `<AgwDataDir>/database/` 为起点，默认文件为 `<AgwDataDir>/database/agw.db` |
 | `Execution:Provider` | `InProcess` | 由当前 Server 直接运行任务 |
 | `DistributedLock:Provider` | 未设置 | 随 SQLite 自动使用进程内锁 |
 | `DistributedLock:ConnectionString` | 空 | 进程内锁无需连接数据库 |
@@ -78,6 +78,9 @@ Standalone 也可以使用 PostgreSQL，而继续保留 InProcess。若选择 Di
 | 配置项 | 默认值 | 用途与可选值 |
 | --- | --- | --- |
 | `Provider` | InProcess | `InProcess`：由当前 Server 直接运行任务，适合简单的单机部署。`Distributed`：将执行状态保存到 PostgreSQL，由负责执行的 Server 领取并运行任务，支持多个执行节点协作。选择 Distributed 时，数据库和分布式锁都必须使用 PostgreSQL。 |
+| `TurnBroadcastRetentionSeconds` | 300 | 一个回合结束后，本 Server 在内存中保留该回合回放内容的秒数。在这段时间内重新连接，或重试已被接受的同一回合的客户端，可以收到完整回放。 |
+
+InProcess 模式下，回合只存在于当前 Server 进程中。Server 重启时，上一个进程遗留的运行中回合会被结束为 Interrupted，不会继续执行；需要跨重启恢复时使用 Distributed。
 
 这里的 Host 就是运行中的 Server 程序。启动 Standalone 时，一个程序同时负责管理、调度和执行；分离部署时，Control Plane 负责管理和调度，Data Plane 负责执行。分离部署的两端都需要设置 PostgreSQL 数据库、Distributed 执行模式和 PostgreSQL 锁。请按部署方式启动对应程序，Execution:Provider 只决定任务如何执行。
 
@@ -98,7 +101,7 @@ Standalone 也可以使用 PostgreSQL，而继续保留 InProcess。若选择 Di
 
 ### 分布式工作节点
 
-工作节点是负责实际运行任务的 Server。下面这些设置决定它多久检查新任务、同时处理多少任务，以及何时检查中断的任务。
+工作节点是负责实际运行任务的 Server。下面这些设置决定它多久检查新任务、同时处理多少任务，以及执行租约的时长和续期间隔。
 
 下表配置项的完整名称都以 `Execution:Distributed:` 开头。
 
@@ -106,10 +109,10 @@ Standalone 也可以使用 PostgreSQL，而继续保留 InProcess。若选择 Di
 | --- | --- | --- |
 | `WorkerPollingMilliseconds` | 250 | 每隔多久检查一次是否有新任务，单位毫秒。默认 250 毫秒，即每秒约检查 4 次。调小后可能更快开始任务，但数据库也会更忙。 |
 | `MaxConcurrentExecutions` | 4 | 每个执行 Server 最多同时处理多少次任务。默认 4，表示这一台 Server 最多同时运行 4 次任务；部署多台时，每台分别计算。 |
-| `RecoveryProbeSeconds` | 30 | 一项标记为运行中的任务，状态多久没有更新后，可以检查是否需要接手恢复，单位秒。默认 30 秒。检查时仍会确认原执行者是否持有任务锁；正常运行的长任务不会仅因超过 30 秒就被中断或重复执行。 |
-| `LockAcquireTimeoutMilliseconds` | 500 | 领取任务前，最多等待多久来确认自己拥有独占执行权，单位毫秒。默认 500 毫秒。这样可以避免多个 Server 同时运行同一次任务。 |
+| `LeaseSeconds` | 30 | 执行租约的时长，单位秒。领取任务的 Server 持有租约；租约到期而没有续期时，其他 Server 可以接手这次执行。正常运行的长任务会持续续期，不会仅因运行超过 30 秒就被接手。 |
+| `LeaseRenewSeconds` | 10 | 持有租约的 Server 每隔多久续期一次，单位秒，必须小于 `LeaseSeconds`。 |
 
-只有选择 Distributed 模式时才需要关注这些设置。所有数值都必须是大于 0 的整数；没有明确的性能问题时，建议先使用默认值。
+只有选择 Distributed 模式时才需要关注这些设置。所有数值都必须是大于 0 的整数，且 `LeaseSeconds` 必须大于 `LeaseRenewSeconds`，否则 Server 启动时报错；没有明确的性能问题时，建议先使用默认值。
 
 ### 执行事件与回放
 
@@ -119,13 +122,13 @@ Agent 执行时会不断产生回复和状态消息。系统保存这些消息�
 
 | 配置项 | 默认值 | 用途与可选值 |
 | --- | --- | --- |
-| `Provider` | Postgres | `Postgres`：把执行过程中的消息保存在 PostgreSQL 中，无需额外安装 Redis。`Redis`：使用 Redis Stream 保存这些消息。即使选择 Redis，任务状态和分布式锁仍需要 PostgreSQL。 |
+| `Provider` | Postgres | 执行过程中的消息总是先保存到 PostgreSQL。`Postgres`：只从 PostgreSQL 读取，无需额外安装 Redis。`Redis`：同时把已保存的消息复制一份到 Redis Stream，读取时优先使用 Redis，缺少的部分（包括已过期或 Redis 暂时不可用时）从 PostgreSQL 补齐。任务状态和分布式锁始终需要 PostgreSQL。 |
 | `ReadPollingMilliseconds` | 250 | 暂时没有新消息时，隔多久再检查一次，单位毫秒，必须大于 0。 |
 | `ReadBatchSize` | 100 | 一次最多读取多少条执行消息，必须大于 0。 |
 | `WriteIntervalMilliseconds` | 250 | 收到第一条待保存消息后，最多等待多久把消息一起写入，单位毫秒。默认 250；填 `0` 表示立即写入，不能为负数。 |
 | `WriteBatchSize` | 100 | 待保存消息达到多少条时，就触发一次批量写入，必须大于 0。默认积累到 100 条时写入。 |
 | `Redis:ConnectionString` | 空 | 选择 Redis 时必填，所有相关 Server 使用相同 Redis 服务，例如 `redis:6379,password=...`。 |
-| `Redis:StreamTtlMinutes` | 1440 | 执行消息在 Redis 中保留多久，单位分钟。默认 1440 分钟，即 24 小时；必须大于 0。过期后，客户端无法再从这里补读这些消息。 |
+| `Redis:StreamTtlMinutes` | 1440 | 执行消息在 Redis 中保留多久，单位分钟。默认 1440 分钟，即 24 小时；选择 Redis 时必须大于 0。过期的部分会改从 PostgreSQL 读取。 |
 
 ## 通用配置
 
@@ -148,7 +151,7 @@ Agent 执行时会不断产生回复和状态消息。系统保存这些消息�
 | 配置项 | 默认值 | 用途与可选值 |
 | --- | --- | --- |
 | `Provider` | sqlite | `sqlite`：本地 SQLite 文件，适合单机；`postgres`：PostgreSQL 服务，支持分离和分布式部署。只有这两种值。 |
-| `ConnectionString` | Data Source=agw.db | 所选数据库的连接字符串。SQLite 使用 `Data Source=...`；PostgreSQL 使用 `Host=...;Port=5432;Database=...;Username=...;Password=...`，Host 不能为空。切换 Provider 时必须一起修改。 |
+| `ConnectionString` | Data Source=agw.db | 所选数据库的连接字符串。SQLite 使用 `Data Source=...`，相对路径以 `<AgwDataDir>/database/` 为起点；PostgreSQL 使用 `Host=...;Port=5432;Database=...;Username=...;Password=...`，Host 不能为空。切换 Provider 时必须一起修改。 |
 
 ### 初始化、来源与反向代理
 
@@ -242,9 +245,11 @@ WriteTo 的 Name、Using 和 Enrich 是插件名称，不是固定枚举；上�
 Authorization: Bearer agw_<your-token>
 ```
 
+在 Server 所在主机上直接访问时，满足以下全部条件的请求会自动以管理员 `1001` 的身份通过认证，不需要密码或 API Key：来源是回环地址，没有任何转发请求头，访问的主机名是 `localhost` 或回环 IP，且请求不带认证请求头或登录 Cookie。经过反向代理或从其他主机访问的请求不满足这些条件。
+
 创建 API Key 时为它起一个便于识别的名称，并保存当时显示的完整值；之后不会再次显示。自动化程序可以从环境变量或机密配置中读取它。不再使用时撤销该 API Key。Server 会按创建者的身份判断它能访问哪些资源。多账号登录通过下一节的第三方登录配置；当前不提供角色、API Key 权限范围（scopes）或 JWT 的配置。
 
-密码和 API Key 都以用于验证的哈希值保存在数据库中，不保存原文。管理员认证信息位于 `setting` 表的 `auth` 分组，API Key 信息位于 `api_token` 表，由管理功能自动维护，无需在 appsettings 中填写。修改管理员密码后，各 Server 会检查新的登录状态版本；检查每秒进行一次，读取失败时不再沿用缓存的认证信息。忘记密码可先停止 Server，再运行 `agw-server auth reset-password`。
+密码和 API Key 都以用于验证的哈希值保存在数据库中，不保存原文。管理员认证信息位于 `setting` 表的 `auth` 分组，API Key 信息位于 `api_token` 表，由管理功能自动维护，无需在 appsettings 中填写。修改管理员密码后，各 Server 会检查新的登录状态版本；检查每秒进行一次，读取失败时不再沿用缓存的认证信息。忘记密码可先停止 Server，再运行 `agw-server auth reset-password`；分离部署使用 `agw-control-plane auth reset-password`。新密码需要 12–256 个字符，重置后已有的 Web 登录会话全部失效。
 
 ### 第三方登录
 
@@ -271,7 +276,7 @@ https://agw.example.com/api/auth/oidc/callback/company
 | `Providers:{id}:AuthorizationEndpoint` | 空 | Type 为 `OAuth2` 时必填，用户跳转到提供商的授权地址。 |
 | `Providers:{id}:TokenEndpoint` | 空 | Type 为 `OAuth2` 时必填，Server 换取访问令牌的地址。 |
 | `Providers:{id}:Issuer` | 空 | Type 为 `OAuth2` 时必填，用于标识账号来源，与账号编号一起确定用户身份。 |
-| `Providers:{id}:IdentitySource` | UserInfo | `UserInfo`：调用用户信息接口读取账号。`AccessToken`：从签名的 JWT 访问令牌读取账号。 |
+| `Providers:{id}:IdentitySource` | UserInfo | 仅用于 `OAuth2`。`UserInfo`：调用用户信息接口读取账号。`AccessToken`：从签名的 JWT 访问令牌读取账号。 |
 | `Providers:{id}:UserInfoEndpoint` | 空 | `IdentitySource` 为 `UserInfo` 时必填。 |
 | `Providers:{id}:AccessTokenIssuer` | 空 | `IdentitySource` 为 `AccessToken` 时必填，校验令牌的签发者。 |
 | `Providers:{id}:AccessTokenAudience` | 空 | `IdentitySource` 为 `AccessToken` 时必填，校验令牌的接收方。 |
@@ -279,9 +284,9 @@ https://agw.example.com/api/auth/oidc/callback/company
 | `Providers:{id}:ClientAuthMethod` | Post | OAuth2 换取令牌时提交客户端凭据的方式：`Post` 放在请求体，`Basic` 放在请求头。 |
 | `Providers:{id}:UsePkce` | false | OAuth2 是否启用 S256 校验。Type 为 `Oidc` 时固定启用。 |
 | `Providers:{id}:Scopes` | 空 | OAuth2 申请的权限范围，按数字下标配置，例如 `Scopes__0=read:user`。 |
-| `Providers:{id}:SubjectClaim` | sub | 账号编号对应的字段名称，例如 GitHub 使用 `id`。 |
-| `Providers:{id}:DisplayNameClaim` | name | 显示名称对应的字段名称，例如 GitHub 使用 `login`。 |
-| `Providers:{id}:EmailClaim` | email | 邮箱对应的字段名称。缺少显示名称或邮箱不影响登录。 |
+| `Providers:{id}:SubjectClaim` | sub | 仅用于 `OAuth2`，账号编号对应的字段名称，例如 GitHub 使用 `id`。`Oidc` 固定使用 `sub`。 |
+| `Providers:{id}:DisplayNameClaim` | name | 仅用于 `OAuth2`，显示名称对应的字段名称，例如 GitHub 使用 `login`。`Oidc` 固定使用 `name`。 |
+| `Providers:{id}:EmailClaim` | email | 仅用于 `OAuth2`，邮箱对应的字段名称；`Oidc` 固定使用 `email`。缺少显示名称或邮箱不影响登录。 |
 
 提供商 ID 使用小写字母、数字和连字符，最长 64 个字符，例如 `company`、`entra-id`。每个 ID 对应各自的回调地址，登记后不要再修改。
 

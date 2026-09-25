@@ -2,7 +2,7 @@
 title: "核心概念"
 description: "理解模型、Agent、Project、会话、工具、Agentflow 与 Job 如何配合。"
 weight: 15
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/start/concepts
 ---
 
@@ -41,7 +41,7 @@ Project 围绕一项工作组织目录、上下文与会话。例如，一个代
 
 **Chat** 是交互入口；**会话**保存连续交流的上下文与记录；**执行**是 Agent 或 Agentflow 处理输入的过程。
 
-在一次会话中，你可以连续发送多条消息。执行过程中可以查看回复和工具活动，处理审批或补充信息请求。页面断开连接不等于执行已经停止，重新连接后应查看实际状态。
+在一次会话中，你可以连续发送多条消息。执行过程中可以查看回复和工具活动，处理审批或补充信息请求。页面断开连接不等于执行已经停止，重新连接后应查看实际状态：会话列表中的图标会显示 **Running**（运行中）、**Last turn failed**（上一轮失败）或 **Last turn interrupted**（上一轮被中断）。
 
 使用方法见[Chat 与执行记录]({{< relref "/docs/guides/chat" >}})。
 
@@ -63,7 +63,7 @@ ToolBlock 是需要整体选择和管理的一组关联 Tool，用来保持行�
 
 Skill 围绕任务提供使用说明、资源和可选工具，指导 Agent 如何完成工作。例如，`agw-job` 提供任务管理说明及工具。
 
-Skill 支持 **Local（本地）**和 **Remote（远程）**两种来源：Local 上传到 AGW 服务端，Remote 从指定网址读取。根据内容由谁维护、是否需要随包提供资源来选择，具体格式和更新规则见 [Tools 与 Skills]({{< relref "/docs/guides/tools-skills" >}})。
+Skill 分为 **Built-in（内置）**、**Local（本地）**和 **Remote（远程）**三类。Built-in 由 AGW 模块提供，例如上面的 `agw-job`；用户可以添加 Local 或 Remote Skill：Local 上传到 AGW 服务端，Remote 从指定网址读取。根据内容由谁维护、是否需要随包提供资源来选择，具体格式和更新规则见 [Tools 与 Skills]({{< relref "/docs/guides/tools-skills" >}})。
 
 ### MCP
 

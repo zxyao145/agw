@@ -2,14 +2,14 @@
 title: "AGW 是什么"
 description: "理解 Agent、Project、Chat、Agentflow 与 Job 的关系。"
 weight: 10
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/start/overview
 ---
 
 AGW 是面向个人和小型研发团队的自托管 Agent 工作平台，也可作为 Agent 网关提供服务。它将自定义 Agent、Claude Code、Codex 和 Pi 等外部 Agent 放在统一界面中，围绕项目保留对话与执行记录。
 
-![AGW Desktop 对话界面：顶部选择 Project 和 Agent，底部输入消息。](/images/screenshots/desktop-chat.png)
-{caption="AGW Desktop 对话界面：顶部选择 Project 和 Agent，底部输入消息。"}
+![AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。](/images/screenshots/desktop-chat.png)
+{caption="AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。"}
 
 ## 核心概念
 

@@ -2,7 +2,7 @@
 title: "Agentflow"
 description: "Agent 负责判断与执行，Agentflow 负责编排路由、执行预先确定的步骤。"
 weight: 2
-lastmod: 2026-09-17
+lastmod: 2026-09-25
 translationKey: docs/features/agentflow
 ---
 
@@ -25,9 +25,9 @@ flowchart LR
 | 任务需要 | Agentflow 如何编排 |
 | --- | --- |
 | 按固定顺序处理 | Direct 把上一步结果交给下一步 |
-| 按条件选择路径 | Switch 按顺序检查条件，选择第一个匹配分支 |
-| 同时开展独立任务 | FanOut 分发到多个分支，或用 Concurrent 编排块并行调用成员 |
-| 等待分支结果 | FanInBarrier 等待同组来源到齐，再继续下游步骤 |
+| 按条件选择路径 | If / Else If 按顺序检查条件，只把消息交给第一个匹配的分支；都不匹配时走 Else |
+| 同时开展独立任务 | Fan Out 分发到多个分支，或用 Concurrent 编排块并行调用成员 |
+| 等待分支结果 | Fan-in Barrier 等待同组来源到齐，再继续下游步骤 |
 | 让人确认或补充信息 | Human Gate 暂停流程，等待人工回应 |
 
 需要判断内容含义、生成文字或调用工具的工作交给 Agent；步骤之间的连接和分支规则在 Agentflow 中配置。这样可以直接查看流程是否包含必要的审查与确认环节。
@@ -49,7 +49,7 @@ flowchart LR
 
 开始前，需要在运行环境中配置好 Codex、Claude Code 和 Git，并确认各节点访问同一个 Project 工作区。为实施、审查和提交节点分别写清职责，先用一项小改动验证完整路径，再测试返工路径。
 
-返工应通过 Human Gate 的人工回复和 Switch 条件表达，例如约定“继续修改”返回 Coding、“完成”进入提交；使用 Approval 模式时，应在批准时提交反馈。**拒绝审批会停止流程，不会自动进入返工分支。** 循环必须有明确的退出路径。
+返工应通过 Human Gate 的人工回复和 If / Else If 条件表达：把 Human Step Mode 设为 **Input**，由人在 Response 中回复，例如约定“继续修改”返回 Coding、“完成”进入提交。Approval 模式只提供 Reject 和 Approve 两个按钮，不收集文字回复，条件分支读不到人工反馈。**Input 模式的 Interrupt 和 Approval 模式的 Reject 都会停止流程，不会自动进入返工分支。** 循环必须有明确的退出路径。
 
 Agentflow 固定职责、顺序和人工决定的位置；测试是否通过、审查问题是否解决、最终 diff 是否符合预期，仍需要逐项核对。Checkpoint 的恢复条件见 [Agentflow 使用指南]({{< relref "/docs/guides/agentflows" >}})。
 
@@ -76,13 +76,13 @@ Agentflow 固定职责、顺序和人工决定的位置；测试是否通过、�
 
 1. 先准备并单独验证需要的 Agent，例如材料整理和文档审查。
 2. 打开 Agentflows 编辑器，连接 Input、两个 Agent 节点、Human Gate 和 Output。
-3. 为每个 Agent 节点写清任务，为 Human Gate 选择 Approval 并填写确认提示。
-4. 保存后在 Chat 中选择该 Agentflow，输入一段材料，检查节点执行顺序、人工确认和最终输出。
+3. 为每个 Agent 节点写清任务，在 Human Gate 的 Human Step Mode 中选择 Approval，并填写确认提示。
+4. 保存后在 Chat 中选择该 Agentflow，输入一段材料。Chat 会在当前回合中实时显示每个节点收到的输入，据此检查节点执行顺序、人工确认和最终输出。
 5. 基础路径通过后，再添加条件分支或并行处理，并验证各条路径。
 
 ## 确定的是流程规则
 
-预先确定步骤，不意味着模型每次都会给出相同答案。Agent 仍会根据输入作出判断；条件分支也会根据运行时结果选择路径。Human Gate 的审批被拒绝时，流程会停止。
+预先确定步骤，不意味着模型每次都会给出相同答案。Agent 仍会根据输入作出判断；条件分支也会根据运行时结果选择路径。在 Human Gate 中选择 Reject 或 Interrupt 时，流程会停止。
 
 Agentflow 还支持 Handoff 和 Magentic 等动态协作编排。若每一步都必须执行，应使用明确的顺序连线；若任务需要动态交接或规划，再选择相应编排块。
 

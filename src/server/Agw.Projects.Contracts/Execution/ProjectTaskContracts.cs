@@ -73,7 +73,7 @@ public interface IProjectTaskFacade
         CancellationToken cancellationToken = default
     );
 
-    Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+    Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
         IReadOnlyCollection<Guid> taskIds,
         CancellationToken cancellationToken = default
     );

@@ -2,7 +2,7 @@
 title: "Tool approval"
 description: "Decide whether to allow a tool to modify files or execute commands."
 weight: 50
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/tool-approval
 ---
 
@@ -39,6 +39,8 @@ flowchart TD
     C --> E["Reject: return the decision to the agent"]
 ```
 
-Full access does not bypass Plan restrictions or answer user-input requests and workflow HumanGates for you. Claude Code supports a native tool-approval bridge. The current Codex and Pi integrations support Full access only; the UI displays the modes supported by the target.
+Full access does not bypass Plan restrictions or answer user-input requests and workflow HumanGates for you. Claude Code supports a native tool-approval bridge. The current Codex and Pi integrations support Full access only. The permission menu always lists all three modes; modes the target does not support are disabled, with the reason shown below them.
+
+With **Only Stream Turn Result** turned on in Conversation Settings, external agents and custom agents with Generate Turn Summary enabled automatically decline tool approvals and questions that need a person, and the UI does not show those requests. Full access and automatic approvals from existing grants still apply. Turn the switch off when you need to approve calls one by one.
 
 [Check external agent permissions]({{< relref "/docs/guides/external-agents" >}}) · [Learn about workflow approvals]({{< relref "/docs/guides/agentflows" >}})

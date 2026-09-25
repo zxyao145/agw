@@ -2,7 +2,7 @@
 title: "自定义 Agent"
 description: "组合模型、指令与工具，让 Agent 按明确职责判断和执行。"
 weight: 1
-lastmod: 2026-09-17
+lastmod: 2026-09-25
 translationKey: docs/features/custom-agent
 ---
 
@@ -20,6 +20,7 @@ translationKey: docs/features/custom-agent
 | 指令 | 职责、任务范围、处理要求与输出格式 |
 | Tools 与 Skills | 可调用的操作，以及任务所需的指导与能力 |
 | 配置好的集成连接 | 可访问的外部服务或账号 |
+| Response Schema | 回复是否按 JSON Schema 返回结构化数据，详见 [JSON Schema 结构化响应]({{< relref "/docs/features/structured-output" >}}) |
 
 你可以为材料整理、代码解释和结果审查分别创建 Agent，在 Chat 中按任务选择，也可以把它们放进 Agentflow，作为流程中的执行步骤。
 

@@ -2,7 +2,7 @@
 title: "记忆：个人偏好与项目知识"
 description: "保存个人偏好与项目知识，选择适合项目的记忆存储方式。"
 weight: 30
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/memory
 ---
 
@@ -15,16 +15,16 @@ translationKey: docs/features/memory
 | User Memory | 个人偏好、常用表达方式、长期背景 | 当前用户，可跨 Project 使用 |
 | Project Memory | 项目约定、关键决策、工作说明 | 当前项目的工作上下文 |
 
-为 Agent 或 Project 配置相应的 Memory 能力后，可以让 Agent 保存需要复用的信息，并在后续会话中检查或更新。记忆需要明确维护，不等于自动永久保存和注入全部聊天记录。User Memory 按用户隔离；Project Memory 的范围还取决于项目及所选存储方式，共用工作目录的文件型记忆也会共用。
+为 Agent 或 Project 配置相应的 Memory 能力后，可以让 Agent 保存需要复用的信息，并在后续会话中检查或更新。记忆需要明确维护，不等于自动永久保存和注入全部聊天记录。User Memory 按用户隔离；Project Memory 的范围还取决于项目及所选存储方式，共用工作目录的文件型记忆也会共用。External Agent（Claude Code、Codex、Pi）只会读到已有的 User Memory（最多 50 条）作为上下文，没有记忆工具，不能保存或更新记忆；在 Agent 或 Project 上配置的 Project Memory 对它们不生效。
 
 ![AGW Desktop：User Memory、Project Memory 和 Background Agents 可在工具能力中配置。](/images/screenshots/tool-blocks.png)
 {caption="AGW Desktop：User Memory、Project Memory 和 Background Agents 可在工具能力中配置。"}
 
 ## Project Memory 的两种存储模式
 
-Project Memory 提供 **Database** 和 **Project Workspace (.agw/memory)** 两种存储方式。两者都让 Agent 使用同一组记忆工具来保存、查找、读取和更新项目知识，区别在于内容保存在哪里、如何共享及备份。
+Project Memory 提供 **Database** 和 **Project Workspace (Primary directory: .agw/memory)** 两种存储方式，默认使用 Project Workspace。两者都让 Agent 使用同一组记忆工具来保存、查找、读取和更新项目知识，区别在于内容保存在哪里、如何共享及备份。
 
-| 对比项 | Database（数据库，默认） | Project Workspace（文件系统） |
+| 对比项 | Database（数据库） | Project Workspace（文件系统，默认） |
 | --- | --- | --- |
 | 保存位置 | AGW 使用的数据库 | 主工作目录下的 `.agw/memory/` |
 | 记忆归属 | 按 Project ID 区分 | 按实际工作目录区分 |
@@ -43,7 +43,7 @@ Project Memory 提供 **Database** 和 **Project Workspace (.agw/memory)** 两�
 
 ### Project Workspace：保存为项目目录中的文件
 
-选择 **Project Workspace (.agw/memory)** 后，记忆保存在实际执行主机的主工作目录中。例如，Project 的 Workspace 为 `/work/demo`，记忆目录就是：
+选择 **Project Workspace (Primary directory: .agw/memory)** 后，记忆保存在实际执行主机的主工作目录中。例如，Project 的 Workspace 为 `/work/demo`，记忆目录就是：
 
 ```text
 /work/demo/
@@ -72,7 +72,7 @@ flowchart TD
 前提：已有可运行的自定义 Agent 和 Project；文件系统模式还需要执行主机能够读写主工作目录。
 
 1. 打开 Agent 或 Project 的 **Tools** 配置，选中 **Project Memory** ToolBlock。
-2. 在卡片展开后的 **Storage** 中选择 **Database** 或 **Project Workspace (.agw/memory)**，保存配置。希望项目内统一使用时，优先在 Project 中配置。
+2. 在卡片展开后的 **Storage** 中选择 **Database** 或 **Project Workspace (Primary directory: .agw/memory)**，保存配置。希望项目内统一使用时，优先在 Project 中配置。
 3. 在该 Project 的新回合中，让 Agent 保存一条明确的项目约定，例如：“将项目统一使用 UTC 的约定保存到 `time-conventions.md`，并添加简短说明。”写入操作仍受模式与审批设置约束。
 4. 新建同一 Project 下的会话，使用具有相应记忆能力且存储模式一致的 Agent，让它列出并读取这条记忆。应能读到之前保存的内容。
 5. 文件系统模式可同时检查 `.agw/memory/` 中的文件；数据库模式不会在那里生成文件，应通过记忆工具验证。

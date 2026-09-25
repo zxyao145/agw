@@ -2,7 +2,7 @@
 title: "Agentflow"
 description: "Build valid workflows with branches, joins, and checkpoints."
 weight: 60
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/guides/agentflows
 ---
 
@@ -17,6 +17,10 @@ Verify each agent independently before connecting it. Start with one path from i
 3. Add and connect Output, save, then select the Agentflow in Chat and run it.
 4. After the basic path works, introduce HumanGate, branches, or parallel nodes.
 
+The editor canvas has **Undo** and **Redo** buttons at its top right, also available as Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, or Ctrl+Y. Drag the dividers to resize the node palette and Inspector. With unsaved edits, the dialog shows **Unsaved changes** and asks **Discard unsaved changes?** before closing; unsaved drafts are not kept after the dialog closes.
+
+Each flow in the Agentflows list has an **Enabled** switch and Run, Edit, Copy, View Mermaid chart, and Delete actions. Run opens Chat in a side drawer using the built-in default Project, which suits a quick trial; to run it in another Project, select the Agentflow in Chat. Disabled agents and agentflows are not offered in the editor's selectors.
+
 ```mermaid
 flowchart LR
     I[Input] --> A[Agent]
@@ -24,7 +28,7 @@ flowchart LR
     H --> O[Output]
 ```
 
-HumanGate pauses for approval. Its approved reply can drive downstream predicates; rejection stops the workflow.
+HumanGate pauses for a person. Input mode shows a Response box with Submit and Interrupt buttons, and the submitted reply can drive downstream predicates. Approval mode offers only Approve and Reject. Interrupt and Reject both stop the workflow.
 
 ![AGW Desktop: an existing Agentflow in the editor, showing nodes, edges, the node palette, and inspector. The flow was not run.](/images/screenshots/agentflow-editor.png)
 {caption="AGW Desktop: an existing Agentflow in the editor, showing nodes, edges, the node palette, and inspector. The flow was not run."}
@@ -74,7 +78,7 @@ Insert Human Gate where a person needs to confirm a result or provide informatio
 | Human Step Mode | Choose Input to request information or Approval to request approval |
 | Human Prompt | Explain what to supply or approve, such as “Confirm the release scope and list modules to exclude” |
 
-Execution pauses until the request is handled through an interactive interface. Approval continues the flow, and the human reply can be tested by outgoing edge conditions. Rejection stops the flow. To return upstream for changes, use feedback supplied with approval and conditional routing.
+Execution pauses until the request is handled through an interactive interface. In Input mode, a person writes a reply in Response and clicks Submit; the flow continues, and outgoing edge conditions can test that reply. In Approval mode, Approve continues the flow without any text. Interrupt and Reject both stop the flow. To return upstream for changes, use Input mode with a human reply and conditional routing.
 
 For example, `Agent → Human Gate → Output` confirms a result. Conditions can also use agreed reply text to choose between revision and completion. Human nodes require a channel that can receive and answer interaction requests.
 
@@ -82,7 +86,7 @@ For example, `Agent → Human Gate → Output` confirms a result. Conditions can
 
 The Checkpoint node is called `CheckpointMarker` in code. Set a recognizable **Checkpoint Name**, such as “Research complete,” and place it where execution progress should be saved.
 
-After this node, the system saves a complete workflow checkpoint at the end of the corresponding execution stage. Resuming selects one specific saved occurrence, creates a new execution branch from that state, and removes conversation records after the saved boundary.
+After this node, the system saves a complete workflow checkpoint at the end of the corresponding execution stage. Chat shows each saved checkpoint as a card marked **Checkpoint**; click **Resume** on the card to restore that save. The button is disabled with “This checkpoint is unavailable” when it cannot be resumed. Resuming selects one specific saved occurrence, creates a new execution branch from that state, and removes conversation records after the saved boundary.
 
 Resume requires the same user, Project, conversation, and Agentflow, an unchanged flow definition, and no conflicting execution. InProcess checkpoints remain resumable only while the original runtime still holds the occurrence. Distributed mode persists checkpoints in PostgreSQL and supports recovery across disconnects or Server restarts. A checkpoint is neither a database backup nor a button to rerun any arbitrary node.
 
@@ -90,11 +94,11 @@ Resume requires the same user, Project, conversation, and Agentflow, an unchange
 
 Output emits arriving messages as flow results. A simple flow can connect `Agent → Output` directly.
 
-To turn several results into a conclusion, enable the node’s summary option, configure a summary Model Provider, and enter summary instructions. This makes an additional model call and appends a summary to the original results. Without it, the received messages pass through unchanged.
+A new Output node starts with **Generate Summary** on, and the flow cannot be saved until a **Summary Model Provider** is selected; turn the switch off when no summary is needed. With it on, an additional model call turns the results entering Output into a conclusion appended after them. Without it, the received messages pass through unchanged.
 
 ## Orchestration Blocks
 
-Blocks organize multiple participants into one step. Participants can be Agents or nested Agentflows. Add a block, use its member controls to add participants, then click **Open** to inspect members and configure their names and responsibilities. Parent-flow edges connect to the block, which schedules its members internally.
+Blocks organize multiple participants into one step. Participants can be Agents or nested Agentflows. The node palette lists the four blocks as **Concurrent Block**, **Handoff Group**, **GroupChat Room**, and **Magentic Team**. Add a block, use its member controls to add participants, then click **Open** to inspect members and configure their names and responsibilities. Parent-flow edges connect to the block, which schedules its members internally.
 
 | Block | Collaboration | Suitable tasks |
 | --- | --- | --- |
@@ -187,7 +191,7 @@ Human Gate example:
 }
 ```
 
-Use `input` to request information or `approval` for approval. Choose explicitly: the UI displays Input when unset, while the runtime defaults a missing mode to approval. `humanPrompt` is the text shown to the user.
+Use `input` to request information or `approval` for approval. When unset, both the editor and the runtime treat the mode as `approval`. `humanPrompt` is the text shown to the user.
 
 Checkpoint Name is stored as:
 
@@ -197,16 +201,19 @@ Checkpoint Name is stored as:
 
 The Output runtime configuration currently has one field, `enableSummary`, but Output does not show an Advanced Config JSON editor. Configure it directly through the **Generate Summary** controls in the Inspector:
 
-- `false` (default): pass through the messages entering the Output without an extra model call.
-- `true`: after the main flow succeeds, use the selected Model Provider to append a Markdown summary to the final output.
+- `true` (the value for a new Output node): after the main flow succeeds, use the selected Model Provider to append a Markdown summary to the final output.
+- `false`: pass through the messages entering the Output without an extra model call. The Server also treats a missing field as `false`.
 
-When summary generation is enabled, the workflow must have exactly one Output node, and the Output Inspector must have a valid **Summary Model Provider** selected. Output `Instructions`, when present, are additional requirements for the summary; the summary model receives the messages entering that Output.
+When summary generation is enabled, both conditions below must hold, or the editor's save button stays disabled:
 
-The Model Provider is workflow configuration. Adding `modelProviderId` or `summaryModelProviderId` to node JSON does not replace it. Existing flows still read the legacy `enableSummary` value; arbitrary additional keys do not add Output capabilities.
+1. The Output Inspector has a valid **Summary Model Provider** selected.
+2. The workflow has exactly one Output node; otherwise the editor shows “Summary requires exactly one Output node”.
+
+The summary model receives the messages entering that Output. The editor provides no Instructions field for Output. The Model Provider is workflow configuration; adding `modelProviderId` or `summaryModelProviderId` to node JSON does not replace it, and arbitrary additional keys do not add Output capabilities.
 
 ### Block members
 
-All four blocks use `participantNodeIds`: **canvas node IDs**, not Agent definition IDs or display names. The editor provides Members, Max Rounds, Manager, and the other block-specific controls, so orchestration blocks do not show an Advanced Config JSON editor. The JSON below documents the persisted shape and legacy compatibility; users do not need to enter it manually.
+All four blocks use `participantNodeIds`: **canvas node IDs**, not Agent definition IDs or display names. The editor provides Members, Max Rounds, Manager, and the other block-specific controls, so orchestration blocks do not show an Advanced Config JSON editor. The JSON below documents the shape those controls save; users do not need to enter it manually.
 
 Replace the example IDs `node-a` and `node-b` with real Agent or Workflow as Agent node IDs in the current graph. Concurrent requires at least one member; Handoff, Group Chat, and Magentic require at least two.
 
@@ -261,34 +268,34 @@ Members take turns in array order. Set `maxRounds` to a positive integer limitin
 
 ### Before saving
 
-Check that members and values are correct, then save and verify with a small task. Advanced Config JSON is not a script entry point; arbitrary keys do not add capabilities. Existing JSON configuration is still read for compatibility, while the Inspector controls are the supported editing surface.
+Check that member IDs exist, value types are correct, and each setting belongs to the current node. Advanced Config JSON is not a script entry point; arbitrary keys do not add capabilities. After editing JSON, check that the Inspector form shows what you expect, then save and verify with a small task.
 
-Branch predicates belong to an **edge’s** Condition JSON. Switch ordering uses the edge configuration field `switchCaseOrder`. Neither belongs in node Advanced Config JSON.
+Branch predicates go in an **edge’s** **Predicate JSON**. If / Else If edges do not show Advanced Config JSON; set branch order with **Move branch up** and **Move branch down**. Neither belongs in node Advanced Config JSON.
 
 ## Routing and constraints
 
 Exactly one Input must have ID `input` and no incoming edges. Runtime-visible nodes must be reachable from it. Node and edge IDs must be unique, with valid references.
 
-Connections determine which steps run after a node finishes:
+Connections determine which steps run after a node finishes. Choose one in the edge's **Edge Type**:
 
 | Routing | Meaning | Design consideration |
 | --- | --- | --- |
 | Direct | Continue to the next step | Use for a fixed sequence |
-| FanOut | Send input to several branches | Branches should process the input independently |
-| Switch | Choose the first matching condition in order | An optional Default handles unmatched conditions |
-| FanInBarrier | Wait for every source in the group before continuing | Every required branch must be able to arrive |
+| Fan Out | Send input to several branches; every branch whose predicate matches runs | Branches should process the input independently |
+| If / Else If | Check conditions in order and send the message only to the first match | Add an Else edge to handle unmatched conditions |
+| Fan-in Barrier | Wait for every source in the group before continuing | Every required branch must be able to arrive |
 
-Do not mix Direct, FanOut, and Switch from one source. For example, a Switch selects only one branch; a later barrier waiting for all branches may never receive everything it needs.
+Do not mix Direct, Fan Out, and If / Else If from one source. For example, If / Else If selects only one branch; a later barrier waiting for all branches may never receive everything it needs.
 
 Controlled cycles are supported when graph safety rules are met. Verify exit conditions before adding nested workflows, orchestration blocks, and checkpoints so failures remain easy to locate.
 
 ## Verify and inspect history
 
-Test success, unmatched conditions, human rejection, and waiting paths separately. CheckpointMarker identifies a full MAF checkpoint boundary; recovery is not an arbitrary restart at a chosen node. Keep a working flow before editing, and inspect execution records for node attribution.
+Test success, unmatched conditions, human rejection, and waiting paths separately. While the flow runs, Chat shows the input each node receives as its own input bubble in the current turn, keeping the upstream node attribution, so you can check execution order. CheckpointMarker identifies a full MAF checkpoint boundary; recovery is not an arbitrary restart at a chosen node. Keep a working flow before editing, and inspect execution records for node attribution.
 
 ## Implementation and references
 
-- [Graph contract](https://github.com/zxyao145/agw/blob/main/docs/6.Agentflow.md)
+- [Graph contract](https://github.com/zxyao145/agw/blob/main/docs/approachs/2.Agentflow.md)
 
 - [Node and block configuration](https://github.com/zxyao145/agw/blob/main/src/clients/packages/agents/src/ui-web/pages/agentflows/components/visual-agentflow-builder.tsx)
 - [Orchestration block execution](https://github.com/zxyao145/agw/tree/main/src/server/Agw.Agents.Execution/Agentflows/Workflows/Builders)

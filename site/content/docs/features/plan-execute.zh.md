@@ -2,13 +2,13 @@
 title: "Plan 与 Execute 模式"
 description: "先分析方案，再执行操作，把讨论与行动分开。"
 weight: 40
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/plan-execute
 ---
 
 ## 先想清楚，再动手
 
-准备修改代码或执行复杂任务时，可以先让 Agent 分析现状和提出方案，再决定是否进入执行阶段。配置 Mode ToolBlock 的自定义 Agent 支持 Plan 与 Execute 两种工作模式。
+准备修改代码或执行复杂任务时，可以先让 Agent 分析现状和提出方案，再决定是否进入执行阶段。在自定义 Agent 或 Project 上配置 Mode ToolBlock 后，自定义 Agent 支持 Plan 与 Execute 两种工作模式；配置在 Project 上时，该 Project 中运行的自定义 Agent 都会获得这项能力。
 
 | 模式 | 适合做什么 | 工具行为 |
 | --- | --- | --- |
@@ -23,9 +23,9 @@ translationKey: docs/features/plan-execute
 
 ## 开始使用
 
-1. 为自定义 Agent 配置 Mode ToolBlock 和任务所需工具。
-2. 先要求 Agent 在 Plan 模式分析问题，确认当前模式后查看方案。
-3. 确认方案后切换到 Execute；Agent 请求切换模式时，在界面中回应确认。
+1. 在自定义 Agent 或 Project 的 **Tools** 中配置 Mode ToolBlock 和任务所需工具。
+2. 新回合默认处于 Execute。在 Chat 输入框点击 **+**，选择 **Plan mode**，输入框中出现 **Plan** 标记后，再要求 Agent 分析问题。
+3. Agent 提出的方案显示为 **Plan** 卡片，可以复制。确认方案后点击 Plan 标记上的 × 回到 Execute；Agent 请求切换模式时，在界面中回应确认。
 4. 检查实际改动和执行结果，必要时回到 Plan 继续讨论。
 
 ```mermaid

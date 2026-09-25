@@ -2,7 +2,7 @@
 title: "Split Control/Data Plane deployment"
 description: "Share PostgreSQL, keys, and workspaces, and route requests by Host role."
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/operations/split
 ---
 
@@ -17,6 +17,8 @@ This page assumes familiarity with containers, databases, and reverse proxies. P
 | Control Plane | Setup, Web, management APIs, Job scheduling |
 | Data Plane | SignalR Execution, A2A, durable execution workers |
 | Standalone | Both roles combined for a single-server setup |
+
+Split deployment uses Distributed execution. In this mode, turns that run an External Agent (Claude Code, Codex, or Pi) directly in Chat fail with “Distributed execution currently supports System Agents only.” To use those external agents directly, choose Standalone with InProcess execution.
 
 Split deployments require PostgreSQL for the database and locks, plus Distributed execution on both roles. SQLite or in-memory locks cannot replace cross-node coordination.
 
@@ -33,7 +35,7 @@ This is an environment configuration fragment for both roles. An empty lock conn
 ## Startup and routing
 
 1. Configure the database, both Hosts, shared keys, and directories using the cluster Compose reference.
-2. Start Control Plane first, initialize it, and confirm readiness.
+2. Start Control Plane first, initialize it, and confirm readiness: `GET /api/health/ready` returns 503 until the Host is initialized and can reach its database, then 200; `GET /api/health/live` only shows that the process is running. Neither requires sign-in.
 3. Start Data Plane, then add replicas as needed.
 4. Route `/api/hubs/exec`, `/a2a/*`, and `/.well-known/agents.json` to Data Plane; route other application paths to Control Plane.
 
@@ -47,7 +49,7 @@ Both approaches need a shared client entry point. The Nginx section shows which 
 
 ## Kubernetes YAML examples
 
-The repository’s [deploy/k8s](https://github.com/zxyao145/agw/tree/main/deploy/k8s) directory provides a **local, single-node kind** example. It uses separate Control Plane and Data Plane Deployments, an external PostgreSQL database, and NodePorts that can connect to the Nginx configuration above. These files do not create PostgreSQL or an Ingress Controller.
+The repository’s [deploy/k8s](https://github.com/zxyao145/agw/tree/main/deploy/k8s) directory provides a **local, single-node kind** example. It uses separate Control Plane and Data Plane Deployments, an external PostgreSQL database, and NodePorts that can connect to the Nginx configuration below. These files do not create PostgreSQL or an Ingress Controller.
 
 | File | Purpose |
 | --- | --- |
@@ -251,13 +253,13 @@ kubectl get pods,services,pvc
 
 `rollout status` confirms the Deployment rollout, not application initialization. In this example, Control Plane’s `Setup__AdminPassword` triggers first-run initialization. Check logs and the sign-in page before starting Data Plane. Existing database authentication settings are not overwritten by this initial password.
 
-With the kind mappings above, the earlier Nginx upstreams can use `127.0.0.1:30816` and `127.0.0.1:30820`. Nginx inside the cluster can instead use `agw-control-plane:30816` and `agw-data-plane:30820` in the same namespace. After checking that the PVC is Bound and Pods are running, verify login, execution connections, and which nodes receive requests.
+With the kind mappings above, the upstreams in the Nginx example below can use `127.0.0.1:30816` and `127.0.0.1:30820`. Nginx inside the cluster can instead use `agw-control-plane:30816` and `agw-data-plane:30820` in the same namespace. After checking that the PVC is Bound and Pods are running, verify login, execution connections, and which nodes receive requests.
 
 Do not run `kubectl apply -f deploy/k8s/`: the kind Cluster file is input to `kind`, not a Kubernetes API resource. Changing kind port or mount mappings requires recreating the cluster; back up data first. See the [local kind deployment guide](https://github.com/zxyao145/agw/blob/main/deploy/k8s/README.md) for the complete source instructions.
 
 ## Nginx configuration example
 
-This example follows the routing structure of the local `agw.conf`: Nginx provides one entry point, Control Plane listens on `30816`, and Data Plane on `30820`. Replace these example ports with the actual Host listeners. For separate hosts or containers, replace `127.0.0.1` with addresses reachable from Nginx.
+In this example, Nginx provides one entry point, Control Plane listens on `30816`, and Data Plane on `30820`, matching the kind example above; the repository's `deploy/nginx.split.conf.example` and cluster Compose example use `30817` for Data Plane. Replace these example ports with the actual Host listeners. For separate hosts or containers, replace `127.0.0.1` with addresses reachable from Nginx.
 
 ### Web hosted by Control Plane
 
@@ -343,7 +345,7 @@ The access log uses `$uri` without query parameters. Its upstream field helps id
 
 ### A separate Web service
 
-If Web runs separately on `3001`, as in the reference configuration, retain the Data Plane routes and common proxy settings above. Add the `agw_web` upstream and the management routes below, replacing the original `location /`. Port `3001` is the repository’s Web development port; use your Web service’s actual port in deployment.
+If Web runs separately on `3001`, retain the Data Plane routes and common proxy settings above. Add the `agw_web` upstream and the management routes below, replacing the original `location /`. Port `3001` is the repository’s Web development port; use your Web service’s actual port in deployment.
 
 ```nginx
 # Add inside http {}, alongside the other upstream blocks.

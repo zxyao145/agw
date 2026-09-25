@@ -2,7 +2,7 @@
 
 ## Architecture
 
-Architecture rules are maintained in [AGENTS.md](AGENTS.md) and [docs/rules.md](docs/rules.md); do not duplicate them here. Reusable implementation pitfalls live in [.claude/learning-log.md](.claude/learning-log.md).
+Architecture rules are maintained in [AGENTS.md](AGENTS.md), [Module Organization](docs/human/4.module-organization.md), and [Domain Architecture](docs/human/5.domain-architecture.md); do not duplicate them here. Reusable implementation pitfalls live in [.claude/learning-log.md](.claude/learning-log.md).
 
 ## API Design
 

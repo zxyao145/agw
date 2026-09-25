@@ -67,6 +67,7 @@ import { createGraphLayout } from "./autoLayout";
 import {
   isPlainObject,
   readConfigJson,
+  readHumanStepMode,
   readString,
   readStringArray,
   updateConfigJson,
@@ -2320,7 +2321,7 @@ function HumanGateConfigInspector({
       <div className="space-y-2">
         <Label>Human Step Mode</Label>
         <Select
-          value={readString(config.humanMode) || "input"}
+          value={readHumanStepMode(config)}
           onValueChange={(value) => setConfig({ humanMode: value })}
         >
           <SelectTrigger>

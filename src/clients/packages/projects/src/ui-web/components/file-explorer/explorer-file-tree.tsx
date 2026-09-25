@@ -494,7 +494,7 @@ function GitChangeGroupSection({
           <span className="text-sm text-muted-foreground">{formatFileCount(group.fileCount)}</span>
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="ml-4" >
+      <CollapsibleContent className="ml-4">
         {group.items.map((item) => (
           <FileTreeNode
             projectId={projectId}

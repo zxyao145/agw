@@ -1,6 +1,6 @@
 title: AGW
 baseURL: http://localhost:1313/
-defaultContentLanguage: zh
+defaultContentLanguage: en
 defaultContentLanguageInSubdir: false
 enableRobotsTXT: true
 timeZone: UTC
@@ -10,7 +10,7 @@ languages:
   zh:
     label: 简体中文
     locale: zh-CN
-    weight: 1
+    weight: 2
     hasCJKLanguage: true
     params:
       description: 自托管的 Agent 工作平台。连接模型、工具与项目，让对话、工作流和定时任务在同一处运行。
@@ -21,7 +21,7 @@ languages:
   en:
     label: English
     locale: en-US
-    weight: 2
+    weight: 1
     params:
       description: A self-hosted workspace for agents. Connect models, tools, and projects to run conversations, workflows, and scheduled jobs in one place.
     menus:

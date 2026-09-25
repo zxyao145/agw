@@ -27,7 +27,7 @@ public class JobLogContractTests
             .Select(property => property.Name)
             .ToArray();
 
-        Assert.Contains(nameof(JobLogResponse.ContextId), propertyNames);
+        Assert.Contains(nameof(JobLogResponse.ConversationId), propertyNames);
         Assert.DoesNotContain("TaskId", propertyNames);
     }
 }

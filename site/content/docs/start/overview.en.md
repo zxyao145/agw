@@ -2,14 +2,14 @@
 title: "What is AGW?"
 description: "Understand agents, projects, chat, agentflows, and jobs."
 weight: 10
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/start/overview
 ---
 
 AGW is a self-hosted agent workspace for individuals and small engineering teams. It can also serve as an agent gateway. A shared interface brings together custom agents and external agents such as Claude Code, Codex, and Pi, with conversations and execution records organized around projects.
 
-![AGW Desktop chat: select a Project and Agent at the top, then enter a message below.](/images/screenshots/desktop-chat.png)
-{caption="AGW Desktop chat: select a Project and Agent at the top, then enter a message below."}
+![AGW Desktop chat: select a Project and Agent, then enter a message.](/images/screenshots/desktop-chat.png)
+{caption="AGW Desktop chat: select a Project and Agent, then enter a message."}
 
 ## Core concepts
 

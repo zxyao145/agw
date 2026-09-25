@@ -2,7 +2,7 @@
 title: "Memory: preferences and project knowledge"
 description: "Save personal preferences and project knowledge, and choose where project memory lives."
 weight: 30
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/memory
 ---
 
@@ -15,16 +15,16 @@ A conversation may end while working preferences and project knowledge remain us
 | User Memory | Personal preferences, writing conventions, lasting background | The current user, across Projects |
 | Project Memory | Project conventions, decisions, working notes | The project’s working context |
 
-Configure the appropriate Memory capability on an Agent or Project, then ask the agent to save information and check or update it in later conversations. Memory needs deliberate maintenance; it does not automatically retain and inject every chat message forever. User Memory is isolated by user. Project Memory scope also depends on the project and storage choice; filesystem memory is shared when workspaces are shared.
+Configure the appropriate Memory capability on an Agent or Project, then ask the agent to save information and check or update it in later conversations. Memory needs deliberate maintenance; it does not automatically retain and inject every chat message forever. User Memory is isolated by user. Project Memory scope also depends on the project and storage choice; filesystem memory is shared when workspaces are shared. External agents (Claude Code, Codex, Pi) only receive existing User Memory entries (up to 50) as read-only context. They get no memory tools, so they cannot save or update memory, and Project Memory configured on the Agent or Project does not apply to them.
 
 ![AGW Desktop: configure User Memory, Project Memory, and Background Agents as tool capabilities.](/images/screenshots/tool-blocks.png)
 {caption="AGW Desktop: configure User Memory, Project Memory, and Background Agents as tool capabilities."}
 
 ## Two storage modes for Project Memory
 
-Project Memory offers **Database** and **Project Workspace (.agw/memory)** storage. Both expose the same tools for saving, finding, reading, and updating project knowledge. They differ in where content lives, how it is shared, and how you back it up.
+Project Memory offers **Database** and **Project Workspace (Primary directory: .agw/memory)** storage; Project Workspace is the default. Both expose the same tools for saving, finding, reading, and updating project knowledge. They differ in where content lives, how it is shared, and how you back it up.
 
-| Comparison | Database (default) | Project Workspace (filesystem) |
+| Comparison | Database | Project Workspace (filesystem, default) |
 | --- | --- | --- |
 | Location | The database used by AGW | `.agw/memory/` under the primary workspace |
 | Scope | Project ID | The actual workspace directory |
@@ -43,7 +43,7 @@ This mode suits deployments that manage and back up data centrally. Follow AGW�
 
 ### Project Workspace: files in the project directory
 
-With **Project Workspace (.agw/memory)**, memory lives in the primary workspace on the execution host. For example, a Workspace of `/work/demo` produces this memory directory:
+With **Project Workspace (Primary directory: .agw/memory)**, memory lives in the primary workspace on the execution host. For example, a Workspace of `/work/demo` produces this memory directory:
 
 ```text
 /work/demo/
@@ -72,7 +72,7 @@ flowchart TD
 Prerequisites: a working custom Agent and Project. Filesystem mode also requires the execution host to be able to read and write the primary workspace.
 
 1. Open **Tools** on the Agent or Project and select the **Project Memory** ToolBlock.
-2. In the expanded card’s **Storage** selector, choose **Database** or **Project Workspace (.agw/memory)** and save. Prefer configuring it on the Project when you want a consistent project-wide choice.
+2. In the expanded card’s **Storage** selector, choose **Database** or **Project Workspace (Primary directory: .agw/memory)** and save. Prefer configuring it on the Project when you want a consistent project-wide choice.
 3. In a new turn in that Project, ask the agent to save a concrete convention, such as: “Save our project convention to use UTC in `time-conventions.md`, with a short description.” Writes remain subject to mode and approval settings.
 4. Open a new conversation in the same Project with an agent that has the memory capability and matching storage mode. Ask it to list and read the entry. It should retrieve the saved content.
 5. In filesystem mode, you can also inspect the files in `.agw/memory/`. Database mode creates no files there; verify through memory tools instead.

@@ -92,8 +92,7 @@ public class ApiResultMetadataTests
         var ruleFiles = new[]
         {
             Path.Combine(repoRoot, "AGENTS.md"),
-            Path.Combine(repoRoot, "CLAUDE.md"),
-            Path.Combine(repoRoot, "docs", "rules.md"),
+            Path.Combine(repoRoot, "docs", "human", "6.repository-constraint.md"),
         };
 
         foreach (var ruleFile in ruleFiles)

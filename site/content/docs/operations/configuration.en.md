@@ -2,7 +2,7 @@
 title: "Configuration and authentication"
 description: "Understand configuration precedence, deployment defaults, and API Key behavior."
 weight: 30
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/operations/configuration
 ---
 
@@ -40,7 +40,7 @@ For local use or a single Server, start with this default combination. These key
 | Full key | Default | Meaning |
 | --- | --- | --- |
 | `Database:Provider` | `sqlite` | Use a local database file |
-| `Database:ConnectionString` | `Data Source=agw.db` | SQLite file location |
+| `Database:ConnectionString` | `Data Source=agw.db` | SQLite file location; relative paths start from `<AgwDataDir>/database/`, so the default file is `<AgwDataDir>/database/agw.db` |
 | `Execution:Provider` | `InProcess` | Run tasks directly in the current Server |
 | `DistributedLock:Provider` | Unset | Automatically use an in-process lock with SQLite |
 | `DistributedLock:ConnectionString` | Empty | In-process locks need no database connection |
@@ -72,6 +72,9 @@ All fields below use the prefix `Execution:`.
 | Setting | Default | Purpose and accepted values |
 | --- | --- | --- |
 | `Provider` | InProcess | `InProcess`: execute in the current process. `Distributed`: coordinate durable execution through PostgreSQL, with workers claiming work. Distributed requires PostgreSQL for both the database and locks. |
+| `TurnBroadcastRetentionSeconds` | 300 | Seconds this Server keeps a finished turn's replay buffer in memory. Clients that reconnect, or retry the same accepted turn, within this window receive the full replay. |
+
+In InProcess mode, turns exist only inside the current Server process. When the Server restarts, running turns left by the previous process end as Interrupted and do not resume; use Distributed for recovery across restarts.
 
 The executable determines the Host role: Standalone combines both planes, Control Plane manages and schedules, and Data Plane executes. Both split Hosts require PostgreSQL, Distributed execution, and PostgreSQL locks. This setting does not change one Host executable into another role.
 
@@ -98,10 +101,10 @@ All fields below use the prefix `Execution:Distributed:`.
 | --- | --- | --- |
 | `WorkerPollingMilliseconds` | 250 | Polling interval for pending work in milliseconds. Lower values reduce claiming latency but increase database queries. |
 | `MaxConcurrentExecutions` | 4 | Maximum concurrent executions per execution Server, not a cluster-wide total. |
-| `RecoveryProbeSeconds` | 30 | Seconds of inactivity before recovery of a Running record may be probed. The distributed lock still decides ownership; this is not a task timeout. |
-| `LockAcquireTimeoutMilliseconds` | 500 | Maximum wait to acquire an execution lock, in milliseconds. |
+| `LeaseSeconds` | 30 | Execution lease duration in seconds. The Server that claims a run holds the lease; if it expires without renewal, another Server may take over the run. Long runs keep renewing, so they are not taken over merely for exceeding 30 seconds. |
+| `LeaseRenewSeconds` | 10 | How often the lease holder renews, in seconds; must be shorter than `LeaseSeconds`. |
 
-All of these fields must be positive integers and are used for worker coordination in Distributed mode.
+All of these fields must be positive integers, and `LeaseSeconds` must exceed `LeaseRenewSeconds`, or the Server fails at startup. They are used for worker coordination in Distributed mode.
 
 ### Execution events and replay
 
@@ -109,13 +112,13 @@ All fields below use the prefix `Execution:Distributed:EventStream:`.
 
 | Setting | Default | Purpose and accepted values |
 | --- | --- | --- |
-| `Provider` | Postgres | `Postgres`: store and replay events in PostgreSQL without Redis. `Redis`: store and replay events through Redis Streams. Redis does not replace the PostgreSQL database, task records, or locks. |
+| `Provider` | Postgres | Events always commit to PostgreSQL first. `Postgres`: read them from PostgreSQL only, without Redis. `Redis`: also project committed events to a Redis Stream; reads prefer Redis and fill any missing part from PostgreSQL, including expired entries or times when Redis is unavailable. Task records and locks always need PostgreSQL. |
 | `ReadPollingMilliseconds` | 250 | Delay between reads when no new events exist, in milliseconds; must be positive. |
 | `ReadBatchSize` | 100 | Maximum events per read; must be positive. |
 | `WriteIntervalMilliseconds` | 250 | Batch-write delay measured from the first pending event, in milliseconds. `0` writes immediately; negative values are invalid. |
 | `WriteBatchSize` | 100 | Event-count threshold for a write batch; must be positive. |
 | `Redis:ConnectionString` | Empty | Required when Redis is selected. Related Servers must use the same Redis service, for example `redis:6379,password=...`. |
-| `Redis:StreamTtlMinutes` | 1440 | Redis Stream retention in minutes, defaulting to 24 hours; must be positive when Redis is selected. Expired events can no longer be replayed from that Stream. |
+| `Redis:StreamTtlMinutes` | 1440 | Redis Stream retention in minutes, defaulting to 24 hours; must be positive when Redis is selected. Expired entries are read from PostgreSQL instead. |
 
 
 
@@ -142,7 +145,7 @@ All fields below use the prefix `Database:`.
 | Setting | Default | Purpose and accepted values |
 | --- | --- | --- |
 | `Provider` | sqlite | `sqlite`: a local SQLite file for standalone use. `postgres`: a PostgreSQL service supporting split and distributed deployment. These are the two supported values. |
-| `ConnectionString` | Data Source=agw.db | Connection string for the selected database. SQLite uses `Data Source=...`; PostgreSQL uses `Host=...;Port=5432;Database=...;Username=...;Password=...` with a nonempty Host. Change it together with Provider. |
+| `ConnectionString` | Data Source=agw.db | Connection string for the selected database. SQLite uses `Data Source=...`, with relative paths starting from `<AgwDataDir>/database/`; PostgreSQL uses `Host=...;Port=5432;Database=...;Username=...;Password=...` with a nonempty Host. Change it together with Provider. |
 
 
 
@@ -236,9 +239,11 @@ Remote Web signs in with the administrator password and receives a Cookie. Deskt
 Authorization: Bearer agw_<your-token>
 ```
 
+A request made directly on the Server host is authenticated automatically as administrator `1001`, without a password or API Key, when all of these hold: it comes from a loopback address, carries no forwarding headers, targets `localhost` or a loopback IP as the host name, and carries no authentication header or sign-in Cookie. Requests through a reverse proxy or from another host do not qualify.
+
 API Key plaintext is returned only on creation. Store and supply it through the environment or Secrets, and revoke unused keys. Authentication uses the key creator’s stable ID. Multiple login accounts come from the third-party sign-in configuration below; there are currently no configuration keys for roles, API Key scopes, or JWT.
 
-Administrator password hashes, initialization state, and session versions are stored in the database’s global `auth` group in `setting`; API Key hashes are in `api_token`. Management features maintain these values; they are not appsettings entries. Password changes update the session version. Hosts refresh every second and discard cached credentials if refresh fails. To recover a forgotten password, stop Server and run `agw-server auth reset-password`.
+Administrator password hashes, initialization state, and session versions are stored in the database’s global `auth` group in `setting`; API Key hashes are in `api_token`. Management features maintain these values; they are not appsettings entries. Password changes update the session version. Hosts refresh every second and discard cached credentials if refresh fails. To recover a forgotten password, stop Server and run `agw-server auth reset-password`; split deployments use `agw-control-plane auth reset-password`. The new password needs 12–256 characters, and resetting it invalidates all existing Web sessions.
 
 ### Third-party sign-in
 
@@ -265,7 +270,7 @@ The following keys are all prefixed with `Auth:Oidc:`, where `{id}` is the ID yo
 | `Providers:{id}:AuthorizationEndpoint` | Empty | Required for `OAuth2`: where the user authorizes AGW. |
 | `Providers:{id}:TokenEndpoint` | Empty | Required for `OAuth2`: where Server exchanges the authorization code. |
 | `Providers:{id}:Issuer` | Empty | Required for `OAuth2`: identifies the account source and, with the account ID, determines the user. |
-| `Providers:{id}:IdentitySource` | UserInfo | `UserInfo` reads the account from the user information endpoint. `AccessToken` reads it from a signed JWT access token. |
+| `Providers:{id}:IdentitySource` | UserInfo | `OAuth2` only. `UserInfo` reads the account from the user information endpoint. `AccessToken` reads it from a signed JWT access token. |
 | `Providers:{id}:UserInfoEndpoint` | Empty | Required when `IdentitySource` is `UserInfo`. |
 | `Providers:{id}:AccessTokenIssuer` | Empty | Required when `IdentitySource` is `AccessToken`: validates who issued the token. |
 | `Providers:{id}:AccessTokenAudience` | Empty | Required when `IdentitySource` is `AccessToken`: validates the intended recipient. |
@@ -273,9 +278,9 @@ The following keys are all prefixed with `Auth:Oidc:`, where `{id}` is the ID yo
 | `Providers:{id}:ClientAuthMethod` | Post | How OAuth2 client credentials are sent: `Post` in the request body, `Basic` in the header. |
 | `Providers:{id}:UsePkce` | false | Enables S256 for OAuth2. `Oidc` always uses it. |
 | `Providers:{id}:Scopes` | Empty | OAuth2 scopes, configured by index, such as `Scopes__0=read:user`. |
-| `Providers:{id}:SubjectClaim` | sub | Field holding the account ID; GitHub uses `id`. |
-| `Providers:{id}:DisplayNameClaim` | name | Field holding the display name; GitHub uses `login`. |
-| `Providers:{id}:EmailClaim` | email | Field holding the email address. A missing display name or email does not block sign-in. |
+| `Providers:{id}:SubjectClaim` | sub | `OAuth2` only: field holding the account ID; GitHub uses `id`. `Oidc` always uses `sub`. |
+| `Providers:{id}:DisplayNameClaim` | name | `OAuth2` only: field holding the display name; GitHub uses `login`. `Oidc` always uses `name`. |
+| `Providers:{id}:EmailClaim` | email | `OAuth2` only: field holding the email address; `Oidc` always uses `email`. A missing display name or email does not block sign-in. |
 
 Provider IDs use lowercase letters, digits, and hyphens, up to 64 characters, such as `company` or `entra-id`. Each ID owns its callback URL; keep it stable after registration.
 

@@ -2,7 +2,7 @@
 title: "安装与配置 Server"
 description: "选择安装方式，完成 Server 初始化并连接客户端。"
 weight: 20
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/start/install
 aliases: ["/docs/start/setup/"]
 ---
@@ -25,12 +25,14 @@ AGW 需要一个持续运行的 Server，以及用来操作它的客户端。首
 2. 按平台选择 Full 或 Client。Windows、Ubuntu 当前提供 x64；macOS 提供 x64 和 arm64。
 3. Full 首次启动时完成 Server 的初始化；Client 连接现有 Server。
 
-Full 安装包含 Desktop Client 以及当前用户级 Server 后台服务；关闭 Desktop 不会自动停止 Server。安装包当前未签名或公证。
+Full 和 Client 使用相同的应用标识，只能安装其中一种。Full 安装包含 Desktop Client 以及当前用户级 Server 后台服务；关闭 Desktop 不会自动停止 Server。安装包当前未签名或公证。
 
-![AGW Desktop 对话界面：顶部选择 Project 和 Agent，底部输入消息。](/images/screenshots/desktop-chat.png)
-{caption="AGW Desktop 对话界面：顶部选择 Project 和 Agent，底部输入消息。"}
+![AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。](/images/screenshots/desktop-chat.png)
+{caption="AGW Desktop 对话界面：选择 Project 和 Agent 后输入消息。"}
 
-## Docker
+## Docker 与 Portable Server
+
+Docker 镜像随版本发布到 `ghcr.io/zxyao145/agw`。Portable Server 不随 Release 提供，需要在仓库根目录自行构建，例如 `PUBLISH_MODE=portable APP_VERSION=0.1.0 RIDS=linux-x64 ./publish.sh`，再按单机部署文档启动 `agw-server serve`。
 
 根据部署需求选择以下方式：
 
@@ -51,8 +53,8 @@ Docker 镜像不包含 Claude Code、Codex、Pi 等任何外部 Agent；如需�
 
 ### 首次初始化
 
-1. 本机打开 `http://localhost:30816/setup`。Docker 或 Portable Server 包含 Web；源码模式也可先完成服务端初始化。
-2. 设置管理员密码。通过域名或转发访问时，还需要启动日志中的一次性 Setup Code；直接本机访问不需要该码。
+1. 打开 Server 的 `/setup` 页面，例如本机的 `http://localhost:30816/setup`。Docker 或 Portable Server 包含 Web；源码模式也可先完成服务端初始化。
+2. 设置管理员密码。只有在 Server 所在主机上直接用 `localhost` 或回环地址访问时，才不需要 Setup Code。通过域名、反向代理或其他主机访问，以及访问 Docker 容器映射的端口时，还需要填写启动日志中的一次性 Setup Code。
 3. 提交后等待数据库初始化完成，页面会进入应用，无需再次重启。
 
 初始化成功后，密码和登录设置会保存在数据库中，后续启动无需重复设置。需要备份或迁移时，请一并保存数据库和加密密钥，参见[备份与升级]({{< relref "/docs/operations/backup" >}})。
@@ -62,11 +64,11 @@ Docker 镜像不包含 Claude Code、Codex、Pi 等任何外部 Agent；如需�
 
 ### 连接客户端
 
-- 远程 Web 使用管理员密码登录，获得会话 Cookie。Server 配置了身份提供商时，登录页还会显示第三方账号按钮，Desktop 可由此自动获得 API Key，见[配置与认证]({{< relref "/docs/operations/configuration" >}})。
+- 远程 Web 使用管理员密码登录，获得会话 Cookie。Server 配置了身份提供商时，Web 登录页还会显示第三方账号按钮；Desktop 在 **Settings → Connections & app** 中每个 Server 下方显示 **Sign in with …** 按钮，通过系统浏览器登录后自动获得 API Key，见[配置与认证]({{< relref "/docs/operations/configuration" >}})。
 - Desktop、Mobile 和自动化使用 API Key，通过 `Authorization: Bearer agw_...` 请求头发送。API Key 明文只在创建时显示一次。
 - Desktop Full 的本地初始化由 Server 页面完成，主进程随后配置自己的 API Key，并使用操作系统凭据存储保护它。
 
-API Key（访问密钥）相当于客户端连接 Server 的钥匙。给 Desktop Client 或 Mobile 配置远程连接时，先在已登录的管理界面创建一个带名称的 API Key，再将 Server 地址和完整的 API Key 填入客户端。手机上的 `localhost` 指手机本身，不能用它访问电脑上的 Server。
+API Key（访问密钥）相当于客户端连接 Server 的钥匙。给 Desktop Client 或 Mobile 配置远程连接时，先登录 Web，在 **Settings** 的 **Server access** 页面中，于 **API tokens** 填写 **Token name** 并创建一个 API Key，再将 Server 地址和完整的 API Key 填入客户端。Desktop Client 在 **Settings → Connections & app** 中点击 **+**（Add remote Server），填写 **Name**、**Server URL** 和 **API token**。手机上的 `localhost` 指手机本身，不能用它访问电脑上的 Server。
 
 ### 无人值守初始化
 

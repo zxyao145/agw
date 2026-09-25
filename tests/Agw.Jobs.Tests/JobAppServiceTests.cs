@@ -10,6 +10,7 @@ using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
@@ -161,6 +162,33 @@ public class JobAppServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ListLogsAsync_RunWithOwnedConversation_ReturnsConversationId()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobAppServiceFixture.CreateAsync(1, cancellationToken);
+        var conversationId = await fixture.AddLogWithConversationAsync(
+            fixture.FirstJobId,
+            "test-user",
+            UtcNow.AddMinutes(2),
+            cancellationToken
+        );
+        await fixture.AddLogWithConversationAsync(
+            fixture.FirstJobId,
+            "other-user",
+            UtcNow.AddMinutes(1),
+            cancellationToken
+        );
+        await fixture.AddLogWithoutConversationAsync(fixture.FirstJobId, UtcNow, cancellationToken);
+
+        var logs = await fixture.Service.ListLogsAsync(fixture.FirstJobId, cancellationToken);
+
+        Assert.Equal(3, logs.Count);
+        Assert.Equal(conversationId, logs[0].ConversationId);
+        Assert.Null(logs[1].ConversationId);
+        Assert.Null(logs[2].ConversationId);
+    }
+
+    [Fact]
     public async Task DeleteAsync_ActiveAttempt_ThrowsConflict()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -229,6 +257,77 @@ public class JobAppServiceTests : IDisposable
             _dbContext.ChangeTracker.Clear();
             return await _dbContext.Jobs.AsNoTracking().SingleAsync(job => job.Id == id, cancellationToken);
         }
+
+        public async Task<Guid> AddLogWithConversationAsync(
+            Guid jobId,
+            string conversationOwner,
+            DateTimeOffset startTime,
+            CancellationToken cancellationToken
+        )
+        {
+            var projectId = Guid.CreateVersion7();
+            var conversationId = Guid.CreateVersion7();
+            var taskId = Guid.CreateVersion7();
+            _dbContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = $"project-{projectId:N}",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = conversationOwner,
+                    CreateTime = UtcNow,
+                }
+            );
+            _dbContext.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = conversationId,
+                    ProjectId = projectId,
+                    ContextId = Guid.CreateVersion7().ToString("D"),
+                    CreateBy = conversationOwner,
+                    CreateTime = UtcNow,
+                }
+            );
+            _dbContext.ProjectConversationChatHistories.Add(
+                new ProjectConversationChatHistory
+                {
+                    Id = Guid.CreateVersion7(),
+                    ConversationId = conversationId,
+                    TaskId = taskId,
+                    JobId = jobId,
+                    Status = TaskExecutionStatus.Succeeded,
+                    ConversationSequence = 0,
+                    CreateTime = UtcNow,
+                }
+            );
+            AddLog(jobId, taskId, startTime);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return conversationId;
+        }
+
+        public async Task AddLogWithoutConversationAsync(
+            Guid jobId,
+            DateTimeOffset startTime,
+            CancellationToken cancellationToken
+        )
+        {
+            AddLog(jobId, Guid.CreateVersion7(), startTime);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        private void AddLog(Guid jobId, Guid taskId, DateTimeOffset startTime) =>
+            _dbContext.JobLogs.Add(
+                new JobLog
+                {
+                    Id = Guid.CreateVersion7(),
+                    JobId = jobId,
+                    TaskId = taskId,
+                    StartTime = startTime,
+                    EndTime = startTime.AddSeconds(5),
+                    Success = true,
+                    Attempt = 1,
+                }
+            );
 
         public async Task SetActiveAttemptAsync(Guid id, CancellationToken cancellationToken)
         {

@@ -2,9 +2,9 @@
 title: "Install and configure Server"
 description: "Choose an installation, initialize Server, and connect clients."
 weight: 20
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/start/install
-aliases: ["/en/docs/start/setup/"]
+aliases: ["/docs/start/setup/"]
 ---
 
 AGW needs a running Server and a client to operate it. For a first local installation, choose Desktop Full. If Server already exists, use Desktop Client or a browser. After installation, configure a model service or external agent to start a conversation.
@@ -27,10 +27,12 @@ AGW needs a running Server and a client to operate it. For a first local install
 
 Full and Client share an application identity and are mutually exclusive variants. Full installs a current-user Server daemon; closing Desktop does not stop it. Packages are currently unsigned and not notarized.
 
-![AGW Desktop chat: select a Project and Agent at the top, then enter a message below.](/images/screenshots/desktop-chat.png)
-{caption="AGW Desktop chat: select a Project and Agent at the top, then enter a message below."}
+![AGW Desktop chat: select a Project and Agent, then enter a message.](/images/screenshots/desktop-chat.png)
+{caption="AGW Desktop chat: select a Project and Agent, then enter a message."}
 
-## Docker
+## Docker and Portable Server
+
+Docker images are published to `ghcr.io/zxyao145/agw` with each release. Portable Server is not attached to Releases; build it from the repository root, for example with `PUBLISH_MODE=portable APP_VERSION=0.1.0 RIDS=linux-x64 ./publish.sh`, then start `agw-server serve` as described in the standalone guide.
 
 Choose a deployment approach for your needs:
 
@@ -51,8 +53,8 @@ Prerequisites: Server is running, database configuration is valid, and its data 
 
 ### First-run initialization
 
-1. Locally open `http://localhost:30816/setup`. Docker and Portable Server include Web; source users can initialize the server before starting Web.
-2. Set the administrator password. Domain or forwarded access also requires the one-time Setup Code from the startup log; direct local access does not.
+1. Open the Server's `/setup` page, such as `http://localhost:30816/setup` on the local machine. Docker and Portable Server include Web; source users can initialize the server before starting Web.
+2. Set the administrator password. Only direct access on the Server host through `localhost` or a loopback address skips the Setup Code. Access through a domain, reverse proxy, another host, or a port mapped from a Docker container also requires the one-time Setup Code from the startup log.
 3. Submit and wait for database initialization. The application opens without another restart.
 
 After initialization, authentication settings are saved in the database, so later starts do not repeat setup. Preserve the database and encryption keys when moving or backing up the service; see [Backup and upgrades]({{< relref "/docs/operations/backup" >}}).
@@ -62,11 +64,11 @@ After initialization, authentication settings are saved in the database, so late
 
 ### Connect clients
 
-- Remote Web signs in with the administrator password and receives a session Cookie. With identity providers configured, the sign-in page also shows third-party account buttons, and Desktop can obtain its API Key through them; see [Configuration and authentication]({{< relref "/docs/operations/configuration" >}}).
+- Remote Web signs in with the administrator password and receives a session Cookie. With identity providers configured, the Web sign-in page also shows third-party account buttons. Desktop shows **Sign in with …** buttons below each Server in **Settings → Connections & app**; they sign in through the system browser and obtain an API Key automatically. See [Configuration and authentication]({{< relref "/docs/operations/configuration" >}}).
 - Desktop, Mobile, and automation use API Keys, sent in the `Authorization: Bearer agw_...` header. Plaintext is shown only once when a key is created.
 - Desktop Full uses the Server-owned setup page, then provisions its own API Key and protects it with the operating system credential store.
 
-An API Key is the client’s access key to Server. To connect Desktop Client or Mobile remotely, create a named API Key in the signed-in management interface, then enter the Server URL and full key in the client. On a phone, `localhost` refers to the phone, not your computer.
+An API Key is the client’s access key to Server. To connect Desktop Client or Mobile remotely, sign in to Web, open **Settings** → **Server access**, enter a **Token name** under **API tokens**, and create an API Key. Then enter the Server URL and full key in the client. In Desktop Client, open **Settings → Connections & app**, click **+** (Add remote Server), and fill in **Name**, **Server URL**, and **API token**. On a phone, `localhost` refers to the phone, not your computer.
 
 ### Unattended initialization
 

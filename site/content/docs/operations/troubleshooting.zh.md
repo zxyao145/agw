@@ -2,7 +2,7 @@
 title: "日志与常见问题"
 description: "沿连接、认证、模型、文件与执行状态排查问题。"
 weight: 50
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/operations/troubleshooting
 ---
 
@@ -22,7 +22,7 @@ translationKey: docs/operations/troubleshooting
 | CLI 无法启动 | 执行节点的可执行文件、账号与环境 |
 | 文件找不到 | 当前目录选择、Server 路径、挂载和访问权限 |
 | Job 没运行 | 启用状态、未来时间、UTC Cron、有效目标和日志 |
-| 断线后状态不对 | 会话选择、WebSocket 代理、执行是否仍在后台运行 |
+| 断线后状态不对 | 会话选择、WebSocket 代理、执行是否仍在后台运行；InProcess 模式下 Server 重启后，原来运行中的会话会显示为 Interrupted，不会继续执行 |
 
 ## 示例：页面能打开，但 Agent 不回复
 
@@ -41,9 +41,11 @@ translationKey: docs/operations/troubleshooting
 | 类别 | 通常的原因 |
 | --- | --- |
 | `provider-unavailable`、`provider-timeout` | Server 访问不到提供商：网络、出站代理或防火墙 |
-| `provider-rejected` | 提供商返回错误：客户端编号、密钥或已登记的回调地址不符 |
+| `provider-rejected` | 能访问提供商，但 OAuth2 的用户信息接口返回错误状态码：检查 `UserInfoEndpoint`、`Scopes` 和令牌权限 |
+| `protocol-rejected` | OIDC 提供商返回协议错误：客户端编号、密钥或已登记的回调地址不符 |
 | `invalid-state`、`invalid-nonce` | 回调校验未通过：浏览器访问的地址与 `PublicBaseUrl` 不一致，或校验用的 Cookie 被拦截 |
-| `invalid-token`、`protocol-rejected` | 令牌校验未通过：Authority、签发者、接收方或验签地址配置不符 |
+| `invalid-token` | 令牌校验未通过：Authority、签发者、接收方或验签地址配置不符 |
+| `protocol-validation-failed` | 其他未归类的协议失败，包括 OAuth2 换取令牌被拒绝：先检查客户端编号、密钥和回调地址 |
 | `provisioning-failed`、`grant-creation-failed`、`session-creation-failed` | Server 本地处理失败：先检查数据库连接和迁移是否完成 |
 | `authorization-denied` | 用户在提供商页面取消了授权 |
 
@@ -63,6 +65,6 @@ Web 开发运行在 `3001`，后端默认 `30816`。代理目标依次取 `BACKE
 
 ## 实现与参考
 
-- [Runtime consistency](https://github.com/zxyao145/agw/blob/main/docs/operations/backend-runtime-consistency.md)
+- [Execution persistence](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/Persistence/README.md)
 - [Host settings](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Host/appsettings.json)
 - [Deployment](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md)

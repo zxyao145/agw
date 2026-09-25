@@ -10360,7 +10360,7 @@
         "required": [
           "id",
           "jobId",
-          "contextId",
+          "conversationId",
           "startTime",
           "endTime",
           "success",
@@ -10377,11 +10377,12 @@
             "type": "string",
             "format": "uuid"
           },
-          "contextId": {
+          "conversationId": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "format": "uuid"
           },
           "startTime": {
             "type": "string",

@@ -3,7 +3,7 @@ namespace Agw.Jobs.Contracts;
 public record JobLogResponse(
     Guid Id,
     Guid JobId,
-    string? ContextId,
+    Guid? ConversationId,
     DateTimeOffset StartTime,
     DateTimeOffset? EndTime,
     bool Success,

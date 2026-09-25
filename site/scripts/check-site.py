@@ -101,8 +101,8 @@ for source in sources:
                 errors.append(f'{source}: missing repository reference: {path}')
     content_path = source.relative_to(site / 'content').as_posix().removesuffix('.zh.md')
     route = content_path.removesuffix('_index').rstrip('/')
-    zh_file = root / route / 'index.html'
-    en_file = root / 'en' / route / 'index.html'
+    zh_file = root / 'zh' / route / 'index.html'
+    en_file = root / route / 'index.html'
     for document, file in ((source, zh_file), (english, en_file)):
         if route == 'docs' or route.startswith('docs/'):
             lastmod = re.search(r'^lastmod: (.+)$', document.read_text(), re.M)

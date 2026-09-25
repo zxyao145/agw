@@ -2,7 +2,7 @@
 title: "Shared context across agents"
 description: "Switch agents within a conversation and build on the discussion so far."
 weight: 10
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/shared-context
 ---
 
@@ -34,6 +34,6 @@ Briefly repeat important paths, acceptance criteria, and conclusions. To retain 
 
 ## What carries over
 
-Handoff carries public conversation text, not private reasoning, tool-call protocols, or an external tool’s entire internal state. Its length is limited, so older content may be left out. Files must still be accessible in the receiving agent’s environment. A new conversation does not automatically inherit another conversation’s discussion.
+Handoff carries public conversation text, not private reasoning, tool-call protocols, or an external tool’s entire internal state. Unfinished messages from interrupted or failed turns are not handed off either. It is limited to 32,000 characters, so older content may be left out. Files must still be accessible in the receiving agent’s environment. A new conversation does not automatically inherit another conversation’s discussion.
 
 [Read the Chat guide]({{< relref "/docs/guides/chat" >}}) · [Configure external agents for different purposes]({{< relref "/docs/guides/external-agents" >}})

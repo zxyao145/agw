@@ -40,6 +40,8 @@ public class JobScheduleCalculatorTests
     [Theory]
     [InlineData(TriggerType.Once, "not-a-date", 400_0032)]
     [InlineData(TriggerType.Interval, "00:00:00", 400_0033)]
+    [InlineData(TriggerType.Cron, "99 * * * *", 400_0076)]
+    [InlineData(TriggerType.Cron, "*/5 * * *", 400_0076)]
     public void GetNextRunTime_InvalidTrigger_ThrowsExpectedAgwException(
         TriggerType triggerType,
         string triggerValue,
