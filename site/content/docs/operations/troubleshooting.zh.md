@@ -65,6 +65,6 @@ Web 开发运行在 `3001`，后端默认 `30816`。代理目标依次取 `BACKE
 
 ## 实现与参考
 
-- [Runtime consistency](https://github.com/zxyao145/agw/blob/main/docs/operations/backend-runtime-consistency.md)
+- [Execution persistence](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/Persistence/README.md)
 - [Host settings](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Host/appsettings.json)
 - [Deployment](https://github.com/zxyao145/agw/blob/main/docs/4.Deployment.md)

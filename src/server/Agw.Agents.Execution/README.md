@@ -40,7 +40,7 @@ InProcess 连接的控制查询与后台 Runtime 使用独立的 DI scope，避�
 
 Runtime 拥有 Workflow Lease，Runner 拥有当前 `StreamingRun`；Durable Runner 还拥有该段的人工交互作用域。释放顺序为 Run、人工交互作用域、Workflow Lease。Factory 构建失败时清理已经创建的 Agent 和嵌套 Lease，清理异常不能覆盖构建异常。
 
-流式执行保持既有 Error/Finished 顺序；非流式执行保持原有输出集合与非交互审批错误。Durable Runner 逐条等待 sink 写入，返回分段状态；pending 与 terminal 控制消息仍由持久化提交后的协调层发布。节点间统一以完整 turn 交接：Direct、FanOut、Switch 等待源节点完成，FanIn 等待所有前驱的完成批次；并发块等待所有参与者完成。工具和人工等待期间不释放下游输入。详见 [Agentflow 执行约定](../../../docs/6.Agentflow.md#node-completion-and-downstream-activation)。Checkpoint 恢复会还原未完成 turn 的消息和待处理请求；只有首次执行发送启动 `TurnToken`，恢复时不能再次发送。Worker 故障后的整个 segment 重试仍为至少一次执行，不增加跨故障的恰好一次保证。
+流式执行保持既有 Error/Finished 顺序；非流式执行保持原有输出集合与非交互审批错误。Durable Runner 逐条等待 sink 写入，返回分段状态；pending 与 terminal 控制消息仍由持久化提交后的协调层发布。节点间统一以完整 turn 交接：Direct、FanOut、Switch 等待源节点完成，FanIn 等待所有前驱的完成批次；并发块等待所有参与者完成。工具和人工等待期间不释放下游输入。详见 [Agentflow 执行约定](../../../docs/approachs/2.Agentflow.md#node-completion-and-downstream-activation)。Checkpoint 恢复会还原未完成 turn 的消息和待处理请求；只有首次执行发送启动 `TurnToken`，恢复时不能再次发送。Worker 故障后的整个 segment 重试仍为至少一次执行，不增加跨故障的恰好一次保证。
 
 InProcess 的每次显式恢复都携带当前 occurrence 的 Marker；Durable 只在新恢复分支的首段（`SegmentIndex == 1` 且 Manifest 含恢复 occurrence）自动继续这些 Marker，后续 HITL 分段保留自己的等待边界。两者的恢复条件对应不同的输入协议。
 
@@ -60,7 +60,7 @@ Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后�
 
 分布式普通事件由 segment sink 按 `Execution:Distributed:EventStream:WriteIntervalMilliseconds`（默认 250）或 `WriteBatchSize`（默认 100）提交，间隔为 0 时逐条写入。普通事件先排空，再保存分段结果并发布 pending/terminal；状态轮询在发出控制消息前重新排空尾部事件。作废 attempt 的待写事件被丢弃，回放故障继续沿用现有降级行为。
 
-配置、恢复边界、异常退出影响和回退示例见 [对话历史与事件持久化](../../../docs/operations/conversation-persistence.md)。
+配置、恢复边界和异常退出影响见 [执行持久化说明](Persistence/README.md)。
 
 ## 领取权与会话重置
 
@@ -70,7 +70,7 @@ Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后�
 
 任务快照和 durable manifest 携带代次。`ConversationSessionContext` 通过执行的异步上下文传递不可变代次，SDK history provider 把它保存在 session state，外部 SDK 回调显式捕获 `ProjectProviderSessionReference.Generation`。这些写入使用原代次；不能在迟到回调中读取当前值作为凭据。`SaveConversationChangesAsync` 在同一事务中按 Project → Conversation 锁顺序验证存活根、owner 和代次，再提交子记录。旧 manifest 缺少代次时按 0 读取；序列化省略默认 0，保留既有幂等比较。
 
-部署与隔离 PostgreSQL 验证见 [运行时一致性维护说明](../../../docs/operations/backend-runtime-consistency.md)。
+部署与隔离 PostgreSQL 验证见 [执行持久化说明](Persistence/README.md)。
 
 ## 断线后的客户端执行状态
 

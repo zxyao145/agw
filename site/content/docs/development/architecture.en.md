@@ -23,10 +23,10 @@ flowchart LR
 | --- | --- | --- |
 | Api | Receive requests and return responses | Routes, inputs, and outputs |
 | Application | Complete a business operation | Authorization, queries, transactions, and call order |
-| Domain | Hold business data and express rules | Data structures, Policies, Decisions, and Behaviors |
+| Domain | Hold business data and express rules | Entities, Behaviors, and DomainServices |
 | Infrastructure | Connect databases and external systems | Persistence and concrete adapters |
 
-Domain entities hold data only. A Policy evaluates complex rules and returns a data-only Decision. Application constructs a concrete Behavior to apply it to the loaded root and its children. Ordinary CRUD stays in Application without creating a Behavior for every entity.
+Domain entities hold state. A Behavior handles rules within one Aggregate, while a DomainService handles rules that need facts beyond it. Application loads data, coordinates these calls, and persists changes. Ordinary CRUD stays in Application without creating a Behavior for every entity.
 
 ## Data ownership
 
@@ -51,4 +51,4 @@ Identify the owning module and public entry point before adding a feature. Run `
 ## Implementation and references
 
 - [Architecture](https://github.com/zxyao145/agw/blob/main/docs/2.Architecture.md)
-- [Module organization](https://github.com/zxyao145/agw/blob/main/docs/3.Module%20Organization.md)
+- [Module organization](https://github.com/zxyao145/agw/blob/main/docs/human/4.module-organization.md)

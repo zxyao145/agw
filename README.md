@@ -300,7 +300,7 @@ The following screenshots show the main Agw interfaces:
 
 Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the shared Hosting Module; `Agw.ControlPlane.Host`, `Agw.DataPlane.Host`, and `Agw.Standalone.Host` provide the executable composition roots. The pnpm Workspace at `src/clients` contains the Web, Electron Desktop, and Expo Mobile applications plus shared business and infrastructure packages.
 
-Application owns use cases and persistence. When domain rules are needed, it evaluates a Policy and applies its data-only Decision through a manually constructed Behavior; simple CRUD uses the persistence seam directly. A typical backend flow is:
+Application coordinates use cases and persistence. A Behavior handles rules within one Aggregate; a DomainService handles rules that require facts beyond it. Simple CRUD uses the persistence seam directly. A typical backend flow is:
 
 ```text
 Controller -> Application -> I<Module>DbContext / persistence adapter -> EF Core
@@ -426,9 +426,9 @@ Detailed project documentation is available under [`docs/`](docs/):
 
 - [Development Guide](docs/1.Development.md): Local environment setup, build/test/lint/format commands, and Git hook configuration.
 - [Architecture](docs/2.Architecture.md): System overview, backend and frontend architecture, and core domain concepts.
-- [Module Organization](docs/3.Module%20Organization.md): Layering principles used within modules.
-- [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
-- [Agentflow Guide](docs/6.Agentflow.md): Graph routing and cycle rules, checkpoint branching, editor Undo and dirty state, and Chat message attribution.
+- [Module Organization](docs/human/4.module-organization.md): Layering principles used within modules.
+- [Chat Suggestions Design](docs/approachs/1.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
+- [Agentflow Guide](docs/approachs/2.Agentflow.md): Graph routing and cycle rules, checkpoint branching, editor Undo and dirty state, and Chat message attribution.
 - [Agent Execution Flow](docs/ws-flow.md): SignalR commands, execution providers, turn messages, and disconnection behavior.
 - [Execution Subsystem](src/server/Agw.Agents.Execution/README.md): In-process and distributed execution, directory responsibilities, data flow, Definition Agent compaction, and command extension methods.
 - [Files Module](src/server/Agw.Files/README.zh-CN.md): Project workspace resolution, path boundaries, Git behavior, and mount requirements.
@@ -465,7 +465,7 @@ Primary backend settings are located in [`src/server/Agw.Host/appsettings.json`]
 ```
 
 - Supported database providers are `sqlite` and `postgres`.
-- The Host template flushes conversation history every 10 seconds; omitting the interval uses a 5-second code fallback. See [conversation persistence](docs/operations/conversation-persistence.md).
+- The Host template flushes conversation history every 10 seconds; omitting the interval uses a 5-second code fallback. See [conversation persistence](src/server/Agw.Agents.Execution/Persistence/README.md).
 - Supported distributed execution lock providers are `inmemory` and `postgres`. When `DistributedLock:Provider` is `null` or absent, SQLite uses an in-process lock, while PostgreSQL uses an advisory lock. If the PostgreSQL lock connection string is empty, it reuses `Database:ConnectionString`.
 - `Execution:Provider` supports `InProcess` and `Distributed`. Distributed execution requires PostgreSQL for the database and lock; message replay uses PostgreSQL by default and can explicitly use Redis.
 - Do not store secrets in static configuration files; prefer environment variable overrides.

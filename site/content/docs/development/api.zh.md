@@ -57,5 +57,5 @@ DTO（请求和响应的数据类型）放在所属模块的 `Contracts` 中。�
 ## 实现与参考
 
 - [Execution protocol](https://github.com/zxyao145/agw/blob/main/docs/ws-flow.md)
-- [API rules](https://github.com/zxyao145/agw/blob/main/docs/rules.md)
+- [API rules](https://github.com/zxyao145/agw/blob/main/AGENTS.md)
 - [API client](https://github.com/zxyao145/agw/tree/main/src/clients/packages/api)

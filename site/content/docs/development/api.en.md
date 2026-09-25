@@ -55,5 +55,5 @@ After backend contract changes, export the Development OpenAPI document to `src/
 ## Implementation and references
 
 - [Execution protocol](https://github.com/zxyao145/agw/blob/main/docs/ws-flow.md)
-- [API rules](https://github.com/zxyao145/agw/blob/main/docs/rules.md)
+- [API rules](https://github.com/zxyao145/agw/blob/main/AGENTS.md)
 - [API client](https://github.com/zxyao145/agw/tree/main/src/clients/packages/api)

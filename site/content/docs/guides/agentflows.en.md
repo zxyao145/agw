@@ -295,7 +295,7 @@ Test success, unmatched conditions, human rejection, and waiting paths separatel
 
 ## Implementation and references
 
-- [Graph contract](https://github.com/zxyao145/agw/blob/main/docs/6.Agentflow.md)
+- [Graph contract](https://github.com/zxyao145/agw/blob/main/docs/approachs/2.Agentflow.md)
 
 - [Node and block configuration](https://github.com/zxyao145/agw/blob/main/src/clients/packages/agents/src/ui-web/pages/agentflows/components/visual-agentflow-builder.tsx)
 - [Orchestration block execution](https://github.com/zxyao145/agw/tree/main/src/server/Agw.Agents.Execution/Agentflows/Workflows/Builders)

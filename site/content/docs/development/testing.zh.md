@@ -6,7 +6,7 @@ lastmod: 2026-09-25
 translationKey: docs/development/testing
 ---
 
-前提：依赖已安装。修改前阅读根目录 AGENTS.md 和 `docs/rules.md`，保留无关的本地改动。
+前提：依赖已安装。修改前阅读根目录 `AGENTS.md` 和 `docs/human/` 中的相关规则，保留无关的本地改动。
 
 ## 后端检查
 
@@ -45,7 +45,7 @@ pnpm build
 
 模型变更需要配套 SQLite 与 PostgreSQL 迁移，但只有明确授权后才生成或应用。生成时分别以 `src/server/Agw.Migrations.Sqlite` 和 `src/server/Agw.Migrations.Postgres` 为迁移项目、`src/server/Agw.Standalone.Host` 为启动项目，并在命令末尾传入 `-- --provider sqlite` 或 `-- --provider postgres`，完整命令见开发文档。`dotnet tool restore` 只安装 CSharpier，`dotnet ef` 需要另行安装。`NoForeignKeyModelDiffer` 禁止生成数据库外键，引用验证和清理由应用层/基础设施负责。
 
-C# 使用显式构造函数，禁止 primary constructor；日期使用 `DateTimeOffset`。AGENTS.md 与 CLAUDE.md 保持相同。提交需显式授权，并使用 Conventional Commits。
+C# 使用显式构造函数，禁止 primary constructor；日期使用 `DateTimeOffset`。遵守根目录 `AGENTS.md`。提交需显式授权，并使用 Conventional Commits。
 
 ## 按改动选择检查
 

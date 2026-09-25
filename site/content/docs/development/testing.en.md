@@ -6,7 +6,7 @@ lastmod: 2026-09-25
 translationKey: docs/development/testing
 ---
 
-Prerequisite: dependencies are installed. Read root AGENTS.md and `docs/rules.md` before changes, and preserve unrelated local work.
+Prerequisite: dependencies are installed. Read root `AGENTS.md` and the relevant rules under `docs/human/` before changes, and preserve unrelated local work.
 
 ## Backend checks
 
@@ -45,7 +45,7 @@ Component rendering tests use the shared `@agw/test-harness` package to set up a
 
 Model changes need matching SQLite and PostgreSQL migrations, but generate or apply them only with explicit authorization. Use `src/server/Agw.Migrations.Sqlite` or `src/server/Agw.Migrations.Postgres` as the migrations project and `src/server/Agw.Standalone.Host` as the startup project, ending the command with `-- --provider sqlite` or `-- --provider postgres`; see the Development guide for the full commands. `dotnet tool restore` installs only CSharpier, so install `dotnet ef` separately. `NoForeignKeyModelDiffer` prohibits database foreign keys; Application/Infrastructure own reference validation and cleanup.
 
-Use explicit C# constructors, not primary constructors, and `DateTimeOffset` for dates. Keep AGENTS.md and CLAUDE.md identical. Commits need explicit authorization and use Conventional Commits.
+Use explicit C# constructors, not primary constructors, and `DateTimeOffset` for dates. Follow root `AGENTS.md`. Commits need explicit authorization and use Conventional Commits.
 
 ## Match checks to the change
 

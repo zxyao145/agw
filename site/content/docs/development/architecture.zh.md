@@ -25,10 +25,10 @@ flowchart LR
 | --- | --- | --- |
 | Api | 接收请求并返回响应 | 路由、输入和返回值 |
 | Application | 完成一次业务操作 | 身份检查、查询、事务和调用顺序 |
-| Domain | 保存业务数据并表达规则 | 数据结构、Policy、Decision 和 Behavior |
+| Domain | 保存业务数据并表达规则 | Entity、Behavior 和 DomainService |
 | Infrastructure | 连接数据库和外部系统 | 持久化、外部服务适配和具体实现 |
 
-Domain 中的实体只保存数据，不把验证、状态变化等方法写进实体。复杂规则由 Policy 判断并返回纯数据 Decision，再由 Application 创建具体的 Behavior，将决定应用到当前对象及其子项。普通增删改查保留在 Application，无需为每个实体创建 Behavior。
+Domain 中的 Entity 保存状态。单个 Aggregate 的业务规则由 Behavior 处理；需要其他 Aggregate 信息的规则由 DomainService 处理。Application 读取数据、协调调用并保存变更。普通增删改查由 Application 直接完成。
 
 ## 数据所有权
 
@@ -53,4 +53,4 @@ Web 与 Desktop 各自拥有路由壳和构建，业务包位于 `src/clients/pa
 ## 实现与参考
 
 - [Architecture](https://github.com/zxyao145/agw/blob/main/docs/2.Architecture.md)
-- [Module organization](https://github.com/zxyao145/agw/blob/main/docs/3.Module%20Organization.md)
+- [Module organization](https://github.com/zxyao145/agw/blob/main/docs/human/4.module-organization.md)

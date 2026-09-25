@@ -303,7 +303,7 @@ git push origin v0.1.0
 
 Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是共享 Hosting Module，`Agw.ControlPlane.Host`、`Agw.DataPlane.Host`、`Agw.Standalone.Host` 是三个可执行组合根；`src/clients` pnpm Workspace 包含 Web、Electron Desktop、Expo Mobile 以及共享业务和基础设施 package。
 
-Application 负责用例与持久化。有领域规则时，由 Application 求值 Policy，并通过手动构造的 Behavior 应用纯数据 Decision；简单 CRUD 直接使用持久化接缝。典型后端流程如下：
+Application 负责用例协调、数据读取和保存。单个 Aggregate 的业务规则由 Behavior 处理；需要其他 Aggregate 信息的规则由 DomainService 处理。普通 CRUD 直接使用持久化接口。典型后端流程如下：
 
 ```text
 Controller -> Application -> I<Module>DbContext / persistence adapter -> EF Core
@@ -429,9 +429,9 @@ flowchart TB
 
 - [Development Guide](docs/1.Development.md): 本地环境配置、构建/测试/代码检查/格式化命令，以及 Git 钩子配置。
 - [Architecture](docs/2.Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
-- [Module Organization](docs/3.Module%20Organization.md): 模块内部采用的分层原则。
-- [Chat Suggestions 设计](docs/5.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
-- [Agentflow 指南](docs/6.Agentflow.md)：图路由与循环规则、Checkpoint 分支恢复、编辑器撤销和未保存状态、Chat 消息归属。
+- [Module Organization](docs/human/4.module-organization.md): 模块内部采用的分层原则。
+- [Chat Suggestions 设计](docs/approachs/1.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
+- [Agentflow 指南](docs/approachs/2.Agentflow.md)：图路由与循环规则、Checkpoint 分支恢复、编辑器撤销和未保存状态、Chat 消息归属。
 - [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、执行 Provider、turn 消息与断线行为。
 - [Execution 子系统](src/server/Agw.Agents.Execution/README.md)：进程内与分布式执行、目录职责、数据流、Definition Agent 自动上下文压缩与 command 扩展方式。
 - [Files 模块](src/server/Agw.Files/README.zh-CN.md)：Project Workspace 解析、路径边界、Git 行为与挂载要求。
@@ -468,7 +468,7 @@ flowchart TB
 ```
 
 - 数据库 Provider 支持：`sqlite` 和 `postgres`。
-- Host 模板每 10 秒刷新对话历史；省略该间隔时使用代码中的 5 秒兜底。见[对话持久化](docs/operations/conversation-persistence.md)。
+- Host 模板每 10 秒刷新对话历史；省略该间隔时使用代码中的 5 秒默认值。见[对话持久化](src/server/Agw.Agents.Execution/Persistence/README.md)。
 - 分布式执行锁 Provider 支持 `inmemory` 和 `postgres`。`DistributedLock:Provider` 为 `null` 或不存在时，SQLite 使用进程内锁，PostgreSQL 使用 advisory lock；PostgreSQL 锁连接串为空时复用 `Database:ConnectionString`。
 - `Execution:Provider` 支持 `InProcess` 和 `Distributed`。分布式执行要求数据库与分布式锁都使用 PostgreSQL；消息回放默认使用 PostgreSQL，也可以显式改用 Redis。
 - 请勿将机密信息写入固定配置文件；建议优先使用环境变量进行覆盖。

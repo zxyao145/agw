@@ -83,5 +83,5 @@ If the UI looks wrong, first check the selected Server and conversation, then pe
 
 ## Implementation and references
 
-- [Conversation persistence](https://github.com/zxyao145/agw/blob/main/docs/operations/conversation-persistence.md)
+- [Conversation persistence](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/Persistence/README.md)
 - [Execution connections](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/README.md)

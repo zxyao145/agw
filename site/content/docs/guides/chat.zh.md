@@ -83,5 +83,5 @@ Desktop 的每个 Server、Project、Conversation 组合有独立执行连接。
 
 ## 实现与参考
 
-- [Conversation persistence](https://github.com/zxyao145/agw/blob/main/docs/operations/conversation-persistence.md)
+- [Conversation persistence](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/Persistence/README.md)
 - [Execution connections](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/README.md)

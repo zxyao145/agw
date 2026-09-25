@@ -4,7 +4,7 @@
 
 **InProcess 同样需要、也已经实现持久化。** 两种执行方式都会保存聊天历史、适用的 Agent 会话状态和 Agentflow 检查点。它们的区别在于：InProcess 的当前执行与人工等待由本进程持有；Distributed 额外持久化执行状态机，由 Worker 从数据库领取并恢复执行。
 
-本文围绕本目录说明持久化架构、运行原理、配置、调用方式和恢复限制。完整的运行时与传输协议见[执行模块说明](../README.md)，历史写入策略见[对话历史与事件持久化](../../../../docs/operations/conversation-persistence.md)。
+本文围绕本目录说明持久化架构、运行原理、配置、调用方式和恢复限制。完整的运行时与传输协议见[执行模块说明](../README.md)，历史写入策略见本文第 7 节。
 
 ## 1. 持久化的数据分别解决什么问题
 
@@ -323,7 +323,7 @@ Manifest、checkpoint、pending、response 和错误使用实体上的 `[Encrypt
 
 模型读取合并数据库与本作用域待写历史；普通历史 API 返回已提交内容。正常结束、取消、异常和枚举器释放时都会尝试刷新剩余历史；保存 Session / 检查点等必要边界也会提前刷新，因此 `TurnEnd` 不表示所有状态都等到最后才保存。
 
-进程突然退出或掉电时，未提交的历史可能丢失。即使选择 `Immediate`，也仍受 SDK 何时把消息交给 Provider 的影响。详细的流式快照、缓冲上限和故障行为见[历史持久化说明](../../../../docs/operations/conversation-persistence.md)。
+进程突然退出或掉电时，未提交的历史可能丢失。即使选择 `Immediate`，也仍受 SDK 何时把消息交给 Provider 的影响。每个执行作用域按 `MaxBufferedBytes` 限制待写历史，事件流按下述批次写入。
 
 ### 7.2 Distributed 的事件流策略
 
@@ -499,6 +499,5 @@ dotnet test tests/Agw.Agents.Tests --filter "FullyQualifiedName~AgentSessionStat
 
 - [执行模块总览](../README.md)：命令、Runtime、Host 分工和传输协议。
 - [Turn 生命周期](../Turns/README.md)：执行上下文、取消、消息与历史刷新边界。
-- [Agentflow 设计](../../../../docs/6.Agentflow.md)：图执行、检查点分支与 Chat 归属。
-- [历史与事件持久化配置](../../../../docs/operations/conversation-persistence.md)：批量提交、恢复边界和异常退出影响。
-- [仓库规则](../../../../docs/rules.md)：模块数据所有权、用户隔离、时间和迁移约束。
+- [Agentflow 设计](../../../../docs/approachs/2.Agentflow.md)：图执行、检查点分支与 Chat 归属。
+- [仓库规则](../../../../AGENTS.md)：模块数据所有权、用户隔离、时间和迁移约束。

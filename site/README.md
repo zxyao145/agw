@@ -106,7 +106,7 @@ Technical articles end with implementation references; feature pages may link to
 | Getting started | Root README, Setup/Auth implementations, provider and agent UI |
 | User guide | Module READMEs and code for Agents.Execution, Jobs, Files, Tools, Integrations; client packages |
 | Operations | Host configuration, `deploy/`, Auth/Setup, execution persistence |
-| Development | `docs/rules.md`, Development/Architecture/Module Organization guides, client package scripts |
+| Development | `AGENTS.md`, `docs/human/` rules, Development/Architecture guides, client package scripts |
 
 站点只介绍当前受支持的功能、行为与操作步骤，不记录已退役的机制、历史实现，也不加入针对旧方案的提醒。中英文文档遵守同一规则。
 
