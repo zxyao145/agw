@@ -90,6 +90,85 @@ public sealed class ConversationTurnQueryServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ListAsync_MoreThanOneHundredInputs_ReadsCompleteConversationWithoutMessages()
+    {
+        // Arrange / 准备超过一页的用户回合。
+        var token = TestContext.Current.CancellationToken;
+        var conversationId = Guid.CreateVersion7();
+        await using var context = new AgwDbContext(_options);
+        var turnIds = Seed(context, "tester", conversationId, turns: 205);
+        await context.SaveChangesAsync(token);
+        var service = new ConversationTurnQueryService(context, _user);
+        var inputs = new List<ConversationTurnResponse>();
+        ConversationTurnPageResponse? page = null;
+
+        // Act / 沿游标读取全部回合摘要。
+        do
+        {
+            page = await service.ListAsync(
+                new()
+                {
+                    ConversationId = conversationId,
+                    Limit = 100,
+                    BeforeSequence = page?.NextBeforeSequence,
+                    BeforeTurnId = page?.NextBeforeTurnId,
+                },
+                token
+            );
+            inputs.AddRange(page!.Items);
+        } while (page.HasMore);
+
+        // Assert / 确认顺序、输入身份和预览完整。
+        Assert.Equal(turnIds.AsEnumerable().Reverse(), inputs.Select(input => input.InputMessageId));
+        Assert.Equal(205, inputs.Select(input => input.InputMessageId).Distinct().Count());
+        Assert.All(inputs, input => Assert.StartsWith("request ", input.InputSummary));
+    }
+
+    [Fact]
+    public async Task ListAsync_ImageAndTextInputs_ReturnsNormalizedPreviews()
+    {
+        // Arrange / 准备输入消息。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var rows = await context
+            .ProjectConversationChatHistories.Where(row => _turnIds.Contains(row.Id))
+            .OrderBy(row => row.ConversationSequence)
+            .ToListAsync(token);
+        var image = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT1sAAAAASUVORK5CYII="
+        );
+        ChatMessage[] messages =
+        [
+            new(
+                ChatRole.User,
+                [
+                    new DataContent(image, "image/png") { Name = " diagram.png " },
+                    new DataContent(image, "image/png") { Name = "details.png" },
+                ]
+            ),
+            new(ChatRole.User, [new DataContent(image, "image/png")]),
+            new(
+                ChatRole.User,
+                [new TextContent("  Review\n\n  this  "), new TextContent(string.Concat(Enumerable.Repeat("😀", 210)))]
+            ),
+        ];
+        for (var index = 0; index < rows.Count; index++)
+            rows[index].ConversationPayload = JsonSerializer.Serialize(messages[index], PayloadJsonOptions);
+        await context.SaveChangesAsync(token);
+
+        // Act / 查询 Turn 摘要。
+        var page = await new ConversationTurnQueryService(context, _user).ListAsync(
+            new() { ConversationId = _conversationId },
+            token
+        );
+
+        // Assert / 检查附件名称、空白处理和 Unicode 字符完整性。
+        Assert.Equal("diagram.png, details.png", page!.Items[2].InputSummary);
+        Assert.Equal("Image input", page.Items[1].InputSummary);
+        Assert.Equal("Review this " + string.Concat(Enumerable.Repeat("😀", 188)), page.Items[0].InputSummary);
+    }
+
+    [Fact]
     public async Task ListAsync_TurnsSharingFirstSequence_PagesReturnEveryTurnOnce()
     {
         // Arrange: turns without input write no message, so they and the next input turn share first_sequence 0.

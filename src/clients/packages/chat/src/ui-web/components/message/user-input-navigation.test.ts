@@ -86,24 +86,52 @@ test("user input marker layout includes the history-loader row offset", () => {
   assert.equal(getActiveUserInputMarkerKey(markers, 0, true), "second");
 });
 
-test("marker layout skips anchors whose virtual row is unavailable", () => {
+test("marker layout keeps anchors whose virtual row is unavailable", () => {
   const markers = layoutUserInputMarkers(
     [{ key: "missing", itemIndex: 4, preview: "Missing" }],
     [{ start: 0 }],
     0,
   );
 
-  assert.deepEqual(markers, []);
+  assert.deepEqual(markers, [
+    { key: "missing", itemIndex: 4, rowIndex: 4, start: null, preview: "Missing" },
+  ]);
   assert.equal(getActiveUserInputMarkerKey(markers, 0), null);
 });
 
-test("node handoff inputs remain navigation anchors within the current user turn", () => {
+test("node handoff inputs do not create user turn anchors", () => {
   const input = messageItem("node-input", "user", [
     { type: "markdown", markdown: "Review result", sourceType: "TextContent" },
   ]);
   if (input.type !== "message") throw new Error("expected a message");
   input.message.source.additionalProperties = { agentflowInput: true, nodeName: "Review" };
-  assert.deepEqual(buildUserInputAnchors([input]), [
-    { key: "node-input", itemIndex: 0, preview: "Review result" },
+  assert.deepEqual(buildUserInputAnchors([input]), []);
+});
+
+test("turn inputs include unloaded history and match loaded message IDs across GUID formats", () => {
+  const messageId = "019966aa-1234-7000-8000-abcdef123456";
+  const items = [
+    messageItem(messageId.replaceAll("-", "").toUpperCase(), "user", [
+      { type: "plain", text: "Loaded", sourceType: "TextContent" },
+    ]),
+    messageItem("pending", "user", [
+      { type: "markdown", markdown: "New input", sourceType: "TextContent" },
+    ]),
+  ];
+  const anchors = buildUserInputAnchors(items, [
+    { inputMessageId: "older", inputSummary: "Older input" },
+    { inputMessageId: messageId, inputSummary: "Loaded" },
   ]);
+  assert.deepEqual(
+    anchors.map(({ key, itemIndex, preview }) => ({ key, itemIndex, preview })),
+    [
+      { key: "older", itemIndex: null, preview: "Older input" },
+      { key: messageId.replaceAll("-", ""), itemIndex: 0, preview: "Loaded" },
+      { key: "pending", itemIndex: 1, preview: "New input" },
+    ],
+  );
+  const markers = layoutUserInputMarkers(anchors, [{ start: 0 }, { start: 72 }, { start: 144 }], 1);
+  assert.equal(markers[0].rowIndex, null);
+  assert.equal(markers[0].start, null);
+  assert.equal(getActiveUserInputMarkerKey(markers, 0), messageId.replaceAll("-", ""));
 });

@@ -1,4 +1,4 @@
-import type { AiMessage } from "@agw/api";
+import type { AiMessage, components } from "@agw/api";
 import { normalizeTokenUsage, type TokenUsage, type TokenUsageInput } from "@agw/api";
 
 import { ApiError, type AgwApiClient } from "@agw/api";
@@ -7,6 +7,39 @@ import * as browserClient from "@agw/api";
 type ProjectConversationApiClient = Pick<AgwApiClient, "apiGet" | "apiPut" | "apiDelete">;
 
 export type ConversationMessageDirection = "newer" | "older";
+
+export type ConversationTurnInputSummary = Pick<
+  components["schemas"]["ConversationTurnResponse"],
+  "inputMessageId" | "inputSummary"
+>;
+
+export async function getConversationTurnInputs(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<ConversationTurnInputSummary[]> {
+  const inputs: ConversationTurnInputSummary[] = [];
+  let beforeSequence: number | string | undefined;
+  let beforeTurnId: string | undefined;
+  while (true) {
+    const page = await browserClient.apiGet("/api/projects/conversation-turns", {
+      params: { query: { conversationId, beforeSequence, beforeTurnId, limit: 100 } },
+      signal,
+    });
+    if (!page) throw new Error("The conversation turn page is missing.");
+    inputs.push(
+      ...page.items
+        .filter((turn) => turn.inputMessageId !== browserClient.EMPTY_GUID)
+        .map(({ inputMessageId, inputSummary }) => ({ inputMessageId, inputSummary })),
+    );
+    if (!page.hasMore) break;
+    if (page.nextBeforeSequence === null || page.nextBeforeTurnId === null) {
+      throw new Error("The conversation turn page is missing its next cursor.");
+    }
+    beforeSequence = page.nextBeforeSequence;
+    beforeTurnId = page.nextBeforeTurnId;
+  }
+  return inputs.reverse();
+}
 
 export interface ConversationSummary {
   projectId: string;

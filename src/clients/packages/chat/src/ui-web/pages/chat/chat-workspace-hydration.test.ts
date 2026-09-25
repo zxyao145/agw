@@ -13,6 +13,7 @@ import * as sessionRouting from "./lib/session-routing";
 import type { ChatProps } from "../../components/message/chat";
 import type { ChatWorkspaceProps } from "./chat-workspace";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@agw/components/query";
 import * as chatRuntime from "@agw/chat-runtime";
 import type { ExecutionHubHandlers, ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime";
 
@@ -199,6 +200,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const modules: Record<string, unknown> = {
     "@agw/components": components,
     "@agw/components/query": {
+      useQueryClient,
       useQuery: ({ queryKey }: { queryKey: string[] }) => ({
         data:
           queryKey[0] === "execution-permissions"
@@ -380,17 +382,22 @@ async function checkConversationSession(kind: string, strictMode = false) {
     new URL("./chat-workspace.tsx", import.meta.url),
   );
   const root = createRoot(dom.window.document.getElementById("root")!);
+  const queryClient = new QueryClient();
+  const renderWithQueries = (children: React.ReactNode) =>
+    root.render(
+      React.createElement(
+        strictMode ? React.StrictMode : React.Fragment,
+        null,
+        React.createElement(QueryClientProvider, { client: queryClient }, children),
+      ),
+    );
   try {
     const renderWorkspace = () =>
-      root.render(
-        React.createElement(
-          strictMode ? React.StrictMode : React.Fragment,
-          null,
-          React.createElement(ChatWorkspace, {
-            routeBasePath: "/desktop/chat",
-            showProjectSelect: false,
-          }),
-        ),
+      renderWithQueries(
+        React.createElement(ChatWorkspace, {
+          routeBasePath: "/desktop/chat",
+          showProjectSelect: false,
+        }),
       );
     if (kind.startsWith("drawer")) {
       const flow = kind === "drawer-agentflow";
@@ -413,7 +420,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       const Drawer = drawerModules[flow ? "ExecuteAgentflowDrawer" : "ExecuteAgentDrawer"];
       const agent = { id: "agent-1", name: "First", resultFormat: "json" };
       const draw = (open: boolean) =>
-        root.render(
+        renderWithQueries(
           React.createElement(
             Drawer,
             flow
@@ -716,7 +723,17 @@ async function checkConversationSession(kind: string, strictMode = false) {
           searchParams = new URLSearchParams(dom.window.location.search);
           await React.act(async () => renderWorkspace());
         } else {
+          const inputQueryKey = [
+            "conversation-turn-inputs",
+            "local",
+            "conversation-1",
+            observed.chat!.sessionSeed.revision,
+          ];
+          queryClient.setQueryData(inputQueryKey, [
+            { inputMessageId: "message-1", inputSummary: "Previous input" },
+          ]);
           await React.act(async () => observed.input!.onClearSession());
+          assert.deepEqual(queryClient.getQueryData(inputQueryKey), []);
         }
         assert.equal(observed.input?.isTransitioning, false);
         await React.act(async () => observed.input!.onExecute("next turn", []));
@@ -785,6 +802,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
     }
   } finally {
     await React.act(async () => root.unmount());
+    queryClient.clear();
     dom.window.close();
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
     else Reflect.deleteProperty(globalThis, "window");

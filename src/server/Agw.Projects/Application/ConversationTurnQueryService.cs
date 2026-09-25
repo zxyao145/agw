@@ -1,9 +1,11 @@
+using System.Text.RegularExpressions;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Application;
 
@@ -134,7 +136,6 @@ public sealed class ConversationTurnQueryService
         ProjectConversationChatHistory? input
     )
     {
-        var text = input?.GetText() ?? string.Empty;
         return new ConversationTurnResponse(
             turn.Id,
             turn.ProjectConversationId,
@@ -148,7 +149,33 @@ public sealed class ConversationTurnQueryService
             turn.LastSequence,
             turn.ErrorCode,
             turn.InputMessageId,
-            text.Length <= InputSummaryLength ? text : text[..InputSummaryLength]
+            GetInputSummary(input)
         );
+    }
+
+    private static string GetInputSummary(ProjectConversationChatHistory? input)
+    {
+        var message = input?.ToChatMessage();
+        if (message == null)
+            return string.Empty;
+
+        var text = string.Join(" ", message.Contents.OfType<TextContent>().Select(content => content.Text));
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            var images = message
+                .Contents.OfType<DataContent>()
+                .Where(content => content.MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var names = images.Select(content => content.Name?.Trim()).Where(name => !string.IsNullOrEmpty(name));
+            text = string.Join(", ", names);
+            if (text.Length == 0)
+                text =
+                    images.Count > 0
+                        ? "Image input"
+                        : message.Contents.OfType<UriContent>().FirstOrDefault()?.Uri.ToString() ?? "User input";
+        }
+
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+        return string.Concat(text.EnumerateRunes().Take(InputSummaryLength).Select(rune => rune.ToString()));
     }
 }

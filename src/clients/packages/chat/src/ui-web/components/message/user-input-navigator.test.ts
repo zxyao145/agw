@@ -17,14 +17,14 @@ const markers: UserInputMarker[] = [
 function renderNavigator(
   navigatorMarkers: UserInputMarker[],
   activeKey: string | null,
-  selected: number[] = [],
+  selected: string[] = [],
 ) {
   return render(
     React.createElement(UserInputNavigator, {
       markers: navigatorMarkers,
       activeKey,
       height: 240,
-      onSelect: (rowIndex: number) => selected.push(rowIndex),
+      onSelect: (key: string) => selected.push(key),
     }),
   );
 }
@@ -33,8 +33,8 @@ function anchor(preview: string) {
   return screen.getByRole("button", { name: `Jump to user input: ${preview}` });
 }
 
-test("the navigator marks the active user input and selects a virtual row", () => {
-  const selected: number[] = [];
+test("the navigator marks the active user input and selects its message key", () => {
+  const selected: string[] = [];
   renderNavigator(markers, "first", selected);
 
   assert.ok(screen.getByRole("navigation", { name: "User input navigation" }));
@@ -43,7 +43,7 @@ test("the navigator marks the active user input and selects a virtual row", () =
 
   fireEvent.click(anchor("Second user input"));
 
-  assert.deepEqual(selected, [4]);
+  assert.deepEqual(selected, ["second"]);
 });
 
 test("anchors are laid out by the list, not by absolute offsets", () => {
@@ -124,4 +124,15 @@ test("a long marker list keeps every anchor reachable", () => {
   );
 
   assert.equal(screen.getAllByRole("button").length, 100);
+});
+
+test("an unloaded input remains selectable", () => {
+  const selected: string[] = [];
+  renderNavigator(
+    [{ key: "unloaded", itemIndex: null, rowIndex: null, start: null, preview: "Earlier input" }],
+    null,
+    selected,
+  );
+  fireEvent.click(anchor("Earlier input"));
+  assert.deepEqual(selected, ["unloaded"]);
 });

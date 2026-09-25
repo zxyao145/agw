@@ -7,7 +7,7 @@ import {
 } from "@agw/execution-core";
 
 import * as React from "react";
-import { useQuery } from "@agw/components/query";
+import { useQuery, useQueryClient } from "@agw/components/query";
 import { toast } from "sonner";
 
 import { apiGet } from "@agw/api";
@@ -47,6 +47,7 @@ import {
 import {
   clearProjectConversationRecords,
   getProjectConversationMessages,
+  getConversationTurnInputs,
   type LineComment,
   type ProjectDirectoryOption,
 } from "@agw/projects";
@@ -69,6 +70,7 @@ import type { ChatTargetOption } from "@agw/api";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 import { ToolDirectoriesContext } from "./tool-directory";
+import { userInputKey } from "./user-input-navigation";
 
 export interface ChatSessionSeed {
   revision: string | number;
@@ -195,6 +197,7 @@ export function Chat({
   restoreExecution = false,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
+  const queryClient = useQueryClient();
   const initialHistory = React.useMemo(
     () => prepareChatHistory(sessionSeed.messages),
     [sessionSeed.revision],
@@ -237,6 +240,7 @@ export function Chat({
   const [hasOlderMessages, setHasOlderMessages] = React.useState(sessionSeed.hasOlderMessages);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = React.useState(false);
   const [isJumpingToTop, setIsJumpingToTop] = React.useState(false);
+  const [acceptedConversationId, setAcceptedConversationId] = React.useState<string | null>(null);
   const [pendingInteraction, setPendingInteraction] = React.useState<PendingInteraction | null>(
     null,
   );
@@ -351,6 +355,16 @@ export function Chat({
   const isRestoringExecution =
     executionRestoreKey !== null && restoredExecutionKey !== executionRestoreKey;
   const showReconnect = getExecutionReconnectProgress(reconnectState) !== null;
+  const userInputsQuery = useQuery({
+    queryKey: ["conversation-turn-inputs", executionServerId, conversationId, sessionSeed.revision],
+    enabled:
+      showUserInputNavigation &&
+      Boolean(
+        conversationId && (sessionSeed.contextId || acceptedConversationId === conversationId),
+      ) &&
+      !isHydratingSession,
+    queryFn: ({ signal }) => getConversationTurnInputs(conversationId!, signal),
+  });
   const checkpointResumeDisabled =
     isExecuting || isTransitioning || isHydratingSession || isRestoringExecution || showReconnect;
   const isCurrentTurnActive =
@@ -472,6 +486,7 @@ export function Chat({
     setClaudeCommands(preparedHistory.commands);
     setConversationUsage(sessionSeed.usage);
     conversationIdRef.current = conversationId;
+    setAcceptedConversationId(null);
     announcedConversationIdRef.current = conversationId;
     setContextId(sessionSeed.contextId);
     contextIdRef.current = sessionSeed.contextId;
@@ -640,6 +655,7 @@ export function Chat({
           activeStreamingScopeRef.current ??
           message.messageId;
         setIsExecuting(true);
+        setAcceptedConversationId(conversationIdRef.current);
         return;
       }
 
@@ -1372,6 +1388,11 @@ export function Chat({
       setCheckpointAvailability([]);
       messagesRef.current = [];
       setMessages([]);
+      const inputQueries = {
+        queryKey: ["conversation-turn-inputs", executionServerId, conversationToClear],
+      };
+      await queryClient.cancelQueries(inputQueries);
+      queryClient.setQueriesData(inputQueries, []);
       setClaudeCommands([]);
       setHasOlderMessages(false);
       setIsLoadingOlderMessages(false);
@@ -1410,7 +1431,15 @@ export function Chat({
         clearInFlightRef.current = false;
       }
     })();
-  }, [conversationId, interruptAndDispose, notifyExecutionError, onConversationChange, projectId]);
+  }, [
+    conversationId,
+    executionServerId,
+    interruptAndDispose,
+    notifyExecutionError,
+    onConversationChange,
+    projectId,
+    queryClient,
+  ]);
 
   const handleClearPendingFileComments = React.useCallback(() => {
     if (pendingFileComments.length === 0) return;
@@ -1506,104 +1535,127 @@ export function Chat({
     return () => cancelAnimationFrame(frame);
   }, [hasOlderMessages, isLoadingOlderMessages, loadOlderMessages, renderItems.length]);
 
-  const handleScrollToTop = React.useCallback(async () => {
-    const scrollContainer = conversationScrollRef.current;
-    if (!scrollContainer) return;
+  // 返回历史是否已经加载到目标输入；没有目标时表示是否已经加载到对话开头。
+  // Returns whether history now reaches the target input; without a target, whether it reaches the conversation start.
+  const loadHistoryThroughInput = React.useCallback(
+    async (inputKey?: string): Promise<boolean> => {
+      const scrollContainer = conversationScrollRef.current;
+      if (!scrollContainer) return false;
 
-    autoScrollStateRef.current = {
-      ...autoScrollStateRef.current,
-      shouldAutoScroll: false,
-    };
+      autoScrollStateRef.current = {
+        ...autoScrollStateRef.current,
+        shouldAutoScroll: false,
+      };
 
-    if (!hasOlderMessagesRef.current || !olderMessagesCursorRef.current) {
-      scrollContainer.scrollTo({ top: 0, behavior: "auto" });
-      return;
-    }
-
-    const activeProjectId = projectId;
-    const activeConversationId = conversationIdRef.current;
-    const activeContextId = contextIdRef.current;
-    if (
-      !activeProjectId ||
-      !activeConversationId ||
-      !activeContextId ||
-      isLoadingOlderMessagesRef.current
-    ) {
-      return;
-    }
-
-    const abortController = new AbortController();
-    olderMessagesAbortRef.current?.abort();
-    olderMessagesAbortRef.current = abortController;
-    isLoadingOlderMessagesRef.current = true;
-    setIsLoadingOlderMessages(true);
-    setIsJumpingToTop(true);
-
-    let cursor: string | null = olderMessagesCursorRef.current;
-    let hasMore: boolean = hasOlderMessagesRef.current;
-    const pages: AiMessage[][] = [];
-
-    try {
-      while (hasMore && cursor) {
-        const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
-          direction: "older",
-          cursor,
-          pageSize: 50,
-          signal: abortController.signal,
-        });
-        if (
-          abortController.signal.aborted ||
-          conversationIdRef.current !== activeConversationId ||
-          contextIdRef.current !== activeContextId
-        ) {
-          return;
-        }
-
-        pages.push(page.items);
-        cursor = page.nextCursor;
-        hasMore = page.hasMore && cursor !== null;
+      if (!hasOlderMessagesRef.current || !olderMessagesCursorRef.current) {
+        if (!inputKey) scrollContainer.scrollTo({ top: 0, behavior: "auto" });
+        return !inputKey;
       }
 
-      const olderMessages = pages.reverse().flat();
-      if (olderMessages.length > 0) {
-        const historyCommands = prepareClaudeHistory(olderMessages).commands;
-        setMessages((current) => {
-          const prepared = prepareChatHistory(prependUniqueMessages(olderMessages, current));
-          messagesRef.current = prepared.messages;
-          return prepared.messages;
-        });
-        if (historyCommands.length > 0) {
-          setClaudeCommands((current) => (current.length === 0 ? historyCommands : current));
-        }
+      const activeProjectId = projectId;
+      const activeConversationId = conversationIdRef.current;
+      const activeContextId = contextIdRef.current;
+      if (!activeProjectId || !activeConversationId || !activeContextId) {
+        return false;
       }
 
-      olderMessagesCursorRef.current = cursor;
-      hasOlderMessagesRef.current = hasMore;
-      setHasOlderMessages(hasMore);
+      const abortController = new AbortController();
+      olderMessagesAbortRef.current?.abort();
+      olderMessagesAbortRef.current = abortController;
+      pendingPrependAnchorRef.current = null;
+      isLoadingOlderMessagesRef.current = true;
+      setIsLoadingOlderMessages(true);
+      setIsJumpingToTop(true);
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      let cursor: string | null = olderMessagesCursorRef.current;
+      let hasMore: boolean = hasOlderMessagesRef.current;
+      const pages: AiMessage[][] = [];
+
+      try {
+        while (hasMore && cursor) {
+          const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
+            direction: "older",
+            cursor,
+            pageSize: 50,
+            signal: abortController.signal,
+          });
           if (
-            conversationIdRef.current === activeConversationId &&
-            contextIdRef.current === activeContextId
+            abortController.signal.aborted ||
+            conversationIdRef.current !== activeConversationId ||
+            contextIdRef.current !== activeContextId
           ) {
-            conversationScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+            return false;
           }
-        });
-      });
-    } catch (error) {
-      if (!abortController.signal.aborted) {
-        notifyExecutionError(error);
+
+          pages.push(page.items);
+          cursor = page.nextCursor;
+          hasMore = page.hasMore && cursor !== null;
+          if (
+            inputKey &&
+            page.items.some((message) => userInputKey(message.messageId) === inputKey)
+          ) {
+            break;
+          }
+        }
+
+        const olderMessages = pages.reverse().flat();
+        if (olderMessages.length > 0) {
+          const historyCommands = prepareClaudeHistory(olderMessages).commands;
+          setMessages((current) => {
+            const prepared = prepareChatHistory(prependUniqueMessages(olderMessages, current));
+            messagesRef.current = prepared.messages;
+            return prepared.messages;
+          });
+          if (historyCommands.length > 0) {
+            setClaudeCommands((current) => (current.length === 0 ? historyCommands : current));
+          }
+        }
+
+        olderMessagesCursorRef.current = cursor;
+        hasOlderMessagesRef.current = hasMore;
+        setHasOlderMessages(hasMore);
+
+        if (
+          inputKey &&
+          !messagesRef.current.some((message) => userInputKey(message.messageId) === inputKey) &&
+          !olderMessages.some((message) => userInputKey(message.messageId) === inputKey)
+        ) {
+          throw new Error("The selected user input was not found in conversation history.");
+        }
+
+        if (!inputKey)
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (
+                conversationIdRef.current === activeConversationId &&
+                contextIdRef.current === activeContextId
+              ) {
+                conversationScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+              }
+            });
+          });
+        return true;
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          notifyExecutionError(error);
+        }
+        return false;
+      } finally {
+        if (olderMessagesAbortRef.current === abortController) {
+          olderMessagesAbortRef.current = null;
+          isLoadingOlderMessagesRef.current = false;
+          setIsLoadingOlderMessages(false);
+          setIsJumpingToTop(false);
+        }
       }
-    } finally {
-      if (olderMessagesAbortRef.current === abortController) {
-        olderMessagesAbortRef.current = null;
-        isLoadingOlderMessagesRef.current = false;
-        setIsLoadingOlderMessages(false);
-        setIsJumpingToTop(false);
-      }
-    }
-  }, [notifyExecutionError, projectId]);
+    },
+    [notifyExecutionError, projectId],
+  );
+
+  const handleScrollToTop = React.useCallback(
+    () => loadHistoryThroughInput(),
+    [loadHistoryThroughInput],
+  );
 
   const handleScrollToBottom = React.useCallback(() => {
     const scrollContainer = conversationScrollRef.current;
@@ -1647,6 +1699,16 @@ export function Chat({
     };
   }, []);
 
+  const handleAnchorNavigate = React.useCallback(() => {
+    olderMessagesAbortRef.current?.abort();
+    olderMessagesAbortRef.current = null;
+    isLoadingOlderMessagesRef.current = false;
+    setIsLoadingOlderMessages(false);
+    setIsJumpingToTop(false);
+    pendingPrependAnchorRef.current = null;
+    handleUserInputNavigate();
+  }, [handleUserInputNavigate]);
+
   return (
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
@@ -1681,7 +1743,9 @@ export function Chat({
                   onWorkSummaryToggle={handleUserInputNavigate}
                   scrollElementRef={conversationScrollRef}
                   userInputNavigationHost={userInputNavigationHost}
-                  onUserInputNavigate={handleUserInputNavigate}
+                  onUserInputNavigate={handleAnchorNavigate}
+                  userInputs={userInputsQuery.data}
+                  onLoadUserInput={loadHistoryThroughInput}
                   hasOlderMessages={hasOlderMessages}
                   isLoadingOlderMessages={isLoadingOlderMessages}
                   isInitialLoading={isLoadingConversation}
