@@ -2,7 +2,7 @@
 title: "MCP 服务"
 description: "连接工具服务，并核对服务端的网络与进程环境。"
 weight: 90
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/guides/mcp
 ---
 
@@ -12,10 +12,11 @@ MCP（Model Context Protocol）是一种让 Agent 使用外部工具的协议。
 
 ## 连接路径
 
-1. 在 MCP 配置界面创建工具服务，按其要求配置传输、命令或端点与凭据。
+1. 在 **MCP Tool Servers** 页面点击 **Add Server**，在 **Transport Type** 中选择 `stdio` 或 `http`，按服务要求填写命令或端点与凭据。
 2. 本地进程服务需要执行节点能启动对应命令；远程服务需要从执行节点访问。
-3. 将服务绑定给自定义 Agent，开启新回合。
-4. 检查可发现的工具，使用一个只读操作验证返回内容。
+3. 在列表中点击 **Connect and list tools** 检查连通性，成功时显示 “N tools available”。确认 **Enabled** 已打开，停用的服务不会被使用。
+4. 在自定义 Agent 或 Project 的 **MCP Tool Server** 标签中绑定该服务，开启新回合；运行时使用 Agent 和 Project 绑定的全部服务。
+5. 检查可发现的工具，使用一个只读操作验证返回内容。
 
 目录、命令和网络都以实际 Server/执行节点为准。远程 Desktop 连接不会使本机安装的 MCP 服务自动出现在 Server 上。
 
@@ -27,7 +28,7 @@ MCP（Model Context Protocol）是一种让 Agent 使用外部工具的协议。
 | 方式 | 如何连接 | 配置前检查 |
 | --- | --- | --- |
 | stdio | AGW 启动一个进程，通过它的输入输出通信 | 执行主机上有对应程序，命令、参数和工作目录正确 |
-| HTTP / SSE | AGW 访问正在运行的工具服务 | 服务地址和认证方式正确，执行主机能够访问 |
+| http | AGW 访问正在运行的工具服务。连接 SSE 服务时也选择 `http`，AGW 会自动识别服务使用的 HTTP 传输方式 | 服务地址和认证方式正确，执行主机能够访问 |
 
 例如，stdio 命令在个人终端能运行，但 Server 使用另一个账号或运行在容器中时，可能找不到同一个程序。应在 Server 所用环境中检查命令和环境变量。远程地址则需要从执行主机测试连通性。
 
@@ -38,6 +39,8 @@ MCP 是工具协议。Integration 是带目录定义、用户配置、凭据和 
 Plugin MCP 支持 stdio、HTTP 和 SSE 源。向 HTTP/SSE 注入凭据的 Plugin MCP 源必须使用 HTTPS；凭据在调用作用域中解析，不应放进公开 URL 或提示词。
 
 ## 故障排查
+
+运行时无法连接的 MCP 服务会被跳过，Server 日志中记录警告，本回合继续执行；工具名称无效或与其他工具重名时，本回合会报错。stdio 服务启动时，执行时传入的环境变量会覆盖服务配置中的同名变量。
 
 工具未出现时检查绑定、启动命令、可执行文件、网络可达性与凭据。先在相同执行环境确认服务可用，再重试新的 Agent 回合。外部 CLI 的 MCP 配置按其自身机制处理，不等同于 AGW Connection 注入。
 

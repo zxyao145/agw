@@ -2,7 +2,7 @@
 title: "Control/Data Plane 分离部署"
 description: "共享 PostgreSQL、密钥和工作目录，按角色路由请求。"
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/operations/split
 ---
 
@@ -17,6 +17,8 @@ translationKey: docs/operations/split
 | Control Plane | Setup、Web、管理 API、Jobs 调度 |
 | Data Plane | SignalR Execution、A2A、持久化执行 workers |
 | Standalone | 合并两种职责，适合单机 |
+
+分离部署使用 Distributed 执行模式。在这种模式下，Chat 中直接运行 External Agent（Claude Code、Codex、Pi）的回合会报错 “Distributed execution currently supports System Agents only.”；需要直接使用这些外部 Agent 时，应选择 InProcess 执行的 Standalone。
 
 分离部署要求两端使用 PostgreSQL 数据库、Distributed 执行和 PostgreSQL 锁。不能使用 SQLite 或内存锁替代跨节点协调。
 
@@ -33,7 +35,7 @@ DistributedLock__ConnectionString: ""
 ## 启动与路由
 
 1. 按仓库 cluster Compose 配置数据库、两个 Host、共享密钥和目录。
-2. 先启动 Control Plane，完成初始化并确认就绪。
+2. 先启动 Control Plane，完成初始化并确认就绪：`GET /api/health/ready` 在未初始化或数据库无法连接时返回 503，就绪后返回 200；`GET /api/health/live` 只表示进程在运行。这两个地址不需要登录。
 3. 再启动 Data Plane，最后按需要增加副本。
 4. 将 `/api/hubs/exec`、`/a2a/*` 和 `/.well-known/agents.json` 路由到 Data Plane，其余应用路径到 Control Plane。
 
@@ -47,7 +49,7 @@ Docker Compose 部署从文末的 cluster Compose 文件开始，并按上一节
 
 ## Kubernetes YAML 示例
 
-仓库的 [deploy/k8s](https://github.com/zxyao145/agw/tree/main/deploy/k8s) 提供一套**本地单节点 kind** 示例。它将 Control Plane 和 Data Plane 分成独立 Deployment，使用外部 PostgreSQL，并通过 NodePort 接入前面的 Nginx。以下内容对应这些文件，不会额外创建 PostgreSQL 或 Ingress Controller。
+仓库的 [deploy/k8s](https://github.com/zxyao145/agw/tree/main/deploy/k8s) 提供一套**本地单节点 kind** 示例。它将 Control Plane 和 Data Plane 分成独立 Deployment，使用外部 PostgreSQL，并通过 NodePort 接入后文的 Nginx 配置。以下内容对应这些文件，不会额外创建 PostgreSQL 或 Ingress Controller。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -251,13 +253,13 @@ kubectl get pods,services,pvc
 
 `rollout status` 表示 Deployment 已完成滚动更新，不能单独证明 AGW 已完成初始化。本例由 Control Plane 的 `Setup__AdminPassword` 触发首次初始化；应结合日志和登录页面确认成功后再启动 Data Plane。已有数据库的认证配置不会被该初始密码覆盖。
 
-按上述 kind 端口映射运行时，前面的 Nginx upstream 可直接使用 `127.0.0.1:30816` 和 `127.0.0.1:30820`。如果 Nginx 在集群内部，则使用相同 namespace 下的 Service 地址 `agw-control-plane:30816` 和 `agw-data-plane:30820`。检查 PVC 为 Bound、Pod 正常运行后，再验证登录、执行连接和各节点实际接收的请求。
+按上述 kind 端口映射运行时，后文 Nginx 示例中的 upstream 可直接使用 `127.0.0.1:30816` 和 `127.0.0.1:30820`。如果 Nginx 在集群内部，则使用相同 namespace 下的 Service 地址 `agw-control-plane:30816` 和 `agw-data-plane:30820`。检查 PVC 为 Bound、Pod 正常运行后，再验证登录、执行连接和各节点实际接收的请求。
 
 不要执行 `kubectl apply -f deploy/k8s/`：目录中的 kind Cluster 文件是 `kind` 的输入，不是 Kubernetes API 资源。更改 kind 的端口或目录映射需要重建集群，操作前先备份数据。完整步骤见 [本地 kind 部署说明](https://github.com/zxyao145/agw/blob/main/deploy/k8s/README.md)。
 
 ## Nginx 配置示例
 
-下面的配置参考本地 `agw.conf` 的分流方式：Nginx 提供统一入口，Control Plane 监听 `30816`，Data Plane 监听 `30820`。端口只是示例，需要与实际 Host 的监听地址一致；如果服务运行在不同主机或容器中，将 `127.0.0.1` 换成 Nginx 能访问的地址。
+下面的配置中，Nginx 提供统一入口，Control Plane 监听 `30816`，Data Plane 监听 `30820`，与前面的 kind 示例一致；仓库中的 `deploy/nginx.split.conf.example` 和 cluster Compose 示例则让 Data Plane 使用 `30817`。端口只是示例，需要与实际 Host 的监听地址一致；如果服务运行在不同主机或容器中，将 `127.0.0.1` 换成 Nginx 能访问的地址。
 
 ### Control Plane 同时提供 Web
 
@@ -343,7 +345,7 @@ server {
 
 ### Web 单独运行
 
-如果与参考配置一样，Web 在 `3001` 单独运行，保留上述 Data Plane 路由和公共代理设置，再添加 `agw_web` upstream，按下面的方式调整管理路由并替换原来的 `location /`。`3001` 是仓库 Web 开发端口，实际部署按 Web 服务端口填写。
+如果 Web 在 `3001` 单独运行，保留上述 Data Plane 路由和公共代理设置，再添加 `agw_web` upstream，按下面的方式调整管理路由并替换原来的 `location /`。`3001` 是仓库 Web 开发端口，实际部署按 Web 服务端口填写。
 
 ```nginx
 # Add inside http {}, alongside the other upstream blocks.

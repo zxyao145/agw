@@ -2,11 +2,11 @@
 title: "开发环境与运行"
 description: "安装依赖，独立运行后端、Web、Desktop 或 Mobile。"
 weight: 10
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/development/setup
 ---
 
-前提：.NET 10 SDK、Node.js 24、pnpm 11.7.0 和 Git。只有构建容器镜像时才需要 Docker Buildx。以下应用命令在 AGW 仓库执行，文档站本身不依赖这些工具链。
+前提：.NET 10 SDK、Node.js 24、pnpm 12.5.1（版本由 `src/clients/package.json` 的 `packageManager` 指定）和 Git。只有构建容器镜像时才需要 Docker Buildx。以下应用命令在 AGW 仓库执行，文档站本身不依赖这些工具链。
 
 ## 后端
 
@@ -43,7 +43,7 @@ pnpm dev:web
 
 确认后端初始化完成，客户端能连接并运行一条简单消息。移动真机需要可达的后端地址；外部 CLI 需在执行进程环境下可用。
 
-运行站点只需要 Hugo Extended 与 Go，命令见 `site/README.md`。不要将站点加入客户端 Turborepo，也不要让 Web/Desktop 消费站点产物。
+运行站点需要 Hugo Extended 与 Go，运行检查脚本 `scripts/check-site.py` 还需要 Python 3，命令见 `site/README.md`。不要将站点加入客户端 Turborepo，也不要让 Web/Desktop 消费站点产物。
 
 ## 实现与参考
 

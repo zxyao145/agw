@@ -2,7 +2,7 @@
 title: "Core concepts"
 description: "Understand how models, agents, projects, conversations, tools, agentflows, and jobs work together."
 weight: 15
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/start/concepts
 ---
 
@@ -41,7 +41,7 @@ These paths must be visible to Server or the execution node. See [Projects, file
 
 **Chat** is the interaction surface. A **conversation** holds the context and records of an ongoing exchange. An **execution** is an agent or agentflow processing input.
 
-You can send multiple messages within a conversation. During execution, inspect replies and tool activity, approve actions, or provide requested information. Losing the page connection does not mean execution has stopped; check its actual state after reconnecting.
+You can send multiple messages within a conversation. During execution, inspect replies and tool activity, approve actions, or provide requested information. Losing the page connection does not mean execution has stopped; check its actual state after reconnecting. The icon beside each conversation in the list shows **Running**, **Last turn failed**, or **Last turn interrupted**.
 
 See [Chat and execution history]({{< relref "/docs/guides/chat" >}}).
 
@@ -63,7 +63,7 @@ For example, `todo` groups tools for adding, listing, and completing to-do items
 
 A Skill provides task-oriented instructions, resources, and optional tools to guide how an agent performs work. For example, `agw-job` supplies job-management instructions and tools.
 
-Skills support **Local** and **Remote** sources. Local uploads a package to AGW Server; Remote reads it from a URL. Choose based on who maintains the content and whether packaged resources are needed. See [Tools and Skills]({{< relref "/docs/guides/tools-skills" >}}) for formats and update rules.
+Skills come in three kinds: **Built-in**, **Local**, and **Remote**. Built-in Skills are provided by AGW modules, such as `agw-job` above. You can add Local or Remote Skills: Local uploads a package to AGW Server; Remote reads it from a URL. Choose based on who maintains the content and whether packaged resources are needed. See [Tools and Skills]({{< relref "/docs/guides/tools-skills" >}}) for formats and update rules.
 
 ### MCP
 

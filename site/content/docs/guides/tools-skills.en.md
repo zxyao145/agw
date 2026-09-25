@@ -2,7 +2,7 @@
 title: "Tools and Skills"
 description: "Select agent tools and task instructions with permissions and project binding."
 weight: 80
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/guides/tools-skills
 ---
 
@@ -12,12 +12,25 @@ The steps below assume an existing custom agent and Project. External agents con
 
 ## Add capabilities
 
-1. Inspect the available tool catalog, including purpose and permission level.
+1. Review the selectable tools in the **Tools** tab of an Agent or Project. ToolBlock cards show a description and member tools, plus an **Approval** badge when a call may need approval; individual tools appear in a dropdown with name, description, and category.
 2. Manage available Skills and read their instructions and prerequisites.
 3. Bind the tools and Skills needed for this task to the agent.
 4. Start a new turn in the correct Project. Verify read operations before testing necessary writes.
 
 Every tool explicitly declares `AgwToolPermission`. The execution pipeline checks permissions; saying “allowed” in a prompt does not bypass permission or ownership checks.
+
+## Built-in ToolBlocks
+
+| ToolBlock | Purpose | Configurable on |
+| --- | --- | --- |
+| Todo | Tracks multi-step work with a persistent todo list | Agent, Project |
+| Mode | Switches between Plan and Execute; see [Plan and Execute modes]({{< relref "/docs/features/plan-execute" >}}) | Agent, Project |
+| File Access | Reads and modifies files in the Project workspace | Agent, Project |
+| User Memory | Memory for the current user across Projects | Agent, Project |
+| Project Memory | Memory shared across the current Project, stored in the database or the primary directory; see [Memory]({{< relref "/docs/features/memory" >}}) | Agent, Project |
+| Background Agents | Delegates work to explicitly allowed agents chosen in **Allowed delegation targets** | Agent only |
+
+In File Access, `file_access_read`, `file_access_read_lines`, `file_access_ls`, and `file_access_grep` are read-only and allowed in Plan mode; `file_access_write`, `file_access_delete`, `file_access_replace`, and `file_access_replace_lines` require write permission.
 
 ![AGW Desktop: select ToolBlocks as groups in the Agent’s Tools tab and inspect their member tools.](/images/screenshots/tool-blocks.png)
 {caption="AGW Desktop: select ToolBlocks as groups in the Agent’s Tools tab and inspect their member tools."}
@@ -34,7 +47,7 @@ Choose a mode according to how you maintain the content:
 “Local” means the AGW server, not the computer running the browser. Remote refers to where the instructions come from; the Agent still performs the task.
 
 1. Create a Skill in Skills and select Local or Remote.
-2. For Local, enter a name and description and upload a ZIP containing `SKILL.md`. For Remote, enter the ZIP download URL without uploading a file.
+2. For Local, enter a name and description and upload a ZIP containing `SKILL.md`. For Remote, enter the ZIP download URL without uploading a file. AGW downloads it with an unauthenticated GET, so URLs that require sign-in or a token cannot be used.
 3. A Remote package must contain exactly one `SKILL.md`, with `name` and `description` in its YAML frontmatter and instructions in its body. The remote file supplies the name and description.
 4. After saving, select the Skill in an Agent or Project and use a small relevant task to verify that its instructions are available.
 

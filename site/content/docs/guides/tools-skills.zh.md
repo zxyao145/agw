@@ -2,7 +2,7 @@
 title: "Tools 与 Skills"
 description: "为 Agent 选择工具和任务说明，理解权限与项目绑定。"
 weight: 80
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/guides/tools-skills
 ---
 
@@ -12,12 +12,25 @@ translationKey: docs/guides/tools-skills
 
 ## 添加能力
 
-1. 在工具目录检查可用工具的用途和权限级别。
+1. 在 Agent 或 Project 的 **Tools** 标签中查看可选工具：ToolBlock 卡片显示用途说明、包含的成员工具，可能需要审批时还会显示 **Approval** 标记；单个工具在下拉列表中显示名称、说明和分类。
 2. 在 Skills 管理可用 Skill，阅读其说明与前提。
 3. 在 Agent 中绑定本次任务需要的工具和 Skills。
 4. 在正确的 Project 中开始新回合，先验证读取类任务，再验证确实需要的写操作。
 
 每个工具显式声明 `AgwToolPermission`。运行权限由执行管线检查；提示词写“允许”不会跳过权限或资源归属验证。
+
+## 内置 ToolBlock
+
+| ToolBlock | 用途 | 可配置在 |
+| --- | --- | --- |
+| Todo | 用持久保存的待办清单跟踪多步骤工作 | Agent、Project |
+| Mode | 在 Plan 与 Execute 之间切换，见 [Plan 与 Execute 模式]({{< relref "/docs/features/plan-execute" >}}) | Agent、Project |
+| File Access | 读取和修改 Project 工作目录中的文件 | Agent、Project |
+| User Memory | 当前用户跨 Project 使用的记忆 | Agent、Project |
+| Project Memory | 当前 Project 共享的记忆，保存在数据库或主目录中，见[记忆]({{< relref "/docs/features/memory" >}}) | Agent、Project |
+| Background Agents | 把工作委派给明确允许的 Agent，需要在 **Allowed delegation targets** 中选择目标 | 仅 Agent |
+
+File Access 中的 `file_access_read`、`file_access_read_lines`、`file_access_ls` 和 `file_access_grep` 是只读工具，可以在 Plan 模式中使用；`file_access_write`、`file_access_delete`、`file_access_replace` 和 `file_access_replace_lines` 需要写入权限。
 
 ![AGW Desktop：在 Agent 的 Tools 中按组选择 ToolBlocks，并查看各组包含的工具。](/images/screenshots/tool-blocks.png)
 {caption="AGW Desktop：在 Agent 的 Tools 中按组选择 ToolBlocks，并查看各组包含的工具。"}
@@ -34,7 +47,7 @@ translationKey: docs/guides/tools-skills
 Local 中的“本地”指 AGW 服务端，不是浏览器所在的电脑。Remote 表示说明内容来自远程地址，任务仍由 Agent 执行。
 
 1. 在 Skills 中创建 Skill，选择 Local 或 Remote。
-2. Local 填写名称和描述，上传含 `SKILL.md` 的 ZIP 包；Remote 填写 ZIP 下载地址，无需上传文件。
+2. Local 填写名称和描述，上传含 `SKILL.md` 的 ZIP 包；Remote 填写 ZIP 下载地址，无需上传文件。AGW 以不带认证信息的 GET 请求下载 Remote 地址，需要登录或 Token 才能访问的地址无法使用。
 3. Remote 包中必须恰好有一个 `SKILL.md`，其中的 YAML 元信息需包含 `name`、`description`，正文需包含使用说明。名称和描述由远程文件提供。
 4. 保存成功后，在 Agent 或 Project 中选择该 Skill，再用一个相关的小任务验证说明是否可用。
 

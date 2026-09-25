@@ -2,7 +2,7 @@
 title: "数据目录、备份与升级"
 description: "备份数据库与密钥，并单独管理项目工作目录。"
 weight: 40
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/operations/backup
 ---
 
@@ -12,7 +12,7 @@ translationKey: docs/operations/backup
 
 ## 数据范围
 
-`AgwDataDir` 默认 `~/agw`，Docker 使用 `/data`。路径支持 `~`，其他相对路径相对进程工作目录解析。
+`AgwDataDir` 默认 `~/agw`，Docker 使用 `/data`。路径支持 `~`，其他相对路径相对进程工作目录解析。默认的 SQLite 数据库文件是 `<AgwDataDir>/database/agw.db`，Docker 中为 `/data/database/agw.db`。
 
 需要一起保存：
 
@@ -25,16 +25,17 @@ translationKey: docs/operations/backup
 
 ## 先列出备份清单
 
-记录数据库位置、`AgwDataDir` 的实际值、各 Project 的目录及当前程序版本。项目使用文件型 Memory 时，还要包含主目录下的隐藏目录 `.agw/memory/`；数据库型 Memory 随数据库保存。
+记录数据库位置、`AgwDataDir` 的实际值、各 Project 的目录及当前程序版本。项目使用文件型 Memory 时，还要包含主目录下的隐藏目录 `.agw/memory/`；数据库型 Memory 随数据库保存。表单默认的主目录 `~/.agw/<项目文件夹名>` 和 Server 默认的 `~/.agw/projects/{projectId:N}` 都位于运行 Server 的账号的主目录下，不在 `AgwDataDir` 中；Docker 中也不在 `/data` 卷内，需要另外挂载并备份。
 
 备份数据库和文件前，先等待任务结束或中断任务，避免备份期间仍有写入。SQLite 的简单做法是停止 Server 后复制数据库及相关文件；PostgreSQL 使用自己的备份工具。数据目录和项目目录可能在不同位置，应逐项核对，不能假定它们都在 `/data` 内。
 
 ## 升级顺序
 
 1. 阅读目标 Release 说明，记录当前镜像或安装包版本。
-2. 取得一致性备份：SQLite 简单部署可停止 Server 后备份；PostgreSQL 使用数据库自身的备份机制。
-3. 更新 Server 与客户端，保留数据、密钥和目录挂载。
-4. 验证初始化状态、登录、Project 文件和一个小任务；分离部署还需验证 worker 与 Job。
+2. 停止全部旧版 Standalone、Control Plane 和 Data Plane 进程，取得一致性备份：SQLite 简单部署可在停止后复制文件；PostgreSQL 使用数据库自身的备份机制。
+3. 应用新版本对应数据库的迁移（SQLite 或 PostgreSQL 其中一套）。已初始化的 Server 正常启动时不会自动执行迁移，只有首次 Setup 会执行；源码部署可使用 [Development Guide](https://github.com/zxyao145/agw/blob/main/docs/1.Development.md) 中按数据库区分的命令。
+4. 更新 Server 与客户端，保留数据、Data Protection 密钥和目录挂载，再启动新版本。新版 Host 在接受请求和启动 Worker 之前，会检查并升级正在进行的执行记录；某条记录无法解密或验证失败时，Host 启动报错，需要修正数据后重新启动。
+5. 验证初始化状态、登录、Project 文件和一个小任务；分离部署还需验证 worker 与 Job。
 
 AGW 在 1.0 前的升级可能包含 schema 变更。回滚时需要使用彼此兼容的程序版本、数据库备份和密钥备份。
 

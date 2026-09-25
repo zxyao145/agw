@@ -2,7 +2,7 @@
 title: "Image input"
 description: "Upload images in a conversation and ask the agent questions about them."
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/image-input
 ---
 
@@ -19,7 +19,7 @@ To change code, also provide the Project and file access. A screenshot supplies 
 ## Get started
 
 1. Choose a model and execution target that support image understanding.
-2. Add images in Web, Desktop, or Mobile Chat and explain what the agent should focus on.
+2. Add images in Chat: paste them into the message box in Web and Desktop, or choose them from the photo library on Mobile. Then explain what the agent should focus on.
 3. Check the attachments, send the message, and verify that the reply interprets the image correctly.
 
 | Item | Supported range |

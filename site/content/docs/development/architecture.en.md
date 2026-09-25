@@ -2,7 +2,7 @@
 title: "Architecture and module boundaries"
 description: "Understand the modular monolith, data ownership, and client package responsibilities."
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/development/architecture
 ---
 
@@ -32,7 +32,7 @@ Domain entities hold data only. A Policy evaluates complex rules and returns a d
 
 Each table has one owning module. Sharing entity types and a database does not permit direct access to another module’s tables; use that module’s published interfaces.
 
-Each module declares an Application persistence interface such as `I<Module>DbContext`. Within a request, one `AgwDbContext` instance implements these interfaces. Modules share database resources while limiting the data each can access. Cross-module calls use Contracts; approved Infrastructure adapters handle cross-module transactions.
+Each module that owns tables declares its persistence interface `I<Module>DbContext` in `Application/Persistence`. There are nine: Agents, Auth, Integrations, Jobs, Projects, Providers, Settings, Skills, and Tools. Files, Setup, and A2A own no tables and have no such interface. Within a request, one `AgwDbContext` instance implements these interfaces. Modules share database resources while limiting the data each can access. Cross-module calls use Contracts; approved Infrastructure adapters handle cross-module transactions.
 
 `Agw.Agents.Execution → Agw.Agents` is one-way; both assemblies belong to the Agents module. Selective DDD for Agentflows does not extend to ordinary CRUD modules.
 
@@ -46,7 +46,7 @@ For edge rules, inspect the Agentflow Policy and Topology. For authorization or 
 
 Web and Desktop own independent route shells and builds. Business packages live in `src/clients/packages`. `chat-core` owns message semantics, `chat-runtime` owns execution connections and state, and `chat` owns DOM rendering. Mobile uses `chat-native` and RN-safe packages rather than DOM packages.
 
-Identify the owning module and public entry point before adding a feature. Run `pnpm test:boundaries` and relevant backend architecture tests after boundary changes.
+Identify the owning module and public entry point before adding a feature. Run `pnpm test:boundaries` and the backend architecture tests, `dotnet test tests/Agw.Architecture.Tests`, after boundary changes.
 
 ## Implementation and references
 

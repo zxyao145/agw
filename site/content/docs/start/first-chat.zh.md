@@ -2,7 +2,7 @@
 title: "开始第一次对话"
 description: "从配置模型到运行 Agent 的最短路径。"
 weight: 40
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/start/first-chat
 ---
 
@@ -22,18 +22,18 @@ translationKey: docs/start/first-chat
 
 ## 2. 创建一个简单的 Agent
 
-在 **Agents** 中创建自定义 Agent，命名为“问答助手”，选择刚配置的 Model Provider，并填写指令：
+在 **Agents** 中点击 **Create**。**Agent Type** 保持默认的 `System`（自定义 Agent），**Display Name** 填写“问答助手”，在 **Model Provider** 中选择刚配置的连接，并在 **Instructions** 中填写：
 
 ```text
 用中文回答问题。先给出直接答案，再解释必要的背景。
 遇到信息不足的情况，请明确说明缺少什么。
 ```
 
-保存并确认 Agent 已启用。这次只验证文字对话，工具、Skills 和工作流可以稍后再配置。
+点击 **Create** 保存，并在 Agents 列表中确认 **Enabled** 开关已打开；新建的 Agent 默认启用。这次只验证文字对话，工具、Skills 和工作流可以稍后再配置。
 
 ## 3. 发送第一条消息
 
-打开 **Chat**，确认当前 Server，选择一个可用 Project 和“问答助手”，发送：
+打开 **Chat**，确认当前 Server，并选择一个可用 Project：Desktop 在窗口顶部的项目标签页中选择，Web 在左侧栏顶部的下拉框中选择。然后在输入框左上方的选择器中选择“问答助手”，发送：
 
 ```text
 请用两句话解释什么是工作目录，并给一个简单例子。
@@ -41,8 +41,8 @@ translationKey: docs/start/first-chat
 
 应能看到回复逐步出现，随后本次执行结束。再发送“把刚才的解释说得更简单一些”，检查 Agent 能否接着上一条消息回答。这可以同时验证模型连接和连续对话。
 
-![AGW Desktop 对话界面：顶部选择 Project 和 Agent，底部输入消息。](/images/screenshots/desktop-chat.png)
-{caption="AGW Desktop：确认 Project 和 Agent 后，在底部发送消息。"}
+![AGW Desktop 对话界面。](/images/screenshots/desktop-chat.png)
+{caption="AGW Desktop 对话界面。"}
 
 ## 下一步
 
@@ -50,7 +50,7 @@ translationKey: docs/start/first-chat
 
 ## 没有收到回复
 
-检查所选 Model Provider 是否可用、模型 ID 是否正确、凭据与地址是否匹配，并查看 Server 日志。对话可能在等待审批或用户输入；这种状态需要在 Chat 中处理。不要在未验证模型前同时加入大量工具或复杂流程。
+检查所选 Model Provider 是否可用、模型 ID 是否正确、凭据与地址是否匹配，并查看 Server 日志。会话列表中的图标显示会话状态：**Running** 表示仍在运行，**Last turn failed** 表示上一轮失败，**Last turn interrupted** 表示上一轮被中断。对话也可能在等待审批或用户输入；这种状态需要在 Chat 中处理。不要在未验证模型前同时加入大量工具或复杂流程。
 
 ## 实现与参考
 

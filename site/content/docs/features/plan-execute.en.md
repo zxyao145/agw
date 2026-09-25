@@ -2,13 +2,13 @@
 title: "Plan and Execute modes"
 description: "Analyze the approach first, then carry out the work."
 weight: 40
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/plan-execute
 ---
 
 ## Plan before taking action
 
-Before changing code or starting a complex task, ask an agent to assess the situation and propose an approach. Custom agents configured with the Mode ToolBlock support Plan and Execute modes.
+Before changing code or starting a complex task, ask an agent to assess the situation and propose an approach. Configure the Mode ToolBlock on a custom agent or a Project to give custom agents Plan and Execute modes; on a Project, every custom agent running in that Project receives it.
 
 | Mode | Useful for | Tool behavior |
 | --- | --- | --- |
@@ -23,9 +23,9 @@ Reading and editing still require the configured tools. Switching modes does not
 
 ## Get started
 
-1. Configure the Mode ToolBlock and required tools on a custom agent.
-2. Ask it to analyze the problem in Plan mode, confirm the current mode, and review its proposal.
-3. Switch to Execute after agreeing on the approach. Respond in the UI when the agent requests a mode change.
+1. Configure the Mode ToolBlock and required tools in the **Tools** tab of a custom agent or Project.
+2. New turns start in Execute. In the Chat input, click **+** and choose **Plan mode**. When the **Plan** chip appears in the input, ask the agent to analyze the problem.
+3. The proposal appears as a **Plan** card that you can copy. After agreeing on the approach, click × on the Plan chip to return to Execute. Respond in the UI when the agent requests a mode change.
 4. Review the changes and results; return to Plan for further discussion if needed.
 
 ```mermaid

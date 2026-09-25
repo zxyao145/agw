@@ -2,7 +2,7 @@
 title: "扩展 Tools 与 Integrations"
 description: "选择能力归属，使用编译期工具声明与用户连接。"
 weight: 40
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/development/extensions
 ---
 
@@ -12,13 +12,13 @@ translationKey: docs/development/extensions
 
 ## 工具扩展路径
 
-1. 通用工具放在 `Agw.Tools`；业务工具放在所属模块的 `Application/Tools`，DTO 放 `Contracts/Tools`。
+1. 手写的 `IAgwTool`、`IContextualTool` 和 `IToolBlock` 实现放在 `Agw.Tools`，全局目录只扫描这个程序集中的手写工具。业务工具放在所属模块的 `Application/Tools`，以 Attribute 容器声明或通过 Skill 提供，DTO 放 `Contracts/Tools`。
 2. 引用 `Agw.Tools.Abstractions`，需要 Attribute 声明时将 `Agw.Tools.Generators` 作为 Analyzer 引用。
 3. 显式声明权限、参数说明和返回类型。独立工具及使用 Attribute 声明的工具容器不能保存会话状态；状态放在 Provider、会话对象或所属存储中。
 4. 在所属模块注册所需服务与生成声明。选择通过 Skill 提供，或显式加入全局目录。
 5. 验证工具发现、参数、权限、项目绑定和错误映射。
 
-生成器输出元数据、JSON Schema 和直接调用委托。不要加入运行时反射扫描兜底。Skill 工具通过 `IAgentSkillRegistration.Tools` 提供，执行时绑定 Project，不因注册生成模块就自动进入全局目录。
+生成器输出元数据、JSON Schema 和直接调用委托。不要加入运行时反射扫描兜底。Skill 工具有两个来源：`IAgentSkillRegistration.Tools` 提供手写的 `IProjectScopedAgwTool` 实例，`ToolTypes` 提供 Attribute 容器类型（由 `IAgwToolSet<T>` 生成）。它们在执行时绑定 Project，不因注册生成模块就自动进入全局目录。
 
 ## 集成扩展路径
 
@@ -34,11 +34,13 @@ translationKey: docs/development/extensions
 
 ## 方式一：通过接口定义 Tool
 
-适合一个类负责一个可独立调用的操作。实现 `IAgwTool`，声明稳定名称、分类、Plan 可用性和权限，再通过 `Execute` 方法提供输入与返回值。下面是一个不读写外部资源的最小示例：
+适合一个类负责一个可独立调用的操作。实现 `IAgwTool`，声明稳定名称、分类、Plan 可用性和权限，并实现唯一必需的成员 `ToAITool()`。仓库工具的写法是把操作放在 `Execute` 方法中，再在 `ToAITool()` 中用 `AgwAIFunctionFactory.CreateParameterObjectFunction` 包装成模型可调用的函数；这个工厂是 `Agw.Tools` 的内部类型，所以示例放在 `Agw.Tools` 中。下面是一个不读写外部资源的最小示例：
 
 ```csharp
 using System.ComponentModel;
 using Agw.Tools.Abstractions;
+using Agw.Tools.Infrastructure;
+using Microsoft.Extensions.AI;
 
 public sealed class EchoInput
 {
@@ -55,19 +57,25 @@ public sealed class EchoTool : IAgwTool
 
     [Description("Return the supplied text unchanged.")]
     public string Execute(EchoInput input) => input.Text;
+
+    public AITool ToAITool()
+    {
+        Func<EchoInput, string> func = Execute;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
+    }
 }
 ```
 
-`IAgwTool` 提供元数据契约，具体操作由实现类的执行方法提供。参数 DTO 和方法上的 `Description` 帮助模型理解何时调用、如何填参。实际异步 I/O 应参考仓库工具使用异步方法并传递 `CancellationToken`；业务 DTO 放在所属模块的 `Contracts/Tools`。
+`IAgwTool` 继承元数据接口 `IAgwToolMeta`，`ToAITool()` 把执行方法包装成模型可调用的函数。参数 DTO 和方法上的 `Description` 帮助模型理解何时调用、如何填参。实际异步 I/O 应参考仓库工具使用异步方法并传递 `CancellationToken`；业务 DTO 放在所属模块的 `Contracts/Tools`。
 
 ### 接入与使用
 
-1. 将实现放到通用工具目录 `Agw.Tools/Impl/Tools`，或业务模块的 `Application/Tools`。声明对象保持无状态，不在字段中保存当前 Project、用户或会话数据。
-2. 全局目录只发现明确选择的程序集，默认包括 `Agw.Tools`。新增全局工具还需在 `ToolValueObject.cs` 所在的类型体系中加入具体 `ToolDefinition`、稳定的 `JsonDerivedType` 名称和空的或实际的 Options 类型，保持定义与实现一一对应。
+1. 将实现放到 `Agw.Tools/Impl/Tools`。全局目录只扫描 `Agw.Tools` 程序集中的手写工具，放在业务模块中的 `IAgwTool` 不会被发现；业务模块改用方式二的 Attribute 容器，或把 `IProjectScopedAgwTool` 实例放进 Skill 的 `IAgentSkillRegistration.Tools`。声明对象保持无状态，不在字段中保存当前 Project、用户或会话数据。
+2. 在 `src/server/Agw.Shared/Tooling/ToolValueObject.cs` 中把工具名称加入 `ToolDefinitionNames` 及其 `All` 列表，并加入具体 `ToolDefinition`、`[JsonDerivedType]` 名称映射和空的或实际的 Options 类型，保持定义与实现一一对应。名称没有登记时，注册会报错 “does not have a registered ToolDefinition”。
 3. 在所属模块 DI 入口登记依赖，确认工具出现在 `/api/tools`；工具绑定到 Agent 或 Project 后，才供该执行目标使用。
 4. 在 Chat 让 Agent 调用该操作，检查输入和输出。直接调用 C# 方法适合单元测试，但不能证明运行时权限和 Project 绑定已接通。
 
-有 Project 或运行时目录依赖的独立工具，应参考 `IContextualTool.MaterializeAsync`，把已校验的上下文绑定到本次贡献的函数中。不要让模型通过一个随意填写的 Project ID 决定资源归属。
+有 Project 或运行时目录依赖的独立工具，应参考 `IContextualTool.MaterializeAsync`（接口位于 `Agw.Tools/Contracts/Abstractions`，与其他手写工具一样只从 `Agw.Tools` 程序集发现），把已校验的上下文绑定到本次贡献的函数中。不要让模型通过一个随意填写的 Project ID 决定资源归属。
 
 ## 方式二：通过 Attribute 定义 Tool
 
@@ -91,7 +99,7 @@ using Agw.Tools.Abstractions.Attributes;
 
 [AgwToolContainer(AgwToolPermission.None,
     DefaultCategory = "Examples", AllowInPlanMode = true)]
-public static class TextTools
+public sealed class TextTools
 {
     [AgwTool("echo", AgwToolPermission.None)]
     [Description("Return the supplied text unchanged.")]
@@ -105,7 +113,7 @@ public static class TextTools
 }
 ```
 
-`AgwToolContainer` 批量选择类型直接声明的 public 普通方法；`AgwTool` 指定名称和权限；`AgwToolIgnore` 排除辅助方法。没有显式名称时，默认使用方法名并移除末尾的 `Async`。容器及每个操作都应明确声明或继承权限；`AllowInPlanMode` 是独立设置。
+示例容器是普通的 `sealed class`，其中的方法都是静态方法；后面的 `IAgwToolSet<TextTools>` 要求类型参数是非静态类，所以容器不能声明为 `static class`。`AgwToolContainer` 批量选择类型直接声明的 public 普通方法；`AgwTool` 指定名称和权限；`AgwToolIgnore` 排除辅助方法。没有显式名称时，默认使用方法名并移除末尾的 `Async`。容器及每个操作都应明确声明或继承权限；`AllowInPlanMode` 是独立设置。
 
 实例容器使用显式构造函数注入，并在 DI 中注册实例类型。静态方法可通过标记 `[AgwToolService]` 的参数取得服务。服务参数与 `CancellationToken` 不进入模型可填写的参数 Schema；每次调用都有独立的异步 DI scope。
 
@@ -121,9 +129,9 @@ services.AddSingleton<IAgwGeneratedToolModule>(
 services.AddToolCatalogTypes(typeof(TextTools));
 ```
 
-上述代码片段需要生成声明命名空间及所属注册扩展的引用。静态容器不必登记实例；实例容器还需 `services.AddScoped<YourToolContainer>()`。生成模块只登记声明，不会自动公开全部工具。全局工具仍要完成具体 ToolDefinition 和 JSON 多态映射。
+上述代码片段需要生成声明命名空间及所属注册扩展的引用。只包含静态方法的容器不必登记实例；包含实例方法的容器还需 `services.AddScoped<YourToolContainer>()`。生成模块只登记声明，不会自动公开全部工具。全局工具仍要完成具体 ToolDefinition 和 JSON 多态映射。
 
-若工具只服务于 Skill，让 Skill 注册类使用 `partial` 并实现 `IAgwToolSet<TextTools>`，生成器补齐 `ToolTypes`；同时按 `IAgentSkillRegistration` 完成 Id、说明和创建逻辑。将该 Skill 绑定到 Agent/Project 后，其工具才参与运行时组合。手工 Skill 工具使用 `IAgentSkillRegistration.Tools`，不应额外放进全局目录。
+若工具只服务于 Skill，让 Skill 注册类使用 `partial` 并实现 `IAgwToolSet<TextTools>`，生成器补齐 `ToolTypes`；同时按 `IAgentSkillRegistration` 完成 Id、说明和创建逻辑。在所属模块的 DI 入口用 `services.AddSingleton<IAgentSkillRegistration, YourSkillRegistration>()` 注册 Skill，并登记生成模块和实例容器，写法参考 Jobs 模块的 `JobManagementSkillRegistration`。将该 Skill 绑定到 Agent/Project 后，其工具才参与运行时组合。手写的 Skill 工具实现 `IProjectScopedAgwTool`，放进 `IAgentSkillRegistration.Tools`，不应额外放进全局目录。
 
 生成失败时先处理编译诊断：不支持的签名是 `AGWTOOL001`，无效声明是 `AGWTOOL002`。不要用运行时反射绕过诊断。完整的实例容器和 Skill 示例见 [工具抽象说明](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Tools.Abstractions/README.md)。
 
@@ -186,7 +194,7 @@ public sealed class TodoToolBlock : IToolBlock
 ### 开发自己的有状态 ToolBlock
 
 1. 定义数据对象和状态范围：回合、会话或项目长期存储。会话状态参考 `AgwTodoState`，项目长期状态参考 Project Memory。
-2. 增加具体 `ToolBlockDefinition`、Options 和稳定的 JSON 名称映射，并在 `ToolBlockNames` 加入运行时名称。
+2. 在 `Agw.Shared/Tooling/ToolValueObject.cs` 中把名称加入 `ToolBlockDefinitionNames` 及其 `All` 列表，增加具体 `ToolBlockDefinition`、Options 和 `[JsonDerivedType]` 名称映射，再在 `ToolBlockNames` 中加入引用该常量的运行时名称。启动时的覆盖检查会拒绝缺少定义或缺少实现的 ToolBlock。
 3. 实现 `IToolBlock`，一次声明全部成员，明确每个成员的权限与 `allowInPlanMode`。
 4. 在 `MaterializeAsync` 创建 Provider，将函数和状态操作绑定到当前上下文；把生命周期交给 `ToolContribution`，不要缓存跨用户的 Provider 或 scoped 服务。
 5. 在目录和定义解析流程接通整组选用，再测试：新增、完成、移除、不同 session 隔离、保存恢复、Plan 限制与审批。
@@ -323,14 +331,14 @@ public sealed class BuiltInPluginCatalog : IPluginCatalog
 1. 在 Integrations 的 DI 入口维护目录注册；Native Provider 注册为 `IConnectionNativeCapabilityProvider`，调用服务按其生命周期登记，例如 GitHub 的 scoped Invoker。
 2. 若附带 Skill，将内容放入 Plugin 内容目录，并通过 `PluginSkillDefinition.ContentPath` 指向 `SKILL.md`。它提供使用说明，不自动执行第三方脚本；同时确认构建产物包含内容文件。
 3. 在 Available integrations 找到定义，为测试用户配置安装字段和账号。完成认证后确认 Ready，再绑定 Agent 或 Project。
-4. 用 fake 外部服务验证一次读取和一次受控写入，检查工具名称、参数、权限及错误处理；不要以真实 OAuth 授权作为默认单元测试前提。
+4. 验证一次读取和一次受控写入，检查工具名称、参数、权限及错误处理。测试使用真实实现，不使用 mock 或 fake 实现；需要真实账号或 OAuth 授权的测试不放进默认测试套件。
 5. 覆盖跨用户 ConnectionId、未就绪账号、失效凭据、目录字段错误、同名工具和配置变更。修改用户安装设置只应影响该用户的账号连接。
 
 当前没有远程 Marketplace 的下载、签名与自动升级机制。完整调用链参考 [GitHub Native Provider](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionNativeCapabilityProvider.cs)、[GitHub Invoker](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionInvoker.cs) 和 [能力源定义](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Domain/Plugins/CapabilitySourceDefinition.cs)。
 
 ## 验证
 
-至少覆盖成功调用、非法参数、权限不足、外来 Connection 和未就绪 Connection。保持编译期诊断有效，使用 fake 服务测试，不依赖真实账号或外部 CLI。
+至少覆盖成功调用、非法参数、权限不足、外来 Connection 和未就绪 Connection。保持编译期诊断有效。测试使用真实实现，不使用 mock 或 fake 实现；依赖真实账号或外部 CLI 的测试需要显式开启，不放进默认测试套件。
 
 ## 实现与参考
 

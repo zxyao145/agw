@@ -2,7 +2,7 @@
 title: "Logs and troubleshooting"
 description: "Diagnose connection, authentication, model, file, and execution failures."
 weight: 50
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/operations/troubleshooting
 ---
 
@@ -22,7 +22,7 @@ Record the Server, Project, conversation, and time, then inspect the matching lo
 | CLI cannot start | Execution-node executable, account, environment |
 | Files missing | Selected root, Server path, mounts, permissions |
 | Job does not run | Enablement, future timestamp, UTC Cron, valid target, logs |
-| Wrong state after disconnect | Conversation selection, WebSocket proxy, background execution |
+| Wrong state after disconnect | Conversation selection, WebSocket proxy, background execution; in InProcess mode, running conversations show Interrupted after a Server restart and do not continue |
 
 ## Example: the page opens but the agent does not reply
 
@@ -41,9 +41,11 @@ A failed sign-in returns the browser to the sign-in page with `error=oidc-<categ
 | Category | Usual cause |
 | --- | --- |
 | `provider-unavailable`, `provider-timeout` | Server cannot reach the provider: network, outbound proxy, or firewall |
-| `provider-rejected` | The provider returned an error: client ID, secret, or registered callback URL does not match |
+| `provider-rejected` | The provider was reached, but its OAuth2 user information endpoint returned an error status: check `UserInfoEndpoint`, `Scopes`, and token permissions |
+| `protocol-rejected` | The OIDC provider returned a protocol error: client ID, secret, or registered callback URL does not match |
 | `invalid-state`, `invalid-nonce` | Callback validation failed: the browser origin differs from `PublicBaseUrl`, or validation Cookies were blocked |
-| `invalid-token`, `protocol-rejected` | Token validation failed: Authority, issuer, audience, or signing-key URL does not match |
+| `invalid-token` | Token validation failed: Authority, issuer, audience, or signing-key URL does not match |
+| `protocol-validation-failed` | Any other protocol failure, including a rejected OAuth2 token exchange: check the client ID, secret, and callback URL first |
 | `provisioning-failed`, `grant-creation-failed`, `session-creation-failed` | Local completion failed: check the database connection and applied migrations first |
 | `authorization-denied` | The user cancelled authorization at the provider |
 

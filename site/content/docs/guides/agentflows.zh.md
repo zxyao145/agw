@@ -2,7 +2,7 @@
 title: "Agentflow"
 description: "构建可验证的工作流，理解分支、汇合与检查点。"
 weight: 60
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/guides/agentflows
 ---
 
@@ -17,6 +17,10 @@ Agentflow 指 **Agent Workflow（Agent 工作流）**，把多个处理步骤连
 3. 添加 Output 并连接输出，保存后在 Chat 中选择该 Agentflow 运行。
 4. 基础路径通过后，再加入 HumanGate、分支或并行节点。
 
+编辑器画布右上角有 **Undo** 和 **Redo** 按钮，也可以使用 Cmd/Ctrl+Z、Cmd/Ctrl+Shift+Z 或 Ctrl+Y；节点面板和 Inspector 可以拖动分隔条调整宽度。存在未保存的修改时，对话框显示 **Unsaved changes**，关闭前会询问 **Discard unsaved changes?**；关闭对话框后，未保存的草稿不会保留。
+
+Agentflows 列表中每个流程都有 **Enabled** 开关，以及 Run、Edit、Copy、View Mermaid chart 和 Delete 操作。Run 在右侧抽屉中打开一个使用内置默认 Project 的 Chat，适合快速试运行；需要在其他 Project 中运行时，在 Chat 中选择该 Agentflow。停用的 Agent 和 Agentflow 不会出现在编辑器的选择列表中。
+
 ```mermaid
 flowchart LR
     I[Input] --> A[Agent]
@@ -24,7 +28,7 @@ flowchart LR
     H --> O[Output]
 ```
 
-HumanGate 暂停并请求人工批准；批准后的回复可用于下游条件判断，拒绝会停止流程。
+HumanGate 暂停并等待人工处理。Input 模式显示 Response 输入框和 Submit、Interrupt 按钮，提交的回复可用于下游条件判断；Approval 模式只有 Approve 和 Reject 两个按钮。Interrupt 和 Reject 都会停止流程。
 
 ![AGW Desktop：一个已有 Agentflow 的编辑视图，展示节点、连线、节点面板和属性检查器；此图未运行流程。](/images/screenshots/agentflow-editor.png)
 {caption="AGW Desktop：一个已有 Agentflow 的编辑视图，展示节点、连线、节点面板和属性检查器；此图未运行流程。"}
@@ -74,7 +78,7 @@ Clear Messages 丢弃到达该节点的消息，以空消息继续下游流程�
 | Human Step Mode | 选择 Input 收集补充信息，或选择 Approval 请求审批 |
 | Human Prompt | 写清需要人提供什么或批准什么，例如“请确认发布范围，并填写需要排除的模块” |
 
-流程到达这里会暂停，在交互界面等待处理。批准后继续执行，人工回复可以用于下游连线的条件判断；拒绝会停止流程。因此，“需要修改”若应返回上游继续处理，应通过批准时的反馈和条件分支表达。
+流程到达这里会暂停，在交互界面等待处理。Input 模式下，人在 Response 中填写回复并点击 Submit 后继续执行，这段回复可以用于下游连线的条件判断；Approval 模式下点击 Approve 继续执行，但不会带上文字回复。Interrupt 和 Reject 都会停止流程。因此，“需要修改”若应返回上游继续处理，应使用 Input 模式，通过人工回复和条件分支表达。
 
 例如：`Agent → Human Gate → Output` 用于确认结果；也可以根据人工回复中的约定文字选择“修改”或“完成”分支。使用人工节点时，需要能够接收和回应请求的交互通道。
 
@@ -82,7 +86,7 @@ Clear Messages 丢弃到达该节点的消息，以空消息继续下游流程�
 
 Checkpoint 节点在代码中称为 `CheckpointMarker`。在 **Checkpoint Name** 中填写易于辨认的名称，例如“资料收集完成”，并将它放在希望保留执行进度的位置。
 
-经过该节点后，系统在对应执行阶段结束时保存完整工作流检查点。恢复时选择的是一次具体保存记录，会从该状态创建新的执行分支，并移除当前会话中保存边界之后的记录。
+经过该节点后，系统在对应执行阶段结束时保存完整工作流检查点。Chat 中每个已保存的检查点显示为一张带 **Checkpoint** 标记的卡片，点击卡片上的 **Resume** 从这次保存恢复；检查点不可用时按钮禁用，并提示 “This checkpoint is unavailable”。恢复时选择的是一次具体保存记录，会从该状态创建新的执行分支，并移除当前会话中保存边界之后的记录。
 
 恢复要求仍是同一用户、Project、会话和 Agentflow，流程定义未改变，且没有冲突的执行。单机 InProcess 检查点只在原运行时仍持有该记录时可恢复；Distributed 模式将检查点持久化到 PostgreSQL，可以跨断线或 Server 重启恢复。它不等于数据库备份，也不是任意节点的重新运行按钮。
 
@@ -90,11 +94,11 @@ Checkpoint 节点在代码中称为 `CheckpointMarker`。在 **Checkpoint Name**
 
 Output 将到达它的消息作为流程结果输出。简单流程可直接连接 `Agent → Output`。
 
-若希望将多个结果整理成一份结论，可以启用节点的总结选项，配置总结使用的 Model Provider，并填写总结要求。启用后会额外调用模型，在原有结果后追加总结；未启用时直接输出收到的消息。
+新建的 Output 节点默认打开 **Generate Summary**，需要在 **Summary Model Provider** 中选择模型后才能保存；不需要总结时关闭这个开关。启用后会额外调用模型，把流入 Output 的多个结果整理成一份结论，追加在原有结果后；未启用时直接输出收到的消息。
 
 ## Orchestration Blocks（编排块）
 
-编排块把多个参与者组织成一个步骤，参与者可以是 Agent 或子 Agentflow。添加编排块后，通过成员选择控件加入参与者；点击 **Open** 查看块内成员，分别配置名称和职责。主流程的连线连接到编排块，由块内部安排成员执行。
+编排块把多个参与者组织成一个步骤，参与者可以是 Agent 或子 Agentflow。四种编排块在节点面板中分别显示为 **Concurrent Block**、**Handoff Group**、**GroupChat Room** 和 **Magentic Team**。添加编排块后，通过成员选择控件加入参与者；点击 **Open** 查看块内成员，分别配置名称和职责。主流程的连线连接到编排块，由块内部安排成员执行。
 
 | 编排块 | 协作方式 | 适合场景 |
 | --- | --- | --- |
@@ -197,20 +201,19 @@ Checkpoint Name 在保存的数据中对应：
 
 Output 的底层配置当前只有一个运行时字段 `enableSummary`，但 Output 节点不显示 Advanced Config JSON 编辑框，直接使用 Inspector 中的 **Generate Summary** UI 配置：
 
-- `enableSummary: false`（默认）：Output 原样传递流入的消息，不额外调用模型。
-- `enableSummary: true`：Output 在主流程成功后，使用所选的 Model Provider 生成一段 Markdown 总结，并追加到最终输出末尾。
+- `enableSummary: true`（新建 Output 节点的默认值）：Output 在主流程成功后，使用所选的 Model Provider 生成一段 Markdown 总结，并追加到最终输出末尾。
+- `enableSummary: false`：Output 原样传递流入的消息，不额外调用模型。字段缺失时，Server 也按 `false` 处理。
 
-启用总结后，必须同时满足以下条件：
+启用总结后，必须同时满足以下条件，否则编辑器中的保存按钮不可用：
 
 1. 在 Output 节点的 **Summary Model Provider** 中选择有效的模型。
-2. 整个流程只能有一个 Output 节点。
-3. Output 节点的 `Instructions`（如果填写）会作为额外的总结要求；总结模型接收的是流入该 Output 的消息。
+2. 整个流程只能有一个 Output 节点，否则提示 “Summary requires exactly one Output node”。
 
-模型选择属于工作流配置，不能通过在节点 JSON 中添加 `modelProviderId` 或 `summaryModelProviderId` 来替代。已有流程中的 `enableSummary` 配置仍会被兼容读取；任意其他字段不会自动增加 Output 能力。
+总结模型接收的是流入该 Output 的消息。编辑器不为 Output 提供 Instructions 输入框。模型选择属于工作流配置，不能通过在节点 JSON 中添加 `modelProviderId` 或 `summaryModelProviderId` 来替代；任意其他字段不会增加 Output 能力。
 
 ### 编排块的成员配置
 
-四种编排块都使用 `participantNodeIds`，值是成员的**画布节点 ID**，不是 Agent 定义 ID，也不是显示名称。编辑器已提供 Members、Max Rounds、Manager 等控件，编排块不显示 Advanced Config JSON；以下 JSON 仅用于说明保存格式和旧数据兼容，不需要手动填写。
+四种编排块都使用 `participantNodeIds`，值是成员的**画布节点 ID**，不是 Agent 定义 ID，也不是显示名称。编辑器已提供 Members、Max Rounds、Manager 等控件，编排块不显示 Advanced Config JSON；以下 JSON 说明这些控件保存的格式，不需要手动填写。
 
 下面的 `node-a`、`node-b` 是占位示例，使用时必须替换为当前画布中真实的 Agent 或 Workflow as Agent 节点 ID。Concurrent 至少需要一个成员；Handoff、Group Chat 和 Magentic 至少需要两个成员。
 
@@ -265,30 +268,30 @@ Output 的底层配置当前只有一个运行时字段 `enableSummary`，但 Ou
 
 ### 保存前检查
 
-确认成员 ID 存在、字段类型正确，并且参数属于当前节点。高级配置框不是脚本入口，添加任意键也不会自动获得新功能。修改 JSON 后检查表单显示是否符合预期，再保存并用小任务验证。
+确认成员 ID 存在、字段类型正确，并且参数属于当前节点。高级配置框不是脚本入口，添加任意键也不会自动获得新功能。修改 JSON 后检查 Inspector 中的表单显示是否符合预期，再保存并用小任务验证。
 
-分支条件属于**连线**的 Condition JSON，Switch 顺序属于连线配置中的 `switchCaseOrder`；它们不放在节点的 Advanced Config JSON 中。
+分支条件填写在**连线**的 **Predicate JSON** 中；If / Else If 连线不显示 Advanced Config JSON，分支顺序用 **Move branch up** 和 **Move branch down** 调整。它们都不放在节点的 Advanced Config JSON 中。
 
 ## 路由与约束
 
 必须恰好有一个 ID 为 `input` 的 Input，且无入边；可运行节点必须从它可达。节点、边 ID 必须唯一，引用必须有效。
 
-连线决定一个节点结束后，哪些步骤继续执行：
+连线决定一个节点结束后，哪些步骤继续执行。在连线的 **Edge Type** 中选择：
 
 | 连线方式 | 含义 | 设计时注意 |
 | --- | --- | --- |
 | Direct | 直接交给下一步 | 适合固定顺序 |
-| FanOut | 同时分发给多个分支 | 各分支应能独立处理输入 |
-| Switch | 按顺序检查条件，选择第一个匹配分支 | 可以配置 Default，在条件都不匹配时使用 |
-| FanInBarrier | 等待同组的各个来源到齐，再继续 | 每个被等待的分支都必须有机会到达 |
+| Fan Out | 同时分发给多个分支，条件匹配的分支都会执行 | 各分支应能独立处理输入 |
+| If / Else If | 按顺序检查条件，只把消息交给第一个匹配的分支 | 可以再添加一条 Else，在条件都不匹配时使用 |
+| Fan-in Barrier | 等待同组的各个来源到齐，再继续 | 每个被等待的分支都必须有机会到达 |
 
-同一来源节点不要混用 Direct、FanOut 和 Switch。例如，Switch 只会选择一条分支，却让后续汇合点等待所有分支，就可能一直等不到结果。
+同一来源节点不要混用 Direct、Fan Out 和 If / Else If。例如，If / Else If 只会选择一条分支，却让后续汇合点等待所有分支，就可能一直等不到结果。
 
 工作流允许符合安全规则的受控循环。需要重复处理时，先验证退出条件，再增加嵌套流程、编排块或检查点，避免一次加入太多分支而难以定位问题。
 
 ## 验证与历史
 
-分别测试正常路径、条件不匹配、人工拒绝及需要等待的路径。CheckpointMarker 标记完整 MAF 检查点的边界；恢复不是随意从某个节点重新开始。修改流程前保留可工作的版本，查看执行记录确认节点归属。
+分别测试正常路径、条件不匹配、人工拒绝及需要等待的路径。运行时，Chat 会在当前回合中把每个节点收到的输入显示为单独的输入气泡，并保留上游节点归属，可以据此检查执行顺序。CheckpointMarker 标记完整 MAF 检查点的边界；恢复不是随意从某个节点重新开始。修改流程前保留可工作的版本，查看执行记录确认节点归属。
 
 ## 实现与参考
 

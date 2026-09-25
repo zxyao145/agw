@@ -2,7 +2,7 @@
 title: "Custom agents"
 description: "Combine models, instructions, and tools so agents can reason and act within a defined role."
 weight: 1
-lastmod: 2026-09-17
+lastmod: 2026-09-25
 translationKey: docs/features/custom-agent
 ---
 
@@ -20,6 +20,7 @@ For example, create a documentation reviewer that reads material, identifies unc
 | Instructions | Role, scope, processing requirements, and output format |
 | Tools and Skills | Available operations, task guidance, and capabilities |
 | Configured integration connections | External services or accounts the agent can access |
+| Response Schema | Whether replies return structured data that follows a JSON Schema; see [Structured responses with JSON Schema]({{< relref "/docs/features/structured-output" >}}) |
 
 Create agents for organizing material, explaining code, and reviewing results. Select them in Chat for individual tasks, or use them as execution steps in an Agentflow.
 

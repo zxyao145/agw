@@ -2,7 +2,7 @@
 title: "架构与模块边界"
 description: "理解模块化单体、数据所有权和客户端包分工。"
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/development/architecture
 ---
 
@@ -34,7 +34,7 @@ Domain 中的实体只保存数据，不把验证、状态变化等方法写进�
 
 每张表只有一个负责它的模块。即使多个模块共用实体类型和数据库，也要通过所属模块提供的接口访问数据，不能直接查询或修改其他模块的表。
 
-每个模块在 Application 中声明自己的持久化接口，例如 `I<Module>DbContext`。同一次请求中，这些接口由同一个 `AgwDbContext` 实例实现。这样既能共用数据库连接和事务，又能限制模块可见的数据范围。跨模块调用使用 Contracts 中的公开约定，必要的跨模块事务放在经过批准的 Infrastructure 适配器中。
+拥有数据表的模块在 `Application/Persistence` 中声明自己的持久化接口 `I<Module>DbContext`，目前共有九个：Agents、Auth、Integrations、Jobs、Projects、Providers、Settings、Skills 和 Tools；Files、Setup 和 A2A 不拥有数据表，也没有这类接口。同一次请求中，这些接口由同一个 `AgwDbContext` 实例实现。这样既能共用数据库连接和事务，又能限制模块可见的数据范围。跨模块调用使用 Contracts 中的公开约定，必要的跨模块事务放在经过批准的 Infrastructure 适配器中。
 
 `Agw.Agents.Execution → Agw.Agents` 单向依赖，两程序集属于同一 Agents 模块。Agentflow 的选择性 DDD 不扩展到普通 CRUD 模块。
 
@@ -48,7 +48,7 @@ Domain 中的实体只保存数据，不把验证、状态变化等方法写进�
 
 Web 与 Desktop 各自拥有路由壳和构建，业务包位于 `src/clients/packages`。`chat-core` 负责消息语义，`chat-runtime` 负责执行连接和状态，`chat` 负责 DOM 呈现。Mobile 通过 `chat-native` 与 RN-safe 包接入，不直接依赖 DOM 包。
 
-增加功能前确认所属模块与公开入口；修改边界后运行 `pnpm test:boundaries` 和相应后端架构测试。
+增加功能前确认所属模块与公开入口；修改边界后运行 `pnpm test:boundaries` 和后端架构测试 `dotnet test tests/Agw.Architecture.Tests`。
 
 ## 实现与参考
 

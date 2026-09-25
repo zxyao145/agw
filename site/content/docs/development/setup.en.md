@@ -2,11 +2,11 @@
 title: "Development setup"
 description: "Install dependencies and run the backend, Web, Desktop, or Mobile independently."
 weight: 10
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/development/setup
 ---
 
-Prerequisites: .NET 10 SDK, Node.js 24, pnpm 11.7.0, and Git. Docker Buildx is needed only for container images. These application commands run in the AGW repository; the documentation site does not depend on this toolchain.
+Prerequisites: .NET 10 SDK, Node.js 24, pnpm 12.5.1 (pinned by `packageManager` in `src/clients/package.json`), and Git. Docker Buildx is needed only for container images. These application commands run in the AGW repository; the documentation site does not depend on this toolchain.
 
 ## Backend
 
@@ -43,7 +43,7 @@ The backend defaults to `30816`, Web development to `3001`, and the Desktop rend
 
 Confirm backend initialization, client connectivity, and a simple message. Physical mobile devices need a reachable backend address. External CLIs must work in the execution process environment.
 
-The site needs only Hugo Extended and Go; see `site/README.md` for commands. Do not add it to the client Turborepo or make Web/Desktop consume its artifacts.
+The site needs Hugo Extended and Go, plus Python 3 for the `scripts/check-site.py` verifier; see `site/README.md` for commands. Do not add it to the client Turborepo or make Web/Desktop consume its artifacts.
 
 ## Implementation and references
 

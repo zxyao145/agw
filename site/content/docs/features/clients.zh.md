@@ -2,7 +2,7 @@
 title: "多端客户端"
 description: "通过浏览器、桌面和移动设备访问自己的 AGW 服务。"
 weight: 60
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/features/clients
 ---
 
@@ -28,9 +28,9 @@ AGW 提供 Web、Desktop 和 Mobile 客户端。连接同一个 Server 并使用
 ## 开始使用
 
 1. 完成 Server 初始化，确保设备能够访问服务地址。
-2. Web 使用管理员密码或[第三方账号]({{< relref "/docs/features/oidc-login" >}})登录；Desktop 和 Mobile 使用 API Key 连接。
+2. Web 使用管理员密码或[第三方账号]({{< relref "/docs/features/oidc-login" >}})登录。Desktop 使用 API Key 连接；Server 配置了身份提供商时，也可以点击 **Sign in with …** 用第三方账号登录，由 Server 签发 API Key。Mobile 手动填写 API Key，或用 **Import Web configuration** 粘贴 Web Settings 中 **Copy config** 复制的连接配置。
 3. 确认 Server 和 Project，打开已有会话或创建新会话。
-4. 检查历史记录和执行状态，避免因设备切换重复发起同一任务。
+4. 检查历史记录和执行状态，避免因设备切换重复发起同一任务。会话列表中的图标显示 **Running**、**Last turn failed** 或 **Last turn interrupted**。
 
 任务在实际执行主机上运行，手机或浏览器连接不会把执行环境搬到当前设备。Desktop Full 包含 Server，Desktop Client 连接已有 Server；Mobile 当前提供源码运行方式。不同客户端的布局与管理入口有所差异。
 

@@ -2,7 +2,7 @@
 title: "Connect external agents"
 description: "Run tasks with Claude Code, Codex, or Pi and configure separate agents for different purposes."
 weight: 30
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/guides/external-agents
 ---
 
@@ -23,15 +23,17 @@ For both definitions, select **External → Claude Code**, then choose a Model P
 
 Selecting Coding or Review in Chat uses that definition’s model configuration. You can also use them in different Agentflow nodes, without repeatedly editing a single Agent definition to switch purposes.
 
-This separation applies to the settings stored in each AGW Agent definition. It does not automatically create separate operating-system accounts or file environments. If a definition has no Model Provider selected, it continues to use the external tool’s own model configuration.
+This separation applies to the settings stored in each AGW Agent definition. It does not automatically create separate operating-system accounts or file environments. If a definition has no Model Provider selected, the model comes from the agent's **Extra Settings** or the external tool’s own model configuration.
 
 ## Configure
 
 1. Verify the CLI on the execution node and complete its authentication or model configuration.
-2. Configure the corresponding external agent type in Agents.
+2. In **Agents**, click **Create**, set **Agent Type** to `External`, and choose the external agent kind. The kind cannot be changed after creation.
 3. Select a Project and ensure its primary workspace is visible to the execution process.
-4. Optionally select a compatible Model Provider. Leave it empty to use the external tool's own configuration.
+4. Optionally select a compatible Model Provider. Leave it empty to use Extra Settings or the external tool's own configuration. Put other options for the external tool in the JSON object on the **Extra Settings** tab.
 5. Send a short task and verify the working directory, output, and permission mode.
+
+Claude Code and Codex receive the Project's additional directories through their SDK directory options; Pi receives the directory list in each turn's context. All three start in the primary workspace.
 
 | External agent | Optional Model Provider | Permissions |
 | --- | --- | --- |
@@ -44,9 +46,11 @@ This separation applies to the settings stored in each AGW Agent definition. It 
 
 ## Changes and limitations
 
-Chat displays only supported permission modes, and the server validates them. Permission or definition edits affect the next turn. Active turns and durable recovery retain their original snapshots.
+The Chat permission menu always lists all three modes and disables those the target does not support, with the reason shown; the server also validates them. Permission or definition edits affect the next turn. Active turns keep the configuration snapshot captured at their start.
 
-Configured integration Connections are not currently injected into external Codex or Claude agents. Configure and verify the external tool's capabilities in its own environment.
+Running an External Agent directly in Chat requires InProcess execution. In Distributed mode, including split Control/Data Plane deployments, such turns fail with “Distributed execution currently supports System Agents only.”
+
+AGW's Instructions, Tools, Skills, MCP Tool Server, and Integrations settings are not passed to any External Agent, including Pi, and those tabs cannot be edited in the form. External agents only receive existing User Memory as context. Configure and verify the external tool's capabilities in its own environment.
 
 If the CLI is unavailable, check its executable, account, environment variables, and Server logs. If a CLI works in your terminal but fails in AGW, check that the Server account’s PATH includes the executable.
 

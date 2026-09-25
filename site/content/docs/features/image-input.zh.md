@@ -2,7 +2,7 @@
 title: "图片输入"
 description: "在对话中上传图片，让 Agent 结合图片内容回答问题。"
 weight: 20
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/features/image-input
 ---
 
@@ -19,7 +19,7 @@ translationKey: docs/features/image-input
 ## 开始使用
 
 1. 选择支持图片理解的模型和执行目标。
-2. 在 Web、Desktop 或 Mobile 的 Chat 中添加图片，并写明希望 Agent 关注的部分。
+2. 在 Chat 中添加图片：Web 和 Desktop 把图片粘贴到输入框，Mobile 从相册选择。然后写明希望 Agent 关注的部分。
 3. 确认附件后发送，检查回复是否正确理解了图片内容。
 
 | 项目 | 支持范围 |

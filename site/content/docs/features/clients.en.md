@@ -2,7 +2,7 @@
 title: "Multiple clients"
 description: "Access your AGW Server from a browser, desktop, or mobile device."
 weight: 60
-lastmod: 2026-09-23
+lastmod: 2026-09-25
 translationKey: docs/features/clients
 ---
 
@@ -28,9 +28,9 @@ Different Servers keep separate configuration and records. If a Project disappea
 ## Get started
 
 1. Initialize the Server and make sure the device can reach its address.
-2. Sign in to Web with the administrator password or a [third-party account]({{< relref "/docs/features/oidc-login" >}}); connect Desktop and Mobile with API Keys.
+2. Sign in to Web with the administrator password or a [third-party account]({{< relref "/docs/features/oidc-login" >}}). Connect Desktop with an API Key, or, when the Server has identity providers, click **Sign in with …** to sign in with a third-party account and receive a Server-issued API Key. On Mobile, enter an API Key, or use **Import Web configuration** to paste the configuration copied with **Copy config** in Web Settings.
 3. Confirm the Server and Project, then open an existing conversation or create one.
-4. Check history and execution status to avoid starting the same task again after switching devices.
+4. Check history and execution status to avoid starting the same task again after switching devices. The icons in the conversation list show **Running**, **Last turn failed**, or **Last turn interrupted**.
 
 Tasks run on the execution host. Connecting from a phone or browser does not move execution to that device. Desktop Full includes a Server; Desktop Client connects to an existing one. Mobile currently offers a source-based setup. Layouts and management entry points vary across clients.
 

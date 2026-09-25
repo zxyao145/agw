@@ -2,7 +2,7 @@
 title: "Extend tools and integrations"
 description: "Choose capability ownership and use generated tools and user connections."
 weight: 40
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/development/extensions
 ---
 
@@ -10,13 +10,13 @@ Prerequisites: understand module boundaries and decide whether the capability is
 
 ## Tool extension path
 
-1. Put general-purpose tools in `Agw.Tools`; business tools belong in their module's `Application/Tools`, with DTOs in `Contracts/Tools`.
+1. Put hand-written `IAgwTool`, `IContextualTool`, and `IToolBlock` implementations in `Agw.Tools`; the global catalog scans only that assembly for hand-written tools. Business tools belong in their module's `Application/Tools`, declared as attributed containers or supplied through a Skill, with DTOs in `Contracts/Tools`.
 2. Reference `Agw.Tools.Abstractions`; add `Agw.Tools.Generators` as an Analyzer for attributed declarations.
 3. Explicitly declare permissions, argument descriptions, and return types. Standalone tools and attributed containers stay stateless; session state belongs in a Provider, session, or owned storage.
 4. Register services and generated declarations in the owning module. Choose Skill exposure or explicit global catalog inclusion.
 5. Verify discovery, arguments, permissions, project binding, and error mapping.
 
-The generator emits metadata, JSON Schema, and direct invocation delegates. Do not add runtime reflection scanning as a fallback. Skill tools use `IAgentSkillRegistration.Tools` and bind to a Project during execution. Registering a generated module does not automatically expose every tool globally.
+The generator emits metadata, JSON Schema, and direct invocation delegates. Do not add runtime reflection scanning as a fallback. Skill tools come from two members: `IAgentSkillRegistration.Tools` supplies hand-written `IProjectScopedAgwTool` instances, and `ToolTypes` supplies attributed container types generated through `IAgwToolSet<T>`. They bind to a Project during execution. Registering a generated module does not automatically expose every tool globally.
 
 ## Integration extension path
 
@@ -32,11 +32,13 @@ After compilation, verify that the agent can discover the tool. If it is missing
 
 ## Option 1: define a Tool with an interface
 
-Use `IAgwTool` for one independently callable operation per class. Declare a stable name, category, Plan availability, and permission, then expose the operation through `Execute`. This minimal example performs no external I/O:
+Use `IAgwTool` for one independently callable operation per class. Declare a stable name, category, Plan availability, and permission, and implement the one required member, `ToAITool()`. Repository tools put the operation in an `Execute` method and wrap it in `ToAITool()` with `AgwAIFunctionFactory.CreateParameterObjectFunction`. That factory is internal to `Agw.Tools`, so the example lives in `Agw.Tools`. This minimal example performs no external I/O:
 
 ```csharp
 using System.ComponentModel;
 using Agw.Tools.Abstractions;
+using Agw.Tools.Infrastructure;
+using Microsoft.Extensions.AI;
 
 public sealed class EchoInput
 {
@@ -53,19 +55,25 @@ public sealed class EchoTool : IAgwTool
 
     [Description("Return the supplied text unchanged.")]
     public string Execute(EchoInput input) => input.Text;
+
+    public AITool ToAITool()
+    {
+        Func<EchoInput, string> func = Execute;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
+    }
 }
 ```
 
-The interface supplies metadata; the implementation supplies the execution method. Describe the method and input DTO so the model knows when and how to call it. Use asynchronous methods and propagate CancellationToken for real I/O. Business DTOs belong in the owner module’s Contracts/Tools.
+`IAgwTool` extends the metadata interface `IAgwToolMeta`; `ToAITool()` wraps the execution method as a model-callable function. Describe the method and input DTO so the model knows when and how to call it. Use asynchronous methods and propagate CancellationToken for real I/O. Business DTOs belong in the owner module’s Contracts/Tools.
 
 ### Register and use it
 
-1. Put general tools in Agw.Tools/Impl/Tools and business tools in the owner module’s Application/Tools. Keep declarations stateless; do not store the current user, Project, or conversation in fields.
-2. The global catalog discovers explicitly selected assemblies, including Agw.Tools by default. Add a concrete ToolDefinition, stable JsonDerivedType name mapping, and Options type alongside the implementation. Definitions and implementations must match one to one.
+1. Put the implementation in `Agw.Tools/Impl/Tools`. The global catalog scans only the `Agw.Tools` assembly for hand-written tools, so an `IAgwTool` placed in a business module is never discovered. Business modules use Option 2's attributed containers instead, or place `IProjectScopedAgwTool` instances in a Skill's `IAgentSkillRegistration.Tools`. Keep declarations stateless; do not store the current user, Project, or conversation in fields.
+2. In `src/server/Agw.Shared/Tooling/ToolValueObject.cs`, add the tool name to `ToolDefinitionNames` and its `All` list, plus a concrete `ToolDefinition`, a `[JsonDerivedType]` name mapping, and an empty or real Options type. Definitions and implementations must match one to one. An unregistered name fails registration with “does not have a registered ToolDefinition”.
 3. Register dependencies through the owner module’s DI entry point. Verify /api/tools and bind the tool to an Agent or Project before using it.
 4. Ask the agent to invoke it and inspect arguments and output. Direct C# calls test the operation but do not verify runtime permission or Project binding.
 
-For standalone tools requiring a Project or runtime directory, use IContextualTool.MaterializeAsync and bind authorized context into contributed functions. Do not let a model-supplied Project ID determine resource ownership.
+For standalone tools requiring a Project or runtime directory, use IContextualTool.MaterializeAsync (defined in `Agw.Tools/Contracts/Abstractions` and, like other hand-written tools, discovered only in the `Agw.Tools` assembly) and bind authorized context into contributed functions. Do not let a model-supplied Project ID determine resource ownership.
 
 ## Option 2: define Tools with attributes
 
@@ -89,7 +97,7 @@ using Agw.Tools.Abstractions.Attributes;
 
 [AgwToolContainer(AgwToolPermission.None,
     DefaultCategory = "Examples", AllowInPlanMode = true)]
-public static class TextTools
+public sealed class TextTools
 {
     [AgwTool("echo", AgwToolPermission.None)]
     [Description("Return the supplied text unchanged.")]
@@ -103,7 +111,7 @@ public static class TextTools
 }
 ```
 
-AgwToolContainer selects public ordinary methods declared directly on the type. AgwTool supplies a name and permission; AgwToolIgnore excludes helpers. Default names use the method name minus a terminal Async. Permissions must be explicitly declared or inherited from the container; AllowInPlanMode is independent.
+The example container is an ordinary `sealed class` whose methods are all static. `IAgwToolSet<TextTools>`, used later, requires a non-static class as its type argument, so the container cannot be a `static class`. AgwToolContainer selects public ordinary methods declared directly on the type. AgwTool supplies a name and permission; AgwToolIgnore excludes helpers. Default names use the method name minus a terminal Async. Permissions must be explicitly declared or inherited from the container; AllowInPlanMode is independent.
 
 Instance containers use explicit constructor injection and must be registered in DI. Static methods can use parameters marked AgwToolService. Service and CancellationToken parameters are excluded from model-facing schemas. Each invocation gets an independent asynchronous DI scope.
 
@@ -119,9 +127,9 @@ services.AddSingleton<IAgwGeneratedToolModule>(
 services.AddToolCatalogTypes(typeof(TextTools));
 ```
 
-Import the generated contracts and relevant registration extensions. Static containers need no instance registration; instance containers also need AddScoped<YourToolContainer>(). A generated module registers declarations without exposing every tool globally. Global tools still require concrete ToolDefinition types and JSON mappings.
+Import the generated contracts and relevant registration extensions. Containers with only static methods need no instance registration; containers with instance methods also need AddScoped<YourToolContainer>(). A generated module registers declarations without exposing every tool globally. Global tools still require concrete ToolDefinition types and JSON mappings.
 
-For Skill-only tools, make the registration partial and implement IAgwToolSet<TextTools> so the generator supplies ToolTypes. Complete the remaining IAgentSkillRegistration members, including identity, description, and creation logic. Bind the Skill to an Agent/Project to contribute its tools. Manual Skill registrations supply IAgentSkillRegistration.Tools; they do not need global catalog entries.
+For Skill-only tools, make the registration partial and implement IAgwToolSet<TextTools> so the generator supplies ToolTypes. Complete the remaining IAgentSkillRegistration members, including identity, description, and creation logic. Register the Skill in the owner module's DI entry point with `services.AddSingleton<IAgentSkillRegistration, YourSkillRegistration>()`, along with its generated module and instance containers; see `JobManagementSkillRegistration` in the Jobs module. Bind the Skill to an Agent/Project to contribute its tools. Hand-written Skill tools implement `IProjectScopedAgwTool` and go in IAgentSkillRegistration.Tools; they do not need global catalog entries.
 
 Fix generator diagnostics rather than adding reflection fallbacks: AGWTOOL001 identifies unsupported signatures; AGWTOOL002 identifies invalid declarations. See the [tool abstraction guide](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Tools.Abstractions/README.md) for complete instance-container and Skill examples.
 
@@ -184,7 +192,7 @@ public sealed class TodoToolBlock : IToolBlock
 ### Implement your own stateful ToolBlock
 
 1. Define the data and its lifetime: turn, session, or persistent project storage. Use AgwTodoState for session state and Project Memory for project storage as references.
-2. Add a concrete ToolBlockDefinition, Options, stable JSON mapping, and a runtime name in ToolBlockNames.
+2. In `Agw.Shared/Tooling/ToolValueObject.cs`, add the name to `ToolBlockDefinitionNames` and its `All` list, plus a concrete ToolBlockDefinition, Options, and `[JsonDerivedType]` mapping. Then add a runtime name in ToolBlockNames that references that constant. The startup coverage check rejects ToolBlocks missing a definition or an implementation.
 3. Implement IToolBlock and declare every member’s permission and allowInPlanMode.
 4. Create Providers in MaterializeAsync, bind functions to the current context, and transfer lifetime ownership to ToolContribution. Do not cache Providers or scoped services across users.
 5. Wire group selection into catalog and definition resolution. Test adding, completing, removing, session isolation, save/restore, Plan restrictions, and approvals.
@@ -321,14 +329,14 @@ Follow GitHubConnectionNativeCapabilityProvider: functions bind the account and 
 1. Maintain catalog registration in the Integrations DI entry point. Register Native providers as IConnectionNativeCapabilityProvider and invocation services with suitable lifetimes, such as the scoped GitHub Invoker.
 2. Place optional Skill content in the Plugin content directory and point PluginSkillDefinition.ContentPath to SKILL.md. It provides instructions, not automatic execution of third-party scripts. Ensure published artifacts include these files.
 3. Find the definition in Available integrations, configure setup and an account for a test user, complete authentication, verify Ready, and bind it to an Agent or Project.
-4. Use fake external services to test a read and a controlled write, including tool names, arguments, permissions, and errors. Default unit tests should not require real OAuth authorization.
+4. Test a read and a controlled write, including tool names, arguments, permissions, and errors. Tests use real implementations, never mocks or fake implementations; tests that need real accounts or OAuth authorization stay out of the default suite.
 5. Cover foreign ConnectionIds, unready accounts, expired credentials, invalid catalog fields, duplicate tool names, and configuration changes. Updating one user’s installation settings must affect only that user’s connections.
 
 There is currently no remote Marketplace download, signature, or automatic upgrade mechanism. Follow the [GitHub Native Provider](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionNativeCapabilityProvider.cs), [GitHub Invoker](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionInvoker.cs), and [capability-source definitions](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Integrations/Domain/Plugins/CapabilitySourceDefinition.cs).
 
 ## Verify
 
-Cover successful invocation, invalid arguments, insufficient permissions, foreign Connections, and non-Ready Connections. Keep compile-time diagnostics effective. Use fake services rather than real accounts or external CLIs in tests.
+Cover successful invocation, invalid arguments, insufficient permissions, foreign Connections, and non-Ready Connections. Keep compile-time diagnostics effective. Tests use real implementations, never mocks or fake implementations; tests that depend on real accounts or external CLIs are opt-in and stay out of the default suite.
 
 ## Implementation and references
 

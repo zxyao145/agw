@@ -29,7 +29,7 @@ Reset to HEAD and Delete change files on disk and cannot be undone from the UI. 
 
 ## Send line comments to the agent
 
-In file content or a diff, hover over a line and click the `+` button at the end of it to write a comment. Press Ctrl/Shift+Enter to submit or Esc to cancel. In a diff, you can comment on the old side and the new side separately.
+In file content or a diff, hover over a line and click the `+` button that appears to the right of its line number to write a comment. Press Ctrl/Shift+Enter to submit or Esc to cancel. A line that already has a comment hides the button; double-click the comment to edit it, or click its delete button to remove it. In a diff, you can comment on the old side and the new side separately.
 
 Comments wait above the Chat input, which shows how many are pending, such as “2 code comments”. Switch back to **Chat**, describe what you want, and send the message. Each comment's file path, line number, side (old or new), and group travel with that message to the agent. Once the Server accepts the execution, the sent comments leave the pending list. Click `×` next to the count to discard all pending comments.
 

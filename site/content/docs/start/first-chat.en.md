@@ -2,7 +2,7 @@
 title: "Start your first conversation"
 description: "The shortest path from configuring a model to running an agent."
 weight: 40
-lastmod: 2026-09-15
+lastmod: 2026-09-25
 translationKey: docs/start/first-chat
 ---
 
@@ -22,18 +22,18 @@ Use the model ID supplied by the service. Model discovery may suggest `256,000 /
 
 ## 2. Create a simple agent
 
-In **Agents**, create a custom agent named “Question helper,” select your Model Provider, and enter these instructions:
+In **Agents**, click **Create**. Keep the default **Agent Type** `System` (a custom agent), enter “Question helper” as the **Display Name**, choose your connection in **Model Provider**, and enter these **Instructions**:
 
 ```text
 Answer the question directly, then explain any necessary background.
 If information is missing, say what you need to know.
 ```
 
-Save and confirm the agent is enabled. Start with text chat; add tools, Skills, and workflows after the connection works.
+Click **Create** to save, then confirm that the **Enabled** switch is on in the Agents list. New agents are enabled by default. Start with text chat; add tools, Skills, and workflows after the connection works.
 
 ## 3. Send your first message
 
-Open **Chat**, confirm the Server, choose an available Project and “Question helper,” then send:
+Open **Chat**, confirm the Server, and choose an available Project: in Desktop, use the project tabs at the top of the window; in Web, use the dropdown at the top of the left sidebar. Then choose “Question helper” in the selector at the top-left of the message box and send:
 
 ```text
 Explain a working directory in two sentences and give a simple example.
@@ -41,8 +41,8 @@ Explain a working directory in two sentences and give a simple example.
 
 The reply should appear progressively and the execution should finish. Follow up with “Make that explanation simpler” to check that the agent can continue the discussion. This verifies both the model connection and a continuing conversation.
 
-![AGW Desktop chat: select a Project and Agent at the top, then enter a message below.](/images/screenshots/desktop-chat.png)
-{caption="AGW Desktop: confirm the Project and Agent, then send a message below."}
+![AGW Desktop chat.](/images/screenshots/desktop-chat.png)
+{caption="AGW Desktop chat."}
 
 ## Next steps
 
@@ -50,7 +50,7 @@ Verify plain text chat before adding [tools and Skills]({{< relref "/docs/guides
 
 ## No response
 
-Check the selected Model Provider, model ID, credentials, and endpoint, then inspect Server logs. A conversation may be waiting for approval or user input; handle that state in Chat. Avoid adding many tools or complex workflows before the model connection works.
+Check the selected Model Provider, model ID, credentials, and endpoint, then inspect Server logs. The icon beside each conversation in the list shows its status: **Running** means it is still running, **Last turn failed** means the previous turn failed, and **Last turn interrupted** means the previous turn was interrupted. A conversation may also be waiting for approval or user input; handle that state in Chat. Avoid adding many tools or complex workflows before the model connection works.
 
 ## Implementation and references
 
