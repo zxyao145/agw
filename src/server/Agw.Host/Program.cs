@@ -404,6 +404,16 @@ public static class AgwHostApplication
                 await upgradeScope
                     .ServiceProvider.GetRequiredService<Agw.Infrastructure.Agents.DurableTurnUpgrade>()
                     .UpgradeAsync(CancellationToken.None);
+                if (
+                    app.Services.GetRequiredService<
+                        IOptions<Agw.Agents.Execution.Configuration.ExecutionRuntimeOptions>
+                    >().Value.Provider == Agw.Agents.Contracts.Execution.ExecutionProvider.InProcess
+                )
+                {
+                    await upgradeScope
+                        .ServiceProvider.GetRequiredService<Agw.Infrastructure.Projects.InProcessTurnRecovery>()
+                        .RecoverAsync(CancellationToken.None);
+                }
             }
 
             await app.StartAsync();

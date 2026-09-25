@@ -26,6 +26,7 @@ internal static class TurnMessageFactory
     public const string TurnIdKey = "turnId";
     public const string TurnSequenceKey = "turnSequence";
     public const string StepIndexKey = "stepIndex";
+    public const string SupersededKey = "superseded";
 
     public static AgwMessage CreateStarted(TurnEnvelope envelope) =>
         Create(AgwMessageTypes.TurnStart, CreateTurnProperties(envelope));
@@ -49,6 +50,19 @@ internal static class TurnMessageFactory
             AgwMessageTypes.TurnFinished,
             new AdditionalPropertiesDictionary { [AgwMessageClassifier.StatusKey] = status }
         );
+
+    /// <summary>
+    /// 复制生命周期消息，并标记它的 Turn 已被会话中更新的 Turn 取代；原消息可能属于共享的广播缓冲，不能修改。
+    /// Copies a lifecycle message and marks its turn as superseded by a newer turn of the conversation; the original may belong to a shared broadcast buffer and must not change.
+    /// </summary>
+    public static AgwMessage MarkSuperseded(AgwMessage message) =>
+        message with
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary(message.AdditionalProperties!)
+            {
+                [SupersededKey] = true,
+            },
+        };
 
     /// <summary>
     /// 结束消息的 errorCode：AgwException 取其七位错误码，其他异常归为执行失败。

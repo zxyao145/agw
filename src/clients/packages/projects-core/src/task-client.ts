@@ -41,6 +41,35 @@ export async function getConversationTurnInputs(
   return inputs.reverse();
 }
 
+export type ConversationActivityStatus = "running" | "failed" | "interrupted";
+
+export type ConversationActivityItem = {
+  conversationId: string;
+  turnId: string;
+  status: ConversationActivityStatus;
+};
+
+/**
+ * 读取项目中状态不是 idle 的会话，响应中没有的会话为 idle。
+ * Reads the project's conversations whose status is not idle; conversations missing from the response are idle.
+ */
+export async function getConversationActivity(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ConversationActivityItem[]> {
+  const response = await browserClient.apiGet("/api/projects/conversation-activity", {
+    params: { query: { projectId } },
+    signal,
+  });
+  if (!response) throw new Error("The conversation activity response is missing.");
+  return response.items.map(({ conversationId, turnId, status }) => {
+    if (status !== "running" && status !== "failed" && status !== "interrupted") {
+      throw new Error(`The conversation status '${status}' is not supported.`);
+    }
+    return { conversationId, turnId, status };
+  });
+}
+
 export interface ConversationSummary {
   projectId: string;
   conversationId: string;

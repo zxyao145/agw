@@ -113,8 +113,6 @@ export interface ChatProps {
   showUserInputNavigation?: boolean;
   /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
   onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
-  /** turn execution state; the workspace uses it to fetch a newly created conversation. 执行状态，工作区据此拉取新建会话。 */
-  onExecutingChange?: (isExecuting: boolean) => void;
   /** 历史水合后查询服务端活动执行，并恢复 durable attachment。 */
   restoreExecution?: boolean;
   active?: boolean;
@@ -193,7 +191,6 @@ export function Chat({
   onPendingFileCommentsRemove,
   showUserInputNavigation = false,
   onReconnectStateChange,
-  onExecutingChange,
   restoreExecution = false,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
@@ -308,10 +305,6 @@ export function Chat({
   React.useEffect(() => {
     onReconnectStateChange?.(reconnectState);
   }, [onReconnectStateChange, reconnectState]);
-
-  React.useEffect(() => {
-    onExecutingChange?.(isExecuting);
-  }, [isExecuting, onExecutingChange]);
 
   React.useEffect(() => {
     conversationIdRef.current = conversationId;
@@ -1409,6 +1402,10 @@ export function Chat({
         if (projectId && conversationToClear) {
           const cleared = await clearProjectConversationRecords(projectId, conversationToClear);
           if (!cleared) throw new Error("Conversation not found.");
+          executionSessionManager.conversationStatuses.reset(
+            { serverId: executionServerId, projectId },
+            conversationToClear,
+          );
           const isStillCurrent =
             conversationIdRef.current === conversationToClear &&
             executionGenerationRef.current === generation;

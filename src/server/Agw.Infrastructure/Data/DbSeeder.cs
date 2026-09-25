@@ -150,6 +150,34 @@ public class DbSeeder
         return rows.Select(row => (row.Id, row.UserId)).ToArray();
     }
 
+    /// <summary>
+    /// 读取进程内模式残留的活动 Turn：状态为 Accepted 或 Running，并且没有同 ID 的活动 durable_execution；所属用户取所属对话的 CreateBy。
+    /// Reads active turns left by in-process mode: Accepted or Running with no active durable_execution of the same ID; the owner is the conversation's CreateBy.
+    /// </summary>
+    internal static async Task<IReadOnlyList<(Guid Id, string? UserId)>> ReadInProcessTurnRecoveryCandidatesAsync(
+        AgwDbContext database,
+        CancellationToken cancellationToken
+    )
+    {
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        var activeExecutions = database.DurableExecutions.Where(DurableExecutionQueries.Active);
+        var rows = await database
+            .ProjectConversationTurns.AsNoTracking()
+            .Where(turn =>
+                turn.Status == ProjectConversationTurnStatus.Accepted
+                || turn.Status == ProjectConversationTurnStatus.Running
+            )
+            .Where(turn => !activeExecutions.Any(execution => execution.Id == turn.Id))
+            .Join(
+                database.ProjectConversations,
+                turn => turn.ProjectConversationId,
+                conversation => conversation.Id,
+                (turn, conversation) => new { turn.Id, UserId = conversation.CreateBy }
+            )
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => (row.Id, row.UserId)).ToArray();
+    }
+
     private async Task SeedQuickPromptsAsync()
     {
         if (await _context.Settings.AnyAsync(x => x.Key == QuickPromptSettings.Key && x.UserId == null))

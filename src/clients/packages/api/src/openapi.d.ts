@@ -3043,6 +3043,49 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/conversation-activity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 项目中各会话的执行状态快照，只返回 running、failed、interrupted 的会话。
+     *     A snapshot of the project's conversation execution statuses, returning only running, failed and interrupted conversations.
+     */
+    get: {
+      parameters: {
+        query?: {
+          projectId?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfConversationActivityResponse"];
+            "application/json": components["schemas"]["ApiResultOfConversationActivityResponse"];
+            "text/json": components["schemas"]["ApiResultOfConversationActivityResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/conversations": {
     parameters: {
       query?: never;
@@ -5095,6 +5138,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfConversationActivityResponse: {
+      data?: null | components["schemas"]["ConversationActivityResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfConversationTurnMessagesResponse: {
       data?: null | components["schemas"]["ConversationTurnMessagesResponse"];
       /** Format: int32 */
@@ -5521,6 +5571,24 @@ export interface components {
       description?: null | string;
       authSchemes?: components["schemas"]["AuthSchemeResponse"][];
       capabilitySources?: components["schemas"]["CapabilitySourceResponse"][];
+    };
+    /**
+     * @description 一个会话的执行状态。Status 取 running / failed / interrupted；running 的 TurnId 是最新的活动 Turn，其余取最新的 Turn。
+     *     The execution status of one conversation. Status is running / failed / interrupted; TurnId is the latest active turn for running, otherwise the latest turn.
+     */
+    ConversationActivityItemResponse: {
+      /** Format: uuid */
+      conversationId: string;
+      /** Format: uuid */
+      turnId: string;
+      status: string;
+    };
+    /**
+     * @description 项目中状态不是 idle 的会话；响应中没有的会话为 idle。
+     *     The project's conversations whose status is not idle; conversations missing from the response are idle.
+     */
+    ConversationActivityResponse: {
+      items: components["schemas"]["ConversationActivityItemResponse"][];
     };
     /**
      * @description Turn 内的一条消息。StepIndex 只用于同一节点内分组，排序使用 Sequence。

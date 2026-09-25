@@ -203,7 +203,19 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                     .ConfigureAwait(false)
             )
             {
-                await _messageSink.WriteAsync(entry.Message, cancellationToken).ConfigureAwait(false);
+                var message = entry.Message;
+                // 回放可能发生在会话已有更新的 Turn 之后；标记后客户端不再用它更新会话状态。
+                // A replay can happen after the conversation has a newer turn; the mark stops clients from updating conversation status with it.
+                if (
+                    (AgwMessageClassifier.IsTurnStart(message) || AgwMessageClassifier.IsTurnFinished(message))
+                    && await _coordinator
+                        .IsSupersededAsync(executionId, _userId, cancellationToken)
+                        .ConfigureAwait(false)
+                )
+                {
+                    message = TurnMessageFactory.MarkSuperseded(message);
+                }
+                await _messageSink.WriteAsync(message, cancellationToken).ConfigureAwait(false);
                 if (AgwMessageClassifier.IsTurnFinished(entry.Message))
                 {
                     if (ActiveExecutionId == executionId)

@@ -41,4 +41,19 @@ public class ConversationTurnsController : ControllerBase
         var messages = await _turns.GetMessagesAsync(query, cancellationToken);
         return messages == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(messages);
     }
+
+    /// <summary>
+    /// 项目中各会话的执行状态快照，只返回 running、failed、interrupted 的会话。
+    /// A snapshot of the project's conversation execution statuses, returning only running, failed and interrupted conversations.
+    /// </summary>
+    [HttpGet("conversation-activity")]
+    [ProducesApiResult(typeof(ConversationActivityResponse))]
+    public async Task<IActionResult> GetActivityAsync(
+        [FromQuery] ConversationActivityQuery query,
+        CancellationToken cancellationToken
+    )
+    {
+        var activity = await _turns.GetActivityAsync(query, cancellationToken);
+        return activity == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(activity);
+    }
 }

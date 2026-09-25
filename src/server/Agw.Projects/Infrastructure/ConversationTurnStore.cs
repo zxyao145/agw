@@ -121,6 +121,22 @@ public sealed class ConversationTurnStore : IConversationTurnStore
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public Task<bool> IsSupersededAsync(Guid turnId, CancellationToken cancellationToken) =>
+        _dbContext
+            .ProjectConversationTurns.AsNoTracking()
+            .Where(turn => turn.Id == turnId)
+            .AnyAsync(
+                turn =>
+                    _dbContext.ProjectConversationTurns.Any(newer =>
+                        newer.ProjectConversationId == turn.ProjectConversationId
+                        && (
+                            newer.FirstSequence > turn.FirstSequence
+                            || newer.FirstSequence == turn.FirstSequence && newer.Id.CompareTo(turn.Id) > 0
+                        )
+                    ),
+                cancellationToken
+            );
+
     public async Task<IReadOnlyList<ConversationHistoryEntry>> ReadOutputAsync(
         Guid turnId,
         CancellationToken cancellationToken

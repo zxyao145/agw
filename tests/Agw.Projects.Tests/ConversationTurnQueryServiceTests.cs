@@ -321,6 +321,194 @@ public sealed class ConversationTurnQueryServiceTests : IAsyncLifetime
         Assert.Null(messages);
     }
 
+    [Fact]
+    public async Task GetActivityAsync_LatestTurnStatuses_ReturnsOnlyNonIdleConversations()
+    {
+        // Arrange: one conversation per latest-turn status, plus one without turns.
+        // 准备：每种最新 Turn 状态各一个会话，另加一个没有 Turn 的会话。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var projectId = AddProject(context, "tester");
+        var expected = new Dictionary<Guid, (Guid TurnId, string Status)>();
+        foreach (
+            var (status, name) in new (ProjectConversationTurnStatus Status, string? Name)[]
+            {
+                (ProjectConversationTurnStatus.Accepted, "running"),
+                (ProjectConversationTurnStatus.Running, "running"),
+                (ProjectConversationTurnStatus.Failed, "failed"),
+                (ProjectConversationTurnStatus.Interrupted, "interrupted"),
+                (ProjectConversationTurnStatus.Completed, null),
+            }
+        )
+        {
+            var conversationId = AddConversation(context, projectId, "tester");
+            AddTurn(context, conversationId, ProjectConversationTurnStatus.Completed, 0);
+            var turnId = AddTurn(context, conversationId, status, 2);
+            if (name != null)
+                expected[conversationId] = (turnId, name);
+        }
+        AddConversation(context, projectId, "tester");
+        await context.SaveChangesAsync(token);
+
+        // Act
+        var activity = await new ConversationTurnQueryService(context, _user).GetActivityAsync(
+            new() { ProjectId = projectId },
+            token
+        );
+
+        // Assert
+        Assert.Equal(
+            expected.OrderBy(item => item.Key),
+            activity!
+                .Items.Select(item => KeyValuePair.Create(item.ConversationId, (item.TurnId, item.Status)))
+                .OrderBy(item => item.Key)
+        );
+    }
+
+    [Fact]
+    public async Task GetActivityAsync_EarlierTurnStillRunning_ReturnsRunningWithThatTurn()
+    {
+        // Arrange: the latest turn finished while an earlier turn is still running.
+        // 准备：最新 Turn 已结束，较早的 Turn 仍在运行。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var projectId = AddProject(context, "tester");
+        var conversationId = AddConversation(context, projectId, "tester");
+        var runningTurnId = AddTurn(context, conversationId, ProjectConversationTurnStatus.Running, 0);
+        AddTurn(context, conversationId, ProjectConversationTurnStatus.Failed, 2);
+        await context.SaveChangesAsync(token);
+
+        // Act
+        var activity = await new ConversationTurnQueryService(context, _user).GetActivityAsync(
+            new() { ProjectId = projectId },
+            token
+        );
+
+        // Assert
+        var item = Assert.Single(activity!.Items);
+        Assert.Equal(conversationId, item.ConversationId);
+        Assert.Equal(runningTurnId, item.TurnId);
+        Assert.Equal("running", item.Status);
+    }
+
+    [Theory]
+    [InlineData(ProjectConversationTurnStatus.Failed, ProjectConversationTurnStatus.Interrupted, "interrupted")]
+    [InlineData(ProjectConversationTurnStatus.Interrupted, ProjectConversationTurnStatus.Failed, "failed")]
+    [InlineData(ProjectConversationTurnStatus.Failed, ProjectConversationTurnStatus.Completed, null)]
+    public async Task GetActivityAsync_TurnsSharingFirstSequence_UsesTurnWithLargestId(
+        ProjectConversationTurnStatus earlierStatus,
+        ProjectConversationTurnStatus laterStatus,
+        string? expectedStatus
+    )
+    {
+        // Arrange: a turn without input and the next turn share first_sequence; the larger turn ID is the latest.
+        // 准备：没有输入的 Turn 与下一个 Turn 共用 first_sequence，Turn ID 较大的为最新。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var projectId = AddProject(context, "tester");
+        var conversationId = AddConversation(context, projectId, "tester");
+        var laterTurnId = AddTurn(
+            context,
+            conversationId,
+            laterStatus,
+            3,
+            Guid.Parse("01994000-0000-7000-8000-000000000002")
+        );
+        AddTurn(context, conversationId, earlierStatus, 3, Guid.Parse("01994000-0000-7000-8000-000000000001"));
+        await context.SaveChangesAsync(token);
+
+        // Act
+        var activity = await new ConversationTurnQueryService(context, _user).GetActivityAsync(
+            new() { ProjectId = projectId },
+            token
+        );
+
+        // Assert
+        if (expectedStatus == null)
+        {
+            Assert.Empty(activity!.Items);
+            return;
+        }
+        var item = Assert.Single(activity!.Items);
+        Assert.Equal(laterTurnId, item.TurnId);
+        Assert.Equal(expectedStatus, item.Status);
+    }
+
+    [Fact]
+    public async Task GetActivityAsync_ForeignProject_ReturnsNull()
+    {
+        // Arrange: another user's project with a running conversation.
+        // 准备：其他用户的项目，其中有运行中的会话。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var projectId = AddProject(context, "another-user");
+        var conversationId = AddConversation(context, projectId, "another-user");
+        AddTurn(context, conversationId, ProjectConversationTurnStatus.Running, 0);
+        await context.SaveChangesAsync(token);
+        var service = new ConversationTurnQueryService(context, _user);
+
+        // Act
+        var foreign = await service.GetActivityAsync(new() { ProjectId = projectId }, token);
+        var missing = await service.GetActivityAsync(new() { ProjectId = Guid.CreateVersion7() }, token);
+
+        // Assert
+        Assert.Null(foreign);
+        Assert.Null(missing);
+    }
+
+    private static Guid AddProject(AgwDbContext context, string owner)
+    {
+        var projectId = Guid.CreateVersion7();
+        context.Projects.Add(
+            new Project
+            {
+                Id = projectId,
+                Name = projectId.ToString("N"),
+                CreateBy = owner,
+            }
+        );
+        return projectId;
+    }
+
+    private static Guid AddConversation(AgwDbContext context, Guid projectId, string owner)
+    {
+        var conversationId = Guid.CreateVersion7();
+        context.ProjectConversations.Add(
+            new ProjectConversation
+            {
+                Id = conversationId,
+                ProjectId = projectId,
+                ContextId = conversationId.ToString("N"),
+                CreateBy = owner,
+            }
+        );
+        return conversationId;
+    }
+
+    private Guid AddTurn(
+        AgwDbContext context,
+        Guid conversationId,
+        ProjectConversationTurnStatus status,
+        long firstSequence,
+        Guid? id = null
+    )
+    {
+        var turnId = id ?? Guid.CreateVersion7();
+        context.ProjectConversationTurns.Add(
+            new ProjectConversationTurn
+            {
+                Id = turnId,
+                ProjectConversationId = conversationId,
+                TargetId = Guid.CreateVersion7(),
+                RuntimeType = AgentRuntimeType.Agent,
+                Status = status,
+                FirstSequence = firstSequence,
+                StartedAt = _started,
+            }
+        );
+        return turnId;
+    }
+
     /// <summary>
     /// 写入一个对话与若干已完成的 Turn：每个 Turn 有一条用户输入与一条 Agent 回答。
     /// Writes a conversation with completed turns, each with one user input and one Agent answer.

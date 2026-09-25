@@ -90,7 +90,7 @@ InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查�
 | HITL 等待状态 | `InProcessInteractionSession` 内存 | PostgreSQL pending + response 快照 |
 | Agentflow 恢复点 | 当前 workflow run | PostgreSQL 中的加密 JSON checkpoint |
 | 消息传输 | 当前 SignalR connection | `IExecutionEventStream`，可选择 PostgreSQL 或 Redis Stream 并按 cursor 重放 |
-| 进程重启 | 活动 turn 失效 | 从持久状态继续 |
+| 进程重启 | 活动 turn 失效；Host 接受连接前由 `InProcessTurnRecovery` 记为 `Interrupted` | 从持久状态继续 |
 | K8s 滚动更新 | 正在等待/运行的 turn 可能中断 | PostgreSQL advisory lock 释放后由新 Pod 至少一次恢复 |
 | 基础设施 | SQLite/PostgreSQL 均可 | PostgreSQL + PostgreSQL DistributedLock；Redis 可选 |
 | 适用场景 | 本机、单实例、最低运维成本 | 多副本、滚动发布、长时间 HITL |

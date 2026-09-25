@@ -77,3 +77,21 @@ public sealed record ConversationTurnMessagesResponse(
     Guid TurnId,
     IReadOnlyList<ConversationTurnMessageResponse> Items
 );
+
+public sealed record ConversationActivityQuery
+{
+    [FromQuery(Name = "projectId")]
+    public Guid ProjectId { get; init; }
+}
+
+/// <summary>
+/// 一个会话的执行状态。Status 取 running / failed / interrupted；running 的 TurnId 是最新的活动 Turn，其余取最新的 Turn。
+/// The execution status of one conversation. Status is running / failed / interrupted; TurnId is the latest active turn for running, otherwise the latest turn.
+/// </summary>
+public sealed record ConversationActivityItemResponse(Guid ConversationId, Guid TurnId, string Status);
+
+/// <summary>
+/// 项目中状态不是 idle 的会话；响应中没有的会话为 idle。
+/// The project's conversations whose status is not idle; conversations missing from the response are idle.
+/// </summary>
+public sealed record ConversationActivityResponse(IReadOnlyList<ConversationActivityItemResponse> Items);

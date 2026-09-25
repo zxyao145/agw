@@ -86,6 +86,12 @@ public interface IConversationTurnStore
     Task MarkRunningAsync(Guid turnId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// 会话中是否已有排在这个 Turn 之后的 Turn；Turn 按 (first_sequence, turnId) 排序，与会话状态快照相同。没有这个 Turn 时返回假。
+    /// Whether the conversation already has a turn ordered after this one; turns order by (first_sequence, turnId), as in the conversation status snapshot. Returns false when the turn does not exist.
+    /// </summary>
+    Task<bool> IsSupersededAsync(Guid turnId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 记录已完成的 Step（Agentflow 为 Superstep）数量。
     /// Records the number of completed Steps (Supersteps for an Agentflow).
     /// </summary>

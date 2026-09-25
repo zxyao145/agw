@@ -126,11 +126,15 @@ async function checkConversationSession(kind: string, strictMode = false) {
     };
     newChat?: () => void;
     refreshSignal?: number;
-    historyExecuting?: boolean;
+    conversationStatuses?: ReadonlyMap<string, string>;
+    currentConversationTurnId?: string | null;
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
     selectTab?: (value: string) => void;
   } = {};
   const attachedContexts = new Set<string>();
+  const conversationStatuses = new chatRuntime.ConversationStatusStore();
+  const supersededListeners = new Set<(key: { serverId: string; projectId: string }) => void>();
+  let activityRequests = 0;
   const executions: (ExecutionRequest & { contextId: string })[] = [];
   const configurations: ExecutionSetting[] = [];
   let finishHistory!: () => void;
@@ -234,6 +238,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return { diff: "", unchanged: true };
       },
       clearProjectConversationRecords: async () => true,
+      getConversationActivity: async () => {
+        activityRequests += 1;
+        return [];
+      },
       getProjectConversationDetails: async (_project: string, id: string) => {
         if (id !== "conversation-1") return pending.get(id)!.promise;
         detailsRequests += 1;
@@ -251,12 +259,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
       // workspace's route hydration effect. A summary is not a hydrated session.
       ConversationList: (props: {
         refreshSignal?: number;
-        isExecuting?: boolean;
+        conversationStatuses?: ReadonlyMap<string, string>;
+        currentConversationTurnId?: string | null;
         onNewConversation?: () => void;
         onActiveConversationResolved?: (value: unknown) => void;
       }) => {
         observed.refreshSignal = props.refreshSignal;
-        observed.historyExecuting = props.isExecuting;
+        observed.conversationStatuses = props.conversationStatuses;
+        observed.currentConversationTurnId = props.currentConversationTurnId;
         observed.newChat = props.onNewConversation;
         React.useEffect(() => {
           props.onActiveConversationResolved?.(conversation);
@@ -284,6 +294,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "@agw/chat-runtime": {
       ...chatRuntime,
       executionSessionManager: {
+        conversationStatuses,
+        subscribeReconnected: () => () => undefined,
+        subscribeSupersededTurn: (
+          listener: (key: { serverId: string; projectId: string }) => void,
+        ) => {
+          supersededListeners.add(listener);
+          return () => supersededListeners.delete(listener);
+        },
         has: (key: { contextId: string }) =>
           (kind === "restore-active" || kind.startsWith("work-close")) &&
           attachedContexts.has(key.contextId),
@@ -378,6 +396,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
       return React.createElement(Chat, props);
     },
   };
+  modules["../../conversation-statuses"] = await loadComponent(
+    new URL("../../conversation-statuses.ts", import.meta.url),
+  );
   const { ChatWorkspace } = await loadComponent<ChatWorkspaceProps>(
     new URL("./chat-workspace.tsx", import.meta.url),
   );
@@ -659,27 +680,46 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return;
       }
       if (kind === "history-refresh") {
-        assert.equal(observed.historyExecuting, false, "idle history waits for nothing");
+        const statusScope = { serverId: "local", projectId: "project-1" };
+        assert.equal(activityRequests, 1, "entering the page requests one status snapshot");
+        assert.equal(observed.currentConversationTurnId, null);
         const before = observed.refreshSignal!;
         await React.act(async () => observed.input!.onExecute("long answer", []));
+        // The stubbed session manager does not route messages, so write the turn start it would record.
+        // 会话管理器由测试替换，不转发消息，这里写入它会记录的 Turn 开始事件。
+        await React.act(async () =>
+          conversationStatuses.turnStarted(statusScope, "conversation-1", "turn-1"),
+        );
         assert.equal(refreshTimers.size, 0, "a running turn does not poll the conversation list");
         assert.equal(observed.refreshSignal, before + 1, "starting a turn refreshes history once");
+        assert.equal(observed.conversationStatuses?.get("conversation-1"), "running");
         assert.equal(
-          observed.historyExecuting,
-          true,
-          "history fetches the conversation a running turn creates",
+          observed.currentConversationTurnId,
+          "turn-1",
+          "the turn ID lets history fetch the conversation a running turn creates",
         );
-        await React.act(async () =>
+        await React.act(async () => {
           reconnectHandlers!.onMessage({
             messageId: "history-refresh-finished",
             role: "system",
             additionalProperties: { type: "agw-turn-finished", status: "completed" },
             contents: [],
-          }),
-        );
+          });
+          conversationStatuses.turnFinished(statusScope, "conversation-1", "turn-1", "completed");
+        });
         assert.equal(refreshTimers.size, 0, "ending a turn leaves no timer behind");
         assert.equal(observed.refreshSignal, before + 2, "ending a turn refreshes history once");
-        assert.equal(observed.historyExecuting, false, "history stops fetching once the turn ends");
+        assert.equal(observed.conversationStatuses?.get("conversation-1"), "idle");
+        assert.equal(activityRequests, 1, "turn events update statuses without another snapshot");
+        await React.act(async () => {
+          for (const listener of supersededListeners)
+            listener({ serverId: "local", projectId: "project-2" });
+        });
+        assert.equal(activityRequests, 1, "another project's superseded turn leaves this snapshot");
+        await React.act(async () => {
+          for (const listener of supersededListeners) listener(statusScope);
+        });
+        assert.equal(activityRequests, 2, "a superseded turn of this project fetches a snapshot");
         return;
       }
       if (kind === "restore" || kind === "restore-failure") {

@@ -3557,6 +3557,46 @@
         }
       }
     },
+    "/api/projects/conversation-activity": {
+      "get": {
+        "tags": [
+          "ConversationTurns"
+        ],
+        "summary": "项目中各会话的执行状态快照，只返回 running、failed、interrupted 的会话。\nA snapshot of the project's conversation execution statuses, returning only running, failed and interrupted conversations.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationActivityResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationActivityResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConversationActivityResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/conversations": {
       "get": {
         "tags": [
@@ -7724,6 +7764,38 @@
           }
         }
       },
+      "ApiResultOfConversationActivityResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConversationActivityResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfConversationTurnMessagesResponse": {
         "required": [
           "code",
@@ -9532,6 +9604,43 @@
             }
           }
         }
+      },
+      "ConversationActivityItemResponse": {
+        "required": [
+          "conversationId",
+          "turnId",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "turnId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "description": "一个会话的执行状态。Status 取 running / failed / interrupted；running 的 TurnId 是最新的活动 Turn，其余取最新的 Turn。\nThe execution status of one conversation. Status is running / failed / interrupted; TurnId is the latest active turn for running, otherwise the latest turn."
+      },
+      "ConversationActivityResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConversationActivityItemResponse"
+            }
+          }
+        },
+        "description": "项目中状态不是 idle 的会话；响应中没有的会话为 idle。\nThe project's conversations whose status is not idle; conversations missing from the response are idle."
       },
       "ConversationTurnMessageResponse": {
         "required": [

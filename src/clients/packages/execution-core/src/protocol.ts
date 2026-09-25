@@ -41,6 +41,12 @@ export type TurnPosition = {
   turnSequence: number;
 };
 
+/** Turn 生命周期消息所属的会话与 Turn。The conversation and turn of a turn lifecycle message. */
+export type TurnIdentity = {
+  conversationId: string;
+  turnId: string;
+};
+
 export type ApprovalScope = "Once" | "AlwaysTool" | "AlwaysArguments";
 export type InteractionSource = {
   nodeId?: string;
@@ -179,6 +185,29 @@ export function getTurnPosition(message: ExecutionMessage): TurnPosition | null 
     turnSequence > 0
     ? { turnId, turnSequence }
     : null;
+}
+
+/**
+ * 读取 Turn 开始、结束消息中的会话 ID 与 Turn ID；连接上没有 Turn 时服务端发出的结束消息只有 status，返回 null。
+ * Reads the conversation and turn IDs of a turn start or finish message; a finish message sent without a turn on the connection carries only status and returns null.
+ */
+export function getTurnIdentity(message: ExecutionMessage): TurnIdentity | null {
+  const conversationId = message.additionalProperties?.conversationId;
+  const turnId = message.additionalProperties?.turnId;
+  return typeof conversationId === "string" &&
+    conversationId.length > 0 &&
+    typeof turnId === "string" &&
+    turnId.length > 0
+    ? { conversationId, turnId }
+    : null;
+}
+
+/**
+ * 服务端回放生命周期消息时，会话中已有排在该 Turn 之后的 Turn，消息带有 superseded 标记。
+ * The server marks a replayed lifecycle message as superseded when its conversation already has a turn ordered after it.
+ */
+export function isSupersededTurnMessage(message: ExecutionMessage): boolean {
+  return message.additionalProperties?.superseded === true;
 }
 
 /** 读取服务端 message 级 Turn 结束标记；未知状态按兼容性的 completed 处理。 */

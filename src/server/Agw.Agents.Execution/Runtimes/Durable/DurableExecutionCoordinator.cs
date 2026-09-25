@@ -387,6 +387,20 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     }
 
     /// <summary>
+    /// 以执行所属用户的身份判断会话中是否已有排在这个 Turn 之后的 Turn。
+    /// Determines, as the execution's owner, whether the conversation already has a turn ordered after this one.
+    /// </summary>
+    internal async Task<bool> IsSupersededAsync(Guid executionId, string userId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        using var owner = UserInfoUtil.Push(CreateUserPrincipal(userId));
+        return await scope
+            .ServiceProvider.GetRequiredService<IConversationTurnStore>()
+            .IsSupersededAsync(executionId, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// 执行持有租约的一个 Segment：续期租约，执行并在租约检查事务中提交结果与事件。失去租约、被中断或实例关闭时停止，不提交结果。
     /// Runs one lease-holding segment: renews the lease, executes, and commits the result and events in a lease-checked transaction. Losing the lease, an interrupt or instance shutdown stops it without committing a result.
     /// </summary>
