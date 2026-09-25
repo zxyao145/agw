@@ -1,9 +1,10 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Contracts.Messages;
+using Agw.Agents.Execution.Context;
+using Agw.Agents.Execution.HumanInteraction.InProcess;
+using Agw.Agents.Execution.Outbound;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
@@ -19,6 +20,7 @@ using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Testing;
 using Agw.Tools.Abstractions;
 using Agw.Tools.Abstractions.Generated;
@@ -430,17 +432,13 @@ public class JobManagementSkillTests : IDisposable
         private JobManagementSkillFixture(
             SqliteConnection connection,
             ServiceProvider serviceProvider,
-            TestRuntimeTurnContextAccessor turnContextAccessor,
             JobManagementSkillRegistration registration
         )
         {
             _connection = connection;
             _serviceProvider = serviceProvider;
-            TurnContextAccessor = turnContextAccessor;
             Registration = registration;
         }
-
-        private TestRuntimeTurnContextAccessor TurnContextAccessor { get; }
 
         private JobManagementSkillRegistration Registration { get; }
 
@@ -460,28 +458,34 @@ public class JobManagementSkillTests : IDisposable
 
         public IDisposable PushInteractiveContext(Guid projectId, string userId)
         {
-            var contextId = Guid.CreateVersion7().ToString("D");
+            var agentId = Guid.CreateVersion7();
+            var context = new AgentExecutionContext
+            {
+                UserId = userId,
+                ProjectId = projectId,
+                ProjectConversationId = Guid.CreateVersion7(),
+                ContextId = Guid.CreateVersion7().ToString("D"),
+                Generation = 0,
+                WorkspaceSnapshot = new ProjectWorkspaceSnapshot("/workspace", [], "fingerprint"),
+                TurnId = Guid.CreateVersion7(),
+                TurnTargetId = agentId,
+                RuntimeType = AgentRuntimeType.Agent,
+                AgentId = agentId,
+                EngineKind = EngineKind.Maf,
+                Provider = ExecutionProvider.InProcess,
+            };
+            // 连接先以命令发送者的身份建立用户上下文，再进入该用户的执行作用域。
+            // The connection establishes the sender's user context before entering that user's execution scope.
             var userScope = UserInfoUtil.Push(CreatePrincipal(userId));
-            var turnScope = TurnContextAccessor.Push(
-                new RuntimeTurnContext(
-                    SettingCommandMapper.FromCommand(new SettingCommand(projectId)),
-                    new AgentExecutionTask
-                    {
-                        TaskId = Guid.CreateVersion7(),
-                        ProjectConversationId = Guid.CreateVersion7(),
-                        ProjectId = projectId,
-                        ContextId = contextId,
-                        CreateTime = TimeProvider.System.GetUtcNow(),
-                    },
-                    new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
-                    workspace: string.Empty,
-                    messageSink: null!
+            var executionScope = ExecutionScope
+                .Create(
+                    context,
+                    Guid.CreateVersion7(),
+                    new CollectingMessageSink(),
+                    new InMemoryPendingInteractionSet(null)
                 )
-                {
-                    UserId = userId,
-                }
-            );
-            return new CompositeScope(turnScope, userScope);
+                .Push();
+            return new CompositeScope(executionScope, userScope);
         }
 
         public static async Task<JobManagementSkillFixture> CreateAsync()
@@ -494,11 +498,9 @@ public class JobManagementSkillTests : IDisposable
                 .UseSnakeCaseNamingConvention()
                 .Options;
             var timeProvider = new TestTimeProvider(UtcNow);
-            var turnContextAccessor = new TestRuntimeTurnContextAccessor();
             var services = new ServiceCollection();
             services.AddSingleton<TimeProvider>(timeProvider);
-            services.AddSingleton<IRuntimeTurnContextAccessor>(turnContextAccessor);
-            services.AddSingleton<ICurrentAgentTurn>(turnContextAccessor);
+            services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
             services.AddSingleton<IProjectTaskFacade, NoopProjectTaskFacade>();
             services.AddSingleton<JobScheduleCalculator>();
             services.AddSingleton<JobSchedulerWakeSignal>();
@@ -546,7 +548,40 @@ public class JobManagementSkillTests : IDisposable
             }
 
             var registration = new JobManagementSkillRegistration();
-            return new JobManagementSkillFixture(connection, serviceProvider, turnContextAccessor, registration);
+            return new JobManagementSkillFixture(connection, serviceProvider, registration);
+        }
+
+        /// <summary>
+        /// 保存执行作用域输出的消息；这些测试只调用 Job 工具，不读取输出。
+        /// Keeps messages written to the execution scope output; these tests only invoke Job tools and never read it.
+        /// </summary>
+        private sealed class CollectingMessageSink : IExecutionMessageSink
+        {
+            public List<AgwMessage> Messages { get; } = [];
+
+            public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
+            {
+                Messages.Add(message);
+                return ValueTask.CompletedTask;
+            }
+        }
+
+        private sealed class CompositeScope : IDisposable
+        {
+            private readonly IDisposable _executionScope;
+            private readonly IDisposable _userScope;
+
+            public CompositeScope(IDisposable executionScope, IDisposable userScope)
+            {
+                _executionScope = executionScope;
+                _userScope = userScope;
+            }
+
+            public void Dispose()
+            {
+                _executionScope.Dispose();
+                _userScope.Dispose();
+            }
         }
 
         private sealed class TestToolInvocationContext : IAgwToolInvocationContext, IAgwToolInvocationContextInitializer
@@ -608,53 +643,6 @@ public class JobManagementSkillTests : IDisposable
         {
             await _serviceProvider.DisposeAsync();
             await _connection.DisposeAsync();
-        }
-
-        private sealed class TestRuntimeTurnContextAccessor : IRuntimeTurnContextAccessor, ICurrentAgentTurn
-        {
-            public RuntimeTurnContext? Current { get; private set; }
-
-            AgentTurnSnapshot? ICurrentAgentTurn.Current =>
-                Current == null ? null : new AgentTurnSnapshot(Current.ProjectId, Current.UserId);
-
-            public IDisposable Push(RuntimeTurnContext context)
-            {
-                var previous = Current;
-                Current = context;
-                return new PopScope(this, previous);
-            }
-
-            private sealed class PopScope : IDisposable
-            {
-                private readonly TestRuntimeTurnContextAccessor _accessor;
-                private readonly RuntimeTurnContext? _previous;
-
-                public PopScope(TestRuntimeTurnContextAccessor accessor, RuntimeTurnContext? previous)
-                {
-                    _accessor = accessor;
-                    _previous = previous;
-                }
-
-                public void Dispose() => _accessor.Current = _previous;
-            }
-        }
-
-        private sealed class CompositeScope : IDisposable
-        {
-            private readonly IDisposable _turnScope;
-            private readonly IDisposable _userScope;
-
-            public CompositeScope(IDisposable turnScope, IDisposable userScope)
-            {
-                _turnScope = turnScope;
-                _userScope = userScope;
-            }
-
-            public void Dispose()
-            {
-                _turnScope.Dispose();
-                _userScope.Dispose();
-            }
         }
 
         private sealed class NoopProjectTaskFacade : IProjectTaskFacade

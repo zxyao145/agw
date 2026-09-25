@@ -4,8 +4,6 @@ import * as React from "react";
 
 import type { UserInputMarker } from "./user-input-navigation";
 
-const PREVIEW_ESTIMATED_HEIGHT = 96;
-
 type PreviewState = {
   key: string;
   top: number;
@@ -15,7 +13,7 @@ export type UserInputNavigatorProps = {
   markers: readonly UserInputMarker[];
   activeKey: string | null;
   height: number;
-  onSelect: (rowIndex: number) => void;
+  onSelect: (key: string) => void;
 };
 
 export function UserInputNavigator({
@@ -34,11 +32,9 @@ export function UserInputNavigator({
 
     const navigationRect = navigation.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
-    const desiredTop =
-      buttonRect.top + buttonRect.height / 2 - navigationRect.top - PREVIEW_ESTIMATED_HEIGHT / 2;
     setPreview({
       key: marker.key,
-      top: Math.min(Math.max(desiredTop, 0), Math.max(height - PREVIEW_ESTIMATED_HEIGHT, 0)),
+      top: buttonRect.top + buttonRect.height / 2 - navigationRect.top,
     });
   };
 
@@ -85,8 +81,8 @@ export function UserInputNavigator({
                 aria-current={isActive ? "location" : undefined}
                 aria-describedby={isPreviewed ? "user-input-navigation-preview" : undefined}
                 aria-label={`Jump to user input: ${marker.preview}`}
-                className="flex h-6 w-6 shrink-0 cursor-pointer items-center rounded-sm pl-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-                onClick={() => onSelect(marker.rowIndex)}
+                className="flex h-4 w-6 shrink-0 cursor-pointer items-center rounded-sm pl-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                onClick={() => onSelect(marker.key)}
                 onMouseEnter={(event) => showPreview(marker, event.currentTarget)}
                 onMouseLeave={() =>
                   setPreview((current) => (current?.key === marker.key ? null : current))
@@ -116,7 +112,7 @@ export function UserInputNavigator({
         <div
           id="user-input-navigation-preview"
           role="tooltip"
-          className="pointer-events-none absolute left-8 z-30 w-80 max-w-[calc(100cqw-4rem)] rounded-md border bg-popover px-2 py-2 text-left text-popover-foreground shadow-xl"
+          className="pointer-events-none absolute left-8 z-30 w-80 max-w-[calc(100cqw-4rem)] -translate-y-1/2 rounded-md border bg-popover px-2 py-2 text-left text-popover-foreground shadow-xl"
           style={{ top: preview.top }}
         >
           <p className="line-clamp-3 whitespace-normal wrap-break-word text-xs text-muted-foreground">

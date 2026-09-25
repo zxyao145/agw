@@ -36,7 +36,7 @@ internal static class ToolStateSnapshots
             var tasks = backgroundProvider.GetIncompleteTasks(session);
             messages.Add(
                 CreateMessage(
-                    ToolMessageTypes.BackgroundTaskStatus,
+                    AgwMessageTypes.ToolBackgroundTaskStatus,
                     new AdditionalPropertiesDictionary
                     {
                         ["tasks"] = tasks
@@ -66,7 +66,7 @@ internal static class ToolStateSnapshots
     {
         var mode = await provider.GetModeAsync(session, cancellationToken).ConfigureAwait(false);
         return CreateMessage(
-            ToolMessageTypes.ModeStatus,
+            AgwMessageTypes.ToolModeStatus,
             new AdditionalPropertiesDictionary
             {
                 ["toolName"] = toolName,
@@ -92,7 +92,7 @@ internal static class ToolStateSnapshots
             ? await provider.GetRemainingTodosAsync(session, cancellationToken).ConfigureAwait(false)
             : await provider.GetAllTodosAsync(session, cancellationToken).ConfigureAwait(false);
         return CreateMessage(
-            ToolMessageTypes.TodoSnapshot,
+            AgwMessageTypes.ToolTodoSnapshot,
             new AdditionalPropertiesDictionary
             {
                 ["toolName"] = toolName,
@@ -177,19 +177,22 @@ internal static class ToolStateSnapshots
         IsToolMessage(update) && !IsHistoryPrelude(update.AdditionalProperties);
 
     private static bool IsToolMessage(AdditionalPropertiesDictionary? properties) =>
-        properties?.TryGetValue("type", out var type) == true && ToolMessageTypes.IsToolMessage(type?.ToString());
+        AgwMessageClassifier.IsToolMessage(AgwMessageClassifier.GetMessageType(properties));
 
     private static bool IsHistoryPrelude(AdditionalPropertiesDictionary? properties)
     {
         if (
-            properties?.TryGetValue("type", out var type) != true
-            || !string.Equals(type?.ToString(), ToolMessageTypes.Warning, StringComparison.Ordinal)
+            !string.Equals(
+                AgwMessageClassifier.GetMessageType(properties),
+                AgwMessageTypes.ToolWarning,
+                StringComparison.Ordinal
+            )
         )
         {
             return false;
         }
 
-        return properties.TryGetValue("persistSeparately", out var persistSeparately) != true
+        return properties?.TryGetValue("persistSeparately", out var persistSeparately) != true
             || persistSeparately is not true;
     }
 

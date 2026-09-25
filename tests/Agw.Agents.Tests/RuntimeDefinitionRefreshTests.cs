@@ -1,16 +1,16 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents.Contracts;
+using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.Agents.Turns;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
-using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
 using Agw.Files.Infrastructure.Storage;
 using Agw.Infrastructure.Data;
@@ -33,12 +33,10 @@ namespace Agw.Agents.Tests;
 public sealed class RuntimeDefinitionRefreshTests
 {
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode)]
-    [InlineData(ExternalAgentKind.Codex)]
-    [InlineData(ExternalAgentKind.Pi)]
-    public async Task StartAsync_DirectoriesChangeDuringTurn_FreezesActiveAndChildContextThenRebuilds(
-        ExternalAgentKind kind
-    )
+    [InlineData(EngineKind.ClaudeCode)]
+    [InlineData(EngineKind.Codex)]
+    [InlineData(EngineKind.Pi)]
+    public async Task StartAsync_DirectoriesChangeDuringTurn_FreezesActiveAndChildContextThenRebuilds(EngineKind kind)
     {
         await using var fixture = new Fixture(kind);
         await fixture.InitializeAsync();
@@ -53,16 +51,17 @@ public sealed class RuntimeDefinitionRefreshTests
             );
             fixture.Request = fixture.Request with { WorkspaceSnapshot = original };
             fixture.Service.HoldTurn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            await fixture.Starter.StartAsync(fixture.Request, TestContext.Current.CancellationToken);
-            var active = Assert.IsType<AgentRuntime>(fixture.Starter.Runtime);
+            await fixture.StartAsync();
+            var host = fixture.Host;
+            var active = Assert.IsType<AgentRuntime>(host.AgentRuntime);
             fixture.Request = fixture.Request with
             {
                 WorkspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(projectId, Path.GetTempPath()),
             };
-            Assert.True(active.HasActiveTurn);
+            Assert.True(host.HasActiveTurn);
             Assert.False(active.IsDisposed);
             fixture.Service.HoldTurn.SetResult();
-            await active.WhenIdleAsync();
+            await host.WhenIdleAsync();
             fixture.Service.HoldTurn = null;
             Assert.Equal(original.Fingerprint, Assert.Single(fixture.Service.ExecutedWorkspaces)!.Fingerprint);
             Assert.Equal(original.Fingerprint, Assert.Single(fixture.Service.ChildWorkspaces)!.Fingerprint);
@@ -136,10 +135,10 @@ public sealed class RuntimeDefinitionRefreshTests
     }
 
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode)]
-    [InlineData(ExternalAgentKind.Codex)]
-    [InlineData(ExternalAgentKind.Pi)]
-    public async Task StartAsync_UpdatedDefinition_RebuildsAndPreservesConversation(ExternalAgentKind kind)
+    [InlineData(EngineKind.ClaudeCode)]
+    [InlineData(EngineKind.Codex)]
+    [InlineData(EngineKind.Pi)]
+    public async Task StartAsync_UpdatedDefinition_RebuildsAndPreservesConversation(EngineKind kind)
     {
         // Arrange
         await using var fixture = new Fixture(kind);
@@ -184,7 +183,7 @@ public sealed class RuntimeDefinitionRefreshTests
 
         // Assert
         Assert.True(first.IsDisposed);
-        Assert.Null(fixture.Starter.Runtime);
+        Assert.Null(fixture.Coordinator.Host);
         fixture.Service.FailCreation = false;
         var recovered = await fixture.RunTurnAsync();
         Assert.NotSame(first, recovered);
@@ -198,8 +197,9 @@ public sealed class RuntimeDefinitionRefreshTests
         await using var fixture = new Fixture();
         await fixture.InitializeAsync();
         fixture.Service.HoldTurn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await fixture.Starter.StartAsync(fixture.Request, TestContext.Current.CancellationToken);
-        var active = Assert.IsType<AgentRuntime>(fixture.Starter.Runtime);
+        await fixture.StartAsync();
+        var host = fixture.Host;
+        var active = Assert.IsType<AgentRuntime>(host.AgentRuntime);
 
         try
         {
@@ -207,14 +207,14 @@ public sealed class RuntimeDefinitionRefreshTests
             await fixture.UpdateAsync();
 
             // Assert
-            Assert.True(active.HasActiveTurn);
+            Assert.True(host.HasActiveTurn);
             Assert.False(active.IsDisposed);
             Assert.Single(fixture.Service.CreatedAgents);
         }
         finally
         {
             fixture.Service.HoldTurn.SetResult();
-            await active.WhenIdleAsync();
+            await host.WhenIdleAsync();
             fixture.Service.HoldTurn = null;
         }
         Assert.NotSame(active, await fixture.RunTurnAsync());
@@ -284,7 +284,7 @@ public sealed class RuntimeDefinitionRefreshTests
             Task.FromResult<string?>(null);
     }
 
-    private sealed class Fixture : IAsyncDisposable, IAgwFileSystemResolver, IExecutionMessageSink
+    private sealed class Fixture : IAsyncDisposable, IAgwFileSystemResolver
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
         private readonly ServiceProvider _services = new ServiceCollection().BuildServiceProvider();
@@ -293,11 +293,10 @@ public sealed class RuntimeDefinitionRefreshTests
         public TestProjects Projects { get; } = new();
         public AgwDbContext Db { get; }
         public Agent Definition { get; }
-        public RecordingRuntimeService Service { get; }
-        public InProcessExecutionStarter Starter { get; }
-        public ExecutionStartRequest Request { get; set; }
+        public RecordingRuntimeFactory Service { get; }
+        public ExecutionRequest Request { get; set; }
 
-        public Fixture(ExternalAgentKind kind = ExternalAgentKind.ClaudeCode)
+        public Fixture(EngineKind kind = EngineKind.ClaudeCode)
         {
             Db = new AgwDbContext(new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(_connection).Options);
             Definition = new Agent
@@ -313,7 +312,7 @@ public sealed class RuntimeDefinitionRefreshTests
             };
             var app = new AgentAppService(Db, null!, Providers, null!, User, null!);
             var configuration = new AgentRuntimeConfiguration(app, Projects);
-            var checker = new AgentRuntimeService(
+            var checker = new AgentRuntimeFactory(
                 app,
                 null!,
                 null!,
@@ -323,7 +322,7 @@ public sealed class RuntimeDefinitionRefreshTests
                 null!,
                 null!,
                 null!,
-                NullLogger<AgentRuntimeService>.Instance,
+                NullLogger<AgentRuntimeFactory>.Instance,
                 telemetryMiddleware: null!,
                 summaryService: null!,
                 services: _services,
@@ -334,34 +333,20 @@ public sealed class RuntimeDefinitionRefreshTests
                 loggerFactory: NullLoggerFactory.Instance,
                 conversationHistoryWriter: null,
                 humanInteractionContextAccessor: null,
-                turnContextAccessor: null,
+                executionContext: null,
                 timeProvider: TimeProvider.System,
                 generatedToolCatalog: null
             );
-            Service = new RecordingRuntimeService(Db, checker, configuration);
-            var turnExecutor = new AgentTurnExecutor(
-                null!,
+            Service = new RecordingRuntimeFactory(Db, checker, configuration);
+            _turnExecutor = new AgentTurnExecutor(
+                null,
                 new AgentSessionStateStore(
                     _services.GetRequiredService<IServiceScopeFactory>(),
                     TimeProvider.System,
                     NullLogger<AgentSessionStateStore>.Instance
                 ),
-                null!
-            );
-            var factory = new RuntimeFactory(
-                Service,
-                turnExecutor,
-                null!,
-                this,
-                new RuntimeTurnContextAccessor(),
-                new HumanInteractionContextAccessor()
-            );
-            Starter = new InProcessExecutionStarter(
-                factory,
-                "tester",
-                this,
-                TestContext.Current.CancellationToken,
-                _ => { }
+                null,
+                NullLogger<AgentTurnExecutor>.Instance
             );
             var task = new AgentExecutionTask
             {
@@ -371,16 +356,30 @@ public sealed class RuntimeDefinitionRefreshTests
                 ContextId = "existing-chat",
                 Generation = 3,
             };
-            Request = new ExecutionStartRequest(
-                Guid.CreateVersion7(),
-                new ExecutionTarget(Definition.Id, AgentRuntimeType.Agent),
+            var target = new ExecutionTarget(Definition.Id, AgentRuntimeType.Agent);
+            var turnId = Guid.CreateVersion7();
+            Request = new ExecutionRequest(
+                turnId,
+                "tester",
+                target,
                 task,
                 ExecutionSettings.CreateDefault(),
                 new AgwUserInput { Contents = [] },
-                false,
-                Path.GetTempPath()
-            );
+                Stream: false,
+                ProjectWorkspacePaths.CreateSnapshot(task.ProjectId, Path.GetTempPath())
+            )
+            {
+                Envelope = TurnPersistenceTestKit.CreateEnvelope(turnId, task, target),
+            };
         }
+
+        private readonly AgentTurnExecutor _turnExecutor;
+
+        private TurnPersistenceTestKit? _persistence;
+
+        public InProcessExecutionCoordinator Coordinator { get; private set; } = null!;
+
+        public InProcessTurnHost Host => Assert.IsType<InProcessTurnHost>(Coordinator.Host);
 
         public async Task InitializeAsync()
         {
@@ -388,6 +387,18 @@ public sealed class RuntimeDefinitionRefreshTests
             await Db.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             Db.Agents.Add(Definition);
             await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            _persistence = await TurnPersistenceTestKit.CreateAsync();
+            Coordinator = new InProcessExecutionCoordinator(
+                Service,
+                _turnExecutor,
+                new AgentflowTurnExecutor(null!, null!, NullLogger<AgentflowTurnExecutor>.Instance),
+                new ExecutionContextFactory(Db),
+                this,
+                conversationGate: null,
+                _persistence.Broadcasts,
+                _persistence.Services.GetRequiredService<IServiceScopeFactory>(),
+                TestContext.Current.CancellationToken
+            );
         }
 
         public async Task UpdateAsync()
@@ -396,40 +407,55 @@ public sealed class RuntimeDefinitionRefreshTests
             await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
+        /// <summary>
+        /// 登记当前请求的 Turn 行与广播后交给协调器。
+        /// Registers the current request's turn row and broadcast, then hands it to the coordinator.
+        /// </summary>
+        public async Task<ExecutionReceipt> StartAsync() =>
+            await Coordinator.StartAsync(
+                await _persistence!.RegisterTurnAsync(Request),
+                TestContext.Current.CancellationToken
+            );
+
         public async Task<AgentRuntime> RunTurnAsync()
         {
-            var receipt = await Starter.StartAsync(
-                Request with
-                {
-                    ExecutionId = Guid.CreateVersion7(),
-                },
+            var turnId = Guid.CreateVersion7();
+            var receipt = await Coordinator.StartAsync(
+                await _persistence!.RegisterTurnAsync(
+                    Request with
+                    {
+                        TurnId = turnId,
+                        Envelope = Request.Envelope with { TurnId = turnId },
+                    }
+                ),
                 TestContext.Current.CancellationToken
             );
             Assert.True(receipt.Accepted);
-            var runtime = Assert.IsType<AgentRuntime>(Starter.Runtime);
-            await runtime.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-            return runtime;
+            var host = Host;
+            await host.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            return Assert.IsType<AgentRuntime>(host.AgentRuntime);
         }
 
         public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
             Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(Path.GetTempPath()));
 
-        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
-
         public async ValueTask DisposeAsync()
         {
             Service.HoldTurn?.TrySetResult();
-            await Starter.ReleaseRuntimeAsync();
+            if (Coordinator != null)
+                await Coordinator.ReleaseAsync();
             await Db.DisposeAsync();
             await _connection.DisposeAsync();
             await _services.DisposeAsync();
+            if (_persistence != null)
+                await _persistence.DisposeAsync();
         }
     }
 
-    private sealed class RecordingRuntimeService : IAgentRuntimeService
+    private sealed class RecordingRuntimeFactory : IAgentRuntimeFactory
     {
         private readonly AgwDbContext _db;
-        private readonly AgentRuntimeService _checker;
+        private readonly AgentRuntimeFactory _checker;
         private readonly AgentRuntimeConfiguration _configuration;
         public List<RecordingAgent> CreatedAgents { get; } = [];
         public List<ProjectWorkspaceSnapshot?> ExecutedWorkspaces { get; } = [];
@@ -437,9 +463,9 @@ public sealed class RuntimeDefinitionRefreshTests
         public bool FailCreation { get; set; }
         public TaskCompletionSource? HoldTurn { get; set; }
 
-        public RecordingRuntimeService(
+        public RecordingRuntimeFactory(
             AgwDbContext db,
-            AgentRuntimeService checker,
+            AgentRuntimeFactory checker,
             AgentRuntimeConfiguration configuration
         )
         {
@@ -485,7 +511,7 @@ public sealed class RuntimeDefinitionRefreshTests
             };
         }
 
-        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        public Task<AgentflowNodeAgent?> CreateAgentflowNodeAgentAsync(
             Guid agentId,
             Guid? projectId,
             Guid conversationId,
@@ -497,28 +523,17 @@ public sealed class RuntimeDefinitionRefreshTests
 
         public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-
-        public Task SetPermissionModeAsync(
-            AgentRuntime runtime,
-            AgwPermissionMode permissionMode,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<Agw.Agents.Execution.Agents.Contracts.AgentExecutionResult?> ExecuteByIdAsync(
-            AgentExecuteByIdRequest request,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
     }
 
     private sealed class RecordingAgent : AIAgent, IAsyncDisposable
     {
-        private readonly RecordingRuntimeService _owner;
+        private readonly RecordingRuntimeFactory _owner;
         private readonly Guid _projectId;
 
         public Agent Definition { get; }
         public bool Disposed { get; private set; }
 
-        public RecordingAgent(Agent definition, RecordingRuntimeService owner, Guid projectId)
+        public RecordingAgent(Agent definition, RecordingRuntimeFactory owner, Guid projectId)
         {
             Definition = definition;
             _owner = owner;
@@ -540,27 +555,15 @@ public sealed class RuntimeDefinitionRefreshTests
             CancellationToken cancellationToken
         ) => throw new NotSupportedException();
 
-        // 在真实执行位置观察工作区上下文：Agent 运行期间当前上下文与派生任务看到的快照都记录下来。
-        // Observe the workspace context where the turn actually runs: both the ambient snapshot and the one a derived task sees are recorded.
-        protected override async Task<AgentResponse> RunCoreAsync(
+        protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
             CancellationToken cancellationToken
-        )
-        {
-            if (_owner.HoldTurn != null)
-            {
-                await _owner.HoldTurn.Task.WaitAsync(cancellationToken);
-            }
+        ) => throw new NotSupportedException();
 
-            _owner.ExecutedWorkspaces.Add(ProjectWorkspaceContext.Get(_projectId));
-            _owner.ChildWorkspaces.Add(
-                await Task.Run(() => ProjectWorkspaceContext.Get(_projectId), cancellationToken)
-            );
-            return new AgentResponse();
-        }
-
+        // 在真实执行位置观察工作区上下文：Agent 运行期间当前上下文与派生任务看到的快照都记录下来。
+        // Observe the workspace context where the turn actually runs: both the ambient snapshot and the one a derived task sees are recorded.
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
@@ -568,7 +571,15 @@ public sealed class RuntimeDefinitionRefreshTests
             [EnumeratorCancellation] CancellationToken cancellationToken
         )
         {
-            await Task.CompletedTask;
+            if (_owner.HoldTurn != null)
+            {
+                await _owner.HoldTurn.Task.WaitAsync(cancellationToken);
+            }
+
+            _owner.ExecutedWorkspaces.Add(ExecutionContextSlot.GetWorkspaceSnapshot(_projectId));
+            _owner.ChildWorkspaces.Add(
+                await Task.Run(() => ExecutionContextSlot.GetWorkspaceSnapshot(_projectId), cancellationToken)
+            );
             yield break;
         }
 

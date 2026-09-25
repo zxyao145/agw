@@ -115,7 +115,7 @@ for (const status of ["completed", "failed", "interrupted", "recovered"]) {
         messageId: "finished",
         role: "system",
         contents: [],
-        additionalProperties: { type: "turn-finished", status },
+        additionalProperties: { type: "agw-turn-finished", status },
       });
     }
     assert.equal(summaries().length, 1);
@@ -450,7 +450,7 @@ test("conversation controller owns raw messages, control state, usage, and rende
     messageId: "turn-start",
     role: "system",
     contents: [],
-    additionalProperties: { type: "turn-start", streamingScopeId: "user-scope" },
+    additionalProperties: { type: "agw-turn-start", streamingScopeId: "user-scope" },
   });
   handlers.onMessage({
     messageId: "assistant-1",

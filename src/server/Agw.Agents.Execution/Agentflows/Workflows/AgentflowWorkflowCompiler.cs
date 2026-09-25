@@ -199,13 +199,15 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext = null,
-        AgentflowSummaryContext? summaryContext = null
+        AgentflowSummaryContext? summaryContext = null,
+        IReadOnlyDictionary<string, EngineKind>? nodeEngineKinds = null
     )
     {
         if (orderedNodes.Count == 0)
         {
             return null;
         }
+        nodeEngineKinds ??= new Dictionary<string, EngineKind>();
 
         var nodeMap = orderedNodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
         var blockParticipantNodeIds = GetBlockParticipantNodeIds(orderedNodes);
@@ -228,6 +230,7 @@ public sealed class AgentflowWorkflowCompiler
                 node,
                 nodeMap,
                 nodeIdToAgent,
+                nodeEngineKinds,
                 sessionScope,
                 executionTraceContext,
                 summaryContext
@@ -325,6 +328,7 @@ public sealed class AgentflowWorkflowCompiler
         AgentflowNode node,
         IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
+        IReadOnlyDictionary<string, EngineKind> nodeEngineKinds,
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext,
         AgentflowSummaryContext? summaryContext
@@ -336,6 +340,7 @@ public sealed class AgentflowWorkflowCompiler
                 node,
                 nodeMap,
                 nodeIdToAgent,
+                nodeEngineKinds,
                 sessionScope,
                 executionTraceContext,
                 AgentHostOptions
@@ -354,7 +359,8 @@ public sealed class AgentflowWorkflowCompiler
                     executionTraceContext,
                     agentflowId,
                     node.NodeId,
-                    node.RelateId
+                    node.RelateId,
+                    engineKind: nodeEngineKinds.TryGetValue(node.NodeId, out var engineKind) ? engineKind : null
                 ).BindAsExecutor(AgentHostOptions)
                 : null,
             AgentflowNodeKind.WorkflowAsAgent => nodeIdToAgent.TryGetValue(node.NodeId, out var workflowAgent)

@@ -87,12 +87,8 @@ public sealed class ExecutionRuntimeConfigurationTests
 
         services.AddAgentExecution(configuration);
 
-        Assert.Contains(
-            services,
-            descriptor =>
-                descriptor.ServiceType == typeof(IExecutionEventStream)
-                && descriptor.ImplementationType == typeof(PostgresExecutionEventStream)
-        );
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(DurableExecutionEventLog));
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(RedisExecutionEventProjection));
         Assert.DoesNotContain(
             services,
             descriptor => descriptor.ServiceType == typeof(StackExchange.Redis.IConnectionMultiplexer)
@@ -179,11 +175,30 @@ public sealed class ExecutionRuntimeConfigurationTests
 
         Assert.Contains(services, descriptor => descriptor.ImplementationType == typeof(DistributedExecutionWorker));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(DurableExecutionCoordinator));
-        Assert.Contains(
-            services,
-            descriptor =>
-                descriptor.ServiceType == typeof(IExecutionEventStream)
-                && descriptor.ImplementationType == typeof(RedisExecutionEventStream)
-        );
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(DurableExecutionEventLog));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(RedisExecutionEventProjection));
+    }
+
+    [Theory]
+    [InlineData("10", "10")]
+    [InlineData("0", "30")]
+    public void AddAgentExecution_DistributedWithInvalidLease_FailsFast(string renewSeconds, string leaseSeconds)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Execution:Provider"] = "Distributed",
+                    ["Database:Provider"] = "postgres",
+                    ["Execution:Distributed:LeaseRenewSeconds"] = renewSeconds,
+                    ["Execution:Distributed:LeaseSeconds"] = leaseSeconds,
+                }
+            )
+            .Build();
+
+        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgentExecution(configuration));
+
+        Assert.Equal(ErrorCodes.DurableExecutionUnavailable.Code, exception.Code);
+        Assert.Contains("LeaseSeconds must exceed LeaseRenewSeconds", exception.Message);
     }
 }

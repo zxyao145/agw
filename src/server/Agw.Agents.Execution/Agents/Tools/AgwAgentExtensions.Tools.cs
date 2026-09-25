@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.PlanMode;
-using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.History;
 using Agw.Agents.Execution.Agents.Middleware.ModelInput;
 using Agw.Agents.Execution.Agents.Middleware.ToolFeedback;
@@ -80,7 +79,7 @@ public static class AgwAgentExtensions
         var chatOptions = new ChatOptions
         {
             ModelId = definition.ModelId,
-            Instructions = AgentRuntimeServiceUtil.BuildInstructions(definition.SystemPrompt),
+            Instructions = AgentRuntimeFactoryUtil.BuildInstructions(definition.SystemPrompt),
             Tools = capabilities.Tools.Count == 0 ? null : capabilities.Tools.ToList(),
             MaxOutputTokens = definition.MaxOutputTokens,
             // 配置了 Response Schema 时启用结构化输出；未配置时保持现有行为。
@@ -167,12 +166,7 @@ public static class AgwAgentExtensions
         }
 
         // 每次请求 Model 前处理历史，包括加入新消息、整理顺序、保存进度和 Compaction。
-        ConfigureHistoryPipeline(
-            chatClientBuilder,
-            definition,
-            loggerFactory,
-            services.GetService(typeof(TimeProvider)) as TimeProvider
-        );
+        ConfigureHistoryPipeline(chatClientBuilder, definition, loggerFactory);
 
         // 移除空消息和已处理的 Function 审批响应，避免发送 Model 无法接收的内容；MCP 审批响应仍保留。
         chatClientBuilder.Use(static innerClient => new ModelInputFilteringChatClient(innerClient));
@@ -191,8 +185,7 @@ public static class AgwAgentExtensions
     private static void ConfigureHistoryPipeline(
         ChatClientBuilder chatClientBuilder,
         ResolvedAgentDefinition definition,
-        ILoggerFactory loggerFactory,
-        TimeProvider? timeProvider
+        ILoggerFactory loggerFactory
     )
     {
         var compactionStateKey = definition.CompactionProvider is CompactionProvider compactionProvider
@@ -207,15 +200,6 @@ public static class AgwAgentExtensions
             .UsePerServiceCallChatHistoryPersistence()
             // 加载历史后再次整理顺序，处理本次 Tool 结果对应历史中某次调用的情况。
             .Use(static innerClient => new FunctionResultOrderingChatClient(innerClient));
-        if (definition.ChatHistoryProvider?.GetService<IStreamingConversationHistoryProvider>() is { } streamingHistory)
-        {
-            // Streaming 响应每收到一段内容就先保存再转发，避免必须等完整响应结束才能保存。
-            chatClientBuilder.Use(innerClient => new StreamingChatHistoryClient(
-                innerClient,
-                streamingHistory,
-                timeProvider
-            ));
-        }
         if (definition.CompactionProvider != null)
         {
             chatClientBuilder
@@ -259,15 +243,10 @@ public static class AgwAgentExtensions
 
         var interactions =
             services.GetService(typeof(HumanInteractionContextAccessor)) as HumanInteractionContextAccessor;
-        // 执行前刷新权限，并保存用户允许复用的授权；权限模式改变时清除失效授权。
+        // 维护完整审批批次：按权限快照与有效授权自动决定工具审批，其余请求作为一个批次交给 TurnExecutor 或 Workflow。
+        agentBuilder.Use((inner, _) => new MafApprovalBatchAgent(inner, interactions, capabilities.AutoApprovalRules));
+        // 按本轮权限快照同步授权，并记录已经过批次校验的可复用授权。
         agentBuilder.Use((inner, _) => new MafApprovalGrantAgent(inner, interactions));
-        // 尝试使用已有授权或自动审批规则；未通过的请求交给 AgentRuntime，决定直接放行还是等待用户。
-        agentBuilder.UseToolApproval(
-            new ToolApprovalAgentOptions
-            {
-                AutoApprovalRules = [context => TryAutoApproveAsync(context, interactions, capabilities)],
-            }
-        );
         // 用 OpenTelemetry 记录 Agent 执行信息，导出位置由 Host 配置。
         agentBuilder.UseOpenTelemetry(sourceName: definition.OpenTelemetrySourceName);
         return agentBuilder.Build(services);
@@ -299,36 +278,5 @@ public static class AgwAgentExtensions
             );
             agentBuilder.Use(runFunc: feedback.RunAsync, runStreamingFunc: feedback.RunStreamingAsync);
         }
-    }
-
-    /// <summary>判断当前 Tool 调用能否自动批准；返回 false 时由 AgentRuntime 继续处理审批。</summary>
-    private static async ValueTask<bool> TryAutoApproveAsync(
-        ToolAutoApprovalRuleContext context,
-        HumanInteractionContextAccessor? interactions,
-        AgentCapabilityComposition capabilities
-    )
-    {
-        // 每次审批都读取最新权限；需要用户回答的问题不能自动批准，其他调用依次检查已有授权和自动审批规则。
-        if (interactions is not null)
-            await interactions.RefreshPermissionsAsync().ConfigureAwait(false);
-        var source =
-            context.RunOptions?.AdditionalProperties?.GetValueOrDefault(HumanInteractionToolMetadata.SourceKey)
-            as InteractionSource;
-        if (
-            interactions?.Requests?.IsUserInputCall(source?.NodeId ?? "standalone", context.FunctionCallContent.CallId)
-            == true
-        )
-            return false;
-        var mode =
-            context.Session is { } approvalSession && interactions?.PermissionState is { } permissions
-                ? MafSessionApprovalState.Synchronize(approvalSession, permissions)
-            : context.Session is { } existingSession ? MafSessionApprovalState.GetPermissionMode(existingSession)
-            : null;
-        if (MafSessionApprovalState.TryApprove(context, mode))
-            return true;
-        foreach (var rule in capabilities.AutoApprovalRules)
-            if (await rule(context).ConfigureAwait(false))
-                return true;
-        return false;
     }
 }

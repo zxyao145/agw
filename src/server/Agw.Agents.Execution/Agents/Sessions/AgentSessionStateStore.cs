@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Context;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
@@ -124,17 +125,20 @@ public sealed class AgentSessionStateStore
             return;
         }
 
-        IAsyncDisposable barrier;
-        try
+        // 会话只在其历史已提交后推进。
+        // The session advances only after its history is committed.
+        IAsyncDisposable? barrier = null;
+        if (ExecutionScope.Current is { History: { } history } execution)
         {
-            barrier = await ConversationHistoryPersistenceContext
-                .EnterBarrierAsync(cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception exception) when (ConversationHistoryPersistenceContext.HasExecutionFailure)
-        {
-            _logger.LogError(exception, "Session state was not advanced because its history could not be saved.");
-            return;
+            try
+            {
+                barrier = await history.EnterBarrierAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (execution.Failure != null)
+            {
+                _logger.LogError(exception, "Session state was not advanced because its history could not be saved.");
+                return;
+            }
         }
         await using var historyBarrier = barrier;
         var ownerUserId = UserInfoUtil.RequiredUserId;

@@ -108,7 +108,7 @@ public sealed class AgentCapabilityComposer
                 ConversationId = conversationId,
                 Workspace = project.Workspace ?? string.Empty,
                 WorkspaceSnapshot =
-                    ProjectWorkspaceContext.Get(project.Id)
+                    ExecutionContextSlot.GetWorkspaceSnapshot(project.Id)
                     ?? ProjectWorkspacePaths.CreateSnapshot(
                         project.Id,
                         project.Workspace,

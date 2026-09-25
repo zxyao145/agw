@@ -5,6 +5,7 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution;
 using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Context;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.ControlPlane.Host;
@@ -70,10 +71,10 @@ public sealed class HostModuleCompositionTests
             services,
             d =>
                 d.ServiceType.Name
-                    is "AgentRuntimeService"
-                        or "AgentflowRuntimeService"
-                        or "DurableExecutionSegmentExecutor"
-                        or "RuntimeFactory"
+                    is "AgentRuntimeFactory"
+                        or "AgentflowRuntimeFactory"
+                        or "InProcessExecutionCoordinatorFactory"
+                        or "AgentflowTurnExecutor"
                         or "AgentTurnExecutor"
         );
     }
@@ -131,10 +132,10 @@ public sealed class HostModuleCompositionTests
     }
 
     [Fact]
-    public void AgentRuntimeService_ResolvedFromModuleComposition_UsesNormalizedHistoryProvider()
+    public void AgentRuntimeFactory_ResolvedFromModuleComposition_UsesProjectsHistoryStore()
     {
-        // 注册处负责装饰历史写入链路，解析结果必须是 Normalized 装饰器。
-        // The registration owns the history write chain decoration, so the resolved provider must be the Normalized decorator.
+        // 历史存储由 Projects 模块注册，Execution 通过 Contracts 使用同一个单例。
+        // The history store is registered by the Projects module, and Execution uses the same singleton through Contracts.
         var dataPaths = AgwDataPaths.Resolve(
             Path.Combine(Path.GetTempPath(), $"agw-runtime-composition-{Guid.CreateVersion7():N}"),
             "/unused"
@@ -171,16 +172,20 @@ public sealed class HostModuleCompositionTests
 
             using var provider = services.BuildServiceProvider();
             using var scope = provider.CreateScope();
-            var runtimeService = Assert.IsType<AgentRuntimeService>(
-                scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>()
+            var runtimeService = Assert.IsType<AgentRuntimeFactory>(
+                scope.ServiceProvider.GetRequiredService<IAgentRuntimeFactory>()
             );
 
-            var historyField = typeof(AgentRuntimeService).GetField(
-                "_chatHistoryProvider",
+            var historyField = typeof(AgentRuntimeFactory).GetField(
+                "_historyStore",
                 BindingFlags.Instance | BindingFlags.NonPublic
             );
             Assert.NotNull(historyField);
-            Assert.Equal("NormalizedChatHistoryProvider", historyField.GetValue(runtimeService)?.GetType().Name);
+            Assert.Same(
+                scope.ServiceProvider.GetRequiredService<Agw.Projects.Contracts.History.IConversationHistoryStore>(),
+                historyField.GetValue(runtimeService)
+            );
+            Assert.Equal("ConversationHistoryStore", historyField.GetValue(runtimeService)?.GetType().Name);
         }
         finally
         {
@@ -318,17 +323,12 @@ public sealed class HostModuleCompositionTests
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<JobScheduleCalculator>();
         services.AddSingleton<JobSchedulerWakeSignal>();
-        services.AddSingleton<ICurrentAgentTurn, EmptyCurrentAgentTurn>();
+        services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
         services.AddScoped<IUserInfoService, TestUserInfoService>();
         services.AddScoped<IProjectRuntimeFacade, EmptyProjectRuntimeFacade>();
         services.AddScoped<IAgentCatalogFacade, EmptyAgentCatalogFacade>();
         services.AddScoped<IJobsDbContext>(_ => null!);
         services.AddScoped<IProjectTaskFacade, EmptyProjectTaskFacade>();
-    }
-
-    private sealed class EmptyCurrentAgentTurn : ICurrentAgentTurn
-    {
-        public AgentTurnSnapshot? Current => null;
     }
 
     private sealed class EmptyProjectRuntimeFacade : IProjectRuntimeFacade

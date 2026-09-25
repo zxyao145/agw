@@ -1,7 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Plus, RotateCw, Trash2, Broom } from "lucide-react";
+import {
+  Broom,
+  CircleAlert,
+  CircleSlash,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  RotateCw,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   useInfiniteQuery,
@@ -17,6 +27,7 @@ import {
   getProjectConversationDetails,
   getProjectConversations,
   updateProjectConversationTitle,
+  type ConversationActivityStatus,
   type ConversationPage,
   type ConversationSummary,
 } from "../../../services/task-client";
@@ -37,27 +48,55 @@ interface ConversationListProps {
   projectId: string;
   currentConversationId: string | null;
   refreshSignal?: number;
-  /** the current conversation has a running turn; its record may not be persisted yet. 当前会话正在执行，记录可能尚未写入数据库。 */
-  isExecuting?: boolean;
+  /** 会话 ID 到执行状态的映射，没有的会话为 idle。Conversation execution statuses; missing conversations are idle. */
+  conversationStatuses?: ReadonlyMap<string, ConversationActivityStatus | "idle">;
+  /**
+   * 当前会话状态记录的 turnId；当前会话不在已加载的分页中时，Turn 开始后据此查询一次会话记录。
+   * The turnId of the current conversation's status record; when the conversation is outside the loaded pages, a turn start fetches its record once.
+   */
+  currentConversationTurnId?: string | null;
   onConversationSelect: (conversation: ConversationSummary) => void;
   onNewConversation: () => void;
   onAllConversationsDeleted: () => void;
+  onConversationDeleted?: (conversationId: string) => void;
+  onProjectConversationsCleared?: () => void;
   headerActions?: (currentConversation: ConversationSummary | null) => React.ReactNode;
 }
 
 const CONVERSATION_PAGE_SIZE = 20;
 const CONVERSATION_STALE_TIME_MS = 30_000;
 const CONVERSATION_GC_TIME_MS = 30 * 60_000;
-const CONVERSATION_RESOLVE_INTERVAL_MS = 5_000;
+const EMPTY_CONVERSATION_STATUSES: ReadonlyMap<string, ConversationActivityStatus | "idle"> =
+  new Map();
+
+const CONVERSATION_STATUS_DISPLAY: Record<
+  ConversationActivityStatus,
+  { icon: LucideIcon; label: string; className: string }
+> = {
+  running: {
+    icon: LoaderCircle,
+    label: "Running",
+    className: "animate-spin text-muted-foreground",
+  },
+  failed: { icon: CircleAlert, label: "Last turn failed", className: "text-destructive" },
+  interrupted: {
+    icon: CircleSlash,
+    label: "Last turn interrupted",
+    className: "text-muted-foreground",
+  },
+};
 
 export function ConversationList({
   projectId,
   currentConversationId,
   refreshSignal,
-  isExecuting = false,
+  conversationStatuses = EMPTY_CONVERSATION_STATUSES,
+  currentConversationTurnId = null,
   onConversationSelect,
   onNewConversation,
   onAllConversationsDeleted,
+  onConversationDeleted,
+  onProjectConversationsCleared,
   headerActions,
 }: ConversationListProps) {
   const queryClient = useQueryClient();
@@ -176,7 +215,14 @@ export function ConversationList({
     !conversations.some(matchesCurrentSession),
   );
   const currentConversationQuery = useQuery({
-    queryKey: ["project-conversation-summary", projectId, currentConversationId],
+    // 新会话的记录在受理时写入，Turn 开始后 turnId 改变 query key，查询一次即可取得记录。
+    // A new conversation's row is written on acceptance; a turn start changes the turnId in the key, so one fetch finds it.
+    queryKey: [
+      "project-conversation-summary",
+      projectId,
+      currentConversationId,
+      currentConversationTurnId,
+    ],
     enabled: shouldResolveCurrentConversation,
     queryFn: async ({ signal }) => {
       try {
@@ -192,10 +238,6 @@ export function ConversationList({
       }
     },
     retry: false,
-    // 新建会话的记录由服务端在第一次历史写入时创建，取到之后立即停止重试。
-    // A new conversation row appears on the first history write; stop retrying once it is fetched.
-    refetchInterval: (query) =>
-      isExecuting && !query.state.data ? CONVERSATION_RESOLVE_INTERVAL_MS : false,
     staleTime: CONVERSATION_STALE_TIME_MS,
     gcTime: CONVERSATION_GC_TIME_MS,
   });
@@ -241,6 +283,7 @@ export function ConversationList({
     try {
       await deleteAllProjectConversations(projectId);
       toast.success("All chats cleared");
+      onProjectConversationsCleared?.();
       onAllConversationsDeleted();
       await refreshConversations();
     } catch (error) {
@@ -259,6 +302,7 @@ export function ConversationList({
       }
 
       toast.success("Conversation deleted");
+      onConversationDeleted?.(conversation.conversationId);
       if (conversation.conversationId === currentConversationId) {
         onAllConversationsDeleted();
       }
@@ -362,20 +406,42 @@ export function ConversationList({
         ) : (
           displayedConversations.map((conversation) => {
             const isActive = conversation.conversationId === currentConversationId;
+            const status = conversationStatuses.get(conversation.conversationId) ?? "idle";
+            const statusDisplay = status === "idle" ? null : CONVERSATION_STATUS_DISPLAY[status];
 
             return (
               <div
                 key={conversation.conversationId}
                 onClick={() => onConversationSelect(conversation)}
                 className={cn(
-                  "group relative py-2.5 pl-4 rounded-md cursor-pointer transition-colors",
+                  "group relative py-2.5 pl-4 pr-2 rounded-md cursor-pointer transition-colors",
                   isActive ? "bg-accent" : "hover:bg-accent/80",
                 )}
               >
-                <div className="flex items-start">
+                <div className="flex items-center">
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="text-sm truncate">{conversation.title || "Untitled"}</div>
                   </div>
+                  <div className="ml-2 flex h-4 w-4 shrink-0 items-center justify-center">
+                    {statusDisplay ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            role="img"
+                            aria-label={statusDisplay.label}
+                            className="flex h-4 w-4 items-center justify-center"
+                          >
+                            <statusDisplay.icon
+                              aria-hidden="true"
+                              className={cn("h-4 w-4", statusDisplay.className)}
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{statusDisplay.label}</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                  {/* Actions sit left of the status slot 操作按钮位于状态位置左侧 */}
                   <div
                     className="absolute inset-y-1 right-0
                         hidden group-hover:flex

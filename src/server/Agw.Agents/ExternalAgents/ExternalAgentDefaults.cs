@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Agw.Providers.Contracts;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
@@ -12,24 +11,19 @@ namespace Agw.Agents.ExternalAgents;
 
 public static class ExternalAgentDefaults
 {
-    public static IReadOnlyList<ExternalAgentKind> SupportedKinds { get; } =
-    [ExternalAgentKind.ClaudeCode, ExternalAgentKind.Codex, ExternalAgentKind.Pi];
+    public static IReadOnlyList<EngineKind> SupportedKinds { get; } =
+    [EngineKind.ClaudeCode, EngineKind.Codex, EngineKind.Pi];
 
-    public static IReadOnlyList<ProviderType> GetSupportedProviderTypes(ExternalAgentKind kind) =>
+    public static IReadOnlyList<ProviderType> GetSupportedProviderTypes(EngineKind kind) =>
         kind switch
         {
-            ExternalAgentKind.ClaudeCode => [ProviderType.Anthropic],
-            ExternalAgentKind.Codex => [ProviderType.OpenAIResponses],
-            ExternalAgentKind.Pi =>
-            [
-                ProviderType.OpenAIChatCompletions,
-                ProviderType.OpenAIResponses,
-                ProviderType.Anthropic,
-            ],
+            EngineKind.ClaudeCode => [ProviderType.Anthropic],
+            EngineKind.Codex => [ProviderType.OpenAIResponses],
+            EngineKind.Pi => [ProviderType.OpenAIChatCompletions, ProviderType.OpenAIResponses, ProviderType.Anthropic],
             _ => [],
         };
 
-    public static void ValidateProviderType(ExternalAgentKind kind, ProviderType providerType)
+    public static void ValidateProviderType(EngineKind kind, ProviderType providerType)
     {
         if (!GetSupportedProviderTypes(kind).Contains(providerType))
         {
@@ -40,23 +34,23 @@ public static class ExternalAgentDefaults
         }
     }
 
-    public static string GetDisplayName(ExternalAgentKind kind) =>
+    public static string GetDisplayName(EngineKind kind) =>
         kind switch
         {
-            ExternalAgentKind.ClaudeCode => "Claude Code",
-            ExternalAgentKind.Codex => "OpenAI Codex",
-            ExternalAgentKind.Pi => "Pi",
+            EngineKind.ClaudeCode => "Claude Code",
+            EngineKind.Codex => "OpenAI Codex",
+            EngineKind.Pi => "Pi",
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"External agent kind '{kind}' is not supported."),
         };
 
-    public static string GetDefaultExtra(ExternalAgentKind kind) =>
+    public static string GetDefaultExtra(EngineKind kind) =>
         kind switch
         {
-            ExternalAgentKind.ClaudeCode => JsonUtil.Serialize(
+            EngineKind.ClaudeCode => JsonUtil.Serialize(
                 new ClaudeCodeAIAgentOptions { PermissionMode = PermissionMode.bypassPermissions }
             ),
-            ExternalAgentKind.Codex => JsonUtil.Serialize(new CodexAIAgentOptions()),
-            ExternalAgentKind.Pi => JsonUtil.Serialize(new PiAgentAIAgentOptions()),
+            EngineKind.Codex => JsonUtil.Serialize(new CodexAIAgentOptions()),
+            EngineKind.Pi => JsonUtil.Serialize(new PiAgentAIAgentOptions()),
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"External agent kind '{kind}' is not supported."),
         };
 

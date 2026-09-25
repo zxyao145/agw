@@ -17,9 +17,13 @@ import type { AiMessage } from "@agw/api";
 import {
   cloneMessage,
   getMessageStreamingScopeId,
+  getTurnIdentity,
+  isSupersededTurnMessage,
+  isTurnStartMessage,
   mergeStreamingMessages,
   scopeStreamingMessage,
 } from "@agw/execution-core";
+import { ConversationStatusStore } from "./conversation-status-store";
 import {
   ExecutionActivityStore,
   getExecutionSessionKey,
@@ -95,6 +99,14 @@ export class ExecutionSessionManager {
   private readonly entries = new Map<string, Entry>();
   private readonly createClient: ClientFactory;
   private readonly activity = new ExecutionActivityStore();
+  private readonly reconnectedListeners = new Set<() => void>();
+  private readonly supersededTurnListeners = new Set<(key: ExecutionSessionKey) => void>();
+
+  /**
+   * 会话列表右侧的执行状态；当前显示的会话与后台会话的 Turn 事件都写入这里。
+   * The conversation list's execution statuses; turn events of the displayed and background conversations both write here.
+   */
+  public readonly conversationStatuses = new ConversationStatusStore();
 
   public constructor(createClient: ClientFactory = (handlers) => new ExecutionSession(handlers)) {
     this.createClient = createClient;
@@ -262,12 +274,35 @@ export class ExecutionSessionManager {
 
   public getSnapshot = this.activity.getSnapshot;
 
+  /**
+   * 订阅任一执行连接重连成功的事件。
+   * Subscribes to any execution connection reconnecting successfully.
+   */
+  public subscribeReconnected = (listener: () => void): (() => void) => {
+    this.reconnectedListeners.add(listener);
+    return () => this.reconnectedListeners.delete(listener);
+  };
+
+  /**
+   * 订阅已被更新 Turn 取代的生命周期消息；这时本地记录可能已经过期，需要重新获取该项目的快照。
+   * Subscribes to lifecycle messages superseded by a newer turn; the local record may then be stale and the project's snapshot needs fetching again.
+   */
+  public subscribeSupersededTurn = (listener: (key: ExecutionSessionKey) => void): (() => void) => {
+    this.supersededTurnListeners.add(listener);
+    return () => this.supersededTurnListeners.delete(listener);
+  };
+
   private handleMessage(entry: Entry, message: AiMessage): void {
     this.captureActiveTurnMessage(entry, message);
     const interaction = getPendingInteraction(message);
-    if (message.additionalProperties?.type === "turn-start") {
+    // 缺少会话或 Turn 标识、或已被更新 Turn 取代的生命周期消息不更新会话状态，对应会话由快照更新。
+    // Lifecycle messages without conversation or turn IDs, or superseded by a newer turn, leave statuses to the next snapshot.
+    const superseded = isSupersededTurnMessage(message);
+    const turn = superseded ? null : getTurnIdentity(message);
+    if (isTurnStartMessage(message)) {
       this.clearPendingInteraction(entry);
       this.activity.turnStarted(entry.key);
+      if (turn) this.conversationStatuses.turnStarted(entry.key, turn.conversationId, turn.turnId);
     } else if (interaction) {
       entry.pendingInteractions.set(interaction.interactionId, message);
       this.activity.waitingForApproval(entry.key);
@@ -278,8 +313,19 @@ export class ExecutionSessionManager {
         const wasActive = this.activity.isActive(entry.key);
         this.activity.turnFinished(entry.key, terminalStatus);
         entry.activeTurn = null;
+        if (turn) {
+          this.conversationStatuses.turnFinished(
+            entry.key,
+            turn.conversationId,
+            turn.turnId,
+            terminalStatus,
+          );
+        }
         if (wasActive) this.emitTurnFinished(entry.key, terminalStatus);
       }
+    }
+    if (superseded) {
+      for (const listener of this.supersededTurnListeners) listener(entry.key);
     }
     if (entry.handler) {
       entry.handler.onMessage(message);
@@ -325,7 +371,7 @@ export class ExecutionSessionManager {
 
   private captureActiveTurnMessage(entry: Entry, message: AiMessage): void {
     const explicitScopeId = getMessageStreamingScopeId(message);
-    if (message.additionalProperties?.type === "turn-start" && explicitScopeId) {
+    if (isTurnStartMessage(message) && explicitScopeId) {
       if (!entry.activeTurn || entry.activeTurn.streamingScopeId !== explicitScopeId) {
         entry.activeTurn = {
           streamingScopeId: explicitScopeId,
@@ -387,6 +433,7 @@ export class ExecutionSessionManager {
       this.emitTurnFinished(entry.key, "completed");
     }
     entry.handler?.onReconnected?.();
+    for (const listener of this.reconnectedListeners) listener();
   }
 }
 

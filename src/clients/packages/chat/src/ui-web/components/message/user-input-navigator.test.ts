@@ -17,14 +17,14 @@ const markers: UserInputMarker[] = [
 function renderNavigator(
   navigatorMarkers: UserInputMarker[],
   activeKey: string | null,
-  selected: number[] = [],
+  selected: string[] = [],
 ) {
   return render(
     React.createElement(UserInputNavigator, {
       markers: navigatorMarkers,
       activeKey,
       height: 240,
-      onSelect: (rowIndex: number) => selected.push(rowIndex),
+      onSelect: (key: string) => selected.push(key),
     }),
   );
 }
@@ -33,8 +33,8 @@ function anchor(preview: string) {
   return screen.getByRole("button", { name: `Jump to user input: ${preview}` });
 }
 
-test("the navigator marks the active user input and selects a virtual row", () => {
-  const selected: number[] = [];
+test("the navigator marks the active user input and selects its message key", () => {
+  const selected: string[] = [];
   renderNavigator(markers, "first", selected);
 
   assert.ok(screen.getByRole("navigation", { name: "User input navigation" }));
@@ -43,7 +43,7 @@ test("the navigator marks the active user input and selects a virtual row", () =
 
   fireEvent.click(anchor("Second user input"));
 
-  assert.deepEqual(selected, [4]);
+  assert.deepEqual(selected, ["second"]);
 });
 
 test("anchors are laid out by the list, not by absolute offsets", () => {
@@ -75,7 +75,7 @@ test("a preview appears only for the hovered user input", () => {
   assert.equal(screen.queryByRole("tooltip"), null);
 });
 
-test("a focused user input shows its preview and follows the anchor while scrolling", () => {
+test("a focused user input keeps its preview while scrolling", () => {
   renderNavigator(markers, "first");
   const first = anchor("First user input");
 
@@ -85,24 +85,12 @@ test("a focused user input shows its preview and follows the anchor while scroll
   assert.equal(screen.getByRole("tooltip").textContent?.trim(), "First user input");
   assert.equal(screen.getByRole("tooltip").getAttribute("id"), "user-input-navigation-preview");
 
-  first.getBoundingClientRect = () =>
-    ({
-      top: 100,
-      height: 24,
-      bottom: 124,
-      left: 0,
-      right: 24,
-      width: 24,
-      x: 0,
-      y: 100,
-      toJSON() {},
-    }) as DOMRect;
   fireEvent.scroll(
     screen.getByRole("navigation", { name: "User input navigation" }).firstElementChild!,
   );
 
   assert.equal(screen.getByRole("tooltip").textContent?.trim(), "First user input");
-  assert.equal(screen.getByRole("tooltip").style.top, "64px");
+  assert.strictEqual(document.activeElement, first);
 });
 
 test("each anchor owns its own hover target", () => {
@@ -136,4 +124,15 @@ test("a long marker list keeps every anchor reachable", () => {
   );
 
   assert.equal(screen.getAllByRole("button").length, 100);
+});
+
+test("an unloaded input remains selectable", () => {
+  const selected: string[] = [];
+  renderNavigator(
+    [{ key: "unloaded", itemIndex: null, rowIndex: null, start: null, preview: "Earlier input" }],
+    null,
+    selected,
+  );
+  fireEvent.click(anchor("Earlier input"));
+  assert.deepEqual(selected, ["unloaded"]);
 });

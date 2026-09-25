@@ -31,6 +31,7 @@ import {
   getMessageStreamingScopeId,
   getTurnFinishedStatus,
   isModeControlMessage,
+  isTurnStartMessage,
   isUserTurnMessage,
   mergeStreamingMessages,
   scopeMessagesByUserTurn,
@@ -527,7 +528,7 @@ function NativeWorkspaceSession({
         return;
       }
 
-      if (incoming.additionalProperties?.type === "turn-start") {
+      if (isTurnStartMessage(incoming)) {
         batcherRef.current?.flush(generation);
         activeStreamingScopeRef.current =
           getMessageStreamingScopeId(incoming) ??

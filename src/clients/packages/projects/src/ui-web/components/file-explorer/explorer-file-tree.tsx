@@ -335,7 +335,7 @@ function FileTreeNode({
                   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm",
                   "opacity-0 transition-[opacity,color,background-color]",
                   "group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100",
-                  "hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "cursor-pointer hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isUpdatingGitScope && "cursor-wait opacity-100",
                 )}
                 aria-label={`${item.gitScope === "staged" ? "Unstage" : "Stage"} ${item.type} ${item.name}`}
@@ -494,7 +494,7 @@ function GitChangeGroupSection({
           <span className="text-sm text-muted-foreground">{formatFileCount(group.fileCount)}</span>
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent>
+      <CollapsibleContent className="ml-4" >
         {group.items.map((item) => (
           <FileTreeNode
             projectId={projectId}

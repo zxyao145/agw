@@ -20,10 +20,10 @@ public interface IDurableExecutionScopeMaintenance
         CancellationToken cancellationToken = default
     );
 
-    // The worker must hold the execution lock throughout validation and segment execution.
-    Task<bool> ValidateLockedExecutionAsync(Guid executionId, CancellationToken cancellationToken = default);
+    // Quarantines a record whose manifest or scope is invalid; a concurrent state change wins through StateVersion.
+    Task<bool> ValidateExecutionAsync(Guid executionId, CancellationToken cancellationToken = default);
 
-    // Returns an untracked, decrypted record for segment claiming. Caller holds the execution lock.
+    // Returns an untracked, decrypted record for a segment whose lease the caller has just claimed.
     Task<DurableExecutionRecord?> LoadValidatedExecutionAsync(
         Guid executionId,
         CancellationToken cancellationToken = default

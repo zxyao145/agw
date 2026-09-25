@@ -1,3 +1,4 @@
+using Agw.Agents.Contracts.Execution;
 using Agw.Shared.Tooling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -16,7 +17,7 @@ public class AgentConfiguration : IEntityTypeConfiguration<Agent>
         builder.Property(e => e.Description).HasMaxLength(200);
         builder.Property(e => e.Enable).HasDefaultValue(true);
         builder.Property(e => e.SystemPrompt).HasMaxLength(4000);
-        builder.Property(e => e.ExternalAgentKind).HasDefaultValue(ExternalAgentKind.None);
+        builder.Property(e => e.ExternalAgentKind).HasDefaultValue(EngineKind.Maf);
         var tools = builder
             .Property(e => e.Tools)
             .HasConversion(

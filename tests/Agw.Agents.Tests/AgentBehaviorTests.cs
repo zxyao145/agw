@@ -103,7 +103,7 @@ public class AgentBehaviorTests
         var agent = new Agent
         {
             Type = AgentType.System,
-            ExternalAgentKind = ExternalAgentKind.Codex,
+            ExternalAgentKind = EngineKind.Codex,
             ModelProviderId = Guid.CreateVersion7(),
         };
 
@@ -123,12 +123,12 @@ public class AgentBehaviorTests
     }
 
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode, true)]
-    [InlineData(ExternalAgentKind.Codex, true)]
-    [InlineData(ExternalAgentKind.Pi, true)]
-    [InlineData(ExternalAgentKind.Pi, false)]
+    [InlineData(EngineKind.ClaudeCode, true)]
+    [InlineData(EngineKind.Codex, true)]
+    [InlineData(EngineKind.Pi, true)]
+    [InlineData(EngineKind.Pi, false)]
     public void PrepareForCreate_ExternalAgentWithSummaryConfiguration_ThrowsInvalidParam(
-        ExternalAgentKind kind,
+        EngineKind kind,
         bool enableSummary
     )
     {
@@ -152,7 +152,7 @@ public class AgentBehaviorTests
         var agent = new Agent
         {
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            ExternalAgentKind = EngineKind.ClaudeCode,
             EnableSummary = true,
             ModelProviderId = null,
             SummaryModelProviderId = null,
@@ -217,7 +217,7 @@ public class AgentBehaviorTests
             Tools = [new ToolValue { Definition = new WebSearchToolDefinition() }],
             EnableSummary = false,
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            ExternalAgentKind = EngineKind.ClaudeCode,
             DisplayName = "Before",
             CreateBy = "creator",
             CreateTime = originalCreateTime,
@@ -253,7 +253,7 @@ public class AgentBehaviorTests
         Assert.Same(originalTools, agent.Tools);
         Assert.False(agent.EnableSummary);
         Assert.Equal(AgentType.External, agent.Type);
-        Assert.Equal(ExternalAgentKind.ClaudeCode, agent.ExternalAgentKind);
+        Assert.Equal(EngineKind.ClaudeCode, agent.ExternalAgentKind);
         Assert.Equal("After", agent.DisplayName);
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);
         Assert.Null(agent.SummaryModelProviderId);
@@ -271,7 +271,7 @@ public class AgentBehaviorTests
             Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            ExternalAgentKind = EngineKind.ClaudeCode,
             Extra = "{\"before\":true}",
         };
 

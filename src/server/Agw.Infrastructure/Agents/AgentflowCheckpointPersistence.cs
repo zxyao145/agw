@@ -1,6 +1,7 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.EntityFrameworkCore;
@@ -11,11 +12,17 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
 {
     private readonly AgwDbContext _dbContext;
     private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
+    private readonly IConversationTurnStore _turns;
 
-    public AgentflowCheckpointPersistence(AgwDbContext dbContext, IDurableExecutionScopeMaintenance scopeMaintenance)
+    public AgentflowCheckpointPersistence(
+        AgwDbContext dbContext,
+        IDurableExecutionScopeMaintenance scopeMaintenance,
+        IConversationTurnStore turns
+    )
     {
         _dbContext = dbContext;
         _scopeMaintenance = scopeMaintenance;
+        _turns = turns;
     }
 
     public Task<bool> RepairAndCheckActiveExecutionsAsync(
@@ -44,10 +51,13 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
     {
         ArgumentNullException.ThrowIfNull(operation);
 
-        await using var transaction = await _dbContext
-            .Database.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var result = await operation(new Session(_dbContext), cancellationToken).ConfigureAwait(false);
+        // 在执行写入入口的事务中调用时沿用该事务，行锁与租约检查覆盖这些写入。
+        // Called inside the execution write guard's transaction, the operation joins it so the row lock and lease check cover these writes.
+        await using var transaction =
+            _dbContext.Database.CurrentTransaction == null
+                ? await _dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false)
+                : null;
+        var result = await operation(new Session(_dbContext, _turns), cancellationToken).ConfigureAwait(false);
         if (!result.Commit)
         {
             return result.Result;
@@ -61,7 +71,8 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return result.Result;
     }
 
@@ -90,10 +101,12 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
     private sealed class Session : IAgentflowCheckpointPersistenceSession
     {
         private readonly AgwDbContext _dbContext;
+        private readonly IConversationTurnStore _turns;
 
-        public Session(AgwDbContext dbContext)
+        public Session(AgwDbContext dbContext, IConversationTurnStore turns)
         {
             _dbContext = dbContext;
+            _turns = turns;
         }
 
         public IAgentsDbContext Agents => _dbContext;
@@ -121,21 +134,71 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
                     AgentName = history.AgentName,
                     ConversationSequence = history.ConversationSequence,
                     ConversationPayload = history.ConversationPayload,
+                    TurnId = history.TurnId,
+                    Purpose = ConversationMessagePurpose.Message,
                     CreateTime = history.Timestamp,
                     UpdateTime = history.Timestamp,
                 }
             );
         }
 
-        public Task DeleteConversationHistoryAfterAsync(
+        public async Task DeleteConversationHistoryAfterAsync(
             Guid conversationId,
             long boundarySequence,
             CancellationToken cancellationToken = default
-        ) =>
-            _dbContext
+        )
+        {
+            await _dbContext
                 .ProjectConversationChatHistories.Where(history =>
                     history.ConversationId == conversationId && history.ConversationSequence > boundarySequence
                 )
-                .ExecuteDeleteAsync(cancellationToken);
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await _dbContext
+                .ProjectConversationTurns.Where(turn =>
+                    turn.ProjectConversationId == conversationId && turn.FirstSequence > boundarySequence
+                )
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await _dbContext
+                .ProjectConversationTurns.Where(turn =>
+                    turn.ProjectConversationId == conversationId && turn.LastSequence > boundarySequence
+                )
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(turn => turn.LastSequence, boundarySequence),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+
+        public async Task AcceptResumeTurnAsync(
+            Guid turnId,
+            AgentflowCheckpointRecord checkpoint,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var generation = await _dbContext
+                .ProjectConversations.AsNoTracking()
+                .Where(conversation => conversation.Id == checkpoint.ProjectConversationId)
+                .Select(conversation => conversation.Generation)
+                .SingleAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await _turns
+                .AcceptAsync(
+                    new AcceptConversationTurnRequest
+                    {
+                        TurnId = turnId,
+                        ProjectId = checkpoint.ProjectId,
+                        ContextId = checkpoint.ContextId,
+                        ConversationId = checkpoint.ProjectConversationId,
+                        Generation = generation,
+                        TaskId = checkpoint.TaskId,
+                        TargetId = checkpoint.AgentflowId,
+                        TargetType = ConversationTurnTargetType.Agentflow,
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
     }
 }

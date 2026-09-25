@@ -2,7 +2,6 @@ using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.ExternalAgents;
 using Agw.Providers.Contracts;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
 using OpenAI.CodexSdk;
@@ -26,7 +25,7 @@ internal static class ExternalAgentModelOptions
             return options;
         }
 
-        var apiKey = GetApiKey(configuration, ExternalAgentKind.ClaudeCode);
+        var apiKey = GetApiKey(configuration, EngineKind.ClaudeCode);
         var environment = new Dictionary<string, string?>(options.EnvironmentVariables ?? [], StringComparer.Ordinal)
         {
             ["ANTHROPIC_BASE_URL"] = configuration.Provider.Endpoint,
@@ -60,7 +59,7 @@ internal static class ExternalAgentModelOptions
             return options;
         }
 
-        var apiKey = GetApiKey(configuration, ExternalAgentKind.Codex);
+        var apiKey = GetApiKey(configuration, EngineKind.Codex);
         var original = options.CodexOptions ?? new CodexOptions();
         var environment = new Dictionary<string, string>(StringComparer.Ordinal);
         if (original.Env != null)
@@ -150,7 +149,7 @@ internal static class ExternalAgentModelOptions
             return options;
         }
 
-        var apiKey = GetApiKey(configuration, ExternalAgentKind.Pi);
+        var apiKey = GetApiKey(configuration, EngineKind.Pi);
         var providerId = $"agw-{configuration.Provider.Id:N}";
         var session = options.SessionOptions;
         var environment = new Dictionary<string, string>(
@@ -205,7 +204,7 @@ internal static class ExternalAgentModelOptions
         };
     }
 
-    private static string GetApiKey(AgentModelRuntimeConfiguration configuration, ExternalAgentKind kind)
+    private static string GetApiKey(AgentModelRuntimeConfiguration configuration, EngineKind kind)
     {
         ExternalAgentDefaults.ValidateProviderType(kind, configuration.Provider.ProviderType);
         if (

@@ -936,9 +936,9 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
-                    b.Property<Guid>("ExecutionId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("execution_id");
+                    b.Property<long>("LeaseEpoch")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("lease_epoch");
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
@@ -949,9 +949,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("segment_index");
 
-                    b.Property<int>("Sequence")
+                    b.Property<Guid>("TurnId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_id");
+
+                    b.Property<long>("TurnSequence")
                         .HasColumnType("INTEGER")
-                        .HasColumnName("sequence");
+                        .HasColumnName("turn_sequence");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
@@ -964,9 +968,9 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.HasKey("Id")
                         .HasName("pk_execution_stream_entry");
 
-                    b.HasIndex("ExecutionId", "SegmentIndex", "Sequence")
+                    b.HasIndex("TurnId", "TurnSequence")
                         .IsUnique()
-                        .HasDatabaseName("ix_execution_stream_entry_execution_id_segment_index_sequence");
+                        .HasDatabaseName("ix_execution_stream_entry_turn_id_turn_sequence");
 
                     b.ToTable("execution_stream_entry", (string)null);
                 });
@@ -993,6 +997,22 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("TEXT")
                         .HasColumnName("error_message");
+
+                    b.Property<long>("LastEventSequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("last_event_sequence");
+
+                    b.Property<long>("LeaseEpoch")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("lease_epoch");
+
+                    b.Property<long?>("LeaseExpiresAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("lease_expires_at");
 
                     b.Property<string>("ManifestJson")
                         .IsRequired()
@@ -1036,6 +1056,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("status");
 
+                    b.Property<string>("TurnCheckpointJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_checkpoint_json");
+
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
                         .HasColumnName("update_by");
@@ -1050,8 +1074,16 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
+                    b.Property<string>("WorkerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("worker_id");
+
                     b.HasKey("Id")
                         .HasName("pk_durable_execution");
+
+                    b.HasIndex("Status", "LeaseExpiresAt")
+                        .HasDatabaseName("ix_durable_execution_status_lease_expires_at");
 
                     b.HasIndex("Status", "StateChangedAt")
                         .HasDatabaseName("ix_durable_execution_status_state_changed_at");
@@ -1801,6 +1833,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("provider_session_id");
 
+                    b.Property<long?>("SeenThroughSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("seen_through_sequence");
+
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
                         .HasColumnName("update_by");
@@ -1828,6 +1864,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
 
                     b.Property<string>("AgentName")
                         .HasMaxLength(200)
@@ -1858,6 +1898,11 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("finished_time");
 
+                    b.Property<string>("HistoryScope")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("history_scope");
+
                     b.Property<Guid?>("JobId")
                         .HasColumnType("TEXT")
                         .HasColumnName("job_id");
@@ -1866,9 +1911,21 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("metadata");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("message")
+                        .HasColumnName("purpose");
+
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER")
                         .HasColumnName("status");
+
+                    b.Property<int?>("StepIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("step_index");
 
                     b.Property<string>("TaskErrorMessage")
                         .HasMaxLength(2000)
@@ -1878,6 +1935,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<Guid>("TaskId")
                         .HasColumnType("TEXT")
                         .HasColumnName("task_id");
+
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_id");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
                         .HasColumnType("TEXT")
@@ -1898,7 +1959,91 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.HasIndex("TaskId", "CreateTime")
                         .HasDatabaseName("ix_project_conversation_chat_history_task_id_create_time");
 
+                    b.HasIndex("TurnId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_turn_id_conversation_sequence");
+
+                    b.HasIndex("ConversationId", "HistoryScope", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_history_scope_conversation_sequence");
+
+                    b.HasIndex("ConversationId", "Purpose", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_purpose_conversation_sequence");
+
                     b.ToTable("project_conversation_chat_history", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationTurn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_code");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_at");
+
+                    b.Property<long>("FirstSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("first_sequence");
+
+                    b.Property<Guid>("InputMessageId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("input_message_id");
+
+                    b.Property<long?>("LastSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_sequence");
+
+                    b.Property<Guid>("ProjectConversationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_conversation_id");
+
+                    b.Property<string>("RuntimeType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("runtime_type");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<int>("StepCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("step_count");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_id");
+
+                    b.Property<Guid?>("TaskId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_conversation_turn");
+
+                    b.HasIndex("TaskId")
+                        .HasDatabaseName("ix_project_conversation_turn_task_id");
+
+                    b.HasIndex("ProjectConversationId", "FirstSequence")
+                        .HasDatabaseName("ix_project_conversation_turn_project_conversation_id_first_sequence");
+
+                    b.HasIndex("ProjectConversationId", "Status")
+                        .HasDatabaseName("ix_project_conversation_turn_project_conversation_id_status");
+
+                    b.ToTable("project_conversation_turn", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMcpServerRelation", b =>
@@ -2645,6 +2790,18 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_project_conversation_chat_history_project_conversation_project_conversation_id");
+
+                    b.Navigation("ProjectConversation");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationTurn", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
+                        .WithMany()
+                        .HasForeignKey("ProjectConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_conversation_turn_project_conversation_project_conversation_id");
 
                     b.Navigation("ProjectConversation");
                 });

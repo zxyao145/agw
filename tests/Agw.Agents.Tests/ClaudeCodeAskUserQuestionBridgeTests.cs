@@ -1,12 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
-using Agw.Agents.Execution.Inbound.Connections;
-using Agw.Agents.Execution.Outbound;
-using Agw.Agents.Execution.Runtimes;
-using Agw.Agents.Execution.Turns;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -19,7 +16,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     public async Task HandleAsync_WithUserAnswers_EmitsInteractionAndReturnsUpdatedInput()
     {
         // Arrange
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var channel = new TestHumanInteractionChannel(request => new UserInputResponse
         {
             InteractionId = "test-interaction",
@@ -41,7 +38,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
         });
 
         // Act
-        using (accessor.Push(channel))
+        using (ExecutionTestScopes.PushInteractions(channel))
         {
             await bridge.BindRunAsync(
                 [],
@@ -71,7 +68,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     public async Task BindRunAsync_AcrossSequentialRuns_UsesCurrentChannel()
     {
         // Arrange
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var firstChannel = CreateAnsweringChannel("First");
         var secondChannel = CreateAnsweringChannel("Second");
         var bridge = new ClaudeCodeAskUserQuestionBridge(accessor, allowInteraction: true);
@@ -87,7 +84,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
         );
 
         // Act
-        using (accessor.Push(firstChannel))
+        using (ExecutionTestScopes.PushInteractions(firstChannel))
         {
             await bridge.BindRunAsync(
                 [],
@@ -97,7 +94,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
                 TestContext.Current.CancellationToken
             );
         }
-        using (accessor.Push(secondChannel))
+        using (ExecutionTestScopes.PushInteractions(secondChannel))
         {
             await bridge.BindRunAsync(
                 [],
@@ -117,7 +114,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     public async Task HandleAsync_WhenUserCancels_ReturnsNonInterruptingDeny()
     {
         // Arrange
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var channel = new TestHumanInteractionChannel(request => new UserInputResponse
         {
             InteractionId = "test-interaction",
@@ -137,7 +134,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
         });
 
         // Act
-        using (accessor.Push(channel))
+        using (ExecutionTestScopes.PushInteractions(channel))
         {
             await bridge.BindRunAsync(
                 [],
@@ -158,7 +155,10 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     public async Task HandleAsync_ForNonQuestionPermission_ReturnsDeny()
     {
         // Arrange
-        var bridge = new ClaudeCodeAskUserQuestionBridge(new HumanInteractionContextAccessor(), allowInteraction: true);
+        var bridge = new ClaudeCodeAskUserQuestionBridge(
+            new HumanInteractionContextAccessor(new AgentExecutionContextAccessor()),
+            allowInteraction: true
+        );
 
         // Act
         var result = await bridge.HandleAsync(
@@ -176,7 +176,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     public async Task BindRunAsync_ForBackgroundAgent_DoesNotExposeInteractiveChannel()
     {
         // Arrange
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var channel = CreateAnsweringChannel("Yes");
         var bridge = new ClaudeCodeAskUserQuestionBridge(accessor, allowInteraction: false);
         PermissionResult? permissionResult = null;
@@ -191,7 +191,7 @@ public class ClaudeCodeAskUserQuestionBridgeTests
         });
 
         // Act
-        using (accessor.Push(channel))
+        using (ExecutionTestScopes.PushInteractions(channel))
         {
             await bridge.BindRunAsync(
                 [],
@@ -249,34 +249,18 @@ public class ClaudeCodeAskUserQuestionBridgeTests
         int expectedRequests
     )
     {
-        var accessor = new HumanInteractionContextAccessor();
-        var turnAccessor = new RuntimeTurnContextAccessor();
+        var executionContext = new AgentExecutionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(executionContext);
         var channel = new ToolChannel(approve);
-        var settings = ExecutionSettings.CreateDefault().WithPermissionMode(mode);
-        var task = new AgentExecutionTask
-        {
-            ProjectId = Guid.NewGuid(),
-            ProjectConversationId = Guid.NewGuid(),
-            ContextId = "scope",
-        };
-        var turn = new RuntimeTurnContext(
-            settings,
-            task,
-            new ExecutionTarget(Guid.NewGuid(), AgentRuntimeType.Agent),
-            "/workspace",
-            new NullSink()
-        )
-        {
-            UserId = "owner",
-        };
+        var agentId = Guid.NewGuid();
         var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeToolApprovalCache();
         var bridge = new ClaudeCodeAskUserQuestionBridge(
             accessor,
             true,
             mode,
             "/workspace",
-            turn.AgentId,
-            turnAccessor,
+            agentId,
+            executionContext,
             cache
         );
         var results = new List<PermissionResult>();
@@ -290,8 +274,17 @@ public class ClaudeCodeAskUserQuestionBridgeTests
                 )
             )
         );
-        using var turnScope = turnAccessor.Push(turn);
-        using var interactionScope = accessor.Push(channel);
+        var scope = ExecutionTestScopes.Scope(
+            ExecutionTestScopes.Context(
+                contextId: "scope",
+                userId: "owner",
+                agentId: agentId,
+                permissionMode: mode,
+                permissionVersion: 1
+            )
+        );
+        scope.BindInteractions(handler: null, channel, requests: null);
+        using var executionScope = scope.Push();
         await bridge.BindRunAsync([], null, null, agent, TestContext.Current.CancellationToken);
         await bridge.BindRunAsync([], null, null, agent, TestContext.Current.CancellationToken);
         Assert.Equal(expectedRequests, channel.Count);
@@ -327,11 +320,6 @@ public class ClaudeCodeAskUserQuestionBridgeTests
         );
         Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 2, "Bash", args));
         Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 0, "Bash", args));
-    }
-
-    private sealed class NullSink : IExecutionMessageSink
-    {
-        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 
     private sealed class ToolChannel : IHumanInteractionChannel, IInteractionHandler

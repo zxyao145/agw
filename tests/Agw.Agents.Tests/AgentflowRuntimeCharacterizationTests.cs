@@ -3,28 +3,30 @@ using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
-using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
-using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Fact]
-    public async Task ExecuteStreamingAsync_UpdatesAndOutput_PreservesOrderAndSingleTerminalEvent()
+    public async Task ExecuteStreamingAsync_UpdatesAndOutput_PreservesOrder()
     {
         var agent = new ScriptedAgent(["first", "second"]);
         var fixture = CreateCharacterizationFixture([AgentflowNodeKind.Agent, AgentflowNodeKind.Output], _ => agent);
@@ -33,36 +35,70 @@ public partial class AgentflowRuntimeServiceTests
             fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(["input", "first", "second", "firstsecond", "turn-finished"], messages.Select(MessageShape));
-        Assert.Equal("completed", messages[^1].AdditionalProperties!["status"]);
+        Assert.Equal(["input", "first", "second", "firstsecond"], messages.Select(MessageShape));
         Assert.Equal(1, agent.DisposeCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_UpdatesAndOutput_ReturnsOnlyWorkflowOutput()
+    public async Task ExecuteStreamingAsync_ThreeSequentialNodes_ReportsCompletedSuperstepsAsStepCount()
+    {
+        var fixture = CreateCharacterizationFixture(
+            [AgentflowNodeKind.Agent, AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
+            _ => new ScriptedAgent(["answer"])
+        );
+
+        await CollectAsync(
+            fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
+        );
+
+        // 用同一拓扑直接运行 MAF Workflow，数出完成的 Superstep 作为对照。
+        // Run the same topology directly on MAF and count the completed Supersteps as the reference.
+        var workflow = new AgentflowWorkflowCompiler().Compile(
+            fixture.Flow,
+            fixture.Nodes,
+            fixture.Edges.Queryable.ToList(),
+            fixture
+                .Nodes.Where(node => node.Kind == AgentflowNodeKind.Agent)
+                .ToDictionary(node => node.NodeId, AIAgent (_) => new ScriptedAgent(["answer"]))
+        )!;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow,
+            new List<ChatMessage> { new(ChatRole.User, "input") },
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var supersteps = 0;
+        await foreach (var evt in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+            if (evt is SuperStepCompletedEvent)
+                supersteps++;
+
+        var outcome = fixture.Service.LastScope!.Outcome!;
+        Assert.Equal(Agw.Agents.Execution.Turns.TurnOutcomeStatus.Completed, outcome.Status);
+        Assert.True(supersteps > 3);
+        Assert.Equal(supersteps, outcome.StepCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UpdatesAndOutput_ReturnsMessageStream()
     {
         var fixture = CreateCharacterizationFixture(
             [AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
             _ => new ScriptedAgent(["first", "second"])
         );
-        var taskId = Guid.CreateVersion7();
 
-        var result = await fixture.Service.ExecuteAsync(
+        var messages = await fixture.Service.ExecuteAsync(
             fixture.Flow.Id,
-            taskId,
+            Guid.CreateVersion7(),
             "input",
             TestContext.Current.CancellationToken,
             contextId: " context "
         );
 
-        Assert.NotNull(result);
-        Assert.Equal(["input", "firstsecond", "firstsecond"], result.Messages.Select(MessageShape));
-        Assert.Equal("context", result.ContextId);
-        Assert.Equal(taskId.ToString("D"), result.TaskId);
+        Assert.Equal(["input", "first", "second", "firstsecond"], messages.Select(MessageShape));
     }
 
     [Fact]
-    public async Task ExecuteStreamingAsync_WorkflowFailure_EmitsErrorThenFinishedAndDisposes()
+    public async Task ExecuteStreamingAsync_WorkflowFailure_EmitsErrorAndDisposes()
     {
         var agent = new ScriptedAgent([], fail: true);
         var fixture = CreateCharacterizationFixture([AgentflowNodeKind.Agent, AgentflowNodeKind.Output], _ => agent);
@@ -71,7 +107,7 @@ public partial class AgentflowRuntimeServiceTests
             fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(["input", "workflow-error", "turn-finished"], messages.Select(MessageShape));
+        Assert.Equal(["input", "workflow-error"], messages.Select(MessageShape));
         Assert.StartsWith(
             "Error invoking handler for ",
             Assert.IsType<AgwErrorContent>(Assert.Single(messages[1].Contents)).Content
@@ -100,9 +136,7 @@ public partial class AgentflowRuntimeServiceTests
         );
 
         Assert.Equal(
-            unavailable
-                ? ["input", "human-gate-unavailable", "turn-finished"]
-                : ["input", "human-gate-rejected", "turn-finished"],
+            unavailable ? ["input", "human-gate-unavailable"] : ["input", "human-gate-rejected"],
             messages.Select(MessageShape)
         );
         Assert.Empty(agent.Inputs);
@@ -110,7 +144,7 @@ public partial class AgentflowRuntimeServiceTests
     }
 
     [Fact]
-    public async Task ExecuteStreamingAsync_HumanGateApproved_PreservesRequestPayloadAndTerminalSequence()
+    public async Task ExecuteStreamingAsync_HumanGateApproved_PreservesRequestPayloadAndSequence()
     {
         var agent = new ScriptedAgent(["done"]);
         var fixture = CreateCharacterizationFixture(
@@ -129,7 +163,7 @@ public partial class AgentflowRuntimeServiceTests
             )
         );
 
-        Assert.Equal(["input", "done", "done", "turn-finished"], messages.Select(MessageShape));
+        Assert.Equal(["input", "done", "done"], messages.Select(MessageShape));
         var gate = Assert.IsType<WorkflowGateInteraction>(Assert.Single(handler.Requests));
         Assert.Equal("review", gate.Mode);
         Assert.Equal("Approve now", gate.Prompt);
@@ -138,7 +172,7 @@ public partial class AgentflowRuntimeServiceTests
     }
 
     [Fact]
-    public async Task ExecuteStreamingAsync_ToolApprovalWithoutChannel_EmitsUnavailableThenFinished()
+    public async Task ExecuteStreamingAsync_ToolApprovalWithoutChannel_EmitsUnavailable()
     {
         var fixture = CreateCharacterizationFixture(
             [AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
@@ -149,7 +183,7 @@ public partial class AgentflowRuntimeServiceTests
             fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(["input", "", "tool-approval-unavailable", "turn-finished"], messages.Select(MessageShape));
+        Assert.Equal(["input", "", "tool-approval-unavailable"], messages.Select(MessageShape));
         Assert.Equal("approval-1", messages[2].AdditionalProperties!["providerRequestId"]);
     }
 
@@ -184,7 +218,7 @@ public partial class AgentflowRuntimeServiceTests
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -210,7 +244,7 @@ public partial class AgentflowRuntimeServiceTests
         ]);
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -226,7 +260,7 @@ public partial class AgentflowRuntimeServiceTests
         );
         var response = CreateResponse(manifest, request, approved);
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 1, [response], checkpoint),
             sink,
@@ -260,7 +294,7 @@ public partial class AgentflowRuntimeServiceTests
         );
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -270,7 +304,7 @@ public partial class AgentflowRuntimeServiceTests
         var request = Assert.Single(waiting.PendingInteractions);
         var response = CreateResponse(manifest, request, true, approvalScope);
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 1, [response], waiting.Checkpoint),
             sink,
@@ -304,7 +338,7 @@ public partial class AgentflowRuntimeServiceTests
         var sink = new RecordingSegmentSink();
         var request = InteractionTestData.Gate("unmatched", "missing", prompt: "unused");
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [CreateResponse(manifest, request, true)], null),
             sink,
@@ -313,7 +347,8 @@ public partial class AgentflowRuntimeServiceTests
 
         Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
         Assert.Equal("Agentflow did not restore human request 'unmatched'.", result.ErrorMessage);
-        Assert.Equal(["input", "done", "done"], sink.Messages.Select(MessageShape));
+        Assert.Equal(["input", "done", "done", ""], sink.Messages.Select(MessageShape));
+        Assert.Equal(result.ErrorMessage, ErrorText(sink.Messages[^1]));
     }
 
     [Fact]
@@ -323,7 +358,7 @@ public partial class AgentflowRuntimeServiceTests
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 1, [], null),
             sink,
@@ -332,7 +367,7 @@ public partial class AgentflowRuntimeServiceTests
 
         Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
         Assert.Equal("Agentflow checkpoint could not be found.", result.ErrorMessage);
-        Assert.Empty(sink.Messages);
+        Assert.Equal(result.ErrorMessage, ErrorText(Assert.Single(sink.Messages)));
         Assert.All(fixture.Agents.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
 
@@ -344,7 +379,7 @@ public partial class AgentflowRuntimeServiceTests
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -355,27 +390,6 @@ public partial class AgentflowRuntimeServiceTests
         Assert.Equal(["input", "workflow-error"], sink.Messages.Select(MessageShape));
         Assert.StartsWith("Error invoking handler for ", result.ErrorMessage);
         Assert.Equal(1, agent.DisposeCount);
-    }
-
-    [Fact]
-    public async Task ExecuteDurableSegmentAsync_NoInteractionContext_FailsBeforeResolvingMissingFlow()
-    {
-        var fixture = CreateCharacterizationFixture(
-            [AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
-            interactions: false
-        );
-        var manifest = CreateManifest(Guid.CreateVersion7());
-
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
-            manifest,
-            new(manifest.ExecutionId, 0, [], null),
-            new RecordingSegmentSink(),
-            TestContext.Current.CancellationToken
-        );
-
-        Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
-        Assert.Equal("Human interaction context is unavailable.", result.ErrorMessage);
-        Assert.Empty(fixture.Agents.CreatedAgents);
     }
 
     [Theory]
@@ -390,7 +404,7 @@ public partial class AgentflowRuntimeServiceTests
         var fixture = await CreateParallelGateFixtureAsync();
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -400,7 +414,7 @@ public partial class AgentflowRuntimeServiceTests
         Assert.Equal(2, waiting.PendingInteractions.Count);
         Assert.Equal(["input"], sink.Messages.Select(MessageShape));
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(
                 manifest.ExecutionId,
@@ -439,25 +453,26 @@ public partial class AgentflowRuntimeServiceTests
         if (durable)
         {
             var manifest = CreateManifest(fixture.Flow.Id);
-            var result = await fixture.Service.ExecuteDurableSegmentAsync(
+            var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
                 new(manifest.ExecutionId, 0, [], null),
                 new RecordingSegmentSink(),
                 TestContext.Current.CancellationToken
             );
             Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
-            Assert.Equal("Agentflow could not be found.", result.ErrorMessage);
+            Assert.Equal("The Agentflow was not found.", result.ErrorMessage);
         }
         else
         {
-            Assert.Null(
-                await fixture.Service.ExecuteAsync(
+            var error = await Assert.ThrowsAsync<AgwException>(() =>
+                fixture.Service.ExecuteAsync(
                     fixture.Flow.Id,
                     Guid.CreateVersion7(),
                     "input",
                     TestContext.Current.CancellationToken
                 )
             );
+            Assert.Equal(ErrorCodes.ResourceNotFound.Code, error.Code);
             Assert.Null(await fixture.Service.GetMermaidAsync(fixture.Flow.Id, TestContext.Current.CancellationToken));
         }
         Assert.Empty(fixture.Agents.CreatedAgents);
@@ -468,8 +483,17 @@ public partial class AgentflowRuntimeServiceTests
     [InlineData(true)]
     public async Task ExecuteAsync_FullAccess_ApprovesToolAndContinues(bool distributed)
     {
+        // 节点 Agent 与 System Agent 一样经过审批批次层；FullAccess 的自动批准不产生可复用授权。
+        // The node Agent goes through the approval batch layer like a System Agent; FullAccess approvals create no reusable grant.
         var agent = new ApprovalRequestAgent();
-        var fixture = CreateCharacterizationFixture([AgentflowNodeKind.Agent, AgentflowNodeKind.Output], _ => agent);
+        var fixture = CreateCharacterizationFixture(
+            [AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
+            _ => new MafApprovalBatchAgent(
+                agent,
+                new HumanInteractionContextAccessor(new AgentExecutionContextAccessor()),
+                []
+            )
+        );
         if (distributed)
         {
             var manifest = CreateManifest(fixture.Flow.Id);
@@ -483,7 +507,7 @@ public partial class AgentflowRuntimeServiceTests
             };
             var sink = new RecordingSegmentSink();
 
-            var result = await fixture.Service.ExecuteDurableSegmentAsync(
+            var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
                 new(manifest.ExecutionId, 0, [], null),
                 sink,
@@ -492,20 +516,19 @@ public partial class AgentflowRuntimeServiceTests
 
             Assert.Equal(DurableExecutionSegmentStatus.Completed, result.Status);
             Assert.Empty(result.PendingInteractions);
-            Assert.Contains(sink.Messages, message => MessageShape(message) == "always-tool");
+            Assert.Contains(sink.Messages, message => MessageShape(message) == "once");
         }
         else
         {
-            var result = await fixture.Service.ExecuteAsync(
+            using var fullAccess = FullAccessScope().Push();
+            var messages = await fixture.Service.ExecuteAsync(
                 fixture.Flow.Id,
                 Guid.CreateVersion7(),
                 "input",
-                TestContext.Current.CancellationToken,
-                permissionMode: AgwPermissionMode.FullAccess
+                TestContext.Current.CancellationToken
             );
 
-            Assert.NotNull(result);
-            Assert.Contains(result.Messages, message => MessageShape(message) == "always-tool");
+            Assert.Contains(messages, message => MessageShape(message) == "once");
         }
         Assert.Equal(2, agent.RunCount);
         Assert.Equal(AgwPermissionMode.FullAccess, fixture.Agents.LastPermissionMode);
@@ -533,7 +556,7 @@ public partial class AgentflowRuntimeServiceTests
                 },
             };
 
-            var result = await fixture.Service.ExecuteDurableSegmentAsync(
+            var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
                 new(manifest.ExecutionId, 0, [], null),
                 new RecordingSegmentSink(),
@@ -546,13 +569,13 @@ public partial class AgentflowRuntimeServiceTests
         }
         else
         {
+            using var fullAccess = FullAccessScope().Push();
             var error = await Assert.ThrowsAsync<AgwException>(() =>
                 fixture.Service.ExecuteAsync(
                     fixture.Flow.Id,
                     Guid.CreateVersion7(),
                     "input",
-                    TestContext.Current.CancellationToken,
-                    permissionMode: AgwPermissionMode.FullAccess
+                    TestContext.Current.CancellationToken
                 )
             );
             Assert.Contains("unattended", error.Message);
@@ -560,17 +583,23 @@ public partial class AgentflowRuntimeServiceTests
         Assert.Empty(agent.Inputs);
     }
 
+    private static ExecutionScope FullAccessScope() =>
+        ExecutionTestScopes.Scope(
+            ExecutionTestScopes.Context(
+                userId: "tester",
+                runtimeType: AgentRuntimeType.Agentflow,
+                permissionMode: AgwPermissionMode.FullAccess
+            )
+        );
+
     private static CharacterizationFixture CreateCharacterizationFixture(
         AgentflowNodeKind[] kinds,
         Func<Guid, AIAgent?>? agentFactory = null,
-        bool interactions = true,
         AgentflowCheckpointStore? checkpointStore = null,
         AgentSessionStateStore? sessionStateStore = null,
         IProviderSessionState? providerSessionState = null,
         IProjectDefaultResolver? projectDefaults = null,
-        IProjectRuntimeFacade? projectRuntimeFacade = null,
-        IRuntimeTurnContextAccessor? turnContextAccessor = null,
-        HumanInteractionContextAccessor? interactionAccessor = null
+        IProjectRuntimeFacade? projectRuntimeFacade = null
     )
     {
         var flow = new Agentflow
@@ -623,11 +652,11 @@ public partial class AgentflowRuntimeServiceTests
             }
         );
         var agents =
-            agentFactory == null ? new StubAgentRuntimeService(agentId) : new StubAgentRuntimeService(agentFactory);
+            agentFactory == null ? new StubAgentRuntimeFactory(agentId) : new StubAgentRuntimeFactory(agentFactory);
         var edgeRepository = new TestRepository<AgentflowEdge>(edges, edge => edge.EdgeId);
         var nodeRepository = new TestRepository<AgentflowNode>(nodes, node => node.NodeId);
-        var service = CreateRuntimeService(
-            NullLogger<AgentflowRuntimeService>.Instance,
+        var service = CreateTestHost(
+            NullLogger<AgentflowCheckpointSupport>.Instance,
             new TestRepository<Agentflow>([flow], item => item.Id),
             nodeRepository,
             edgeRepository,
@@ -635,13 +664,9 @@ public partial class AgentflowRuntimeServiceTests
             providerSessionState ?? new StubProviderSessionState(),
             new RecordingSummaryService(),
             sessionStateStore: sessionStateStore,
-            humanInteractionContextAccessor: interactions
-                ? interactionAccessor ?? new HumanInteractionContextAccessor()
-                : null,
             checkpointStore: checkpointStore,
             projectDefaults: projectDefaults,
-            projectRuntimeFacade: projectRuntimeFacade,
-            turnContextAccessor: turnContextAccessor
+            projectRuntimeFacade: projectRuntimeFacade
         );
         return new CharacterizationFixture(flow, nodes, nodeRepository, edgeRepository, agents, service);
     }
@@ -651,8 +676,8 @@ public partial class AgentflowRuntimeServiceTests
         AgentflowNode[] Nodes,
         TestRepository<AgentflowNode> NodeRepository,
         TestRepository<AgentflowEdge> Edges,
-        StubAgentRuntimeService Agents,
-        AgentflowRuntimeService Service
+        StubAgentRuntimeFactory Agents,
+        AgentflowTurnTestHost Service
     );
 
     private static DurableExecutionManifest CreateManifest(Guid flowId) =>
@@ -692,6 +717,9 @@ public partial class AgentflowRuntimeServiceTests
         message.AdditionalProperties?.TryGetValue("type", out var type) == true
             ? type?.ToString() ?? ""
             : string.Concat(message.Contents.OfType<AgwTextContent>().Select(content => content.Content));
+
+    private static string? ErrorText(AgwMessage message) =>
+        Assert.IsType<AgwErrorContent>(Assert.Single(message.Contents)).Content;
 
     private sealed class RecordingSegmentSink : IExecutionMessageSink
     {

@@ -3,7 +3,7 @@ using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Theory]
     [InlineData(true)]
@@ -19,7 +19,7 @@ public partial class AgentflowRuntimeServiceTests
         ]);
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -33,7 +33,7 @@ public partial class AgentflowRuntimeServiceTests
             : InteractionTestData.Gate("missing-workflow-answer");
 
         // Inject a persisted answer whose original request is absent from the restored checkpoint.
-        var resumed = await fixture.Service.ExecuteDurableSegmentAsync(
+        var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(
                 manifest.ExecutionId,
@@ -63,7 +63,7 @@ public partial class AgentflowRuntimeServiceTests
         ]);
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -71,7 +71,7 @@ public partial class AgentflowRuntimeServiceTests
         );
         var first = Assert.Single(waiting.PendingInteractions);
 
-        var resumed = await fixture.Service.ExecuteDurableSegmentAsync(
+        var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 1, [CreateResponse(manifest, first, true)], waiting.Checkpoint),
             sink,
@@ -98,7 +98,7 @@ public partial class AgentflowRuntimeServiceTests
         ]);
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -106,7 +106,7 @@ public partial class AgentflowRuntimeServiceTests
         );
         var first = Assert.Single(waiting.PendingInteractions);
 
-        var resumed = await fixture.Service.ExecuteDurableSegmentAsync(
+        var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(
                 manifest.ExecutionId,

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Shared.Exceptions;
 
@@ -14,7 +13,7 @@ public class HumanInteractionRegressionTests
     public async Task RequestAsync_DifferentCallWithSingleSavedAnswer_RejectsMismatch(string node, string? callId)
     {
         var saved = InteractionTestData.Input("saved", "node-a", "call-a");
-        var channel = new ResolvedHumanInteractionChannel([
+        var channel = ExecutionTestScopes.ResolvedChannel([
             new(
                 saved,
                 new UserInputResponse
@@ -39,7 +38,7 @@ public class HumanInteractionRegressionTests
     {
         var saved = InteractionTestData.Input("saved", "node-a", "call-a");
         var answer = new UserInputResponse { InteractionId = "saved", Cancelled = true };
-        var channel = new ResolvedHumanInteractionChannel([new(saved, answer)]);
+        var channel = ExecutionTestScopes.ResolvedChannel([new(saved, answer)]);
         var response = await channel.RequestAsync(
             new UserInputRequest(saved.InputKind, saved.Prompt, saved.Payload) { Source = saved.Source },
             TestContext.Current.CancellationToken

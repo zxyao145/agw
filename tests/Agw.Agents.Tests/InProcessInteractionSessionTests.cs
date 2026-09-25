@@ -1,6 +1,6 @@
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Tests;
@@ -166,8 +166,10 @@ public class InProcessInteractionSessionTests
     }
 
     [Fact]
-    public async Task ResolveAsync_InteractionDisallowedWithFullAccess_StillApprovesTools()
+    public async Task ResolveAsync_InteractionDisallowedWithFullAccess_DeclinesTool()
     {
+        // 自动决定在 Agent 管线内完成；到达即时通道的工具审批都需要用户。
+        // Automatic decisions happen in the Agent pipeline; every tool approval reaching the live channel needs the user.
         var sink = new InteractionTestSink();
         var session = new InProcessInteractionSession(sink, AgwPermissionMode.FullAccess, allowInteraction: false);
 
@@ -176,9 +178,10 @@ public class InProcessInteractionSessionTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.True(
+        Assert.False(
             Assert.IsType<ToolApprovalDecision>(Assert.IsType<InteractionResolution.Resolved>(result).Response).Approved
         );
+        Assert.Empty(sink.Messages);
     }
 
     [Fact]

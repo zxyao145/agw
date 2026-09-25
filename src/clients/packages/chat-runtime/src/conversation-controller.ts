@@ -22,6 +22,7 @@ import {
   getMessageStreamingScopeId,
   getTurnFinishedStatus,
   isModeControlMessage,
+  isTurnStartMessage,
   isUserTurnMessage,
   mergeStreamingMessage,
   scopeStreamingMessage,
@@ -379,7 +380,7 @@ export class ConversationController {
       return;
     }
 
-    if (message.additionalProperties?.type === "turn-start") {
+    if (isTurnStartMessage(message)) {
       this.activeStreamingScopeId =
         getMessageStreamingScopeId(message) ?? this.activeStreamingScopeId ?? message.messageId;
       this.patch({ isExecuting: true });

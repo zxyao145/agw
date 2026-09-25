@@ -23,7 +23,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
     public void Dispose() => _user.Dispose();
 
     [Fact]
-    public async Task ValidateLockedExecutionAsync_UnindexedRecord_RejectsWithoutRecoveringScope()
+    public async Task ValidateExecutionAsync_UnindexedRecord_RejectsWithoutRecoveringScope()
     {
         var token = TestContext.Current.CancellationToken;
         await using var database = await Database.CreateAsync();
@@ -33,9 +33,8 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
         database.Context.Add(row);
         await database.Context.SaveChangesAsync(token);
         var originalManifest = row.ManifestJson;
-        await using var lease = await database.Locks.AcquireAsync(DurableExecutionLock.GetResourceName(row.Id), token);
 
-        Assert.False(await database.Maintenance.ValidateLockedExecutionAsync(row.Id, token));
+        Assert.False(await database.Maintenance.ValidateExecutionAsync(row.Id, token));
 
         database.Context.ChangeTracker.Clear();
         var unchanged = await database.Context.DurableExecutions.SingleAsync(token);
@@ -92,7 +91,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task TryBeginSegmentAsync_CorruptManifest_QuarantinesWithoutStarting(bool corruptCiphertext)
+    public async Task LoadClaimedAsync_CorruptManifest_QuarantinesWithoutStarting(bool corruptCiphertext)
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
@@ -118,10 +117,9 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
             database.Locks,
             database.Maintenance
         );
-        await using var lease = await database.Locks.AcquireAsync(DurableExecutionLock.GetResourceName(row.Id), token);
 
         // Act
-        var snapshot = await store.TryBeginSegmentAsync(row.Id, TimeProvider.System.GetUtcNow(), token);
+        var snapshot = await store.LoadClaimedAsync(row.Id, token);
 
         // Assert
         Assert.Null(snapshot);
@@ -140,7 +138,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
     }
 
     [Fact]
-    public async Task TryBeginSegmentAsync_HealthyRecord_ReadsExecutionOnce()
+    public async Task LoadClaimedAsync_HealthyRecord_ReadsExecutionOnce()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
@@ -167,15 +165,14 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
             database.Locks,
             database.Maintenance
         );
-        await using var lease = await database.Locks.AcquireAsync(DurableExecutionLock.GetResourceName(row.Id), token);
         database.Commands.Clear();
 
         // Act
-        var snapshot = await store.TryBeginSegmentAsync(row.Id, TimeProvider.System.GetUtcNow(), token);
+        var snapshot = await store.LoadClaimedAsync(row.Id, token);
 
         // Assert
         Assert.NotNull(snapshot);
-        Assert.Equal(DurableExecutionStatus.Running, snapshot.Status);
+        Assert.Equal(row.Status, snapshot.Status);
         Assert.Single(
             database.Commands,
             sql =>
@@ -185,32 +182,31 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetRunnableExecutionIdsAsync_UnresolvedRow_DoesNotHideIndexedWork()
+    public async Task GetClaimableAsync_UnresolvedRow_DoesNotHideIndexedWork()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
-        await using var database = await Database.CreateAsync();
+        await using var kit = await TurnPersistenceTestKit.CreateAsync();
         var pending = CreateExecution(Guid.CreateVersion7(), Guid.CreateVersion7(), manifest: "broken");
         var healthy = CreateExecution(Guid.CreateVersion7(), Guid.CreateVersion7());
         healthy.ScopeBackfilled = true;
-        database.Context.AddRange(pending, healthy);
-        await database.Context.SaveChangesAsync(token);
-        var store = new DurableExecutionStore(
-            database.Context,
-            TimeProvider.System,
-            database.Locks,
-            database.Maintenance
-        );
+        await using (var context = kit.CreateContext())
+        {
+            context.AddRange(pending, healthy);
+            await context.SaveChangesAsync(token);
+        }
 
         // Act
-        var ids = await store.GetRunnableExecutionIdsAsync(TimeProvider.System.GetUtcNow(), 1, token);
+        IReadOnlyList<Guid> ids;
+        using (UserInfoUtil.PushSystemScope())
+            ids = await kit.Leases.GetClaimableAsync(1, token);
 
         // Assert
         Assert.Equal(healthy.Id, Assert.Single(ids));
     }
 
     [Fact]
-    public async Task ValidateLockedExecutionAsync_InconsistentIndex_InvalidatesWrongScope()
+    public async Task ValidateExecutionAsync_InconsistentIndex_InvalidatesWrongScope()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
@@ -220,10 +216,9 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
         row.ScopeBackfilled = true;
         database.Context.Add(row);
         await database.Context.SaveChangesAsync(token);
-        await using var lease = await database.Locks.AcquireAsync(DurableExecutionLock.GetResourceName(row.Id), token);
 
         // Act
-        var valid = await database.Maintenance.ValidateLockedExecutionAsync(row.Id, token);
+        var valid = await database.Maintenance.ValidateExecutionAsync(row.Id, token);
 
         // Assert
         Assert.False(valid);
@@ -295,19 +290,18 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
     }
 
     [Fact]
-    public async Task RepairAndCheckActiveExecutionsAsync_WorkerOwnsLock_PreservesRunningStateAndBlocksResume()
+    public async Task RepairAndCheckActiveExecutionsAsync_WorkerHoldsLease_PreservesRunningStateAndBlocksResume()
     {
         // Arrange
         await using var database = await Database.CreateAsync();
         var row = CreateExecution(Guid.CreateVersion7(), Guid.CreateVersion7(), manifest: "broken");
         row.ScopeBackfilled = true;
         row.Status = DurableExecutionStatus.Running;
+        row.WorkerId = "worker-a";
+        row.LeaseEpoch = 1;
+        row.LeaseExpiresAt = TimeProvider.System.GetUtcNow().AddMinutes(1);
         database.Context.Add(row);
         await database.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
-        await using var executionLock = await database.Locks.AcquireAsync(
-            DurableExecutionLock.GetResourceName(row.Id),
-            TestContext.Current.CancellationToken
-        );
 
         // Act
         var active = await database.Maintenance.RepairAndCheckActiveExecutionsAsync(
@@ -330,7 +324,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
     }
 
     [Fact]
-    public async Task ValidateLockedExecutionAsync_ConcurrentVersionChange_DoesNotOverwriteWinner()
+    public async Task ValidateExecutionAsync_ConcurrentVersionChange_DoesNotOverwriteWinner()
     {
         // Arrange
         await using var database = await Database.CreateAsync();
@@ -349,16 +343,9 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
             """,
             TestContext.Current.CancellationToken
         );
-        await using var executionLock = await database.Locks.AcquireAsync(
-            DurableExecutionLock.GetResourceName(row.Id),
-            TestContext.Current.CancellationToken
-        );
 
         // Act
-        var valid = await database.Maintenance.ValidateLockedExecutionAsync(
-            row.Id,
-            TestContext.Current.CancellationToken
-        );
+        var valid = await database.Maintenance.ValidateExecutionAsync(row.Id, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(valid);
@@ -434,7 +421,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
                     .AddInterceptors(new CommandRecorder(Commands))
                     .Options
             );
-            Maintenance = new DurableExecutionScopeMaintenance(Context, Locks, TimeProvider.System, Logger);
+            Maintenance = new DurableExecutionScopeMaintenance(Context, TimeProvider.System, Logger);
         }
 
         public static async Task<Database> CreateAsync()

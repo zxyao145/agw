@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -311,29 +310,6 @@ public class MafSessionApprovalStateTests
                 session.StateBag.Serialize().GetProperty("toolApprovalState")
             )
         );
-    }
-
-    [Fact]
-    public async Task Set_SharedPermissions_DoesNotModifySessionUntilExecutionRegistersIt()
-    {
-        var permissions = new InteractionPermissionState(null);
-        var state = new MafPermissionState(permissions);
-        var session = new TestSession();
-        var call = CreateCall("run_shell", "{}");
-        state.Register(session);
-        MafSessionApprovalState.Record(session, call, ApprovalScope.AlwaysTool, state.Current);
-        var before = session.StateBag.Serialize();
-
-        await Task.Run(() => state.Set(AgwPermissionMode.AlwaysAsk), TestContext.Current.CancellationToken);
-
-        Assert.Same(permissions, state.Permissions);
-        Assert.Equal(AgwPermissionMode.AlwaysAsk, permissions.Current);
-        Assert.Equal(permissions.Current, state.Current);
-        Assert.True(JsonElement.DeepEquals(before, session.StateBag.Serialize()));
-        state.Register(session);
-        permissions.Set(null);
-        Assert.Null(state.Current);
-        Assert.False(MafSessionApprovalState.TryApprove(CreateContext(session, call), state.Current));
     }
 
     private static FunctionCallContent CreateCall(string toolName, string? arguments) =>

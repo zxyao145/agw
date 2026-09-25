@@ -3,63 +3,44 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
-using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Auth.Contracts;
-using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Runtime;
-using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Execution.Persistence.Durable;
 
 /// <summary>
-/// 从 PostgreSQL 单行状态机还原的 execution 快照。
+/// 从 durable_execution 单行状态机还原的 execution 快照。
+/// The execution snapshot restored from the single-row durable_execution state machine.
 /// </summary>
 internal sealed record DurableExecutionSnapshot
 {
-    /// <summary>
-    /// 获取不可变启动清单。
-    /// </summary>
     public required DurableExecutionManifest Manifest { get; init; }
 
-    /// <summary>
-    /// 获取数据库中持久化的执行状态。
-    /// </summary>
     public required DurableExecutionStatus Status { get; init; }
 
     /// <summary>
-    /// 获取下一次需要执行的分段序号。
+    /// 下一次需要执行的分段序号。
+    /// The next segment index to run.
     /// </summary>
     public required int SegmentIndex { get; init; }
 
     public Guid StateVersion { get; init; }
 
-    /// <summary>
-    /// 获取恢复 Agentflow 所需的最新 checkpoint。
-    /// </summary>
     public DurableAgentflowCheckpoint? Checkpoint { get; init; }
 
-    /// <summary>
-    /// 获取当前等待边界的全部人工请求。
-    /// </summary>
     public IReadOnlyList<InteractionRequest> PendingInteractions { get; init; } = [];
 
-    /// <summary>
-    /// 获取当前等待边界已经持久化的人工回答。
-    /// </summary>
     public IReadOnlyList<InteractionResponse> Responses { get; init; } = [];
 
-    /// <summary>
-    /// 获取执行失败时保存的错误信息。
-    /// </summary>
     public string? ErrorMessage { get; init; }
 
     public IReadOnlyList<UserInputInteraction> InputCatalog { get; init; } = [];
+
     public IReadOnlyList<DurableResolvedInteraction> ResolvedInputs { get; init; } = [];
 }
 
@@ -67,6 +48,7 @@ internal static class DurableExecutionSnapshotExtensions
 {
     /// <summary>
     /// 返回当前仍未收到回答的人工请求。
+    /// Returns the human requests still waiting for an answer.
     /// </summary>
     public static IReadOnlyList<InteractionRequest> GetUnansweredInteractions(this DurableExecutionSnapshot snapshot)
     {
@@ -76,6 +58,7 @@ internal static class DurableExecutionSnapshotExtensions
 
     /// <summary>
     /// 从持久化 checkpoint、pending 和 response 构造下一分段输入。
+    /// Builds the next segment input from the persisted checkpoint, pending requests and responses.
     /// </summary>
     public static DurableExecutionSegmentInput CreateSegmentInput(this DurableExecutionSnapshot snapshot)
     {
@@ -112,7 +95,10 @@ internal static class DurableExecutionSnapshotExtensions
 }
 
 /// <summary>
-/// 在一条 PostgreSQL 记录中原子保存 execution 清单、状态、checkpoint、pending 和 response。
+/// durable_execution 单行状态机的读写：启动清单、状态、checkpoint、pending 与 response。执行结果在租约检查事务中写入，
+/// 用户回答、权限切换与中断属于用户命令，按 StateVersion 做乐观并发。
+/// Reads and writes the single-row durable_execution state machine: manifest, status, checkpoint, pending requests and responses. Execution results are written inside lease-checked transactions,
+/// while answers, permission changes and interrupts are user commands using StateVersion optimistic concurrency.
 /// </summary>
 internal sealed class DurableExecutionStore
 {
@@ -120,163 +106,39 @@ internal sealed class DurableExecutionStore
     private readonly TimeProvider _timeProvider;
     private readonly IApplicationLock _applicationLock;
     private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
-    private readonly IProjectRuntimeFacade? _projects;
 
-    /// <summary>
-    /// 创建使用当前 scope 持久化上下文和统一时钟的 execution 状态仓储。
-    /// </summary>
     public DurableExecutionStore(
         IAgentsDbContext dbContext,
         TimeProvider timeProvider,
         IApplicationLock applicationLock,
-        IDurableExecutionScopeMaintenance scopeMaintenance,
-        IProjectRuntimeFacade? projects = null
+        IDurableExecutionScopeMaintenance scopeMaintenance
     )
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
         _applicationLock = applicationLock;
         _scopeMaintenance = scopeMaintenance;
-        _projects = projects;
     }
 
     /// <summary>
-    /// 幂等登记 execution owner 与加密启动清单，并初始化 Queued 状态。
-    /// 同 ID 不同内容返回冲突。
+    /// 由已受理的请求生成加密前的启动清单 JSON。
+    /// Builds the manifest JSON, before encryption, from an accepted request.
     /// </summary>
-    internal async Task<DurableExecutionSnapshot> RegisterAsync(
-        Guid executionId,
-        string userId,
-        Guid agentId,
-        Agw.Agents.Contracts.Execution.AgentRuntimeType agentType,
-        AgwUserInput input,
-        AgentExecutionTask task,
-        ExecutionSettings settings,
-        CancellationToken cancellationToken
-    )
-    {
-        if (executionId == Guid.Empty)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "executionId is required.");
-        }
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            throw new AgwException(ErrorCodes.AuthenticationRequired);
-        }
-
-        userId = userId.Trim();
-        if (
-            !UserInfoUtil.IsContextActive
-            || !string.Equals(UserInfoUtil.RequiredUserId, userId, StringComparison.Ordinal)
-        )
-        {
-            throw new AgwException(ErrorCodes.AuthenticationRequired);
-        }
-        ArgumentNullException.ThrowIfNull(input);
-        ArgumentNullException.ThrowIfNull(task);
-        ArgumentNullException.ThrowIfNull(settings);
-
-        var manifest = new DurableExecutionManifest
-        {
-            ExecutionId = executionId,
-            UserId = userId,
-            AgentId = agentId,
-            AgentType = agentType,
-            Input = input,
-            Task = DurableExecutionMapper.FromProjection(task),
-            Settings = DurableExecutionMapper.FromSettings(settings),
-            WorkspaceSnapshot = ProjectWorkspaceContext.Get(task.ProjectId),
-        };
-        var manifestJson = DurableExecutionJson.Serialize(manifest);
-        await using var lifecycleLease = await _applicationLock
-            .AcquireAsync(ProjectLifecycleLock.GetResourceName(task.ProjectId), cancellationToken)
-            .ConfigureAwait(false);
-        DurableExecutionRecord? existing;
-        using (UserInfoUtil.PushSystemScope())
-        {
-            existing = await FindAsync(executionId, userId: null, tracking: false, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        if (existing != null)
-        {
-            await _dbContext.SaveConversationChangesAsync(
-                task.ProjectConversationId,
-                task.Generation,
-                cancellationToken
-            );
-            return EnsureIdempotentRegistration(existing, userId, manifestJson);
-        }
-
-        manifest = manifest with
-        {
-            WorkspaceSnapshot =
-                manifest.WorkspaceSnapshot ?? await CaptureWorkspaceAsync(task.ProjectId, cancellationToken),
-        };
-        manifestJson = DurableExecutionJson.Serialize(manifest);
-        var now = _timeProvider.GetUtcNow();
-        var record = new DurableExecutionRecord
-        {
-            Id = executionId,
-            UserId = userId,
-            CreateBy = userId,
-            ProjectId = task.ProjectId,
-            ProjectConversationId = task.ProjectConversationId,
-            ScopeBackfilled = true,
-            UpdateBy = userId,
-            ManifestJson = manifestJson,
-            Status = DurableExecutionStatus.Queued,
-            SegmentIndex = 0,
-            StateChangedAt = now,
-            StateVersion = Guid.CreateVersion7(),
-        };
-        _dbContext.DurableExecutions.Add(record);
-        try
-        {
-            await _dbContext
-                .SaveConversationChangesAsync(task.ProjectConversationId, task.Generation, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (DbUpdateException)
-        {
-            // 多个 Server 可能同时登记同一 executionId；主键选出胜者后再校验真正幂等。
-            ClearTrackedDurableExecutions();
-            using (UserInfoUtil.PushSystemScope())
+    internal static string CreateManifestJson(ExecutionRequest request) =>
+        DurableExecutionJson.Serialize(
+            new DurableExecutionManifest
             {
-                existing = await FindAsync(executionId, userId: null, tracking: false, cancellationToken)
-                    .ConfigureAwait(false);
+                ExecutionId = request.TurnId,
+                UserId = request.UserId,
+                AgentId = request.Target.AgentId,
+                AgentType = request.Target.AgentType,
+                Input = request.Input,
+                Task = DurableExecutionMapper.FromProjection(request.Task),
+                Settings = DurableExecutionMapper.FromSettings(request.Settings),
+                WorkspaceSnapshot = request.WorkspaceSnapshot,
+                StreamingScopeId = request.Envelope.StreamingScopeId,
             }
-            if (existing == null)
-            {
-                throw;
-            }
-
-            return EnsureIdempotentRegistration(existing, userId, manifestJson);
-        }
-
-        return ToSnapshot(record);
-    }
-
-    private async Task<ProjectWorkspaceSnapshot> CaptureWorkspaceAsync(
-        Guid projectId,
-        CancellationToken cancellationToken
-    )
-    {
-        if (_projects == null)
-        {
-            return ProjectWorkspacePaths.CreateSnapshot(projectId, null);
-        }
-        var project =
-            await _projects.GetForCurrentUserAsync(projectId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.ResourceNotFound);
-        return ProjectWorkspacePaths.CreateSnapshot(
-            projectId,
-            project.Workspace,
-            (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
-                directory.Id,
-                directory.Path
-            ))
         );
-    }
 
     internal async Task<DurableExecutionSnapshot> GetAsync(Guid executionId, CancellationToken cancellationToken)
     {
@@ -287,7 +149,23 @@ internal sealed class DurableExecutionStore
     }
 
     /// <summary>
+    /// 读取刚领取的记录；清单或所属范围无效的记录被隔离并返回空。
+    /// Reads a just-claimed record; a record with an invalid manifest or scope is quarantined and null is returned.
+    /// </summary>
+    internal async Task<DurableExecutionSnapshot?> LoadClaimedAsync(
+        Guid executionId,
+        CancellationToken cancellationToken
+    )
+    {
+        var record = await _scopeMaintenance
+            .LoadValidatedExecutionAsync(executionId, cancellationToken)
+            .ConfigureAwait(false);
+        return record == null ? null : ToSnapshot(record);
+    }
+
+    /// <summary>
     /// 按 executionId 和 owner 同时加载快照，避免向其他用户泄露执行是否存在。
+    /// Loads the snapshot by executionId and owner together so the existence of another user's execution is not disclosed.
     /// </summary>
     internal async Task<DurableExecutionSnapshot> GetAuthorizedAsync(
         Guid executionId,
@@ -335,133 +213,20 @@ internal sealed class DurableExecutionStore
     }
 
     /// <summary>
-    /// 查询等待执行、等待恢复或可能因 Server 退出而遗留的 Running execution。
+    /// 在调用方的租约检查事务中持久化一个分段的 checkpoint、pending 或终态。
+    /// Persists a segment's checkpoint, pending requests or terminal state inside the caller's lease-checked transaction.
     /// </summary>
-    internal async Task<IReadOnlyList<Guid>> GetRunnableExecutionIdsAsync(
-        DateTimeOffset staleRunningBefore,
-        int limit,
-        CancellationToken cancellationToken
-    )
-    {
-        if (limit <= 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "limit must be positive.");
-        }
-
-        var candidates = _dbContext
-            .DurableExecutions.AsNoTracking()
-            .Where(item => item.ScopeBackfilled && item.ProjectId != null && item.ProjectConversationId != null)
-            .Where(item =>
-                item.Status == DurableExecutionStatus.Queued
-                || item.Status == DurableExecutionStatus.Resuming
-                || item.Status == DurableExecutionStatus.Running
-            );
-        try
-        {
-            return await candidates
-                .Where(item =>
-                    item.Status != DurableExecutionStatus.Running || item.StateChangedAt <= staleRunningBefore
-                )
-                .OrderBy(item => item.Status == DurableExecutionStatus.Running ? 1 : 0)
-                .ThenBy(item => item.StateChangedAt)
-                .Select(item => item.Id)
-                .Take(limit)
-                .ToArrayAsync(cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception exception) when (IsDateTimeOffsetQueryTranslationException(exception))
-        {
-            var localCandidates = await candidates
-                .Select(item => new
-                {
-                    item.Id,
-                    item.Status,
-                    item.StateChangedAt,
-                })
-                .ToArrayAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return localCandidates
-                .Where(item =>
-                    item.Status != DurableExecutionStatus.Running || item.StateChangedAt <= staleRunningBefore
-                )
-                .OrderBy(item => item.Status == DurableExecutionStatus.Running ? 1 : 0)
-                .ThenBy(item => item.StateChangedAt)
-                .Select(item => item.Id)
-                .Take(limit)
-                .ToArray();
-        }
-    }
-
-    /// <summary>
-    /// 在持有 execution 分布式锁后，把可运行状态转换为 Running 并返回稳定的分段输入快照。
-    /// 状态已被其他操作推进时返回 <see langword="null"/>。
-    /// </summary>
-    internal async Task<DurableExecutionSnapshot?> TryBeginSegmentAsync(
-        Guid executionId,
-        DateTimeOffset staleRunningBefore,
-        CancellationToken cancellationToken
-    )
-    {
-        ClearTrackedDurableExecutions();
-        var record = await _scopeMaintenance
-            .LoadValidatedExecutionAsync(executionId, cancellationToken)
-            .ConfigureAwait(false);
-        if (record == null)
-        {
-            return null;
-        }
-        var runnable =
-            record.Status is DurableExecutionStatus.Queued or DurableExecutionStatus.Resuming
-            || record.Status == DurableExecutionStatus.Running && record.StateChangedAt <= staleRunningBefore;
-        if (!runnable)
-        {
-            return null;
-        }
-
-        _dbContext.DurableExecutions.Attach(record);
-        record.Status = DurableExecutionStatus.Running;
-        record.ErrorMessage = null;
-        try
-        {
-            await SaveStateAsync(record, cancellationToken).ConfigureAwait(false);
-            return ToSnapshot(record);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            // 中断请求可能在获取锁前后更新并发版本；让下一轮按最新状态重新判断。
-            ClearTrackedDurableExecutions();
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// 原子持久化一个分段的 checkpoint、pending 或终态。
-    /// </summary>
-    internal async Task<DurableExecutionSnapshot> SaveSegmentResultAsync(
+    internal async Task<DurableExecutionSnapshot> ApplySegmentResultAsync(
         DurableExecutionSegmentResult result,
-        Guid expectedStateVersion,
         CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(result);
-        await using var permissionLock = await _applicationLock
-            .AcquireAsync($"agw:execution:permissions:{result.ExecutionId:N}", cancellationToken)
-            .ConfigureAwait(false);
-        ClearTrackedDurableExecutions();
         var record =
             await FindAsync(result.ExecutionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        if (
-            record.Status != DurableExecutionStatus.Running
-            || record.SegmentIndex != result.SegmentIndex
-            || record.StateVersion != expectedStateVersion
-        )
+        if (record.Status != DurableExecutionStatus.Running || record.SegmentIndex != result.SegmentIndex)
         {
-            if (record.Status == DurableExecutionStatus.Interrupted)
-            {
-                return ToSnapshot(record);
-            }
-
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
                 "The persisted execution state does not match the completed segment."
@@ -469,17 +234,28 @@ internal sealed class DurableExecutionStore
         }
 
         ApplySegmentResult(record, result);
+        await SaveStateAsync(record, cancellationToken).ConfigureAwait(false);
+        return ToSnapshot(record);
+    }
 
-        try
-        {
-            await SaveStateAsync(record, cancellationToken).ConfigureAwait(false);
-            return ToSnapshot(record);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return await ResolveConcurrentSegmentResultAsync(result.ExecutionId, cancellationToken)
-                .ConfigureAwait(false);
-        }
+    /// <summary>
+    /// 受理后、执行开始前的失败：在调用方的事务中把 Queued 或 Running 的记录写为 Failed；记录已经被其他命令结束时返回假。
+    /// A failure after acceptance and before execution: writes a Queued or Running record as Failed inside the caller's transaction; returns false when another command already ended it.
+    /// </summary>
+    internal async Task<bool> FailAcceptedAsync(
+        Guid executionId,
+        string errorMessage,
+        CancellationToken cancellationToken
+    )
+    {
+        var record =
+            await FindAsync(executionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
+            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        if (record.Status is not (DurableExecutionStatus.Queued or DurableExecutionStatus.Running))
+            return false;
+        SetTerminal(record, DurableExecutionStatus.Failed, errorMessage);
+        await SaveStateAsync(record, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     internal async Task<DurableExecutionSnapshot> SetPermissionModeAsync(
@@ -548,6 +324,7 @@ internal sealed class DurableExecutionStore
 
     /// <summary>
     /// 校验 pending request 后持久化人工回答；全部回答到齐时把状态推进到 Resuming。
+    /// Persists a human answer after validating its pending request; once every answer arrives the status advances to Resuming.
     /// </summary>
     internal async Task<DurableExecutionSnapshot> SubmitHumanResponseAsync(
         SubmitDurableHumanResponseRequest request,
@@ -629,13 +406,12 @@ internal sealed class DurableExecutionStore
     }
 
     /// <summary>
-    /// 持久请求中断 execution，并通过并发版本阻止正在运行的分段覆盖 Interrupted 终态。
+    /// 在调用方的事务中把未结束的执行写为 Interrupted 并清除租约；返回是否由本次写入结束。条件更新锁定执行行，
+    /// 与租约检查事务互斥，正在运行的实例之后的写入都会被拒绝。
+    /// Writes an unfinished execution as Interrupted and clears its lease inside the caller's transaction; returns whether this write ended it. The conditional update locks the execution row,
+    /// excluding lease-checked transactions, so every later write of a running instance is rejected.
     /// </summary>
-    internal async Task<bool> RequestInterruptAsync(
-        Guid executionId,
-        string userId,
-        CancellationToken cancellationToken
-    )
+    internal async Task<bool> InterruptAsync(Guid executionId, string userId, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
         var updatedCount = await _dbContext
@@ -645,6 +421,12 @@ internal sealed class DurableExecutionStore
                 setters =>
                     setters
                         .SetProperty(item => item.Status, DurableExecutionStatus.Interrupted)
+                        .SetProperty(item => item.WorkerId, (string?)null)
+                        .SetProperty(item => item.LeaseExpiresAt, (DateTimeOffset?)null)
+                        .SetProperty(item => item.CheckpointJson, (string?)null)
+                        .SetProperty(item => item.TurnCheckpointJson, (string?)null)
+                        .SetProperty(item => item.PendingInteractionsJson, (string?)null)
+                        .SetProperty(item => item.ResponsesJson, (string?)null)
                         .SetProperty(item => item.StateChangedAt, now)
                         .SetProperty(item => item.UpdateBy, userId)
                         .SetProperty(item => item.UpdateTime, now)
@@ -657,15 +439,12 @@ internal sealed class DurableExecutionStore
             return true;
         }
 
-        var existing =
+        _ =
             await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         return false;
     }
 
-    /// <summary>
-    /// 加载可选 owner 约束下的 execution 记录。
-    /// </summary>
     private Task<DurableExecutionRecord?> FindAsync(
         Guid executionId,
         string? userId,
@@ -687,40 +466,8 @@ internal sealed class DurableExecutionStore
     }
 
     /// <summary>
-    /// 校验并发登记是否与既有 owner 和启动清单完全一致。
-    /// </summary>
-    private static DurableExecutionSnapshot EnsureIdempotentRegistration(
-        DurableExecutionRecord existing,
-        string userId,
-        string manifestJson
-    )
-    {
-        // Retrying the same execution must retain its original directory snapshot.
-        var original = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
-            existing.ManifestJson,
-            "manifest"
-        );
-        var incoming = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(manifestJson, "manifest") with
-        {
-            WorkspaceSnapshot = original.WorkspaceSnapshot,
-        };
-        if (
-            !string.Equals(existing.UserId, userId, StringComparison.Ordinal)
-            || !string.Equals(
-                DurableExecutionJson.Serialize(original),
-                DurableExecutionJson.Serialize(incoming),
-                StringComparison.Ordinal
-            )
-        )
-        {
-            throw new AgwException(ErrorCodes.DurableExecutionConflict);
-        }
-
-        return ToSnapshot(existing);
-    }
-
-    /// <summary>
-    /// 把分段结果映射到同一条 execution 状态记录。
+    /// 把分段结果映射到同一条 execution 状态记录；终态同时清除租约。
+    /// Maps a segment result onto the execution record; a terminal state also clears the lease.
     /// </summary>
     private static void ApplySegmentResult(DurableExecutionRecord record, DurableExecutionSegmentResult result)
     {
@@ -730,6 +477,8 @@ internal sealed class DurableExecutionStore
                 ValidatePendingInteractions(result.PendingInteractions);
                 record.Status = DurableExecutionStatus.WaitingForHuman;
                 record.SegmentIndex = checked(result.SegmentIndex + 1);
+                record.WorkerId = null;
+                record.LeaseExpiresAt = null;
                 record.CheckpointJson =
                     result.Checkpoint == null ? null : DurableExecutionJson.Serialize(result.Checkpoint);
                 var previous = ToSnapshot(record);
@@ -757,16 +506,7 @@ internal sealed class DurableExecutionStore
                         ResolvedInputs = retainedInputs,
                     }
                 );
-                var automaticResponses = result
-                    .PendingInteractions.Select(request =>
-                        InteractionRules.AutomaticallyApprove(request, previous.Manifest.Settings.PermissionMode)
-                    )
-                    .OfType<InteractionResponse>()
-                    .ToArray();
-                record.ResponsesJson =
-                    automaticResponses.Length == 0 ? null : DurableExecutionJson.Serialize(automaticResponses);
-                if (automaticResponses.Length == result.PendingInteractions.Count)
-                    record.Status = DurableExecutionStatus.Resuming;
+                record.ResponsesJson = null;
                 record.ErrorMessage = null;
                 break;
             case DurableExecutionSegmentStatus.Completed:
@@ -787,9 +527,6 @@ internal sealed class DurableExecutionStore
         }
     }
 
-    /// <summary>
-    /// 校验等待边界包含非空且互不重复的 requestId。
-    /// </summary>
     private static void ValidatePendingInteractions(IReadOnlyList<InteractionRequest> pending)
     {
         var distinct = pending.Select(item => item.InteractionId).Distinct(StringComparer.Ordinal).Count();
@@ -807,29 +544,8 @@ internal sealed class DurableExecutionStore
     }
 
     /// <summary>
-    /// 在并发中断更新导致结果保存失败时，以中断状态收敛；其他并发修改视为冲突。
-    /// </summary>
-    private async Task<DurableExecutionSnapshot> ResolveConcurrentSegmentResultAsync(
-        Guid executionId,
-        CancellationToken cancellationToken
-    )
-    {
-        ClearTrackedDurableExecutions();
-        var record =
-            await FindAsync(executionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
-            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        if (record.Status != DurableExecutionStatus.Interrupted)
-        {
-            throw new AgwException(
-                ErrorCodes.DurableExecutionConflict,
-                "The distributed execution state changed while a segment result was being saved."
-            );
-        }
-        return ToSnapshot(record);
-    }
-
-    /// <summary>
     /// 把记录转换为已解密且经过 schema 校验的 execution 快照。
+    /// Converts a record into a decrypted, schema-validated execution snapshot.
     /// </summary>
     private static DurableExecutionSnapshot ToSnapshot(DurableExecutionRecord record)
     {
@@ -911,13 +627,13 @@ internal sealed class DurableExecutionStore
         };
     }
 
-    /// <summary>
-    /// 设置终态并清除仅恢复期间需要的 checkpoint、pending 和 response。
-    /// </summary>
     private static void SetTerminal(DurableExecutionRecord record, DurableExecutionStatus status, string? errorMessage)
     {
         record.Status = status;
+        record.WorkerId = null;
+        record.LeaseExpiresAt = null;
         record.CheckpointJson = null;
+        record.TurnCheckpointJson = null;
         record.PendingInteractionsJson = null;
         record.ResponsesJson = null;
         record.ErrorMessage = errorMessage;
@@ -931,20 +647,9 @@ internal sealed class DurableExecutionStore
         }
     }
 
-    private static bool IsDateTimeOffsetQueryTranslationException(Exception exception)
-    {
-        return exception is NotSupportedException
-                && exception.Message.Contains(
-                    "SQLite does not support expressions of type 'DateTimeOffset'",
-                    StringComparison.Ordinal
-                )
-            || exception is InvalidOperationException
-                && exception.Message.Contains("StateChangedAt", StringComparison.Ordinal)
-                && exception.Message.Contains("could not be translated", StringComparison.Ordinal);
-    }
-
     /// <summary>
-    /// 更新时间与乐观并发版本后保存状态变更。
+    /// 更新时间与乐观并发版本后保存状态变更；对话 Generation 在同一事务中校验。
+    /// Saves the state change after updating the time and optimistic concurrency version; the conversation generation is checked in the same transaction.
     /// </summary>
     private async Task SaveStateAsync(
         DurableExecutionRecord record,
@@ -956,11 +661,6 @@ internal sealed class DurableExecutionStore
         {
             record.StateChangedAt = _timeProvider.GetUtcNow();
             record.StateVersion = Guid.CreateVersion7();
-        }
-        if (string.IsNullOrWhiteSpace(record.UserId))
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return;
         }
 
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal(record.UserId));

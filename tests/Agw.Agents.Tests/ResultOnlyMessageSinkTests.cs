@@ -30,8 +30,9 @@ public class ResultOnlyMessageSinkTests
     }
 
     [Theory]
-    [InlineData("turn-start")]
-    [InlineData("turn-finished")]
+    [InlineData(AgwMessageTypes.TurnStart)]
+    [InlineData(AgwMessageTypes.TurnFinished)]
+    [InlineData(AgwMessageTypes.StepDiscarded)]
     [InlineData("interaction-request")]
     [InlineData("agentflow-checkpoint")]
     [InlineData("human-gate-request")]

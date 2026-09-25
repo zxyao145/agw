@@ -1,6 +1,7 @@
 "use client";
 
 import type { InteractionResponse } from "@agw/execution-core";
+import type { ConversationTurnInputSummary } from "@agw/projects";
 
 import * as React from "react";
 import { CheckCircle2, ChevronRight, CircleAlert, LoaderCircle } from "lucide-react";
@@ -57,6 +58,8 @@ export interface ChatSessionProps {
   onLoadOlderMessages?: () => void;
   userInputNavigationHost?: HTMLDivElement | null;
   onUserInputNavigate?: () => void;
+  userInputs?: readonly ConversationTurnInputSummary[];
+  onLoadUserInput?: (key: string) => Promise<boolean>;
   permissionMode?: PermissionMode;
   showCheckpointResume?: boolean;
   checkpointResumeDisabled?: boolean;
@@ -75,6 +78,8 @@ export function Conversation({
   onLoadOlderMessages,
   userInputNavigationHost = null,
   onUserInputNavigate,
+  userInputs,
+  onLoadUserInput,
   permissionMode,
   showCheckpointResume = false,
   checkpointResumeDisabled = false,
@@ -108,8 +113,8 @@ export function Conversation({
   const totalSize = virtualizer.getTotalSize() + 20;
   const navigationHeight = Math.max(viewportHeight - 168, 0);
   const userInputAnchors = React.useMemo(
-    () => (userInputNavigationHost ? buildUserInputAnchors(items) : []),
-    [items, userInputNavigationHost],
+    () => (userInputNavigationHost ? buildUserInputAnchors(items, userInputs) : []),
+    [items, userInputNavigationHost, userInputs],
   );
   const userInputMarkers = userInputNavigationHost
     ? layoutUserInputMarkers(userInputAnchors, virtualizer.measurementsCache, rowOffset)
@@ -128,14 +133,37 @@ export function Conversation({
     userInputNavigationHost !== null &&
     userInputMarkers.length > 0 &&
     navigationHeight > 0 &&
-    totalSize > viewportHeight + 1;
+    (totalSize > viewportHeight + 1 ||
+      userInputAnchors.some((anchor) => anchor.itemIndex === null));
+
+  const [pendingNavigation, setPendingNavigation] = React.useState<{
+    key: string;
+    conversationKey: string | undefined;
+  } | null>(null);
+  const pendingRowIndex =
+    pendingNavigation?.conversationKey === conversationKey
+      ? userInputMarkers.find((marker) => marker.key === pendingNavigation?.key)?.rowIndex
+      : null;
+  React.useEffect(() => setPendingNavigation(null), [conversationKey]);
+  React.useLayoutEffect(() => {
+    if (pendingRowIndex == null) return;
+    virtualizer.scrollToIndex(pendingRowIndex, { align: "start", behavior: "auto" });
+    setPendingNavigation(null);
+  }, [pendingRowIndex, virtualizer]);
 
   const handleUserInputSelect = React.useCallback(
-    (rowIndex: number) => {
+    (key: string) => {
       onUserInputNavigate?.();
-      virtualizer.scrollToIndex(rowIndex, { align: "start", behavior: "auto" });
+      const navigation = { key, conversationKey };
+      setPendingNavigation(navigation);
+      if (userInputAnchors.find((anchor) => anchor.key === key)?.itemIndex != null) return;
+      // 历史没有加载到目标输入时撤销这次跳转，之后再加载到它也不会跳转。
+      // Cancel this jump when history does not reach the target input, so a later load does not jump to it.
+      void onLoadUserInput?.(key).then((loaded) => {
+        if (!loaded) setPendingNavigation((current) => (current === navigation ? null : current));
+      });
     },
-    [onUserInputNavigate, virtualizer],
+    [conversationKey, onLoadUserInput, onUserInputNavigate, userInputAnchors],
   );
 
   if (items.length === 0 && isInitialLoading) {

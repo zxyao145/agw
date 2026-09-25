@@ -26,11 +26,8 @@ public class ConversationHandoffProviderTests
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         var sourceId = Guid.CreateVersion7();
-        var metadata = CreateMetadata(
-            scoped ? AgentRuntimeType.Agentflow : AgentRuntimeType.Agent,
-            sourceId,
-            scoped ? CreateScope(sourceId) : null
-        );
+        var metadata = CreateMetadata(scoped ? AgentRuntimeType.Agentflow : AgentRuntimeType.Agent, sourceId);
+        var historyScope = scoped ? CreateScope(sourceId) : null;
         var result = CreateTypedAssistantMessage("answer", "result", "result");
         result.AuthorName = "pi";
         result.AdditionalProperties!["resultSourceMessageId"] = "source";
@@ -39,10 +36,10 @@ public class ConversationHandoffProviderTests
             projectId,
             conversationId,
             cancellationToken,
-            CreateRecord(conversationId, 0, CreateUserMessage("request", "user"), metadata),
-            CreateRecord(conversationId, 1, CreateAssistantMessage("answer", "source"), metadata),
-            CreateRecord(conversationId, 2, CreateAssistantMessage("answer", "unrelated"), metadata),
-            CreateRecord(conversationId, 3, result, metadata)
+            CreateRecord(conversationId, 0, CreateUserMessage("request", "user"), metadata, historyScope),
+            CreateRecord(conversationId, 1, CreateAssistantMessage("answer", "source"), metadata, historyScope),
+            CreateRecord(conversationId, 2, CreateAssistantMessage("answer", "unrelated"), metadata, historyScope),
+            CreateRecord(conversationId, 3, result, metadata, historyScope)
         );
         await using var dbContext = new AgwDbContext(options);
 
@@ -153,13 +150,13 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 2,
                 CreateUserMessage("start implementation", "coding-user"),
-                CreateMetadata(historyScope: CreateScope(codingAgentflowId))
+                historyScope: CreateScope(codingAgentflowId)
             ),
             CreateRecord(
                 conversationId,
                 3,
                 new ChatMessage(ChatRole.Assistant, "Which plan should I implement?") { MessageId = "coding-response" },
-                CreateMetadata(historyScope: CreateScope(codingAgentflowId))
+                historyScope: CreateScope(codingAgentflowId)
             )
         );
 
@@ -213,12 +210,8 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 2,
                 CreateUserMessage("coding turn", "coding-user"),
-                CreateMetadata(
-                    AgentRuntimeType.Agentflow,
-                    codingAgentflowId,
-                    CreateScope(codingAgentflowId),
-                    throughSequence: 1
-                )
+                CreateMetadata(AgentRuntimeType.Agentflow, codingAgentflowId, throughSequence: 1),
+                CreateScope(codingAgentflowId)
             ),
             CreateRecord(
                 conversationId,
@@ -247,12 +240,8 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 5,
                 CreateUserMessage("continue coding", "coding-user-2"),
-                CreateMetadata(
-                    AgentRuntimeType.Agentflow,
-                    codingAgentflowId,
-                    CreateScope(codingAgentflowId),
-                    throughSequence: 4
-                )
+                CreateMetadata(AgentRuntimeType.Agentflow, codingAgentflowId, throughSequence: 4),
+                CreateScope(codingAgentflowId)
             )
         );
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -305,13 +294,14 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 3,
                 CreateUserMessage("agentflow request", "flow-user"),
-                CreateMetadata(AgentRuntimeType.Agentflow, agentflowId, CreateScope(agentflowId))
+                CreateMetadata(AgentRuntimeType.Agentflow, agentflowId),
+                CreateScope(agentflowId)
             ),
             CreateRecord(
                 conversationId,
                 4,
                 CreateAssistantMessage("agentflow response", "flow-response"),
-                CreateMetadata(historyScope: CreateScope(agentflowId))
+                historyScope: CreateScope(agentflowId)
             )
         );
 
@@ -460,7 +450,7 @@ public class ConversationHandoffProviderTests
             CreateRecord(
                 conversationId,
                 5,
-                CreateTypedAssistantMessage("tool state", "tool-state", ToolMessageTypes.ModeStatus)
+                CreateTypedAssistantMessage("tool state", "tool-state", AgwMessageTypes.ToolModeStatus)
             ),
             CreateRecord(conversationId, 6, CreateAssistantMessage(" \t\r\n", "blank")),
             CreateRecord(conversationId, 7, CreateTypedAssistantMessage("final plan", "result", "result")),
@@ -541,7 +531,8 @@ public class ConversationHandoffProviderTests
         Guid conversationId,
         long sequence,
         ChatMessage message,
-        Dictionary<string, JsonElement>? metadata = null
+        Dictionary<string, JsonElement>? metadata = null,
+        string? historyScope = null
     ) =>
         new()
         {
@@ -552,6 +543,7 @@ public class ConversationHandoffProviderTests
             ConversationSequence = sequence,
             ConversationPayload = JsonSerializer.Serialize(message, JsonOptions),
             Metadata = metadata,
+            HistoryScope = historyScope,
             CreateTime = TimeProvider.System.GetUtcNow(),
             UpdateTime = TimeProvider.System.GetUtcNow(),
         };
@@ -580,7 +572,6 @@ public class ConversationHandoffProviderTests
     private static Dictionary<string, JsonElement> CreateMetadata(
         AgentRuntimeType? targetType = null,
         Guid? targetId = null,
-        string? historyScope = null,
         long? throughSequence = null
     )
     {
@@ -591,11 +582,6 @@ public class ConversationHandoffProviderTests
                 targetType == AgentRuntimeType.Agent ? "agent" : "agentflow"
             );
             metadata["targetId"] = JsonSerializer.SerializeToElement(targetId.Value.ToString("D"));
-        }
-
-        if (historyScope != null)
-        {
-            metadata["historyScope"] = JsonSerializer.SerializeToElement(historyScope);
         }
 
         if (throughSequence.HasValue)

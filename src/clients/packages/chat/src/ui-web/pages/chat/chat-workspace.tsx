@@ -83,6 +83,7 @@ import {
   type ExecutionReconnectState,
 } from "@agw/chat-runtime";
 import { useExecutionPlatform } from "../../execution-platform";
+import { useConversationStatuses } from "../../conversation-statuses";
 
 type ProjectDto = {
   id: string;
@@ -398,7 +399,6 @@ export function ChatWorkspace({
   });
   const [isLoadingConversation, setIsLoadingConversation] = React.useState(false);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
-  const [isExecutingTurn, setIsExecutingTurn] = React.useState(false);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
@@ -1097,18 +1097,55 @@ export function ChatWorkspace({
     [getProjectSettingsDraft, selectedProjectId],
   );
 
+  const conversationStatuses = useConversationStatuses({
+    serverId: executionServerId,
+    projectId: selectedProjectId,
+    conversationId,
+  });
+  // 状态映射在范围内每次写入后更换实例，这里读取的 turnId 与它同步。
+  // The status map changes instance on every write in the scope, so this turnId stays in step with it.
+  const currentConversationTurnId =
+    selectedProjectId && conversationId
+      ? (executionSessionManager.conversationStatuses.get(
+          { serverId: executionServerId, projectId: selectedProjectId },
+          conversationId,
+        )?.turnId ?? null)
+      : null;
+
+  const handleConversationDeleted = React.useCallback(
+    (deletedConversationId: string) => {
+      if (!selectedProjectId) return;
+      executionSessionManager.conversationStatuses.remove(
+        { serverId: executionServerId, projectId: selectedProjectId },
+        deletedConversationId,
+      );
+    },
+    [executionServerId, selectedProjectId],
+  );
+
+  const handleProjectConversationsCleared = React.useCallback(() => {
+    if (!selectedProjectId) return;
+    executionSessionManager.conversationStatuses.removeScope({
+      serverId: executionServerId,
+      projectId: selectedProjectId,
+    });
+  }, [executionServerId, selectedProjectId]);
+
   const renderConversationList = React.useCallback(
     () => (
       <ConversationList
         projectId={selectedProjectId ?? ""}
         currentConversationId={conversationId}
         refreshSignal={conversationListRefreshSignal}
-        isExecuting={isExecutingTurn}
+        conversationStatuses={conversationStatuses}
+        currentConversationTurnId={currentConversationTurnId}
         onConversationSelect={(nextConversation) => {
           void handleConversationSelect(nextConversation);
         }}
         onNewConversation={handleNewConversation}
         onAllConversationsDeleted={handleAllConversationsDeleted}
+        onConversationDeleted={handleConversationDeleted}
+        onProjectConversationsCleared={handleProjectConversationsCleared}
         headerActions={(currentConversation) => (
           <ChatSettingsDialog
             selectedProjectId={selectedProjectId}
@@ -1124,11 +1161,14 @@ export function ChatWorkspace({
       getActiveSettingsDraft,
       conversationId,
       conversationListRefreshSignal,
+      conversationStatuses,
+      currentConversationTurnId,
       handleAllConversationsDeleted,
+      handleConversationDeleted,
       handleConversationSelect,
       handleNewConversation,
+      handleProjectConversationsCleared,
       handleSaveChatSettings,
-      isExecutingTurn,
       selectedProjectId,
     ],
   );
@@ -1353,7 +1393,6 @@ export function ChatWorkspace({
                       pendingFileComments={comments}
                       onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
                       onReconnectStateChange={setExecutionReconnectState}
-                      onExecutingChange={setIsExecutingTurn}
                     />
                   </div>
                 </div>

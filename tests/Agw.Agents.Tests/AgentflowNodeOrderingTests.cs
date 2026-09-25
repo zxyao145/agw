@@ -8,8 +8,14 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgentflowNodeOrderingTests
+public sealed class AgentflowNodeOrderingTests : IDisposable
 {
+    private readonly IDisposable _executionScope = ExecutionTestScopes
+        .Scope(ExecutionTestScopes.Context(runtimeType: AgentRuntimeType.Agentflow))
+        .Push();
+
+    public void Dispose() => _executionScope.Dispose();
+
     public static IEnumerable<object[]> Connections()
     {
         foreach (

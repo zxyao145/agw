@@ -291,6 +291,7 @@ public class EncryptedDataPersistenceTests
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ManifestJson)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.PendingInteractionsJson)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ResponsesJson)}",
+                $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.TurnCheckpointJson)}",
                 $"{typeof(DurableExecutionEventRecord).FullName}.{nameof(DurableExecutionEventRecord.PayloadJson)}",
                 $"{typeof(ConnectionCredential).FullName}.{nameof(ConnectionCredential.Value)}",
                 $"{typeof(PluginInstallationCredential).FullName}.{nameof(PluginInstallationCredential.Value)}",

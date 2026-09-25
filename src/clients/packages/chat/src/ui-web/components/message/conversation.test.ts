@@ -324,3 +324,106 @@ test("user input navigation renders into the host the caller provides", async ()
   assert.ok(host);
   assert.ok(within(host as HTMLElement).getByRole("navigation", { name: "User input navigation" }));
 });
+
+const turnInputs = [
+  { inputMessageId: "earlier", inputSummary: "Earlier request" },
+  { inputMessageId: "latest", inputSummary: "Latest request" },
+];
+
+// 加载后的 "earlier" 前面有 5 行，它的起始位置是 5 × 72 = 360。
+// Once loaded, "earlier" follows five rows, so it starts at 5 × 72 = 360.
+function TurnNavigationHarness({
+  loaded,
+  requested,
+  loadResult = true,
+  conversationKey = "a",
+}: {
+  loaded: boolean;
+  requested: string[];
+  loadResult?: boolean;
+  conversationKey?: string;
+}) {
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [host, setHost] = React.useState<HTMLDivElement | null>(null);
+  const items = [
+    ...(loaded
+      ? [
+          ...Array.from({ length: 5 }, (_, index) =>
+            messageItem(`prelude-${index}`, `Prelude ${index}`),
+          ),
+          messageItem("earlier", "Earlier request", "right"),
+        ]
+      : []),
+    messageItem("latest", "Latest request", "right"),
+    ...Array.from({ length: 20 }, (_, index) => messageItem(`reply-${index}`, `Reply ${index}`)),
+  ];
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement("div", { ref: setHost }),
+    React.createElement(
+      "div",
+      { ref: scrollRef, "data-testid": "scroller" },
+      host &&
+        React.createElement(Conversation, {
+          items,
+          conversationKey,
+          scrollElementRef: scrollRef,
+          userInputNavigationHost: host,
+          userInputs: turnInputs,
+          onLoadUserInput: async (key: string) => {
+            requested.push(key);
+            return loadResult;
+          },
+        }),
+    ),
+  );
+}
+
+test("only unloaded turn anchors request history", async () => {
+  const requested: string[] = [];
+  const view = render(React.createElement(TurnNavigationHarness, { loaded: false, requested }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Jump to user input: Earlier request" }),
+  );
+  assert.deepEqual(requested, ["earlier"]);
+  view.rerender(React.createElement(TurnNavigationHarness, { loaded: true, requested }));
+  assert.ok(view.container.querySelector('[data-msg-id="earlier"]'));
+  fireEvent.click(screen.getByRole("button", { name: "Jump to user input: Earlier request" }));
+  assert.deepEqual(requested, ["earlier"]);
+  view.rerender(
+    React.createElement(TurnNavigationHarness, { loaded: false, requested, conversationKey: "b" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Jump to user input: Earlier request" }));
+  assert.deepEqual(requested, ["earlier", "earlier"]);
+});
+
+for (const loadResult of [true, false]) {
+  test(`a history load that ${loadResult ? "reaches" : "misses"} the selected input ${loadResult ? "jumps" : "does not jump"} once it appears`, async () => {
+    const requested: string[] = [];
+    const view = render(
+      React.createElement(TurnNavigationHarness, { loaded: false, requested, loadResult }),
+    );
+    const button = await screen.findByRole("button", {
+      name: "Jump to user input: Earlier request",
+    });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    assert.deepEqual(requested, ["earlier"]);
+
+    // 模拟用户在加载结束后停留在别处阅读，随后向上滚动加载到了目标输入。
+    // The reader stays elsewhere after the load ends, then scrolling up loads the target input.
+    const scroller = screen.getByTestId("scroller");
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 2000 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 600 });
+    scroller.scrollTop = 1000;
+    await act(async () => {
+      view.rerender(
+        React.createElement(TurnNavigationHarness, { loaded: true, requested, loadResult }),
+      );
+    });
+
+    assert.equal(scroller.scrollTop, loadResult ? 360 : 1000);
+  });
+}

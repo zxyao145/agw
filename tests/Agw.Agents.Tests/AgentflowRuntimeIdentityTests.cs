@@ -1,16 +1,12 @@
 using System.Security.Claims;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
-using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
-using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Theory]
     [InlineData("null")]
@@ -74,22 +70,24 @@ public partial class AgentflowRuntimeServiceTests
                 fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
             )
         );
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             new RecordingSegmentSink(),
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal(ErrorCodes.ResourceNotFound.Code, error.Code);
-        Assert.Null(
-            await fixture.Service.ExecuteAsync(
+        var unattendedError = await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Service.ExecuteAsync(
                 fixture.Flow.Id,
                 Guid.CreateVersion7(),
                 "input",
                 TestContext.Current.CancellationToken
             )
         );
+
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, error.Code);
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, unattendedError.Code);
         Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
         Assert.Equal(
             defaultMissing ? "The default project was not found." : "The project was not found.",
@@ -99,37 +97,16 @@ public partial class AgentflowRuntimeServiceTests
     }
 
     [Theory]
-    [InlineData("authenticated")]
-    [InlineData("turn")]
-    [InlineData("invalid-authentication")]
-    public async Task ExecuteStreamingAsync_UserContexts_PreservesAuthenticationPrecedence(string mode)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteStreamingAsync_UserContexts_RequireStableExecutionUser(bool invalidAuthentication)
     {
-        var accessor = new RuntimeTurnContextAccessor();
-        var fixture = CreateCharacterizationFixture(
-            [AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
-            turnContextAccessor: accessor
-        );
-        var task = CreateManifest(fixture.Flow.Id).Task.ToProjection();
-        using var turn = accessor.Push(
-            new RuntimeTurnContext(
-                SettingCommandMapper.FromCommand(new SettingCommand(task.ProjectId)),
-                task,
-                new ExecutionTarget(fixture.Flow.Id, AgentRuntimeType.Agentflow),
-                "",
-                new RecordingSegmentSink()
-            )
-            {
-                UserId = mode == "authenticated" ? "foreign-user" : " tester ",
-            }
-        );
-        if (mode == "turn")
-            _userScope.Dispose();
-        using var invalidUser =
-            mode == "invalid-authentication"
-                ? UserInfoUtil.Push(new ClaimsPrincipal(new ClaimsIdentity([], "test")))
-                : null;
+        var fixture = CreateCharacterizationFixture([AgentflowNodeKind.Agent, AgentflowNodeKind.Output]);
+        using var invalidUser = invalidAuthentication
+            ? UserInfoUtil.Push(new ClaimsPrincipal(new ClaimsIdentity([], "test")))
+            : null;
 
-        if (mode == "invalid-authentication")
+        if (invalidAuthentication)
         {
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
                 CollectAsync(
@@ -148,7 +125,7 @@ public partial class AgentflowRuntimeServiceTests
             var messages = await CollectAsync(
                 fixture.Service.ExecuteStreamingAsync(fixture.Flow.Id, "input", TestContext.Current.CancellationToken)
             );
-            Assert.Equal("turn-finished", MessageShape(messages[^1]));
+            Assert.Equal(["input", "done", "done"], messages.Select(MessageShape));
             Assert.Single(fixture.Agents.CreatedAgents);
         }
     }

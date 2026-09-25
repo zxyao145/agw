@@ -1,32 +1,33 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Runtime;
-using Agw.Agents.Execution.Agents.Tools;
+using Agw.Agents.Execution.Agents.Turns;
+using Agw.Agents.Execution.Context;
+using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public sealed class UnattendedAgentExecutionTests
+public sealed class UnattendedAgentExecutionTests : IDisposable
 {
+    private readonly IDisposable _executionScope = ExecutionTestScopes.Scope().Push();
+
+    public void Dispose() => _executionScope.Dispose();
+
     [Fact]
-    public async Task CollectStreamingMessagesAsync_ApprovalRequest_FailsExplicitly()
+    public async Task RunAsync_UnattendedApprovalRequest_FailsExplicitly()
     {
         var agent = new UnattendedTestAgent(includeApproval: true);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var persistence = new ToolTurnPersistence(agent, session, (_, _) => Task.CompletedTask);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
-            await AgentRuntimeService.CollectStreamingMessagesAsync(
-                agent,
-                [new ChatMessage(ChatRole.User, "run a tool")],
-                session,
-                persistence,
-                TestContext.Current.CancellationToken
-            )
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            RunUnattendedAsync(agent, permissionMode: null, TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
@@ -34,62 +35,36 @@ public sealed class UnattendedAgentExecutionTests
     }
 
     [Fact]
-    public async Task CollectStreamingMessagesAsync_ToolMessage_PersistsBeforeReturning()
+    public async Task RunAsync_UnattendedToolMessage_PersistsBeforeReturning()
     {
         var agent = new UnattendedTestAgent(includeApproval: false);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        IReadOnlyList<ChatMessage>? persisted = null;
-        var persistence = new ToolTurnPersistence(
-            agent,
-            session,
-            (messages, _) =>
-            {
-                persisted = messages.ToList();
-                return Task.CompletedTask;
-            }
-        );
+        var history = new RecordingConversationHistoryWriter();
 
-        var messages = await AgentRuntimeService.CollectStreamingMessagesAsync(
+        var messages = await RunUnattendedAsync(
             agent,
-            [new ChatMessage(ChatRole.User, "run")],
-            session,
-            persistence,
-            TestContext.Current.CancellationToken
+            permissionMode: null,
+            TestContext.Current.CancellationToken,
+            history
         );
 
         Assert.NotEmpty(messages);
-        var warning = Assert.Single(persisted!);
-        Assert.Equal(ToolMessageTypes.Warning, warning.AdditionalProperties!["type"]?.ToString());
+        var warning = Assert.Single(history.Messages);
+        Assert.Equal(AgwMessageTypes.ToolWarning, warning.AdditionalProperties!["type"]?.ToString());
     }
 
     [Theory]
     [InlineData(1)]
     [InlineData(3)]
-    public async Task CollectStreamingMessagesAsync_FullAccess_ExecutesAfterApprovalAndPersists(int approvalRounds)
+    public async Task RunAsync_UnattendedFullAccess_ExecutesAfterApprovalAndPersists(int approvalRounds)
     {
-        var agent = new UnattendedTestAgent(includeApproval: true);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        agent.ApprovalRounds = approvalRounds;
-        var persisted = new List<ChatMessage>();
-        var finalResponseMessages = new List<ChatMessage>();
-        var persistence = new ToolTurnPersistence(
-            agent,
-            session,
-            (messages, _) =>
-            {
-                persisted.AddRange(messages);
-                return Task.CompletedTask;
-            }
-        );
+        var agent = new UnattendedTestAgent(includeApproval: true) { ApprovalRounds = approvalRounds };
+        var history = new RecordingConversationHistoryWriter();
 
-        var messages = await AgentRuntimeService.CollectStreamingMessagesAsync(
+        var messages = await RunUnattendedAsync(
             agent,
-            [new ChatMessage(ChatRole.User, "run")],
-            session,
-            persistence,
+            AgwPermissionMode.FullAccess,
             TestContext.Current.CancellationToken,
-            new UnattendedInteractionHandler(AgwPermissionMode.FullAccess),
-            finalResponseMessages
+            history
         );
 
         Assert.Equal(approvalRounds, agent.ExecutedTools);
@@ -97,8 +72,7 @@ public sealed class UnattendedAgentExecutionTests
             messages,
             message => message.Contents.OfType<AgwTextContent>().Any(text => text.Content == "done")
         );
-        Assert.Equal("done", finalResponseMessages.Last(message => message.Role == ChatRole.Assistant).Text);
-        Assert.NotEmpty(persisted);
+        Assert.NotEmpty(history.Messages);
     }
 
     [Theory]
@@ -106,7 +80,7 @@ public sealed class UnattendedAgentExecutionTests
     [InlineData("failure")]
     [InlineData("limit")]
     [InlineData("cancel")]
-    public async Task CollectStreamingMessagesAsync_FullAccess_DoesNotHideFailures(string scenario)
+    public async Task RunAsync_UnattendedFullAccess_DoesNotHideFailures(string scenario)
     {
         var agent = new UnattendedTestAgent(true)
         {
@@ -115,21 +89,12 @@ public sealed class UnattendedAgentExecutionTests
             RequiresInput = scenario == "question",
             ApprovalRounds = scenario == "limit" ? 100 : 1,
         };
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var persistence = new ToolTurnPersistence(agent, session, (_, _) => Task.CompletedTask);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         if (scenario == "cancel")
             cancellation.Cancel();
 
         var error = await Record.ExceptionAsync(() =>
-            AgentRuntimeService.CollectStreamingMessagesAsync(
-                agent,
-                [new ChatMessage(ChatRole.User, "run")],
-                session,
-                persistence,
-                cancellation.Token,
-                new UnattendedInteractionHandler(AgwPermissionMode.FullAccess)
-            )
+            RunUnattendedAsync(agent, AgwPermissionMode.FullAccess, cancellation.Token)
         );
 
         if (scenario == "cancel")
@@ -149,6 +114,68 @@ public sealed class UnattendedAgentExecutionTests
                 },
                 failure.Message
             );
+        }
+    }
+
+    /// <summary>
+    /// 按无人值守协调方式执行一个 Turn：Agent 管线的批次层按权限自动批准工具审批，其余人工请求使执行失败。
+    /// Runs one turn the way unattended coordination does: the Agent pipeline's batch layer approves tools by permission and other human requests fail the execution.
+    /// </summary>
+    private static async Task<List<AgwMessage>> RunUnattendedAsync(
+        UnattendedTestAgent agent,
+        AgwPermissionMode? permissionMode,
+        CancellationToken cancellationToken,
+        IConversationHistoryWriter? history = null
+    )
+    {
+        var pipeline = new MafApprovalBatchAgent(
+            agent,
+            new HumanInteractionContextAccessor(new AgentExecutionContextAccessor()),
+            []
+        );
+        var session = await pipeline.CreateSessionAsync(cancellationToken);
+        await using var runtime = new AgentRuntime(
+            NullLogger.Instance,
+            pipeline,
+            session,
+            Guid.CreateVersion7(),
+            "unattended-context",
+            sessionStateScope: null,
+            conversationHistoryWriter: history
+        );
+        var scope = ExecutionTestScopes.Scope(ExecutionTestScopes.Context(permissionMode: permissionMode));
+        scope.BindInteractions(new UnattendedInteractionHandler(), null, null);
+        var executor = new AgentTurnExecutor(null, null, null, NullLogger<AgentTurnExecutor>.Instance);
+        var messages = new List<AgwMessage>();
+        await foreach (
+            var message in scope.RunStreaming(
+                executor.RunAsync(
+                    scope,
+                    runtime,
+                    new TurnInput(new AgwUserInput { Contents = [new AgwTextContent { Content = "run" }] }),
+                    cancellationToken
+                )
+            )
+        )
+        {
+            messages.Add(message);
+        }
+        return messages;
+    }
+
+    private sealed class RecordingConversationHistoryWriter : IConversationHistoryWriter
+    {
+        public List<ChatMessage> Messages { get; } = [];
+
+        public Task AppendAsync(
+            Guid projectId,
+            string contextId,
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Messages.AddRange(messages);
+            return Task.CompletedTask;
         }
     }
 
@@ -201,7 +228,7 @@ public sealed class UnattendedAgentExecutionTests
                 AuthorName = "tools",
                 AdditionalProperties = new AdditionalPropertiesDictionary
                 {
-                    ["type"] = ToolMessageTypes.Warning,
+                    ["type"] = AgwMessageTypes.ToolWarning,
                     ["persistSeparately"] = true,
                 },
             };

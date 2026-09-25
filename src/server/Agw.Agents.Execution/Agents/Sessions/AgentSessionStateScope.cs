@@ -1,5 +1,6 @@
 using Agw.Auth.Contracts;
 using Agw.Shared.Extensions;
+using Agw.Shared.Runtime;
 
 namespace Agw.Agents.Execution.Agents.Sessions;
 
@@ -16,7 +17,7 @@ public sealed class AgentSessionStateScope
     {
         ProjectConversationId = projectConversationId;
         ProjectId = projectId;
-        Generation = generation ?? ConversationSessionContext.GetGeneration(projectId, contextId);
+        Generation = generation ?? ExecutionContextSlot.FindBound(projectId, contextId)?.Generation ?? 0;
         ContextId = contextId.Trim();
         AgentId = agentId;
         AgentflowNodeId = agentflowNodeId?.Trim() ?? string.Empty;

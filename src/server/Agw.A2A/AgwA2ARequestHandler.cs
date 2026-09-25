@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using A2A;
 using Agw.A2A.Extensions;
-using Agw.Agents.Contracts.Execution;
+using Agw.Agents.Contracts.Messages;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -469,7 +469,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             {
                 var eventQueue = new AgentEventQueue();
                 var updater = new TaskUpdater(eventQueue, request.Id, durableTask.ContextId);
-                if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
+                if (AgwMessageClassifier.TryGetTurnFinishedStatus(message, out var status))
                 {
                     await CommonAgentHandler
                         .ApplyTerminalStatusAsync(updater, durableContext, status, cancellationToken)

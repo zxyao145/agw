@@ -1,10 +1,14 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Agents.Execution.Persistence.Durable;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
+using Agw.Agents.Execution.Turns;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -17,10 +21,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Fact]
-    public async Task ExecuteStreamingWithPermissionStateAsync_RealCheckpoint_ResumesAndPersistsNodeSessions()
+    public async Task RunAsync_RealCheckpoint_ResumesAndPersistsNodeSessions()
     {
         await using var database = await RuntimeCheckpointDatabase.CreateAsync();
         var providerState = new RecordingProviderSessionState();
@@ -36,24 +40,14 @@ public partial class AgentflowRuntimeServiceTests
             providerSessionState: providerState
         );
         var manifest = await database.SeedAsync(fixture);
-        var checkpointState = new AgentflowCheckpointRuntimeState();
-        var permissionState = new MafPermissionState(permissionMode: null);
+        await using var runtime = CreateRuntime(fixture, manifest);
         var messages = new List<AgwMessage>();
         await foreach (
-            var message in fixture.Service.ExecuteStreamingWithPermissionStateAsync(
-                fixture.Flow.Id,
-                manifest.Input,
-                TestContext.Current.CancellationToken,
-                manifest.Task.ProjectId,
-                manifest.Task.ContextId,
-                manifest.Task.TaskId,
-                null,
-                null,
-                manifest.Task.ProjectConversationId,
-                permissionState,
-                manifest.ExecutionId,
-                checkpointState,
-                null
+            var message in fixture.Service.RunAsync(
+                runtime,
+                new TurnInput(manifest.Input),
+                interactionHandler: null,
+                TestContext.Current.CancellationToken
             )
         )
         {
@@ -61,8 +55,8 @@ public partial class AgentflowRuntimeServiceTests
             if (MessageShape(message) == "agentflow-checkpoint")
                 break;
         }
-        var occurrence = Assert.Single(checkpointState.OccurrenceIds);
-        Assert.True(checkpointState.TryGet(occurrence, out var checkpoint));
+        var occurrence = Assert.Single(runtime.CheckpointOccurrenceIds);
+        Assert.True(runtime.TryGetCheckpoint(occurrence, out var checkpoint));
         Assert.NotNull(checkpoint);
         Assert.Equal(["input", "done", "agentflow-checkpoint"], messages.Select(MessageShape));
         await using (var scope = database.Services.CreateAsyncScope())
@@ -79,29 +73,29 @@ public partial class AgentflowRuntimeServiceTests
             "tester",
             TestContext.Current.CancellationToken
         );
-        var resumedState = new AgentflowCheckpointRuntimeState();
+        await using var resumedRuntime = CreateRuntime(fixture, manifest);
         var initializedBeforeResume = providerState.Scopes.Count;
 
         var resumed = await CollectAsync(
-            fixture.Service.ExecuteStreamingWithPermissionStateAsync(
-                fixture.Flow.Id,
-                manifest.Input,
-                TestContext.Current.CancellationToken,
-                manifest.Task.ProjectId,
-                manifest.Task.ContextId,
-                manifest.Task.TaskId,
-                null,
-                null,
-                manifest.Task.ProjectConversationId,
-                permissionState,
-                Guid.CreateVersion7(),
-                resumedState,
-                restored
+            fixture.Service.RunAsync(
+                resumedRuntime,
+                new TurnInput(manifest.Input)
+                {
+                    Resume = new TurnResume
+                    {
+                        Checkpoint = restored.Checkpoint,
+                        CheckpointNodeIds = restored
+                            .Markers.Select(marker => marker.NodeId)
+                            .ToHashSet(StringComparer.Ordinal),
+                    },
+                },
+                interactionHandler: null,
+                TestContext.Current.CancellationToken
             )
         );
 
-        Assert.Equal(["done", "done", "turn-finished"], resumed.Select(MessageShape));
-        Assert.Empty(resumedState.OccurrenceIds);
+        Assert.Equal(["done", "done"], resumed.Select(MessageShape));
+        Assert.Empty(resumedRuntime.CheckpointOccurrenceIds);
         Assert.DoesNotContain(
             providerState.Scopes.Skip(initializedBeforeResume),
             item => item.HistoryScope.EndsWith("node-0", StringComparison.Ordinal)
@@ -144,7 +138,7 @@ public partial class AgentflowRuntimeServiceTests
         );
         var manifest = await database.SeedAsync(fixture);
         var sink = new RecordingSegmentSink();
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -156,7 +150,7 @@ public partial class AgentflowRuntimeServiceTests
         var checkpointMessage = sink.Messages.Single(message => MessageShape(message) == "agentflow-checkpoint");
         Assert.Equal("node-1", checkpointMessage.AdditionalProperties!["checkpointNodeId"]);
 
-        var resumed = await fixture.Service.ExecuteDurableSegmentAsync(
+        var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 1, [CreateResponse(manifest, request, true)], waiting.Checkpoint),
             sink,
@@ -171,7 +165,7 @@ public partial class AgentflowRuntimeServiceTests
     }
 
     [Fact]
-    public async Task ExecuteStreamingWithPermissionStateAsync_ParallelMarkers_ShareOccurrenceAndContinueBoth()
+    public async Task RunAsync_ParallelMarkers_ShareOccurrenceAndContinueBoth()
     {
         await using var database = await RuntimeCheckpointDatabase.CreateAsync();
         var fixture = CreateCharacterizationFixture(
@@ -203,32 +197,30 @@ public partial class AgentflowRuntimeServiceTests
             }
         );
         var manifest = await database.SeedAsync(fixture);
-        var state = new AgentflowCheckpointRuntimeState();
+        await using var runtime = CreateRuntime(fixture, manifest);
 
         var messages = await CollectAsync(
-            fixture.Service.ExecuteStreamingWithPermissionStateAsync(
-                fixture.Flow.Id,
-                manifest.Input,
-                TestContext.Current.CancellationToken,
-                manifest.Task.ProjectId,
-                manifest.Task.ContextId,
-                manifest.Task.TaskId,
-                null,
-                null,
-                manifest.Task.ProjectConversationId,
-                new MafPermissionState(permissionMode: null),
-                manifest.ExecutionId,
-                state,
-                null
+            fixture.Service.RunAsync(
+                runtime,
+                new TurnInput(manifest.Input),
+                interactionHandler: null,
+                TestContext.Current.CancellationToken
             )
         );
 
-        var occurrenceId = Assert.Single(state.OccurrenceIds);
-        Assert.True(state.TryGet(occurrenceId, out var checkpoint));
+        var occurrenceId = Assert.Single(runtime.CheckpointOccurrenceIds);
+        Assert.True(runtime.TryGetCheckpoint(occurrenceId, out var checkpoint));
         Assert.Equal(["node-1", "node-2"], checkpoint!.Markers.Select(marker => marker.NodeId));
         Assert.Equal(2, messages.Count(message => MessageShape(message) == "agentflow-checkpoint"));
-        Assert.Equal("turn-finished", MessageShape(messages[^1]));
     }
+
+    private static AgentflowRuntime CreateRuntime(CharacterizationFixture fixture, DurableExecutionManifest manifest) =>
+        AgentflowRuntimeFactory.CreateRuntime(
+            fixture.Flow.Id,
+            manifest.Task.ToProjection(),
+            new ExecutionSettings(manifest.Task.ProjectId, manifest.Task.ContextId),
+            deferHumanInteractions: false
+        );
 
     private sealed class RecordingProviderSessionState : IProviderSessionState
     {
@@ -284,6 +276,10 @@ public partial class AgentflowRuntimeServiceTests
             );
             services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
+            services.AddScoped<IConversationTurnStore>(provider => new ConversationTurnStore(
+                provider.GetRequiredService<AgwDbContext>(),
+                TimeProvider.System
+            ));
             services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
             services.AddScoped<IDurableExecutionScopeMaintenance>(provider =>
                 TestDurablePersistence.Create(provider.GetRequiredService<AgwDbContext>())

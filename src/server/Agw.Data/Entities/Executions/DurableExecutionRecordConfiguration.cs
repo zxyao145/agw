@@ -19,7 +19,11 @@ public sealed class DurableExecutionRecordConfiguration : IEntityTypeConfigurati
         builder.Property(item => item.Status).IsRequired();
         builder.Property(item => item.StateChangedAt).IsRequired();
         builder.Property(item => item.StateVersion).IsConcurrencyToken().IsRequired();
+        builder.Property(item => item.WorkerId).HasMaxLength(128);
+        builder.Property(item => item.LeaseEpoch).HasDefaultValue(0L).HasSentinel(-1L).IsRequired();
+        builder.Property(item => item.LastEventSequence).HasDefaultValue(0L).HasSentinel(-1L).IsRequired();
         builder.HasIndex(item => new { item.Status, item.StateChangedAt });
+        builder.HasIndex(item => new { item.Status, item.LeaseExpiresAt });
         builder.HasIndex(item => new
         {
             item.UserId,

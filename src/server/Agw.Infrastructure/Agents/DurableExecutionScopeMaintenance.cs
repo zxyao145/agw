@@ -1,7 +1,5 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure.Data;
-using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -12,19 +10,16 @@ namespace Agw.Infrastructure.Agents;
 public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMaintenance
 {
     private readonly AgwDbContext _dbContext;
-    private readonly IApplicationLock _applicationLock;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DurableExecutionScopeMaintenance> _logger;
 
     public DurableExecutionScopeMaintenance(
         AgwDbContext dbContext,
-        IApplicationLock applicationLock,
         TimeProvider timeProvider,
         ILogger<DurableExecutionScopeMaintenance> logger
     )
     {
         _dbContext = dbContext;
-        _applicationLock = applicationLock;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -55,28 +50,36 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
         CancellationToken cancellationToken = default
     )
     {
+        var now = await DatabaseClock
+            .GetUtcNowAsync(_dbContext, _timeProvider, cancellationToken)
+            .ConfigureAwait(false);
+        // 持有有效租约的执行正在某个实例上运行，不修复也不改写它的状态。
+        // An execution holding a valid lease is running on some instance; it is neither repaired nor rewritten.
+        if (
+            await ActiveExecutions(projectId, conversationId, ownerUserId)
+                .AnyAsync(
+                    item => item.Status == DurableExecutionStatus.Running && item.LeaseExpiresAt > now,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+        {
+            return true;
+        }
         var ids = await ActiveExecutions(projectId, conversationId, ownerUserId)
             .Select(item => item.Id)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         foreach (var id in ids)
         {
-            await using var lease = await TryAcquireAsync(id, cancellationToken).ConfigureAwait(false);
-            if (lease == null)
-            {
-                return true;
-            }
-            await ValidateLockedExecutionAsync(id, cancellationToken).ConfigureAwait(false);
+            await ValidateExecutionAsync(id, cancellationToken).ConfigureAwait(false);
         }
         return await ActiveExecutions(projectId, conversationId, ownerUserId)
             .AnyAsync(cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async Task<bool> ValidateLockedExecutionAsync(
-        Guid executionId,
-        CancellationToken cancellationToken = default
-    )
+    public async Task<bool> ValidateExecutionAsync(Guid executionId, CancellationToken cancellationToken = default)
     {
         var row = await ReadAsync(executionId, cancellationToken).ConfigureAwait(false);
         if (row == null)
@@ -232,23 +235,6 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
             return DurableExecutionManifestScopeReader.Read(entity.ManifestJson, row.Id, row.UserId);
         }
         catch (AgwException exception) when (exception.Code == ErrorCodes.EncryptedDataInvalid.Code)
-        {
-            return null;
-        }
-    }
-
-    private async Task<IAsyncDisposable?> TryAcquireAsync(Guid executionId, CancellationToken cancellationToken)
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromMilliseconds(250));
-        try
-        {
-            return await _applicationLock
-                .AcquireAsync(DurableExecutionLock.GetResourceName(executionId), timeout.Token)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-            when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             return null;
         }

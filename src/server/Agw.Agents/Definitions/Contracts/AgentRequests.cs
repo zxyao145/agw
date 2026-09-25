@@ -20,13 +20,13 @@ public record AgentCreateRequest(
     bool EnableSummary = false,
     Guid? SummaryModelProviderId = null,
     AgentType? Type = null,
-    ExternalAgentKind? ExternalAgentKind = null,
+    EngineKind? ExternalAgentKind = null,
     string? Extra = null,
     string? ResponseSchema = null
 );
 
 public sealed record ExternalAgentOptionResponse(
-    ExternalAgentKind Kind,
+    EngineKind Kind,
     string DisplayName,
     string DefaultExtra,
     IReadOnlyList<ProviderType> SupportedProviderTypes
@@ -235,7 +235,7 @@ public sealed record AgentResponse(
     bool EnableSummary,
     IReadOnlyList<ToolValueObject> Tools,
     AgentType Type,
-    ExternalAgentKind ExternalAgentKind,
+    EngineKind ExternalAgentKind,
     string? Extra,
     IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<AgentMcpToolServerRelationResponse> AgentMcpToolServers,
@@ -293,7 +293,7 @@ public sealed record AgentListResponse(
     bool EnableSummary,
     IReadOnlyList<ToolValueObject> Tools,
     AgentType Type,
-    ExternalAgentKind ExternalAgentKind,
+    EngineKind ExternalAgentKind,
     string? Extra,
     IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<AgentMcpToolServerRelationResponse> AgentMcpToolServers,

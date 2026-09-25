@@ -21,5 +21,6 @@
     <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
     <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
   </ItemGroup>
 </Project>

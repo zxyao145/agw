@@ -76,6 +76,14 @@ public sealed partial class ProjectDeletionCoordinatorTests
             history => history.ConversationId == conversationId
         );
         Assert.DoesNotContain(
+            await assertContext.ProjectConversationTurns.ToListAsync(cancellationToken),
+            turn => turn.ProjectConversationId == conversationId
+        );
+        Assert.Contains(
+            await assertContext.ProjectConversationTurns.ToListAsync(cancellationToken),
+            turn => turn.ProjectConversationId == otherConversationId
+        );
+        Assert.DoesNotContain(
             await assertContext.ProjectConversationBindings.ToListAsync(cancellationToken),
             binding => binding.ProjectConversationId == conversationId
         );
@@ -131,7 +139,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         );
         Assert.DoesNotContain(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.ExecutionId == executionId
+            entry => entry.TurnId == executionId
         );
         Assert.Contains(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
@@ -139,7 +147,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         );
         Assert.Contains(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.ExecutionId == otherExecutionId
+            entry => entry.TurnId == otherExecutionId
         );
         Assert.Contains(
             await assertContext.ProjectConversations.ToListAsync(cancellationToken),
@@ -203,7 +211,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
     }
 
     [Fact]
-    public async Task DeleteProjectAsync_UnindexedBusyExecution_LeavesUnknownScopeUntouched()
+    public async Task DeleteProjectAsync_UnindexedLeasedExecution_LeavesUnknownScopeUntouched()
     {
         // Arrange
         using var userScope = PushUser("tester");
@@ -224,10 +232,17 @@ public sealed partial class ProjectDeletionCoordinatorTests
         );
         await using var context = new AgwDbContext(options);
         var coordinator = TestProjectPersistence.CreateDeletionCoordinator(context);
-        await using var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
-            DurableExecutionLock.GetResourceName(executionId),
-            token
-        );
+        await context
+            .DurableExecutions.Where(row => row.Id == executionId)
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(row => row.Status, DurableExecutionStatus.Running)
+                        .SetProperty(row => row.WorkerId, "worker-a")
+                        .SetProperty(row => row.LeaseEpoch, 1)
+                        .SetProperty(row => row.LeaseExpiresAt, TimeProvider.System.GetUtcNow().AddMinutes(1)),
+                token
+            );
 
         // Act
         var deleted = await coordinator.DeleteProjectAsync(new ProjectDeletionTarget(projectId, "tester"), token);
@@ -272,19 +287,10 @@ public sealed partial class ProjectDeletionCoordinatorTests
             );
         var maintenance = new DurableExecutionScopeMaintenance(
             context,
-            InMemoryApplicationLock.Shared,
             TimeProvider.System,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<DurableExecutionScopeMaintenance>.Instance
         );
-        await using (
-            var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
-                DurableExecutionLock.GetResourceName(executionId),
-                token
-            )
-        )
-        {
-            Assert.False(await maintenance.ValidateLockedExecutionAsync(executionId, token));
-        }
+        Assert.False(await maintenance.ValidateExecutionAsync(executionId, token));
         var coordinator = new ProjectDeletionCoordinator(
             context,
             InMemoryApplicationLock.Shared,
@@ -309,7 +315,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.Null(retained.ProjectId);
         Assert.Null(retained.ProjectConversationId);
         Assert.Equal(DurableExecutionStatus.Failed, retained.Status);
-        Assert.True(await context.DurableExecutionEvents.AnyAsync(row => row.ExecutionId == executionId, token));
+        Assert.True(await context.DurableExecutionEvents.AnyAsync(row => row.TurnId == executionId, token));
         Assert.True(await context.Projects.AnyAsync(row => row.Id == projectId, token));
     }
 
@@ -362,7 +368,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         );
         Assert.DoesNotContain(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.ExecutionId == executionId
+            entry => entry.TurnId == executionId
         );
         Assert.Contains(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
@@ -370,7 +376,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         );
         Assert.Contains(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.ExecutionId == otherExecutionId
+            entry => entry.TurnId == otherExecutionId
         );
         Assert.Contains(
             await assertContext.Projects.ToListAsync(cancellationToken),
@@ -404,12 +410,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var coordinator = new ProjectDeletionCoordinator(
             dbContext,
             InMemoryApplicationLock.Shared,
-            scopeMaintenance: new DurableExecutionScopeMaintenance(
-                dbContext,
-                InMemoryApplicationLock.Shared,
-                TimeProvider.System,
-                logger
-            ),
+            scopeMaintenance: new DurableExecutionScopeMaintenance(dbContext, TimeProvider.System, logger),
             timeProvider: TimeProvider.System
         );
 
@@ -571,7 +572,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.Equal(new[] { unrelated }, await dbContext.DurableExecutions.Select(row => row.Id).ToArrayAsync(token));
         Assert.Equal(
             new[] { unrelated },
-            await dbContext.DurableExecutionEvents.Select(row => row.ExecutionId).ToArrayAsync(token)
+            await dbContext.DurableExecutionEvents.Select(row => row.TurnId).ToArrayAsync(token)
         );
     }
 
@@ -614,6 +615,18 @@ public sealed partial class ProjectDeletionCoordinatorTests
                 ConversationSequence = 0,
                 ConversationPayload = "{}",
                 CreateTime = now,
+            }
+        );
+        context.ProjectConversationTurns.Add(
+            new ProjectConversationTurn
+            {
+                Id = Guid.CreateVersion7(),
+                ProjectConversationId = conversationId,
+                TargetId = Guid.CreateVersion7(),
+                Status = ProjectConversationTurnStatus.Completed,
+                InputMessageId = Guid.CreateVersion7(),
+                StartedAt = now,
+                FinishedAt = now,
             }
         );
         context.ProjectConversationBindings.Add(
@@ -786,9 +799,9 @@ public sealed partial class ProjectDeletionCoordinatorTests
             new DurableExecutionEventRecord
             {
                 Id = Guid.CreateVersion7(),
-                ExecutionId = executionId,
+                TurnId = executionId,
                 SegmentIndex = 0,
-                Sequence = 0,
+                TurnSequence = 1,
                 PayloadJson = "{}",
             }
         );

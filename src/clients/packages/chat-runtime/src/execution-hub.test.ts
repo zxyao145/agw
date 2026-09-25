@@ -426,7 +426,7 @@ test("execution session keeps tool rendering scope across handler replacement an
   });
   const turnState = (
     messageId: string,
-    type: "turn-start" | "turn-finished",
+    type: "agw-turn-start" | "agw-turn-finished",
     additionalProperties: Record<string, unknown> = {},
   ) => ({
     messageId,
@@ -435,7 +435,7 @@ test("execution session keeps tool rendering scope across handler replacement an
     contents: [],
     additionalProperties: {
       type,
-      ...(type === "turn-finished" ? { status: "completed" } : {}),
+      ...(type === "agw-turn-finished" ? { status: "completed" } : {}),
       ...additionalProperties,
     },
   });
@@ -454,14 +454,14 @@ test("execution session keeps tool rendering scope across handler replacement an
       agentType: 0,
       input: { messageId: "user-1", author: "$agw", contents: [] },
     });
-    emit(turnState("start-1", "turn-start"));
+    emit(turnState("start-1", "agw-turn-start"));
     emit(toolCall("call-read-1", "Read_1", "Read"));
     emit(toolCall("call-bash-1", "Bash_1", "Bash"));
 
     client.setHandlers(attachHandler());
     emit(toolResult("result-bash-1", "Bash_1"));
     emit(toolResult("result-read-1", "Read_1"));
-    emit(turnState("finished-1", "turn-finished"));
+    emit(turnState("finished-1", "agw-turn-finished"));
 
     assert.deepEqual(
       transportMessages.slice(0, 6).map((message) => message.streamingScopeId),
@@ -489,13 +489,13 @@ test("execution session keeps tool rendering scope across handler replacement an
       input: { messageId: "user-2", author: "$agw", contents: [] },
     });
     emit(
-      turnState("start-2", "turn-start", {
+      turnState("start-2", "agw-turn-start", {
         streamingScopeId: "server-user-2",
       }),
     );
     emit(toolCall("call-read-2", "Read_1", "Read"));
     emit(toolResult("result-read-2", "Read_1"));
-    emit(turnState("finished-2", "turn-finished"));
+    emit(turnState("finished-2", "agw-turn-finished"));
 
     assert.deepEqual(
       transportMessages.slice(-4).map((message) => message.streamingScopeId),
@@ -682,10 +682,10 @@ test("durable attachment detection connects only for a valid persisted execution
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
 
     const key = getDurableExecutionStorageKey(runtime, setting);
-    values.set(key, JSON.stringify({ executionId: "", cursor: "1-0" }));
+    values.set(key, JSON.stringify({ executionId: "", cursor: "1" }));
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
 
-    values.set(key, JSON.stringify({ executionId: "execution-1", cursor: "3-9" }));
+    values.set(key, JSON.stringify({ executionId: "execution-1", cursor: "9" }));
     assert.equal(hasPersistedDurableExecution(setting, runtime), true);
   } finally {
     if (originalDescriptor) {
@@ -754,7 +754,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
   };
 
   try {
-    values.set(storageKey, JSON.stringify({ executionId: "execution-1", cursor: "3-9" }));
+    values.set(storageKey, JSON.stringify({ executionId: "execution-1", cursor: "9" }));
     const resumed = createConnection(async () => undefined);
     HubConnectionBuilder.prototype.build = () => resumed.connection as never;
     const resumedClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
@@ -765,11 +765,35 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
     assert.deepEqual(resumed.commands.at(-1), {
       type: "SubscribeExecutionCommand",
       executionId: "execution-1",
-      cursor: "3-9",
+      cursor: "9",
     });
     await resumedClient.dispose();
 
-    values.set(storageKey, JSON.stringify({ executionId: "execution-terminal", cursor: "3-10" }));
+    values.set(storageKey, JSON.stringify({ executionId: "execution-progress", cursor: "3" }));
+    let progressed: string | undefined;
+    const progress = createConnection(async (_command, emitMessage) => {
+      emitMessage({
+        messageId: "progress-4",
+        role: "assistant",
+        author: "agent",
+        contents: [{ type: "TextContent", content: "partial" }],
+        additionalProperties: { turnId: "execution-progress", turnSequence: 4 },
+      });
+      progressed = values.get(storageKey);
+    });
+    HubConnectionBuilder.prototype.build = () => progress.connection as never;
+    const progressClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
+
+    assert.deepEqual(await progressClient.configure(setting), {
+      restoredDurableExecution: true,
+    });
+    assert.deepEqual(JSON.parse(progressed ?? "null"), {
+      executionId: "execution-progress",
+      cursor: "4",
+    });
+    await progressClient.dispose();
+
+    values.set(storageKey, JSON.stringify({ executionId: "execution-terminal", cursor: "10" }));
     const terminal = createConnection(async (_command, emitMessage) => {
       emitMessage({
         messageId: "terminal-1",
@@ -777,10 +801,10 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
         author: "$agw",
         contents: [],
         additionalProperties: {
-          type: "turn-finished",
+          type: "agw-turn-finished",
           status: "completed",
-          executionId: "execution-terminal",
-          streamCursor: "3-11",
+          turnId: "execution-terminal",
+          turnSequence: 11,
         },
       });
     });
@@ -793,7 +817,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
     await terminalClient.dispose();
 
-    values.set(storageKey, JSON.stringify({ executionId: "execution-2", cursor: "4-0" }));
+    values.set(storageKey, JSON.stringify({ executionId: "execution-2", cursor: "4" }));
     const missing = createConnection(async () => {
       throw new Error("404_0011: execution not found");
     });
@@ -806,7 +830,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
     await missingClient.dispose();
 
-    values.set(storageKey, JSON.stringify({ executionId: "execution-3", cursor: "5-1" }));
+    values.set(storageKey, JSON.stringify({ executionId: "execution-3", cursor: "5" }));
     const temporary = createConnection(async () => {
       throw new Error("temporary transport failure");
     });
@@ -845,7 +869,7 @@ test("getTurnFinishedStatus reads terminal AgwMessage", async () => {
       role: "system",
       author: "$agw",
       contents: [],
-      additionalProperties: { type: "turn-finished", status: "interrupted" },
+      additionalProperties: { type: "agw-turn-finished", status: "interrupted" },
     }),
     "interrupted",
   );
@@ -938,8 +962,9 @@ test("getMessageStreamingScopeId keeps a restored turn bound to its original use
       author: "$agw-server",
       contents: [],
       additionalProperties: {
-        type: "turn-start",
-        executionId: "execution-1",
+        type: "agw-turn-start",
+        turnId: "execution-1",
+        turnSequence: 1,
         streamingScopeId: "user-message-1",
       },
     }),

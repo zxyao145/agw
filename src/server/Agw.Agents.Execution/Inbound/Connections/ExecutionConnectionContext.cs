@@ -1,12 +1,9 @@
 using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
-using Agw.Agents.Execution.Agentflows.Runtime;
-using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
-using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes;
@@ -18,8 +15,6 @@ using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Runtime;
-using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Inbound.Connections;
@@ -32,18 +27,16 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     private readonly string _userId;
     private readonly IExecutionMessageSink _messageSink;
-    private readonly IRuntimeFactory _runtimeFactory;
+    private readonly TurnAcceptanceService _acceptance;
     private readonly IProjectTaskFacade _projectTasks;
-    private readonly IProjectRuntimeFacade _projects;
     private readonly IProjectDefaultResolver? _projectDefaults;
-    private readonly DurableExecutionSession? _durableSession;
+    private readonly IExecutionCoordinator _coordinator;
+    private readonly InProcessExecutionCoordinator? _inProcess;
+    private readonly DurableExecutionAttachment? _attachment;
     private readonly AgentflowCheckpointStore? _checkpointStore;
-    private readonly IExecutionStarter _executionStarter;
-    private readonly InProcessExecutionStarter? _inProcessStarter;
-    private RuntimeBase? Runtime => _inProcessStarter?.Runtime;
+    private InProcessTurnHost? Host => _inProcess?.Host;
     private AgentExecutionTask? _resolvedTask;
     private string? _workspace;
-    private ProjectWorkspaceSnapshot? _workspaceSnapshot;
     private ExecutionTarget? _target;
     private PendingModeChange? _pendingModeChange;
     private Guid? _lastResumeExecutionId;
@@ -51,14 +44,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private readonly ExecutionPermissionService? _permissions;
     private ExecutionSettings? _turnSettings;
 
+    /// <summary>
+    /// 创建连接上下文；进程内协调器工厂与 Durable 协调器恰好提供一个，决定本连接的执行方式。
+    /// Creates the connection context; exactly one of the in-process coordinator factory and the Durable coordinator is supplied, deciding how this connection executes.
+    /// </summary>
     internal ExecutionConnectionContext(
         string userId,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
-        IRuntimeFactory runtimeFactory,
+        TurnAcceptanceService acceptance,
         IProjectTaskFacade projectTasks,
-        IProjectRuntimeFacade projects,
-        DurableExecutionSession? durableSession = null,
+        InProcessExecutionCoordinatorFactory? inProcessCoordinators,
+        DurableExecutionCoordinator? durableCoordinator,
         AgentflowCheckpointStore? checkpointStore = null,
         IProjectDefaultResolver? projectDefaults = null,
         ExecutionPermissionService? permissions = null
@@ -69,26 +66,26 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             ? throw new AgwException(ErrorCodes.AuthenticationRequired)
             : userId.Trim();
         _messageSink = messageSink;
-        _runtimeFactory = runtimeFactory;
+        _acceptance = acceptance;
         _projectTasks = projectTasks;
-        _projects = projects;
         _projectDefaults = projectDefaults;
-        _durableSession = durableSession;
         _checkpointStore = checkpointStore;
-        if (durableSession == null)
+        if ((inProcessCoordinators == null) == (durableCoordinator == null))
         {
-            _inProcessStarter = new InProcessExecutionStarter(
-                runtimeFactory,
-                _userId,
-                messageSink,
-                hostToken,
-                pendingCount => _waitingForHuman = pendingCount > 0
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Exactly one of the in-process and durable coordinators is required."
             );
-            _executionStarter = _inProcessStarter;
+        }
+        if (durableCoordinator == null)
+        {
+            _inProcess = inProcessCoordinators!.Create(hostToken, pendingCount => _waitingForHuman = pendingCount > 0);
+            _coordinator = _inProcess;
         }
         else
         {
-            _executionStarter = new DurableExecutionStarter(durableSession);
+            _attachment = new DurableExecutionAttachment(_userId, messageSink, hostToken, durableCoordinator);
+            _coordinator = durableCoordinator;
         }
     }
 
@@ -116,12 +113,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         get
         {
-            if (Runtime is { HasActiveTurn: true })
+            if (Host is { HasActiveTurn: true })
             {
                 return true;
             }
 
-            return _durableSession?.HasActiveExecution == true;
+            return _attachment?.HasActiveExecution == true;
         }
     }
 
@@ -163,9 +160,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         if (HasActiveTurn)
         {
             if (
-                _durableSession != null
+                _attachment != null
                 && command.ExecutionId.HasValue
-                && command.ExecutionId == _durableSession.ActiveExecutionId
+                && command.ExecutionId == _attachment.ActiveExecutionId
             )
             {
                 await SubscribeExecutionAsync(command.ExecutionId.Value, cursor: null, cancellationToken);
@@ -176,17 +173,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (Runtime != null)
+        if (Host != null)
         {
-            await Runtime.WhenIdleAsync();
+            await Host.WhenIdleAsync();
         }
 
         var agentId =
             command.AgentId ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
-        if (agentId == Guid.Empty)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
-        }
         var conversationId =
             command.ConversationId
             ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.conversationId is required.");
@@ -201,64 +194,115 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 "ExecCommand.conversationId does not match the active conversation."
             );
         }
-        command.ExecutionId ??= Guid.CreateVersion7();
 
         Settings ??= ExecutionSettings.CreateDefault();
-        await ResolveExecutionContextAsync(command, cancellationToken);
-        if (command.ResumeCheckpoint != null && command.ResumeGeneration != _resolvedTask!.Generation)
-        {
-            throw new AgwException(ErrorCodes.ConversationSessionConflict);
-        }
-
+        await RefreshResolvedTaskAsync(conversationId, cancellationToken);
         var target = new ExecutionTarget(agentId, command.AgentType);
-        if (_inProcessStarter != null && _target.HasValue && _target.Value != target)
-        {
-            await ReleaseRuntimeAsync();
-        }
-
-        if (_permissions != null)
-            ExecutionPermissionService.Validate(
-                await _permissions.GetAsync(target.AgentType, target.AgentId, cancellationToken),
-                Settings.PermissionMode
-            );
-        _turnSettings = Settings;
-        await SendPermissionStatusAsync(starting: true);
-
         var requestedMode =
             command.AgentType == AgentRuntimeType.Agent
             && _pendingModeChange is { } pendingModeChange
             && pendingModeChange.AgentId == agentId
                 ? pendingModeChange.Mode
                 : null;
-        var start = await _executionStarter.StartAsync(
-            new ExecutionStartRequest(
-                command.ExecutionId.Value,
+        var accepted = await _acceptance.AcceptAsync(
+            new TurnAcceptanceRequest(
+                _userId,
+                command.ExecutionId,
                 target,
-                _resolvedTask!,
-                Settings,
+                conversationId,
                 command.Input,
-                command.Stream,
-                _workspace!
+                Settings,
+                command.Stream
             )
             {
-                WorkspaceSnapshot = _workspaceSnapshot,
+                Task = _resolvedTask,
                 RequestedMode = requestedMode,
                 ResumeCheckpoint = command.ResumeCheckpoint,
             },
             cancellationToken
         );
-        command.ExecutionId = start.ExecutionId;
-        _target = start.Accepted || Runtime != null ? target : null;
-        if (requestedMode != null && Runtime != null)
+        var request = accepted.Request;
+        _resolvedTask = request.Task;
+        _workspace = request.WorkspaceSnapshot.Workspace;
+        command.ExecutionId = request.TurnId;
+        if (!accepted.Created)
+        {
+            await ResumeAcceptedTurnAsync(accepted, cancellationToken);
+            return;
+        }
+
+        // 受理事务已经提交：先写出开始消息，再创建 Runtime。
+        // The acceptance transaction has committed: the start message goes out before the Runtime is created.
+        _turnSettings = Settings;
+        if (_attachment != null)
+        {
+            await _messageSink.WriteAsync(accepted.Start, CancellationToken.None);
+        }
+        else
+        {
+            accepted.Broadcast!.AddSink(_messageSink);
+            await accepted.Broadcast.WriteAsync(accepted.Start, CancellationToken.None);
+        }
+        await SendPermissionStatusAsync(starting: true);
+        try
+        {
+            if (command.ResumeCheckpoint != null && command.ResumeGeneration != request.Task.Generation)
+            {
+                throw new AgwException(ErrorCodes.ConversationSessionConflict);
+            }
+            var start = await _coordinator.StartAsync(request, cancellationToken);
+            if (!start.Accepted)
+            {
+                throw new AgwException(ErrorCodes.AgentExecutionFailed, "Agent execution could not be started.");
+            }
+        }
+        catch (Exception exception)
+        {
+            await _acceptance.ReportStartFailureAsync(accepted, exception);
+            if (_attachment != null)
+            {
+                await _attachment.AttachAsync(request.TurnId, cursor: "1", cancellationToken);
+            }
+            return;
+        }
+
+        if (_attachment != null)
+        {
+            await _attachment.AttachAsync(request.TurnId, cursor: "1", cancellationToken);
+        }
+        _target = target;
+        if (requestedMode != null && Host != null)
         {
             _pendingModeChange = null;
             await SendModeStatusAsync(agentId, requestedMode);
         }
+    }
 
-        if (!start.Accepted)
+    /// <summary>
+    /// 同一 turnId 的重发不重复受理：Durable 从头回放已提交的事件；进程内回放本实例保留的广播，Turn 不在本实例时按 Turn 行写出结局。
+    /// A resend of the same turnId is not accepted again: Durable replays committed events from the start; in-process replays the broadcast this instance keeps, writing the outcome from the turn row when the turn is not here.
+    /// </summary>
+    private async Task ResumeAcceptedTurnAsync(AcceptedTurn accepted, CancellationToken cancellationToken)
+    {
+        if (_attachment != null)
         {
-            await SendErrorAsync("Agent execution could not be started.");
+            await _attachment.AttachAsync(accepted.Request.TurnId, cursor: null, cancellationToken);
+            return;
         }
+        if (accepted.Broadcast != null)
+        {
+            await accepted.Broadcast.AttachAsync(_messageSink, afterSequence: 0);
+            return;
+        }
+        await _messageSink.WriteAsync(
+            TurnMessageFactory.CreateFinished(
+                accepted.Request.Envelope,
+                TurnAcceptanceService.ToFinishedStatus(accepted.Turn.Status),
+                accepted.Turn.StepCount,
+                accepted.Turn.ErrorCode
+            ),
+            CancellationToken.None
+        );
     }
 
     public async Task SetModeAsync(Guid agentId, string mode, CancellationToken cancellationToken)
@@ -267,7 +311,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         var change = new PendingModeChange(agentId, mode);
         _pendingModeChange = change;
         if (
-            Runtime is not AgentRuntime runtime
+            Host is not { AgentRuntime: not null } host
             || _target is not { AgentId: var targetAgentId }
             || targetAgentId != agentId
         )
@@ -275,12 +319,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (runtime.TryScheduleAfterTurn(SetModeAfterTurnActionKey, _ => ApplyQueuedModeAsync(runtime, change)))
+        if (host.TryScheduleAfterTurn(SetModeAfterTurnActionKey, _ => ApplyQueuedModeAsync(host, change)))
         {
             return;
         }
 
-        await _runtimeFactory.SetModeAsync(runtime, mode, cancellationToken);
+        await _inProcess!.SetModeAsync(mode, cancellationToken);
         if (_pendingModeChange == change)
         {
             _pendingModeChange = null;
@@ -297,8 +341,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 await _permissions.GetAsync(target.AgentType, target.AgentId, cancellationToken),
                 permissionMode
             );
-        if (_durableSession != null)
-            await _durableSession.SetPermissionModeAsync(permissionMode, cancellationToken);
+        if (_attachment != null)
+            await _attachment.SetPermissionModeAsync(permissionMode, cancellationToken);
         Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithPermissionMode(permissionMode);
         await SendPermissionStatusAsync();
     }
@@ -315,33 +359,36 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async Task InterruptTurnAsync(Guid? executionId, string? reason, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
-        if (_durableSession != null)
+        if (_attachment != null)
         {
-            await _durableSession.InterruptAsync(executionId, reason, cancellationToken);
+            await _attachment.InterruptAsync(executionId, reason, cancellationToken);
             return;
         }
 
         if (!HasActiveTurn)
         {
             await SendSystemMessageAsync(reason ?? "No active request is currently running.");
-            await _messageSink.WriteAsync(TurnMessageFactory.CreateFinished("interrupted"), CancellationToken.None);
+            await _messageSink.WriteAsync(
+                TurnMessageFactory.CreateFinished(AgwTurnStatus.Interrupted),
+                CancellationToken.None
+            );
             return;
         }
 
-        Runtime!.RequestInterrupt();
+        Host!.RequestInterrupt();
     }
 
     public async Task SubmitHumanDecisionAsync(HumanResponseCommand command, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         ArgumentNullException.ThrowIfNull(command);
-        if (_durableSession != null)
+        if (_attachment != null)
         {
-            await _durableSession.RespondAsync(command, cancellationToken);
+            await _attachment.RespondAsync(command, cancellationToken);
             return;
         }
 
-        if (Runtime == null || !await Runtime.TrySubmitHumanResponseAsync(command.Response, cancellationToken))
+        if (Host == null || !await Host.TrySubmitHumanResponseAsync(command.Response, cancellationToken))
         {
             await SendSystemMessageAsync("No matching interaction is waiting for this response.");
         }
@@ -369,8 +416,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             );
         IReadOnlySet<Guid>? inProcessOccurrences = null;
         if (
-            _durableSession == null
-            && Runtime is AgentflowRuntime runtime
+            Host?.AgentflowRuntime is { } runtime
             && _target is { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
             && targetId == agentflowId
         )
@@ -446,9 +492,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         var projectId = await ResolveProjectIdAsync(settings, cancellationToken).ConfigureAwait(false);
         var contextId = ContextIdUtil.ResolveContextId(settings.ContextId);
 
-        if (_durableSession != null)
+        if (_attachment != null)
         {
-            await _durableSession
+            await _attachment
                 .ResumeCheckpointAsync(
                     command.CheckpointOccurrenceId,
                     command.ResumeExecutionId,
@@ -467,7 +513,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         if (
-            Runtime is not AgentflowRuntime runtime
+            Host?.AgentflowRuntime is not { } runtime
             || _target is not { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
             || targetId != command.AgentflowId
             || !runtime.TryGetCheckpoint(command.CheckpointOccurrenceId, out _)
@@ -515,9 +561,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
-        if (_durableSession != null)
+        if (_attachment != null)
         {
-            await _durableSession.DisposeAsync();
+            await _attachment.DisposeAsync();
         }
         await ReleaseRuntimeAsync();
         _resolvedTask = null;
@@ -528,16 +574,16 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     internal bool PrepareForDetach()
     {
-        if (_durableSession != null)
+        if (_attachment != null)
         {
-            _durableSession.PrepareForDetach();
+            _attachment.PrepareForDetach();
             return false;
         }
 
         var hasActiveTurn = HasActiveTurn;
         if (hasActiveTurn && _waitingForHuman)
         {
-            Runtime!.RequestInterrupt();
+            Host!.RequestInterrupt();
         }
 
         return hasActiveTurn;
@@ -546,8 +592,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// <summary>
     /// 等待连接内进程执行结束；durable execution 不依赖当前连接存活，因此无需等待。
     /// </summary>
-    internal Task WhenIdleAsync() =>
-        _durableSession != null ? Task.CompletedTask : Runtime?.WhenIdleAsync() ?? Task.CompletedTask;
+    internal Task WhenIdleAsync() => Host?.WhenIdleAsync() ?? Task.CompletedTask;
 
     /// <summary>
     /// 将当前连接附着到已有 durable execution，并从指定 cursor 继续回放消息。
@@ -555,14 +600,14 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async Task SubscribeExecutionAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
-        var session =
-            _durableSession
+        var attachment =
+            _attachment
             ?? throw new AgwException(
                 ErrorCodes.DurableExecutionUnavailable,
                 "Durable execution services are not configured."
             );
-        await session.AttachAsync(executionId, cursor, cancellationToken);
-        if (session.PermissionStatus is { } status)
+        await attachment.AttachAsync(executionId, cursor, cancellationToken);
+        if (attachment.PermissionStatus is { } status)
         {
             var settings = Settings ?? ExecutionSettings.CreateDefault();
             _turnSettings = settings.WithPermissionSnapshot(
@@ -574,9 +619,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
     }
 
-    private async Task ResolveExecutionContextAsync(ExecCommand command, CancellationToken cancellationToken)
+    /// <summary>
+    /// 对话的 Generation 变化后释放 Runtime 并丢弃已解析的项目任务，受理时重新解析。
+    /// Releases the Runtime and drops the resolved project task when the conversation generation changes; acceptance resolves it again.
+    /// </summary>
+    private async Task RefreshResolvedTaskAsync(Guid conversationId, CancellationToken cancellationToken)
     {
-        var generation = await _projectTasks.GetGenerationAsync(command.ConversationId!.Value, cancellationToken);
+        var generation = await _projectTasks.GetGenerationAsync(conversationId, cancellationToken);
         if (_resolvedTask != null && _resolvedTask.Generation != generation)
         {
             await ReleaseRuntimeAsync();
@@ -588,43 +637,6 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 throw new AgwException(ErrorCodes.ResourceNotFound);
             }
         }
-
-        if (_resolvedTask == null)
-        {
-            var task = await _projectTasks.ResolveAsync(
-                new ResolveProjectTaskRequest(
-                    TaskId: null,
-                    ConversationId: command.ConversationId!.Value,
-                    ProjectId: Settings!.ProjectId,
-                    ContextId: Settings.ContextId,
-                    Input: AgwMessageUtil.ExtractInputText(command.Input),
-                    Resume: Settings.Resume,
-                    OwnerUserId: _userId
-                ),
-                cancellationToken
-            );
-            _resolvedTask = ProjectTaskProjectionMapper.Map(task);
-            if (_resolvedTask.ProjectConversationId != command.ConversationId)
-            {
-                throw new AgwException(
-                    ErrorCodes.InvalidParam,
-                    "The resolved task does not match ExecCommand.conversationId."
-                );
-            }
-        }
-
-        var project =
-            await _projects.GetForCurrentUserAsync(_resolvedTask.ProjectId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{_resolvedTask.ProjectId}' was not found.");
-        _workspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(
-            project.Id,
-            project.Workspace,
-            (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
-                directory.Id,
-                directory.Path
-            ))
-        );
-        _workspace = _workspaceSnapshot.Workspace;
     }
 
     private async Task<Guid> ResolveProjectIdAsync(ExecutionSettings settings, CancellationToken cancellationToken)
@@ -653,9 +665,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     private async Task ReleaseRuntimeAsync()
     {
-        if (_inProcessStarter != null)
+        if (_inProcess != null)
         {
-            await _inProcessStarter.ReleaseRuntimeAsync();
+            await _inProcess.ReleaseAsync();
         }
 
         _target = null;
@@ -672,10 +684,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             .WriteAsync(CreateMessage(new AgwTextContent { Content = message }), CancellationToken.None)
             .AsTask();
 
-    private async Task ApplyQueuedModeAsync(AgentRuntime runtime, PendingModeChange change)
+    private async Task ApplyQueuedModeAsync(InProcessTurnHost host, PendingModeChange change)
     {
         if (
-            !ReferenceEquals(Runtime, runtime)
+            !ReferenceEquals(Host, host)
             || _target is not { AgentId: var targetAgentId }
             || targetAgentId != change.AgentId
             || _pendingModeChange != change
@@ -686,7 +698,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
         try
         {
-            await _runtimeFactory.SetModeAsync(runtime, change.Mode, CancellationToken.None);
+            await _inProcess!.SetModeAsync(change.Mode, CancellationToken.None);
             if (_pendingModeChange != change)
             {
                 return;
@@ -714,7 +726,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     new AgwTextContent { Content = "Permission settings updated." },
                     new AdditionalPropertiesDictionary
                     {
-                        ["type"] = "permission-status",
+                        ["type"] = AgwMessageTypes.PermissionStatus,
                         ["activePermissionMode"] = (
                             starting || HasActiveTurn ? _turnSettings : Settings
                         )?.PermissionMode,
@@ -736,7 +748,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     new AgwTextContent { Content = $"Agent mode changed to '{mode}'." },
                     new AdditionalPropertiesDictionary
                     {
-                        ["type"] = "mode-status",
+                        ["type"] = AgwMessageTypes.ModeStatus,
                         ["agentId"] = agentId,
                         ["mode"] = mode,
                     }
@@ -752,7 +764,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     new AgwTextContent { Content = message },
                     new AdditionalPropertiesDictionary
                     {
-                        ["type"] = "mode-change-failed",
+                        ["type"] = AgwMessageTypes.ModeChangeFailed,
                         ["agentId"] = agentId,
                         ["mode"] = mode,
                     }

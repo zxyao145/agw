@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -12,7 +13,7 @@ public sealed class PiIntegrationAdapterTests
     [Fact]
     public async Task PiExtensionUiBridge_ForegroundConfirm_UsesCurrentHumanChannel()
     {
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var bridge = new PiExtensionUiBridge(accessor, allowInteraction: true);
         PiExtensionUiResponse? captured = null;
         var request = new PiExtensionUiRequest
@@ -36,7 +37,7 @@ public sealed class PiIntegrationAdapterTests
             Cancelled = false,
             ResponseData = JsonSerializer.SerializeToElement(new { confirmed = true }),
         });
-        using var scope = accessor.Push(channel);
+        using var scope = ExecutionTestScopes.PushInteractions(channel);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
         await agent.RunAsync(
@@ -89,7 +90,7 @@ public sealed class PiIntegrationAdapterTests
     public async Task PiExtensionUiBridge_Select_AcceptsOnlyConfiguredOptions(string value, bool expectedCancelled)
     {
         // Arrange
-        var accessor = new HumanInteractionContextAccessor();
+        var accessor = new HumanInteractionContextAccessor(new AgentExecutionContextAccessor());
         var bridge = new PiExtensionUiBridge(accessor, allowInteraction: true);
         PiExtensionUiResponse? captured = null;
         var request = new PiExtensionUiRequest
@@ -113,7 +114,7 @@ public sealed class PiIntegrationAdapterTests
             Cancelled = false,
             ResponseData = JsonSerializer.SerializeToElement(new { value }),
         });
-        using var scope = accessor.Push(channel);
+        using var scope = ExecutionTestScopes.PushInteractions(channel);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
         // Act
@@ -127,95 +128,6 @@ public sealed class PiIntegrationAdapterTests
         Assert.NotNull(captured);
         Assert.Equal(expectedCancelled, captured.Cancelled);
         Assert.Equal(expectedCancelled ? null : value, captured.Value);
-    }
-
-    [Fact]
-    public async Task PiChatHistoryProvider_Response_RemovesTransportDataAndMarksToolDisplayOnly()
-    {
-        var inner = new RecordingHistoryProvider();
-        var provider = new PiChatHistoryProvider(inner);
-        var agent = new CallbackAgent(_ => ValueTask.CompletedTask);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var response = new ChatMessage(
-            ChatRole.Tool,
-            [new FunctionResultContent("call-1", "done") { RawRepresentation = new object() }]
-        );
-#pragma warning disable MAAI001
-        var context = new ChatHistoryProvider.InvokedContext(agent, session, [], [response]);
-#pragma warning restore MAAI001
-
-        await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
-
-        var persisted = Assert.Single(Assert.Single(inner.Stored).Responses);
-        Assert.Null(Assert.Single(persisted.Contents).RawRepresentation);
-        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(persisted));
-    }
-
-    [Fact]
-    public async Task PiChatHistoryProvider_Request_IsIgnoredByResponseOnlyAdapter()
-    {
-        // Arrange
-        var inner = new RecordingHistoryProvider();
-        var provider = new PiChatHistoryProvider(inner);
-        var agent = new CallbackAgent(_ => ValueTask.CompletedTask);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var request = new ChatMessage(ChatRole.User, [new TextContent("run") { RawRepresentation = new object() }])
-        {
-            RawRepresentation = new object(),
-        };
-#pragma warning disable MAAI001
-        var context = new ChatHistoryProvider.InvokedContext(agent, session, [request], []);
-#pragma warning restore MAAI001
-
-        // Act
-        await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Empty(Assert.Single(inner.Stored).Requests);
-    }
-
-    [Fact]
-    public async Task PiChatHistoryProvider_Request_ExcludesInjectedContextFromHistory()
-    {
-        var inner = new RecordingHistoryProvider();
-        var provider = new PiChatHistoryProvider(inner);
-        var agent = new CallbackAgent(_ => ValueTask.CompletedTask);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var memory = new ChatMessage(ChatRole.User, "memory context").WithAgentRequestMessageSource(
-            AgentRequestMessageSourceType.AIContextProvider,
-            "UserMemoryProvider"
-        );
-        var request = new ChatMessage(ChatRole.User, "run");
-#pragma warning disable MAAI001
-        var context = new ChatHistoryProvider.InvokedContext(agent, session, [memory, request], []);
-#pragma warning restore MAAI001
-
-        await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
-
-        Assert.Empty(Assert.Single(inner.Stored).Requests);
-    }
-
-    [Fact]
-    public async Task PiChatHistoryProvider_Failure_SanitizesRequestAndPreservesException()
-    {
-        // Arrange
-        var inner = new RecordingHistoryProvider();
-        var provider = new PiChatHistoryProvider(inner);
-        var agent = new CallbackAgent(_ => ValueTask.CompletedTask);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var request = new ChatMessage(ChatRole.User, [new TextContent("run") { RawRepresentation = new object() }]);
-        var failure = new InvalidOperationException("failed");
-#pragma warning disable MAAI001
-        var context = new ChatHistoryProvider.InvokedContext(agent, session, [request], failure);
-#pragma warning restore MAAI001
-
-        // Act
-        await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
-
-        // Assert
-        var stored = Assert.Single(inner.Stored);
-        Assert.Same(failure, stored.InvokeException);
-        Assert.Empty(stored.Requests);
     }
 
     private sealed class CallbackAgent : AIAgent
@@ -283,50 +195,5 @@ public sealed class PiIntegrationAdapterTests
             Requests.Add(request);
             return ValueTask.FromResult(_respond(request));
         }
-    }
-
-    private sealed class RecordingHistoryProvider : ChatHistoryProvider
-    {
-        public List<StoredCall> Stored { get; } = [];
-
-        protected override ValueTask<IEnumerable<ChatMessage>> InvokingCoreAsync(
-            InvokingContext context,
-            CancellationToken cancellationToken = default
-        ) => ValueTask.FromResult<IEnumerable<ChatMessage>>([]);
-
-        protected override ValueTask InvokedCoreAsync(
-            InvokedContext context,
-            CancellationToken cancellationToken = default
-        )
-        {
-            Stored.Add(
-                new StoredCall(
-                    context.RequestMessages.ToList(),
-                    context.ResponseMessages?.ToList() ?? [],
-                    context.InvokeException
-                )
-            );
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StoredCall
-    {
-        public StoredCall(
-            IReadOnlyList<ChatMessage> requests,
-            IReadOnlyList<ChatMessage> responses,
-            Exception? invokeException
-        )
-        {
-            Requests = requests;
-            Responses = responses;
-            InvokeException = invokeException;
-        }
-
-        public IReadOnlyList<ChatMessage> Requests { get; }
-
-        public IReadOnlyList<ChatMessage> Responses { get; }
-
-        public Exception? InvokeException { get; }
     }
 }

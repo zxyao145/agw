@@ -23,10 +23,10 @@ public class AgentAppServiceUpdateTests : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode)]
-    [InlineData(ExternalAgentKind.Codex)]
-    [InlineData(ExternalAgentKind.Pi)]
-    public async Task CreateAgentAsync_ExternalSummary_DoesNotPersistAgent(ExternalAgentKind kind)
+    [InlineData(EngineKind.ClaudeCode)]
+    [InlineData(EngineKind.Codex)]
+    [InlineData(EngineKind.Pi)]
+    public async Task CreateAgentAsync_ExternalSummary_DoesNotPersistAgent(EngineKind kind)
     {
         // Arrange
         var summaryModelProviderId = Guid.CreateVersion7();
@@ -342,7 +342,7 @@ public class AgentAppServiceUpdateTests : IDisposable
             Name = existing.Name,
             DisplayName = "My copy",
             Type = type,
-            ExternalAgentKind = type == AgentType.External ? ExternalAgentKind.Pi : ExternalAgentKind.None,
+            ExternalAgentKind = type == AgentType.External ? EngineKind.Pi : EngineKind.Maf,
             ModelProviderId = type == AgentType.System ? modelProviderId : null,
             CreateBy = "tester",
         };
@@ -374,10 +374,10 @@ public class AgentAppServiceUpdateTests : IDisposable
     }
 
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.OpenAIResponses)]
-    [InlineData(ExternalAgentKind.Codex, ProviderType.Anthropic)]
+    [InlineData(EngineKind.ClaudeCode, ProviderType.OpenAIResponses)]
+    [InlineData(EngineKind.Codex, ProviderType.Anthropic)]
     public async Task UpdateAgentAsync_IncompatibleModelProvider_RejectsBeforeMutation(
-        ExternalAgentKind kind,
+        EngineKind kind,
         ProviderType providerType
     )
     {
@@ -419,10 +419,10 @@ public class AgentAppServiceUpdateTests : IDisposable
     {
         var service = CreateService(CreateExternalAgent());
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            service.GetExternalModelRuntimeConfigurationAsync(ExternalAgentKind.Pi, Guid.CreateVersion7())
+            service.GetExternalModelRuntimeConfigurationAsync(EngineKind.Pi, Guid.CreateVersion7())
         );
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, error.Code);
-        Assert.Null(await service.GetExternalModelRuntimeConfigurationAsync(ExternalAgentKind.Pi, null));
+        Assert.Null(await service.GetExternalModelRuntimeConfigurationAsync(EngineKind.Pi, null));
     }
 
     private static Agent CreateExternalAgent() =>
@@ -431,7 +431,7 @@ public class AgentAppServiceUpdateTests : IDisposable
             Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            ExternalAgentKind = EngineKind.ClaudeCode,
             DisplayName = "External Agent",
             Description = "Original description",
             SystemPrompt = "original-prompt",

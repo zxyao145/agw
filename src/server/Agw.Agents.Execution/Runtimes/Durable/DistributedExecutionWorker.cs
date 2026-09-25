@@ -1,65 +1,43 @@
-using System.Collections.Concurrent;
-using System.Security.Claims;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Configuration;
-using Agw.Agents.Execution.HumanInteraction;
-using Agw.Agents.Execution.HumanInteraction.Application;
-using Agw.Agents.Execution.Messaging.Durable;
-using Agw.Agents.Execution.Persistence.Durable;
-using Agw.Agents.Execution.Runtimes.Durable.Contracts;
-using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
-using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Coordination;
-using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Runtime;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
 
 namespace Agw.Agents.Execution.Runtimes.Durable;
 
 /// <summary>
-/// 从 PostgreSQL 领取可运行 execution，并在 PostgreSQL 分布式锁保护下执行一个可恢复分段。
+/// 扫描等待名额的 Queued、等待恢复的 Resuming 和租约到期的 Running，交给本实例的 Scheduler 预留名额并领取。
+/// Scans Queued records awaiting capacity, Resuming records awaiting recovery, and Running records with expired leases, then asks this instance's scheduler to reserve capacity and claim them.
 /// </summary>
 internal sealed class DistributedExecutionWorker : BackgroundService
 {
-    private static readonly TimeSpan InterruptPollingInterval = TimeSpan.FromMilliseconds(250);
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IApplicationLock _applicationLock;
-    private readonly IExecutionEventStream _eventStream;
+    private readonly IDurableExecutionLeases _leases;
+    private readonly DurableSegmentScheduler _scheduler;
     private readonly IServerInitializationState _initializationState;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DistributedExecutionWorker> _logger;
     private readonly DistributedExecutionOptions _options;
-    private readonly ConcurrentDictionary<Guid, Task> _runningExecutions = new();
 
-    /// <summary>
-    /// 创建共享 PostgreSQL 状态、分布式锁和消息流的后台执行器。
-    /// </summary>
     public DistributedExecutionWorker(
-        IServiceScopeFactory scopeFactory,
-        IApplicationLock applicationLock,
-        IExecutionEventStream eventStream,
+        IDurableExecutionLeases leases,
+        DurableSegmentScheduler scheduler,
         IServerInitializationState initializationState,
         TimeProvider timeProvider,
         IOptions<ExecutionRuntimeOptions> options,
         ILogger<DistributedExecutionWorker> logger
     )
     {
-        _scopeFactory = scopeFactory;
-        _applicationLock = applicationLock;
-        _eventStream = eventStream;
+        _leases = leases;
+        _scheduler = scheduler;
         _initializationState = initializationState;
         _timeProvider = timeProvider;
         _options = options.Value.Distributed;
         _logger = logger;
     }
 
-    /// <summary>
-    /// 等待服务初始化后持续领取可运行 execution，并限制当前 Server 的并发数。
-    /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
@@ -71,11 +49,10 @@ internal sealed class DistributedExecutionWorker : BackgroundService
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                RemoveCompletedExecutions();
-                var capacity = _options.MaxConcurrentExecutions - _runningExecutions.Count;
+                var capacity = _options.MaxConcurrentExecutions - _scheduler.RunningCount;
                 if (capacity > 0)
                 {
-                    await ScheduleRunnableExecutionsAsync(capacity, stoppingToken).ConfigureAwait(false);
+                    await ClaimAsync(capacity, stoppingToken).ConfigureAwait(false);
                 }
 
                 await DelayAsync(stoppingToken).ConfigureAwait(false);
@@ -84,354 +61,40 @@ internal sealed class DistributedExecutionWorker : BackgroundService
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
         finally
         {
-            await WaitForRunningExecutionsAsync().ConfigureAwait(false);
+            await _scheduler.WaitAllAsync().ConfigureAwait(false);
         }
     }
 
     /// <summary>
-    /// 从 PostgreSQL 查询候选记录，并为本 Server 尚未处理的 execution 启动竞争任务。
+    /// 在系统范围内扫描候选记录并逐条尝试领取；其他实例先领取的记录被跳过。
+    /// Scans candidates in the system scope and tries to claim each; records claimed first by another instance are skipped.
     /// </summary>
-    private async Task ScheduleRunnableExecutionsAsync(int capacity, CancellationToken cancellationToken)
+    private async Task ClaimAsync(int capacity, CancellationToken cancellationToken)
     {
         try
         {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
-            IReadOnlyList<Guid> executionIds;
-            using (UserInfoUtil.PushSystemScope())
-            {
-                executionIds = await store
-                    .GetRunnableExecutionIdsAsync(staleBefore, capacity + _runningExecutions.Count, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            var scheduled = 0;
-            foreach (var executionId in executionIds)
-            {
-                if (scheduled >= capacity)
-                {
-                    break;
-                }
-                if (_runningExecutions.ContainsKey(executionId))
-                {
-                    continue;
-                }
-
-                var task = RunTrackedExecutionAsync(executionId, cancellationToken);
-                if (_runningExecutions.TryAdd(executionId, task))
-                {
-                    scheduled++;
-                }
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Failed to query runnable distributed executions.");
-        }
-    }
-
-    /// <summary>
-    /// 包装单个 execution 的完整处理过程，并保证异常不会终止后台轮询服务。
-    /// </summary>
-    private async Task RunTrackedExecutionAsync(Guid executionId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await RunExecutionAsync(executionId, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Distributed execution {ExecutionId} worker failed.", executionId);
-        }
-        finally
-        {
-            _runningExecutions.TryRemove(executionId, out _);
-        }
-    }
-
-    /// <summary>
-    /// 尝试获取 execution 分布式锁；成功后只执行并持久化一个分段。
-    /// </summary>
-    private async Task RunExecutionAsync(Guid executionId, CancellationToken cancellationToken)
-    {
-        IApplicationLockLease executionLock;
-        using (
-            var timeoutCancellation = new CancellationTokenSource(
-                TimeSpan.FromMilliseconds(_options.LockAcquireTimeoutMilliseconds),
-                _timeProvider
-            )
-        )
-        using (
-            var lockCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                timeoutCancellation.Token
-            )
-        )
-        {
-            try
-            {
-                executionLock = await _applicationLock
-                    .AcquireAsync(DurableExecutionLock.GetResourceName(executionId), lockCancellation.Token)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-                when (timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-            {
-                // 其他 Server 正持有该 execution 的 PostgreSQL advisory lock，本轮直接跳过。
-                return;
-            }
-        }
-
-        await using (executionLock.ConfigureAwait(false))
-        {
-            using var ownershipCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                executionLock.HandleLostToken
-            );
-            var ownershipToken = ownershipCancellation.Token;
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            var executor = scope.ServiceProvider.GetRequiredService<IDurableExecutionSegmentExecutor>();
-            var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
-            DurableExecutionSnapshot? snapshot;
-            using (UserInfoUtil.PushSystemScope())
-            {
-                snapshot = await store
-                    .TryBeginSegmentAsync(executionId, staleBefore, ownershipToken)
-                    .ConfigureAwait(false);
-            }
-            if (snapshot == null)
-            {
-                return;
-            }
-
-            var permissions = new InteractionPermissionState(
-                snapshot.Manifest.Settings.PermissionMode,
-                executionId,
-                snapshot.Manifest.Settings.PermissionVersion
-            );
-            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
-            using var interactionControl = scope
-                .ServiceProvider.GetService<HumanInteractionContextAccessor>()
-                ?.Push(
-                    null,
-                    permissions: permissions,
-                    refreshPermissions: async token =>
-                    {
-                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                            token,
-                            segmentCancellation.Token
-                        );
-                        await using var controlScope = _scopeFactory.CreateAsyncScope();
-                        var controlStore = controlScope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-                        var current = await controlStore
-                            .GetAuthorizedAsync(executionId, snapshot.Manifest.UserId, linked.Token)
-                            .ConfigureAwait(false);
-                        if (
-                            current.Status != DurableExecutionStatus.Running
-                            || current.StateVersion != snapshot.StateVersion
-                        )
-                        {
-                            await segmentCancellation.CancelAsync().ConfigureAwait(false);
-                            segmentCancellation.Token.ThrowIfCancellationRequested();
-                        }
-                        permissions.Set(
-                            current.Manifest.Settings.PermissionMode,
-                            current.Manifest.Settings.PermissionVersion
-                        );
-                    }
-                );
-            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
-            var interruptMonitor = MonitorInterruptAsync(
-                executionId,
-                snapshot.StateVersion,
-                permissions,
-                segmentCancellation,
-                monitorCancellation.Token
-            );
-            DurableExecutionSegmentResult result;
-            try
-            {
-                result = await executor
-                    .RunAsync(snapshot.CreateSegmentInput(), segmentCancellation.Token, executionLock.HandleLostToken)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                // 关闭中的 Server 不写失败终态；锁释放后由其他 Server 根据 Running 快照重放该分段。
-                return;
-            }
-            catch (OperationCanceledException) when (segmentCancellation.IsCancellationRequested)
-            {
-                // 中断状态已经先写入 PostgreSQL；协作式取消只负责尽快停止旧分支并释放锁。
-                return;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(
-                    exception,
-                    "Distributed execution {ExecutionId} segment {SegmentIndex} failed.",
-                    executionId,
-                    snapshot.SegmentIndex
-                );
-                result = new DurableExecutionSegmentResult
-                {
-                    ExecutionId = executionId,
-                    SegmentIndex = snapshot.SegmentIndex,
-                    Status = DurableExecutionSegmentStatus.Failed,
-                    ErrorMessage = exception.Message,
-                };
-            }
-            finally
-            {
-                await monitorCancellation.CancelAsync().ConfigureAwait(false);
-                try
-                {
-                    await interruptMonitor.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { }
-                catch (Exception exception)
-                {
-                    _logger.LogWarning(
-                        exception,
-                        "Failed to monitor interrupt state for distributed execution {ExecutionId}.",
-                        executionId
-                    );
-                }
-            }
-
-            DurableExecutionSnapshot persisted;
-            using var ownerScope = UserInfoUtil.Push(CreateUserPrincipal(snapshot.Manifest.UserId));
-            using (UserInfoUtil.PushSystemScope())
-            {
-                persisted = await store
-                    .SaveSegmentResultAsync(result, snapshot.StateVersion, segmentCancellation.Token)
-                    .ConfigureAwait(false);
-            }
-            if (IsTerminal(persisted.Status))
-            {
-                await PublishTerminalBestEffortAsync(
-                        executionId,
-                        result.SegmentIndex,
-                        persisted.Status,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-            }
-        }
-    }
-
-    private async Task MonitorInterruptAsync(
-        Guid executionId,
-        Guid expectedStateVersion,
-        InteractionPermissionState permissions,
-        CancellationTokenSource segmentCancellation,
-        CancellationToken cancellationToken
-    )
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            await Task.Delay(InterruptPollingInterval, _timeProvider, cancellationToken).ConfigureAwait(false);
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            DurableExecutionSnapshot snapshot;
-            using (UserInfoUtil.PushSystemScope())
-            {
-                snapshot = await store.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
-            }
-            if (snapshot.Status == DurableExecutionStatus.Running && snapshot.StateVersion == expectedStateVersion)
-            {
-                permissions.Set(
-                    snapshot.Manifest.Settings.PermissionMode,
-                    snapshot.Manifest.Settings.PermissionVersion
-                );
-                continue;
-            }
-
-            await segmentCancellation.CancelAsync().ConfigureAwait(false);
-            return;
-        }
-    }
-
-    /// <summary>
-    /// 在 PostgreSQL 终态已经提交后，尽力向当前 event stream 发布 terminal marker。
-    /// </summary>
-    private async Task PublishTerminalBestEffortAsync(
-        Guid executionId,
-        int segmentIndex,
-        DurableExecutionStatus status,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            var terminalStatus = status switch
-            {
-                DurableExecutionStatus.Failed => "failed",
-                DurableExecutionStatus.Interrupted => "interrupted",
-                _ => "completed",
-            };
-            await _eventStream
-                .AppendAsync(
-                    executionId,
-                    segmentIndex,
-                    int.MaxValue,
-                    TurnMessageFactory.CreateFinished(terminalStatus),
-                    cancellationToken
-                )
+            using var systemScope = UserInfoUtil.PushSystemScope();
+            var candidates = await _leases
+                .GetClaimableAsync(capacity + _scheduler.RunningCount, cancellationToken)
                 .ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            // Event stream 只改善实时回放；终态仍可由 PostgreSQL 重建。
-            _logger.LogWarning(
-                exception,
-                "Failed to publish terminal output for distributed execution {ExecutionId}.",
-                executionId
-            );
-        }
-    }
-
-    /// <summary>
-    /// 移除已经完成的本地任务，释放并发容量。
-    /// </summary>
-    private void RemoveCompletedExecutions()
-    {
-        foreach (var pair in _runningExecutions)
-        {
-            if (pair.Value.IsCompleted)
+            var claimed = 0;
+            foreach (var executionId in candidates)
             {
-                _runningExecutions.TryRemove(pair.Key, out _);
+                if (claimed >= capacity)
+                    break;
+                if (_scheduler.IsRunning(executionId))
+                    continue;
+                if (await _scheduler.TryStartAsync(executionId, cancellationToken).ConfigureAwait(false))
+                    claimed++;
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Failed to claim distributed executions.");
+        }
     }
 
-    /// <summary>
-    /// 使用统一时钟等待下一次 PostgreSQL 轮询。
-    /// </summary>
     private Task DelayAsync(CancellationToken cancellationToken) =>
         Task.Delay(TimeSpan.FromMilliseconds(_options.WorkerPollingMilliseconds), _timeProvider, cancellationToken);
-
-    /// <summary>
-    /// Host 关闭时等待当前 Server 已启动的 execution 任务释放分布式锁。
-    /// </summary>
-    private async Task WaitForRunningExecutionsAsync()
-    {
-        var tasks = _runningExecutions.Values.ToArray();
-        if (tasks.Length == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            await Task.WhenAll(tasks).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) { }
-    }
-
-    private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
-        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "DistributedExecution"));
 }

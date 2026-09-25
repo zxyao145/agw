@@ -3,12 +3,15 @@ using System.Text;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
+using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Persistence.Durable;
+using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -21,7 +24,7 @@ namespace Agw.Agents.Execution.Agentflows.Checkpoints;
 /// </summary>
 public sealed class AgentflowCheckpointStore
 {
-    private const string CheckpointMessageType = "agentflow-checkpoint";
+    private const string CheckpointMessageType = AgwMessageTypes.AgentflowCheckpoint;
     private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -92,92 +95,119 @@ public sealed class AgentflowCheckpointStore
         var messages = chatMessages.Select(item => item.ToAiMessage()).OfType<AgwMessage>().ToArray();
 
         // Flush before acquiring the history lock: a flush uses the same Project -> History lock order.
-        await using var historyBarrier = await ConversationHistoryPersistenceContext
-            .EnterBarrierAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var historyBarrier = ExecutionScope.Current?.History is { } history
+            ? await history.EnterBarrierAsync(cancellationToken).ConfigureAwait(false)
+            : null;
         await using var lifecycleLock = await _applicationLock
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
             .ConfigureAwait(false);
         await using var historyLock = await _applicationLock
             .AcquireAsync(GetHistoryLockName(projectId, contextId), cancellationToken)
             .ConfigureAwait(false);
+        var turnId = ExecutionScope.Current?.Context.TurnId;
+        // Durable 执行的存档行经写入入口在租约检查事务中提交。
+        // A durable execution commits its checkpoint rows through the write guard inside a lease-checked transaction.
+        if (ExecutionScope.Current?.WriteGuard is { } writeGuard)
+        {
+            return await writeGuard
+                .RunAsync(
+                    (services, token) =>
+                        RecordCoreAsync(services.GetRequiredService<IAgentflowCheckpointPersistence>(), token),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IAgentflowCheckpointPersistence>();
-        var existing = await persistence.FindCheckpointAsync(occurrenceId, cancellationToken).ConfigureAwait(false);
-        if (existing != null)
-        {
-            if (!string.Equals(existing.UserId, userId, StringComparison.Ordinal))
-            {
-                throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint owner does not match.");
-            }
-
-            return new RecordedAgentflowCheckpoint(ToSnapshot(existing), messages);
-        }
-
-        if (
-            !await persistence
-                .ProjectConversationExistsAsync(projectId, conversationId, contextId, userId, cancellationToken)
-                .ConfigureAwait(false)
-        )
-        {
-            return null;
-        }
-
-        return await persistence
-            .ExecuteAsync(
-                async (session, token) =>
-                {
-                    var nextSequence = await session
-                        .GetLastConversationSequenceAsync(conversationId, token)
-                        .ConfigureAwait(false);
-                    var now = _timeProvider.GetUtcNow();
-                    foreach (var message in chatMessages)
-                    {
-                        nextSequence++;
-                        session.AddConversationHistory(
-                            new AgentflowCheckpointHistoryWrite(
-                                Guid.CreateVersion7(),
-                                conversationId,
-                                taskId,
-                                message.AuthorName,
-                                nextSequence,
-                                JsonSerializer.Serialize(message, JsonOptions),
-                                now
-                            )
-                        );
-                    }
-
-                    var record = new AgentflowCheckpointRecord
-                    {
-                        Id = occurrenceId,
-                        SourceExecutionId = sourceExecutionId,
-                        ProjectId = projectId,
-                        ProjectConversationId = conversationId,
-                        ContextId = contextId,
-                        TaskId = taskId,
-                        AgentflowId = agentflowId,
-                        UserId = userId,
-                        IsDurable = isDurable,
-                        BoundarySequence = nextSequence,
-                        DefinitionFingerprint = definitionFingerprint,
-                        MarkersJson = JsonSerializer.Serialize(markers, JsonOptions),
-                        CheckpointJson = DurableExecutionJson.Serialize(checkpoint),
-                        CreateBy = userId,
-                        CreateTime = now,
-                        UpdateBy = userId,
-                        UpdateTime = now,
-                    };
-                    session.Agents.AgentflowCheckpoints.Add(record);
-                    return new AgentflowCheckpointPersistenceResult<RecordedAgentflowCheckpoint?>(
-                        new RecordedAgentflowCheckpoint(ToSnapshot(record), messages),
-                        Commit: true
-                    );
-                },
-                cancellationToken,
-                conversationId,
-                ConversationSessionContext.GetGeneration(projectId, contextId)
+        return await RecordCoreAsync(
+                scope.ServiceProvider.GetRequiredService<IAgentflowCheckpointPersistence>(),
+                cancellationToken
             )
             .ConfigureAwait(false);
+
+        async Task<RecordedAgentflowCheckpoint?> RecordCoreAsync(
+            IAgentflowCheckpointPersistence persistence,
+            CancellationToken token
+        )
+        {
+            var existing = await persistence.FindCheckpointAsync(occurrenceId, token).ConfigureAwait(false);
+            if (existing != null)
+            {
+                if (!string.Equals(existing.UserId, userId, StringComparison.Ordinal))
+                {
+                    throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint owner does not match.");
+                }
+
+                return new RecordedAgentflowCheckpoint(ToSnapshot(existing), messages);
+            }
+
+            if (
+                !await persistence
+                    .ProjectConversationExistsAsync(projectId, conversationId, contextId, userId, token)
+                    .ConfigureAwait(false)
+            )
+            {
+                return null;
+            }
+
+            return await persistence
+                .ExecuteAsync(
+                    async (session, sessionToken) =>
+                    {
+                        var nextSequence = await session
+                            .GetLastConversationSequenceAsync(conversationId, sessionToken)
+                            .ConfigureAwait(false);
+                        var now = _timeProvider.GetUtcNow();
+                        foreach (var message in chatMessages)
+                        {
+                            nextSequence++;
+                            session.AddConversationHistory(
+                                new AgentflowCheckpointHistoryWrite(
+                                    Guid.CreateVersion7(),
+                                    conversationId,
+                                    taskId,
+                                    message.AuthorName,
+                                    nextSequence,
+                                    JsonSerializer.Serialize(message, JsonOptions),
+                                    now
+                                )
+                                {
+                                    TurnId = turnId,
+                                }
+                            );
+                        }
+
+                        var record = new AgentflowCheckpointRecord
+                        {
+                            Id = occurrenceId,
+                            SourceExecutionId = sourceExecutionId,
+                            ProjectId = projectId,
+                            ProjectConversationId = conversationId,
+                            ContextId = contextId,
+                            TaskId = taskId,
+                            AgentflowId = agentflowId,
+                            UserId = userId,
+                            IsDurable = isDurable,
+                            BoundarySequence = nextSequence,
+                            DefinitionFingerprint = definitionFingerprint,
+                            MarkersJson = JsonSerializer.Serialize(markers, JsonOptions),
+                            CheckpointJson = DurableExecutionJson.Serialize(checkpoint),
+                            CreateBy = userId,
+                            CreateTime = now,
+                            UpdateBy = userId,
+                            UpdateTime = now,
+                        };
+                        session.Agents.AgentflowCheckpoints.Add(record);
+                        return new AgentflowCheckpointPersistenceResult<RecordedAgentflowCheckpoint?>(
+                            new RecordedAgentflowCheckpoint(ToSnapshot(record), messages),
+                            Commit: true
+                        );
+                    },
+                    token,
+                    conversationId,
+                    ExecutionContextSlot.FindBound(projectId, contextId)?.Generation ?? 0
+                )
+                .ConfigureAwait(false);
+        }
     }
 
     internal async Task<IReadOnlyList<AgentflowCheckpointAvailability>> ListAsync(
@@ -462,6 +492,15 @@ public sealed class AgentflowCheckpointStore
                         )
                         .ExecuteDeleteAsync(token)
                         .ConfigureAwait(false);
+                    if (resumeExecutionId.HasValue)
+                    {
+                        // 恢复分支是一个新的 Turn：Turn 行与序号 1 的开始事件随执行记录一起提交。
+                        // The resume branch is a new turn: its turn row and the start event with sequence 1 commit with the execution record.
+                        await session
+                            .AcceptResumeTurnAsync(resumeExecutionId.Value, record, token)
+                            .ConfigureAwait(false);
+                        AddResumeStartEvent(session.Agents, resumeExecutionId.Value, record, userId);
+                    }
                     return new AgentflowCheckpointPersistenceResult<AgentflowCheckpointSnapshot>(
                         snapshot,
                         Commit: true
@@ -623,6 +662,7 @@ public sealed class AgentflowCheckpointStore
         var manifest = ReadExecutionManifest(source) with
         {
             ExecutionId = resumeExecutionId,
+            StreamingScopeId = resumeExecutionId.ToString("D"),
             ResumeCheckpointOccurrenceId = checkpointRecord.Id,
             ResumeCheckpointNodeIds = DeserializeMarkers(checkpointRecord.MarkersJson)
                 .Select(item => item.NodeId)
@@ -655,10 +695,46 @@ public sealed class AgentflowCheckpointStore
                 CheckpointJson = checkpointRecord.CheckpointJson,
                 StateChangedAt = now,
                 StateVersion = Guid.CreateVersion7(),
+                LastEventSequence = 1,
                 CreateBy = userId,
                 CreateTime = now,
                 UpdateBy = userId,
                 UpdateTime = now,
+            }
+        );
+    }
+
+    /// <summary>
+    /// 恢复分支的开始事件，序号为 1；Worker 领取后继续分配之后的序号。
+    /// The start event of a resume branch with sequence 1; the worker continues with later sequences after claiming it.
+    /// </summary>
+    private static void AddResumeStartEvent(
+        IAgentsDbContext dbContext,
+        Guid resumeExecutionId,
+        AgentflowCheckpointRecord checkpointRecord,
+        string userId
+    )
+    {
+        var start = TurnMessageFactory.CreateStarted(
+            new TurnEnvelope(
+                resumeExecutionId,
+                checkpointRecord.ProjectConversationId,
+                checkpointRecord.AgentflowId,
+                AgentRuntimeType.Agentflow,
+                resumeExecutionId.ToString("D")
+            )
+        );
+        dbContext.DurableExecutionEvents.Add(
+            new DurableExecutionEventRecord
+            {
+                Id = Guid.CreateVersion7(),
+                TurnId = resumeExecutionId,
+                TurnSequence = 1,
+                LeaseEpoch = 0,
+                SegmentIndex = 0,
+                PayloadJson = JsonUtil.Serialize(start),
+                CreateBy = userId,
+                UpdateBy = userId,
             }
         );
     }
@@ -718,5 +794,5 @@ public sealed class AgentflowCheckpointStore
     }
 
     private static string GetHistoryLockName(Guid projectId, string contextId) =>
-        $"conversation-history:{projectId:D}:{contextId}";
+        ConversationHistoryLock.GetResourceName(projectId, contextId);
 }

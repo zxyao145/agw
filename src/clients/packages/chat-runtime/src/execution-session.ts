@@ -27,7 +27,9 @@ import {
   getLatestAgentMode,
   getMessageStreamingScopeId,
   getTurnFinishedStatus,
+  getTurnPosition,
   isModeControlMessage,
+  isTurnStartMessage,
   isUserTurnMessage,
   scopeStreamingMessage,
   type AgentMode,
@@ -190,10 +192,6 @@ export function buildSubscribeExecutionCommand(executionId: string, cursor?: str
   return buildCoreSubscribeExecutionCommand(executionId, cursor);
 }
 
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 /** 读取服务端持久化的作用域；委托给 platform-neutral 的 execution-core，保持单一来源。 */
 export { getMessageStreamingScopeId };
 
@@ -203,7 +201,7 @@ const executionInterruptTimeoutMs = 3_000;
 type PersistedDurableExecution = {
   /** 尚未确认结束的业务执行标识。 */
   executionId: string;
-  /** 客户端最后处理完成的 Redis Stream cursor。 */
+  /** 客户端已经收到的最大 turnSequence。 */
   cursor: string | null;
 };
 
@@ -373,7 +371,7 @@ export class ExecutionSession {
     this.connection.on("ReceiveMessage", (message: AiMessage) => {
       const scopedMessage = this.scopeIncomingMessage(message);
       this.updateDurableProgress(scopedMessage);
-      if (scopedMessage.additionalProperties?.type === "turn-start") {
+      if (isTurnStartMessage(scopedMessage)) {
         this.hasActiveTurn = true;
       } else if (getTurnFinishedStatus(scopedMessage)) {
         this.finishActiveTurn();
@@ -1002,18 +1000,22 @@ export class ExecutionSession {
     }
   }
 
-  /** 从服务端消息推进 executionId 与 cursor，并持久化最新恢复位置。 */
+  /** Durable 模式下从服务端消息推进 turnId 与 turnSequence 游标，并持久化最新恢复位置。 */
   private updateDurableProgress(message: AiMessage): void {
-    const executionId = readString(message.additionalProperties?.executionId);
-    if (!executionId) return;
-    this.activeExecutionId = executionId;
+    if (this.executionProvider !== "distributed") return;
+    const position = getTurnPosition(message);
+    if (!position) return;
+    const received =
+      this.activeExecutionId === position.turnId && this.streamCursor !== null
+        ? Number(this.streamCursor)
+        : 0;
+    this.activeExecutionId = position.turnId;
     this.durableConfirmed = true;
-    const cursor = readString(message.additionalProperties?.streamCursor);
-    if (cursor) this.streamCursor = cursor;
+    if (position.turnSequence > received) this.streamCursor = String(position.turnSequence);
     writePersistedDurableExecution(
       this.durableStorageKey,
       {
-        executionId,
+        executionId: position.turnId,
         cursor: this.streamCursor,
       },
       this.runtime,
@@ -1023,7 +1025,7 @@ export class ExecutionSession {
   private scopeIncomingMessage(message: AiMessage): AiMessage {
     const explicitScopeId = getMessageStreamingScopeId(message);
     const scopeId = explicitScopeId ?? this.activeStreamingScopeId ?? message.messageId;
-    if (explicitScopeId || message.additionalProperties?.type === "turn-start") {
+    if (explicitScopeId || isTurnStartMessage(message)) {
       this.activeStreamingScopeId = scopeId;
     }
     return scopeStreamingMessage(message, scopeId);

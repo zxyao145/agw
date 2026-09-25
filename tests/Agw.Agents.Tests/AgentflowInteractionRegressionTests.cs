@@ -4,7 +4,7 @@ using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Tests;
 
-public partial class AgentflowRuntimeServiceTests
+public partial class AgentflowTurnExecutorTests
 {
     [Fact]
     public async Task ExecuteStreamingAsync_ResponseDuringPublication_IsAlreadyRegistered()
@@ -149,7 +149,7 @@ public partial class AgentflowRuntimeServiceTests
         manifest = manifest with { Settings = manifest.Settings with { PermissionMode = mode } };
         var sink = new RecordingSegmentSink();
         var token = TestContext.Current.CancellationToken;
-        var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
+        var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 0, [], null),
             sink,
@@ -158,7 +158,7 @@ public partial class AgentflowRuntimeServiceTests
         var request = Assert.Single(waiting.PendingInteractions);
         var response = CreateResponse(manifest, request, true, submittedScope);
 
-        var result = await fixture.Service.ExecuteDurableSegmentAsync(
+        var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(manifest.ExecutionId, 1, [response], waiting.Checkpoint),
             sink,

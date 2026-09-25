@@ -2,11 +2,9 @@ using System.Text.Json;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Extensions.AI;
-using OpenAI.CodexSdk;
 using OpenAI.CodexSdk.MAF;
 
 namespace Agw.Agents.Tests;
@@ -74,7 +72,7 @@ public sealed class AgentResponseSchemaRuntimeTests
     {
         var options = new ClaudeCodeAIAgentOptions();
 
-        Assert.Same(options, AgentRuntimeService.ApplyResponseSchema(options, "  "));
+        Assert.Same(options, AgentRuntimeFactory.ApplyResponseSchema(options, "  "));
     }
 
     [Fact]
@@ -85,7 +83,7 @@ public sealed class AgentResponseSchemaRuntimeTests
             ExtraArgs = new Dictionary<string, string?> { ["json-schema"] = "{\"old\":true}", ["model"] = "sonnet" },
         };
 
-        var updated = AgentRuntimeService.ApplyResponseSchema(options, Schema);
+        var updated = AgentRuntimeFactory.ApplyResponseSchema(options, Schema);
 
         Assert.Equal(Schema, updated.ExtraArgs!["json-schema"]);
         Assert.Equal("sonnet", updated.ExtraArgs["model"]);
@@ -96,7 +94,7 @@ public sealed class AgentResponseSchemaRuntimeTests
     {
         var options = new ClaudeCodeAIAgentOptions { Resume = "session-1" };
 
-        var updated = AgentRuntimeService.ApplyResponseSchema(options, Schema);
+        var updated = AgentRuntimeFactory.ApplyResponseSchema(options, Schema);
 
         Assert.Equal("session-1", updated.Resume);
         Assert.Equal(Schema, updated.ExtraArgs!["json-schema"]);
@@ -108,7 +106,7 @@ public sealed class AgentResponseSchemaRuntimeTests
         var threadId = Guid.CreateVersion7();
         var options = new CodexAIAgentOptions { ThreadId = threadId, IsResume = true };
 
-        var updated = AgentRuntimeService.ApplyCodexResponseSchema(options, Schema);
+        var updated = AgentRuntimeFactory.ApplyCodexResponseSchema(options, Schema);
 
         Assert.Equal(threadId, updated.ThreadId);
         Assert.True(updated.IsResume);
@@ -118,7 +116,7 @@ public sealed class AgentResponseSchemaRuntimeTests
     [Fact]
     public void ApplyCodexResponseSchema_SetsOutputSchemaOnTurnOptions()
     {
-        var options = AgentRuntimeService.ApplyCodexResponseSchema(new CodexAIAgentOptions(), Schema);
+        var options = AgentRuntimeFactory.ApplyCodexResponseSchema(new CodexAIAgentOptions(), Schema);
 
         Assert.NotNull(options.TurnOptions);
         var outputSchema = options.TurnOptions!.OutputSchema;
@@ -132,7 +130,7 @@ public sealed class AgentResponseSchemaRuntimeTests
     {
         var options = new CodexAIAgentOptions();
 
-        Assert.Same(options, AgentRuntimeService.ApplyCodexResponseSchema(options, " "));
+        Assert.Same(options, AgentRuntimeFactory.ApplyCodexResponseSchema(options, " "));
         Assert.Null(options.TurnOptions);
     }
 
@@ -144,7 +142,7 @@ public sealed class AgentResponseSchemaRuntimeTests
             ErrorCodes.InvalidParam.Code,
             Assert
                 .Throws<AgwException>(() =>
-                    AgentRuntimeService.ApplyCodexResponseSchema(new CodexAIAgentOptions(), schema)
+                    AgentRuntimeFactory.ApplyCodexResponseSchema(new CodexAIAgentOptions(), schema)
                 )
                 .Code
         );

@@ -1,5 +1,4 @@
 using Agw.Agents.Execution.HumanInteraction.Application;
-using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Tests;
@@ -28,57 +27,64 @@ public class InteractionRulesTests
         Assert.Equal(scope, result.Scope);
     }
 
-    [Fact]
-    public async Task FullAccess_OnlyOrdinaryTools_AreAutomatic()
+    [Theory]
+    [InlineData("tool", AgwPermissionMode.AlwaysAsk, false)]
+    [InlineData("tool", AgwPermissionMode.AllowSameArguments, false)]
+    [InlineData("tool", AgwPermissionMode.FullAccess, true)]
+    [InlineData("granted-tool", AgwPermissionMode.AlwaysAsk, true)]
+    [InlineData("granted-tool", AgwPermissionMode.AllowSameArguments, true)]
+    [InlineData("granted-tool", AgwPermissionMode.FullAccess, true)]
+    [InlineData("input", AgwPermissionMode.AlwaysAsk, false)]
+    [InlineData("input", AgwPermissionMode.AllowSameArguments, false)]
+    [InlineData("input", AgwPermissionMode.FullAccess, false)]
+    [InlineData("gate", AgwPermissionMode.AlwaysAsk, false)]
+    [InlineData("gate", AgwPermissionMode.AllowSameArguments, false)]
+    [InlineData("gate", AgwPermissionMode.FullAccess, false)]
+    public void AutomaticallyApprove_RequestKindAndMode_ApprovesOnlyFullAccessOrGrantedTools(
+        string kind,
+        AgwPermissionMode mode,
+        bool expected
+    )
     {
-        var handler = new UnattendedInteractionHandler(AgwPermissionMode.FullAccess);
-        var result = await handler.ResolveAsync(
-            InteractionTestData.Tool("tool"),
-            TestContext.Current.CancellationToken
-        );
-        Assert.Equal(
-            ApprovalScope.AlwaysTool,
-            Assert.IsType<ToolApprovalDecision>(Assert.IsType<InteractionResolution.Resolved>(result).Response).Scope
-        );
+        InteractionRequest request = kind switch
+        {
+            "tool" or "granted-tool" => InteractionTestData.Tool(kind),
+            "input" => InteractionTestData.Input(kind),
+            _ => InteractionTestData.Gate(kind),
+        };
+
+        // 输入与 HumanGate 即使带有授权也需要用户。
+        // Input and HumanGate need the user even with a grant.
+        var decision = InteractionRules.AutomaticallyApprove(request, mode, granted: kind != "tool");
+
+        Assert.Equal(expected, decision != null);
+        if (decision != null)
+        {
+            Assert.True(decision.Approved);
+            Assert.Equal(ApprovalScope.Once, decision.Scope);
+            Assert.Equal(request.InteractionId, decision.InteractionId);
+        }
+    }
+
+    [Fact]
+    public async Task UnattendedHandler_EveryRequestKind_FailsExecution()
+    {
+        var handler = new UnattendedInteractionHandler();
+
         foreach (
             var request in new InteractionRequest[]
             {
+                InteractionTestData.Tool("tool"),
                 InteractionTestData.Gate("gate"),
                 InteractionTestData.Input("input"),
             }
         )
-            await Assert.ThrowsAsync<AgwException>(async () =>
+        {
+            var error = await Assert.ThrowsAsync<AgwException>(async () =>
                 await handler.ResolveAsync(request, TestContext.Current.CancellationToken)
             );
-    }
-
-    [Fact]
-    public async Task SetPermissionMode_FullAccess_OnlyCompletesOrdinaryTools()
-    {
-        var waiting = 0;
-        var session = new InProcessInteractionSession(
-            new InteractionTestSink(),
-            AgwPermissionMode.AlwaysAsk,
-            count => waiting = count
-        );
-        var tool = session
-            .ResolveAsync(InteractionTestData.Tool("tool"), TestContext.Current.CancellationToken)
-            .AsTask();
-        var input = session
-            .ResolveAsync(InteractionTestData.Input("input"), TestContext.Current.CancellationToken)
-            .AsTask();
-        var gate = session
-            .ResolveAsync(InteractionTestData.Gate("gate"), TestContext.Current.CancellationToken)
-            .AsTask();
-        session.SetPermissionMode(AgwPermissionMode.FullAccess);
-        Assert.IsType<ToolApprovalDecision>(Assert.IsType<InteractionResolution.Resolved>(await tool).Response);
-        Assert.Equal(2, waiting);
-        Assert.False(input.IsCompleted);
-        Assert.False(gate.IsCompleted);
-        session.CancelAll();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => input);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => gate);
-        Assert.Equal(0, waiting);
+            Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, error.Code);
+        }
     }
 
     [Fact]

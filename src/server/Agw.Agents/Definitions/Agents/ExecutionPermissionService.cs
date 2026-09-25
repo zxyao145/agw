@@ -18,7 +18,7 @@ public sealed class ExecutionPermissionService
     }
 
     public static ExecutionPermissionCapabilities ForAgent(Agent agent) =>
-        agent.Type == AgentType.External && agent.ExternalAgentKind is ExternalAgentKind.Codex or ExternalAgentKind.Pi
+        agent.Type == AgentType.External && agent.ExternalAgentKind is EngineKind.Codex or EngineKind.Pi
             ? new(
                 [AgwPermissionMode.FullAccess],
                 $"The current {agent.ExternalAgentKind} SDK integration supports Full access only."

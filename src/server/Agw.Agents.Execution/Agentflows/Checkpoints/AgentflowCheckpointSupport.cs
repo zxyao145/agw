@@ -1,5 +1,4 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
-using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI.Workflows;
@@ -9,15 +8,16 @@ using Microsoft.Extensions.Logging;
 namespace Agw.Agents.Execution.Agentflows.Checkpoints;
 
 /// <summary>
-/// 共享 Checkpoint 操作；待处理请求和恢复状态由每次 Runner 调用持有。
+/// 共享 Checkpoint 操作；待处理请求和恢复状态由每次 Turn 执行持有。
+/// Shared checkpoint operations; pending requests and resume state belong to each turn execution.
 /// </summary>
 public sealed class AgentflowCheckpointSupport
 {
-    private readonly ILogger<AgentflowRuntimeService> _logger;
+    private readonly ILogger<AgentflowCheckpointSupport> _logger;
     private readonly AgentflowCheckpointStore? _checkpointStore;
 
     public AgentflowCheckpointSupport(
-        ILogger<AgentflowRuntimeService> logger,
+        ILogger<AgentflowCheckpointSupport> logger,
         AgentflowCheckpointStore? checkpointStore = null
     )
     {
@@ -31,14 +31,14 @@ public sealed class AgentflowCheckpointSupport
         _checkpointStore?.GetDefinitionFingerprintAsync(agentflowId, cancellationToken)
         ?? Task.FromResult<string?>(null);
 
-    private static string CreateCheckpointSessionId(Guid agentflowId, Guid taskId) =>
-        $"agentflow-{agentflowId:N}-task-{taskId:N}";
+    private static string CreateCheckpointSessionId(Guid agentflowId, Guid turnId) =>
+        $"agentflow-{agentflowId:N}-turn-{turnId:N}";
 
     internal static async ValueTask<CheckpointedStreamingRun> StartCheckpointedRunAsync(
         Workflow workflow,
         List<ChatMessage> messages,
         Guid agentflowId,
-        Guid taskId,
+        Guid turnId,
         DurableAgentflowCheckpoint? resumeCheckpoint,
         CancellationToken cancellationToken
     )
@@ -52,7 +52,7 @@ public sealed class AgentflowCheckpointSupport
                     workflow,
                     messages,
                     checkpointManager,
-                    CreateCheckpointSessionId(agentflowId, taskId),
+                    CreateCheckpointSessionId(agentflowId, turnId),
                     cancellationToken
                 )
                 .ConfigureAwait(false);

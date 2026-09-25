@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Agw.Agents.Contracts.Execution;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Tooling;
@@ -32,7 +33,7 @@ public class Agent : BaseEntity, IAggregateRoot
 
     public AgentType Type { get; set; } = AgentType.System;
 
-    public ExternalAgentKind ExternalAgentKind { get; set; } = ExternalAgentKind.None;
+    public EngineKind ExternalAgentKind { get; set; } = EngineKind.Maf;
 
     /// <summary>
     /// JSON object for additional external agent settings.

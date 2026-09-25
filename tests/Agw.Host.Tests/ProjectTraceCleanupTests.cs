@@ -182,7 +182,6 @@ public class ProjectTraceCleanupTests
                 Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
                 new Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance(
                     dbContext,
-                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
                     TimeProvider.System,
                     Microsoft
                         .Extensions
@@ -210,7 +209,6 @@ public class ProjectTraceCleanupTests
                 Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
                 new Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance(
                     dbContext,
-                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
                     TimeProvider.System,
                     Microsoft
                         .Extensions

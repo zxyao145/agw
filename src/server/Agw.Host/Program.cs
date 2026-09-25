@@ -398,6 +398,24 @@ public static class AgwHostApplication
 
             Log.Information("Agw Host configured successfully");
 
+            if (app.Services.GetRequiredService<IServerInitializationState>().IsInitialized)
+            {
+                await using var upgradeScope = app.Services.CreateAsyncScope();
+                await upgradeScope
+                    .ServiceProvider.GetRequiredService<Agw.Infrastructure.Agents.DurableTurnUpgrade>()
+                    .UpgradeAsync(CancellationToken.None);
+                if (
+                    app.Services.GetRequiredService<
+                        IOptions<Agw.Agents.Execution.Configuration.ExecutionRuntimeOptions>
+                    >().Value.Provider == Agw.Agents.Contracts.Execution.ExecutionProvider.InProcess
+                )
+                {
+                    await upgradeScope
+                        .ServiceProvider.GetRequiredService<Agw.Infrastructure.Projects.InProcessTurnRecovery>()
+                        .RecoverAsync(CancellationToken.None);
+                }
+            }
+
             await app.StartAsync();
             ServerRuntimeDescriptorStore? runtimeStore = null;
             if (profile == AgwHostProfile.Standalone)

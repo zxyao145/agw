@@ -17,6 +17,14 @@ public class ProjectConversationChatHistoryConfiguration : IEntityTypeConfigurat
         builder.Property(e => e.AgentName).HasMaxLength(200);
         builder.Property(e => e.ConversationPayload).HasColumnType("text");
         builder.Property(e => e.Error).HasColumnType("text");
+        builder.Property(e => e.HistoryScope).HasMaxLength(256);
+        builder
+            .Property(e => e.Purpose)
+            .HasConversion(LowercaseEnum.Converter<ConversationMessagePurpose>())
+            .HasMaxLength(16)
+            .HasDefaultValue(ConversationMessagePurpose.Message)
+            .HasSentinel((ConversationMessagePurpose)(-1))
+            .IsRequired();
         builder
             .HasIndex(e => e.ConversationId)
             .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id");
@@ -25,6 +33,19 @@ public class ProjectConversationChatHistoryConfiguration : IEntityTypeConfigurat
             .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_conversation_sequence");
         builder.HasIndex(e => new { e.TaskId, e.CreateTime });
         builder.HasIndex(e => new { e.TaskId, e.ConversationSequence }).IsUnique(false);
+        builder.HasIndex(e => new
+        {
+            e.ConversationId,
+            e.HistoryScope,
+            e.ConversationSequence,
+        });
+        builder.HasIndex(e => new { e.TurnId, e.ConversationSequence });
+        builder.HasIndex(e => new
+        {
+            e.ConversationId,
+            e.Purpose,
+            e.ConversationSequence,
+        });
 
         builder
             .HasOne(e => e.ProjectConversation)

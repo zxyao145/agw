@@ -16,12 +16,12 @@ namespace Agw.Jobs.Application.Tools;
 public sealed class JobManagementToolExecutor
 {
     private readonly JobAppService _service;
-    private readonly ICurrentAgentTurn _turnContextAccessor;
+    private readonly IAgentExecutionContextAccessor _executionContext;
 
-    public JobManagementToolExecutor(JobAppService service, ICurrentAgentTurn turnContextAccessor)
+    public JobManagementToolExecutor(JobAppService service, IAgentExecutionContextAccessor executionContext)
     {
         _service = service;
-        _turnContextAccessor = turnContextAccessor;
+        _executionContext = executionContext;
     }
 
     [AgwTool(Name = "agw_job_list")]
@@ -180,15 +180,10 @@ public sealed class JobManagementToolExecutor
 
     private string RequireInteractiveUserId(Guid projectId)
     {
-        var context = _turnContextAccessor.Current;
+        var context = _executionContext.Current;
         if (context == null || ProjectDefaults.GetDefaultProjectIdentifier(context.ProjectId) != projectId)
         {
             throw new AgwException(ErrorCodes.InteractiveAdminRequired);
-        }
-
-        if (string.IsNullOrWhiteSpace(context.UserId))
-        {
-            throw new AgwException(ErrorCodes.AuthenticationRequired, "A stable user id is required.");
         }
 
         if (

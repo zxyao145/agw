@@ -943,9 +943,9 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("create_time");
 
-                    b.Property<Guid>("ExecutionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("execution_id");
+                    b.Property<long>("LeaseEpoch")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lease_epoch");
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
@@ -956,9 +956,13 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("segment_index");
 
-                    b.Property<int>("Sequence")
-                        .HasColumnType("integer")
-                        .HasColumnName("sequence");
+                    b.Property<Guid>("TurnId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("turn_id");
+
+                    b.Property<long>("TurnSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("turn_sequence");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("text")
@@ -971,9 +975,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_execution_stream_entry");
 
-                    b.HasIndex("ExecutionId", "SegmentIndex", "Sequence")
+                    b.HasIndex("TurnId", "TurnSequence")
                         .IsUnique()
-                        .HasDatabaseName("ix_execution_stream_entry_execution_id_segment_index_sequence");
+                        .HasDatabaseName("ix_execution_stream_entry_turn_id_turn_sequence");
 
                     b.ToTable("execution_stream_entry", (string)null);
                 });
@@ -1000,6 +1004,22 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text")
                         .HasColumnName("error_message");
+
+                    b.Property<long>("LastEventSequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("last_event_sequence");
+
+                    b.Property<long>("LeaseEpoch")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("lease_epoch");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_expires_at");
 
                     b.Property<string>("ManifestJson")
                         .IsRequired()
@@ -1043,6 +1063,10 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<string>("TurnCheckpointJson")
+                        .HasColumnType("text")
+                        .HasColumnName("turn_checkpoint_json");
+
                     b.Property<string>("UpdateBy")
                         .HasColumnType("text")
                         .HasColumnName("update_by");
@@ -1057,8 +1081,16 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("user_id");
 
+                    b.Property<string>("WorkerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("worker_id");
+
                     b.HasKey("Id")
                         .HasName("pk_durable_execution");
+
+                    b.HasIndex("Status", "LeaseExpiresAt")
+                        .HasDatabaseName("ix_durable_execution_status_lease_expires_at");
 
                     b.HasIndex("Status", "StateChangedAt")
                         .HasDatabaseName("ix_durable_execution_status_state_changed_at");
@@ -1808,6 +1840,10 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("provider_session_id");
 
+                    b.Property<long?>("SeenThroughSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("seen_through_sequence");
+
                     b.Property<string>("UpdateBy")
                         .HasColumnType("text")
                         .HasColumnName("update_by");
@@ -1835,6 +1871,10 @@ namespace Agw.Migrations.Postgres.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("agent_id");
 
                     b.Property<string>("AgentName")
                         .HasMaxLength(200)
@@ -1865,6 +1905,11 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("finished_time");
 
+                    b.Property<string>("HistoryScope")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("history_scope");
+
                     b.Property<Guid?>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
@@ -1873,9 +1918,21 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("message")
+                        .HasColumnName("purpose");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
+
+                    b.Property<int?>("StepIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("step_index");
 
                     b.Property<string>("TaskErrorMessage")
                         .HasMaxLength(2000)
@@ -1885,6 +1942,10 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<Guid>("TaskId")
                         .HasColumnType("uuid")
                         .HasColumnName("task_id");
+
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("turn_id");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
                         .HasColumnType("timestamp with time zone")
@@ -1905,7 +1966,91 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasIndex("TaskId", "CreateTime")
                         .HasDatabaseName("ix_project_conversation_chat_history_task_id_create_time");
 
+                    b.HasIndex("TurnId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_turn_id_conversation_sequ");
+
+                    b.HasIndex("ConversationId", "HistoryScope", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_h");
+
+                    b.HasIndex("ConversationId", "Purpose", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_p");
+
                     b.ToTable("project_conversation_chat_history", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationTurn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("error_code");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<long>("FirstSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("first_sequence");
+
+                    b.Property<Guid>("InputMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("input_message_id");
+
+                    b.Property<long?>("LastSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_sequence");
+
+                    b.Property<Guid>("ProjectConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_conversation_id");
+
+                    b.Property<string>("RuntimeType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("runtime_type");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("StepCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("step_count");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.Property<Guid?>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_conversation_turn");
+
+                    b.HasIndex("TaskId")
+                        .HasDatabaseName("ix_project_conversation_turn_task_id");
+
+                    b.HasIndex("ProjectConversationId", "FirstSequence")
+                        .HasDatabaseName("ix_project_conversation_turn_project_conversation_id_first_seq");
+
+                    b.HasIndex("ProjectConversationId", "Status")
+                        .HasDatabaseName("ix_project_conversation_turn_project_conversation_id_status");
+
+                    b.ToTable("project_conversation_turn", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMcpServerRelation", b =>
@@ -2652,6 +2797,18 @@ namespace Agw.Migrations.Postgres.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_project_conversation_chat_history_project_conversation_proj");
+
+                    b.Navigation("ProjectConversation");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationTurn", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
+                        .WithMany()
+                        .HasForeignKey("ProjectConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_conversation_turn_project_conversation_project_conv");
 
                     b.Navigation("ProjectConversation");
                 });

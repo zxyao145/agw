@@ -191,7 +191,7 @@ function createTurnFinishedMessage(): AiMessage {
     role: "system",
     author: "$agw",
     contents: [],
-    additionalProperties: { type: "turn-finished", status: "completed" },
+    additionalProperties: { type: "agw-turn-finished", status: "completed" },
   };
 }
 
@@ -250,7 +250,7 @@ test("manager restores the complete active turn instead of replaying capped delt
     author: "$agw",
     contents: [],
     streamingScopeId: "user-1",
-    additionalProperties: { type: "turn-start" },
+    additionalProperties: { type: "agw-turn-start" },
   });
 
   const deltas = Array.from({ length: 250 }, (_, index) => String(index % 10));
@@ -287,7 +287,7 @@ test("manager restores the complete active turn instead of replaying capped delt
     author: "$agw",
     contents: [],
     streamingScopeId: "user-1",
-    additionalProperties: { type: "turn-finished", status: "completed" },
+    additionalProperties: { type: "agw-turn-finished", status: "completed" },
   });
   assert.equal(second.getActiveTurnSnapshot(), null);
 });
@@ -523,7 +523,7 @@ function createTurnStartMessage(): AiMessage {
     role: "system",
     author: "$agw",
     contents: [],
-    additionalProperties: { type: "turn-start" },
+    additionalProperties: { type: "agw-turn-start" },
   };
 }
 
@@ -559,7 +559,7 @@ test("manager notifies with the failed status", () => {
   clientHandlers?.onMessage(createTurnStartMessage());
   clientHandlers?.onMessage({
     ...createTurnFinishedMessage(),
-    additionalProperties: { type: "turn-finished", status: "failed" },
+    additionalProperties: { type: "agw-turn-finished", status: "failed" },
   });
 
   assert.deepEqual(events, [{ key: sessionKey, status: "failed" }]);
@@ -635,6 +635,145 @@ test("manager notifies when reconnect finds the execution finished", async () =>
   clientHandlers?.onReconnected?.();
 
   assert.deepEqual(events, [{ key: sessionKey, status: "completed" }]);
+});
+
+function createTurnLifecycleMessage(
+  type: "agw-turn-start" | "agw-turn-finished",
+  turnId: string,
+  status?: string,
+): AiMessage {
+  return {
+    messageId: `${type}-${turnId}`,
+    role: "system",
+    author: "$agw",
+    contents: [],
+    additionalProperties: {
+      type,
+      turnId,
+      conversationId: "conversation-1",
+      ...(status ? { status } : {}),
+    },
+  };
+}
+
+test("manager records turn statuses of a background conversation after detach", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined }).detach();
+  const statuses = () => manager.conversationStatuses.getStatuses(sessionKey).get("conversation-1");
+
+  clientHandlers?.onMessage(createTurnLifecycleMessage("agw-turn-start", "turn-1"));
+  const running = statuses();
+  clientHandlers?.onMessage(createTurnLifecycleMessage("agw-turn-finished", "turn-1", "failed"));
+
+  assert.equal(running, "running");
+  assert.equal(statuses(), "failed");
+  assert.equal(
+    manager.conversationStatuses.getStatuses({ serverId: "server-a", projectId: "project-2" }).size,
+    0,
+  );
+});
+
+test("manager ignores a finish message that carries only status", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  clientHandlers?.onMessage(createTurnLifecycleMessage("agw-turn-start", "turn-1"));
+  const before = manager.conversationStatuses.getStatuses(sessionKey);
+
+  clientHandlers?.onMessage({
+    ...createTurnFinishedMessage(),
+    additionalProperties: { type: "agw-turn-finished", status: "interrupted" },
+  });
+
+  assert.equal(manager.conversationStatuses.getStatuses(sessionKey), before);
+  assert.equal(before.get("conversation-1"), "running");
+});
+
+function markSuperseded(message: AiMessage): AiMessage {
+  return {
+    ...message,
+    additionalProperties: { ...message.additionalProperties, superseded: true },
+  };
+}
+
+test("manager keeps snapshot statuses when superseded turn messages are replayed", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  const store = manager.conversationStatuses;
+  const status = () => store.getStatuses(sessionKey).get("conversation-1");
+  clientHandlers?.onMessage(createTurnLifecycleMessage("agw-turn-start", "turn-a"));
+
+  // B 在另一个客户端成功结束，快照不再包含这个会话；随后回放 A 的结束消息。
+  // B completed on another client so the snapshot omits the conversation; A's finish is replayed afterwards.
+  store.applySnapshot(sessionKey, store.beginSnapshot(sessionKey), []);
+  clientHandlers?.onMessage(
+    markSuperseded(createTurnLifecycleMessage("agw-turn-finished", "turn-a", "failed")),
+  );
+  const afterOldFinish = status();
+
+  // B 仍在运行时，回放 A 的开始与结束消息。A's start and finish are replayed while B is still running.
+  store.applySnapshot(sessionKey, store.beginSnapshot(sessionKey), [
+    { conversationId: "conversation-1", turnId: "turn-b", status: "running" },
+  ]);
+  clientHandlers?.onMessage(markSuperseded(createTurnLifecycleMessage("agw-turn-start", "turn-a")));
+  clientHandlers?.onMessage(
+    markSuperseded(createTurnLifecycleMessage("agw-turn-finished", "turn-a", "interrupted")),
+  );
+
+  assert.equal(afterOldFinish, "idle");
+  assert.equal(status(), "running");
+  assert.equal(store.get(sessionKey, "conversation-1")?.turnId, "turn-b");
+});
+
+test("manager notifies subscribers of superseded lifecycle messages with the session key", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  const notified: (typeof sessionKey)[] = [];
+  const unsubscribe = manager.subscribeSupersededTurn((key) => notified.push(key));
+
+  clientHandlers?.onMessage(createTurnLifecycleMessage("agw-turn-start", "turn-a"));
+  clientHandlers?.onMessage(
+    markSuperseded(createTurnLifecycleMessage("agw-turn-finished", "turn-a", "failed")),
+  );
+  unsubscribe();
+  clientHandlers?.onMessage(markSuperseded(createTurnLifecycleMessage("agw-turn-start", "turn-a")));
+
+  assert.deepEqual(notified, [sessionKey]);
+});
+
+test("manager notifies reconnect subscribers after any connection reconnects", () => {
+  const handlers: ExecutionHubHandlers[] = [];
+  const manager = new ExecutionSessionManager((value) => {
+    handlers.push(value);
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  manager.attach({ ...sessionKey, contextId: "context-2" }, { onMessage: () => undefined });
+  let reconnects = 0;
+  const unsubscribe = manager.subscribeReconnected(() => {
+    reconnects += 1;
+  });
+
+  for (const handler of handlers) handler.onReconnected?.();
+  unsubscribe();
+  handlers[0]?.onReconnected?.();
+
+  assert.equal(reconnects, 2);
 });
 
 test("manager does not notify when the execute command fails", async () => {

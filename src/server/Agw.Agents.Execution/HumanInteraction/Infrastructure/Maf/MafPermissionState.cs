@@ -23,6 +23,4 @@ internal sealed class MafPermissionState
         ArgumentNullException.ThrowIfNull(session);
         MafSessionApprovalState.Synchronize(session, Permissions);
     }
-
-    public void Set(AgwPermissionMode? permissionMode) => Permissions.Set(permissionMode);
 }

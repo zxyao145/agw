@@ -17,7 +17,13 @@ import {
   getExecutionReconnectDelay,
   getLatestAgentMode,
   getTurnFinishedStatus,
+  getTurnIdentity,
+  getTurnPosition,
   isModeControlMessage,
+  isSupersededTurnMessage,
+  isTurnStartMessage,
+  TURN_FINISHED_MESSAGE_TYPE,
+  TURN_START_MESSAGE_TYPE,
 } from "./protocol";
 
 const interactionResponses: InteractionResponse[] = [
@@ -196,24 +202,99 @@ test("turn-finished is message-level and accepts only server statuses", () => {
     role: "system",
     author: "$agw",
     contents: [],
-    additionalProperties: { type: "turn-finished", status: "failed" },
+    additionalProperties: { type: TURN_FINISHED_MESSAGE_TYPE, status: "failed" },
   };
 
+  assert.equal(TURN_FINISHED_MESSAGE_TYPE, "agw-turn-finished");
   assert.equal(getTurnFinishedStatus(message), "failed");
   assert.equal(
     getTurnFinishedStatus({
       ...message,
       additionalProperties: undefined,
-      contents: [{ type: "TextContent", additionalProperties: { type: "turn-finished" } }],
+      contents: [
+        { type: "TextContent", additionalProperties: { type: TURN_FINISHED_MESSAGE_TYPE } },
+      ],
     }),
     null,
   );
   assert.equal(
     getTurnFinishedStatus({
       ...message,
-      additionalProperties: { type: "turn-finished", status: "cancelled" },
+      additionalProperties: { type: TURN_FINISHED_MESSAGE_TYPE, status: "cancelled" },
     }),
     "completed",
+  );
+  assert.equal(
+    getTurnFinishedStatus({
+      ...message,
+      additionalProperties: { type: "turn-finished", status: "failed" },
+    }),
+    null,
+  );
+});
+
+test("turn position reads the server turnId and positive in-turn sequence", () => {
+  const message = {
+    messageId: "message-1",
+    role: "system",
+    author: "$agw",
+    contents: [],
+    additionalProperties: { type: TURN_START_MESSAGE_TYPE, turnId: "turn-1", turnSequence: 1 },
+  };
+
+  assert.equal(TURN_START_MESSAGE_TYPE, "agw-turn-start");
+  assert.equal(isTurnStartMessage(message), true);
+  assert.deepEqual(getTurnPosition(message), { turnId: "turn-1", turnSequence: 1 });
+  assert.equal(getTurnPosition({ ...message, additionalProperties: { turnId: "turn-1" } }), null);
+  assert.equal(
+    getTurnPosition({ ...message, additionalProperties: { turnId: "turn-1", turnSequence: 0 } }),
+    null,
+  );
+  assert.equal(
+    getTurnPosition({ ...message, additionalProperties: { turnId: "", turnSequence: 2 } }),
+    null,
+  );
+});
+
+test("turn lifecycle messages expose their conversation and turn only when both are present", () => {
+  const message = {
+    messageId: "message-1",
+    role: "system",
+    author: "$agw",
+    contents: [],
+    additionalProperties: {
+      type: TURN_FINISHED_MESSAGE_TYPE,
+      status: "failed",
+      conversationId: "conversation-1",
+      turnId: "turn-1",
+    },
+  };
+
+  assert.deepEqual(getTurnIdentity(message), {
+    conversationId: "conversation-1",
+    turnId: "turn-1",
+  });
+  assert.equal(
+    getTurnIdentity({
+      ...message,
+      additionalProperties: { type: TURN_FINISHED_MESSAGE_TYPE, status: "interrupted" },
+    }),
+    null,
+  );
+  assert.equal(
+    getTurnIdentity({
+      ...message,
+      additionalProperties: { ...message.additionalProperties, conversationId: "" },
+    }),
+    null,
+  );
+  assert.equal(isSupersededTurnMessage(message), false);
+  assert.equal(
+    isSupersededTurnMessage({
+      ...message,
+      additionalProperties: { ...message.additionalProperties, superseded: true },
+    }),
+    true,
   );
 });
 

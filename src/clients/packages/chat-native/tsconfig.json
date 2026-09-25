@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.react.json",
   "compilerOptions": {
+    "customConditions": ["react-native-legacy-deep-imports"],
     "moduleSuffixes": [".native", ""]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]

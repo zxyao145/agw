@@ -1,17 +1,20 @@
 import type { ConversationRenderItem, PresentedContent } from "@agw/chat-core";
+import { isUserTurnMessage } from "@agw/execution-core";
+import type { ConversationTurnInputSummary } from "@agw/projects";
+import { isNonEmptyGuid } from "@agw/api";
 
 export const USER_INPUT_PREVIEW_MAX_LENGTH = 160;
 export const USER_INPUT_NAVIGATION_ACTIVATION_OFFSET = 32;
 
 export type UserInputAnchor = {
   key: string;
-  itemIndex: number;
+  itemIndex: number | null;
   preview: string;
 };
 
 export type UserInputMarker = UserInputAnchor & {
-  rowIndex: number;
-  start: number;
+  rowIndex: number | null;
+  start: number | null;
 };
 
 type RowMeasurement = {
@@ -68,21 +71,43 @@ function getAttachmentPreview(contents: readonly PresentedContent[]): string {
   return uri?.name ?? uri?.uri ?? "User input";
 }
 
-export function buildUserInputAnchors(items: readonly ConversationRenderItem[]): UserInputAnchor[] {
-  return items.flatMap((item, itemIndex) => {
+export function userInputKey(messageId: string): string {
+  return isNonEmptyGuid(messageId) || /^[0-9a-f]{32}$/i.test(messageId)
+    ? messageId.replaceAll("-", "").toLowerCase()
+    : messageId;
+}
+
+export function buildUserInputAnchors(
+  items: readonly ConversationRenderItem[],
+  inputs: readonly ConversationTurnInputSummary[] = [],
+): UserInputAnchor[] {
+  const loaded = new Map<string, UserInputAnchor>();
+  items.forEach((item, itemIndex) => {
     if (
       (item.type !== "message" && item.type !== "result" && item.type !== "plan") ||
-      item.message.source.role !== "user"
+      !isUserTurnMessage(item.message.source)
     ) {
-      return [];
+      return;
     }
 
     const textPreview = getTextPreview(item.message.contents);
     const preview = truncateUserInputPreview(
       textPreview || getAttachmentPreview(item.message.contents),
     );
-    return [{ key: item.key, itemIndex, preview }];
+    const key = userInputKey(item.message.source.messageId);
+    loaded.set(key, { key, itemIndex, preview });
   });
+  const anchors = inputs.map((input) => {
+    const key = userInputKey(input.inputMessageId);
+    const itemIndex = loaded.get(key)?.itemIndex ?? null;
+    loaded.delete(key);
+    return {
+      key,
+      itemIndex,
+      preview: truncateUserInputPreview(input.inputSummary || "User input"),
+    };
+  });
+  return [...anchors, ...loaded.values()];
 }
 
 export function layoutUserInputMarkers(
@@ -90,18 +115,13 @@ export function layoutUserInputMarkers(
   measurements: readonly RowMeasurement[],
   rowOffset: number,
 ): UserInputMarker[] {
-  return anchors.flatMap((anchor) => {
-    const rowIndex = anchor.itemIndex + rowOffset;
-    const measurement = measurements[rowIndex];
-    if (!measurement) return [];
-
-    return [
-      {
-        ...anchor,
-        rowIndex,
-        start: measurement.start,
-      },
-    ];
+  return anchors.map((anchor) => {
+    const rowIndex = anchor.itemIndex === null ? null : anchor.itemIndex + rowOffset;
+    return {
+      ...anchor,
+      rowIndex,
+      start: rowIndex === null ? null : (measurements[rowIndex]?.start ?? null),
+    };
   });
 }
 
@@ -115,8 +135,10 @@ export function getActiveUserInputMarkerKey(
   if (isAtBottom) return markers[markers.length - 1].key;
 
   const threshold = Math.max(scrollOffset, 0) + activationOffset;
-  let activeKey = markers[0].key;
+  let activeKey: string | null = null;
   for (const marker of markers) {
+    if (marker.start === null) continue;
+    activeKey ??= marker.key;
     if (marker.start > threshold) break;
     activeKey = marker.key;
   }

@@ -96,7 +96,7 @@ test("node inputs stay inside their parent turn and hidden control messages stay
     1,
     0,
     { ...message("node-input", "user"), additionalProperties: { agentflowInput: true } },
-    { ...message("control", "system"), additionalProperties: { type: "turn-start" } },
+    { ...message("control", "system"), additionalProperties: { type: "agw-turn-start" } },
   );
   const summary = buildConversationRenderModel(messages)[1];
   assert.ok(summary.type === "work-summary");

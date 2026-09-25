@@ -154,7 +154,8 @@ public class EntityTypeConfigurationTests
             typeof(ProjectConnectionRelation),
             typeof(ProjectConversation),
             typeof(ProjectConversationBinding),
-            typeof(ProjectConversationChatHistory)
+            typeof(ProjectConversationChatHistory),
+            typeof(ProjectConversationTurn)
         );
     }
 
@@ -190,7 +191,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(41, entityTypes.Length);
+        Assert.Equal(42, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

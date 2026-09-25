@@ -4,8 +4,10 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 required = (
-    "LeaseConnectionLost_NewWorkerClaims_OldResultCannotCommit",
-    "PostgresBatch_ConcurrentOverlappingBatches_KeepEveryPositionExactlyOnce",
+    "Postgres_ExpiredLease_TakeoverRejectsOldInstanceWrites",
+    "Postgres_ConcurrentCommits_AssignContiguousSequences",
+    "Postgres_UpgradeActiveExecutions_PreservesStateAndAllowsRecovery",
+    "Postgres_ConcurrentStarts_ReserveCapacityBeforeLeasesAndReleaseOnFailure",
 )
 results = [
     item

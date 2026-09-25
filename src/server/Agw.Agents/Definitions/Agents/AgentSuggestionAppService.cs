@@ -56,7 +56,7 @@ public class AgentSuggestionAppService
         if (agent.Type == AgentType.External)
         {
             var mode =
-                agent.ExternalAgentKind == ExternalAgentKind.ClaudeCode
+                agent.ExternalAgentKind == EngineKind.ClaudeCode
                     ? AgentSuggestionMode.ClaudeCode
                     : AgentSuggestionMode.Unsupported;
             return new AgentSuggestionsResponse(mode, []);

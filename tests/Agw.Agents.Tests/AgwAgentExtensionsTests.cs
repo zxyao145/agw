@@ -3,10 +3,12 @@ using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.History;
 using Agw.Agents.Execution.Agents.Middleware.ModelInput;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
@@ -36,7 +38,15 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         )
     );
 
-    public void Dispose() => _userScope.Dispose();
+    private readonly IDisposable _executionScope = ExecutionTestScopes
+        .Scope(ExecutionTestScopes.Context(userId: "tester"))
+        .Push();
+
+    public void Dispose()
+    {
+        _executionScope.Dispose();
+        _userScope.Dispose();
+    }
 
     [Fact]
     public async Task AsAgwAgent_OwnedCapabilities_DisposeConfiguredChatClientPipeline()
@@ -418,12 +428,8 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         await using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var historyProvider = new EfCoreChatHistoryProvider(
-            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<EfCoreChatHistoryProvider>.Instance,
-            TimeProvider.System,
-            jsonOptions
-        );
+        var historySession = new HistorySessionState();
+        var historyProvider = CreateHistoryProvider(serviceProvider, historySession, jsonOptions);
         var function = AIFunctionFactory.Create(
             (Func<string>)(() => "search result"),
             new AIFunctionFactoryOptions { Name = "web_search" }
@@ -452,7 +458,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             serviceProvider
         );
         var session = await agent.CreateSessionAsync(cancellationToken);
-        historyProvider.InitializeSessionState(session, "compaction-context", projectId);
+        historySession.InitializeSessionState(session, "compaction-context", projectId);
         var originalMessages = Enumerable
             .Range(0, 40)
             .SelectMany(turn =>
@@ -581,7 +587,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         );
 
         Assert.IsType<LoopAgent>(agent);
-        Assert.NotNull(agent.GetService<ToolApprovalAgent>());
+        Assert.NotNull(agent.GetService<MafApprovalBatchAgent>());
         Assert.NotNull(agent.GetService<OpenTelemetryAgent>());
     }
 
@@ -597,7 +603,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             new ServiceCollection().BuildServiceProvider()
         );
 
-        Assert.NotNull(agent.GetService<ToolApprovalAgent>());
+        Assert.NotNull(agent.GetService<MafApprovalBatchAgent>());
         Assert.NotNull(agent.GetService<OpenTelemetryAgent>());
         Assert.Null(agent.GetService<LoopAgent>());
     }
@@ -884,10 +890,10 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         await using var serviceProvider = services.BuildServiceProvider();
-        var historyProvider = new EfCoreChatHistoryProvider(
-            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<EfCoreChatHistoryProvider>.Instance,
-            TimeProvider.System,
+        var historySession = new HistorySessionState();
+        var historyProvider = CreateHistoryProvider(
+            serviceProvider,
+            historySession,
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
         );
         var function = AIFunctionFactory.Create(
@@ -905,7 +911,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             serviceProvider
         );
         var session = await agent.CreateSessionAsync(cancellationToken);
-        historyProvider.InitializeSessionState(session, "context-1", projectId, "agentflow:flow-1:node:node-1");
+        historySession.InitializeSessionState(session, "context-1", projectId, "agentflow:flow-1:node:node-1");
         var firstUpdates = new List<AgentResponseUpdate>();
 
         await foreach (
@@ -924,9 +930,24 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         );
         var serializedSession = await agent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
         session = await agent.DeserializeSessionAsync(serializedSession, cancellationToken: cancellationToken);
-        historyProvider.InitializeSessionState(session, "context-1", projectId, "agentflow:flow-1:node:node-1");
+        historySession.InitializeSessionState(session, "context-1", projectId, "agentflow:flow-1:node:node-1");
         var continuation = AgentflowMessageTransforms.ApplyInstructions(
-            [new ChatMessage(ChatRole.User, [approvalRequest.CreateAlwaysApproveToolResponse()])],
+            [
+                new ChatMessage(
+                    ChatRole.User,
+                    [
+                        MafApprovalAdapter.CreateResponse(
+                            approvalRequest,
+                            new ToolApprovalDecision
+                            {
+                                InteractionId = "approval",
+                                Approved = true,
+                                Scope = ApprovalScope.AlwaysTool,
+                            }
+                        ),
+                    ]
+                ),
+            ],
             "Follow the node instructions."
         );
         await foreach (var _ in agent.RunStreamingAsync(continuation, session, cancellationToken: cancellationToken))
@@ -1096,11 +1117,14 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         await using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var historyProvider = new EfCoreChatHistoryProvider(
-            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<EfCoreChatHistoryProvider>.Instance,
+        var historySession = new HistorySessionState();
+        var historyStore = CreateHistoryStore(serviceProvider, jsonOptions);
+        var historyProvider = AgwChatHistoryProvider.Create(
+            historyStore,
+            historySession,
             TimeProvider.System,
-            jsonOptions
+            EngineKind.Maf,
+            structuredResult: false
         );
         var agent = new StubChatClient().AsAgwAgent(
             CreateDefinition(historyProvider),
@@ -1109,7 +1133,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             serviceProvider
         );
         var session = await agent.CreateSessionAsync(cancellationToken);
-        historyProvider.InitializeSessionState(session, "context-1", projectId);
+        historySession.InitializeSessionState(session, "context-1", projectId);
         var runtime = new AgentRuntime(
             NullLogger.Instance,
             agent,
@@ -1117,17 +1141,27 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             projectId,
             "context-1",
             sessionStateScope: null,
-            conversationHistoryWriter: historyProvider
+            conversationHistoryWriter: new ConversationHistoryWriter(historyStore, TimeProvider.System)
         );
 
+        var executor = new Agw.Agents.Execution.Agents.Turns.AgentTurnExecutor(
+            null,
+            null,
+            null,
+            NullLogger<Agw.Agents.Execution.Agents.Turns.AgentTurnExecutor>.Instance
+        );
         await foreach (
-            var _ in runtime.ExecuteStreamingAsync(
-                new AgwUserInput
-                {
-                    MessageId = "user-1",
-                    Author = "$agw",
-                    Contents = [new AgwTextContent { Content = "question" }],
-                },
+            var _ in executor.RunAsync(
+                Agw.Agents.Execution.Context.ExecutionScope.Required,
+                runtime,
+                new Agw.Agents.Execution.Turns.TurnInput(
+                    new AgwUserInput
+                    {
+                        MessageId = "user-1",
+                        Author = "$agw",
+                        Contents = [new AgwTextContent { Content = "question" }],
+                    }
+                ),
                 cancellationToken
             )
         ) { }
@@ -1147,6 +1181,30 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     }
 
     private static ResolvedAgentDefinition CreateDefinition() => CreateDefinition(new InMemoryChatHistoryProvider());
+
+    private static ConversationHistoryStore CreateHistoryStore(
+        IServiceProvider services,
+        JsonSerializerOptions jsonOptions
+    ) =>
+        new(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<ConversationHistoryStore>.Instance,
+            TimeProvider.System,
+            jsonOptions
+        );
+
+    private static AgwChatHistoryProvider CreateHistoryProvider(
+        IServiceProvider services,
+        HistorySessionState historySession,
+        JsonSerializerOptions jsonOptions
+    ) =>
+        AgwChatHistoryProvider.Create(
+            CreateHistoryStore(services, jsonOptions),
+            historySession,
+            TimeProvider.System,
+            EngineKind.Maf,
+            structuredResult: false
+        );
 
     private static AIAgent CreateTodoMutationAgent(IReadOnlyList<AIContextProvider>? providers = null) =>
         new TodoFunctionCallingStubChatClient().AsAgwAgent(
@@ -1180,7 +1238,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     {
         var snapshots = updates
             .Select((update, index) => (Update: update, Index: index))
-            .Where(item => IsMessageType(item.Update.AdditionalProperties, ToolMessageTypes.TodoSnapshot))
+            .Where(item => IsMessageType(item.Update.AdditionalProperties, AgwMessageTypes.ToolTodoSnapshot))
             .ToList();
 
         Assert.Equal(5, snapshots.Count);

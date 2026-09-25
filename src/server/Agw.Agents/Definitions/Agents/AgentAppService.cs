@@ -135,7 +135,7 @@ public class AgentAppService
     }
 
     public async Task<AgentModelRuntimeConfiguration?> GetExternalModelRuntimeConfigurationAsync(
-        ExternalAgentKind kind,
+        EngineKind kind,
         Guid? modelProviderId
     )
     {
@@ -404,9 +404,9 @@ public class AgentAppService
         };
 
     // Pi runs cannot enforce a response schema, so configuration is rejected instead of degrading silently.
-    private static void EnsureResponseSchemaSupported(ExternalAgentKind kind, string? responseSchema)
+    private static void EnsureResponseSchemaSupported(EngineKind kind, string? responseSchema)
     {
-        if (kind == ExternalAgentKind.Pi && responseSchema != null)
+        if (kind == EngineKind.Pi && responseSchema != null)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Pi agents do not support responseSchema.");
         }

@@ -7,8 +7,14 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgentflowNodeScopedAgentTests
+public sealed class AgentflowNodeScopedAgentTests : IDisposable
 {
+    private readonly IDisposable _executionScope = ExecutionTestScopes
+        .Scope(ExecutionTestScopes.Context(runtimeType: AgentRuntimeType.Agentflow))
+        .Push();
+
+    public void Dispose() => _executionScope.Dispose();
+
     [Fact]
     public async Task RunStreamingAsync_ConsumerStopsEarly_PersistsCapturedToolMessages()
     {
@@ -42,7 +48,7 @@ public sealed class AgentflowNodeScopedAgentTests
         }
 
         var warning = Assert.Single(Assert.Single(writer.Calls));
-        Assert.Equal(ToolMessageTypes.Warning, warning.AdditionalProperties!["type"]?.ToString());
+        Assert.Equal(AgwMessageTypes.ToolWarning, warning.AdditionalProperties!["type"]?.ToString());
         Assert.Equal("Node 1", warning.AdditionalProperties["nodeName"]?.ToString());
         Assert.Equal("Node 1", providerSessionState.NodeName);
     }
@@ -74,7 +80,7 @@ public sealed class AgentflowNodeScopedAgentTests
             updates,
             update => Assert.Equal("Review Node", update.AdditionalProperties!["nodeName"]?.ToString())
         );
-        Assert.Equal(ToolMessageTypes.Warning, updates[0].AdditionalProperties!["type"]?.ToString());
+        Assert.Equal(AgwMessageTypes.ToolWarning, updates[0].AdditionalProperties!["type"]?.ToString());
         Assert.Equal("general-agent", updates[1].AuthorName);
     }
 
@@ -363,7 +369,7 @@ public sealed class AgentflowNodeScopedAgentTests
                 AuthorName = "tools",
                 AdditionalProperties = new AdditionalPropertiesDictionary
                 {
-                    ["type"] = ToolMessageTypes.Warning,
+                    ["type"] = AgwMessageTypes.ToolWarning,
                     ["persistSeparately"] = true,
                 },
             };

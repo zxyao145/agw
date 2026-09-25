@@ -83,9 +83,9 @@ public sealed class ConversationMessagePostgresTests
             await using var services = new ServiceCollection()
                 .AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options.Options))
                 .BuildServiceProvider();
-            var writer = new EfCoreChatHistoryProvider(
+            var writer = new ConversationHistoryStore(
                 services.GetRequiredService<IServiceScopeFactory>(),
-                NullLogger<EfCoreChatHistoryProvider>.Instance,
+                NullLogger<ConversationHistoryStore>.Instance,
                 TimeProvider.System
             );
             var scope = new ConversationMessageWriteScope

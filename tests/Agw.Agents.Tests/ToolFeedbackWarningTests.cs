@@ -89,11 +89,11 @@ public sealed class ToolFeedbackWarningTests
 
     private static bool IsWarning(AgentResponseUpdate update) =>
         update.AdditionalProperties?.TryGetValue("type", out var type) == true
-        && string.Equals(type?.ToString(), ToolMessageTypes.Warning, StringComparison.Ordinal);
+        && string.Equals(type?.ToString(), AgwMessageTypes.ToolWarning, StringComparison.Ordinal);
 
     private static bool IsWarning(ChatMessage message) =>
         message.AdditionalProperties?.TryGetValue("type", out var type) == true
-        && string.Equals(type?.ToString(), ToolMessageTypes.Warning, StringComparison.Ordinal);
+        && string.Equals(type?.ToString(), AgwMessageTypes.ToolWarning, StringComparison.Ordinal);
 
     private sealed class FunctionTranscriptAgent : AIAgent
     {

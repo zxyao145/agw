@@ -1,4 +1,5 @@
 export * from "./conversation-controller";
+export * from "./conversation-status-store";
 export * from "./execution";
 export * from "./execution-activity-store";
 export { buildHumanResponseCommand, buildResumeCheckpointCommand } from "@agw/execution-core";

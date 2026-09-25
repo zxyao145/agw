@@ -1,16 +1,15 @@
 using System.Text.Json;
 using Agw.Agents.ExternalAgents;
-using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.Agents.Tests;
 
 public class ExternalAgentDefaultsTests
 {
     [Theory]
-    [InlineData(ExternalAgentKind.ClaudeCode)]
-    [InlineData(ExternalAgentKind.Codex)]
-    [InlineData(ExternalAgentKind.Pi)]
-    public void GetDefaultExtra_SupportedKind_ReturnsJsonObject(ExternalAgentKind kind)
+    [InlineData(EngineKind.ClaudeCode)]
+    [InlineData(EngineKind.Codex)]
+    [InlineData(EngineKind.Pi)]
+    public void GetDefaultExtra_SupportedKind_ReturnsJsonObject(EngineKind kind)
     {
         var extra = ExternalAgentDefaults.GetDefaultExtra(kind);
 
