@@ -6,6 +6,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Execution.Agents.Context.Workspace;
 
+/// <summary>
+/// 每次 Agent 调用前执行全部 <see cref="IAgentInstructionsSource"/>，按注册顺序把非空结果合并为 Instructions，
+/// 向模型注入 Project workspace、Additional Project directories 等运行环境说明。
+/// </summary>
+/// <remarks>
+/// Agent 与 Project 在 runtime 组装时传入并保存，同一个 runtime 的所有调用共用这份数据；
+/// Project 更新后要等 runtime 重建才会读到新值。
+/// </remarks>
 internal sealed class AgwWorkspaceProvider : AIContextProvider
 {
     private readonly Agent _agent;
@@ -33,9 +41,9 @@ internal sealed class AgwWorkspaceProvider : AIContextProvider
     /// 最终 Tools        = 当前 Tools + Provider Tools
     /// 逻辑在 AIContextProvider.InvokingCoreAsync
     /// </summary>
-    /// <param name="context"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
+    /// <param name="context">MAF 本次调用的 InvokingContext，会和 Agent、Project 一起传给每个 source。</param>
+    /// <param name="cancellationToken">传给每个 source 的 cancellation token。</param>
+    /// <returns>只设置 Instructions 的 AIContext；所有 source 都返回空白时 Instructions 为 null。</returns>
     protected override async ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context,
         CancellationToken cancellationToken = default
