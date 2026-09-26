@@ -9,8 +9,6 @@ using Agw.Projects.Contracts;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Xunit;
 
@@ -302,22 +300,11 @@ public sealed class OidcIdentityStoreTests
         );
     }
 
-    [Theory]
-    [InlineData("previous")]
-    [InlineData("latest")]
-    public async Task Migrations_FreshAndUpgrade_PreserveAdministratorAndStartAt10000(string target)
+    [Fact]
+    public async Task InitialMigration_CreatesOidcUsersStartingAt10000()
     {
-        await using var database = await TestDatabase.CreateAsync(target);
+        await using var database = await TestDatabase.CreateAsync(applyMigrations: true);
         await using var context = database.Context();
-        var tokens = TestApiTokenStore.Create(context);
-        CreatedApiToken legacy;
-        using (UserInfoUtil.Push(OidcPrincipal.Create(new OidcUser("1001", "admin", 1, null))))
-            legacy = await tokens.CreateTokenAsync("legacy-client", TestContext.Current.CancellationToken);
-        await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(
-            "1001",
-            (await tokens.ValidateTokenAsync(legacy.Token, TestContext.Current.CancellationToken))!.UserId
-        );
         var user = await database
             .Store(context)
             .ResolveAsync(Identity("after-migration"), TestContext.Current.CancellationToken);
@@ -338,7 +325,7 @@ public sealed class OidcIdentityStoreTests
         public OidcOptions Options { get; } =
             new() { Providers = new() { ["company"] = new OidcProviderOptions { Enabled = true } } };
 
-        public static async Task<TestDatabase> CreateAsync(string? migration = null)
+        public static async Task<TestDatabase> CreateAsync(bool applyMigrations = false)
         {
             var database = new TestDatabase();
             database._postgresAdmin = Environment.GetEnvironmentVariable("AGW_TEST_OIDC_POSTGRES");
@@ -356,13 +343,10 @@ public sealed class OidcIdentityStoreTests
                 }.ConnectionString;
             }
             await using var context = database.Context();
-            if (migration == null)
-                await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            if (applyMigrations)
+                await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
             else
-            {
-                var target = migration == "previous" ? context.Database.GetMigrations().SkipLast(1).Last() : null;
-                await context.GetService<IMigrator>().MigrateAsync(target, TestContext.Current.CancellationToken);
-            }
+                await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             return database;
         }
 

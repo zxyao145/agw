@@ -1,10 +1,5 @@
-using System.Security.Claims;
-using System.Text.Json;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Data.Encryption;
-using Agw.Shared;
 using Agw.Shared.Configuration;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -12,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Agw.Infrastructure.Tests;
 
-public sealed partial class InitialMigrationTests
+public sealed class InitialMigrationTests
 {
     [Theory]
     [InlineData(false)]
@@ -29,113 +24,88 @@ public sealed partial class InitialMigrationTests
 
         Assert.False(dbContext.Database.HasPendingModelChanges());
 
-        var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(19, migrations.Length);
-        Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
-        Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
-        Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
-        Assert.EndsWith("_AddAgentflowCheckpoints", migrations[3], StringComparison.Ordinal);
-        Assert.EndsWith("_AddModelCompactionLimits", migrations[4], StringComparison.Ordinal);
-        Assert.EndsWith("_UseUserIdForExecutionOwnership", migrations[5], StringComparison.Ordinal);
-        Assert.EndsWith("_AddJobActiveAttempt", migrations[6], StringComparison.Ordinal);
-        Assert.EndsWith("_EnforceUserOwnedConnections", migrations[7], StringComparison.Ordinal);
-        Assert.EndsWith("_EnforceUserDataIsolation", migrations[8], StringComparison.Ordinal);
-        Assert.EndsWith("_AddAgentAndAgentflowEnable", migrations[9], StringComparison.Ordinal);
-        Assert.EndsWith("_AddDurableExecutionScope", migrations[10], StringComparison.Ordinal);
-        Assert.EndsWith("_ConversationSessionGeneration", migrations[11], StringComparison.Ordinal);
-        Assert.EndsWith(BindingRenameMigrationSuffix, migrations[12], StringComparison.Ordinal);
-        Assert.EndsWith("_AddExternalAgentKind", migrations[13], StringComparison.Ordinal);
-        Assert.EndsWith("_AddProjectAdditionalDirectories", migrations[14], StringComparison.Ordinal);
-        Assert.EndsWith("_AddSettings", migrations[15], StringComparison.Ordinal);
-        Assert.EndsWith("_AddOidcLogin", migrations[16], StringComparison.Ordinal);
-        Assert.EndsWith("_AddAgentResponseSchema", migrations[17], StringComparison.Ordinal);
-        Assert.EndsWith("_AddConversationTurns", migrations[18], StringComparison.Ordinal);
-
-        var script = dbContext
-            .GetService<IMigrator>()
-            .GenerateScript(Migration.InitialDatabase, migrations[^1], MigrationsSqlGenerationOptions.NoTransactions);
-
-        Assert.Contains("integration_connection", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("plugin_installation", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("protected_value", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("project_memory", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("project_conversation", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("project_conversation_chat_history", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("project_conversation_binding", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("durable_execution", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("scope_backfilled", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("generation", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ix_durable_execution_scope_backfilled_user_id_id", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ix_durable_execution_user_id_project_id", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("execution_stream_entry", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("agentflow_checkpoint", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("external_agent_kind", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("additional_directories", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("response_schema", script, StringComparison.OrdinalIgnoreCase);
-        var directoryScript = dbContext.GetService<IMigrator>().GenerateScript(migrations[13], migrations[14]);
-        Assert.DoesNotContain("FOREIGN KEY", directoryScript, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("project_conversation_turn", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("turn_sequence", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("last_event_sequence", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("lease_expires_at", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("history_scope", script, StringComparison.OrdinalIgnoreCase);
-        var turnScript = dbContext.GetService<IMigrator>().GenerateScript(migrations[17], migrations[18]);
-        Assert.DoesNotContain("FOREIGN KEY", turnScript, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("api_token", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("user_memory", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("normalized_name", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("secret_hash", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("create_by", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("create_time", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("user_id", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("UPDATE durable_execution SET user_id = '1001'", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("UPDATE agentflow_checkpoint SET user_id = '1001'", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(
-            "UPDATE integration_connection SET create_by = '1001' WHERE create_by IS NULL",
-            script,
-            StringComparison.OrdinalIgnoreCase
+        var migration = Assert.Single(dbContext.Database.GetMigrations());
+        Assert.EndsWith("_ReInit", migration, StringComparison.Ordinal);
+        var migrator = dbContext.GetService<IMigrator>();
+        var script = migrator.GenerateScript(
+            Migration.InitialDatabase,
+            migration,
+            MigrationsSqlGenerationOptions.NoTransactions
         );
-        Assert.Contains("tools", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("max_context_window_tokens", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("max_output_tokens", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ck_model_token_limits", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("active_execution_id", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("active_attempt_started_at", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ix_job_active_execution_id", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ix_integration_connection_create_by_alias", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ck_job_active_attempt", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("DEFAULT 256000", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("DEFAULT 64000", script, StringComparison.OrdinalIgnoreCase);
-        if (usePostgres)
+
+        foreach (
+            var expected in new[]
+            {
+                "integration_connection",
+                "plugin_installation",
+                "protected_value",
+                "project_memory",
+                "project_conversation",
+                "project_conversation_chat_history",
+                "project_conversation_binding",
+                "project_conversation_turn",
+                "durable_execution",
+                "scope_backfilled",
+                "generation",
+                "ix_durable_execution_scope_backfilled_user_id_id",
+                "ix_durable_execution_user_id_project_id",
+                "execution_stream_entry",
+                "turn_sequence",
+                "last_event_sequence",
+                "agentflow_checkpoint",
+                "external_agent_kind",
+                "additional_directories",
+                "response_schema",
+                "lease_expires_at",
+                "history_scope",
+                "api_token",
+                "user_memory",
+                "normalized_name",
+                "secret_hash",
+                "create_by",
+                "create_time",
+                "user_id",
+                "tools",
+                "max_context_window_tokens",
+                "max_output_tokens",
+                "ck_model_token_limits",
+                "active_execution_id",
+                "active_attempt_started_at",
+                "ix_job_active_execution_id",
+                "ix_integration_connection_create_by_alias",
+                "ck_job_active_attempt",
+                "setting",
+                "ix_setting_key",
+                "ix_setting_user_id_key",
+                "user_id IS NULL",
+                "user_id IS NOT NULL",
+                "DEFAULT 256000",
+                "DEFAULT 64000",
+            }
+        )
         {
-            Assert.Contains("metadata jsonb", script, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("uuid", script, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("timestamp with time zone", script, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("ALTER COLUMN create_by SET NOT NULL", script, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(
-                "ALTER TABLE job ALTER COLUMN create_by SET NOT NULL",
-                script,
-                StringComparison.OrdinalIgnoreCase
-            );
-            Assert.DoesNotContain(
-                "ALTER COLUMN create_by TYPE character varying",
-                script,
-                StringComparison.OrdinalIgnoreCase
-            );
-            Assert.Contains("ADD enable boolean NOT NULL DEFAULT TRUE", script, StringComparison.OrdinalIgnoreCase);
-        }
-        else
-        {
-            Assert.Contains("\"metadata\" TEXT", script, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("jsonb", script, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("ADD \"enable\" INTEGER NOT NULL DEFAULT 1", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(expected, script, StringComparison.OrdinalIgnoreCase);
         }
 
+        Assert.DoesNotContain("FOREIGN KEY", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("server_auth_state", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("agent_file_memory", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("building_blocks", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("project_context", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("project_task_record", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("tool_blocks", script, StringComparison.OrdinalIgnoreCase);
+
+        if (usePostgres)
+        {
+            Assert.Contains("metadata jsonb", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("uuid", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("timestamp with time zone", script, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            Assert.Contains("\"metadata\" TEXT", script, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("jsonb", script, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
@@ -156,33 +126,15 @@ public sealed partial class InitialMigrationTests
 
         await dbContext.Database.MigrateAsync(cancellationToken);
 
-        var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(19, appliedMigrations.Length);
-        Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
-        Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
-        Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
-        Assert.EndsWith("_AddAgentflowCheckpoints", appliedMigrations[3], StringComparison.Ordinal);
-        Assert.EndsWith("_AddModelCompactionLimits", appliedMigrations[4], StringComparison.Ordinal);
-        Assert.EndsWith("_UseUserIdForExecutionOwnership", appliedMigrations[5], StringComparison.Ordinal);
-        Assert.EndsWith("_AddJobActiveAttempt", appliedMigrations[6], StringComparison.Ordinal);
-        Assert.EndsWith("_EnforceUserOwnedConnections", appliedMigrations[7], StringComparison.Ordinal);
-        Assert.EndsWith("_EnforceUserDataIsolation", appliedMigrations[8], StringComparison.Ordinal);
-        Assert.EndsWith("_AddAgentAndAgentflowEnable", appliedMigrations[9], StringComparison.Ordinal);
-        Assert.EndsWith("_AddDurableExecutionScope", appliedMigrations[10], StringComparison.Ordinal);
-        Assert.EndsWith("_ConversationSessionGeneration", appliedMigrations[11], StringComparison.Ordinal);
-        Assert.EndsWith(BindingRenameMigrationSuffix, appliedMigrations[12], StringComparison.Ordinal);
-        Assert.EndsWith("_AddExternalAgentKind", appliedMigrations[13], StringComparison.Ordinal);
-        Assert.EndsWith("_AddProjectAdditionalDirectories", appliedMigrations[14], StringComparison.Ordinal);
+        var appliedMigration = Assert.Single(await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken));
+        Assert.EndsWith("_ReInit", appliedMigration, StringComparison.Ordinal);
         Assert.True(await ColumnIsNotNullAsync(connection, "project", "additional_directories", cancellationToken));
         Assert.Equal(
             "'[]'",
             await ColumnDefaultAsync(connection, "project", "additional_directories", cancellationToken)
         );
-        Assert.EndsWith("_AddSettings", appliedMigrations[15], StringComparison.Ordinal);
-        Assert.EndsWith("_AddOidcLogin", appliedMigrations[16], StringComparison.Ordinal);
-        Assert.EndsWith("_AddAgentResponseSchema", appliedMigrations[17], StringComparison.Ordinal);
         Assert.True(await ColumnExistsAsync(connection, "agent", "response_schema", cancellationToken));
-        Assert.EndsWith("_AddConversationTurns", appliedMigrations[18], StringComparison.Ordinal);
+        Assert.True(await ColumnExistsAsync(connection, "agent", "external_agent_kind", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_conversation_turn", cancellationToken));
         Assert.True(
             await ColumnExistsAsync(connection, "project_conversation_chat_history", "turn_id", cancellationToken)
@@ -262,418 +214,6 @@ public sealed partial class InitialMigrationTests
         Assert.False(await TableExistsAsync(connection, "agent_file_memory", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_context", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_task_record", cancellationToken));
-    }
-
-    [Fact]
-    public async Task MigrateAsync_DurableScope_PreservesEncryptedLegacyRowsWithoutRuntimeBackfill()
-    {
-        // Arrange
-        var token = TestContext.Current.CancellationToken;
-        using var user = UserInfoUtil.Push(
-            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "test"))
-        );
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(token);
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(
-                connection,
-                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
-            )
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        var protector = new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());
-        await using var context = new AgwDbContext(options, protector);
-        var migrator = context.GetService<IMigrator>();
-        var migrations = context.Database.GetMigrations().ToArray();
-        var scopeMigrationIndex = Array.FindIndex(
-            migrations,
-            name => name.EndsWith("_AddDurableExecutionScope", StringComparison.Ordinal)
-        );
-        await migrator.MigrateAsync(migrations[scopeMigrationIndex - 1], token);
-        var executionId = Guid.CreateVersion7();
-        var projectId = Guid.CreateVersion7();
-        var conversationId = Guid.CreateVersion7();
-        var manifest = JsonSerializer.Serialize(
-            new
-            {
-                schemaVersion = 1,
-                executionId,
-                userId = "tester",
-                agentId = Guid.CreateVersion7(),
-                agentType = 0,
-                input = new { contents = Array.Empty<object>() },
-                settings = new { environmentVariables = new { }, resume = false },
-                task = new
-                {
-                    taskId = Guid.CreateVersion7(),
-                    projectId,
-                    projectConversationId = conversationId,
-                    contextId = "context",
-                },
-            }
-        );
-        var ciphertext = protector.Protect("durable_execution", executionId, manifest);
-        var now = TimeProvider.System.GetUtcNow();
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO durable_execution (id, user_id, manifest_json, status, segment_index, state_changed_at, state_version, create_time) VALUES ({executionId}, 'tester', {ciphertext}, 0, 0, {now}, {Guid.CreateVersion7()}, {now})",
-            token
-        );
-
-        // Act
-        await migrator.MigrateAsync(migrations[scopeMigrationIndex], token);
-
-        // Assert: the intermediate schema only has the columns of that migration, so they are read by projection.
-        var row = await context
-            .DurableExecutions.AsNoTracking()
-            .Select(item => new
-            {
-                item.ProjectId,
-                item.ProjectConversationId,
-                item.ScopeBackfilled,
-                item.ManifestJson,
-            })
-            .SingleAsync(token);
-        Assert.Null(row.ProjectId);
-        Assert.Null(row.ProjectConversationId);
-        Assert.False(row.ScopeBackfilled);
-        Assert.Equal(ciphertext, row.ManifestJson);
-        await migrator.MigrateAsync(migrations[^1], token);
-        var migrated = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
-        Assert.Null(migrated.ProjectId);
-        Assert.False(migrated.ScopeBackfilled);
-        Assert.Equal(manifest, migrated.ManifestJson);
-        Assert.False(context.Database.HasPendingModelChanges());
-        await migrator.MigrateAsync(migrations[scopeMigrationIndex - 1], token);
-        Assert.False(await ColumnExistsAsync(connection, "durable_execution", "project_id", token));
-        await using var read = connection.CreateCommand();
-        read.CommandText = "SELECT manifest_json FROM durable_execution";
-        Assert.Equal(ciphertext, await read.ExecuteScalarAsync(token));
-    }
-
-    [Fact]
-    public async Task MigrateAsync_Sqlite_ModelCompactionLimitsPreserveExistingMaxTokens()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(
-                connection,
-                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
-            )
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        await using var dbContext = new AgwDbContext(options);
-        var migrations = dbContext.Database.GetMigrations().ToArray();
-        var migrator = dbContext.GetService<IMigrator>();
-        var compactionMigration = migrations.Single(migration =>
-            migration.EndsWith("_AddModelCompactionLimits", StringComparison.Ordinal)
-        );
-        var compactionIndex = Array.IndexOf(migrations, compactionMigration);
-        await migrator.MigrateAsync(migrations[compactionIndex - 1], cancellationToken);
-        var modelId = Guid.CreateVersion7();
-        await using (var insert = connection.CreateCommand())
-        {
-            insert.CommandText =
-                "INSERT INTO model (id, name, max_tokens, create_time) "
-                + "VALUES ($id, $name, $maxTokens, $createTime);";
-            insert.Parameters.AddWithValue("$id", modelId);
-            insert.Parameters.AddWithValue("$name", "existing-model");
-            insert.Parameters.AddWithValue("$maxTokens", 128_000);
-            insert.Parameters.AddWithValue("$createTime", TimeProvider.System.GetUtcNow());
-            await insert.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await migrator.MigrateAsync(compactionMigration, cancellationToken);
-
-        await using var select = connection.CreateCommand();
-        select.CommandText = "SELECT max_context_window_tokens, max_output_tokens FROM model WHERE id = $id;";
-        select.Parameters.AddWithValue("$id", modelId);
-        await using var reader = await select.ExecuteReaderAsync(cancellationToken);
-        Assert.True(await reader.ReadAsync(cancellationToken));
-        Assert.Equal(128_000, reader.GetInt32(0));
-        Assert.Equal(64_000, reader.GetInt32(1));
-    }
-
-    [Fact]
-    public async Task MigrateAsync_Sqlite_ExecutionOwnershipBackfillsAdminUserId()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(
-                connection,
-                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
-            )
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        await using var dbContext = new AgwDbContext(options);
-        var migrations = dbContext.Database.GetMigrations().ToArray();
-        var ownershipMigration = migrations.Single(migration =>
-            migration.EndsWith("_UseUserIdForExecutionOwnership", StringComparison.Ordinal)
-        );
-        var ownershipIndex = Array.IndexOf(migrations, ownershipMigration);
-        var migrator = dbContext.GetService<IMigrator>();
-        await migrator.MigrateAsync(migrations[ownershipIndex - 1], cancellationToken);
-
-        await using (var insert = connection.CreateCommand())
-        {
-            insert.CommandText = """
-                INSERT INTO project
-                    (id, name, type, tools, environment_variables, create_time)
-                VALUES
-                    ($projectId, 'Migration test', 0, '[]', '{}', $now);
-
-                INSERT INTO project_conversation
-                    (id, project_id, context_id, title, create_time)
-                VALUES
-                    ($conversationId, $projectId, 'context-1', 'Migration test', $now);
-
-                INSERT INTO durable_execution
-                    (id, user_name, manifest_json, status, segment_index, state_changed_at, state_version, create_time)
-                VALUES
-                    ($executionId, 'admin', '{}', 0, 0, $now, $stateVersion, $now);
-
-                INSERT INTO agentflow_checkpoint
-                    (id, project_id, project_conversation_id, context_id, task_id, agentflow_id, user_name,
-                     is_durable, boundary_sequence, definition_fingerprint, markers_json, checkpoint_json, create_time)
-                VALUES
-                    ($checkpointId, $projectId, $conversationId, 'context-1', $taskId, $agentflowId, 'admin',
-                     0, 0, $fingerprint, '[]', '{}', $now);
-                """;
-            insert.Parameters.AddWithValue("$executionId", Guid.CreateVersion7());
-            insert.Parameters.AddWithValue("$stateVersion", Guid.CreateVersion7());
-            insert.Parameters.AddWithValue("$checkpointId", Guid.CreateVersion7());
-            insert.Parameters.AddWithValue("$projectId", Guid.CreateVersion7());
-            insert.Parameters.AddWithValue("$conversationId", Guid.CreateVersion7());
-            insert.Parameters.AddWithValue("$taskId", Guid.CreateVersion7());
-            insert.Parameters.AddWithValue("$agentflowId", Guid.CreateVersion7());
-            insert.Parameters.AddWithValue("$fingerprint", new string('a', 64));
-            insert.Parameters.AddWithValue("$now", TimeProvider.System.GetUtcNow());
-            await insert.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await migrator.MigrateAsync(ownershipMigration, cancellationToken);
-
-        await using (var select = connection.CreateCommand())
-        {
-            select.CommandText =
-                "SELECT "
-                + "(SELECT user_id FROM durable_execution LIMIT 1), "
-                + "(SELECT user_id FROM agentflow_checkpoint LIMIT 1);";
-            await using var reader = await select.ExecuteReaderAsync(cancellationToken);
-            Assert.True(await reader.ReadAsync(cancellationToken));
-            Assert.Equal(Constants.AdminUserId, reader.GetString(0));
-            Assert.Equal(Constants.AdminUserId, reader.GetString(1));
-        }
-
-        await migrator.MigrateAsync(migrations[ownershipIndex - 1], cancellationToken);
-
-        Assert.True(await ColumnExistsAsync(connection, "durable_execution", "user_name", cancellationToken));
-        Assert.True(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_name", cancellationToken));
-        Assert.False(await ColumnExistsAsync(connection, "durable_execution", "user_id", cancellationToken));
-        Assert.False(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_id", cancellationToken));
-    }
-
-    [Fact]
-    public async Task MigrateAsync_Sqlite_ConnectionOwnershipBackfillsAdminUserId()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(
-                connection,
-                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
-            )
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        await using var dbContext = new AgwDbContext(options);
-        var migrations = dbContext.Database.GetMigrations().ToArray();
-        var ownershipMigration = migrations.Single(migration =>
-            migration.EndsWith("_EnforceUserOwnedConnections", StringComparison.Ordinal)
-        );
-        var ownershipIndex = Array.IndexOf(migrations, ownershipMigration);
-        var migrator = dbContext.GetService<IMigrator>();
-        await migrator.MigrateAsync(migrations[ownershipIndex - 1], cancellationToken);
-        var connectionId = Guid.CreateVersion7();
-
-        await using (var insert = connection.CreateCommand())
-        {
-            insert.CommandText = """
-                INSERT INTO integration_connection
-                    (id, plugin_id, connector_id, auth_scheme_id, display_name, alias,
-                     configuration_json, enabled, status, create_time, create_by)
-                VALUES
-                    ($id, 'github', 'github-cloud', 'oauth2', 'Legacy GitHub', 'legacy-github',
-                     '{}', 1, 'Unverified', $now, NULL);
-                """;
-            insert.Parameters.AddWithValue("$id", connectionId);
-            insert.Parameters.AddWithValue("$now", TimeProvider.System.GetUtcNow());
-            await insert.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await migrator.MigrateAsync(ownershipMigration, cancellationToken);
-
-        await using var select = connection.CreateCommand();
-        select.CommandText = "SELECT create_by FROM integration_connection WHERE id = $id;";
-        select.Parameters.AddWithValue("$id", connectionId);
-        Assert.Equal(Constants.AdminUserId, Convert.ToString(await select.ExecuteScalarAsync(cancellationToken)));
-    }
-
-    [Fact]
-    public async Task MigrateAsync_Sqlite_UserIsolationUsesCompositeIndexes()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(
-                connection,
-                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
-            )
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        await using var dbContext = new AgwDbContext(options);
-
-        await dbContext.Database.MigrateAsync(cancellationToken);
-
-        var migrations = dbContext.Database.GetMigrations().ToArray();
-        var userIsolationMigration = migrations.Single(migration =>
-            migration.EndsWith("_EnforceUserDataIsolation", StringComparison.Ordinal)
-        );
-        var userIsolationIndex = Array.IndexOf(migrations, userIsolationMigration);
-        var userIsolationScript = dbContext
-            .GetService<IMigrator>()
-            .GenerateScript(
-                migrations[userIsolationIndex - 1],
-                userIsolationMigration,
-                MigrationsSqlGenerationOptions.NoTransactions
-            );
-
-        Assert.True(
-            await IndexHasColumnsAsync(
-                connection,
-                "project",
-                "ix_project_create_by_name",
-                ["create_by", "name"],
-                cancellationToken
-            )
-        );
-        Assert.True(
-            await IndexHasColumnsAsync(
-                connection,
-                "agent",
-                "ix_agent_create_by_name",
-                ["create_by", "name"],
-                cancellationToken
-            )
-        );
-        Assert.True(
-            await IndexHasColumnsAsync(
-                connection,
-                "skill",
-                "ix_skill_create_by_name",
-                ["create_by", "name"],
-                cancellationToken
-            )
-        );
-        Assert.True(
-            await IndexHasColumnsAsync(
-                connection,
-                "model",
-                "ix_model_create_by_name",
-                ["create_by", "name"],
-                cancellationToken
-            )
-        );
-        Assert.True(
-            await IndexHasColumnsAsync(
-                connection,
-                "api_token",
-                "ix_api_token_create_by_normalized_name",
-                ["create_by", "normalized_name"],
-                cancellationToken
-            )
-        );
-        Assert.True(
-            await IndexHasColumnsAsync(
-                connection,
-                "plugin_installation",
-                "ix_plugin_installation_create_by_plugin_id",
-                ["create_by", "plugin_id"],
-                cancellationToken
-            )
-        );
-        Assert.True(
-            await IndexHasColumnsAsync(
-                connection,
-                "provider",
-                "ix_provider_create_by_name_provider_type",
-                ["create_by", "name", "provider_type"],
-                cancellationToken
-            )
-        );
-        Assert.True(await ColumnIsNotNullAsync(connection, "plugin_installation", "create_by", cancellationToken));
-        Assert.True(await ColumnIsNotNullAsync(connection, "job", "create_by", cancellationToken));
-        Assert.True(await ColumnIsNotNullAsync(connection, "agent_usage", "user_id", cancellationToken));
-
-        Assert.Contains("SELECT create_by FROM project", userIsolationScript, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("FOREIGN KEY", userIsolationScript, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task MigrateAsync_Sqlite_UserIsolationBackfillsAgentUsageFromProjectOwner()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(
-                connection,
-                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
-            )
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        await using var dbContext = new AgwDbContext(options);
-        var migrations = dbContext.Database.GetMigrations().ToArray();
-        var migrator = dbContext.GetService<IMigrator>();
-        var userIsolationMigration = migrations.Single(migration =>
-            migration.EndsWith("_EnforceUserDataIsolation", StringComparison.Ordinal)
-        );
-        var userIsolationIndex = Array.IndexOf(migrations, userIsolationMigration);
-        await migrator.MigrateAsync(migrations[userIsolationIndex - 1], cancellationToken);
-
-        var projectId = Guid.CreateVersion7();
-        var usageId = Guid.CreateVersion7();
-        await using (var insert = connection.CreateCommand())
-        {
-            insert.CommandText = """
-                INSERT INTO project
-                    (id, name, type, tools, environment_variables, create_time, create_by)
-                VALUES
-                    ($projectId, 'Owned project', 0, '[]', '{}', $now, 'user-42');
-
-                INSERT INTO agent_usage
-                    (id, project_id, context_id, agent_name, recorded_at,
-                     input_token_count, output_token_count, total_token_count,
-                     cached_input_token_count, reasoning_token_count)
-                VALUES
-                    ($usageId, $projectId, 'context-1', 'agent', $now, 1, 2, 3, 0, 0);
-                """;
-            insert.Parameters.AddWithValue("$projectId", projectId);
-            insert.Parameters.AddWithValue("$usageId", usageId);
-            insert.Parameters.AddWithValue("$now", TimeProvider.System.GetUtcNow());
-            await insert.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await migrator.MigrateAsync(userIsolationMigration, cancellationToken);
-
-        await using var select = connection.CreateCommand();
-        select.CommandText = "SELECT user_id FROM agent_usage WHERE id = $usageId;";
-        select.Parameters.AddWithValue("$usageId", usageId);
-        Assert.Equal("user-42", Convert.ToString(await select.ExecuteScalarAsync(cancellationToken)));
     }
 
     private static async Task<bool> TableExistsAsync(
