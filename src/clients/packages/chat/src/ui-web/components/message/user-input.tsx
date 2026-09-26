@@ -481,7 +481,7 @@ function UserInputContainer({
 
     if (
       suggestions.length > 0 &&
-      event.key === "Enter" &&
+      (event.key === "Enter" || event.key === "Tab") &&
       !event.altKey &&
       !event.ctrlKey &&
       !event.metaKey &&

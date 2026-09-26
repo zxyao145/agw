@@ -169,26 +169,45 @@ public class ProjectConversationAppService
                 && record.ConversationSequence != null
             );
 
-        if (cursor.HasValue)
+        var records = new List<ProjectConversationChatHistory>(query.PageSize + 1);
+        var scanCursor = cursor;
+        while (records.Count <= query.PageSize)
         {
-            recordsQuery =
-                query.Direction == ProjectConversationMessageDirection.Newer
-                    ? recordsQuery.Where(record => record.ConversationSequence > cursor.Value)
-                    : recordsQuery.Where(record => record.ConversationSequence < cursor.Value);
-        }
+            var batchQuery = recordsQuery;
+            if (scanCursor.HasValue)
+            {
+                batchQuery =
+                    query.Direction == ProjectConversationMessageDirection.Newer
+                        ? batchQuery.Where(record => record.ConversationSequence > scanCursor.Value)
+                        : batchQuery.Where(record => record.ConversationSequence < scanCursor.Value);
+            }
 
-        var records =
-            query.Direction == ProjectConversationMessageDirection.Newer
-                ? await recordsQuery
-                    .OrderBy(record => record.ConversationSequence)
-                    .ThenBy(record => record.Id)
-                    .Take(query.PageSize + 1)
-                    .ToListAsync(cancellationToken)
-                : await recordsQuery
-                    .OrderByDescending(record => record.ConversationSequence)
-                    .ThenByDescending(record => record.Id)
-                    .Take(query.PageSize + 1)
-                    .ToListAsync(cancellationToken);
+            var batch =
+                query.Direction == ProjectConversationMessageDirection.Newer
+                    ? await batchQuery
+                        .OrderBy(record => record.ConversationSequence)
+                        .ThenBy(record => record.Id)
+                        .Take(query.PageSize + 1)
+                        .ToListAsync(cancellationToken)
+                    : await batchQuery
+                        .OrderByDescending(record => record.ConversationSequence)
+                        .ThenByDescending(record => record.Id)
+                        .Take(query.PageSize + 1)
+                        .ToListAsync(cancellationToken);
+            if (batch.Count == 0)
+                break;
+
+            var visible = await ConversationInputCopyFilter.FilterAsync(
+                _dbContext,
+                conversation.Id,
+                batch,
+                cancellationToken
+            );
+            records.AddRange(visible.Take(query.PageSize + 1 - records.Count));
+            if (batch.Count <= query.PageSize)
+                break;
+            scanCursor = batch[^1].ConversationSequence;
+        }
 
         var hasMore = records.Count > query.PageSize;
         if (hasMore)
