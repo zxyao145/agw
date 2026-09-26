@@ -117,6 +117,8 @@ export type ChatWorkspaceProps = {
   showUserInputNavigation?: boolean;
 };
 
+export const ChatSidebarVisibilityContext = React.createContext<boolean | undefined>(undefined);
+
 function getResumeTargetValue(resumeState: ConversationResumeState | null): string | null {
   return getTargetValueFromMetadata(resumeState?.targetType, resumeState?.targetId);
 }
@@ -375,13 +377,15 @@ export function ChatWorkspace({
   const router = useRouter();
   const searchParams = useSearchParams();
   const executionServerId = useExecutionPlatform().serverId;
+  const sidebarVisible = React.useContext(ChatSidebarVisibilityContext);
   const queryProjectId = searchParams.get("projectId");
   const queryConversationId = searchParams.get("conversationId");
 
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [executionReconnectState, setExecutionReconnectState] =
     React.useState<ExecutionReconnectState | null>(null);
-  const [isMobile, setIsMobile] = React.useState(false);
+  const [isNarrowViewport, setIsNarrowViewport] = React.useState(false);
+  const isMobile = sidebarVisible === undefined && isNarrowViewport;
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(queryProjectId);
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
@@ -779,10 +783,10 @@ export function ChatWorkspace({
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)");
     const handleMediaChange = (event: MediaQueryListEvent) => {
-      setIsMobile(event.matches);
+      setIsNarrowViewport(event.matches);
     };
 
-    setIsMobile(mediaQuery.matches);
+    setIsNarrowViewport(mediaQuery.matches);
     mediaQuery.addEventListener("change", handleMediaChange);
     return () => mediaQuery.removeEventListener("change", handleMediaChange);
   }, []);
@@ -1215,9 +1219,8 @@ export function ChatWorkspace({
 
   const isChatTab = currentTab === "chat";
   const isFilesTab = currentTab === "files";
-  const activeSidebarVisible = isChatTab
-    ? showChatHistory
-    : hasProjectFileSystem && showFileExplorer;
+  const activeSidebarVisible =
+    sidebarVisible ?? (isChatTab ? showChatHistory : hasProjectFileSystem && showFileExplorer);
   const activeSidebarTitle = isChatTab ? "chat history" : "file explorer";
   const isSidebarToggleDisabled = isFilesTab && !hasProjectFileSystem;
   const sidebarToggleTitle = isSidebarToggleDisabled
@@ -1244,7 +1247,8 @@ export function ChatWorkspace({
       });
   }, [contextId, executionServerId, selectedProjectId]);
 
-  /** Chat/Files 切换与侧栏折叠按钮，桌面端常驻左列顶部，移动端落在主区域顶部。 */
+  // Chat/Files 切换栏；由 Shell 控制侧栏时，切换按钮放在 Shell 中。
+  // Chat/Files toolbar; the sidebar toggle belongs to the Shell when it controls visibility.
   const sidebarControls = (
     <div className="flex shrink-0 flex-wrap items-center gap-2 mb-2 ">
       <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
@@ -1261,21 +1265,23 @@ export function ChatWorkspace({
           Files
         </TabsTrigger>
       </TabsList>
-      <Button
-        variant="ghost"
-        className="cursor-pointer"
-        size="sm"
-        onClick={handleSidebarToggle}
-        title={sidebarToggleTitle}
-        aria-label={sidebarToggleTitle}
-        disabled={isSidebarToggleDisabled}
-      >
-        {activeSidebarVisible ? (
-          <PanelLeftClose className="h-4 w-4" />
-        ) : (
-          <PanelLeftOpen className="h-4 w-4" />
-        )}
-      </Button>
+      {sidebarVisible === undefined ? (
+        <Button
+          variant="ghost"
+          className="cursor-pointer"
+          size="sm"
+          onClick={handleSidebarToggle}
+          title={sidebarToggleTitle}
+          aria-label={sidebarToggleTitle}
+          disabled={isSidebarToggleDisabled}
+        >
+          {activeSidebarVisible ? (
+            <PanelLeftClose className="h-4 w-4" />
+          ) : (
+            <PanelLeftOpen className="h-4 w-4" />
+          )}
+        </Button>
+      ) : null}
     </div>
   );
 
@@ -1287,7 +1293,7 @@ export function ChatWorkspace({
 
   /** 项目选择器与 Chat/Files 工具条，桌面端位于左列顶部，移动端位于主区域顶部。 */
   const workspaceToolbar = (
-    <div className="flex shrink-0 flex-wrap items-center pt-2">
+    <div className="flex shrink-0 flex-wrap items-center pt-2 bg-muted/30 border-b ">
       {showToolbarProjectSelect ? (
         <div className="w-50 mr-2 mb-2">
           <SearchableSelect
@@ -1324,7 +1330,7 @@ export function ChatWorkspace({
         className="flex min-h-0 flex-1 flex-col"
       >
         <ColResizeSplit>
-          {isMobile ? null : (
+          {isMobile || sidebarVisible === false ? null : (
             <ColResizeSplit.Left
               defaultPanelWidth={sidebarDefaultWidth}
               minWidth={268}

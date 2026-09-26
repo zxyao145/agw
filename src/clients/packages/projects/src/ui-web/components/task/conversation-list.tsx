@@ -342,7 +342,7 @@ export function ConversationList({
 
   return (
     <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
-      <div className="p-2 pl-4 border-b flex items-center justify-between">
+      <div className="p-2 pl-4 flex items-center justify-between">
         <h2 className="font-semibold text-sm">Conversations</h2>
         <div className="tools">
           {displayedConversations.length > 0 && (
