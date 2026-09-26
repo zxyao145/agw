@@ -108,28 +108,28 @@ public sealed class MafApprovalBatchAgentTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task RunAsync_AutomaticBatchesWithoutEnd_StopsAtIterationLimitWithoutHumanRounds()
+    public async Task RunAsync_MoreThanFortyAutomaticBatches_CompletesWithoutHumanRounds()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
-        using var model = new ScriptedModel(call => [WriteCall($"write-{call}", "a.txt")]);
+        using var model = new ScriptedModel(call =>
+            call <= 41 ? [WriteCall($"write-{call}", "a.txt")] : [new TextContent("done")]
+        );
         var sink = new InteractionTestSink();
         var turn = await CreateInProcessTurnAsync(model, AgwPermissionMode.FullAccess, sink, token);
 
         // Act
-        var error = await Assert.ThrowsAsync<AgwException>(() => turn.RunAsync(token));
+        await turn.RunAsync(token);
 
         // Assert
-        Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, error.Code);
-        Assert.Contains(MafApprovalBatchAgent.MaxAutoApprovalIterations.ToString(), error.Message);
-        Assert.Equal(MafApprovalBatchAgent.MaxAutoApprovalIterations + 1, model.CallCount);
-        Assert.Equal(MafApprovalBatchAgent.MaxAutoApprovalIterations, _executed.Count);
+        Assert.Equal(42, model.CallCount);
+        Assert.Equal(41, _executed.Count);
         Assert.Equal(0, turn.Set.Snapshot().ApprovalRounds);
         Assert.Empty(sink.Messages);
     }
 
     [Fact]
-    public async Task RunAsync_AutomaticBatchesThenAnswer_EndsAutomaticSequence()
+    public async Task RunAsync_AutomaticBatchesThenAnswer_Completes()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
@@ -148,7 +148,7 @@ public sealed class MafApprovalBatchAgentTests : IAsyncDisposable
 
         // Assert
         Assert.Equal(["write:1.txt", "write:2.txt", "write:3.txt"], _executed);
-        Assert.Equal(0, MafApprovalBatchAgent.ReadAutoApprovalIterations(turn.Session));
+        Assert.Equal(4, model.CallCount);
         Assert.Equal(0, turn.Set.Snapshot().ApprovalRounds);
     }
 

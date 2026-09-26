@@ -20,9 +20,7 @@ namespace Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 /// </remarks>
 internal sealed class MafApprovalBatchAgent : DelegatingAIAgent
 {
-    public const int MaxAutoApprovalIterations = 40;
     internal const string BatchStateKey = "agw.approvalBatch";
-    internal const string AutoApprovalStateKey = "agw.autoApprovalIterations";
 
     private static readonly JsonSerializerOptions JsonOptions = AIJsonUtilities.DefaultOptions;
 
@@ -43,11 +41,6 @@ internal sealed class MafApprovalBatchAgent : DelegatingAIAgent
 
     internal static MafApprovalBatchState? ReadBatch(AgentSession session) =>
         session.StateBag.TryGetValue<MafApprovalBatchState>(BatchStateKey, out var state, JsonOptions) ? state : null;
-
-    internal static int ReadAutoApprovalIterations(AgentSession session) =>
-        session.StateBag.TryGetValue<MafAutoApprovalState>(AutoApprovalStateKey, out var state, JsonOptions)
-            ? state?.Iterations ?? 0
-            : 0;
 
     protected override async Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages,
@@ -75,7 +68,6 @@ internal sealed class MafApprovalBatchAgent : DelegatingAIAgent
                 .ToList();
             if (requests.Count == 0)
             {
-                EndAutomaticSequence(session);
                 collected.AddRange(response.Messages);
                 return CreateResponse(response, collected, usage);
             }
@@ -88,12 +80,11 @@ internal sealed class MafApprovalBatchAgent : DelegatingAIAgent
             collected.AddRange(RemoveRequests(response.Messages, automatic));
             if (automatic.Count == items.Count)
             {
-                next = ContinueAutomatically(session, items);
+                next = ContinueAutomatically(items);
                 continue;
             }
 
             SaveBatch(session, CreateBatch(items));
-            EndAutomaticSequence(session);
             return CreateResponse(response, collected, usage);
         }
     }
@@ -136,19 +127,17 @@ internal sealed class MafApprovalBatchAgent : DelegatingAIAgent
 
             if (requests.Count == 0)
             {
-                EndAutomaticSequence(session);
                 yield break;
             }
 
             var items = await DecideAsync(requests, session, options, next, cancellationToken).ConfigureAwait(false);
             if (items.All(item => !item.RequiresHuman))
             {
-                next = ContinueAutomatically(session, items);
+                next = ContinueAutomatically(items);
                 continue;
             }
 
             SaveBatch(session, CreateBatch(items));
-            EndAutomaticSequence(session);
             var human = items
                 .Where(item => item.RequiresHuman)
                 .Select(item => item.Request.RequestId)
@@ -334,27 +323,11 @@ internal sealed class MafApprovalBatchAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 全部请求都已自动批准时，在当前外层运行中把原生批准响应交回内层 Agent；连续自动批准的次数有独立上限。
-    /// When every request was approved automatically, the native approvals go back to the inner Agent within this outer run; consecutive automatic batches have their own limit.
+    /// 全部请求都已自动批准时，在当前外层运行中把原生批准响应交回内层 Agent。
+    /// When every request was approved automatically, the native approvals go back to the inner Agent within this outer run.
     /// </summary>
-    private static List<ChatMessage> ContinueAutomatically(AgentSession session, List<MafApprovalBatchItem> items)
-    {
-        var iterations = ReadAutoApprovalIterations(session);
-        if (iterations >= MaxAutoApprovalIterations)
-            throw new AgwException(
-                ErrorCodes.AgentExecutionFailed,
-                $"Automatic tool approval exceeded the limit of {MaxAutoApprovalIterations} iterations."
-            );
-        session.StateBag.SetValue(
-            AutoApprovalStateKey,
-            new MafAutoApprovalState { Iterations = iterations + 1 },
-            JsonOptions
-        );
-        return [new ChatMessage(ChatRole.User, items.Select(item => (AIContent)item.Response!).ToList())];
-    }
-
-    private static void EndAutomaticSequence(AgentSession session) =>
-        session.StateBag.TryRemoveValue(AutoApprovalStateKey);
+    private static List<ChatMessage> ContinueAutomatically(List<MafApprovalBatchItem> items) =>
+        [new ChatMessage(ChatRole.User, items.Select(item => (AIContent)item.Response!).ToList())];
 
     private static void SaveBatch(AgentSession session, MafApprovalBatchState batch) =>
         session.StateBag.SetValue(BatchStateKey, batch, JsonOptions);

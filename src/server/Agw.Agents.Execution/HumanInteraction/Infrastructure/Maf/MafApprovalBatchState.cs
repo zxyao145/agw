@@ -39,12 +39,3 @@ internal sealed class MafApprovalBatchItem
 
     public ToolApprovalResponseContent? Response { get; set; }
 }
-
-/// <summary>
-/// 连续自动批准批次的计数，随 Session 保存。
-/// The count of consecutive automatically approved batches, saved with the session.
-/// </summary>
-internal sealed class MafAutoApprovalState
-{
-    public int Iterations { get; set; }
-}
