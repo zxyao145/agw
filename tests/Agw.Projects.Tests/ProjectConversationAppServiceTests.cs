@@ -18,6 +18,184 @@ namespace Agw.Projects.Tests;
 public class ProjectConversationAppServiceTests
 {
     [Fact]
+    public async Task GetMessagePageAsync_AgentflowInputCopies_ReturnsEachTurnInputOnceAcrossPages()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var firstTurnId = Guid.CreateVersion7();
+        var secondTurnId = Guid.CreateVersion7();
+        var missingInputTurnId = Guid.CreateVersion7();
+        var nodeScope = $"agentflow:{Guid.CreateVersion7():N}:node:first";
+        const string inputText = "武汉公园";
+
+        ProjectConversationChatHistory Record(
+            long sequence,
+            Guid turnId,
+            ConversationMessagePurpose purpose,
+            ChatMessage message,
+            string? historyScope = null
+        )
+        {
+            var id = Guid.CreateVersion7();
+            message.MessageId = id.ToString("D");
+            var record = CreateRecord(conversationId, turnId, sequence, message, TaskExecutionStatus.Succeeded);
+            record.Id = id;
+            record.TurnId = turnId;
+            record.StepIndex = 0;
+            record.Purpose = purpose;
+            record.HistoryScope = historyScope;
+            return record;
+        }
+
+        ChatMessage User(string text, string author = Constants.DefaultInputAuthor) =>
+            new(ChatRole.User, text) { AuthorName = author };
+
+        var records = new[]
+        {
+            Record(0, firstTurnId, ConversationMessagePurpose.Input, User(inputText)),
+            Record(1, firstTurnId, ConversationMessagePurpose.Message, User(inputText), nodeScope),
+            Record(2, firstTurnId, ConversationMessagePurpose.Message, User(inputText), nodeScope),
+            Record(
+                3,
+                firstTurnId,
+                ConversationMessagePurpose.Message,
+                new ChatMessage(ChatRole.User, inputText)
+                {
+                    AuthorName = Constants.DefaultInputAuthor,
+                    AdditionalProperties = new AdditionalPropertiesDictionary { ["agentflowInput"] = true },
+                },
+                nodeScope
+            ),
+            Record(4, firstTurnId, ConversationMessagePurpose.Message, User(inputText, "human"), nodeScope),
+            Record(5, firstTurnId, ConversationMessagePurpose.Message, User("another question"), nodeScope),
+            Record(
+                6,
+                firstTurnId,
+                ConversationMessagePurpose.Message,
+                new ChatMessage(
+                    ChatRole.User,
+                    [new TextContent(inputText), new DataContent(new byte[] { 1, 2, 3 }, "image/png")]
+                )
+                {
+                    AuthorName = Constants.DefaultInputAuthor,
+                },
+                nodeScope
+            ),
+            Record(7, firstTurnId, ConversationMessagePurpose.Message, new ChatMessage(ChatRole.Assistant, "answer")),
+            Record(8, secondTurnId, ConversationMessagePurpose.Input, User(inputText)),
+            Record(9, secondTurnId, ConversationMessagePurpose.Message, User(inputText), nodeScope),
+            Record(10, secondTurnId, ConversationMessagePurpose.Message, new ChatMessage(ChatRole.Assistant, "again")),
+            Record(11, missingInputTurnId, ConversationMessagePurpose.Message, User(inputText), nodeScope),
+        };
+        using (var payload = JsonDocument.Parse(records[1].ConversationPayload!))
+            records[1].ConversationPayload = JsonSerializer.Serialize(
+                payload.RootElement,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            );
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "conversation", "History"));
+            foreach (var (turnId, inputIndex, lastSequence) in new[] { (firstTurnId, 0, 7L), (secondTurnId, 8, 10L) })
+            {
+                seedContext.ProjectConversationTurns.Add(
+                    new ProjectConversationTurn
+                    {
+                        Id = turnId,
+                        ProjectConversationId = conversationId,
+                        TargetId = Guid.CreateVersion7(),
+                        RuntimeType = AgentRuntimeType.Agentflow,
+                        Status = ProjectConversationTurnStatus.Completed,
+                        InputMessageId = records[inputIndex].Id,
+                        FirstSequence = inputIndex,
+                        LastSequence = lastSequence,
+                        StartedAt = TimeProvider.System.GetUtcNow(),
+                    }
+                );
+            }
+            seedContext.ProjectConversationTurns.Add(
+                new ProjectConversationTurn
+                {
+                    Id = missingInputTurnId,
+                    ProjectConversationId = conversationId,
+                    TargetId = Guid.CreateVersion7(),
+                    RuntimeType = AgentRuntimeType.Agentflow,
+                    Status = ProjectConversationTurnStatus.Completed,
+                    InputMessageId = Guid.CreateVersion7(),
+                    FirstSequence = 11,
+                    LastSequence = 11,
+                    StartedAt = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            seedContext.ProjectConversationChatHistories.AddRange(records);
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var expected = records
+            .Where(record => record.ConversationSequence is not (1 or 2 or 9))
+            .Select(record => record.Id.ToString("D"));
+        foreach (
+            var direction in new[]
+            {
+                ProjectConversationMessageDirection.Newer,
+                ProjectConversationMessageDirection.Older,
+            }
+        )
+        {
+            var ids = new List<string>();
+            string? cursor = null;
+            ProjectConversationMessagePageResponse page;
+            do
+            {
+                page = (
+                    await service.GetMessagePageAsync(
+                        projectId,
+                        conversationId,
+                        new ProjectConversationMessagesQuery
+                        {
+                            Direction = direction,
+                            Cursor = cursor,
+                            PageSize = 2,
+                        },
+                        cancellationToken
+                    )
+                )!;
+                Assert.InRange(page.Items.Count, 1, 2);
+                if (page.HasMore)
+                    Assert.Equal(2, page.Items.Count);
+                if (direction == ProjectConversationMessageDirection.Newer)
+                    ids.AddRange(page.Items.Select(message => message.MessageId));
+                else
+                    ids.InsertRange(0, page.Items.Select(message => message.MessageId));
+                cursor = page.NextCursor;
+            } while (page.HasMore);
+
+            Assert.Null(page.NextCursor);
+            Assert.DoesNotContain(records[1].Id.ToString("D"), ids);
+            Assert.DoesNotContain(records[2].Id.ToString("D"), ids);
+            Assert.DoesNotContain(records[9].Id.ToString("D"), ids);
+            Assert.Equal(expected, ids);
+        }
+
+        var turnMessages = await new ConversationTurnQueryService(
+            dbContext,
+            new TestUserInfoService()
+        ).GetMessagesAsync(
+            new ConversationTurnMessagesQuery { ConversationId = conversationId, TurnId = firstTurnId },
+            cancellationToken
+        );
+        Assert.Equal([0L, 3L, 4L, 5L, 6L, 7L], turnMessages!.Items.Select(item => item.Sequence));
+    }
+
+    [Fact]
     public async Task ListResponsesAsync_PaginatesWithStableOrderingAndContextFilter()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

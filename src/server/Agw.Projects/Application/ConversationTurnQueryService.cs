@@ -101,9 +101,15 @@ public sealed class ConversationTurnQueryService
             .OrderBy(record => record.ConversationSequence)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+        var visibleRecords = await ConversationInputCopyFilter.FilterAsync(
+            _dbContext,
+            query.ConversationId,
+            records,
+            cancellationToken
+        );
         return new ConversationTurnMessagesResponse(
             query.TurnId,
-            records
+            visibleRecords
                 .SelectMany(record =>
                     TaskExecutionMapper
                         .ToAiMessages(record)
