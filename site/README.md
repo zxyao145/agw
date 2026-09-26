@@ -2,7 +2,7 @@
 
 独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。英文首页在 `/`、文档在 `/docs/`；中文对应 `/zh/` 和 `/zh/docs/`。内容依据当前代码整理，中英文各 36 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
 
-An independent bilingual Hugo site. English is the default language; Chinese lives under `/zh/`. Each language has 36 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace. GitHub Actions builds, validates, and deploys it to GitHub Pages.
+An independent bilingual Hugo site. English is the default language; Chinese lives under `/zh/`. Each language has 36 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace.
 
 ## 工具链 / Toolchain
 
@@ -38,7 +38,7 @@ From `site/`, build with the local default URL:
 python3 scripts/check-site.py public
 ```
 
-The static output is `public/`. For a real deployment, supply the actual canonical URL; the repository deliberately defaults to `http://localhost:1313/`, not an invented public domain:
+The static output is `public/`. Build for the production canonical URL with:
 
 ```bash
 ./scripts/hugo.sh --cleanDestinationDir --gc --minify \
@@ -52,28 +52,6 @@ This is a build only, not publication. The host must serve directory `index.html
 检查脚本只读产物，检查 HTML 本地链接、资源和锚点、译文对应页面、Markdown 元数据配对、仓库源码引用、标题下的修订日期以及两个搜索索引。它不会请求真实模型或外部网站，也不能代替浏览器交互检查。
 
 The verifier checks local links/assets/anchors, translation alternates, paired metadata, repository references, revision dates below headings, and both search indexes. It does not request external websites or replace browser QA. For subpath verification, build into `.cache/subpath` with a base URL containing a prefix, then pass that same URL to the verifier.
-
-## GitHub Pages 自动部署 / Automated deployment
-
-流水线位于 [`.github/workflows/site.yml`](../.github/workflows/site.yml)，名称为 **Site Build and Deploy**。
-
-首次启用：
-
-1. 在仓库 **Settings → Pages → Build and deployment** 中，将 **Source** 设为 **GitHub Actions**。
-2. 将站点源码和工作流合并到 `main`。涉及 `site/**` 或该工作流的推送会自动构建和发布；也可在 **Actions → Site Build and Deploy → Run workflow** 中选择 `main` 手动运行。
-3. 等待 `build` 和 `deploy` 成功，通过部署任务中的链接访问站点。若 `github-pages` 环境配置了审批规则，需按该规则批准部署。
-
-PR 只构建检查，不读取 Pages 配置、不上传部署产物，也不会发布；手动运行其他分支同样只检查。构建固定使用 Hugo Extended 0.165.0，并校验下载文件的 SHA-256；Go 版本从 `site/go.mod` 读取。Hugo 严格构建及链接、翻译、更新时间检查全部通过后，才上传 `site/public/`，发布任务直接使用这份已验证产物。
-
-流水线将 `baseURL` 固定为 `https://zxyao145.github.io/agw/`，PR 和正式构建使用相同的项目路径，确保链接、资源和搜索索引包含 `/agw/` 前缀。GitHub Pages 保持默认项目站点配置，不设置自定义域名。本地预览仍使用 `hugo.yaml` 中的本机地址，无需修改。
-
-无需配置 PAT 或服务器密钥，发布使用 GitHub 自动提供的 Token。构建只有读取权限；Pages 写入和 OIDC 权限仅授予发布任务。`public/` 不提交到 Git。若读取 Pages 配置时出现 404，先确认上述 Pages Source 设置及仓库的 Pages 可用性。
-
-Enable **Settings → Pages → Source: GitHub Actions**, then merge the site and workflow into `main`. Changes to `site/**` or the workflow trigger deployment; **Run workflow** on `main` can deploy manually. Follow any approval rules configured on the `github-pages` environment.
-
-Pull requests and manual runs on other branches only validate. They do not read Pages configuration, upload a deployment artifact, or deploy. All workflow builds use the fixed canonical URL `https://zxyao145.github.io/agw/`, including its `/agw/` project prefix. Leave the Pages custom domain unset. Strict Hugo and site checks must pass before the verified artifact is uploaded and deployed. Local preview keeps the localhost URL in `hugo.yaml`.
-
-No personal access token or server credentials are needed. Only the deployment job receives Pages write and OIDC permissions. Keep generated `public/` files out of Git. See the [Hugo Pages guide](https://gohugo.io/host-and-deploy/host-on-github-pages/) for GitHub's initial setup.
 
 ## 内容维护 / Content maintenance
 

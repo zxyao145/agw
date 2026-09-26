@@ -383,3 +383,4 @@ appsettings.setup.json
 **/.turbo/**/*
 **/.next/**/*
 .agw/
+.wrangler
