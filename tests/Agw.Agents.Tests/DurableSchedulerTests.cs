@@ -104,7 +104,7 @@ public sealed class DurableSchedulerTests
             TurnPersistenceTestKit.UserId,
             target,
             task,
-            TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ContextId),
+            TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),
             new AgwUserInput { Contents = [] },
             true,
             ProjectWorkspacePaths.CreateSnapshot(task.ProjectId, AppContext.BaseDirectory, [])

@@ -74,9 +74,14 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// 连接是否仍在执行这个对话的 Turn。查询来自这条连接自己、且它的 Turn 已写出结束消息时不算：它的客户端已收到结果，剩下的释放由下一条命令等待。
+    /// Whether the connection still runs a turn of the conversation. When the query comes from this connection itself and its turn has written the finish message, it does not count: its client already has the result, and the next command waits for the remaining release.
+    /// </summary>
     internal async Task<bool> IsActiveConversationAsync(
         Guid projectId,
-        string contextId,
+        Guid conversationId,
+        bool queriedBySelf,
         CancellationToken cancellationToken
     )
     {
@@ -85,8 +90,9 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         {
             return Volatile.Read(ref _disposed) == 0
                 && _context.ProjectId == projectId
-                && string.Equals(_context.ContextId, contextId, StringComparison.Ordinal)
-                && !_context.WhenIdleAsync().IsCompleted;
+                && _context.ConversationId == conversationId
+                && !_context.WhenIdleAsync().IsCompleted
+                && !(queriedBySelf && _context.HasWrittenTurnFinish);
         }
         finally
         {

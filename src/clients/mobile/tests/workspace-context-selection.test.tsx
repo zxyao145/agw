@@ -63,7 +63,7 @@ test("selecting the active conversation again preserves its loaded history", asy
   await act(() => result.current.selectConversation(context.conversationId));
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
   expect(result.current.selectedConversationId).toBe(context.conversationId);
-  expect(result.current.selectedContextId).toBe(context.contextId);
+  expect(result.current.readyConversationId).toBe(context.conversationId);
 
   await act(() => result.current.selectConversation(context.conversationId));
 

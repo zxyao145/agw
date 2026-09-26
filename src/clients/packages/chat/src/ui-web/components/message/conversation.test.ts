@@ -44,6 +44,7 @@ type ConversationOptions = {
   responses?: InteractionResponse[];
   resumes?: string[];
   showCheckpointResume?: boolean;
+  activeStreamingScopeId?: string | null;
 };
 
 function Harness(options: ConversationOptions) {
@@ -62,6 +63,7 @@ function Harness(options: ConversationOptions) {
         isLoadingOlderMessages: options.isLoadingOlderMessages,
         isInitialLoading: options.isInitialLoading,
         onLoadOlderMessages: () => options.loadRequests?.push(1),
+        activeStreamingScopeId: options.activeStreamingScopeId,
         showCheckpointResume: options.showCheckpointResume,
         onCheckpointResume: (occurrenceId: string) => options.resumes?.push(occurrenceId),
         onHumanResponse: (response: InteractionResponse) => options.responses?.push(response),
@@ -71,6 +73,41 @@ function Harness(options: ConversationOptions) {
 
 function renderConversation(options: ConversationOptions = {}) {
   return render(React.createElement(Harness, options));
+}
+
+// jsdom 不做排版：给消息滚动区域设定 320px 可见高度和内容高度，按浏览器规则限制 scrollTop，并投递尺寸变化通知。
+// jsdom performs no layout: give the message scroll area a 320px visible height and a content
+// height, clamp scrollTop the way a browser does, and deliver resize notifications.
+function messageScrollArea(content: HTMLElement) {
+  const element = content.closest<HTMLElement>(".max-h-80");
+  assert.ok(element);
+  const clientHeight = 320;
+  let contentHeight = 0;
+  let scrollTop = 0;
+  const scrollHeight = () => Math.max(contentHeight, clientHeight);
+  Object.defineProperties(element, {
+    clientHeight: { configurable: true, value: clientHeight },
+    scrollHeight: { configurable: true, get: scrollHeight },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = Math.min(Math.max(value, 0), scrollHeight() - clientHeight);
+      },
+    },
+  });
+
+  return {
+    element,
+    grow(height: number) {
+      contentHeight = height;
+      for (const entry of environment.observers.resize.filter(
+        (observed) => observed.target === element.firstElementChild,
+      )) {
+        entry.callback([], null);
+      }
+    },
+  };
 }
 
 test("an empty conversation says there are no messages", async () => {
@@ -132,6 +169,68 @@ test("agent metadata renders name, author, and model", async () => {
   assert.ok(await screen.findByText("Review Node"));
   assert.ok(screen.getByText("claude-code"));
   assert.equal(screen.getByText("claude-opus-5").getAttribute("title"), "claude-opus-5");
+});
+
+test("message actions reveal on hover anywhere in the conversation item", async () => {
+  const message = textMessage("m1", "Review the change", "right");
+  message.meta = { name: "Reviewer", author: null, model: null };
+  const view = renderConversation({
+    items: [{ key: "m1", type: "message", alignment: "right", width: "normal", message }],
+  });
+
+  const copy = await screen.findByRole("button", { name: "Copy message" });
+  const item = view.container.querySelector('[data-msg-id="m1"]');
+  assert.equal(copy.closest(".group\\/message"), item);
+  assert.ok(item?.contains(screen.getByText("Reviewer")));
+  assert.equal(copy.closest(".max-h-80"), null);
+});
+
+test("only user and result messages expose message actions", async () => {
+  const view = renderConversation({
+    items: [
+      messageItem("user", "Review the change", "right"),
+      messageItem("agent", "Reviewing now"),
+      {
+        key: "result",
+        type: "result",
+        alignment: "left",
+        width: "full",
+        message: textMessage("result", "Review complete", "left"),
+      },
+    ],
+  });
+
+  await screen.findByText("Review complete");
+  assert.deepEqual(
+    ["user", "agent", "result"].map((id) => {
+      const item = view.container.querySelector<HTMLElement>(`[data-msg-id="${id}"]`);
+      assert.ok(item);
+      return within(item).queryByRole("button", { name: "Copy message" }) !== null;
+    }),
+    [true, false, true],
+  );
+});
+
+test("only messages of the streaming turn follow their growing content", async () => {
+  const earlier = textMessage("m1", "Earlier answer", "left");
+  earlier.source.streamingScopeId = "turn-1";
+  const current = textMessage("m2", "Current answer", "left");
+  current.source.streamingScopeId = "turn-2";
+  renderConversation({
+    items: [
+      { key: "m1", type: "message", alignment: "left", width: "normal", message: earlier },
+      { key: "m2", type: "message", alignment: "left", width: "normal", message: current },
+    ],
+    activeStreamingScopeId: "turn-2",
+  });
+
+  const earlierArea = messageScrollArea(await screen.findByText("Earlier answer"));
+  const currentArea = messageScrollArea(screen.getByText("Current answer"));
+  earlierArea.grow(800);
+  currentArea.grow(800);
+
+  assert.equal(earlierArea.element.scrollTop, 0);
+  assert.equal(currentArea.element.scrollTop, 480);
 });
 
 test("a tool run renders its name, summary, and status", async () => {

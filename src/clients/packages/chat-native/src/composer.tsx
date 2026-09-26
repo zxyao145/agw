@@ -92,7 +92,8 @@ export function NativeChatComposer({
   const canSend = Boolean(
     workspace.selectedProjectId &&
     workspace.selectedTarget &&
-    (!workspace.selectedConversationId || workspace.selectedContextId) &&
+    (!workspace.selectedConversationId ||
+      workspace.readyConversationId === workspace.selectedConversationId) &&
     (composer.text.trim() || composer.attachments.length > 0),
   );
 
@@ -165,7 +166,7 @@ export function NativeChatComposer({
   React.useEffect(() => {
     suggestionRequestRef.current += 1;
     setSuggestions([]);
-  }, [workspace.selectedContextId]);
+  }, [workspace.readyConversationId]);
 
   const handleSelectionChange = (
     event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,

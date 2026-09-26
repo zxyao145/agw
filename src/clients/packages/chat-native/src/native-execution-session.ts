@@ -16,7 +16,7 @@ import type { AgentflowCheckpointAvailability } from "@agw/chat-core";
 
 export type NativeExecutionSetting = {
   projectId: string;
-  contextId: string;
+  conversationId: string;
   permissionMode: PermissionMode;
 };
 

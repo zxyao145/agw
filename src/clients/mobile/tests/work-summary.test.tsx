@@ -57,6 +57,13 @@ test("Mobile folds completed work, exposes an accessible toggle, and resets on c
   expect(view.queryByText("Checking implementation")).toBeNull();
 });
 
+test("Mobile shows the Agent name before the work duration", async () => {
+  const history = [messages[0], messages[1], { ...messages[2], author: "claude-code" }];
+  const view = await render(<NativeConversationHistoryHost messages={history} />);
+  expect(view.getByRole("button", { name: "claude-code Worked for 17m 39s" })).toBeTruthy();
+  expect(view.getByText("claude-code")).toBeTruthy();
+});
+
 test("Mobile keeps work visible through execution and silent reconnect, then folds on completion", async () => {
   const view = await render(
     <NativeConversationHistoryHost messages={messages} isCurrentTurnActive />,

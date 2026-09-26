@@ -34,7 +34,7 @@ export function ExecuteAgentflowDrawer({
   const sessionSeed = React.useMemo(
     () => ({
       revision: `${agentflow?.id ?? "none"}:${resetSignal}`,
-      contextId: null,
+      conversationId: null,
       messages: [],
       historyTurns: [],
       usage: EMPTY_TOKEN_USAGE,

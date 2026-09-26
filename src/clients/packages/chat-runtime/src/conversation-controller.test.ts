@@ -29,7 +29,7 @@ test("history hydration merges reasoning fragments without joining different tur
       contents: [{ type: "TextContent", content: "Done" }],
     },
   ]);
-  const seed = { revision: 1, conversationId: "conversation", contextId: "context", messages };
+  const seed = { revision: 1, conversationId: "conversation", messages };
   const controller = new ConversationController({
     adapter: { execution: { baseUrl: "https://agw.test", token: null } },
     projectId: "project",
@@ -83,7 +83,6 @@ for (const status of ["completed", "failed", "interrupted", "recovered"]) {
       sessionSeed: {
         revision: 1,
         conversationId: "conversation",
-        contextId: "context",
         messages: [],
       },
     });
@@ -124,7 +123,6 @@ for (const status of ["completed", "failed", "interrupted", "recovered"]) {
     controller.hydrate({
       revision: 2,
       conversationId: "conversation",
-      contextId: "context",
       messages,
     });
     assert.equal(summaries()[0].key, summary.key);
@@ -138,7 +136,7 @@ test("equivalent result format options preserve the snapshot and do not notify s
     adapter: { execution: { baseUrl: "https://agw.test", token: null } },
     projectId: "project-1",
     target: { id: "agent-1", type: "agent" },
-    sessionSeed: { revision: 1, conversationId: null, contextId: null, messages: [] },
+    sessionSeed: { revision: 1, conversationId: null, messages: [] },
     agentResultFormats: [{ id: "agent-1", resultFormat: "json" }, { id: "agent-2" }],
   };
   const controller = new ConversationController(options);
@@ -172,7 +170,6 @@ test("in-place result format changes update presentation and notify once", () =>
     sessionSeed: {
       revision: 1,
       conversationId: null,
-      contextId: null,
       messages: [
         {
           messageId: "result",
@@ -216,7 +213,6 @@ test("schema configuration formats live Results and hydrated history, and update
     sessionSeed: {
       revision: 1,
       conversationId: "conversation-1",
-      contextId: "context-1",
       messages: [],
     },
   };
@@ -277,7 +273,6 @@ test("controller completes parallel gates individually without server re-publica
     sessionSeed: {
       revision: 1,
       conversationId: "conversation-1",
-      contextId: "context-1",
       messages: [],
     },
   });
@@ -352,7 +347,6 @@ test("response identity rejects stale kinds and preserves a newer pending intera
     sessionSeed: {
       revision: 1,
       conversationId: "conversation-1",
-      contextId: "context-1",
       messages: [],
     },
   });
@@ -434,7 +428,6 @@ test("conversation controller owns raw messages, control state, usage, and rende
     sessionSeed: {
       revision: 1,
       conversationId: null,
-      contextId: "context-1",
       messages: [],
     },
   });
@@ -526,7 +519,6 @@ test("command errors retain an active turn and block another send until recovery
     sessionSeed: {
       revision: 1,
       conversationId: "conversation",
-      contextId: "context",
       messages: [],
     },
   });
@@ -582,7 +574,6 @@ test("selecting Full access preserves the current tool approval and consumes ser
     sessionSeed: {
       revision: 1,
       conversationId: "conversation",
-      contextId: "context",
       messages: [],
     },
   });
@@ -629,7 +620,6 @@ test("controller accepts live node inputs and deduplicates replay without creati
     sessionSeed: {
       revision: 1,
       conversationId: "conversation-1",
-      contextId: "context-1",
       messages: [],
     },
   });

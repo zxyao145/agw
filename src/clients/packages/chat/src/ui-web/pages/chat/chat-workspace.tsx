@@ -58,6 +58,7 @@ import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import { buildChatHref } from "../../../lib/chat-route";
+import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import { cn } from "@agw/components";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -80,6 +81,7 @@ import { getApiErrorMessage } from "@agw/api";
 import {
   executionSessionManager,
   getExecutionReconnectProgress,
+  migrateDurableExecutionAttachment,
   type ExecutionReconnectState,
 } from "@agw/chat-runtime";
 import { useExecutionPlatform } from "../../execution-platform";
@@ -115,6 +117,8 @@ export type ChatWorkspaceProps = {
   compactToolbar?: boolean;
   showUserInputNavigation?: boolean;
 };
+
+export const ChatSidebarVisibilityContext = React.createContext<boolean | undefined>(undefined);
 
 function getResumeTargetValue(resumeState: ConversationResumeState | null): string | null {
   return getTargetValueFromMetadata(resumeState?.targetType, resumeState?.targetId);
@@ -228,7 +232,7 @@ function ChatSettingsDialog({
             <div className="grid gap-2">
               <Label>Conversation Information</Label>
               {conversationId === null ? (
-                <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                <div className="rounded-lg bg-muted/50 px-4 py-4 text-sm text-muted-foreground">
                   No active conversation.
                 </div>
               ) : (
@@ -261,7 +265,7 @@ function ChatSettingsDialog({
               )}
             </div>
 
-            <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
+            <div className="flex items-start justify-between gap-4 rounded-lg bg-muted/50 px-4 py-3">
               <div className="space-y-1">
                 <Label htmlFor="chat-settings-result-only" className="cursor-pointer">
                   Only Stream Turn Result
@@ -288,7 +292,7 @@ function ChatSettingsDialog({
               </div>
 
               {draftEnvVars.length === 0 ? (
-                <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                <div className="rounded-lg bg-muted/50 px-4 py-4 text-sm text-muted-foreground">
                   No environment variables configured.
                 </div>
               ) : (
@@ -374,23 +378,25 @@ export function ChatWorkspace({
   const router = useRouter();
   const searchParams = useSearchParams();
   const executionServerId = useExecutionPlatform().serverId;
+  const sidebarVisible = React.useContext(ChatSidebarVisibilityContext);
   const queryProjectId = searchParams.get("projectId");
   const queryConversationId = searchParams.get("conversationId");
 
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [executionReconnectState, setExecutionReconnectState] =
     React.useState<ExecutionReconnectState | null>(null);
-  const [isMobile, setIsMobile] = React.useState(false);
+  const reconnectRetryRef = React.useRef<(() => Promise<void>) | null>(null);
+  const [isNarrowViewport, setIsNarrowViewport] = React.useState(false);
+  const isMobile = sidebarVisible === undefined && isNarrowViewport;
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(queryProjectId);
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [conversationId, setConversationId] = React.useState<string | null>(queryConversationId);
-  const [contextId, setContextId] = React.useState<string | null>(null);
   const [chatSessionSeed, setChatSessionSeed] = React.useState<ChatSessionSeed>({
     revision: 0,
-    contextId: null,
+    conversationId: null,
     messages: [],
     historyTurns: [],
     usage: EMPTY_TOKEN_USAGE,
@@ -684,9 +690,11 @@ export function ChatWorkspace({
     hydratedConversationKeyRef.current = null;
     setIsLoadingConversation(false);
     setConversationId(null);
-    setContextId(null);
+    // 新对话重新确定执行目标，不沿用上一个对话的选择。
+    // A new conversation resolves its own target instead of keeping the previous conversation's one.
+    setSelectedTargetValue(null);
     replaceChatSession({
-      contextId: null,
+      conversationId: null,
       messages: [],
       historyTurns: [],
       usage: EMPTY_TOKEN_USAGE,
@@ -730,17 +738,29 @@ export function ChatWorkspace({
           }),
         ]);
         abortController.signal.throwIfAborted();
-        const restoredTargetValue = getResumeTargetValue(details.resumeState);
+        // 本地为该对话选择过的目标优先，其次是服务端记录的最近目标。
+        // The target chosen locally for this conversation wins over the server's latest target.
+        const restoredTargetValue =
+          conversationComposerStorage.get(
+            { serverId: executionServerId, projectId },
+            details.conversationId,
+          ).targetValue ?? getResumeTargetValue(details.resumeState);
 
+        // 按执行上下文保存的旧 durable attachment 必须在 Chat 恢复配置之前移到对话键下。
+        // An old durable attachment saved by execution context must move to the conversation key before Chat restores its configuration.
+        migrateDurableExecutionAttachment({
+          projectId,
+          conversationId: details.conversationId,
+          contextId: details.contextId,
+        });
         hydratedConversationKeyRef.current = getConversationHydrationKey(
           projectId,
           details.conversationId,
         );
         setSelectedProjectId(projectId);
         setConversationId(details.conversationId);
-        setContextId(details.contextId);
         replaceChatSession({
-          contextId: details.contextId,
+          conversationId: details.conversationId,
           messages: messagePage.items,
           historyTurns: messagePage.turns,
           usage: details.usage,
@@ -752,9 +772,7 @@ export function ChatWorkspace({
               ? details.resumeState.agentMode
               : null,
         });
-        if (restoredTargetValue) {
-          setSelectedTargetValue(restoredTargetValue);
-        }
+        setSelectedTargetValue(restoredTargetValue);
         syncRoute(projectId, details.conversationId);
         return details;
       } finally {
@@ -765,16 +783,16 @@ export function ChatWorkspace({
         }
       }
     },
-    [replaceChatSession, syncRoute],
+    [executionServerId, replaceChatSession, syncRoute],
   );
 
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)");
     const handleMediaChange = (event: MediaQueryListEvent) => {
-      setIsMobile(event.matches);
+      setIsNarrowViewport(event.matches);
     };
 
-    setIsMobile(mediaQuery.matches);
+    setIsNarrowViewport(mediaQuery.matches);
     mediaQuery.addEventListener("change", handleMediaChange);
     return () => mediaQuery.removeEventListener("change", handleMediaChange);
   }, []);
@@ -830,39 +848,43 @@ export function ChatWorkspace({
     });
   }, [projects, queryProjectId]);
 
+  // 当前目标为空或不可用时，依次采用对话的本地选择、项目最近的选择、默认 Agent、第一个目标。
+  // 目标列表加载前保留当前值，避免清掉对话恢复出的目标。
+  // When the current target is empty or unavailable, use the conversation's local choice, the project's
+  // latest choice, the default Agent, then the first target. Keep the value until the target list loads.
   React.useEffect(() => {
     if (targetOptions.length === 0) {
+      return;
+    }
+
+    const isAvailable = (value: string | null | undefined): value is string =>
+      Boolean(value) && targetOptions.some((option) => getTargetValue(option) === value);
+    if (isAvailable(selectedTargetValue)) {
+      return;
+    }
+
+    if (!selectedProjectId) {
       setSelectedTargetValue(null);
       return;
     }
 
-    setSelectedTargetValue((current) => {
-      if (current && targetOptions.some((option) => getTargetValue(option) === current)) {
-        return current;
-      }
+    const storedTargetValue = [
+      conversationComposerStorage.get(
+        { serverId: executionServerId, projectId: selectedProjectId },
+        conversationId,
+      ).targetValue,
+      chatSettingsStorage.get(selectedProjectId).targetValue,
+    ].find(isAvailable);
+    if (storedTargetValue) {
+      setSelectedTargetValue(storedTargetValue);
+      return;
+    }
 
-      if (!selectedProjectId) {
-        return null;
-      }
-
-      const storedTargetValue = chatSettingsStorage.get(selectedProjectId).targetValue;
-      if (
-        storedTargetValue &&
-        targetOptions.some((option) => getTargetValue(option) === storedTargetValue)
-      ) {
-        return storedTargetValue;
-      }
-
-      const defaultAgent = targetOptions.find(
-        (option) => option.type === "agent" && option.label === DEFAULT_AGENT_LABEL,
-      );
-      if (defaultAgent) {
-        return getTargetValue(defaultAgent);
-      }
-
-      return getTargetValue(targetOptions[0]);
-    });
-  }, [selectedProjectId, targetOptions]);
+    const defaultAgent = targetOptions.find(
+      (option) => option.type === "agent" && option.label === DEFAULT_AGENT_LABEL,
+    );
+    setSelectedTargetValue(getTargetValue(defaultAgent ?? targetOptions[0]));
+  }, [conversationId, executionServerId, selectedProjectId, selectedTargetValue, targetOptions]);
 
   React.useEffect(() => {
     const routeAction = getChatRouteSessionAction({
@@ -942,9 +964,8 @@ export function ChatWorkspace({
       setSelectedProjectId(nextProjectId);
       setSelectedTargetValue(null);
       setConversationId(null);
-      setContextId(null);
       replaceChatSession({
-        contextId: null,
+        conversationId: null,
         messages: [],
         historyTurns: [],
         usage: EMPTY_TOKEN_USAGE,
@@ -966,9 +987,14 @@ export function ChatWorkspace({
       setSelectedTargetValue(nextTargetValue);
       if (selectedProjectId) {
         chatSettingsStorage.set(selectedProjectId, { targetValue: nextTargetValue });
+        conversationComposerStorage.set(
+          { serverId: executionServerId, projectId: selectedProjectId },
+          conversationId,
+          { targetValue: nextTargetValue },
+        );
       }
     },
-    [selectedProjectId, selectedTargetValue],
+    [conversationId, executionServerId, selectedProjectId, selectedTargetValue],
   );
 
   const handleAgentSelect = React.useCallback(
@@ -983,28 +1009,20 @@ export function ChatWorkspace({
     [handleTargetChange],
   );
 
-  const handleChatContextIdChange = React.useCallback(
-    (nextContextId: string | null) => {
-      setContextId(nextContextId);
-      if (nextContextId == null) {
-        hydratedConversationKeyRef.current = null;
-        setConversationId(null);
-        syncRoute(selectedProjectId, null);
-      }
-    },
-    [selectedProjectId, syncRoute],
-  );
-
-  const handleChatConversationIdChange = React.useCallback((nextConversationId: string | null) => {
-    setConversationId(nextConversationId);
-  }, []);
-
   const handleConversationAccepted = React.useCallback(
     (acceptedConversationId: string) => {
       if (!selectedProjectId) {
         return;
       }
 
+      // 新对话被受理后才有服务端记录：新对话记录中的目标与之后输入的草稿都交给这个 ID。
+      // A new conversation has a server record only once accepted: the target and any draft typed since then move to this ID.
+      if (conversationId === null) {
+        const scope = { serverId: executionServerId, projectId: selectedProjectId };
+        const values = conversationComposerStorage.get(scope, null);
+        conversationComposerStorage.remove(scope, null);
+        conversationComposerStorage.set(scope, acceptedConversationId, values);
+      }
       hydratedConversationKeyRef.current = getConversationHydrationKey(
         selectedProjectId,
         acceptedConversationId,
@@ -1012,7 +1030,7 @@ export function ChatWorkspace({
       setConversationId(acceptedConversationId);
       syncRoute(selectedProjectId, acceptedConversationId);
     },
-    [selectedProjectId, syncRoute],
+    [conversationId, executionServerId, selectedProjectId, syncRoute],
   );
 
   const handleConversationSelect = React.useCallback(
@@ -1119,20 +1137,21 @@ export function ChatWorkspace({
   const handleConversationDeleted = React.useCallback(
     (deletedConversationId: string) => {
       if (!selectedProjectId) return;
-      executionSessionManager.conversationStatuses.remove(
-        { serverId: executionServerId, projectId: selectedProjectId },
-        deletedConversationId,
-      );
+      const scope = { serverId: executionServerId, projectId: selectedProjectId };
+      executionSessionManager.conversationStatuses.remove(scope, deletedConversationId);
+      conversationComposerStorage.remove(scope, deletedConversationId);
+      // 删除对话时释放它的执行连接与队列。Deleting a conversation releases its execution connection and queue.
+      void executionSessionManager.discard({ ...scope, conversationId: deletedConversationId });
     },
     [executionServerId, selectedProjectId],
   );
 
   const handleProjectConversationsCleared = React.useCallback(() => {
     if (!selectedProjectId) return;
-    executionSessionManager.conversationStatuses.removeScope({
-      serverId: executionServerId,
-      projectId: selectedProjectId,
-    });
+    const scope = { serverId: executionServerId, projectId: selectedProjectId };
+    executionSessionManager.conversationStatuses.removeScope(scope);
+    conversationComposerStorage.removeConversations(scope);
+    void executionSessionManager.discardProject(scope);
   }, [executionServerId, selectedProjectId]);
 
   const renderConversationList = React.useCallback(
@@ -1189,9 +1208,8 @@ export function ChatWorkspace({
 
   const isChatTab = currentTab === "chat";
   const isFilesTab = currentTab === "files";
-  const activeSidebarVisible = isChatTab
-    ? showChatHistory
-    : hasProjectFileSystem && showFileExplorer;
+  const activeSidebarVisible =
+    sidebarVisible ?? (isChatTab ? showChatHistory : hasProjectFileSystem && showFileExplorer);
   const activeSidebarTitle = isChatTab ? "chat history" : "file explorer";
   const isSidebarToggleDisabled = isFilesTab && !hasProjectFileSystem;
   const sidebarToggleTitle = isSidebarToggleDisabled
@@ -1206,19 +1224,25 @@ export function ChatWorkspace({
 
   /** 立即执行当前 Server 的本次重连，并继续恢复对应的 execution 会话。 */
   const handleReconnectRetry = React.useCallback(() => {
-    if (!selectedProjectId || !contextId) return;
-    void executionSessionManager
-      .retryConnection({
-        serverId: executionServerId,
-        projectId: selectedProjectId,
-        contextId,
-      })
-      .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Failed to retry connection");
-      });
-  }, [contextId, executionServerId, selectedProjectId]);
+    const retry = reconnectRetryRef.current;
+    if (!retry) return;
+    void retry().catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : "Failed to retry connection");
+    });
+  }, []);
 
-  /** Chat/Files 切换与侧栏折叠按钮，桌面端常驻左列顶部，移动端落在主区域顶部。 */
+  // Chat 给出当前对话（含草稿对话）的重连状态与重试入口。
+  // Chat reports the reconnect state and retry action of the current conversation, draft conversations included.
+  const handleReconnectStateChange = React.useCallback(
+    (state: ExecutionReconnectState | null, retry: () => Promise<void>) => {
+      reconnectRetryRef.current = retry;
+      setExecutionReconnectState(state);
+    },
+    [],
+  );
+
+  // Chat/Files 切换栏；由 Shell 控制侧栏时，切换按钮放在 Shell 中。
+  // Chat/Files toolbar; the sidebar toggle belongs to the Shell when it controls visibility.
   const sidebarControls = (
     <div className="flex shrink-0 flex-wrap items-center gap-2 mb-2 ">
       <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
@@ -1235,21 +1259,23 @@ export function ChatWorkspace({
           Files
         </TabsTrigger>
       </TabsList>
-      <Button
-        variant="ghost"
-        className="cursor-pointer"
-        size="sm"
-        onClick={handleSidebarToggle}
-        title={sidebarToggleTitle}
-        aria-label={sidebarToggleTitle}
-        disabled={isSidebarToggleDisabled}
-      >
-        {activeSidebarVisible ? (
-          <PanelLeftClose className="h-4 w-4" />
-        ) : (
-          <PanelLeftOpen className="h-4 w-4" />
-        )}
-      </Button>
+      {sidebarVisible === undefined ? (
+        <Button
+          variant="ghost"
+          className="cursor-pointer"
+          size="sm"
+          onClick={handleSidebarToggle}
+          title={sidebarToggleTitle}
+          aria-label={sidebarToggleTitle}
+          disabled={isSidebarToggleDisabled}
+        >
+          {activeSidebarVisible ? (
+            <PanelLeftClose className="h-4 w-4" />
+          ) : (
+            <PanelLeftOpen className="h-4 w-4" />
+          )}
+        </Button>
+      ) : null}
     </div>
   );
 
@@ -1261,7 +1287,7 @@ export function ChatWorkspace({
 
   /** 项目选择器与 Chat/Files 工具条，桌面端位于左列顶部，移动端位于主区域顶部。 */
   const workspaceToolbar = (
-    <div className="flex shrink-0 flex-wrap items-center pt-2">
+    <div className="flex shrink-0 flex-wrap items-center pt-2 bg-muted/30 border-b ">
       {showToolbarProjectSelect ? (
         <div className="w-50 mr-2 mb-2">
           <SearchableSelect
@@ -1298,7 +1324,7 @@ export function ChatWorkspace({
         className="flex min-h-0 flex-1 flex-col"
       >
         <ColResizeSplit>
-          {isMobile ? null : (
+          {isMobile || sidebarVisible === false ? null : (
             <ColResizeSplit.Left
               defaultPanelWidth={sidebarDefaultWidth}
               minWidth={268}
@@ -1368,6 +1394,7 @@ export function ChatWorkspace({
                           />
                         </div>
                       }
+                      persistInputDraft
                       conversationId={conversationId}
                       sessionSeed={chatSessionSeed}
                       isLoadingConversation={
@@ -1383,20 +1410,18 @@ export function ChatWorkspace({
                         Number(chatSessionSeed.revision) > 0 &&
                         queryProjectId === selectedProjectId &&
                         queryConversationId === conversationId &&
-                        chatSessionSeed.contextId === contextId
+                        chatSessionSeed.conversationId === conversationId
                       }
                       environmentVariables={environmentVariables}
                       resultOnly={resultOnly}
-                      onConversationIdChange={handleChatConversationIdChange}
                       onConversationAccepted={handleConversationAccepted}
-                      onContextIdChange={handleChatContextIdChange}
                       onConversationChange={refreshConversationList}
                       directoryId={selectedDirectory?.id}
                       searchDirectoryIds={searchDirectoryIds}
                       directories={projectDirectories}
                       pendingFileComments={comments}
                       onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
-                      onReconnectStateChange={setExecutionReconnectState}
+                      onReconnectStateChange={handleReconnectStateChange}
                     />
                   </div>
                 </div>

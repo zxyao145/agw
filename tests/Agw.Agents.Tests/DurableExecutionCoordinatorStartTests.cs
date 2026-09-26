@@ -30,7 +30,7 @@ public sealed partial class DurableExecutionStoreTests
             var receipt = await starter.StartAsync(accepted.Request, token).WaitAsync(TimeSpan.FromSeconds(5), token);
             var sink = new StarterMessageSink();
             await using var attachment = new DurableExecutionAttachment(UserId, sink, token, _kit.Coordinator);
-            await attachment.AttachAsync(receipt.TurnId, cursor: null, token);
+            await attachment.AttachAsync(receipt.TurnId, cursor: null, task.ProjectConversationId, token);
             starts.Add(
                 (receipt, attachment.ActiveExecutionId, await sink.First.WaitAsync(TimeSpan.FromSeconds(5), token))
             );

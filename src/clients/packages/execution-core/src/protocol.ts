@@ -12,7 +12,8 @@ export type ExecutionUserInput<T extends ExecutionMessage = ExecutionMessage> = 
 
 export type ExecutionSettingCommandInput = {
   projectId: string;
-  contextId?: string | null;
+  /** 连接所属的对话；客户端生成，首次受理时由服务端保存。 */
+  conversationId: string;
   environmentVariables?: Record<string, string> | null;
   permissionMode?: PermissionMode | null;
   /** 只接收 result 消息，并拒绝本轮的人机交互。 */
@@ -101,7 +102,7 @@ export function buildSettingCommand(setting: ExecutionSettingCommandInput) {
   return {
     type: "SettingCommand" as const,
     projectId: setting.projectId,
-    ...(setting.contextId === undefined ? {} : { contextId: setting.contextId }),
+    conversationId: setting.conversationId,
     ...(setting.environmentVariables === undefined
       ? {}
       : { environmentVariables: setting.environmentVariables }),

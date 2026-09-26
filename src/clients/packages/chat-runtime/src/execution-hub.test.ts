@@ -2,7 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
+import { createUserMessage } from "@agw/chat-core";
 import type { ExecutionReconnectState } from "./execution-hub";
+import type { ExecutionSubmission } from "./execution-queue";
+import type { SubmissionReturnedEvent } from "./execution-session-manager";
+
+function createSubmission(text: string): ExecutionSubmission {
+  return {
+    target: { agentId: "agent", agentType: 0 },
+    text,
+    attachments: [],
+    fileCommentCount: 0,
+    createMessage: (value, messageId) => ({ ...createUserMessage(value, []), messageId }),
+  };
+}
 
 test("missing execution provider capability fails configuration without dispatching settings", async (t) => {
   const { ExecutionSession } = await import("./execution-session.ts");
@@ -33,7 +46,7 @@ test("missing execution provider capability fails configuration without dispatch
   );
   try {
     await assert.rejects(
-      session.configure({ projectId: "project", contextId: "context" }),
+      session.configure({ projectId: "project", conversationId: "conversation" }),
       /Unknown hub method/,
     );
     assert.deepEqual(calls, ["GetExecutionProvider"]);
@@ -75,7 +88,7 @@ test("concurrent Agentflow initialization and checkpoint queries share the conne
     { baseUrl: "https://agw.test", token: null, attachmentStore: null },
   );
   try {
-    const setting = { projectId: "project", contextId: "context" };
+    const setting = { projectId: "project", conversationId: "conversation" };
     const results = Promise.allSettled([
       session.configure(setting),
       session.configure(setting),
@@ -145,7 +158,7 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
     { baseUrl: "https://agw.test", token: null, attachmentStore: null },
   );
   try {
-    await session.configure({ projectId: "project", contextId: "context" });
+    await session.configure({ projectId: "project", conversationId: "conversation" });
     await session.execute({
       conversationId: "conversation",
       agentId: "flow",
@@ -214,14 +227,14 @@ test("buildSettingCommand keeps target data out of settings", async () => {
   assert.deepEqual(
     buildSettingCommand({
       projectId: "project-1",
-      contextId: "context-1",
+      conversationId: "conversation-1",
       environmentVariables: { TOKEN: "value" },
       permissionMode: "fullAccess",
     }),
     {
       type: "SettingCommand",
       projectId: "project-1",
-      contextId: "context-1",
+      conversationId: "conversation-1",
       environmentVariables: { TOKEN: "value" },
       permissionMode: "fullAccess",
     },
@@ -447,7 +460,7 @@ test("execution session keeps tool rendering scope across handler replacement an
   });
 
   try {
-    await client.configure({ projectId: "project-1", contextId: "context-1" });
+    await client.configure({ projectId: "project-1", conversationId: "conversation-1" });
     await client.execute({
       conversationId: "conversation-1",
       agentId: "agent-1",
@@ -678,7 +691,7 @@ test("durable attachment detection connects only for a valid persisted execution
 
   try {
     const runtime = { baseUrl: "https://agw.example.test", token: null };
-    const setting = { projectId: "project-1", contextId: "context-1" };
+    const setting = { projectId: "project-1", conversationId: "conversation-1" };
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
 
     const key = getDurableExecutionStorageKey(runtime, setting);
@@ -693,6 +706,115 @@ test("durable attachment detection connects only for a valid persisted execution
     } else {
       Reflect.deleteProperty(globalThis, "localStorage");
     }
+  }
+});
+
+test("durable attachment migration moves the context record to the conversation key", async () => {
+  const { getDurableExecutionStorageKey, migrateDurableExecutionAttachment } =
+    await import("./execution-session.ts");
+  const values = new Map<string, string>();
+  const attachmentStore = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => void values.set(key, value),
+    removeItem: (key: string) => void values.delete(key),
+  };
+  const runtime = { baseUrl: "https://agw.example.test/", token: null, attachmentStore };
+  const conversation = {
+    projectId: "project-1",
+    conversationId: "conversation-1",
+    contextId: "context-1",
+  };
+  const contextKey = `agw:durable-execution:v1:${JSON.stringify([
+    "https://agw.example.test",
+    "project-1",
+    "context-1",
+  ])}`;
+  const conversationKey = getDurableExecutionStorageKey(runtime, conversation);
+
+  // A context record moves with its executionId and cursor, and the old record is removed.
+  values.set(contextKey, JSON.stringify({ executionId: "execution-1", cursor: "7" }));
+  migrateDurableExecutionAttachment(conversation, runtime);
+  assert.deepEqual(JSON.parse(values.get(conversationKey) ?? "null"), {
+    executionId: "execution-1",
+    cursor: "7",
+  });
+  assert.equal(values.has(contextKey), false);
+
+  // A newer record under the conversation key wins; the old record is still removed.
+  values.set(contextKey, JSON.stringify({ executionId: "execution-old", cursor: "1" }));
+  migrateDurableExecutionAttachment(conversation, runtime);
+  assert.equal(JSON.parse(values.get(conversationKey) ?? "null").executionId, "execution-1");
+  assert.equal(values.has(contextKey), false);
+
+  // A failed write keeps the old record for the next attempt.
+  values.delete(conversationKey);
+  values.set(contextKey, JSON.stringify({ executionId: "execution-2", cursor: null }));
+  const failingRuntime = {
+    ...runtime,
+    attachmentStore: {
+      ...attachmentStore,
+      setItem: () => {
+        throw new Error("quota exceeded");
+      },
+    },
+  };
+  assert.throws(() => migrateDurableExecutionAttachment(conversation, failingRuntime), /quota/);
+  assert.equal(values.has(contextKey), true);
+
+  // Mobile has no attachment store and nothing to migrate.
+  migrateDurableExecutionAttachment(conversation, { ...runtime, attachmentStore: null });
+  assert.equal(values.has(contextKey), true);
+});
+
+test("a durable start that the server confirms missing rejects as not executed", async (t) => {
+  const { ExecutionSession, ExecutionStartRejectedError } = await import("./execution-session.ts");
+  let missing = true;
+  const connection = {
+    state: HubConnectionState.Disconnected,
+    on() {},
+    onclose() {},
+    onreconnecting() {},
+    onreconnected() {},
+    async start() {
+      connection.state = HubConnectionState.Connected;
+    },
+    async stop() {
+      connection.state = HubConnectionState.Disconnected;
+    },
+    async invoke(method: string, command?: { type: string }) {
+      if (method === "GetExecutionProvider") return "Distributed";
+      if (command?.type === "ExecCommand") throw new Error("HubException: 4090021: busy");
+      if (command?.type === "SubscribeExecutionCommand") {
+        if (missing) throw new Error("HubException: 4040011: Durable execution was not found.");
+        throw new Error("temporary transport failure");
+      }
+    },
+  };
+  t.mock.method(HubConnectionBuilder.prototype, "build", () => connection as never);
+  const session = new ExecutionSession(
+    { onMessage() {} },
+    { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+  );
+  const request = {
+    conversationId: "conversation",
+    agentId: "agent",
+    agentType: 0,
+    executionId: "execution-1",
+    input: { messageId: "input", author: "$agw", contents: [] },
+  };
+  try {
+    await session.configure({ projectId: "project", conversationId: "conversation" });
+    await assert.rejects(session.execute(request), ExecutionStartRejectedError);
+    assert.equal(session.hasActiveExecution(), false);
+
+    missing = false;
+    await assert.rejects(session.execute({ ...request, executionId: "execution-2" }), (error) => {
+      assert.ok(!(error instanceof ExecutionStartRejectedError));
+      return true;
+    });
+    assert.equal(session.hasActiveExecution(), true);
+  } finally {
+    await session.dispose();
   }
 });
 
@@ -712,7 +834,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
   });
 
   const runtime = { baseUrl: "https://agw.example.test", token: null };
-  const setting = { projectId: "project-1", contextId: "context-1" };
+  const setting = { projectId: "project-1", conversationId: "conversation-1" };
   const storageKey = getDurableExecutionStorageKey(runtime, setting);
 
   const createConnection = (
@@ -819,7 +941,9 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
 
     values.set(storageKey, JSON.stringify({ executionId: "execution-2", cursor: "4" }));
     const missing = createConnection(async () => {
-      throw new Error("404_0011: execution not found");
+      throw new Error(
+        "An unexpected error occurred invoking 'DispatchCommand' on the server. HubException: 4040011: Durable execution was not found.",
+      );
     });
     HubConnectionBuilder.prototype.build = () => missing.connection as never;
     const missingClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
@@ -1072,6 +1196,7 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
   let dispatchError: Error | null = null;
   let recoveryError: Error | null = null;
   const recoveryCalls: unknown[][] = [];
+  const execCommands: Array<{ executionId: string }> = [];
   const connection = {
     connectionId: "old-connection",
     state: HubConnectionState.Disconnected,
@@ -1101,12 +1226,9 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
         if (recoveryError) throw recoveryError;
         return active;
       }
-      if (
-        method === "DispatchCommand" &&
-        (args[0] as { type: string }).type === "ExecCommand" &&
-        dispatchError
-      ) {
-        throw dispatchError;
+      if (method === "DispatchCommand" && (args[0] as { type: string }).type === "ExecCommand") {
+        execCommands.push(args[0] as { executionId: string });
+        if (dispatchError) throw dispatchError;
       }
     },
   };
@@ -1119,20 +1241,30 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
         attachmentStore: null,
       }),
   );
-  const key = { serverId: "server", projectId: "project", contextId: "context" };
-  const handle = manager.attach(key, { onMessage: () => undefined });
-  const request = {
-    conversationId: "conversation",
-    agentId: "agent",
-    agentType: 0 as const,
-    input: { messageId: "input", author: "$agw", contents: [] },
-  };
+  const key = { serverId: "server", projectId: "project", conversationId: "conversation" };
+  const returned: SubmissionReturnedEvent[] = [];
+  const handle = manager.attach(key, {
+    onMessage: () => undefined,
+    onSubmissionReturned: (event) => returned.push(event),
+  });
   const settle = async () => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
   };
   try {
-    await handle.configure({ projectId: "project", contextId: "context" });
-    await handle.execute(request);
+    await handle.configure({ projectId: "project", conversationId: "conversation" });
+    assert.equal(handle.submit(createSubmission("first")), "started");
+    await settle();
+    receive({
+      messageId: "start",
+      role: "system",
+      contents: [],
+      additionalProperties: {
+        type: "agw-turn-start",
+        conversationId: "conversation",
+        turnId: execCommands[0]!.executionId,
+        turnSequence: 1,
+      },
+    });
     receive({
       messageId: "error",
       role: "system",
@@ -1147,7 +1279,9 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
     await settle();
     assert.equal(handle.getStatus(), "running");
     assert.deepEqual(recoveryCalls.at(-1), ["old-connection", false]);
-    await assert.rejects(handle.execute(request), /already has a running task/);
+    assert.equal(handle.submit(createSubmission("waits for the running turn")), "queued");
+    handle.removeQueuedItem(handle.getQueue().items[0]!.id);
+    assert.deepEqual(handle.getQueue().items, []);
 
     connection.state = HubConnectionState.Disconnected;
     close(new Error("network lost again"));
@@ -1164,14 +1298,14 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
     t.mock.timers.tick(1000);
     await settle();
     assert.equal(handle.getStatus(), "idle");
+    assert.equal(handle.getQueue().paused, false);
     active = true;
     dispatchError = new Error("Startup response lost");
-    await assert.rejects(
-      handle.execute({ ...request, input: { ...request.input, messageId: "next-input" } }),
-      /Startup response lost/,
-    );
+    assert.equal(handle.submit(createSubmission("next")), "started");
+    await settle();
     assert.equal(handle.getStatus(), "running");
     assert.deepEqual(recoveryCalls.at(-1), ["third-connection", false]);
+    assert.equal(returned.length, 0);
 
     recoveryError = new Error("Recovery unavailable");
     t.mock.timers.tick(1000);
@@ -1182,9 +1316,26 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
     active = false;
     await manager.retryConnection(key);
     assert.equal(handle.getStatus(), "idle");
+    // 服务端确认空闲，但无法确认刚才的发送是否执行：条目回到队首并锁定编辑，队列暂停。
+    // The server is idle, but whether the send ran is unknown: the entry returns to the head locked, and the queue pauses.
+    const uncertain = handle.getQueue().items[0]!;
+    assert.equal(uncertain.uncertain, true);
+    assert.equal(uncertain.executionId, execCommands.at(-1)?.executionId);
+    assert.equal(handle.getQueue().paused, true);
+    assert.equal(returned.length, 1);
+    assert.throws(() => handle.updateQueuedItem(uncertain.id, "edited"), /cannot be edited/);
+
     dispatchError = new Error("HubException: 4000001: Invalid request");
-    await assert.rejects(handle.execute(request), /Invalid request/);
+    handle.resumeQueue();
+    await settle();
+    assert.equal(execCommands.at(-1)?.executionId, uncertain.executionId);
     assert.equal(handle.getStatus(), "idle");
+    const rejected = handle.getQueue().items[0]!;
+    assert.equal(rejected.id, uncertain.id);
+    assert.equal(rejected.uncertain, false);
+    assert.equal(handle.getQueue().paused, true);
+    assert.match(returned.at(-1)?.error.message ?? "", /Invalid request/);
+    assert.equal(returned.at(-1)?.error.name, "ExecutionStartRejectedError");
   } finally {
     await handle.dispose();
   }
@@ -1228,25 +1379,26 @@ test("a fresh client discovers an in-process turn without local attachment stora
         attachmentStore: null,
       }),
   );
-  const key = { serverId: "server", projectId: "project", contextId: "context" };
+  const key = { serverId: "server", projectId: "project", conversationId: "conversation" };
   const handle = manager.attach(key, { onMessage() {} });
   try {
-    await handle.configure({ projectId: key.projectId, contextId: key.contextId });
+    await handle.configure({ projectId: key.projectId, conversationId: key.conversationId });
     assert.equal(handle.getStatus(), "running");
     assert.deepEqual(calls.find((call) => call.method === "FindInProcessExecution")?.args, [
       "project",
-      "context",
+      "conversation",
     ]);
-    await assert.rejects(
-      handle.execute({
-        conversationId: "conversation",
-        agentId: "agent",
-        agentType: 0,
-        input: { messageId: "input", author: "$agw", contents: [] },
-      }),
-      /already has a running task/,
+    assert.equal(handle.submit(createSubmission("waits")), "queued");
+    await handle.stop();
+    assert.deepEqual(handle.getQueue().items, []);
+    assert.equal(
+      calls.some(
+        (call) =>
+          call.method === "DispatchCommand" &&
+          (call.args[0] as { type: string }).type === "ExecCommand",
+      ),
+      false,
     );
-    await handle.interrupt();
     assert.deepEqual(calls.at(-1), {
       method: "RecoverInProcessExecution",
       args: ["before-reload", true],
@@ -1259,7 +1411,7 @@ test("a fresh client discovers an in-process turn without local attachment stora
   try {
     discoveryError = true;
     await assert.rejects(
-      fresh.configure({ projectId: key.projectId, contextId: key.contextId }),
+      fresh.configure({ projectId: key.projectId, conversationId: key.conversationId }),
       /State query unavailable/,
     );
     assert.equal(fresh.getReconnectState()?.status, "failed");
@@ -1320,7 +1472,7 @@ for (const disconnected of [false, true]) {
       },
     );
     try {
-      await session.configure({ projectId: "project", contextId: "context" });
+      await session.configure({ projectId: "project", conversationId: "conversation" });
       await assert.rejects(
         session.execute({
           conversationId: "conversation",

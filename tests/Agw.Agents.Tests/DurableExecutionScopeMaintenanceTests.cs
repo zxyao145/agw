@@ -393,7 +393,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
                             ContextId = "context",
                         },
                         Settings = DurableExecutionMapper.FromSettings(
-                            SettingCommandMapper.FromCommand(new SettingCommand(projectId, contextId: "context"))
+                            SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId))
                         ),
                     }
                 ),

@@ -126,9 +126,7 @@ internal sealed class TestAgentRuntimeFactory : IAgentRuntimeFactory
             new HumanInteractionContextAccessor(new AgentExecutionContextAccessor()),
             []
         );
-        var contextId = ContextIdUtil.ResolveContextId(
-            string.IsNullOrWhiteSpace(settings.ContextId) ? task.ContextId : settings.ContextId
-        );
+        var contextId = ContextIdUtil.ResolveContextId(task.ContextId);
         var runtime = new AgentRuntime(
             NullLogger.Instance,
             pipeline,

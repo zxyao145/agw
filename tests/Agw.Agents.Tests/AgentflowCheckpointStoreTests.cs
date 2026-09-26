@@ -849,9 +849,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                     ContextId = fixture.ContextId,
                 },
                 Settings = DurableExecutionMapper.FromSettings(
-                    SettingCommandMapper.FromCommand(
-                        new SettingCommand(fixture.ProjectId, contextId: fixture.ContextId)
-                    )
+                    SettingCommandMapper.FromCommand(new SettingCommand(fixture.ProjectId, fixture.ConversationId))
                 ),
             };
             await using var context = CreateContext();

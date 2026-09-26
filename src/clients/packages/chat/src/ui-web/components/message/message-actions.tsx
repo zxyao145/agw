@@ -40,8 +40,8 @@ export function MessageActions({ message }: { message: PresentedMessage }) {
 
   return (
     <div
-      className="agw-msg-actions pointer-events-none absolute 
-     right-0 top-full flex h-8 items-center gap-2 whitespace-nowrap
+      className="agw-msg-actions pointer-events-none
+     flex h-8 items-center justify-end gap-2 whitespace-nowrap
      text-xs text-muted-foreground opacity-0
      transition-opacity group-hover/message:pointer-events-auto group-hover/message:opacity-100 
      group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100 

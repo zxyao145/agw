@@ -28,7 +28,6 @@ public sealed record ResolveProjectTaskRequest(
     Guid? TaskId,
     Guid ConversationId,
     Guid? ProjectId,
-    string? ContextId,
     string Input,
     bool Resume,
     string OwnerUserId
@@ -55,6 +54,16 @@ public sealed record FinishProjectTaskRequest(
 public interface IProjectTaskFacade
 {
     Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 按项目与对话读取当前用户已保存对话的执行上下文；对话不存在或属于其他用户时返回 null。
+    /// Reads the execution context of the current user's saved conversation by project and conversation; returns null when the conversation is missing or belongs to another user.
+    /// </summary>
+    Task<string?> FindContextIdAsync(
+        Guid projectId,
+        Guid conversationId,
+        CancellationToken cancellationToken = default
+    );
 
     Task<ProjectTaskSnapshot> ResolveAsync(
         ResolveProjectTaskRequest request,

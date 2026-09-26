@@ -96,6 +96,13 @@ test("completed work defaults closed, preserves Result actions and toggles proce
   assert.equal(screen.queryByText("Checking implementation"), null);
 });
 
+test("the work summary shows the Agent name before the duration", async () => {
+  const history = [messages[0], messages[1], { ...messages[2], author: "claude-code" }];
+  render(React.createElement(Harness, { history }));
+  const trigger = await screen.findByRole("button", { name: "claude-code Worked for 17m 39s" });
+  assert.equal(trigger.firstElementChild?.textContent, "claude-code");
+});
+
 test("a paged completed turn starts closed and keeps expansion while earlier process arrives", async () => {
   const turnId = "turn-paged";
   const input = {

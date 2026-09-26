@@ -174,7 +174,7 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
         // An in-process Facade call has no answer channel, so every human request follows the unattended rules.
         var settings = new ExecutionSettings(
             task.ProjectId,
-            task.ContextId,
+            task.ProjectConversationId,
             permissionMode: MapPermissionMode(request.PermissionMode),
             resume: request.Resume
         ).WithHumanInteractionPolicy(

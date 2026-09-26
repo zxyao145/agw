@@ -9,11 +9,14 @@ import { createRoot } from "react-dom/client";
 import { transformSync } from "esbuild";
 
 import { buildChatHref } from "../../../lib/chat-route";
+import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import * as sessionRouting from "./lib/session-routing";
+import { getTargetValue } from "./lib/target-options";
 import type { ChatProps } from "../../components/message/chat";
 import type { ChatWorkspaceProps } from "./chat-workspace";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@agw/components/query";
+import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import * as chatRuntime from "@agw/chat-runtime";
 import type { ExecutionHubHandlers, ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime";
 
@@ -97,15 +100,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const recoveryReady = new Promise<void>((resolve) => {
     finishRecovery = resolve;
   });
+  // Chat 最近一次附着时传给会话管理器的回调。The callbacks Chat passed to the session manager on its latest attach.
   let reconnectHandlers: ExecutionHubHandlers | undefined;
-  let managedStatus = kind === "restore-active" ? "running" : "idle";
-  let activeTurnSnapshot: {
-    streamingScopeId: string;
-    messages: import("@agw/api").AiMessage[];
-  } | null = null;
-  let currentReconnectState:
-    | import("@agw/chat-runtime/execution-session").ExecutionReconnectState
-    | null = null;
   let detailsRequests = 0;
   let messageRequests = 0;
   const observed: {
@@ -121,9 +117,13 @@ async function checkConversationSession(kind: string, strictMode = false) {
       onClearSession: () => void;
       isTransitioning: boolean;
       isExecuting: boolean;
-      onExecute: (text: string, attachments: []) => void;
+      onExecute: (text: string, attachments: []) => boolean;
+      queue: import("@agw/chat-runtime").ExecutionQueueSnapshot;
+      onInputDraftChange?: (value: string) => void;
+      userInputRef?: { current: unknown };
       topLeft?: React.ReactNode;
     };
+    inputValue?: string;
     newChat?: () => void;
     refreshSignal?: number;
     conversationStatuses?: ReadonlyMap<string, string>;
@@ -131,12 +131,68 @@ async function checkConversationSession(kind: string, strictMode = false) {
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
     selectTab?: (value: string) => void;
   } = {};
-  const attachedContexts = new Set<string>();
-  const conversationStatuses = new chatRuntime.ConversationStatusStore();
   const supersededListeners = new Set<(key: { serverId: string; projectId: string }) => void>();
   let activityRequests = 0;
-  const executions: (ExecutionRequest & { contextId: string })[] = [];
+  const executions: ExecutionRequest[] = [];
   const configurations: ExecutionSetting[] = [];
+  // 配置与发送按发生顺序记录。Configurations and sends are recorded in the order they happen.
+  const commands: string[] = [];
+  // 每个对话一条 SignalR 传输：测试从这里写出服务端消息，会话管理器与队列使用真实实现。
+  // One SignalR transport per conversation: the test writes server messages here, and the session manager and queue are real.
+  const transports: { handlers: ExecutionHubHandlers; setActive: (active: boolean) => void }[] = [];
+  const transport = () => transports.at(-1)!;
+  const manager = new chatRuntime.ExecutionSessionManager((handlers) => {
+    let active = false;
+    transports.push({ handlers, setActive: (value) => (active = value) });
+    return {
+      configure: async (setting: ExecutionSetting) => {
+        configurations.push(setting);
+        commands.push(
+          `configure:${JSON.stringify(setting.environmentVariables ?? {})}:${setting.resultOnly ?? false}`,
+        );
+        if (kind === "restore-active") {
+          await recoveryReady;
+          // 页面重新加载后服务端仍在执行原来的 Turn。The server still runs the original turn after the reload.
+          active = true;
+        }
+        return { restoredDurableExecution: false };
+      },
+      hasActiveExecution: () => active,
+      execute: async (request: ExecutionRequest) => {
+        executions.push(request);
+        commands.push(
+          `execute:${request.input.contents.find((content) => content.type === "TextContent")?.content}`,
+        );
+        active = true;
+      },
+      listAgentflowCheckpoints: async () => [],
+      resumeCheckpoint: async () => "execution-resumed",
+      setMode: async () => undefined,
+      setPermissionMode: async () => undefined,
+      interrupt: async () => undefined,
+      interruptAndWait: async () => {
+        active = false;
+      },
+      submitHumanResponse: async () => undefined,
+      retryConnection: async () => undefined,
+      dispose: async () => undefined,
+    };
+  });
+  const conversationStatuses = manager.conversationStatuses;
+  const turnMessage = (
+    type: "agw-turn-start" | "agw-turn-finished",
+    execution: ExecutionRequest,
+  ): import("@agw/api").AiMessage => ({
+    messageId: `${type}-${execution.executionId}`,
+    role: "system",
+    contents: [],
+    additionalProperties: {
+      type,
+      conversationId: execution.conversationId,
+      turnId: execution.executionId,
+      ...(type === "agw-turn-finished" ? { status: "completed" } : {}),
+    },
+  });
   let finishHistory!: () => void;
   const historyReady = new Promise<void>((resolve) => {
     finishHistory = resolve;
@@ -296,45 +352,28 @@ async function checkConversationSession(kind: string, strictMode = false) {
       ...chatRuntime,
       executionSessionManager: {
         conversationStatuses,
-        subscribeReconnected: () => () => undefined,
+        subscribe: manager.subscribe,
+        getSnapshot: manager.getSnapshot,
+        subscribeReconnected: manager.subscribeReconnected,
+        // 测试直接触发“被取代的 Turn”事件。The test raises the superseded-turn event directly.
         subscribeSupersededTurn: (
           listener: (key: { serverId: string; projectId: string }) => void,
         ) => {
           supersededListeners.add(listener);
           return () => supersededListeners.delete(listener);
         },
-        has: (key: { contextId: string }) =>
-          (kind === "restore-active" || kind.startsWith("work-close")) &&
-          attachedContexts.has(key.contextId),
-        attach: (key: { contextId: string }, handlers: ExecutionHubHandlers) => {
+        subscribeQueue: manager.subscribeQueue,
+        getQueueVersion: manager.getQueueVersion,
+        getQueue: (key: chatRuntime.ExecutionSessionKey) => manager.getQueue(key),
+        has: (key: chatRuntime.ExecutionSessionKey) => manager.has(key),
+        attach: (key: chatRuntime.ExecutionSessionKey, handlers: ExecutionHubHandlers) => {
           reconnectHandlers = handlers;
-          attachedContexts.add(key.contextId);
-          return {
-            matchesKey: (candidate: typeof key) => candidate.contextId === key.contextId,
-            detach() {},
-            interruptAndWait: async () => {},
-            dispose: async () => {},
-            getStatus: () => managedStatus,
-            listAgentflowCheckpoints: async () => [],
-            getReconnectState: () => currentReconnectState,
-            getActiveTurnSnapshot: () => activeTurnSnapshot,
-            configure: async (setting: ExecutionSetting) => {
-              configurations.push(setting);
-              if (kind === "restore-active") await recoveryReady;
-              return { restoredDurableExecution: false };
-            },
-            execute: async (request: ExecutionRequest) => {
-              if (kind.startsWith("work-close")) {
-                managedStatus = "running";
-                activeTurnSnapshot = {
-                  streamingScopeId: request.input.messageId,
-                  messages: [{ ...request.input, role: "user" }],
-                };
-              }
-              executions.push({ ...request, contextId: key.contextId });
-            },
-          };
+          return manager.attach(key, handlers);
         },
+        retryConnection: (key: chatRuntime.ExecutionSessionKey) => manager.retryConnection(key),
+        discard: (key: chatRuntime.ExecutionSessionKey) => manager.discard(key),
+        discardProject: (scope: { serverId: string; projectId: string }) =>
+          manager.discardProject(scope),
       },
     },
     "../../execution-platform": { useExecutionPlatform: () => ({ serverId: "local" }) },
@@ -377,6 +416,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
       "./chat-input": {
         ChatInput: (props: NonNullable<typeof observed.input>) => {
           observed.input = props;
+          // Record the value Chat writes into the composer when it restores or clears the input.
+          if (props.userInputRef) {
+            props.userInputRef.current = {
+              setInput: (value: string) => {
+                observed.inputValue = value;
+              },
+            };
+          }
           // The workspace passes the agent selector through the input's top-left slot,
           // so mount it here to keep observing target changes.
           return React.createElement(React.Fragment, null, props.topLeft ?? null);
@@ -421,6 +468,73 @@ async function checkConversationSession(kind: string, strictMode = false) {
           showProjectSelect: false,
         }),
       );
+    if (kind === "settings-change") {
+      // 当前页面新建的对话：Chat 直接渲染，设置由属性传入。A conversation created on this page: Chat renders directly and settings come in as props.
+      const sessionSeed = {
+        revision: "settings:1",
+        conversationId: null,
+        messages: [],
+        historyTurns: [],
+        usage: EMPTY_TOKEN_USAGE,
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+        agentMode: null,
+      };
+      const ChatView = (modules["../../components/message/chat"] as { Chat: typeof Chat }).Chat;
+      const renderChat = (environmentVariables: Record<string, string>, resultOnly: boolean) =>
+        renderWithQueries(
+          React.createElement(ChatView, {
+            target: { id: "agent-1", type: "agent" },
+            projectId: "project-1",
+            conversationId: null,
+            active: true,
+            sessionSeed,
+            environmentVariables,
+            resultOnly,
+          }),
+        );
+      const finish = (execution: ExecutionRequest) =>
+        React.act(async () => {
+          transport().setActive(false);
+          transport().handlers.onMessage(turnMessage("agw-turn-finished", execution));
+        });
+      await React.act(async () => renderChat({ MODE: "old" }, false));
+      await React.act(async () => observed.input!.onExecute("first turn", []));
+      await React.act(async () =>
+        transport().handlers.onMessage(turnMessage("agw-turn-start", executions[0])),
+      );
+      await finish(executions[0]);
+
+      // 首轮结束后修改设置：下一轮在新设置生效后才发送。Settings change after the first turn: the next turn is sent only once they apply.
+      await React.act(async () => renderChat({ MODE: "new" }, true));
+      await React.act(async () => observed.input!.onExecute("second turn", []));
+      await React.act(async () =>
+        transport().handlers.onMessage(turnMessage("agw-turn-start", executions[1])),
+      );
+
+      // 运行期间修改设置：提交进入队列，服务端在这一轮结束前收不到设置命令。
+      // Settings change during the turn: the submission queues and the server gets no settings command before the turn ends.
+      await React.act(async () => renderChat({ MODE: "third" }, true));
+      await React.act(async () => observed.input!.onExecute("third turn", []));
+      assert.equal(executions.length, 2);
+      assert.deepEqual(
+        observed.input!.queue.items.map((item) => item.text),
+        ["third turn"],
+      );
+      await finish(executions[1]);
+
+      assert.deepEqual(commands, [
+        'configure:{"MODE":"old"}:false',
+        "execute:first turn",
+        'configure:{"MODE":"new"}:true',
+        "execute:second turn",
+        'configure:{"MODE":"third"}:true',
+        "execute:third turn",
+      ]);
+      assert.equal(observed.input?.isTransitioning, false);
+      assert.deepEqual(errors, []);
+      return;
+    }
     if (kind.startsWith("drawer")) {
       const flow = kind === "drawer-agentflow";
       const drawerPath = flow
@@ -455,7 +569,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
       assert.equal(executions.length, 1);
       if (!flow) {
         await React.act(async () =>
-          reconnectHandlers!.onMessage({
+          transport().handlers.onMessage(turnMessage("agw-turn-start", executions[0])),
+        );
+        await React.act(async () =>
+          transport().handlers.onMessage({
             messageId: "drawer-result",
             role: "assistant",
             author: "claude-code",
@@ -463,14 +580,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
             contents: [{ type: "TextContent", content: '{"approved":false}' }],
           }),
         );
-        await React.act(async () =>
-          reconnectHandlers!.onMessage({
-            messageId: "drawer-finished",
-            role: "system",
-            additionalProperties: { type: "agw-turn-finished", status: "completed" },
-            contents: [],
-          }),
-        );
+        await React.act(async () => {
+          transport().setActive(false);
+          transport().handlers.onMessage(turnMessage("agw-turn-finished", executions[0]));
+        });
         const result = observed.items?.find((item) => item.type === "result");
         assert.equal(
           result?.type === "result" ? result.message.contents[0]?.type : undefined,
@@ -482,13 +595,20 @@ async function checkConversationSession(kind: string, strictMode = false) {
       assert.equal(observed.input?.isTransitioning, false);
       await React.act(async () => observed.input!.onExecute("second turn", []));
       assert.equal(executions.length, 2);
-      assert.notEqual(executions[1].conversationId, executions[0].conversationId);
       assert.notEqual(
-        executions[1].contextId,
-        executions[0].contextId,
-        "a new drawer session gets a new context",
+        executions[1].conversationId,
+        executions[0].conversationId,
+        "a new drawer session gets a new conversation",
       );
     } else {
+      if (kind === "composer") {
+        // A draft saved before the page loaded.
+        conversationComposerStorage.set(
+          { serverId: "local", projectId: "project-1" },
+          "conversation-1",
+          { input: "saved draft" },
+        );
+      }
       await React.act(async () => renderWorkspace());
       assert.equal(observed.input?.isTransitioning, true);
       await React.act(async () => observed.input!.onExecute("too early", []));
@@ -512,6 +632,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
       }
       if (kind.startsWith("work-close")) {
         await React.act(async () => observed.input!.onExecute("Review changes", []));
+        await React.act(async () =>
+          transport().handlers.onMessage(turnMessage("agw-turn-start", executions[0])),
+        );
         const initialHandlers = reconnectHandlers;
         if (kind === "work-close-cached") {
           await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
@@ -536,10 +659,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
               contents: [{ type: "TextContent", content: "Done" }],
             },
           ];
-          activeTurnSnapshot!.messages.push(...updates);
-          for (const message of updates) handlers.onMessage(message);
+          for (const message of updates) transport().handlers.onMessage(message);
           // A mode control update flushes the queued output without finishing the turn.
-          handlers.onMessage({
+          transport().handlers.onMessage({
             messageId: "mode",
             role: "system",
             additionalProperties: { type: "mode-status", mode: "execute" },
@@ -550,7 +672,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
           observed.items!.filter((item) => item.type === "work-summary").length;
         assert.ok(observed.items!.some((item) => item.type === "result"));
         assert.equal(summaryCount(), 0);
-        await React.act(async () => handlers.onClose?.(new Error("Connection lost")));
+        await React.act(async () => transport().handlers.onClose?.(new Error("Connection lost")));
         assert.equal(summaryCount(), 0, "disconnect alone must not hide the process");
 
         await React.act(async () =>
@@ -562,16 +684,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.notEqual(reconnectHandlers, handlers, "reattach before accepting further callbacks");
         assert.equal(summaryCount(), 0);
         await React.act(async () => {
+          transport().setActive(false);
           if (kind === "work-close-cached") {
-            managedStatus = "idle";
-            reconnectHandlers!.onReconnected?.();
+            transport().handlers.onReconnected?.();
           } else {
-            reconnectHandlers!.onMessage({
-              messageId: "finished",
-              role: "system",
-              additionalProperties: { type: "agw-turn-finished", status: "completed" },
-              contents: [],
-            });
+            transport().handlers.onMessage(turnMessage("agw-turn-finished", executions[0]));
           }
         });
         assert.equal(
@@ -609,8 +726,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.ok(reconnectHandlers);
         for (let retryAttempt = 1; retryAttempt <= 10; retryAttempt += 1) {
           await React.act(async () => {
-            currentReconnectState = { status: "reconnecting", retryAttempt, retryDelayMs: 1_000 };
-            reconnectHandlers!.onReconnecting?.(currentReconnectState);
+            transport().handlers.onReconnecting?.({
+              status: "reconnecting",
+              retryAttempt,
+              retryDelayMs: 1_000,
+            });
           });
           assert.equal(
             dom.window.document.querySelectorAll("[inert]").length,
@@ -628,25 +748,25 @@ async function checkConversationSession(kind: string, strictMode = false) {
             return;
           }
           if (retryAttempt === 5) {
-            await React.act(async () => reconnectHandlers!.onReconnected?.());
+            await React.act(async () => transport().handlers.onReconnected?.());
             assert.equal(dom.window.document.querySelector('[role="dialog"]'), null);
           }
         }
-        await React.act(async () => reconnectHandlers!.onReconnected?.());
+        await React.act(async () => transport().handlers.onReconnected?.());
         assert.equal(dom.window.document.querySelector('[role="dialog"]'), null);
         assert.equal(dom.window.document.querySelector("[inert]"), null);
         return;
       }
       if (kind === "directories") {
         await React.act(async () => observed.selectTab!("files"));
-        const contextId = observed.chat?.sessionSeed.contextId;
+        const sessionConversationId = observed.chat?.sessionSeed.conversationId;
         assert.deepEqual(observed.chat?.searchDirectoryIds, [null, "extra"]);
         await React.act(async () => observed.explorer!.onFileSelected("README.md"));
         assert.equal(observed.file?.selectedFile, "README.md");
         await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
         assert.equal(observed.file?.selectedFile, null);
         assert.equal(observed.chat?.directoryId, "extra");
-        assert.equal(observed.chat?.sessionSeed.contextId, contextId);
+        assert.equal(observed.chat?.sessionSeed.conversationId, sessionConversationId);
         await React.act(async () => observed.explorer!.onFileSelected("README.md"));
         assert.equal(fileReads.at(-1)?.at(-1), "extra");
         hasAdditionalDirectory = false;
@@ -676,8 +796,29 @@ async function checkConversationSession(kind: string, strictMode = false) {
           true,
           "changing Agent cannot discard the conversation's active execution",
         );
-        await React.act(async () => observed.input!.onExecute("duplicate", []));
-        assert.equal(executions.length, 0);
+        await React.act(async () => observed.input!.onExecute("waits for the old turn", []));
+        assert.equal(executions.length, 0, "input during the old turn waits in the queue");
+        assert.deepEqual(
+          observed.input?.queue.items.map((item) => item.text),
+          ["waits for the old turn"],
+        );
+        await React.act(async () => {
+          transport().setActive(false);
+          transport().handlers.onMessage({
+            messageId: "old-turn-finished",
+            role: "system",
+            contents: [],
+            additionalProperties: {
+              type: "agw-turn-finished",
+              status: "completed",
+              conversationId: "conversation-1",
+              turnId: "old-turn",
+            },
+          });
+        });
+        assert.equal(executions.length, 1, "the queued input starts after the old turn completes");
+        assert.equal(executions[0].conversationId, "conversation-1");
+        assert.deepEqual(observed.input?.queue.items, []);
         return;
       }
       if (kind === "history-refresh") {
@@ -686,27 +827,20 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.equal(observed.currentConversationTurnId, null);
         const before = observed.refreshSignal!;
         await React.act(async () => observed.input!.onExecute("long answer", []));
-        // The stubbed session manager does not route messages, so write the turn start it would record.
-        // 会话管理器由测试替换，不转发消息，这里写入它会记录的 Turn 开始事件。
         await React.act(async () =>
-          conversationStatuses.turnStarted(statusScope, "conversation-1", "turn-1"),
+          transport().handlers.onMessage(turnMessage("agw-turn-start", executions[0])),
         );
         assert.equal(refreshTimers.size, 0, "a running turn does not poll the conversation list");
         assert.equal(observed.refreshSignal, before + 1, "starting a turn refreshes history once");
         assert.equal(observed.conversationStatuses?.get("conversation-1"), "running");
         assert.equal(
           observed.currentConversationTurnId,
-          "turn-1",
+          executions[0].executionId,
           "the turn ID lets history fetch the conversation a running turn creates",
         );
         await React.act(async () => {
-          reconnectHandlers!.onMessage({
-            messageId: "history-refresh-finished",
-            role: "system",
-            additionalProperties: { type: "agw-turn-finished", status: "completed" },
-            contents: [],
-          });
-          conversationStatuses.turnFinished(statusScope, "conversation-1", "turn-1", "completed");
+          transport().setActive(false);
+          transport().handlers.onMessage(turnMessage("agw-turn-finished", executions[0]));
         });
         assert.equal(refreshTimers.size, 0, "ending a turn leaves no timer behind");
         assert.equal(observed.refreshSignal, before + 2, "ending a turn refreshes history once");
@@ -736,10 +870,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
           assert.deepEqual(errors, []);
           assert.equal(executions.length, 1);
           assert.equal(executions[0].conversationId, conversation.conversationId);
-          assert.equal(executions[0].contextId, conversation.contextId);
           assert.equal(executions[0].agentId, "agent-2");
           assert.deepEqual(observed.chat?.sessionSeed.messages, messages);
-          assert.equal(configurations.at(-1)?.contextId, conversation.contextId);
+          assert.equal(configurations.at(-1)?.conversationId, conversation.conversationId);
         }
         return;
       }
@@ -752,6 +885,82 @@ async function checkConversationSession(kind: string, strictMode = false) {
         );
         searchParams = new URLSearchParams(dom.window.location.search);
         await React.act(async () => renderWorkspace());
+      }
+      if (kind === "composer") {
+        const scope = { serverId: "local", projectId: "project-1" };
+        const agent2 = getTargetValue({ type: "agent", id: "agent-2" });
+        const targetId = () => observed.chat?.target?.id;
+        async function startNewChat() {
+          await React.act(async () => observed.newChat!());
+          searchParams = new URLSearchParams(dom.window.location.search);
+          await React.act(async () => renderWorkspace());
+        }
+
+        assert.equal(targetId(), "agent-1", "without a local choice the server's target applies");
+        assert.equal(observed.inputValue, "saved draft", "loading the page restores the draft");
+        await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+        await React.act(async () => observed.input!.onInputDraftChange!("edited draft"));
+
+        await navigate("conversation-2");
+        await React.act(async () =>
+          pending
+            .get("conversation-2")!
+            .resolve({ ...conversation, conversationId: "conversation-2", contextId: "context-2" }),
+        );
+        assert.equal(targetId(), "agent-1", "another conversation keeps its own target");
+        assert.equal(observed.inputValue, "", "another conversation keeps its own draft");
+
+        await navigate("conversation-1");
+        assert.equal(targetId(), "agent-2", "returning restores the conversation's target");
+        assert.equal(
+          observed.inputValue,
+          "edited draft",
+          "returning restores the conversation's draft",
+        );
+
+        await startNewChat();
+        assert.equal(
+          targetId(),
+          "agent-1",
+          "a new conversation without its own choice uses defaults",
+        );
+        assert.equal(observed.inputValue, "");
+        await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+        await React.act(async () => observed.input!.onInputDraftChange!("new conversation draft"));
+        await navigate("conversation-1");
+        await startNewChat();
+        assert.equal(targetId(), "agent-2", "the new conversation keeps its own target");
+        assert.equal(observed.inputValue, "new conversation draft");
+
+        // UserInput reports the empty value right after handing the text to onExecute.
+        await React.act(async () => {
+          observed.input!.onExecute("new conversation draft", []);
+          observed.input!.onInputDraftChange!("");
+        });
+        assert.equal(executions.length, 1);
+        assert.equal(executions[0].agentId, "agent-2");
+        assert.deepEqual(
+          conversationComposerStorage.get(scope, executions[0].conversationId),
+          {},
+          "a draft conversation ID is not a saved conversation yet",
+        );
+        assert.equal(observed.chat?.conversationId, null);
+        await React.act(async () => observed.input!.onInputDraftChange!("typed after sending"));
+        await React.act(async () =>
+          transport().handlers.onMessage(turnMessage("agw-turn-start", executions[0])),
+        );
+        assert.deepEqual(
+          conversationComposerStorage.get(scope, executions[0].conversationId),
+          { targetValue: agent2, input: "typed after sending" },
+          "acceptance hands the target and the newer draft to the new conversation ID",
+        );
+        assert.deepEqual(conversationComposerStorage.get(scope, null), {});
+        assert.equal(observed.chat?.conversationId, executions[0].conversationId);
+        assert.equal(
+          new URLSearchParams(dom.window.location.search).get("conversationId"),
+          executions[0].conversationId,
+        );
+        return;
       }
       if (["new-chat", "project-switch", "clear-history"].includes(kind)) {
         if (kind === "new-chat") {
@@ -781,10 +990,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.equal(executions.length, 1);
         if (kind === "clear-history") {
           assert.equal(executions[0].conversationId, "conversation-1");
-          assert.equal(executions[0].contextId, "original-context");
         } else {
           assert.notEqual(executions[0].conversationId, "conversation-1");
-          assert.notEqual(executions[0].contextId, "original-context");
           assert.equal(
             observed.chat?.projectId,
             kind === "project-switch" ? "project-2" : "project-1",
@@ -821,7 +1028,6 @@ async function checkConversationSession(kind: string, strictMode = false) {
         await React.act(async () => observed.input!.onExecute("recovered", []));
         assert.equal(executions.length, 1);
         assert.equal(executions[0].conversationId, "conversation-3");
-        assert.equal(executions[0].contextId, "context-3");
       } else {
         await navigate("conversation-3");
         await React.act(async () =>
@@ -838,7 +1044,6 @@ async function checkConversationSession(kind: string, strictMode = false) {
         await React.act(async () => observed.input!.onExecute("for conversation-3", []));
         assert.equal(executions.length, 1);
         assert.equal(executions[0].conversationId, "conversation-3");
-        assert.equal(executions[0].contextId, "context-3");
       }
     }
   } finally {
@@ -857,6 +1062,9 @@ test("Web and Desktop pass the Agent list schema flag through Chat to Result ren
 test("the stored result-only setting reaches Chat and the execution setting command", () =>
   checkConversationSession("result-only"));
 
+test("changed chat settings apply before the next turn, and during a turn wait for it to end", () =>
+  checkConversationSession("settings-change"));
+
 test("Web and Desktop hydrate reasoning fragments as one message in completed work", () =>
   checkConversationSession("reasoning-history"));
 
@@ -869,26 +1077,21 @@ test("returning to cached Chat and switching Agent preserves the conversation on
   checkConversationSession("restore"));
 test("StrictMode cancellation retries Chat hydration before switching Agent and sending", () =>
   checkConversationSession("restore", true));
-test("failed history restoration cannot send an existing conversation with a new context", () =>
+test("failed history restoration cannot send an existing conversation before its history loads", () =>
   checkConversationSession("restore-failure", true));
 for (const [kind, name] of [
-  [
-    "drawer-agent",
-    "reopening an Agent drawer before unmount creates a new conversation and context",
-  ],
-  [
-    "drawer-agentflow",
-    "reopening an Agentflow drawer before unmount creates a new conversation and context",
-  ],
+  ["drawer-agent", "reopening an Agent drawer before unmount creates a new conversation"],
+  ["drawer-agentflow", "reopening an Agentflow drawer before unmount creates a new conversation"],
   [
     "route-failure",
     "failed route hydration blocks the old conversation and recovers on navigation",
   ],
   ["route-out-of-order", "late history responses cannot replace the latest route session"],
-  ["new-chat", "New Chat replaces both conversation and context identities"],
-  ["project-switch", "switching projects starts a fresh conversation and context"],
-  ["clear-history", "clearing history preserves conversation and context identities"],
+  ["new-chat", "New Chat replaces the conversation identity"],
+  ["project-switch", "switching projects starts a fresh conversation"],
+  ["clear-history", "clearing history preserves the conversation identity"],
   ["history-refresh", "a running turn refreshes history at its boundaries without polling"],
+  ["composer", "each conversation keeps its own local Agent choice and input draft"],
 ]) {
   test(name, () => checkConversationSession(kind));
 }

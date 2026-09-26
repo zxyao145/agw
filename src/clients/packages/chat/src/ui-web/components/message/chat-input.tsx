@@ -23,17 +23,27 @@ import {
   type ChatImageAttachment,
   validateImageFiles,
 } from "../../../lib/chat/image-attachments";
-import type { AgentMode, PermissionMode } from "@agw/chat-runtime";
+import type { AgentMode, ExecutionQueueSnapshot, PermissionMode } from "@agw/chat-runtime";
+import { ChatInputQueue } from "./chat-input-queue";
 import { ChatInputToolbar } from "./chat-input-toolbar";
 import { UserInput, type UserInputRef } from "./user-input";
 
 interface ChatInputProps {
+  /** 当前对话有执行在运行；输入仍可编辑，提交进入队列。A turn of this conversation is running; the input stays editable and submissions join the queue. */
   isExecuting: boolean;
+  /** 加载或状态切换中，禁止编辑与提交。Loading or switching state; editing and submitting are blocked. */
   isTransitioning: boolean;
   isLoadingHistory: boolean;
   hasMessages: boolean;
-  onExecute: (value: string, imageAttachments: readonly ChatImageAttachment[]) => void;
+  /** 返回 true 表示已受理，清空本次文字、图片和代码评论；false 时保留草稿。True means accepted, clearing this text, images and code comments; false keeps the draft. */
+  onExecute: (value: string, imageAttachments: readonly ChatImageAttachment[]) => boolean;
   onInterrupt: () => void;
+  queue: ExecutionQueueSnapshot;
+  onQueueEditStart: (itemId: string) => boolean;
+  onQueueEditCancel: () => void;
+  onQueueEditSave: (itemId: string, text: string) => boolean;
+  onQueueRemove: (itemId: string) => void;
+  onQueueResume: () => void;
   onClearSession: () => void;
   onScrollToBottom: () => void;
   onScrollToTop: () => void;
@@ -56,6 +66,8 @@ interface ChatInputProps {
   onClearPendingFileComments: () => void;
   placeholder?: string;
   userInputRef?: React.RefObject<UserInputRef | null>;
+  /** 用户编辑输入后的新值，用于保存草稿。 */
+  onInputDraftChange?: (value: string) => void;
   /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
   topLeft?: React.ReactNode;
 }
@@ -67,6 +79,12 @@ export function ChatInput({
   hasMessages,
   onExecute,
   onInterrupt,
+  queue,
+  onQueueEditStart,
+  onQueueEditCancel,
+  onQueueEditSave,
+  onQueueRemove,
+  onQueueResume,
   onClearSession,
   onScrollToBottom,
   onScrollToTop,
@@ -89,6 +107,7 @@ export function ChatInput({
   onClearPendingFileComments,
   placeholder,
   userInputRef: externalUserInputRef,
+  onInputDraftChange,
   topLeft,
 }: ChatInputProps) {
   const internalUserInputRef = React.useRef<UserInputRef | null>(null);
@@ -147,8 +166,9 @@ export function ChatInput({
 
   const handleExecute = React.useCallback(
     (value: string) => {
-      onExecute(value, imageAttachments);
-      setImageAttachments([]);
+      const accepted = onExecute(value, imageAttachments);
+      if (accepted) setImageAttachments([]);
+      return accepted;
     },
     [imageAttachments, onExecute],
   );
@@ -164,15 +184,28 @@ export function ChatInput({
   return (
     <UserInput
       ref={userInputRef}
-      isExecuting={isBusy}
+      isExecuting={isExecuting}
+      isDisabled={isTransitioning}
       isSubmitDisabled={isReadingImages || Boolean(permissionUnavailable)}
-      hasAdditionalInput={pendingFileCommentCount > 0 || imageAttachments.length > 0}
+      canSubmitWithoutText={pendingFileCommentCount > 0}
       onExecute={handleExecute}
-      onStop={isTransitioning ? undefined : onInterrupt}
+      onStop={onInterrupt}
       onPaste={handlePaste}
+      onValueChange={onInputDraftChange}
       onSuggestion={handleSuggestion}
       placeholder={placeholder}
     >
+      <UserInput.Queue>
+        <ChatInputQueue
+          queue={queue}
+          disabled={isTransitioning}
+          onEditStart={onQueueEditStart}
+          onEditCancel={onQueueEditCancel}
+          onEditSave={onQueueEditSave}
+          onRemove={onQueueRemove}
+          onResume={onQueueResume}
+        />
+      </UserInput.Queue>
       {pendingFileCommentCount > 0 || imageAttachments.length > 0 ? (
         <UserInput.Context>
           <div className="space-y-2">
@@ -197,7 +230,7 @@ export function ChatInput({
                       size="icon-sm"
                       className="absolute right-1 top-1 size-6 rounded-full border border-white/20 bg-black/75 text-white shadow-sm hover:bg-black"
                       onClick={() => handleRemoveImage(attachment.id)}
-                      disabled={isBusy || isReadingImages}
+                      disabled={isTransitioning || isReadingImages}
                       aria-label={`Remove ${attachment.name}`}
                       title={`Remove ${attachment.name}`}
                     >
@@ -222,7 +255,7 @@ export function ChatInput({
                   size="icon-sm"
                   className="size-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
                   onClick={onClearPendingFileComments}
-                  disabled={isBusy}
+                  disabled={isTransitioning}
                   aria-label="Clear pending code comments"
                   title="Clear pending code comments"
                 >

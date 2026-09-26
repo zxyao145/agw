@@ -39,10 +39,12 @@ import {
   mergeStreamingMessages,
   replaceStreamingScope,
   scopeStreamingMessage,
-  toExecutionUserInput,
   type StreamingMessageBatcher,
+  EMPTY_EXECUTION_QUEUE,
   executionSessionManager,
+  isSubmittableInput,
   type ManagedExecutionHandle,
+  type ManagedExecutionHandlers,
 } from "@agw/chat-runtime";
 import {
   clearProjectConversationRecords,
@@ -67,6 +69,7 @@ import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
 import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
+import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 import { ToolDirectoriesContext } from "./tool-directory";
@@ -74,7 +77,8 @@ import { userInputKey } from "./user-input-navigation";
 
 export interface ChatSessionSeed {
   revision: string | number;
-  contextId: string | null;
+  /** 这份历史所属的已保存对话；新对话为 null。The saved conversation this history belongs to; null for a new conversation. */
+  conversationId: string | null;
   messages: AiMessage[];
   historyTurns: ConversationHistoryTurn[];
   usage: TokenUsage;
@@ -104,16 +108,26 @@ export interface ChatProps {
   className?: string;
   /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
   inputTopLeft?: React.ReactNode;
-  onConversationIdChange?: (conversationId: string | null) => void;
+  /**
+   * 按对话把输入草稿保存在本地，切换回该对话时恢复。
+   * Keeps the input draft locally per conversation and restores it when the conversation returns.
+   */
+  persistInputDraft?: boolean;
+  /**
+   * 新对话的首轮被服务端受理时通知；这时对话才保存到服务端。
+   * Reports when the first turn of a new conversation is accepted by the server; only then is the conversation saved.
+   */
   onConversationAccepted?: (conversationId: string) => void;
-  onContextIdChange?: (contextId: string | null) => void;
   onConversationChange?: (options?: ConversationChangeOptions) => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
   pendingFileComments?: readonly LineComment[];
   onPendingFileCommentsRemove?: (commentIds: readonly string[]) => void;
   showUserInputNavigation?: boolean;
-  /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
-  onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
+  /** 将 SignalR 重连状态与重试入口同步给更高层的工作区遮罩。Reports the SignalR reconnect state and a retry action to the workspace overlay. */
+  onReconnectStateChange?: (
+    state: ExecutionReconnectState | null,
+    retry: () => Promise<void>,
+  ) => void;
   /** 历史水合后查询服务端活动执行，并恢复 durable attachment。 */
   restoreExecution?: boolean;
   active?: boolean;
@@ -192,9 +206,8 @@ export function Chat({
   placeholder = "Type your message...",
   className,
   inputTopLeft,
-  onConversationIdChange,
+  persistInputDraft = false,
   onConversationAccepted,
-  onContextIdChange,
   onConversationChange,
   onExecutionError,
   pendingFileComments = EMPTY_FILE_COMMENTS,
@@ -216,7 +229,9 @@ export function Chat({
   const messagesRef = React.useRef<AiMessage[]>(initialHistory.messages);
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
   const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
-  const [contextId, setContextId] = React.useState<string | null>(sessionSeed.contextId);
+  // 新对话在首次配置或发送前分配的草稿 ID；它不代表对话已经保存到服务端。
+  // The draft ID a new conversation gets before its first configuration or send; it does not mean the conversation is saved.
+  const [draftConversationId, setDraftConversationId] = React.useState<string | null>(null);
   const [hydratedSessionRevision, setHydratedSessionRevision] = React.useState(
     sessionSeed.revision,
   );
@@ -258,8 +273,6 @@ export function Chat({
   const [checkpointAvailability, setCheckpointAvailability] = React.useState<
     AgentflowCheckpointAvailability[]
   >([]);
-  const contextIdRef = React.useRef<string | null>(sessionSeed.contextId);
-  const announcedContextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const conversationIdRef = React.useRef<string | null>(conversationId);
   const announcedConversationIdRef = React.useRef<string | null>(conversationId);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
@@ -291,6 +304,10 @@ export function Chat({
   });
   const targetKey = target ? `${target.type}:${target.id}` : "";
   const previousTargetKeyRef = React.useRef(targetKey);
+  const inputDraftScope = React.useMemo(
+    () => (persistInputDraft && projectId ? { serverId: executionServerId, projectId } : null),
+    [executionServerId, persistInputDraft, projectId],
+  );
 
   if (streamingMessageBatcherRef.current === null) {
     streamingMessageBatcherRef.current = createStreamingMessageBatcher(
@@ -316,9 +333,30 @@ export function Chat({
     );
   }
 
+  const executionConversationId = conversationId ?? draftConversationId;
+  // 已保存到服务端的对话：历史属于它，或它的首轮已被受理。
+  // A conversation saved on the server: the history belongs to it, or its first turn was accepted.
+  const persistedConversationId =
+    executionConversationId !== null &&
+    (executionConversationId === sessionSeed.conversationId ||
+      executionConversationId === acceptedConversationId)
+      ? executionConversationId
+      : null;
+
+  const retryReconnect = React.useCallback(async () => {
+    if (!projectId || !executionConversationId) {
+      throw new Error("Execution session is not available.");
+    }
+    await executionSessionManager.retryConnection({
+      serverId: executionServerId,
+      projectId,
+      conversationId: executionConversationId,
+    });
+  }, [executionConversationId, executionServerId, projectId]);
+
   React.useEffect(() => {
-    onReconnectStateChange?.(reconnectState);
-  }, [onReconnectStateChange, reconnectState]);
+    onReconnectStateChange?.(reconnectState, retryReconnect);
+  }, [onReconnectStateChange, reconnectState, retryReconnect]);
 
   React.useEffect(() => {
     conversationIdRef.current = conversationId;
@@ -351,27 +389,45 @@ export function Chat({
     () => toCommandSource(agentSuggestionsQuery.data, claudeCommands),
     [agentSuggestionsQuery.data, claudeCommands],
   );
+  // 选中的对话还没有载入它的历史时仍在加载。A selected conversation whose history has not loaded yet is still loading.
   const isHydratingSession =
     isLoadingConversation ||
     hydratedSessionRevision !== sessionSeed.revision ||
-    Boolean(conversationId && !contextId);
+    (conversationId !== null && persistedConversationId !== conversationId);
   const executionRestoreKey =
-    restoreExecution && projectId && contextId
-      ? JSON.stringify([executionServerId, projectId, contextId, sessionSeed.revision])
+    restoreExecution && projectId && persistedConversationId
+      ? JSON.stringify([
+          executionServerId,
+          projectId,
+          persistedConversationId,
+          sessionSeed.revision,
+        ])
       : null;
   const isRestoringExecution =
     executionRestoreKey !== null && restoredExecutionKey !== executionRestoreKey;
   const showReconnect = getExecutionReconnectProgress(reconnectState) !== null;
   const userInputsQuery = useQuery({
-    queryKey: ["conversation-turn-inputs", executionServerId, conversationId, sessionSeed.revision],
-    enabled:
-      showUserInputNavigation &&
-      Boolean(
-        conversationId && (sessionSeed.contextId || acceptedConversationId === conversationId),
-      ) &&
-      !isHydratingSession,
-    queryFn: ({ signal }) => getConversationTurnInputs(conversationId!, signal),
+    queryKey: [
+      "conversation-turn-inputs",
+      executionServerId,
+      persistedConversationId,
+      sessionSeed.revision,
+    ],
+    enabled: showUserInputNavigation && persistedConversationId !== null && !isHydratingSession,
+    queryFn: ({ signal }) => getConversationTurnInputs(persistedConversationId!, signal),
   });
+  const queueKey =
+    projectId && executionConversationId
+      ? { serverId: executionServerId, projectId, conversationId: executionConversationId }
+      : null;
+  React.useSyncExternalStore(
+    executionSessionManager.subscribeQueue,
+    executionSessionManager.getQueueVersion,
+    executionSessionManager.getQueueVersion,
+  );
+  const executionQueue = queueKey
+    ? executionSessionManager.getQueue(queueKey)
+    : EMPTY_EXECUTION_QUEUE;
   const checkpointResumeDisabled =
     isExecuting || isTransitioning || isHydratingSession || isRestoringExecution || showReconnect;
   const isCurrentTurnActive =
@@ -507,11 +563,9 @@ export function Chat({
     setClaudeCommands(preparedHistory.commands);
     setConversationUsage(sessionSeed.usage);
     conversationIdRef.current = conversationId;
+    setDraftConversationId(null);
     setAcceptedConversationId(null);
     announcedConversationIdRef.current = conversationId;
-    setContextId(sessionSeed.contextId);
-    contextIdRef.current = sessionSeed.contextId;
-    announcedContextIdRef.current = sessionSeed.contextId;
     setHasOlderMessages(sessionSeed.hasOlderMessages);
     setIsLoadingOlderMessages(false);
     setIsJumpingToTop(false);
@@ -522,9 +576,27 @@ export function Chat({
     const nextAgentMode = sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages);
     confirmedAgentModeRef.current = nextAgentMode;
     setAgentMode(nextAgentMode);
-    userInputRef.current?.setInput("");
     setHydratedSessionRevision(sessionSeed.revision);
   }, [detachExecution, sessionSeed.revision]);
+
+  // 会话或对话变化时载入该对话的本地草稿；不保存草稿时清空输入。
+  // Loads the conversation's local draft when the session or conversation changes; clears the input without drafts.
+  React.useEffect(() => {
+    userInputRef.current?.setInput(
+      inputDraftScope
+        ? (conversationComposerStorage.get(inputDraftScope, conversationId).input ?? "")
+        : "",
+    );
+  }, [conversationId, inputDraftScope, sessionSeed.revision]);
+
+  const handleInputDraftChange = React.useCallback(
+    (value: string) => {
+      if (inputDraftScope) {
+        conversationComposerStorage.set(inputDraftScope, conversationId, { input: value });
+      }
+    },
+    [conversationId, inputDraftScope],
+  );
 
   React.useEffect(() => {
     return () => {
@@ -676,7 +748,14 @@ export function Chat({
           activeStreamingScopeRef.current ??
           message.messageId;
         setIsExecuting(true);
-        setAcceptedConversationId(conversationIdRef.current);
+        const acceptedId = conversationIdRef.current;
+        setAcceptedConversationId(acceptedId);
+        // 受理后对话才保存到服务端，此时才通知上层。The conversation is saved only once accepted, so the parent learns of it now.
+        if (acceptedId && announcedConversationIdRef.current !== acceptedId) {
+          announcedConversationIdRef.current = acceptedId;
+          onConversationAccepted?.(acceptedId);
+        }
+        void onConversationChange?.();
         return;
       }
 
@@ -708,7 +787,97 @@ export function Chat({
         streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
       }
     },
-    [notifyExecutionError, onConversationChange, refreshAgentflowCheckpoints],
+    [
+      notifyExecutionError,
+      onConversationAccepted,
+      onConversationChange,
+      refreshAgentflowCheckpoints,
+    ],
+  );
+
+  /**
+   * 队列条目开始发送时，它的用户消息进入消息区域。
+   * When a queue entry starts sending, its user message enters the message area.
+   */
+  const applySubmissionStarted = React.useCallback((message: AiMessage, generation: number) => {
+    if (generation !== executionGenerationRef.current) return;
+    streamingMessageBatcherRef.current?.flush(generation);
+    activeStreamingScopeRef.current = message.messageId;
+    const scopedUserMessage = scopeStreamingMessage(message, message.messageId);
+    setMessages((current) => {
+      const nextMessages = mergeStreamingMessages(current, [scopedUserMessage]);
+      messagesRef.current = nextMessages;
+      return nextMessages;
+    });
+    setPendingInteraction(null);
+    setIsExecuting(true);
+  }, []);
+
+  /**
+   * 发送的条目回到队首：从消息区域移除它的用户消息，并显示原因。
+   * A sent entry returned to the queue head: its user message leaves the message area and the reason is shown.
+   */
+  const applySubmissionReturned = React.useCallback(
+    (itemId: string, error: Error, generation: number) => {
+      if (generation !== executionGenerationRef.current) return;
+      streamingMessageBatcherRef.current?.flush(generation);
+      if (activeStreamingScopeRef.current === itemId) activeStreamingScopeRef.current = null;
+      setMessages((current) => {
+        const nextMessages = current.filter((message) => message.messageId !== itemId);
+        messagesRef.current = nextMessages;
+        return nextMessages;
+      });
+      setIsExecuting(false);
+      notifyExecutionError(error);
+    },
+    [notifyExecutionError],
+  );
+
+  const createExecutionHandlers = React.useCallback(
+    (generation: number, getClient: () => ManagedExecutionHandle): ManagedExecutionHandlers => {
+      const isCurrent = () =>
+        generation === executionGenerationRef.current && executionClientRef.current === getClient();
+      return {
+        onMessage: (message) => applyExecutionMessage(message, generation),
+        onSubmissionStarted: ({ message }) => applySubmissionStarted(message, generation),
+        onSubmissionReturned: ({ item, error }) =>
+          applySubmissionReturned(item.id, error, generation),
+        onClose: (error) => {
+          if (!isCurrent()) return;
+          executionClientRef.current = null;
+          configuredSessionRef.current = null;
+          // A closed connection does not confirm that the active turn has finished.
+          setReconnectState(null);
+          setIsExecuting(false);
+          setPendingInteraction(null);
+          if (error) notifyExecutionError(error);
+        },
+        onReconnecting: (state) => {
+          if (isCurrent()) setReconnectState(state);
+        },
+        onReconnectFailed: (state) => {
+          if (isCurrent()) setReconnectState(state);
+        },
+        onReconnected: () => {
+          if (!isCurrent()) return;
+          const client = getClient();
+          setReconnectState(null);
+          const stillActive = ["running", "waiting-approval", "detached"].includes(
+            client.getStatus(),
+          );
+          if (!stillActive) activeStreamingScopeRef.current = null;
+          setIsExecuting(stillActive);
+          void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
+        },
+      };
+    },
+    [
+      applyExecutionMessage,
+      applySubmissionReturned,
+      applySubmissionStarted,
+      notifyExecutionError,
+      refreshAgentflowCheckpoints,
+    ],
   );
 
   const restoreActiveTurnSnapshot = React.useCallback(
@@ -769,66 +938,23 @@ export function Chat({
     if (isHydratingSession) {
       return;
     }
-    if (!projectId || !contextId) {
+    if (!projectId || !executionConversationId) {
       setReconnectState(null);
       return;
     }
     if (executionClientRef.current) return;
-    const key = { serverId: executionServerId, projectId, contextId };
+    const key = { serverId: executionServerId, projectId, conversationId: executionConversationId };
     if (!executionSessionManager.has(key)) {
       setReconnectState(null);
       return;
     }
 
     const generation = executionGenerationRef.current;
-    let client: ManagedExecutionHandle;
-    client = executionSessionManager.attach(key, {
-      onMessage: (message) => applyExecutionMessage(message, generation),
-      onClose: (error) => {
-        if (
-          generation !== executionGenerationRef.current ||
-          executionClientRef.current !== client
-        ) {
-          return;
-        }
-        executionClientRef.current = null;
-        configuredSessionRef.current = null;
-        setReconnectState(null);
-        setIsExecuting(false);
-        setPendingInteraction(null);
-        if (error) notifyExecutionError(error);
-      },
-      onReconnecting: (state) => {
-        if (
-          generation === executionGenerationRef.current &&
-          executionClientRef.current === client
-        ) {
-          setReconnectState(state);
-        }
-      },
-      onReconnectFailed: (state) => {
-        if (
-          generation === executionGenerationRef.current &&
-          executionClientRef.current === client
-        ) {
-          setReconnectState(state);
-        }
-      },
-      onReconnected: () => {
-        if (
-          generation === executionGenerationRef.current &&
-          executionClientRef.current === client
-        ) {
-          setReconnectState(null);
-          const stillActive = ["running", "waiting-approval", "detached"].includes(
-            client.getStatus(),
-          );
-          if (!stillActive) activeStreamingScopeRef.current = null;
-          setIsExecuting(stillActive);
-          void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
-        }
-      },
-    });
+    let client!: ManagedExecutionHandle;
+    client = executionSessionManager.attach(
+      key,
+      createExecutionHandlers(generation, () => client),
+    );
     executionClientRef.current = client;
     setReconnectState(client.getReconnectState());
     setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
@@ -839,21 +965,52 @@ export function Chat({
       client.detach();
     };
   }, [
-    applyExecutionMessage,
-    contextId,
+    createExecutionHandlers,
+    executionConversationId,
     executionServerId,
     isHydratingSession,
-    notifyExecutionError,
     projectId,
-    refreshAgentflowCheckpoints,
     restoreActiveTurnSnapshot,
     sessionSeed.revision,
     targetKey,
   ]);
 
+  /**
+   * 同步附着到对话的执行连接；提交先进入队列，配置完成后才发送。
+   * Attaches to the conversation's execution connection synchronously; a submission joins the queue first and is sent once configuration completes.
+   */
+  const attachManagedClient = React.useCallback(
+    (nextConversationId: string, generation: number): ManagedExecutionHandle => {
+      if (!projectId) {
+        throw new Error("Please select a project");
+      }
+
+      const key = { serverId: executionServerId, projectId, conversationId: nextConversationId };
+      const current = executionClientRef.current;
+      if (current?.matchesKey(key)) {
+        return current;
+      }
+      if (current) {
+        current.detach();
+        executionClientRef.current = null;
+        configuredSessionRef.current = null;
+      }
+      let client!: ManagedExecutionHandle;
+      client = executionSessionManager.attach(
+        key,
+        createExecutionHandlers(generation, () => client),
+      );
+      executionClientRef.current = client;
+      setReconnectState(client.getReconnectState());
+      restoreActiveTurnSnapshot(client, generation);
+      return client;
+    },
+    [createExecutionHandlers, executionServerId, projectId, restoreActiveTurnSnapshot],
+  );
+
   const ensureConfiguredClient = React.useCallback(
     async (
-      nextContextId: string,
+      nextConversationId: string,
       generation: number,
       nextPermissionMode: PermissionMode = permissionMode,
     ): Promise<ManagedExecutionHandle | null> => {
@@ -861,86 +1018,17 @@ export function Chat({
         throw new Error("Please select a project");
       }
 
-      const key = { serverId: executionServerId, projectId, contextId: nextContextId };
-      let client = executionClientRef.current;
-      if (client && !client.matchesKey(key)) {
-        client.detach();
-        if (executionClientRef.current === client) {
-          executionClientRef.current = null;
-        }
-        configuredSessionRef.current = null;
-        client = null;
-      }
-      if (!client) {
-        let attachedClient!: ManagedExecutionHandle;
-        attachedClient = executionSessionManager.attach(
-          { serverId: executionServerId, projectId, contextId: nextContextId },
-          {
-            onMessage: (message) => applyExecutionMessage(message, generation),
-            onClose: (error) => {
-              if (
-                generation !== executionGenerationRef.current ||
-                executionClientRef.current !== attachedClient
-              ) {
-                return;
-              }
-
-              executionClientRef.current = null;
-              configuredSessionRef.current = null;
-              // A closed connection does not confirm that the active turn has finished.
-              setReconnectState(null);
-              setIsExecuting(false);
-              setPendingInteraction(null);
-              if (error) notifyExecutionError(error);
-            },
-            onReconnecting: (state) => {
-              if (
-                generation === executionGenerationRef.current &&
-                executionClientRef.current === attachedClient
-              ) {
-                setReconnectState(state);
-              }
-            },
-            onReconnectFailed: (state) => {
-              if (
-                generation === executionGenerationRef.current &&
-                executionClientRef.current === attachedClient
-              ) {
-                setReconnectState(state);
-              }
-            },
-            onReconnected: () => {
-              if (
-                generation === executionGenerationRef.current &&
-                executionClientRef.current === attachedClient
-              ) {
-                setReconnectState(null);
-                const stillActive = ["running", "waiting-approval", "detached"].includes(
-                  attachedClient.getStatus(),
-                );
-                if (!stillActive) activeStreamingScopeRef.current = null;
-                setIsExecuting(stillActive);
-                void refreshAgentflowCheckpoints(attachedClient, generation).catch(() => undefined);
-              }
-            },
-          },
-        );
-        client = attachedClient;
-        executionClientRef.current = client;
-        setReconnectState(client.getReconnectState());
-        restoreActiveTurnSnapshot(client, generation);
-      }
-
+      const client = attachManagedClient(nextConversationId, generation);
       const configurationKey = JSON.stringify({
         projectId,
-        contextId: nextContextId,
+        conversationId: nextConversationId,
         environmentVariables,
         resultOnly,
       });
       if (configuredSessionRef.current !== configurationKey) {
         await client.configure({
           projectId,
-          contextId: nextContextId,
+          conversationId: nextConversationId,
           environmentVariables,
           permissionMode: nextPermissionMode,
           resultOnly,
@@ -958,23 +1046,13 @@ export function Chat({
         ? client
         : null;
     },
-    [
-      applyExecutionMessage,
-      environmentVariables,
-      executionServerId,
-      notifyExecutionError,
-      permissionMode,
-      projectId,
-      refreshAgentflowCheckpoints,
-      restoreActiveTurnSnapshot,
-      resultOnly,
-    ],
+    [attachManagedClient, environmentVariables, permissionMode, projectId, resultOnly],
   );
 
   React.useEffect(() => {
     if (
       !projectId ||
-      !contextId ||
+      !persistedConversationId ||
       target?.type !== "agentflow" ||
       hydratedSessionRevision !== sessionSeed.revision
     ) {
@@ -983,7 +1061,7 @@ export function Chat({
     }
 
     const generation = executionGenerationRef.current;
-    void ensureConfiguredClient(contextId, generation)
+    void ensureConfiguredClient(persistedConversationId, generation)
       .then((client) =>
         client ? refreshAgentflowCheckpoints(client, generation) : Promise.resolve(),
       )
@@ -993,9 +1071,9 @@ export function Chat({
         }
       });
   }, [
-    contextId,
     ensureConfiguredClient,
     hydratedSessionRevision,
+    persistedConversationId,
     projectId,
     refreshAgentflowCheckpoints,
     sessionSeed.revision,
@@ -1003,10 +1081,11 @@ export function Chat({
   ]);
 
   React.useEffect(() => {
-    if (!executionRestoreKey || !projectId || !contextId || isHydratingSession) return;
+    if (!executionRestoreKey || !projectId || !persistedConversationId || isHydratingSession)
+      return;
     let cancelled = false;
     const generation = executionGenerationRef.current;
-    void ensureConfiguredClient(contextId, generation)
+    void ensureConfiguredClient(persistedConversationId, generation)
       .then((client) => {
         if (
           cancelled ||
@@ -1029,151 +1108,108 @@ export function Chat({
   }, [
     executionRestoreKey,
     projectId,
-    contextId,
+    persistedConversationId,
     isHydratingSession,
     ensureConfiguredClient,
     targetKey,
   ]);
 
-  const ensureContextId = React.useCallback(
-    (announce: boolean) => {
-      const nextContextId = contextIdRef.current ?? createUuidV7();
-      if (contextIdRef.current == null) {
-        contextIdRef.current = nextContextId;
-        setContextId(nextContextId);
-      }
-      if (announce && announcedContextIdRef.current !== nextContextId) {
-        announcedContextIdRef.current = nextContextId;
-        onContextIdChange?.(nextContextId);
-      }
-      return nextContextId;
-    },
-    [onContextIdChange],
-  );
-
+  /**
+   * 首次配置或发送前分配对话 ID；草稿 ID 只在本组件内使用，受理后才通知上层。
+   * Allocates the conversation ID before the first configuration or send; the draft ID stays inside this component until acceptance.
+   */
   const ensureConversationId = React.useCallback(() => {
-    const nextConversationId = conversationIdRef.current ?? createUuidV7();
-    if (conversationIdRef.current == null) {
-      conversationIdRef.current = nextConversationId;
-    }
-    if (announcedConversationIdRef.current !== nextConversationId) {
-      announcedConversationIdRef.current = nextConversationId;
-      onConversationIdChange?.(nextConversationId);
-    }
+    const existingConversationId = conversationIdRef.current;
+    if (existingConversationId) return existingConversationId;
+    const nextConversationId = createUuidV7();
+    conversationIdRef.current = nextConversationId;
+    setDraftConversationId(nextConversationId);
     return nextConversationId;
-  }, [onConversationIdChange]);
+  }, []);
 
+  /**
+   * 点击发送与 Ctrl/Shift+Enter 的共同入口：内容进入对话的队列，空闲时立即开始发送。返回 false 时保留草稿。
+   * The shared entry of the send button and Ctrl/Shift+Enter: the content joins the conversation's queue and starts at once when idle. False keeps the draft.
+   */
   const handleExecute = React.useCallback(
-    async (value: string, imageAttachments: readonly ChatImageAttachment[]) => {
-      if (isExecuting || isHydratingSession || isRestoringExecution || showReconnect) return;
+    (value: string, imageAttachments: readonly ChatImageAttachment[]): boolean => {
+      if (isHydratingSession || isRestoringExecution || showReconnect) return false;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
-        return;
+        return false;
       }
-
       if (permissionUnavailable) {
         toast.error(permissionUnavailable);
-        return;
+        return false;
       }
       const submittedFileComments = [...pendingFileComments];
-      const resolvedInput = buildFileCommentPrompt(value, submittedFileComments);
-      if (!resolvedInput && imageAttachments.length === 0) {
+      if (!isSubmittableInput({ text: value, fileCommentCount: submittedFileComments.length })) {
         toast.error("Please enter a prompt");
-        return;
+        return false;
       }
       if (!projectId) {
         toast.error("Please select a project");
-        return;
+        return false;
       }
       if (!target) {
         toast.error("Please select an execution target");
-        return;
+        return false;
       }
 
       const nextConversationId = ensureConversationId();
-      const nextId = ensureContextId(true);
-
-      const userMessage = createUserMessage(resolvedInput, imageAttachments);
-      const firstContent = userMessage.contents[0];
-      if (firstContent) {
-        firstContent.additionalProperties = {
-          ...firstContent.additionalProperties,
-          targetType: target.type,
-          targetId: target.id,
-        };
-      }
-
-      activeStreamingScopeRef.current = userMessage.messageId;
-      const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
-      streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
-      setMessages((current) => {
-        const nextMessages = [...current, scopedUserMessage];
-        messagesRef.current = nextMessages;
-        return nextMessages;
-      });
-      setPendingInteraction(null);
-      setIsExecuting(true);
       const generation = executionGenerationRef.current;
-      let didReportExecutionError = false;
-      const reportExecutionErrorOnce = (error: unknown) => {
-        if (didReportExecutionError) {
-          return;
-        }
-
-        didReportExecutionError = true;
-        notifyExecutionError(error);
-      };
-
+      const submittedTarget = target;
       try {
-        const client = await ensureConfiguredClient(nextId, generation);
-        if (!client) {
-          activeStreamingScopeRef.current = null;
-          setIsExecuting(false);
-          return;
-        }
-        await client.execute({
-          conversationId: nextConversationId,
-          agentId: target.id,
-          agentType: target.type === "agent" ? 0 : 1,
-          stream: true,
-          input: toExecutionUserInput(userMessage),
+        const client = attachManagedClient(nextConversationId, generation);
+        // 先交出当前设置：configure 在调用时同步记录，设置变化后队列等新设置生效再发送。
+        // Hand over the current settings first: configure records them synchronously on call, and after a change the queue sends only once they apply.
+        void ensureConfiguredClient(nextConversationId, generation).catch((error: unknown) => {
+          if (generation === executionGenerationRef.current) notifyExecutionError(error);
         });
-        if (
-          generation !== executionGenerationRef.current ||
-          executionClientRef.current !== client
-        ) {
-          return;
-        }
-        onConversationAccepted?.(nextConversationId);
-        if (submittedFileComments.length > 0) {
-          onPendingFileCommentsRemove?.(submittedFileComments.map((comment) => comment.id));
-        }
-        void onConversationChange?.();
+        client.submit({
+          target: {
+            agentId: submittedTarget.id,
+            agentType: submittedTarget.type === "agent" ? 0 : 1,
+          },
+          text: value,
+          attachments: imageAttachments,
+          fileCommentCount: submittedFileComments.length,
+          createMessage: (text, messageId) => {
+            const userMessage = {
+              ...createUserMessage(
+                buildFileCommentPrompt(text, submittedFileComments),
+                imageAttachments,
+              ),
+              messageId,
+            };
+            const firstContent = userMessage.contents[0];
+            if (firstContent) {
+              firstContent.additionalProperties = {
+                ...firstContent.additionalProperties,
+                targetType: submittedTarget.type,
+                targetId: submittedTarget.id,
+              };
+            }
+            return userMessage;
+          },
+        });
       } catch (error) {
-        if (generation === executionGenerationRef.current) {
-          const stillActive = ["running", "waiting-approval", "detached"].includes(
-            executionClientRef.current?.getStatus() ?? "idle",
-          );
-          if (!stillActive) {
-            activeStreamingScopeRef.current = null;
-            setPendingInteraction(null);
-          }
-          setIsExecuting(stillActive);
-          reportExecutionErrorOnce(error);
-        }
+        toast.error(error instanceof Error ? error.message : "Unable to send the message");
+        return false;
       }
+      if (submittedFileComments.length > 0) {
+        onPendingFileCommentsRemove?.(submittedFileComments.map((comment) => comment.id));
+      }
+      return true;
     },
     [
+      attachManagedClient,
       ensureConfiguredClient,
       ensureConversationId,
-      ensureContextId,
-      isExecuting,
       isHydratingSession,
       isRestoringExecution,
       isTransitioning,
       notifyExecutionError,
-      onConversationAccepted,
-      onConversationChange,
       onPendingFileCommentsRemove,
       pendingFileComments,
       permissionUnavailable,
@@ -1183,6 +1219,49 @@ export function Chat({
     ],
   );
 
+  const handleQueueEditStart = React.useCallback((itemId: string): boolean => {
+    const client = executionClientRef.current;
+    if (!client) return false;
+    try {
+      client.setEditingQueuedItem(itemId);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to edit the message");
+      return false;
+    }
+  }, []);
+
+  const handleQueueEditCancel = React.useCallback(() => {
+    executionClientRef.current?.setEditingQueuedItem(null);
+  }, []);
+
+  const handleQueueEditSave = React.useCallback((itemId: string, text: string): boolean => {
+    const client = executionClientRef.current;
+    if (!client) return false;
+    try {
+      client.updateQueuedItem(itemId, text);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save the message");
+      return false;
+    }
+  }, []);
+
+  const handleQueueRemove = React.useCallback((itemId: string) => {
+    executionClientRef.current?.removeQueuedItem(itemId);
+  }, []);
+
+  const handleQueueResume = React.useCallback(() => {
+    const conversationToResume = conversationIdRef.current;
+    if (!conversationToResume) return;
+    const generation = executionGenerationRef.current;
+    void ensureConfiguredClient(conversationToResume, generation)
+      .then((client) => client?.resumeQueue())
+      .catch((error: unknown) => {
+        if (generation === executionGenerationRef.current) notifyExecutionError(error);
+      });
+  }, [ensureConfiguredClient, notifyExecutionError]);
+
   const handlePermissionModeChange = React.useCallback(
     (nextPermissionMode: PermissionMode) => {
       if (!supportedPermissionModes.includes(nextPermissionMode)) return;
@@ -1190,13 +1269,13 @@ export function Chat({
       setPermissionMode(nextPermissionMode);
       if (!projectId) return;
 
-      const nextContextId = ensureContextId(false);
+      const nextConversationId = ensureConversationId();
       const generation = executionGenerationRef.current;
       setIsTransitioning(true);
       const currentClient = executionClientRef.current;
       const clientPromise = currentClient
         ? Promise.resolve(currentClient)
-        : ensureConfiguredClient(nextContextId, generation, nextPermissionMode);
+        : ensureConfiguredClient(nextConversationId, generation, nextPermissionMode);
       void clientPromise
         .then(async (client) => {
           if (!client) return;
@@ -1213,7 +1292,7 @@ export function Chat({
     },
     [
       ensureConfiguredClient,
-      ensureContextId,
+      ensureConversationId,
       notifyExecutionError,
       permissionMode,
       projectId,
@@ -1230,9 +1309,9 @@ export function Chat({
 
       const previousAgentMode = agentMode;
       setAgentMode(nextAgentMode);
-      const nextContextId = ensureContextId(false);
+      const nextConversationId = ensureConversationId();
       const generation = executionGenerationRef.current;
-      void ensureConfiguredClient(nextContextId, generation)
+      void ensureConfiguredClient(nextConversationId, generation)
         .then((client) => client?.setMode(target.id, nextAgentMode))
         .catch((error) => {
           if (generation !== executionGenerationRef.current) return;
@@ -1240,9 +1319,18 @@ export function Chat({
           notifyExecutionError(error);
         });
     },
-    [agentMode, ensureConfiguredClient, ensureContextId, notifyExecutionError, projectId, target],
+    [
+      agentMode,
+      ensureConfiguredClient,
+      ensureConversationId,
+      notifyExecutionError,
+      projectId,
+      target,
+    ],
   );
 
+  // 用户终止：先清空队列并取消尚未开始的发送，再请求终止执行。
+  // A user stop clears the queue and cancels sends not yet started before requesting the stop.
   const handleInterrupt = React.useCallback(() => {
     const client = executionClientRef.current;
     if (!client) {
@@ -1252,7 +1340,7 @@ export function Chat({
 
     const generation = executionGenerationRef.current;
     streamingMessageBatcherRef.current?.flush(generation);
-    void client.interrupt("Stop requested by user.").catch((error) => {
+    void client.stop("Stop requested by user.").catch((error) => {
       if (generation === executionGenerationRef.current && executionClientRef.current === client) {
         notifyExecutionError(error);
       }
@@ -1261,7 +1349,7 @@ export function Chat({
 
   const handleResumeCheckpoint = React.useCallback(
     (occurrenceId?: string) => {
-      if (!projectId || !contextId || target?.type !== "agentflow") {
+      if (!projectId || !persistedConversationId || target?.type !== "agentflow") {
         return;
       }
       if (checkpointResumeDisabled) {
@@ -1286,7 +1374,7 @@ export function Chat({
       setPendingInteraction(null);
       setIsTransitioning(true);
 
-      void ensureConfiguredClient(contextId, generation)
+      void ensureConfiguredClient(persistedConversationId, generation)
         .then(async (client) => {
           if (!client) {
             throw new Error("Execution session is no longer available");
@@ -1342,9 +1430,9 @@ export function Chat({
     [
       checkpointAvailability,
       checkpointResumeDisabled,
-      contextId,
       ensureConfiguredClient,
       latestAvailableCheckpoint,
+      persistedConversationId,
       notifyExecutionError,
       onConversationChange,
       projectId,
@@ -1424,6 +1512,7 @@ export function Chat({
       hasOlderMessagesRef.current = false;
       isLoadingOlderMessagesRef.current = false;
       userInputRef.current?.setInput("");
+      handleInputDraftChange("");
     };
 
     clearInFlightRef.current = true;
@@ -1461,6 +1550,7 @@ export function Chat({
   }, [
     conversationId,
     executionServerId,
+    handleInputDraftChange,
     interruptAndDispose,
     notifyExecutionError,
     onConversationChange,
@@ -1477,11 +1567,9 @@ export function Chat({
     async (manual = false) => {
       const activeProjectId = projectId;
       const activeConversationId = conversationIdRef.current;
-      const activeContextId = contextIdRef.current;
       if (
         !activeProjectId ||
         !activeConversationId ||
-        !activeContextId ||
         !hasOlderMessagesRef.current ||
         !olderMessagesCursorRef.current ||
         isLoadingOlderMessagesRef.current ||
@@ -1504,11 +1592,7 @@ export function Chat({
           pageSize: 50,
           signal: abortController.signal,
         });
-        if (
-          abortController.signal.aborted ||
-          conversationIdRef.current !== activeConversationId ||
-          contextIdRef.current !== activeContextId
-        ) {
+        if (abortController.signal.aborted || conversationIdRef.current !== activeConversationId) {
           return;
         }
 
@@ -1572,8 +1656,7 @@ export function Chat({
 
       const activeProjectId = projectId;
       const activeConversationId = conversationIdRef.current;
-      const activeContextId = contextIdRef.current;
-      if (!activeProjectId || !activeConversationId || !activeContextId) {
+      if (!activeProjectId || !activeConversationId) {
         return false;
       }
 
@@ -1600,8 +1683,7 @@ export function Chat({
           });
           if (
             abortController.signal.aborted ||
-            conversationIdRef.current !== activeConversationId ||
-            contextIdRef.current !== activeContextId
+            conversationIdRef.current !== activeConversationId
           ) {
             return false;
           }
@@ -1647,10 +1729,7 @@ export function Chat({
         if (!inputKey)
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              if (
-                conversationIdRef.current === activeConversationId &&
-                contextIdRef.current === activeContextId
-              ) {
+              if (conversationIdRef.current === activeConversationId) {
                 conversationScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
               }
             });
@@ -1766,8 +1845,7 @@ export function Chat({
                   conversationKey={JSON.stringify([
                     executionServerId,
                     projectId,
-                    contextId,
-                    conversationId,
+                    executionConversationId,
                   ])}
                   onWorkSummaryToggle={handleUserInputNavigate}
                   onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
@@ -1776,6 +1854,7 @@ export function Chat({
                   onUserInputNavigate={handleAnchorNavigate}
                   userInputs={userInputsQuery.data}
                   onLoadUserInput={loadHistoryThroughInput}
+                  activeStreamingScopeId={activeStreamingScopeRef.current}
                   hasOlderMessages={hasOlderMessages}
                   isLoadingOlderMessages={isLoadingOlderMessages}
                   isInitialLoading={isLoadingConversation}
@@ -1809,10 +1888,14 @@ export function Chat({
                     }
                     isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
                     hasMessages={renderItems.length > 0}
-                    onExecute={(value, imageAttachments) => {
-                      void handleExecute(value, imageAttachments);
-                    }}
+                    onExecute={handleExecute}
                     onInterrupt={handleInterrupt}
+                    queue={executionQueue}
+                    onQueueEditStart={handleQueueEditStart}
+                    onQueueEditCancel={handleQueueEditCancel}
+                    onQueueEditSave={handleQueueEditSave}
+                    onQueueRemove={handleQueueRemove}
+                    onQueueResume={handleQueueResume}
                     onClearSession={handleClear}
                     onScrollToBottom={handleScrollToBottom}
                     onScrollToTop={handleScrollToTop}
@@ -1838,6 +1921,7 @@ export function Chat({
                     placeholder={placeholder}
                     topLeft={inputTopLeft}
                     userInputRef={userInputRef}
+                    onInputDraftChange={handleInputDraftChange}
                   />
                 </div>
               </div>

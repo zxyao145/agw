@@ -90,6 +90,7 @@ internal sealed record DurableExecutionOutcome(Guid ExecutionId, DurableExecutio
 /// <param name="ExecutionId">业务执行标识。</param>
 /// <param name="Status">当前执行状态。</param>
 /// <param name="StreamingScopeId">原始用户消息标识，用于把恢复消息绑定到同一轮历史。</param>
+/// <param name="ConversationId">执行所属的 Project Conversation。The Project Conversation the execution belongs to.</param>
 /// <param name="ActivePermissionMode">Permission snapshot for this turn.</param>
 /// <param name="NextPermissionMode">Selected permission for the next turn.</param>
 /// <param name="NextPermissionVersion">Version of the selected permission.</param>
@@ -98,6 +99,7 @@ internal sealed record DurableExecutionStatusResponse(
     Guid ExecutionId,
     DurableExecutionStatus Status,
     string StreamingScopeId,
+    Guid ConversationId,
     AgwPermissionMode? ActivePermissionMode = null,
     AgwPermissionMode? NextPermissionMode = null,
     long NextPermissionVersion = 0,

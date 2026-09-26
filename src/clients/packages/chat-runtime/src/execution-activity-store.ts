@@ -15,7 +15,7 @@ type Activity = {
 };
 
 export function getExecutionSessionKey(key: ExecutionSessionKey): string {
-  return JSON.stringify([key.serverId, key.projectId, key.contextId]);
+  return JSON.stringify([key.serverId, key.projectId, key.conversationId]);
 }
 
 export class ExecutionActivityStore {

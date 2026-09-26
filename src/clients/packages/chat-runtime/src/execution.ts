@@ -1,7 +1,7 @@
 export type ExecutionKeyParts = {
   serverId: string;
   projectId: string;
-  contextId: string;
+  conversationId: string;
 };
 
 export type ExecutionStatus =

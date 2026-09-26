@@ -55,8 +55,14 @@ export function isResultMessage(message: AiMessage): boolean {
 }
 
 export function getMessageMeta(message: AiMessage): MessageMeta | null {
-  if (isResultMessage(message)) return null;
+  return isResultMessage(message) ? null : readMessageMeta(message);
+}
 
+/**
+ * 读取消息的展示信息，Result 也适用。
+ * Reads display metadata from any message, including a Result.
+ */
+export function readMessageMeta(message: AiMessage): MessageMeta | null {
   const agentAuthor = readString(message.author);
   if (message.role === "user") {
     return agentAuthor ? { name: null, author: agentAuthor, model: null } : null;

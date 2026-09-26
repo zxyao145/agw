@@ -67,6 +67,12 @@ public sealed class JobAgentExecutorTests
         public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
             Task.FromResult<int?>(0);
 
+        public Task<string?> FindContextIdAsync(
+            Guid projectId,
+            Guid conversationId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
         public StartProjectTaskRequest? Request { get; private set; }
 
         public Task<ProjectTaskSnapshot> ResolveAsync(

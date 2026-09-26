@@ -59,10 +59,15 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     internal DurableExecutionStatusResponse? PermissionStatus { get; private set; }
 
     /// <summary>
-    /// 鉴权后附着 execution，从游标之后继续读取事件；游标是客户端已经收到的 turnSequence，为空时从头回放。
-    /// Attaches the execution after authorization and continues reading events after the cursor; the cursor is the turnSequence the client already received, and an empty one replays from the start.
+    /// 鉴权并确认 execution 属于该对话后附着，从游标之后继续读取事件；游标是客户端已经收到的 turnSequence，为空时从头回放。
+    /// Attaches the execution after authorization and after confirming it belongs to the conversation, then continues reading events after the cursor; the cursor is the turnSequence the client already received, and an empty one replays from the start.
     /// </summary>
-    public async Task AttachAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
+    public async Task AttachAsync(
+        Guid executionId,
+        string? cursor,
+        Guid conversationId,
+        CancellationToken cancellationToken
+    )
     {
         if (executionId == Guid.Empty)
         {
@@ -70,7 +75,8 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         }
 
         var afterSequence = ParseCursor(cursor);
-        var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
+        var status = await GetConversationStatusAsync(executionId, conversationId, cancellationToken)
+            .ConfigureAwait(false);
         await StopSubscriptionAsync().ConfigureAwait(false);
         PermissionStatus = status;
         SetActiveExecution(IsTerminal(status.Status) ? null : executionId);
@@ -80,10 +86,15 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     }
 
     /// <summary>
-    /// 终止显式指定或当前附着的 execution；结束事件与 Interrupted 一起提交，由订阅送达。
-    /// Interrupts the explicit or attached execution; the finish event commits with Interrupted and the subscription delivers it.
+    /// 终止显式指定或当前附着的 execution；显式指定未附着的 execution 时必须属于该对话。结束事件与 Interrupted 一起提交，由订阅送达。
+    /// Interrupts the explicit or attached execution; an explicit execution that is not attached must belong to the conversation. The finish event commits with Interrupted and the subscription delivers it.
     /// </summary>
-    public async Task InterruptAsync(Guid? executionId, string? reason, CancellationToken cancellationToken)
+    public async Task InterruptAsync(
+        Guid? executionId,
+        string? reason,
+        Guid? conversationId,
+        CancellationToken cancellationToken
+    )
     {
         var targetExecutionId = executionId ?? ActiveExecutionId;
         if (!targetExecutionId.HasValue)
@@ -96,6 +107,11 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         }
 
         var subscribed = ActiveExecutionId == targetExecutionId;
+        if (!subscribed)
+        {
+            await GetConversationStatusAsync(targetExecutionId.Value, conversationId, cancellationToken)
+                .ConfigureAwait(false);
+        }
         var interrupted = await _coordinator
             .InterruptAsync(targetExecutionId.Value, _userId, reason, cancellationToken)
             .ConfigureAwait(false);
@@ -130,10 +146,14 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
             : Task.CompletedTask;
 
     /// <summary>
-    /// 提交类型化响应；请求发布统一由已提交的事件负责。
-    /// Submits a typed response; requests are published by committed events.
+    /// 提交类型化响应；显式指定未附着的 execution 时必须属于该对话。请求发布统一由已提交的事件负责。
+    /// Submits a typed response; an explicit execution that is not attached must belong to the conversation. Requests are published by committed events.
     /// </summary>
-    public async Task RespondAsync(HumanResponseCommand command, CancellationToken cancellationToken)
+    public async Task RespondAsync(
+        HumanResponseCommand command,
+        Guid? conversationId,
+        CancellationToken cancellationToken
+    )
     {
         var executionId = command.ExecutionId ?? ActiveExecutionId;
         if (!executionId.HasValue)
@@ -141,6 +161,11 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
             await SendSystemMessageAsync("No matching durable human interaction is waiting for this response.")
                 .ConfigureAwait(false);
             return;
+        }
+        if (executionId != ActiveExecutionId)
+        {
+            await GetConversationStatusAsync(executionId.Value, conversationId, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await _coordinator
@@ -160,6 +185,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         Guid occurrenceId,
         Guid resumeExecutionId,
         Guid projectId,
+        Guid conversationId,
         string contextId,
         Guid agentflowId,
         CancellationToken cancellationToken,
@@ -178,7 +204,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                 permissionSettings
             )
             .ConfigureAwait(false);
-        await AttachAsync(resumeExecutionId, cursor: null, cancellationToken).ConfigureAwait(false);
+        await AttachAsync(resumeExecutionId, cursor: null, conversationId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -215,13 +241,16 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                 {
                     message = TurnMessageFactory.MarkSuperseded(message);
                 }
-                await _messageSink.WriteAsync(message, cancellationToken).ConfigureAwait(false);
-                if (AgwMessageClassifier.IsTurnFinished(entry.Message))
+                // 先清除活动执行再写出结束消息：客户端收到结束消息后立即发来的下一轮不会被判为 busy。
+                // The active execution clears before the finish message goes out, so the next turn sent right after the client receives it is not treated as busy.
+                var finished = AgwMessageClassifier.IsTurnFinished(entry.Message);
+                if (finished && ActiveExecutionId == executionId)
                 {
-                    if (ActiveExecutionId == executionId)
-                    {
-                        SetActiveExecution(null);
-                    }
+                    SetActiveExecution(null);
+                }
+                await _messageSink.WriteAsync(message, cancellationToken).ConfigureAwait(false);
+                if (finished)
+                {
                     return;
                 }
             }
@@ -257,6 +286,28 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         {
             subscriptionCts.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 读取 execution 状态并确认它属于连接配置的对话；属于其他对话的 execution 与不存在的一样。
+    /// Reads the execution status and confirms it belongs to the connection's configured conversation; an execution of another conversation looks like a missing one.
+    /// </summary>
+    private async Task<DurableExecutionStatusResponse> GetConversationStatusAsync(
+        Guid executionId,
+        Guid? conversationId,
+        CancellationToken cancellationToken
+    )
+    {
+        var expectedConversationId =
+            conversationId
+            ?? throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Execution settings must be configured before accessing an execution."
+            );
+        var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
+        return status.ConversationId == expectedConversationId
+            ? status
+            : throw new AgwException(ErrorCodes.DurableExecutionNotFound);
     }
 
     private void SetActiveExecution(Guid? executionId)

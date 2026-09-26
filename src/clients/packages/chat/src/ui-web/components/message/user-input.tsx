@@ -25,15 +25,23 @@ export interface UserInputProps {
     caretIndex: number,
   ) => SuggestionItem[] | Promise<SuggestionItem[]>;
   // Execution state
+  /** 执行进行中：输入框仍可编辑，没有可提交内容时按钮变为终止。A turn is running: the input stays editable, and the button stops it when nothing can be submitted. */
   isExecuting?: boolean;
   isDisabled?: boolean;
   isSubmitDisabled?: boolean;
-  hasAdditionalInput?: boolean;
+  /** 没有文字也能提交，例如附带了代码评论。Content can be submitted without text, for example with code comments attached. */
+  canSubmitWithoutText?: boolean;
 
   // Actions
-  onExecute?: (value: string) => void;
+  /** 提交当前文字；返回 true 表示已受理，此时清空输入并保持焦点。Submits the current text; true means it was accepted, so the input clears and keeps focus. */
+  onExecute?: (value: string) => boolean;
   onStop?: () => void;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  /**
+   * 用户编辑输入（含发送后清空）时通知新值；ref 的 setInput 不触发。
+   * Reports the new value after user edits, including the clear after sending; ref setInput does not.
+   */
+  onValueChange?: (value: string) => void;
 
   // Textarea configuration
   placeholder?: string;
@@ -51,13 +59,14 @@ interface UserInputSlots {
   bottomLeft: ReactNode[];
   help: ReactNode[];
   sender: ReactNode[];
+  queue: ReactNode[];
 }
 
 interface UserInputRootProps {
   isExecuting: boolean;
   isDisabled: boolean;
   isSubmitDisabled: boolean;
-  hasAdditionalInput: boolean;
+  canSubmitWithoutText: boolean;
   placeholder: string;
   rows: number;
   maxHeight: string;
@@ -79,7 +88,7 @@ function UserInputRoot({
   isExecuting,
   isDisabled,
   isSubmitDisabled,
-  hasAdditionalInput,
+  canSubmitWithoutText,
   placeholder,
   rows,
   maxHeight,
@@ -96,14 +105,15 @@ function UserInputRoot({
   onStop,
   textareaRef,
 }: UserInputRootProps) {
-  const { context, topLeft, topRight, bottomLeft, help, sender } = slots;
-  const canStop = isExecuting && Boolean(onStop);
+  const { context, topLeft, topRight, bottomLeft, help, sender, queue } = slots;
+  const hasSubmittableContent = hasSubmittableInput(input, canSubmitWithoutText);
+  // 执行期间有可提交内容时按钮用于排队发送，否则用于终止执行。
+  // While a turn runs the button queues submittable content, otherwise it stops the execution.
+  const isStopAction = isExecuting && !hasSubmittableContent;
   const isSendDisabled =
-    isDisabled ||
-    isSubmitDisabled ||
-    (isExecuting ? !canStop : !input.trim() && !hasAdditionalInput);
+    isDisabled || (isStopAction ? !onStop : isSubmitDisabled || !hasSubmittableContent);
   const handleClick = () => {
-    if (canStop) {
+    if (isStopAction) {
       onStop?.();
       return;
     }
@@ -124,6 +134,7 @@ function UserInputRoot({
           {topRight.length > 0 && <>{topRight}</>}
         </div>
       </div>
+      {queue.length > 0 ? <div className="agw-input-queue">{queue}</div> : null}
       {/* Input area with textarea and action button */}
       <div className="relative">
         {suggestions}
@@ -150,20 +161,20 @@ function UserInputRoot({
             shadow-none 
             focus-visible:ring-0 
             focus-visible:ring-offset-0`}
-            disabled={isExecuting || isDisabled}
+            disabled={isDisabled}
           />
 
           {/* Action button - comment mode or regular send */}
           <div className="absolute left-2 right-2 bottom-2 h-7 flex justify-between">
             <div className="flex min-w-0 items-center">{bottomLeft}</div>
             <Button
-              // variant={canStop ? "destructive" : "default"}
               size="icon-sm"
               className="rounded-full size-7"
               onClick={handleClick}
               disabled={isSendDisabled}
+              aria-label={isStopAction ? "Stop execution" : "Send message"}
             >
-              {sender.length > 0 ? <>{sender}</> : <ArrowUp className="size-5" />}
+              {isStopAction && sender.length > 0 ? <>{sender}</> : <ArrowUp className="size-5" />}
             </Button>
           </div>
         </div>
@@ -184,6 +195,7 @@ function getUserInputSlots(children?: ReactNode): UserInputSlots {
     bottomLeft: [],
     help: [],
     sender: [],
+    queue: [],
   };
 
   if (!children) {
@@ -215,6 +227,9 @@ function getUserInputSlots(children?: ReactNode): UserInputSlots {
         break;
       case "UserInput.Sender":
         slots.sender.push(child);
+        break;
+      case "UserInput.Queue":
+        slots.queue.push(child);
         break;
       default:
         break;
@@ -325,14 +340,23 @@ export interface UserInputRef {
   insertText: (text: string) => void;
 }
 
+/**
+ * 可提交的内容：非空白文字，或者没有文字也能提交的附加内容（例如代码评论）。
+ * Submittable content: non-blank text, or extras that can be submitted without text (such as code comments).
+ */
+function hasSubmittableInput(input: string, canSubmitWithoutText: boolean): boolean {
+  return input.trim().length > 0 || canSubmitWithoutText;
+}
+
 function UserInputContainer({
   isExecuting = false,
   isDisabled = false,
   isSubmitDisabled = false,
-  hasAdditionalInput = false,
+  canSubmitWithoutText = false,
   onExecute,
   onStop,
   onPaste,
+  onValueChange,
   placeholder = "Type your message...",
   rows = 1,
   maxHeight = "max-h-60",
@@ -370,6 +394,7 @@ function UserInputContainer({
         const nextCursor = selectionStart + insertedText.length;
         suggestionRequestRef.current += 1;
         setInput(newValue);
+        onValueChange?.(newValue);
         setSuggestions([]);
         setActiveSuggestionIndex(0);
         setTimeout(() => {
@@ -381,13 +406,14 @@ function UserInputContainer({
         }, 0);
       },
     }),
-    [input],
+    [input, onValueChange],
   );
 
   const handleSuggestionClick = (suggestion: SuggestionItem) => {
     const replacement = replaceSuggestion(input, suggestion.text, suggestionCaretRef.current);
     suggestionRequestRef.current += 1;
     setInput(replacement.value);
+    onValueChange?.(replacement.value);
     setSuggestions([]);
     setActiveSuggestionIndex(0);
 
@@ -406,6 +432,7 @@ function UserInputContainer({
     suggestionRequestRef.current = requestId;
     suggestionCaretRef.current = caretIndex;
     setInput(value);
+    onValueChange?.(value);
     setActiveSuggestionIndex(0);
     if (!onSuggestion) {
       if (suggestions.length > 0) {
@@ -446,15 +473,21 @@ function UserInputContainer({
     />
   );
 
+  // 按钮发送与 Ctrl/Shift+Enter 共用这个入口；被拒绝时保留草稿。
+  // The send button and Ctrl/Shift+Enter share this entry; a rejected submission keeps the draft.
   const handleSend = () => {
-    if (isDisabled || isSubmitDisabled) {
+    if (isDisabled || isSubmitDisabled || !hasSubmittableInput(input, canSubmitWithoutText)) {
       return;
     }
-    onExecute?.(input);
+    if (!onExecute?.(input)) {
+      return;
+    }
     suggestionRequestRef.current += 1;
     setInput("");
+    onValueChange?.("");
     setSuggestions([]);
     setActiveSuggestionIndex(0);
+    textareaRef.current?.focus();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -464,9 +497,7 @@ function UserInputContainer({
 
     if (event.key === "Enter" && (event.ctrlKey || event.shiftKey)) {
       event.preventDefault();
-      if (input.trim() || hasAdditionalInput) {
-        handleSend();
-      }
+      handleSend();
       return;
     }
 
@@ -500,7 +531,7 @@ function UserInputContainer({
       isExecuting={isExecuting}
       isDisabled={isDisabled}
       isSubmitDisabled={isSubmitDisabled}
-      hasAdditionalInput={hasAdditionalInput}
+      canSubmitWithoutText={canSubmitWithoutText}
       placeholder={placeholder}
       rows={rows}
       maxHeight={maxHeight}
@@ -580,6 +611,16 @@ function Sender({ children }: SenderProps) {
 }
 Sender.displayName = "UserInput.Sender";
 
+// 输入框上方的待发送队列。The pending queue above the input box.
+interface QueueProps {
+  children: ReactNode;
+}
+
+function Queue({ children }: QueueProps) {
+  return <>{children}</>;
+}
+Queue.displayName = "UserInput.Queue";
+
 // Export compound component
 const UserInputWithRef = forwardRef<UserInputRef, UserInputProps>((props, ref) => (
   <UserInputContainer {...props} inputRef={ref} />
@@ -594,4 +635,5 @@ export const UserInput = Object.assign(UserInputWithRef, {
   BottomLeft: BottomLeft,
   Help: Help,
   Sender: Sender,
+  Queue: Queue,
 });

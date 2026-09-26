@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Projects.Application.Facades;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
@@ -233,6 +234,117 @@ public partial class TaskAppServiceTests
     }
 
     [Fact]
+    public async Task ResolveTaskAsync_ExistingConversationWithoutContextId_ReusesStoredContext()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await SqliteTestDatabase.CreateAsync(cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await database.SeedAsync(
+            cancellationToken,
+            CreateProject(projectId),
+            CreateConversation(conversationId, projectId, "context-existing")
+        );
+
+        await using var dbContext = database.CreateContext();
+        var service = CreateService(dbContext);
+
+        var result = await service.ResolveTaskAsync(
+            new ExecutionTaskRequest(
+                TaskId: null,
+                ConversationId: conversationId,
+                ProjectId: projectId,
+                ContextId: null,
+                Input: "hello world",
+                Resume: false,
+                User: "tester"
+            ),
+            cancellationToken
+        );
+
+        Assert.Null(result.Error);
+        Assert.Equal("context-existing", result.Task!.ContextId);
+        var conversation = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
+        Assert.Equal("context-existing", conversation.ContextId);
+        Assert.Single(await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task ResolveTaskAsync_NewConversationsWithoutContextId_GenerateDistinctVersion7Contexts()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await SqliteTestDatabase.CreateAsync(cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        await database.SeedAsync(cancellationToken, CreateProject(projectId));
+
+        await using var dbContext = database.CreateContext();
+        var service = CreateService(dbContext);
+        var request = new ExecutionTaskRequest(
+            TaskId: null,
+            ConversationId: Guid.CreateVersion7(),
+            ProjectId: projectId,
+            ContextId: null,
+            Input: "hello world",
+            Resume: false,
+            User: "tester"
+        );
+
+        var first = await service.ResolveTaskAsync(request, cancellationToken);
+        var second = await service.ResolveTaskAsync(
+            request with
+            {
+                ConversationId = Guid.CreateVersion7(),
+            },
+            cancellationToken
+        );
+
+        Assert.Null(first.Error);
+        Assert.Null(second.Error);
+        Assert.NotEqual(first.Task!.ContextId, second.Task!.ContextId);
+        Assert.All(
+            await dbContext
+                .ProjectConversations.Select(conversation => conversation.ContextId)
+                .ToListAsync(cancellationToken),
+            contextId => Assert.Equal(7, Guid.Parse(contextId).Version)
+        );
+    }
+
+    [Fact]
+    public async Task ResolveTaskAsync_ConcurrentInsertWithoutContextId_ReusesConversation()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await SqliteTestDatabase.CreateAsync(cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await database.SeedAsync(cancellationToken, CreateProject(projectId));
+
+        await using var dbContext = database.CreateContext();
+        var unitOfWork = new ConcurrentConversationInsertUnitOfWork(
+            dbContext,
+            database.Options,
+            CreateConversation(conversationId, projectId, "context-other-tab")
+        );
+        var service = CreateService(dbContext, unitOfWork);
+
+        var result = await service.ResolveTaskAsync(
+            new ExecutionTaskRequest(
+                TaskId: null,
+                ConversationId: conversationId,
+                ProjectId: projectId,
+                ContextId: null,
+                Input: "hello world",
+                Resume: false,
+                User: "tester"
+            ),
+            cancellationToken
+        );
+
+        Assert.Null(result.Error);
+        Assert.Equal("context-other-tab", result.Task!.ContextId);
+        Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
+    }
+
+    [Fact]
     public async Task ResolveTaskAsync_ConcurrentMatchingConversationInsert_ReusesConversation()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -434,6 +546,55 @@ public partial class TaskAppServiceTests
         Assert.NotNull(result.Task);
         Assert.Equal(latestTaskId, result.Task!.TaskId);
         Assert.Equal("context-1", result.Task.ContextId);
+    }
+
+    [Fact]
+    public async Task FindContextIdAsync_OnlyOwnConversationInProject_ReturnsStoredContext()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await SqliteTestDatabase.CreateAsync(cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var otherProjectId = Guid.CreateVersion7();
+        var foreignProjectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var foreignConversationId = Guid.CreateVersion7();
+        await database.SeedAsync(
+            cancellationToken,
+            CreateProject(projectId),
+            new Project
+            {
+                Id = otherProjectId,
+                Name = "Other Project",
+                Type = ProjectType.UserDefined,
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            },
+            CreateProject(foreignProjectId, "other-user"),
+            CreateConversation(conversationId, projectId, "context-own"),
+            CreateConversation(foreignConversationId, foreignProjectId, "context-foreign", "other-user")
+        );
+
+        await using var dbContext = database.CreateContext();
+        var userInfo = new TestUserInfoService();
+        var projectResolver = new ProjectResolver(dbContext, userInfo);
+        var taskExecution = new TaskExecutionAppService(
+            dbContext,
+            projectResolver,
+            new ConversationHistoryDomainService(),
+            TimeProvider.System,
+            userInfo
+        );
+        var facade = new ProjectTaskFacade(
+            taskExecution,
+            dbContext,
+            new TaskAppService(dbContext, projectResolver, taskExecution, userInfo),
+            userInfo
+        );
+
+        Assert.Equal("context-own", await facade.FindContextIdAsync(projectId, conversationId, cancellationToken));
+        Assert.Null(await facade.FindContextIdAsync(otherProjectId, conversationId, cancellationToken));
+        Assert.Null(await facade.FindContextIdAsync(foreignProjectId, foreignConversationId, cancellationToken));
+        Assert.Null(await facade.FindContextIdAsync(projectId, Guid.CreateVersion7(), cancellationToken));
     }
 
     private static TaskAppService CreateService(AgwDbContext dbContext, IUnitOfWork? unitOfWork = null)

@@ -380,9 +380,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             return true;
         }
 
-        var contextId = ContextIdUtil.ResolveContextId(
-            string.IsNullOrWhiteSpace(request.Settings.ContextId) ? request.Task.ContextId : request.Settings.ContextId
-        );
+        var contextId = ContextIdUtil.ResolveContextId(request.Task.ContextId);
         return string.Equals(runtime._contextId, contextId, StringComparison.Ordinal)
             && runtime._projectId == request.Task.ProjectId
             && (runtime.SessionStateScope?.Generation ?? 0) == request.Task.Generation

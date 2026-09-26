@@ -104,13 +104,13 @@ test("builds the Mobile execution setting through the shared protocol", () => {
   expect(
     buildMobileSettingCommand({
       projectId: "project-1",
-      contextId: "context-1",
+      conversationId: "conversation-1",
       permissionMode: "alwaysAsk",
     }),
   ).toEqual({
     type: "SettingCommand",
     projectId: "project-1",
-    contextId: "context-1",
+    conversationId: "conversation-1",
     permissionMode: "alwaysAsk",
   });
 });
@@ -120,7 +120,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
   const { session, messages } = createSession(fake);
   await session.configure({
     projectId: "project-1",
-    contextId: "context-1",
+    conversationId: "conversation-1",
     permissionMode: "fullAccess",
   });
   await session.setMode("agent-1", "plan");
@@ -186,7 +186,7 @@ test("reconnect restores settings and the active turn without resending mode", a
   const { session, reconnectStates } = createSession(fake);
   await session.configure({
     projectId: "project-1",
-    contextId: "context-1",
+    conversationId: "conversation-1",
     permissionMode: "fullAccess",
   });
   await session.setPermissionMode("alwaysAsk");
@@ -208,13 +208,13 @@ test("reconnect restores settings and the active turn without resending mode", a
     {
       type: "SettingCommand",
       projectId: "project-1",
-      contextId: "context-1",
+      conversationId: "conversation-1",
       permissionMode: "fullAccess",
     },
     {
       type: "SettingCommand",
       projectId: "project-1",
-      contextId: "context-1",
+      conversationId: "conversation-1",
       permissionMode: "alwaysAsk",
     },
   ]);
@@ -240,7 +240,7 @@ test("interrupt targets the active execution", async () => {
   const { session } = createSession(fake);
   await session.configure({
     projectId: "project-1",
-    contextId: "context-1",
+    conversationId: "conversation-1",
     permissionMode: "fullAccess",
   });
   const turn = session.execute({
@@ -275,7 +275,7 @@ test("reports a closed persistent connection so Workspace can replace the sessio
   const { session, closeErrors } = createSession(fake);
   await session.configure({
     projectId: "project-1",
-    contextId: "context-1",
+    conversationId: "conversation-1",
     permissionMode: "fullAccess",
   });
 

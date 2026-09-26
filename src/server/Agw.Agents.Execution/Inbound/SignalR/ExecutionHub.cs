@@ -59,10 +59,16 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
             )
         );
 
-    /// <summary>页面重新加载后，按当前用户的项目会话发现仍在运行的进程内执行。</summary>
-    public Task<string?> FindInProcessExecution(Guid projectId, string contextId) =>
+    /// <summary>页面重新加载后，按当前用户的项目与对话发现仍在运行的进程内执行。</summary>
+    public Task<string?> FindInProcessExecution(Guid projectId, Guid conversationId) =>
         InvokeResultAsync(() =>
-            _registry.FindInProcessExecutionAsync(projectId, contextId, CurrentUserId, Context.ConnectionAborted)
+            _registry.FindInProcessExecutionAsync(
+                projectId,
+                conversationId,
+                CurrentUserId,
+                Context.ConnectionId,
+                Context.ConnectionAborted
+            )
         );
 
     /// <summary>重连后确认旧进程内执行状态；停止请求仍受连接所有权校验。</summary>
