@@ -5,6 +5,8 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Tools.Application;
+using Agw.Tools.Domain.Services;
+using Agw.Tools.Infrastructure;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -149,7 +151,12 @@ public sealed class UserMemoryAppServiceTests
             var context = new AgwDbContext(options, protector);
             await context.Database.EnsureCreatedAsync(cancellationToken);
             var userInfoService = new TestUserInfoService("user-a");
-            var service = new UserMemoryAppService(context, new InMemoryApplicationLock(), userInfoService);
+            var service = new UserMemoryAppService(
+                context,
+                new UserMemoryNameUniquenessDomainService(new UserMemoryRepository(context)),
+                new InMemoryApplicationLock(),
+                userInfoService
+            );
             return new Fixture(connection, context, service, userInfoService);
         }
 

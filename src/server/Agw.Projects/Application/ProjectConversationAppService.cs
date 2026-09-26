@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
+using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -232,20 +233,19 @@ public class ProjectConversationAppService
         string user
     )
     {
-        if (string.IsNullOrWhiteSpace(title))
-        {
-            return ApplicationResult.Invalid("title is required.");
-        }
-
         var conversation = await GetProjectConversationAsync(projectId, conversationId);
         if (conversation == null)
         {
             return ApplicationResult.NotFound();
         }
 
-        conversation.Title = title.Trim();
-        conversation.UpdateBy = user;
-        conversation.UpdateTime = _timeProvider.GetUtcNow();
+        var behavior = new ProjectConversationBehavior(conversation);
+        if (!behavior.TryRename(title))
+        {
+            return ApplicationResult.Invalid("title is required.");
+        }
+
+        behavior.StampUpdate(user, _timeProvider.GetUtcNow());
         _dbContext.ProjectConversations.Entry(conversation).Property(item => item.Title).IsModified = true;
         await _dbContext.SaveChangesAsync();
         return ApplicationResult.Success();

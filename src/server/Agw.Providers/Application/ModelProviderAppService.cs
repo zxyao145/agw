@@ -1,8 +1,8 @@
 using Agw.Providers.Application.Persistence;
 using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Services;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Providers.Application;
@@ -10,17 +10,17 @@ namespace Agw.Providers.Application;
 public class ModelProviderAppService : IModelProviderAppService
 {
     private readonly IProvidersDbContext _dbContext;
-    private readonly ModelProviderUsageGuard _usageGuard;
+    private readonly ProviderModelBindingDomainService _bindingDomainService;
     private readonly ICurrentUser _currentUser;
 
     public ModelProviderAppService(
         IProvidersDbContext dbContext,
-        ModelProviderUsageGuard usageGuard,
+        ProviderModelBindingDomainService bindingDomainService,
         ICurrentUser currentUser
     )
     {
         _dbContext = dbContext;
-        _usageGuard = usageGuard;
+        _bindingDomainService = bindingDomainService;
         _currentUser = currentUser;
     }
 
@@ -66,17 +66,8 @@ public class ModelProviderAppService : IModelProviderAppService
 
     public async Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request)
     {
-        var ownerUserId = ResolveOwnerUserId();
-        var providerExists = await _dbContext.Providers.AnyAsync(provider =>
-            provider.Id == request.ProviderId && provider.CreateBy == ownerUserId
-        );
-        var modelExists = await _dbContext.Models.AnyAsync(model =>
-            model.Id == request.ModelId && model.CreateBy == ownerUserId
-        );
-        if (!providerExists || !modelExists)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
+        _ = ResolveOwnerUserId();
+        await _bindingDomainService.EnsureBindableAsync(request.ProviderId, request.ModelId);
 
         var entity = new ModelProviderRelation
         {
@@ -126,7 +117,7 @@ public class ModelProviderAppService : IModelProviderAppService
             return false;
         }
 
-        await _usageGuard.EnsureNotInUseAsync([existing.Id]);
+        await _bindingDomainService.EnsureUnbindableAsync([existing.Id]);
         _dbContext.ModelProviders.Remove(existing);
         await _dbContext.SaveChangesAsync();
         return true;

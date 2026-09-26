@@ -1,6 +1,8 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.Repositories;
+using Agw.Agents.Definitions.Domain.Services;
 using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Definitions.Persistence;
 using Microsoft.Extensions.Configuration;
@@ -15,6 +17,10 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddAgents(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddScoped<IAgentDefinitionRepository, AgentDefinitionRepository>();
+        services.AddScoped<AgentDefinitionDomainService>();
+        services.AddScoped<AgentResourceBindingDomainService>();
+        services.AddScoped<AgentflowDefinitionDomainService>();
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
         services.AddScoped<IAgentflowDefinitionReader, AgentflowDefinitionReader>();

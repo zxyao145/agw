@@ -10,6 +10,8 @@ using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
+using Agw.Skills.Domain.Services;
+using Agw.Skills.Infrastructure;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -49,15 +51,17 @@ public class SkillAppServiceBuiltInTests
             context.Skills.Add(skill);
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var unitOfWork = new TestUnitOfWork();
+            var currentUser = new TestCurrentUser("test-user");
             var service = new SkillAppService(
                 context,
                 new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
+                new SkillNameUniquenessDomainService(new SkillRepository(context, currentUser)),
                 dataPaths,
                 NullLogger<SkillAppService>.Instance,
                 new TestRemoteSkillClient(),
                 new TestRemoteSkillRefreshLock(),
                 TimeProvider.System,
-                new TestCurrentUser("test-user"),
+                currentUser,
                 [new TestSkillRegistration()]
             );
 

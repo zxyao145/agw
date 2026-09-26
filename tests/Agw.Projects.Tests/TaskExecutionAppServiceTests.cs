@@ -1,5 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Testing;
@@ -159,7 +160,13 @@ public class TaskExecutionAppServiceTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var service = new TaskExecutionAppService(dbContext, new ProjectResolver(dbContext, userInfo), clock, userInfo);
+        var service = new TaskExecutionAppService(
+            dbContext,
+            new ProjectResolver(dbContext, userInfo),
+            new ConversationHistoryDomainService(),
+            clock,
+            userInfo
+        );
 
         // Act
         var result =
@@ -408,6 +415,12 @@ public class TaskExecutionAppServiceTests
         var userInfo = new TestUserInfoService();
         var projectResolver = new ProjectResolver(dbContext, userInfo);
 
-        return new TaskExecutionAppService(dbContext, projectResolver, TimeProvider.System, userInfo);
+        return new TaskExecutionAppService(
+            dbContext,
+            projectResolver,
+            new ConversationHistoryDomainService(),
+            TimeProvider.System,
+            userInfo
+        );
     }
 }

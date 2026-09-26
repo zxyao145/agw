@@ -12,6 +12,8 @@ using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Domain.Plugins;
+using Agw.Integrations.Domain.Services;
+using Agw.Integrations.Infrastructure;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Integrations;
@@ -669,7 +671,10 @@ public sealed class OAuthAppServiceTests
         var installations = new PluginInstallationAppService(
             peer.DbContext,
             new OAuthTestCatalog(OAuth2ClientAuthenticationMethod.Body, OAuthSubjectSource.TokenResponse, false),
-            new CredentialMutationService(peer.DbContext, clock, user),
+            new PluginInstallationReadinessDomainService(
+                new PluginInstallationRepository(peer.DbContext, user),
+                new ConnectionRepository(peer.DbContext, user)
+            ),
             clock,
             user,
             new IntegrationMutationCoordinator(peer.DbContext, locks, user)

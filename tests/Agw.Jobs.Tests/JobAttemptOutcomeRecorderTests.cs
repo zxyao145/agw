@@ -6,6 +6,7 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
@@ -84,13 +85,18 @@ public sealed class JobAttemptOutcomeRecorderTests
         await db.SaveChangesAsync(token);
         var user = new TestUserInfoService("owner");
         var projects = new ProjectResolver(db, user);
-        var tasks = new TaskExecutionAppService(db, projects, new TestTimeProvider(FinishedAt), user);
+        var tasks = new TaskExecutionAppService(
+            db,
+            projects,
+            new ConversationHistoryDomainService(),
+            new TestTimeProvider(FinishedAt),
+            user
+        );
         var facade = new ProjectTaskFacade(tasks, db, new TaskAppService(db, projects, tasks, user), user);
         var recorder = new JobAttemptOutcomeRecorder(
             db,
             new JobOutcomeTransaction(db, InMemoryApplicationLock.Shared),
             facade,
-            new JobScheduleCalculator(),
             new TestTimeProvider(FinishedAt)
         );
 
@@ -173,6 +179,7 @@ public sealed class JobAttemptOutcomeRecorderTests
         var taskExecution = new TaskExecutionAppService(
             dbContext,
             projectResolver,
+            new ConversationHistoryDomainService(),
             new TestTimeProvider(FinishedAt),
             userInfo
         );
@@ -181,7 +188,6 @@ public sealed class JobAttemptOutcomeRecorderTests
             dbContext,
             new JobOutcomeTransaction(dbContext, InMemoryApplicationLock.Shared),
             new ProjectTaskFacade(taskExecution, dbContext, taskResolver, userInfo),
-            new JobScheduleCalculator(),
             new TestTimeProvider(FinishedAt)
         );
 
@@ -256,7 +262,6 @@ public sealed class JobAttemptOutcomeRecorderTests
             dbContext,
             new JobOutcomeTransaction(dbContext, InMemoryApplicationLock.Shared),
             null!,
-            new JobScheduleCalculator(),
             new TestTimeProvider(FinishedAt)
         );
 

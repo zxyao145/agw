@@ -78,7 +78,6 @@ public sealed class UnattendedAgentExecutionTests : IDisposable
     [Theory]
     [InlineData("question")]
     [InlineData("failure")]
-    [InlineData("limit")]
     [InlineData("cancel")]
     public async Task RunAsync_UnattendedFullAccess_DoesNotHideFailures(string scenario)
     {
@@ -87,7 +86,6 @@ public sealed class UnattendedAgentExecutionTests : IDisposable
             ToolName = scenario == "question" ? "ask_user_question" : "run_shell",
             FailAfterApproval = scenario == "failure",
             RequiresInput = scenario == "question",
-            ApprovalRounds = scenario == "limit" ? 100 : 1,
         };
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         if (scenario == "cancel")
@@ -105,16 +103,27 @@ public sealed class UnattendedAgentExecutionTests : IDisposable
         else
         {
             var failure = Assert.IsType<AgwException>(error);
-            Assert.Contains(
-                scenario switch
-                {
-                    "question" => "ask_user_question",
-                    "failure" => "tool failed",
-                    _ => "limit",
-                },
-                failure.Message
-            );
+            Assert.Contains(scenario == "question" ? "ask_user_question" : "tool failed", failure.Message);
         }
+    }
+
+    [Fact]
+    public async Task RunAsync_UnattendedFullAccess_MoreThanFortyAutomaticApprovals_Completes()
+    {
+        const int approvalRounds = 100;
+        var agent = new UnattendedTestAgent(includeApproval: true) { ApprovalRounds = approvalRounds };
+
+        var messages = await RunUnattendedAsync(
+            agent,
+            AgwPermissionMode.FullAccess,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(approvalRounds, agent.ExecutedTools);
+        Assert.Contains(
+            messages,
+            message => message.Contents.OfType<AgwTextContent>().Any(text => text.Content == "done")
+        );
     }
 
     /// <summary>

@@ -1,14 +1,11 @@
 using System.Linq.Expressions;
-using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
-using Agw.Integrations.Contracts.References;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Behaviors;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-using Agw.Skills.Contracts.References;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -16,9 +13,7 @@ namespace Agw.Projects.Application;
 public class ProjectAppService : IProjectAppService
 {
     private readonly IProjectsDbContext _dbContext;
-    private readonly IAgentCatalogFacade _agentCatalog;
-    private readonly ISkillReferenceFacade _skillReferences;
-    private readonly IConnectionReferenceFacade _connectionReferences;
+    private readonly ProjectResourceBindingDomainService _resourceBindingDomainService;
     private readonly IProjectDeletionCoordinator _deletionCoordinator;
     private readonly ProjectResolver _projectResolver;
     private readonly IUserInfoService _userInfoService;
@@ -26,9 +21,7 @@ public class ProjectAppService : IProjectAppService
 
     public ProjectAppService(
         IProjectsDbContext dbContext,
-        IAgentCatalogFacade agentCatalog,
-        ISkillReferenceFacade skillReferences,
-        IConnectionReferenceFacade connectionReferences,
+        ProjectResourceBindingDomainService resourceBindingDomainService,
         IProjectDeletionCoordinator deletionCoordinator,
         ProjectResolver projectResolver,
         IUserInfoService userInfoService,
@@ -36,9 +29,7 @@ public class ProjectAppService : IProjectAppService
     )
     {
         _dbContext = dbContext;
-        _agentCatalog = agentCatalog;
-        _skillReferences = skillReferences;
-        _connectionReferences = connectionReferences;
+        _resourceBindingDomainService = resourceBindingDomainService;
         _deletionCoordinator = deletionCoordinator;
         _projectResolver = projectResolver;
         _userInfoService = userInfoService;
@@ -53,14 +44,14 @@ public class ProjectAppService : IProjectAppService
             query = query.Where(predicate);
         }
         var projects = await query.ToListAsync();
-        await FilterVisibleReferenceRelationsAsync(projects).ConfigureAwait(false);
+        await _resourceBindingDomainService.RetainVisibleRelationsAsync(projects).ConfigureAwait(false);
         return projects.OrderByDescending(project => project.CreateTime).ThenBy(project => project.Name).ToList();
     }
 
     public async Task<IReadOnlyList<Project>> ListForCurrentUserAsync()
     {
         var projects = await CreateProjectQuery(_userInfoService.RequiredUserId).ToListAsync();
-        await FilterVisibleReferenceRelationsAsync(projects).ConfigureAwait(false);
+        await _resourceBindingDomainService.RetainVisibleRelationsAsync(projects).ConfigureAwait(false);
         return projects.OrderByDescending(project => project.CreateTime).ThenBy(project => project.Name).ToList();
     }
 
@@ -70,7 +61,7 @@ public class ProjectAppService : IProjectAppService
             .FirstOrDefaultAsync(project => project.Id == id);
         if (project != null)
         {
-            await FilterVisibleReferenceRelationsAsync([project]).ConfigureAwait(false);
+            await _resourceBindingDomainService.RetainVisibleRelationsAsync([project]).ConfigureAwait(false);
         }
 
         return project;
@@ -82,7 +73,7 @@ public class ProjectAppService : IProjectAppService
             .FirstOrDefaultAsync(project => project.Id == id);
         if (project != null)
         {
-            await FilterVisibleReferenceRelationsAsync([project]).ConfigureAwait(false);
+            await _resourceBindingDomainService.RetainVisibleRelationsAsync([project]).ConfigureAwait(false);
         }
 
         return project;
@@ -105,12 +96,13 @@ public class ProjectAppService : IProjectAppService
     )
     {
         _ = _userInfoService.RequiredUserId;
-        if (!new ProjectBehavior(project).TryPrepareForCreate())
+        var behavior = new ProjectBehavior(project);
+        if (!behavior.TryPrepareForCreate())
         {
             return null;
         }
 
-        NormalizeAdditionalDirectories(project, []);
+        behavior.EnsureAdditionalDirectoriesExist(ResolveExistingAdditionalDirectoryPaths(project));
         EnsureWorkspaceDirectory(project.Workspace);
         await _dbContext.Projects.AddAsync(project);
         await SyncProjectMcpToolServerRelationsAsync(project.Id, mcpToolServerIds);
@@ -139,29 +131,16 @@ public class ProjectAppService : IProjectAppService
         }
 
         var originalDirectories = existing.AdditionalDirectories.ToArray();
-        var originalType = existing.Type;
-        var originalName = existing.Name;
-        if (!new ProjectBehavior(existing).TryApplyUpdate(updateAction))
+        var behavior = new ProjectBehavior(existing);
+        if (!behavior.TryApplyUpdate(updateAction, originalDirectories))
         {
             return null;
         }
 
-        if (
-            originalType == ProjectType.DefaultBuiltIn
-            && (existing.Type != originalType || existing.Name != originalName)
-        )
-        {
-            existing.Type = originalType;
-            existing.Name = originalName;
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(existing.Workspace))
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Project primary directory is required.");
-        }
-
-        NormalizeAdditionalDirectories(existing, originalDirectories);
+        behavior.EnsureAdditionalDirectoriesExist(
+            ResolveExistingAdditionalDirectoryPaths(existing),
+            originalDirectories
+        );
         EnsureWorkspaceDirectory(existing.Workspace);
         // Preserve audit stamping even when only bindings change or the update is a no-op.
         _dbContext.Projects.Entry(existing).Property(project => project.Name).IsModified = true;
@@ -188,12 +167,7 @@ public class ProjectAppService : IProjectAppService
             project => project.Id == id && project.CreateBy == _userInfoService.RequiredUserId,
             CancellationToken.None
         );
-        if (existing == null)
-        {
-            return false;
-        }
-
-        if (existing.Type == ProjectType.DefaultBuiltIn)
+        if (existing == null || !new ProjectBehavior(existing).TryDelete())
         {
             return false;
         }
@@ -222,52 +196,15 @@ public class ProjectAppService : IProjectAppService
         return project?.Id;
     }
 
-    private static void NormalizeAdditionalDirectories(Project project, IReadOnlyList<ProjectDirectory> previous)
-    {
-        var paths = new HashSet<string>(ProjectWorkspacePaths.Comparer)
-        {
-            ProjectWorkspacePaths.CreateSnapshot(project.Id, project.Workspace).Workspace,
-        };
-        var ids = new HashSet<Guid>();
-        var normalized = new List<ProjectDirectory>();
-        foreach (var directory in project.AdditionalDirectories ?? [])
-        {
-            if (directory == null)
-            {
-                throw new AgwException(ErrorCodes.InvalidParam, "An additional directory must contain a path.");
-            }
-            var path = directory.Path?.Trim();
-            if (
-                string.IsNullOrWhiteSpace(path)
-                || path.Length > 1000
-                || path.Contains('\0')
-                || !Path.IsPathFullyQualified(PathUtil.ExpandTilde(path))
-            )
-            {
-                throw new AgwException(
-                    ErrorCodes.InvalidParam,
-                    "Additional directories require an absolute path or a ~/ path."
-                );
-            }
-            var fullPath = ProjectWorkspacePaths.Normalize(path);
-            if (!paths.Add(fullPath) || (directory.Id != Guid.Empty && !ids.Add(directory.Id)))
-            {
-                throw new AgwException(ErrorCodes.InvalidParam, "Project directories must be unique.");
-            }
-            var original = previous.FirstOrDefault(item => item.Id == directory.Id);
-            var unchanged =
-                original != null
-                && ProjectWorkspacePaths.Comparer.Equals(ProjectWorkspacePaths.Normalize(original.Path), fullPath);
-            if (!unchanged && !Directory.Exists(fullPath))
-            {
-                throw new AgwException(ErrorCodes.InvalidParam, $"Additional directory does not exist: '{path}'.");
-            }
-            normalized.Add(
-                new ProjectDirectory { Id = unchanged ? original!.Id : Guid.CreateVersion7(), Path = fullPath }
-            );
-        }
-        project.AdditionalDirectories = normalized;
-    }
+    /// <summary>
+    /// <para>返回项目附加目录中在本机文件系统上真实存在的规范化路径。</para>
+    /// <para>Returns the normalized additional directory paths that exist on the local file system.</para>
+    /// </summary>
+    private static IReadOnlySet<string> ResolveExistingAdditionalDirectoryPaths(Project project) =>
+        project
+            .AdditionalDirectories.Select(directory => directory.Path)
+            .Where(Directory.Exists)
+            .ToHashSet(ProjectWorkspacePaths.Comparer);
 
     private static void EnsureWorkspaceDirectory(string? workspace)
     {
@@ -285,17 +222,9 @@ public class ProjectAppService : IProjectAppService
             .ProjectMcpToolServers.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.McpToolServerId)
             .ToListAsync();
-
-        var requestedIds = NormalizeRelationIds(mcpToolServerIds);
-        var validIds =
-            requestedIds.Count == 0
-                ? []
-                : (await _agentCatalog.FilterExistingMcpServerIdsAsync(requestedIds).ConfigureAwait(false)).ToList();
-        if (validIds.Count != requestedIds.Count)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
-        var removedIds = currentIds.Except(validIds).ToList();
+        var (addedIds, removedIds) = await _resourceBindingDomainService
+            .PlanMcpToolServerBindingsAsync(currentIds, mcpToolServerIds)
+            .ConfigureAwait(false);
         if (removedIds.Count > 0)
         {
             var removedRelations = await _dbContext
@@ -309,7 +238,7 @@ public class ProjectAppService : IProjectAppService
             }
         }
 
-        foreach (var resourceId in validIds.Except(currentIds))
+        foreach (var resourceId in addedIds)
         {
             await _dbContext.ProjectMcpToolServers.AddAsync(
                 new ProjectMcpServerRelation { ProjectId = projectId, McpToolServerId = resourceId }
@@ -323,17 +252,9 @@ public class ProjectAppService : IProjectAppService
             .ProjectSkillRelations.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.SkillId)
             .ToListAsync();
-
-        var requestedIds = NormalizeRelationIds(skillIds);
-        var validIds =
-            requestedIds.Count == 0
-                ? new HashSet<Guid>()
-                : await _skillReferences.FilterVisibleSkillIdsAsync(requestedIds).ConfigureAwait(false);
-        if (validIds.Count != requestedIds.Count)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
-        var removedIds = currentIds.Except(validIds).ToList();
+        var (addedIds, removedIds) = await _resourceBindingDomainService
+            .PlanSkillBindingsAsync(currentIds, skillIds)
+            .ConfigureAwait(false);
         if (removedIds.Count > 0)
         {
             var removedRelations = await _dbContext
@@ -347,7 +268,7 @@ public class ProjectAppService : IProjectAppService
             }
         }
 
-        foreach (var resourceId in validIds.Except(currentIds))
+        foreach (var resourceId in addedIds)
         {
             await _dbContext.ProjectSkillRelations.AddAsync(
                 new ProjectSkillRelation { ProjectId = projectId, SkillId = resourceId }
@@ -367,22 +288,13 @@ public class ProjectAppService : IProjectAppService
 
     private async Task SyncProjectConnectionRelationsAsync(Guid projectId, IEnumerable<Guid>? connectionIds)
     {
-        var relationIds = await _dbContext
+        var currentIds = await _dbContext
             .ProjectConnectionRelations.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.ConnectionId)
             .ToListAsync();
-        var currentIds = await _connectionReferences.FilterOwnedConnectionIdsAsync(relationIds).ConfigureAwait(false);
-
-        var requestedIds = NormalizeRelationIds(connectionIds);
-        var validIds =
-            requestedIds.Count == 0
-                ? new HashSet<Guid>()
-                : await _connectionReferences.FilterOwnedConnectionIdsAsync(requestedIds).ConfigureAwait(false);
-        if (validIds.Count != requestedIds.Count)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
-        var removedIds = currentIds.Except(validIds).ToList();
+        var (addedIds, removedIds) = await _resourceBindingDomainService
+            .PlanConnectionBindingsAsync(currentIds, connectionIds)
+            .ConfigureAwait(false);
         if (removedIds.Count > 0)
         {
             var removedRelations = await _dbContext
@@ -396,64 +308,11 @@ public class ProjectAppService : IProjectAppService
             }
         }
 
-        foreach (var resourceId in validIds.Except(currentIds))
+        foreach (var resourceId in addedIds)
         {
             await _dbContext.ProjectConnectionRelations.AddAsync(
                 new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = resourceId }
             );
         }
-    }
-
-    private async Task FilterVisibleReferenceRelationsAsync(IReadOnlyList<Project> projects)
-    {
-        var mcpToolServerIds = projects
-            .SelectMany(project => project.ProjectMcpToolServers)
-            .Select(relation => relation.McpToolServerId)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
-        var skillIds = projects
-            .SelectMany(project => project.ProjectSkillRelations)
-            .Select(relation => relation.SkillId)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
-        var connectionIds = projects
-            .SelectMany(project => project.ProjectConnectionRelations)
-            .Select(relation => relation.ConnectionId)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
-
-        var visibleMcpToolServerIds =
-            mcpToolServerIds.Length == 0
-                ? new HashSet<Guid>()
-                : await _agentCatalog.FilterExistingMcpServerIdsAsync(mcpToolServerIds).ConfigureAwait(false);
-        var visibleSkillIds =
-            skillIds.Length == 0
-                ? new HashSet<Guid>()
-                : await _skillReferences.FilterVisibleSkillIdsAsync(skillIds).ConfigureAwait(false);
-        var visibleConnectionIds =
-            connectionIds.Length == 0
-                ? new HashSet<Guid>()
-                : await _connectionReferences.FilterOwnedConnectionIdsAsync(connectionIds).ConfigureAwait(false);
-
-        foreach (var project in projects)
-        {
-            project.ProjectMcpToolServers = project
-                .ProjectMcpToolServers.Where(relation => visibleMcpToolServerIds.Contains(relation.McpToolServerId))
-                .ToList();
-            project.ProjectSkillRelations = project
-                .ProjectSkillRelations.Where(relation => visibleSkillIds.Contains(relation.SkillId))
-                .ToList();
-            project.ProjectConnectionRelations = project
-                .ProjectConnectionRelations.Where(relation => visibleConnectionIds.Contains(relation.ConnectionId))
-                .ToList();
-        }
-    }
-
-    private static IReadOnlyList<Guid> NormalizeRelationIds(IEnumerable<Guid>? relationIds)
-    {
-        return (relationIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
     }
 }

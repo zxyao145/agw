@@ -8,7 +8,10 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Tools.Application;
 using Agw.Tools.Application.Persistence;
+using Agw.Tools.Domain.Repositories;
+using Agw.Tools.Domain.Services;
 using Agw.Tools.Impl.ToolBlocks.UserMemory;
+using Agw.Tools.Infrastructure;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -237,6 +240,8 @@ public sealed class UserMemoryProviderTests
             services.AddSingleton<IApplicationLock, InMemoryApplicationLock>();
             var userInfoService = new UserMemoryAppServiceTests.TestUserInfoService("user-a");
             services.AddSingleton<IUserInfoService>(userInfoService);
+            services.AddScoped<IUserMemoryRepository, UserMemoryRepository>();
+            services.AddScoped<UserMemoryNameUniquenessDomainService>();
             services.AddScoped<UserMemoryAppService>();
             var serviceProvider = services.BuildServiceProvider();
             await using (var scope = serviceProvider.CreateAsyncScope())

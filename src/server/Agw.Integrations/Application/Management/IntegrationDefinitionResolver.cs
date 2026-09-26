@@ -51,21 +51,3 @@ internal static class IntegrationDefinitionResolver
 
     public static string NormalizeId(string value) => (value ?? string.Empty).Trim().ToLowerInvariant();
 }
-
-internal sealed class ResolvedIntegrationDefinition
-{
-    public ResolvedIntegrationDefinition(
-        PluginDefinition plugin,
-        ConnectorDefinition connector,
-        AuthSchemeDefinition authScheme
-    )
-    {
-        Plugin = plugin;
-        Connector = connector;
-        AuthScheme = authScheme;
-    }
-
-    public PluginDefinition Plugin { get; }
-    public ConnectorDefinition Connector { get; }
-    public AuthSchemeDefinition AuthScheme { get; }
-}

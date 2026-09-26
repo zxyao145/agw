@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Agw.Integrations.Application.Credentials;
-using Agw.Integrations.Application.Management;
+using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Tools.GitHub.Dtos;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;

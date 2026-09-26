@@ -4,6 +4,8 @@ using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Services;
+using Agw.Providers.Infrastructure;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -36,12 +38,13 @@ public class ProviderAuditTests
             .Options;
         await using var context = new AgwDbContext(options);
         await context.Database.EnsureCreatedAsync(cancellationToken);
-        var guard = new ModelProviderUsageGuard(
+        var bindingDomainService = new ProviderModelBindingDomainService(
+            new ProviderModelRepository(context, user),
             new TestAgentReferenceFacade(new EfRepository<Agent>(context), new EfRepository<Agentflow>(context))
         );
-        var providers = new ProviderAppService(context, guard, user);
+        var providers = new ProviderAppService(context, bindingDomainService, user);
         var models = new ModelAppService(context, user);
-        var relations = new ModelProviderAppService(context, guard, user);
+        var relations = new ModelProviderAppService(context, bindingDomainService, user);
 
         // Act
         var provider = await providers.CreateAsync(

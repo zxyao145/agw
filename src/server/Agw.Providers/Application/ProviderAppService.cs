@@ -1,6 +1,8 @@
 using Agw.Providers.Application.Persistence;
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Behaviors;
+using Agw.Providers.Domain.Services;
+using Agw.Providers.Domain.ValueObjects;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Microsoft.EntityFrameworkCore;
@@ -10,17 +12,17 @@ namespace Agw.Providers.Application;
 public class ProviderAppService : IProviderAppService
 {
     private readonly IProvidersDbContext _dbContext;
-    private readonly ModelProviderUsageGuard _modelProviderUsageGuard;
+    private readonly ProviderModelBindingDomainService _bindingDomainService;
     private readonly ICurrentUser _currentUser;
 
     public ProviderAppService(
         IProvidersDbContext dbContext,
-        ModelProviderUsageGuard modelProviderUsageGuard,
+        ProviderModelBindingDomainService bindingDomainService,
         ICurrentUser currentUser
     )
     {
         _dbContext = dbContext;
-        _modelProviderUsageGuard = modelProviderUsageGuard;
+        _bindingDomainService = bindingDomainService;
         _currentUser = currentUser;
     }
 
@@ -46,7 +48,7 @@ public class ProviderAppService : IProviderAppService
 
     public async Task<Provider> CreateAsync(ProviderCreateRequest request)
     {
-        var ownerUserId = ResolveOwnerUserId();
+        _ = ResolveOwnerUserId();
         var provider = new Provider
         {
             Id = Guid.CreateVersion7(),
@@ -57,8 +59,9 @@ public class ProviderAppService : IProviderAppService
         };
 
         new ProviderBehavior(provider).ApplyAuthConfigs(BuildAuthConfigs(request.AuthConfigs));
+        var modelSelection = await _bindingDomainService.SelectModelsAsync(provider.Id, [], request.ModelNames ?? []);
         await _dbContext.Providers.AddAsync(provider);
-        await SyncModelRelationsAsync(provider.Id, [], NormalizeModelNames(request.ModelNames) ?? [], ownerUserId);
+        await ApplyModelSelectionAsync(modelSelection);
         await _dbContext.SaveChangesAsync();
         return provider;
     }
@@ -76,15 +79,14 @@ public class ProviderAppService : IProviderAppService
             return null;
         }
 
-        var normalizedModelNames = NormalizeModelNames(request.ModelNames);
-        if (normalizedModelNames != null)
-        {
-            var selectedNames = normalizedModelNames.ToHashSet(StringComparer.Ordinal);
-            var removedRelations = existing
-                .Models.Where(relation => relation.Model == null || !selectedNames.Contains(relation.Model.Name))
-                .ToList();
-            await _modelProviderUsageGuard.EnsureNotInUseAsync(removedRelations.Select(relation => relation.Id));
-        }
+        var modelSelection =
+            request.ModelNames == null
+                ? null
+                : await _bindingDomainService.SelectModelsAsync(
+                    existing.Id,
+                    existing.Models.ToList(),
+                    request.ModelNames
+                );
 
         existing.Name = request.Name;
         existing.ProviderType = request.ProviderType;
@@ -92,9 +94,9 @@ public class ProviderAppService : IProviderAppService
         existing.Endpoint = request.Endpoint;
         new ProviderBehavior(existing).ApplyAuthConfigs(BuildAuthConfigs(request.AuthConfigs));
 
-        if (normalizedModelNames != null)
+        if (modelSelection != null)
         {
-            await SyncModelRelationsAsync(existing.Id, existing.Models.ToList(), normalizedModelNames, ownerUserId);
+            await ApplyModelSelectionAsync(modelSelection);
         }
 
         _dbContext.Providers.Entry(existing).Property(provider => provider.Name).IsModified = true;
@@ -139,84 +141,11 @@ public class ProviderAppService : IProviderAppService
             .ToList();
     }
 
-    private async Task SyncModelRelationsAsync(
-        Guid providerId,
-        IReadOnlyCollection<ModelProviderRelation> currentRelations,
-        IReadOnlyList<string> modelNames,
-        string user
-    )
+    private async Task ApplyModelSelectionAsync(ProviderModelSelection selection)
     {
-        var selectedNames = modelNames.ToHashSet(StringComparer.Ordinal);
-        var removedRelations = currentRelations
-            .Where(relation => relation.Model == null || !selectedNames.Contains(relation.Model.Name))
-            .ToList();
-        foreach (var relation in removedRelations)
-        {
-            _dbContext.ModelProviders.Remove(relation);
-        }
-
-        var models =
-            modelNames.Count == 0
-                ? []
-                : await _dbContext
-                    .Models.AsNoTracking()
-                    .Where(model => modelNames.Contains(model.Name) && model.CreateBy == user)
-                    .ToListAsync();
-        var modelByName = models.ToDictionary(model => model.Name, StringComparer.Ordinal);
-        foreach (var modelName in modelNames)
-        {
-            if (modelByName.ContainsKey(modelName))
-            {
-                continue;
-            }
-
-            var model = new AgwAiModel
-            {
-                Id = Guid.CreateVersion7(),
-                Name = modelName,
-                Description = null,
-                MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
-                MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
-            };
-            await _dbContext.Models.AddAsync(model);
-            modelByName.Add(modelName, model);
-        }
-
-        var currentModelIds = currentRelations
-            .Except(removedRelations)
-            .Select(relation => relation.ModelId)
-            .ToHashSet();
-        foreach (var modelName in modelNames)
-        {
-            var model = modelByName[modelName];
-            if (!currentModelIds.Add(model.Id))
-            {
-                continue;
-            }
-
-            var relation = new ModelProviderRelation
-            {
-                Id = Guid.CreateVersion7(),
-                ProviderId = providerId,
-                ModelId = model.Id,
-            };
-            await _dbContext.ModelProviders.AddAsync(relation);
-        }
-    }
-
-    private static IReadOnlyList<string>? NormalizeModelNames(IReadOnlyList<string>? modelNames)
-    {
-        if (modelNames == null)
-        {
-            return null;
-        }
-
-        return modelNames
-            .Select(modelName => modelName?.Trim())
-            .Where(modelName => !string.IsNullOrEmpty(modelName))
-            .Select(modelName => modelName!)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+        _dbContext.ModelProviders.RemoveRange(selection.RemovedRelations);
+        await _dbContext.Models.AddRangeAsync(selection.CreatedModels);
+        await _dbContext.ModelProviders.AddRangeAsync(selection.AddedRelations);
     }
 
     private string ResolveOwnerUserId() => _currentUser.RequiredUserId;

@@ -20,7 +20,4 @@
       ReferenceOutputAssembly="false"
     />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="AgentCapability\" />
-  </ItemGroup>
 </Project>

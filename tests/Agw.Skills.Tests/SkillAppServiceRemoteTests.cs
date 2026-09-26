@@ -9,6 +9,8 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
+using Agw.Skills.Domain.Services;
+using Agw.Skills.Infrastructure;
 using Agw.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
@@ -271,15 +273,17 @@ public class SkillAppServiceRemoteTests
             RefreshLock = new TestRemoteSkillRefreshLock();
             Logger = new TestLogger<SkillAppService>();
             var unitOfWork = new TestUnitOfWork();
+            var currentUser = new TestCurrentUser("remote-admin");
             Service = new SkillAppService(
                 Context,
                 new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
+                new SkillNameUniquenessDomainService(new SkillRepository(Context, currentUser)),
                 dataPaths,
                 Logger,
                 new TestRemoteSkillClient(definition),
                 RefreshLock,
                 new TestTimeProvider(UtcNow),
-                new TestCurrentUser("remote-admin")
+                currentUser
             );
         }
 

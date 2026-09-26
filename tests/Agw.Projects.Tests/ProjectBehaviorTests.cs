@@ -1,6 +1,7 @@
 using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Tooling;
 
 namespace Agw.Projects.Tests;
 
@@ -84,7 +85,12 @@ public class ProjectBehaviorTests
     [Fact]
     public void TryApplyUpdate_ValidUpdate_ChangesRootWithoutAuditStamping()
     {
-        var project = new Project { Id = Guid.CreateVersion7(), Name = "Project A" };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Project A",
+            Workspace = "~/project-a",
+        };
 
         var result = new ProjectBehavior(project).TryApplyUpdate(current => current.Description = "Updated");
 
@@ -171,7 +177,12 @@ public class ProjectBehaviorTests
     [Fact]
     public void TryApplyUpdate_EnvironmentVariables_NormalizesNames()
     {
-        var project = new Project { Id = Guid.CreateVersion7(), Name = "Project A" };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Project A",
+            Workspace = "~/project-a",
+        };
 
         var result = new ProjectBehavior(project).TryApplyUpdate(current =>
             current.EnvironmentVariables = new Dictionary<string, string> { ["  API_KEY  "] = "updated" }
@@ -179,5 +190,53 @@ public class ProjectBehaviorTests
 
         Assert.True(result);
         Assert.Equal("updated", project.EnvironmentVariables["API_KEY"]);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_BackgroundAgentsToolBlock_ThrowsInvalidParam()
+    {
+        var project = new Project
+        {
+            Name = "Project A",
+            Tools = [new ToolBlockValue { Definition = new BackgroundAgentsToolBlockDefinition() }],
+        };
+
+        var exception = Assert.Throws<AgwException>(() => new ProjectBehavior(project).TryPrepareForCreate());
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public void TryApplyUpdate_DuplicateToolNames_ThrowsInvalidParam()
+    {
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Project A",
+            Workspace = "~/project-a",
+        };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectBehavior(project).TryApplyUpdate(current =>
+                current.Tools = [
+                    new ToolValue { Definition = new DiffToolDefinition() },
+                    new ToolValue { Definition = new DiffToolDefinition() },
+                ]
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Theory]
+    [InlineData(ProjectType.DefaultBuiltIn, false)]
+    [InlineData(ProjectType.UserDefined, true)]
+    public void TryDelete_ProjectType_ProtectsDefaultBuiltInProjects(ProjectType type, bool expected)
+    {
+        var project = new Project { Name = "Project A", Type = type };
+
+        var deletable = new ProjectBehavior(project).TryDelete();
+
+        Assert.Equal(expected, deletable);
     }
 }

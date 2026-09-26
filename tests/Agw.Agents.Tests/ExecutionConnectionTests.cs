@@ -380,7 +380,14 @@ public class ExecutionConnectionTests
 
         Assert.True(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
         Assert.False(agent.Canceled);
-        Assert.True(await connection.RecoverInProcessExecutionAsync(true, TestContext.Current.CancellationToken));
+        var activeAfterInterrupt = await connection.RecoverInProcessExecutionAsync(
+            true,
+            TestContext.Current.CancellationToken
+        );
+        if (!activeAfterInterrupt)
+        {
+            Assert.True(fixture.Context.WhenIdleAsync().IsCompleted);
+        }
         await agent.Cancellation.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await removed.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);

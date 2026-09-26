@@ -1,8 +1,8 @@
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Skills.Application.Persistence;
-using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Remote;
+using Agw.Skills.Domain.Behaviors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -50,10 +50,7 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         }
 
         var definition = await _remoteSkillClient.FetchAsync(state.Skill.RemoteUrl!, cancellationToken);
-        if (!string.Equals(definition.Name, state.Skill.Name, StringComparison.Ordinal))
-        {
-            throw new AgwException(ErrorCodes.RemoteSkillIdentityChanged);
-        }
+        new SkillBehavior(state.Skill).EnsureRemoteIdentity(definition.Name);
 
         await SaveCacheAsync(state.Skill, definition, cancellationToken);
         _logger.LogInformation(
@@ -82,11 +79,7 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
             return false;
         }
 
-        if (!string.Equals(cached.Name, state.Skill.Name, StringComparison.Ordinal))
-        {
-            throw new AgwException(ErrorCodes.RemoteSkillIdentityChanged);
-        }
-
+        new SkillBehavior(state.Skill).EnsureRemoteIdentity(cached.Name);
         definition = cached;
         return true;
     }
@@ -103,7 +96,7 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
             throw new AgwException(ErrorCodes.ResourceNotFound);
         }
 
-        EnsureRemoteSkill(skill);
+        new SkillBehavior(skill).EnsureRemote();
         var cache = await dbContext
             .RemoteSkillCaches.AsNoTracking()
             .SingleOrDefaultAsync(item => item.SkillId == skillId, cancellationToken);
@@ -126,7 +119,7 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
             throw new AgwException(ErrorCodes.ResourceNotFound);
         }
 
-        EnsureRemoteSkill(skill);
+        new SkillBehavior(skill).EnsureRemote();
         if (
             !string.Equals(skill.RemoteUrl, expectedSkill.RemoteUrl, StringComparison.Ordinal)
             || !string.Equals(skill.Name, expectedSkill.Name, StringComparison.Ordinal)
@@ -155,14 +148,6 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private static void EnsureRemoteSkill(Skill skill)
-    {
-        if (skill.Kind != SkillKind.Remote || string.IsNullOrWhiteSpace(skill.RemoteUrl))
-        {
-            throw new AgwException(ErrorCodes.RemoteSkillConfigurationInvalid);
-        }
     }
 
     private sealed record RemoteSkillState(Skill Skill, RemoteSkillCache? Cache);

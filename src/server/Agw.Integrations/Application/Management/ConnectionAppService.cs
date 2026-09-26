@@ -3,7 +3,9 @@ using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
+using Agw.Integrations.Domain.Behaviors;
 using Agw.Integrations.Domain.Plugins;
+using Agw.Integrations.Domain.Services;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -12,15 +14,10 @@ namespace Agw.Integrations.Application.Management;
 
 public sealed class ConnectionAppService
 {
-    private const string NeedsConfigurationCode = "integration.needs_configuration";
-    private const string PendingAuthorizationCode = "integration.pending_authorization";
-    private const string CredentialInvalidCode = "integration.credential_invalid";
-    private const string CredentialExpiredCode = "integration.credential_expired";
-    private const string DefinitionUnavailableCode = "integration.definition_unavailable";
-
     private readonly IIntegrationsDbContext _dbContext;
     private readonly IPluginCatalog _pluginCatalog;
-    private readonly CredentialMutationService _credentialMutations;
+    private readonly ConnectionAliasUniquenessDomainService _aliasUniqueness;
+    private readonly PluginInstallationReadinessDomainService _installationReadiness;
     private readonly IConnectionCredentialReader _credentialReader;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
@@ -29,7 +26,8 @@ public sealed class ConnectionAppService
     public ConnectionAppService(
         IIntegrationsDbContext dbContext,
         IPluginCatalog pluginCatalog,
-        CredentialMutationService credentialMutations,
+        ConnectionAliasUniquenessDomainService aliasUniqueness,
+        PluginInstallationReadinessDomainService installationReadiness,
         IConnectionCredentialReader credentialReader,
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
@@ -38,7 +36,8 @@ public sealed class ConnectionAppService
     {
         _dbContext = dbContext;
         _pluginCatalog = pluginCatalog;
-        _credentialMutations = credentialMutations;
+        _aliasUniqueness = aliasUniqueness;
+        _installationReadiness = installationReadiness;
         _credentialReader = credentialReader;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
@@ -75,46 +74,27 @@ public sealed class ConnectionAppService
         );
         await using var mutation = await _mutations.AcquirePluginAsync(definition.Plugin.Id, cancellationToken);
         cancellationToken = mutation.Token;
-        var alias = IntegrationInputValidator.NormalizeAlias(request.Alias);
-        if (
-            await _dbContext.Connections.AnyAsync(
-                connection => connection.CreateBy == user && connection.Alias == alias,
-                cancellationToken
-            )
-        )
-        {
-            throw new AgwException(ErrorCodes.ConnectionAliasAlreadyExists);
-        }
+        var alias = ConnectionBehavior.NormalizeAlias(request.Alias);
+        await _aliasUniqueness.EnsureAliasAvailableAsync(alias, cancellationToken);
 
-        var input = IntegrationInputValidator.Validate(
-            definition.AuthScheme.ConnectionFields,
-            new Dictionary<string, string?>(
-                request.Configuration ?? new Dictionary<string, string?>(),
-                StringComparer.OrdinalIgnoreCase
-            ),
-            new Dictionary<string, SecretFieldUpdateRequest>(
-                request.Secrets ?? new Dictionary<string, SecretFieldUpdateRequest>(),
-                StringComparer.OrdinalIgnoreCase
-            ),
-            [],
-            IntegrationCredentialSlots.ConnectionField
-        );
+        var input = ValidateInput(definition, request.Configuration, request.Secrets, []);
+        var now = _timeProvider.GetUtcNow();
         var connection = new Connection
         {
             Id = Guid.CreateVersion7(),
-            PluginId = definition.Plugin.Id,
-            ConnectorId = definition.Connector.Id,
-            AuthSchemeId = definition.AuthScheme.Id,
-            DisplayName = IntegrationInputValidator.RequireDisplayName(request.DisplayName),
-            Alias = alias,
             ConfigurationJson = IntegrationConfigurationCodec.Write(input.Configuration),
-            Enabled = request.Enabled,
             CreateBy = user,
-            CreateTime = _timeProvider.GetUtcNow(),
+            CreateTime = now,
         };
+        var behavior = new ConnectionBehavior(connection);
+        behavior.Create(definition, alias, request.DisplayName, request.Enabled);
         await _dbContext.Connections.AddAsync(connection, cancellationToken);
-        await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates);
-        await SetInitialStatusAsync(connection, definition, cancellationToken);
+        behavior.ApplySecretUpdates(input.SecretsToSet, input.ClearedSecretFieldIds, user, now);
+        var (installationConfigured, _) = await _installationReadiness.ResolveInstallationAsync(
+            definition,
+            cancellationToken
+        );
+        behavior.ApplyConfigurationStatus(installationConfigured, definition.AuthScheme.Type);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Map(connection);
     }
@@ -128,48 +108,32 @@ public sealed class ConnectionAppService
         await using var mutation = await _mutations.AcquireConnectionAsync(request.Id, cancellationToken);
         cancellationToken = mutation.Token;
         var connection = await GetTrackedAsync(request.Id, cancellationToken);
-        var alias = IntegrationInputValidator.NormalizeAlias(request.Alias);
-        if (!string.Equals(alias, connection.Alias, StringComparison.Ordinal))
-        {
-            throw new AgwException(ErrorCodes.ConnectionAliasImmutable);
-        }
-
         var definition = IntegrationDefinitionResolver.Resolve(
             _pluginCatalog,
             request.PluginId,
             request.ConnectorId,
             request.AuthSchemeId
         );
-        if (
-            !string.Equals(definition.Plugin.Id, connection.PluginId, StringComparison.Ordinal)
-            || !string.Equals(definition.Connector.Id, connection.ConnectorId, StringComparison.Ordinal)
-            || !string.Equals(definition.AuthScheme.Id, connection.AuthSchemeId, StringComparison.Ordinal)
-        )
-        {
-            throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
-        }
+        var behavior = new ConnectionBehavior(connection);
+        behavior.Update(definition, request.Alias, request.DisplayName, request.Enabled);
 
-        var input = IntegrationInputValidator.Validate(
-            definition.AuthScheme.ConnectionFields,
-            new Dictionary<string, string?>(
-                request.Configuration ?? new Dictionary<string, string?>(),
-                StringComparer.OrdinalIgnoreCase
-            ),
-            new Dictionary<string, SecretFieldUpdateRequest>(
-                request.Secrets ?? new Dictionary<string, SecretFieldUpdateRequest>(),
-                StringComparer.OrdinalIgnoreCase
-            ),
-            connection.Credentials.Select(credential => credential.Slot).ToList(),
-            IntegrationCredentialSlots.ConnectionField
+        var input = ValidateInput(
+            definition,
+            request.Configuration,
+            request.Secrets,
+            connection.Credentials.Select(credential => credential.Slot).ToList()
         );
-        connection.DisplayName = IntegrationInputValidator.RequireDisplayName(request.DisplayName);
+        var now = _timeProvider.GetUtcNow();
         connection.ConfigurationJson = IntegrationConfigurationCodec.Write(input.Configuration);
-        connection.Enabled = request.Enabled;
         connection.UpdateBy = user;
-        connection.UpdateTime = _timeProvider.GetUtcNow();
-        _mutations.InvalidateAuthorization(connection);
-        await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates);
-        await SetInitialStatusAsync(connection, definition, cancellationToken);
+        connection.UpdateTime = now;
+        behavior.CancelPendingAuthorization();
+        behavior.ApplySecretUpdates(input.SecretsToSet, input.ClearedSecretFieldIds, user, now);
+        var (installationConfigured, _) = await _installationReadiness.ResolveInstallationAsync(
+            definition,
+            cancellationToken
+        );
+        behavior.ApplyConfigurationStatus(installationConfigured, definition.AuthScheme.Type);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Map(connection);
     }
@@ -181,55 +145,10 @@ public sealed class ConnectionAppService
         cancellationToken = mutation.Token;
         var connection = await GetTrackedAsync(id, cancellationToken);
         var now = _timeProvider.GetUtcNow();
-        connection.LastValidatedAtUtc = now;
         connection.UpdateBy = user;
         connection.UpdateTime = now;
-
-        if (!connection.Enabled)
-        {
-            SetStatus(connection, ConnectionStatus.Disabled, null);
-        }
-        else if (
-            !IntegrationDefinitionResolver.TryResolve(
-                _pluginCatalog,
-                connection.PluginId,
-                connection.ConnectorId,
-                connection.AuthSchemeId,
-                out var definition
-            )
-        )
-        {
-            SetStatus(connection, ConnectionStatus.DefinitionUnavailable, DefinitionUnavailableCode);
-        }
-        else
-        {
-            try
-            {
-                var installationStatus = await ResolveInstallationStatusAsync(
-                    connection,
-                    definition!,
-                    validateReadable: true,
-                    cancellationToken
-                );
-                if (installationStatus.HasValue)
-                {
-                    SetStatus(
-                        connection,
-                        installationStatus.Value,
-                        installationStatus == ConnectionStatus.Invalid ? CredentialInvalidCode : NeedsConfigurationCode
-                    );
-                }
-                else
-                {
-                    await ValidateResolvedAsync(connection, definition!, now, cancellationToken);
-                }
-            }
-            catch (AgwException)
-            {
-                SetStatus(connection, ConnectionStatus.Invalid, CredentialInvalidCode);
-            }
-        }
-
+        var status = await CheckStatusAsync(connection, now, cancellationToken);
+        new ConnectionBehavior(connection).RecordValidation(status, now);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Map(connection);
     }
@@ -260,44 +179,85 @@ public sealed class ConnectionAppService
         return true;
     }
 
-    private async Task ValidateResolvedAsync(
-        Connection connection,
+    private static ValidatedIntegrationInput ValidateInput(
         ResolvedIntegrationDefinition definition,
+        IDictionary<string, string?>? configuration,
+        IDictionary<string, SecretFieldUpdateRequest>? secrets,
+        IReadOnlyCollection<string> existingCredentialSlots
+    ) =>
+        IntegrationInputValidator.Validate(
+            definition.AuthScheme.ConnectionFields,
+            new Dictionary<string, string?>(
+                configuration ?? new Dictionary<string, string?>(),
+                StringComparer.OrdinalIgnoreCase
+            ),
+            new Dictionary<string, SecretFieldUpdateRequest>(
+                secrets ?? new Dictionary<string, SecretFieldUpdateRequest>(),
+                StringComparer.OrdinalIgnoreCase
+            ),
+            existingCredentialSlots,
+            IntegrationCredentialSlots.ConnectionField
+        );
+
+    /// <summary>
+    /// <para>检查连接当前能否使用：所需配置齐全，并且已保存的凭据都能解密读取；任何读取失败都判定为凭据无效。</para>
+    /// <para>Checks whether the connection is usable now: the required configuration is present and every stored credential can be decrypted; any read failure means the credentials are invalid.</para>
+    /// </summary>
+    private async Task<ConnectionStatus> CheckStatusAsync(
+        Connection connection,
         DateTimeOffset now,
         CancellationToken cancellationToken
     )
     {
-        var configuration = IntegrationConfigurationCodec.Read(connection.ConfigurationJson);
+        if (!connection.Enabled)
+        {
+            return ConnectionStatus.Disabled;
+        }
+
         if (
-            !HasRequiredConfiguration(
-                definition.AuthScheme.ConnectionFields,
-                configuration,
-                connection.Credentials.ToList()
+            !IntegrationDefinitionResolver.TryResolve(
+                _pluginCatalog,
+                connection.PluginId,
+                connection.ConnectorId,
+                connection.AuthSchemeId,
+                out var definition
             )
         )
         {
-            SetStatus(connection, ConnectionStatus.NeedsConfiguration, NeedsConfigurationCode);
-            return;
+            return ConnectionStatus.DefinitionUnavailable;
         }
 
         try
         {
-            IntegrationInputValidator.Validate(
-                definition.AuthScheme.ConnectionFields,
-                configuration,
-                new Dictionary<string, SecretFieldUpdateRequest>(),
-                connection.Credentials.Select(credential => credential.Slot).ToList(),
-                IntegrationCredentialSlots.ConnectionField
+            var (installationConfigured, installation) = await _installationReadiness.ResolveInstallationAsync(
+                definition!,
+                cancellationToken
             );
+            if (!installationConfigured)
+            {
+                return ConnectionStatus.NeedsConfiguration;
+            }
+
+            if (installation != null)
+            {
+                await ReadInstallationCredentialsAsync(installation, definition!, cancellationToken);
+            }
+
+            var behavior = new ConnectionBehavior(connection);
+            var configuration = IntegrationConfigurationCodec.Read(connection.ConfigurationJson);
+            if (!behavior.HasRequiredConfiguration(definition!.AuthScheme.ConnectionFields, configuration))
+            {
+                return ConnectionStatus.NeedsConfiguration;
+            }
+
+            var existingSlots = connection.Credentials.Select(credential => credential.Slot).ToList();
+            ValidateInput(definition, configuration, null, existingSlots);
             foreach (
                 var field in definition.AuthScheme.ConnectionFields.Where(field =>
                     field.Type == FormFieldType.Secret
-                    && connection.Credentials.Any(credential =>
-                        string.Equals(
-                            credential.Slot,
-                            IntegrationCredentialSlots.ConnectionField(field.Id),
-                            StringComparison.OrdinalIgnoreCase
-                        )
+                    && existingSlots.Contains(
+                        IntegrationCredentialSlots.ConnectionField(field.Id),
+                        StringComparer.OrdinalIgnoreCase
                     )
                 )
             )
@@ -308,50 +268,47 @@ public sealed class ConnectionAppService
                     cancellationToken
                 );
             }
-        }
-        catch (AgwException)
-        {
-            SetStatus(connection, ConnectionStatus.Invalid, CredentialInvalidCode);
-            return;
-        }
 
-        if (definition.AuthScheme.Type == AuthSchemeType.OAuth2)
-        {
-            var accessToken = connection.Credentials.FirstOrDefault(credential =>
-                string.Equals(
-                    credential.Slot,
-                    IntegrationCredentialSlots.OAuthAccessToken,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            );
-            if (accessToken == null)
+            if (definition.AuthScheme.Type == AuthSchemeType.OAuth2)
             {
-                SetStatus(connection, ConnectionStatus.PendingAuthorization, PendingAuthorizationCode);
-                return;
-            }
+                var accessTokenStatus = behavior.GetAccessTokenStatus(now);
+                if (accessTokenStatus.HasValue)
+                {
+                    return accessTokenStatus.Value;
+                }
 
-            if (accessToken.ExpiresAtUtc.HasValue && accessToken.ExpiresAtUtc.Value <= now)
-            {
-                SetStatus(connection, ConnectionStatus.Expired, CredentialExpiredCode);
-                return;
-            }
-
-            try
-            {
                 await _credentialReader.ReadConnectionAsync(
                     connection.Id,
                     IntegrationCredentialSlots.OAuthAccessToken,
                     cancellationToken
                 );
             }
-            catch (AgwException)
-            {
-                SetStatus(connection, ConnectionStatus.Invalid, CredentialInvalidCode);
-                return;
-            }
-        }
 
-        SetStatus(connection, ConnectionStatus.Ready, null);
+            return ConnectionStatus.Ready;
+        }
+        catch (AgwException)
+        {
+            return ConnectionStatus.Invalid;
+        }
+    }
+
+    private async Task ReadInstallationCredentialsAsync(
+        PluginInstallation installation,
+        ResolvedIntegrationDefinition definition,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (
+            var credential in installation.Credentials.Where(credential =>
+                credential.Slot.StartsWith(
+                    $"field:{definition.Connector.Id}:{definition.AuthScheme.Id}:",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+        )
+        {
+            await _credentialReader.ReadPluginInstallationAsync(installation.Id, credential.Slot, cancellationToken);
+        }
     }
 
     private async Task<Connection> GetTrackedAsync(Guid id, CancellationToken cancellationToken)
@@ -361,173 +318,6 @@ public sealed class ConnectionAppService
             .Connections.Include(item => item.Credentials)
             .FirstOrDefaultAsync(item => item.Id == id && item.CreateBy == user, cancellationToken);
         return connection ?? throw new AgwException(ErrorCodes.ConnectionNotFound);
-    }
-
-    private static bool HasRequiredConfiguration(
-        IReadOnlyList<FormFieldDefinition> fields,
-        IReadOnlyDictionary<string, string?> configuration,
-        IReadOnlyCollection<ConnectionCredential> credentials
-    )
-    {
-        foreach (var field in fields.Where(field => field.IsRequired))
-        {
-            if (field.Type == FormFieldType.Secret)
-            {
-                if (
-                    !credentials.Any(credential =>
-                        string.Equals(
-                            credential.Slot,
-                            IntegrationCredentialSlots.ConnectionField(field.Id),
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                    )
-                )
-                {
-                    return false;
-                }
-            }
-            else if (!configuration.TryGetValue(field.Id, out var value) || string.IsNullOrWhiteSpace(value))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private async Task SetInitialStatusAsync(
-        Connection connection,
-        ResolvedIntegrationDefinition definition,
-        CancellationToken cancellationToken
-    )
-    {
-        if (!connection.Enabled)
-        {
-            SetStatus(connection, ConnectionStatus.Disabled, null);
-            return;
-        }
-
-        var installationStatus = await ResolveInstallationStatusAsync(
-            connection,
-            definition,
-            validateReadable: false,
-            cancellationToken
-        );
-        if (installationStatus.HasValue)
-        {
-            SetStatus(connection, installationStatus.Value, NeedsConfigurationCode);
-            return;
-        }
-
-        if (
-            definition.AuthScheme.Type == AuthSchemeType.OAuth2
-            && !connection.Credentials.Any(credential =>
-                string.Equals(
-                    credential.Slot,
-                    IntegrationCredentialSlots.OAuthAccessToken,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            )
-        )
-        {
-            SetStatus(connection, ConnectionStatus.PendingAuthorization, PendingAuthorizationCode);
-            return;
-        }
-
-        SetStatus(connection, ConnectionStatus.Unverified, null);
-    }
-
-    private async Task<ConnectionStatus?> ResolveInstallationStatusAsync(
-        Connection connection,
-        ResolvedIntegrationDefinition definition,
-        bool validateReadable,
-        CancellationToken cancellationToken
-    )
-    {
-        if (definition.AuthScheme.InstallationFields.Count == 0)
-        {
-            return null;
-        }
-
-        var installation = await _dbContext
-            .PluginInstallations.Include(item => item.Credentials)
-            .FirstOrDefaultAsync(
-                item => item.PluginId == connection.PluginId && item.CreateBy == _userInfoService.RequiredUserId,
-                cancellationToken
-            );
-        if (installation == null || !installation.Enabled)
-        {
-            return ConnectionStatus.NeedsConfiguration;
-        }
-
-        var allConfiguration = IntegrationConfigurationCodec.Read(installation.ConfigurationJson);
-        foreach (var field in definition.AuthScheme.InstallationFields.Where(field => field.IsRequired))
-        {
-            if (field.Type == FormFieldType.Secret)
-            {
-                var slot = IntegrationCredentialSlots.InstallationField(
-                    definition.Connector.Id,
-                    definition.AuthScheme.Id,
-                    field.Id
-                );
-                if (
-                    !installation.Credentials.Any(credential =>
-                        string.Equals(credential.Slot, slot, StringComparison.OrdinalIgnoreCase)
-                    )
-                )
-                {
-                    return ConnectionStatus.NeedsConfiguration;
-                }
-            }
-            else
-            {
-                var key = IntegrationConfigurationCodec.InstallationKey(
-                    definition.Connector.Id,
-                    definition.AuthScheme.Id,
-                    field.Id
-                );
-                if (!allConfiguration.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
-                {
-                    return ConnectionStatus.NeedsConfiguration;
-                }
-            }
-        }
-
-        if (!validateReadable)
-        {
-            return null;
-        }
-
-        try
-        {
-            foreach (
-                var credential in installation.Credentials.Where(credential =>
-                    credential.Slot.StartsWith(
-                        $"field:{definition.Connector.Id}:{definition.AuthScheme.Id}:",
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-            )
-            {
-                await _credentialReader.ReadPluginInstallationAsync(
-                    installation.Id,
-                    credential.Slot,
-                    cancellationToken
-                );
-            }
-        }
-        catch (AgwException)
-        {
-            return ConnectionStatus.Invalid;
-        }
-
-        return null;
-    }
-
-    private static void SetStatus(Connection connection, ConnectionStatus status, string? errorCode)
-    {
-        connection.Status = status;
-        connection.LastValidationErrorCode = errorCode;
     }
 
     private ConnectionResponse Map(Connection connection)
@@ -589,10 +379,7 @@ public sealed class ConnectionAppService
             DisplayName = connection.DisplayName,
             Alias = connection.Alias,
             Enabled = connection.Enabled,
-            Status =
-                !connection.Enabled ? ConnectionStatusResponse.Disabled
-                : hasDefinition ? (ConnectionStatusResponse)connection.Status
-                : ConnectionStatusResponse.DefinitionUnavailable,
+            Status = (ConnectionStatusResponse)new ConnectionBehavior(connection).GetEffectiveStatus(hasDefinition),
             Subject = connection.Subject,
             ExpiresAtUtc = accessToken?.ExpiresAtUtc,
             LastValidatedAtUtc = connection.LastValidatedAtUtc,

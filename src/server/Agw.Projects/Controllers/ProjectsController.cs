@@ -1,7 +1,6 @@
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-using Agw.Shared.Tooling;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
 
@@ -40,20 +39,6 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] ProjectCreateRequest request)
     {
-        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
-        if (toolsError != null)
-        {
-            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
-        }
-
-        if (ContainsAgentOnlyToolBlock(request.Tools))
-        {
-            return ApiResult.BadRequest(
-                $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' can only be configured on an Agent.",
-                ErrorCodes.InvalidParam.Code
-            );
-        }
-
         var project = new Project
         {
             Name = request.Name,
@@ -83,20 +68,6 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ProjectUpdateRequest request)
     {
-        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
-        if (toolsError != null)
-        {
-            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
-        }
-
-        if (ContainsAgentOnlyToolBlock(request.Tools))
-        {
-            return ApiResult.BadRequest(
-                $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' can only be configured on an Agent.",
-                ErrorCodes.InvalidParam.Code
-            );
-        }
-
         var updated = await _projectAppService.UpdateAsync(
             id,
             project =>
@@ -135,8 +106,4 @@ public class ProjectsController : ControllerBase
         var deleted = await _projectAppService.DeleteAsync(id);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
-
-    private static bool ContainsAgentOnlyToolBlock(IReadOnlyList<ToolValueObject>? values) =>
-        values?.Any(static value => value is ToolBlockValue { Definition: BackgroundAgentsToolBlockDefinition })
-        == true;
 }

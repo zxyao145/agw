@@ -108,8 +108,7 @@ public static class DependencyInjection
         services.AddScoped<DbSeeder>();
         services.AddScoped<IDatabaseBootstrapper, DatabaseBootstrapper>();
         services.AddScoped<IOidcIdentityStore, EfOidcIdentityStore>();
-        services.AddScoped<EfApiTokenStore>();
-        services.AddScoped<IApiTokenStore>(serviceProvider => serviceProvider.GetRequiredService<EfApiTokenStore>());
+        services.AddScoped<IApiTokenCredentialReader, EfApiTokenCredentialReader>();
         services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddScoped<ISettingsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());

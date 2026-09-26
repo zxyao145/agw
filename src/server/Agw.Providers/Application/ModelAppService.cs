@@ -1,6 +1,6 @@
 using Agw.Providers.Application.Persistence;
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Rules;
+using Agw.Providers.Domain.Behaviors;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Microsoft.EntityFrameworkCore;
@@ -35,15 +35,13 @@ public class ModelAppService : IModelAppService
     public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request)
     {
         _ = ResolveOwnerUserId();
-        ModelRules.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
-        var model = new AgwAiModel
-        {
-            Id = Guid.CreateVersion7(),
-            Name = request.Name,
-            Description = request.Description,
-            MaxContextWindowTokens = request.MaxContextWindowTokens,
-            MaxOutputTokens = request.MaxOutputTokens,
-        };
+        var model = new AgwAiModel { Id = Guid.CreateVersion7() };
+        new AgwAiModelBehavior(model).Define(
+            request.Name,
+            request.Description,
+            request.MaxContextWindowTokens,
+            request.MaxOutputTokens
+        );
 
         await _dbContext.Models.AddAsync(model);
         await _dbContext.SaveChangesAsync();
@@ -61,11 +59,12 @@ public class ModelAppService : IModelAppService
             return null;
         }
 
-        ModelRules.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
-        existing.Name = request.Name;
-        existing.Description = request.Description;
-        existing.MaxContextWindowTokens = request.MaxContextWindowTokens;
-        existing.MaxOutputTokens = request.MaxOutputTokens;
+        new AgwAiModelBehavior(existing).Define(
+            request.Name,
+            request.Description,
+            request.MaxContextWindowTokens,
+            request.MaxOutputTokens
+        );
 
         _dbContext.Models.Entry(existing).Property(model => model.Name).IsModified = true;
         await _dbContext.SaveChangesAsync();

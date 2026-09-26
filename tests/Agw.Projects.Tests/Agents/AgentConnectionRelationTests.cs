@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Agents.Definitions.Domain.Services;
+using Agw.Agents.Definitions.Persistence;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Tests;
@@ -307,17 +309,27 @@ public class AgentConnectionRelationTests : IDisposable
             await _connection.DisposeAsync();
         }
 
-        private static AgentAppService CreateService(AgwDbContext dbContext, TestUserInfoService userInfo) =>
-            new AgentAppService(
+        private static AgentAppService CreateService(AgwDbContext dbContext, TestUserInfoService userInfo)
+        {
+            var definitions = new AgentDefinitionRepository(dbContext, userInfo);
+            var modelProviders = new ModelProviderReferenceFacade(dbContext, userInfo);
+            var skills = new SkillReferenceFacade(dbContext, userInfo);
+            return new AgentAppService(
                 dbContext,
-                new ConnectionReferenceFacade(dbContext, userInfo),
-                new ModelProviderReferenceFacade(dbContext, userInfo),
-                new SkillReferenceFacade(dbContext, userInfo),
+                new AgentDefinitionDomainService(definitions, modelProviders),
+                new AgentResourceBindingDomainService(
+                    definitions,
+                    skills,
+                    new ConnectionReferenceFacade(dbContext, userInfo)
+                ),
+                modelProviders,
+                skills,
                 userInfo,
                 new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
                     dbContext,
                     Agw.Shared.Coordination.InMemoryApplicationLock.Shared
                 )
             );
+        }
     }
 }

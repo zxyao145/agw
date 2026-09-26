@@ -6,6 +6,8 @@ using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
+using Agw.Integrations.Domain.Services;
+using Agw.Integrations.Infrastructure;
 using Agw.Integrations.Infrastructure.Plugins;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
@@ -918,11 +920,15 @@ public class IntegrationManagementAppServiceTests
             var userInfo = new TestUserInfoService("tester");
 
             var reader = new ConnectionCredentialReader(dbContext, userInfo);
-            var credentialMutations = new CredentialMutationService(dbContext, timeProvider, userInfo);
+            var connectionRepository = new ConnectionRepository(dbContext, userInfo);
+            var installationReadiness = new PluginInstallationReadinessDomainService(
+                new PluginInstallationRepository(dbContext, userInfo),
+                connectionRepository
+            );
             var installations = new PluginInstallationAppService(
                 dbContext,
                 catalog,
-                credentialMutations,
+                installationReadiness,
                 timeProvider,
                 userInfo,
                 new IntegrationMutationCoordinator(dbContext, InMemoryApplicationLock.Shared, userInfo)
@@ -936,7 +942,8 @@ public class IntegrationManagementAppServiceTests
             var connections = new ConnectionAppService(
                 dbContext,
                 catalog,
-                credentialMutations,
+                new ConnectionAliasUniquenessDomainService(connectionRepository),
+                installationReadiness,
                 reader,
                 timeProvider,
                 userInfo,

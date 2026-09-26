@@ -18,7 +18,6 @@ using Agw.Integrations.Extensions;
 using Agw.Jobs;
 using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Execution;
-using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects;
 using Agw.Projects.Contracts.Execution;
@@ -321,7 +320,6 @@ public sealed class HostModuleCompositionTests
     private static void AddControlPlaneTestDependencies(IServiceCollection services)
     {
         services.AddSingleton<TimeProvider>(TimeProvider.System);
-        services.AddSingleton<JobScheduleCalculator>();
         services.AddSingleton<JobSchedulerWakeSignal>();
         services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
         services.AddScoped<IUserInfoService, TestUserInfoService>();

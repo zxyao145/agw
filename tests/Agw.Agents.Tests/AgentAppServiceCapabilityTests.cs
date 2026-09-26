@@ -123,7 +123,7 @@ public class AgentAppServiceCapabilityTests : IDisposable
         _database.Context.AgentSkillRelations.AddRange(skillRelations);
         _database.Context.SaveChanges();
 
-        return new AgentAppService(
+        return TestAgentAppService.Create(
             _database.Context,
             new TestConnectionReferenceFacade(connectionRepository, userInfo),
             new TestModelProviderReferenceFacade(

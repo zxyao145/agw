@@ -1,5 +1,8 @@
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Auth.Domain.Repositories;
+using Agw.Auth.Domain.Services;
+using Agw.Auth.Infrastructure;
 using Agw.Auth.Security;
 using Agw.Shared.Contracts;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -59,6 +62,9 @@ public static class DependencyInjection
         services.TryAddScoped<UserInfoService>();
         services.TryAddScoped<IUserInfoService>(provider => provider.GetRequiredService<UserInfoService>());
         services.TryAddScoped<ICurrentUser>(provider => provider.GetRequiredService<UserInfoService>());
+        services.TryAddScoped<IApiTokenRepository, ApiTokenRepository>();
+        services.TryAddScoped<ApiTokenNameUniquenessDomainService>();
+        services.TryAddScoped<IApiTokenStore, ApiTokenAppService>();
         return services;
     }
 }

@@ -1,6 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
-using Agw.Agents.Definitions.Domain.Decisions;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
@@ -15,6 +15,8 @@ using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
 using Agw.Skills.Controllers;
+using Agw.Skills.Domain.Services;
+using Agw.Skills.Infrastructure;
 using Agw.Testing;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -236,6 +238,7 @@ public class DefinitionPaginationTests
         var service = new SkillAppService(
             database.Context,
             new AgentCatalogFacade(database.Context, new TestUserInfoService()),
+            new SkillNameUniquenessDomainService(new SkillRepository(database.Context, new TestUserInfoService())),
             AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath()),
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
@@ -510,7 +513,7 @@ public class DefinitionPaginationTests
         var providerRepository = new EfRepository<Provider>(dbContext);
         var skillRepository = new EfRepository<Skill>(dbContext);
         var userInfo = new TestUserInfoService();
-        return new AgentAppService(
+        return TestAgentAppService.Create(
             dbContext,
             new TestConnectionReferenceFacade(connectionRepository, userInfo),
             new TestModelProviderReferenceFacade(

@@ -1,11 +1,10 @@
-using System.Text.RegularExpressions;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Integrations.Application.Management;
 
-internal static partial class IntegrationInputValidator
+internal static class IntegrationInputValidator
 {
     public static ValidatedIntegrationInput Validate(
         IReadOnlyList<FormFieldDefinition> fields,
@@ -38,9 +37,8 @@ internal static partial class IntegrationInputValidator
         }
 
         var normalizedConfiguration = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var normalizedSecretUpdates = new Dictionary<string, SecretFieldUpdateRequest>(
-            StringComparer.OrdinalIgnoreCase
-        );
+        var secretsToSet = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var clearedSecretFieldIds = new List<string>();
         foreach (var field in fields)
         {
             if (field.Type == FormFieldType.Secret)
@@ -66,7 +64,15 @@ internal static partial class IntegrationInputValidator
                     throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
                 }
 
-                normalizedSecretUpdates[field.Id] = update;
+                if (update.Action == SecretUpdateAction.Set)
+                {
+                    secretsToSet[field.Id] = update.SecretValue!;
+                }
+                else if (update.Action == SecretUpdateAction.Clear)
+                {
+                    clearedSecretFieldIds.Add(field.Id);
+                }
+
                 continue;
             }
 
@@ -95,33 +101,16 @@ internal static partial class IntegrationInputValidator
             }
         }
 
-        return new ValidatedIntegrationInput(normalizedConfiguration, normalizedSecretUpdates);
-    }
-
-    public static string NormalizeAlias(string alias)
-    {
-        var normalized = (alias ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalized.Length == 0 || normalized.Length > 128 || !AliasRegex().IsMatch(normalized))
-        {
-            throw new AgwException(ErrorCodes.IntegrationAliasInvalid);
-        }
-
-        return normalized;
-    }
-
-    public static string RequireDisplayName(string displayName)
-    {
-        var normalized = (displayName ?? string.Empty).Trim();
-        if (normalized.Length == 0 || normalized.Length > 200)
-        {
-            throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
-        }
-
-        return normalized;
+        return new ValidatedIntegrationInput(normalizedConfiguration, secretsToSet, clearedSecretFieldIds);
     }
 
     private static void ValidateSecretUpdate(SecretFieldUpdateRequest update)
     {
+        if (!Enum.IsDefined(update.Action))
+        {
+            throw new AgwException(ErrorCodes.IntegrationSecretMutationInvalid);
+        }
+
         var hasSecretValue = !string.IsNullOrWhiteSpace(update.SecretValue);
         if (update.Action != SecretUpdateAction.Set)
         {
@@ -138,22 +127,22 @@ internal static partial class IntegrationInputValidator
             throw new AgwException(ErrorCodes.IntegrationSecretMutationInvalid);
         }
     }
-
-    [GeneratedRegex("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
-    private static partial Regex AliasRegex();
 }
 
 internal sealed class ValidatedIntegrationInput
 {
     public ValidatedIntegrationInput(
         IReadOnlyDictionary<string, string?> configuration,
-        IReadOnlyDictionary<string, SecretFieldUpdateRequest> secretUpdates
+        IReadOnlyDictionary<string, string> secretsToSet,
+        IReadOnlyCollection<string> clearedSecretFieldIds
     )
     {
         Configuration = configuration;
-        SecretUpdates = secretUpdates;
+        SecretsToSet = secretsToSet;
+        ClearedSecretFieldIds = clearedSecretFieldIds;
     }
 
     public IReadOnlyDictionary<string, string?> Configuration { get; }
-    public IReadOnlyDictionary<string, SecretFieldUpdateRequest> SecretUpdates { get; }
+    public IReadOnlyDictionary<string, string> SecretsToSet { get; }
+    public IReadOnlyCollection<string> ClearedSecretFieldIds { get; }
 }

@@ -4,6 +4,8 @@ using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Services;
+using Agw.Providers.Infrastructure;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
@@ -36,10 +38,11 @@ public class ModelProviderAppServiceTests
         await context.SaveChangesAsync(cancellationToken);
         context.ChangeTracker.Clear();
         user.UserId = "tester";
-        var guard = new ModelProviderUsageGuard(
+        var bindingDomainService = new ProviderModelBindingDomainService(
+            new ProviderModelRepository(context, user),
             new TestAgentReferenceFacade(new EfRepository<Agent>(context), new EfRepository<Agentflow>(context))
         );
-        var service = new ModelProviderAppService(context, guard, user);
+        var service = new ModelProviderAppService(context, bindingDomainService, user);
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -116,13 +119,15 @@ public class ModelProviderAppServiceTests
 
         await using (var deleteContext = new AgwDbContext(options))
         {
-            var usageGuard = new ModelProviderUsageGuard(
+            var user = new TestUserInfoService("seed");
+            var bindingDomainService = new ProviderModelBindingDomainService(
+                new ProviderModelRepository(deleteContext, user),
                 new TestAgentReferenceFacade(
                     new EfRepository<Agent>(deleteContext),
                     new EfRepository<Agentflow>(deleteContext)
                 )
             );
-            var service = new ModelProviderAppService(deleteContext, usageGuard, new TestUserInfoService("seed"));
+            var service = new ModelProviderAppService(deleteContext, bindingDomainService, user);
 
             var exception = await Assert.ThrowsAsync<AgwException>(() => service.DeleteAsync(relationId));
 

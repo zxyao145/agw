@@ -1,10 +1,10 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.Definitions.Domain.Services;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Pagination;
-using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using ModelContextProtocol.Client;
 
@@ -13,11 +13,17 @@ namespace Agw.Agents.Definitions.Agents;
 public class McpToolServerAppService
 {
     private readonly IAgentsDbContext _dbContext;
+    private readonly AgentResourceBindingDomainService _resourceBindingDomainService;
     private readonly IUserInfoService _userInfoService;
 
-    public McpToolServerAppService(IAgentsDbContext dbContext, IUserInfoService userInfoService)
+    public McpToolServerAppService(
+        IAgentsDbContext dbContext,
+        AgentResourceBindingDomainService resourceBindingDomainService,
+        IUserInfoService userInfoService
+    )
     {
         _dbContext = dbContext;
+        _resourceBindingDomainService = resourceBindingDomainService;
         _userInfoService = userInfoService;
     }
 
@@ -54,11 +60,11 @@ public class McpToolServerAppService
 
     public async Task<McpServer> CreateMcpToolServerAsync(McpServer server, IEnumerable<Guid>? agentIds, string user)
     {
-        var ownerUserId = ResolveOwnerUserId();
+        _ = ResolveOwnerUserId();
         new McpServerBehavior(server).NormalizeCollections();
         server.Id = server.Id == Guid.Empty ? Guid.CreateVersion7() : server.Id;
         await _dbContext.McpToolServers.AddAsync(server);
-        await SyncMcpToolServerAgentRelationsAsync(server.Id, agentIds, ownerUserId);
+        await SyncMcpToolServerAgentRelationsAsync(server.Id, agentIds);
         await _dbContext.SaveChangesAsync();
         return server;
     }
@@ -115,36 +121,17 @@ public class McpToolServerAppService
         return await McpToolServerToolClient.ListToolsAsync(server, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task SyncMcpToolServerAgentRelationsAsync(
-        Guid mcpToolServerId,
-        IEnumerable<Guid>? agentIds,
-        string user
-    )
+    private async Task SyncMcpToolServerAgentRelationsAsync(Guid mcpToolServerId, IEnumerable<Guid>? agentIds)
     {
-        var requestedIds = (agentIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
         var existingLinks = await _dbContext
             .AgentMcpToolServers.Where(link => link.McpToolServerId == mcpToolServerId)
             .ToListAsync();
-        if (requestedIds.Count == 0)
-        {
-            _dbContext.AgentMcpToolServers.RemoveRange(existingLinks);
-            return;
-        }
+        var (addedIds, removedIds) = await _resourceBindingDomainService
+            .PlanMcpServerAgentBindingsAsync(existingLinks.Select(link => link.AgentId).ToList(), agentIds)
+            .ConfigureAwait(false);
 
-        var existingAgents = await _dbContext
-            .Agents.AsNoTracking()
-            .Where(agent => requestedIds.Contains(agent.Id) && agent.CreateBy == user)
-            .Select(agent => agent.Id)
-            .ToListAsync();
-        if (existingAgents.Count != requestedIds.Count)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
-
-        var linksToRemove = existingLinks.Where(link => !requestedIds.Contains(link.AgentId)).ToArray();
-        _dbContext.AgentMcpToolServers.RemoveRange(linksToRemove);
-        var existingAgentIds = existingLinks.Select(link => link.AgentId).ToHashSet();
-        foreach (var agentId in existingAgents.Where(id => !existingAgentIds.Contains(id)))
+        _dbContext.AgentMcpToolServers.RemoveRange(existingLinks.Where(link => removedIds.Contains(link.AgentId)));
+        foreach (var agentId in addedIds)
         {
             await _dbContext.AgentMcpToolServers.AddAsync(
                 new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = mcpToolServerId }

@@ -78,7 +78,7 @@ public sealed class OidcIdentityStoreTests
             var failing = new EfOidcIdentityStore(
                 context,
                 new FailingProjectInitializer(context),
-                new EfApiTokenStore(context),
+                TestApiTokenStore.Create(context),
                 database.Clock,
                 database.Options
             );
@@ -181,7 +181,7 @@ public sealed class OidcIdentityStoreTests
         await Assert.ThrowsAsync<AgwException>(() =>
             store.ExchangeAsync(code, verifier, TestContext.Current.CancellationToken)
         );
-        var token = await new EfApiTokenStore(context).ValidateTokenAsync(
+        var token = await new EfApiTokenCredentialReader(context).ValidateTokenAsync(
             result.Token,
             TestContext.Current.CancellationToken
         );
@@ -251,7 +251,7 @@ public sealed class OidcIdentityStoreTests
             DesktopLoginProof.Challenge(verifier),
             TestContext.Current.CancellationToken
         );
-        var failing = database.Store(context, new FailingTokenStore(new EfApiTokenStore(context)));
+        var failing = database.Store(context, new FailingTokenStore(TestApiTokenStore.Create(context)));
         await Assert.ThrowsAsync<AgwException>(() =>
             failing.ExchangeAsync(code, verifier, TestContext.Current.CancellationToken)
         );
@@ -309,7 +309,7 @@ public sealed class OidcIdentityStoreTests
     {
         await using var database = await TestDatabase.CreateAsync(target);
         await using var context = database.Context();
-        var tokens = new EfApiTokenStore(context);
+        var tokens = TestApiTokenStore.Create(context);
         CreatedApiToken legacy;
         using (UserInfoUtil.Push(OidcPrincipal.Create(new OidcUser("1001", "admin", 1, null))))
             legacy = await tokens.CreateTokenAsync("legacy-client", TestContext.Current.CancellationToken);
@@ -391,7 +391,13 @@ public sealed class OidcIdentityStoreTests
         }
 
         public EfOidcIdentityStore Store(AgwDbContext context, IApiTokenStore? tokens = null) =>
-            new(context, new UserProjectInitializer(context), tokens ?? new EfApiTokenStore(context), Clock, Options);
+            new(
+                context,
+                new UserProjectInitializer(context),
+                tokens ?? TestApiTokenStore.Create(context),
+                Clock,
+                Options
+            );
 
         public async ValueTask DisposeAsync()
         {

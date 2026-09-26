@@ -1,7 +1,7 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.Definitions.Domain.Services;
 using Agw.Auth.Contracts;
-using Agw.Providers.Contracts.References;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Coordination;
@@ -14,21 +14,21 @@ namespace Agw.Agents.Definitions.Agents;
 public class AgentflowAppService
 {
     private readonly IAgentsDbContext _dbContext;
-    private readonly IModelProviderReferenceFacade _modelProviderReferences;
+    private readonly AgentflowDefinitionDomainService _definitionDomainService;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
     private readonly IApplicationLock _applicationLock;
 
     public AgentflowAppService(
         IAgentsDbContext dbContext,
-        IModelProviderReferenceFacade modelProviderReferences,
+        AgentflowDefinitionDomainService definitionDomainService,
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
         IApplicationLock? applicationLock = null
     )
     {
         _dbContext = dbContext;
-        _modelProviderReferences = modelProviderReferences;
+        _definitionDomainService = definitionDomainService;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
         _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
@@ -98,42 +98,24 @@ public class AgentflowAppService
             definitionLease.HandleLostToken
         );
         cancellationToken = mutationCancellation.Token;
-        var behavior = new AgentflowBehavior(agentflow);
-        if (!behavior.HasValidName())
+        if (!new AgentflowBehavior(agentflow).HasValidName())
         {
             return null;
         }
 
-        var candidateId = agentflow.Id == Guid.Empty ? Guid.CreateVersion7() : agentflow.Id;
-        var existingAgents = await ListExistingAgentsAsync(nodes, definitionOwner, cancellationToken);
-        var existingAgentflows = await ListExistingAgentflowsAsync(
-            nodes,
-            definitionOwner,
-            candidateId,
-            cancellationToken
-        );
-        var existingModelProviderIds = await ListExistingModelProviderIdsAsync(
-            agentflow.SummaryModelProviderId,
-            cancellationToken
-        );
-        var definitionPolicy = new AgentflowDefinitionValidator();
-        var decision = definitionPolicy.Evaluate(
+        agentflow.Id = agentflow.Id == Guid.Empty ? Guid.CreateVersion7() : agentflow.Id;
+        var graphDefined = await _definitionDomainService.TryDefineGraphAsync(
+            agentflow,
             nodes,
             edges,
-            candidateId,
-            existingAgents.Keys.ToList(),
-            agentflow.SummaryModelProviderId,
-            existingModelProviderIds,
-            existingAgents,
-            existingAgentflows,
-            await LoadNestedReferencesAsync(nodes, definitionOwner, cancellationToken)
+            AgentflowConfigurationParser.Parse(nodes, edges),
+            cancellationToken
         );
-        if (!behavior.TryApplyGraphDecision(decision))
+        if (!graphDefined)
         {
             return null;
         }
 
-        agentflow.Id = candidateId;
         agentflow.CreateBy = user;
         agentflow.CreateTime = _timeProvider.GetUtcNow();
 
@@ -183,8 +165,7 @@ public class AgentflowAppService
         }
 
         updateAction(existing);
-        var behavior = new AgentflowBehavior(existing);
-        if (!behavior.HasValidName())
+        if (!new AgentflowBehavior(existing).HasValidName())
         {
             return null;
         }
@@ -194,30 +175,14 @@ public class AgentflowAppService
             await _dbContext.AgentflowNodes.Where(node => node.AgentflowId == existing.Id).LoadAsync(cancellationToken);
             await _dbContext.AgentflowEdges.Where(edge => edge.AgentflowId == existing.Id).LoadAsync(cancellationToken);
 
-            var existingAgents = await ListExistingAgentsAsync(nodes, definitionOwner, cancellationToken);
-            var existingAgentflows = await ListExistingAgentflowsAsync(
-                nodes,
-                definitionOwner,
-                existing.Id,
-                cancellationToken
-            );
-            var existingModelProviderIds = await ListExistingModelProviderIdsAsync(
-                existing.SummaryModelProviderId,
-                cancellationToken
-            );
-            var definitionPolicy = new AgentflowDefinitionValidator();
-            var decision = definitionPolicy.Evaluate(
+            var graphDefined = await _definitionDomainService.TryDefineGraphAsync(
+                existing,
                 nodes,
                 edges,
-                existing.Id,
-                existingAgents.Keys.ToList(),
-                existing.SummaryModelProviderId,
-                existingModelProviderIds,
-                existingAgents,
-                existingAgentflows,
-                await LoadNestedReferencesAsync(nodes, definitionOwner, cancellationToken)
+                AgentflowConfigurationParser.Parse(nodes, edges),
+                cancellationToken
             );
-            if (!behavior.TryApplyGraphDecision(decision))
+            if (!graphDefined)
             {
                 return null;
             }
@@ -311,110 +276,6 @@ public class AgentflowAppService
         _dbContext.Agentflows.Remove(existing);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
-    }
-
-    private async Task<IReadOnlyDictionary<Guid, string>> ListExistingAgentsAsync(
-        IReadOnlyList<AgentflowNode> nodes,
-        string ownerUserId,
-        CancellationToken cancellationToken
-    )
-    {
-        var agentIds = nodes
-            .Where(x => x.Kind == AgentflowNodeKind.Agent)
-            .Select(x => x.RelateId)
-            .Where(x => x is not null && x.Value != Guid.Empty)
-            .Select(x => x!.Value)
-            .Distinct()
-            .ToList();
-        if (agentIds.Count == 0)
-        {
-            return new Dictionary<Guid, string>();
-        }
-
-        var existingAgents = await _dbContext
-            .Agents.Where(x => agentIds.Contains(x.Id) && x.CreateBy == ownerUserId)
-            .ToListAsync(cancellationToken);
-        return existingAgents.ToDictionary(x => x.Id, x => x.Name);
-    }
-
-    private async Task<IReadOnlyCollection<Guid>> ListExistingModelProviderIdsAsync(
-        Guid? modelProviderId,
-        CancellationToken cancellationToken
-    )
-    {
-        if (!modelProviderId.HasValue)
-        {
-            return Array.Empty<Guid>();
-        }
-
-        return await _modelProviderReferences
-            .FilterVisibleModelProviderIdsAsync([modelProviderId.Value], cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private async Task<IReadOnlyCollection<Guid>> ListExistingAgentflowsAsync(
-        IReadOnlyList<AgentflowNode> nodes,
-        string ownerUserId,
-        Guid candidateId,
-        CancellationToken cancellationToken
-    )
-    {
-        var agentflowIds = nodes
-            .Where(x => x.Kind == AgentflowNodeKind.WorkflowAsAgent)
-            .Select(x => x.RelateId)
-            .Where(x => x is not null && x.Value != Guid.Empty)
-            .Select(x => x!.Value)
-            .Where(id => id != candidateId)
-            .Distinct()
-            .ToArray();
-        if (agentflowIds.Length == 0)
-        {
-            return Array.Empty<Guid>();
-        }
-
-        return await _dbContext
-            .Agentflows.Where(x => agentflowIds.Contains(x.Id) && x.CreateBy == ownerUserId)
-            .Select(x => x.Id)
-            .ToArrayAsync(cancellationToken);
-    }
-
-    private async Task<IReadOnlyDictionary<Guid, IReadOnlyCollection<Guid>>> LoadNestedReferencesAsync(
-        IReadOnlyList<AgentflowNode> nodes,
-        string ownerUserId,
-        CancellationToken cancellationToken
-    )
-    {
-        var references = new Dictionary<Guid, IReadOnlyCollection<Guid>>();
-        var pending = nodes
-            .Where(node => node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
-            .Select(node => node.RelateId!.Value)
-            .Distinct()
-            .ToArray();
-        var owned = _dbContext.Agentflows.Where(flow => flow.CreateBy == ownerUserId).Select(flow => flow.Id);
-        while (pending.Length > 0)
-        {
-            var batch = pending;
-            var links = await _dbContext
-                .AgentflowNodes.AsNoTracking()
-                .Where(node =>
-                    batch.Contains(node.AgentflowId)
-                    && owned.Contains(node.AgentflowId)
-                    && node.Kind == AgentflowNodeKind.WorkflowAsAgent
-                    && node.RelateId.HasValue
-                )
-                .Select(node => new { node.AgentflowId, Target = node.RelateId!.Value })
-                .ToListAsync(cancellationToken);
-            foreach (var id in batch)
-            {
-                references[id] = links
-                    .Where(link => link.AgentflowId == id)
-                    .Select(link => link.Target)
-                    .Distinct()
-                    .ToArray();
-            }
-            pending = links.Select(link => link.Target).Where(id => !references.ContainsKey(id)).Distinct().ToArray();
-        }
-        return references;
     }
 
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;

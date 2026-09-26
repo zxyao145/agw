@@ -1,7 +1,6 @@
 using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -58,18 +57,6 @@ public sealed class IntegrationMutationCoordinator
         {
             await lease.DisposeAsync();
             throw;
-        }
-    }
-
-    public void InvalidateAuthorization(Connection connection)
-    {
-        var pending = connection.Credentials.FirstOrDefault(item =>
-            item.Slot == IntegrationCredentialSlots.OAuthAuthorizationAttempt
-        );
-        if (pending != null)
-        {
-            connection.Credentials.Remove(pending);
-            _dbContext.ConnectionCredentials.Remove(pending);
         }
     }
 
