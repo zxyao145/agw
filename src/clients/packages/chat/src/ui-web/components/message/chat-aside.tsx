@@ -11,7 +11,7 @@ import {
 
 import { formatTokenCount, type TokenUsage } from "@agw/api";
 import type { TodoPresentationItem } from "@agw/chat-core";
-import { Badge, cn } from "@agw/components";
+import { Badge, cn, Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
 
 export interface ChatAsideProps {
   usage: TokenUsage;
@@ -91,19 +91,36 @@ export function ChatAside({ usage, todos }: ChatAsideProps) {
                   />
                 )}
                 <div className="min-w-0">
-                  <div
-                    className={cn(
-                      "wrap-break-word text-sm",
-                      todo.isComplete && "text-muted-foreground line-through",
-                    )}
-                  >
-                    {todo.title}
-                  </div>
                   {todo.description ? (
-                    <p className="wrap-break-word mt-0.5 text-xs text-muted-foreground">
-                      {todo.description}
-                    </p>
-                  ) : null}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          tabIndex={0}
+                          className={cn(
+                            "wrap-break-word text-sm",
+                            todo.isComplete && "text-muted-foreground line-through",
+                          )}
+                        >
+                          {todo.title}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="left"
+                        className="max-h-80 max-w-[min(20rem,calc(100vw-2rem))] overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words text-left"
+                      >
+                        {todo.description}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <div
+                      className={cn(
+                        "wrap-break-word text-sm",
+                        todo.isComplete && "text-muted-foreground line-through",
+                      )}
+                    >
+                      {todo.title}
+                    </div>
+                  )}
                 </div>
               </li>
             ))}
