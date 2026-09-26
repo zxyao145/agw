@@ -7,7 +7,6 @@ using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
-using Agw.Infrastructure.Agents;
 using Agw.Projects.Contracts.History;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Executions;

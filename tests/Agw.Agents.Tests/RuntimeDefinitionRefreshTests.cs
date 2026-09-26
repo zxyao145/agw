@@ -6,7 +6,6 @@ using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
-using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;

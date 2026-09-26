@@ -48,6 +48,7 @@ namespace Agw.Host;
 
 public static class AgwHostApplication
 {
+    [Obsolete]
     public static async Task RunAsync(string[] args, AgwHostProfile profile, params IAgwHostModule[] modules)
     {
         var hasControlPlane = profile is AgwHostProfile.ControlPlane or AgwHostProfile.Standalone;

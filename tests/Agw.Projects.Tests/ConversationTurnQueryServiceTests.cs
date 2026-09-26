@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
-using Agw.Projects.Application;
 using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;

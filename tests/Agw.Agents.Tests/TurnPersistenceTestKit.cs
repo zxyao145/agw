@@ -16,7 +16,6 @@ using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Projects.Infrastructure;
 using Agw.Shared.Configuration;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;

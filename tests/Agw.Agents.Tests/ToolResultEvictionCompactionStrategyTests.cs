@@ -1,5 +1,3 @@
-using System.Linq;
-using System.Threading.Tasks;
 using Agw.Agents.Execution.Agents.History;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
@@ -23,7 +21,13 @@ public sealed class ToolResultEvictionCompactionStrategyTests
         );
 
         // Act
-        var compacted = (await CompactionProvider.CompactAsync(strategy, messages)).ToList();
+        var compacted = (
+            await CompactionProvider.CompactAsync(
+                strategy,
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ).ToList();
 
         // Assert: the oldest group loses only its result body; every other message is the original instance.
         Assert.Equal(messages.Count, compacted.Count);
@@ -51,7 +55,13 @@ public sealed class ToolResultEvictionCompactionStrategyTests
         );
 
         // Act
-        var compacted = (await CompactionProvider.CompactAsync(strategy, messages)).ToList();
+        var compacted = (
+            await CompactionProvider.CompactAsync(
+                strategy,
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ).ToList();
 
         // Assert
         Assert.Equal(messages, compacted, ReferenceEqualityComparer.Instance);
@@ -68,7 +78,13 @@ public sealed class ToolResultEvictionCompactionStrategyTests
         );
 
         // Act
-        var compacted = (await CompactionProvider.CompactAsync(strategy, messages)).ToList();
+        var compacted = (
+            await CompactionProvider.CompactAsync(
+                strategy,
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ).ToList();
 
         // Assert
         Assert.Equal(messages, compacted, ReferenceEqualityComparer.Instance);
@@ -83,7 +99,13 @@ public sealed class ToolResultEvictionCompactionStrategyTests
         var strategy = ContextWindowCompactionPipeline.Create(maxContextWindowTokens: 40_000, maxOutputTokens: 0);
 
         // Act
-        var compacted = (await CompactionProvider.CompactAsync(strategy, messages)).ToList();
+        var compacted = (
+            await CompactionProvider.CompactAsync(
+                strategy,
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ).ToList();
 
         // Assert
         Assert.Equal(messages.Count, compacted.Count);
@@ -115,7 +137,8 @@ public sealed class ToolResultEvictionCompactionStrategyTests
         var compacted = (
             await CompactionProvider.CompactAsync(
                 ContextWindowCompactionPipeline.Create(maxContextWindowTokens: 40_000, maxOutputTokens: 0),
-                messages
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
             )
         ).ToList();
         await using var fixture = new OpenAiResponsesReasoningChatClientTests.ClientFixture("https://api.deepseek.com");

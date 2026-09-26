@@ -1,7 +1,5 @@
 using System.Security.Claims;
-using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Projects.Infrastructure;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.EntityFrameworkCore;
 
