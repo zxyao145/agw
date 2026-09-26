@@ -2,6 +2,7 @@ export * from "./conversation-controller";
 export * from "./conversation-status-store";
 export * from "./execution";
 export * from "./execution-activity-store";
+export * from "./execution-queue";
 export { buildHumanResponseCommand, buildResumeCheckpointCommand } from "@agw/execution-core";
 export * from "./execution-session";
 export * from "./execution-session-manager";

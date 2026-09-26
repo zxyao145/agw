@@ -5,7 +5,11 @@ import { getExecutionKey } from "./execution-key";
 
 test("execution key isolates server, project, and conversation", () => {
   assert.equal(
-    getExecutionKey({ serverId: "local", projectId: "project-1", contextId: "context-1" }),
-    "local:project-1:context-1",
+    getExecutionKey({
+      serverId: "local",
+      projectId: "project-1",
+      conversationId: "conversation-1",
+    }),
+    "local:project-1:conversation-1",
   );
 });

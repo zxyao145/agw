@@ -270,7 +270,6 @@ internal sealed class TurnAcceptanceService
                 TaskId: null,
                 ConversationId: request.ConversationId,
                 ProjectId: request.Settings.ProjectId,
-                ContextId: request.Settings.ContextId,
                 Input: AgwMessageUtil.ExtractInputText(request.Input),
                 Resume: request.Settings.Resume,
                 OwnerUserId: request.UserId

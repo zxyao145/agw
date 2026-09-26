@@ -38,6 +38,22 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             .Select(conversation => (int?)conversation.Generation)
             .SingleOrDefaultAsync(cancellationToken);
 
+    public Task<string?> FindContextIdAsync(
+        Guid projectId,
+        Guid conversationId,
+        CancellationToken cancellationToken = default
+    ) =>
+        _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(conversation =>
+                conversation.Id == conversationId
+                && conversation.ProjectId == projectId
+                && conversation.CreateBy == _userInfoService.RequiredUserId
+                && conversation.Project!.CreateBy == _userInfoService.RequiredUserId
+            )
+            .Select(conversation => (string?)conversation.ContextId)
+            .SingleOrDefaultAsync(cancellationToken);
+
     public async Task<ProjectTaskSnapshot> ResolveAsync(
         ResolveProjectTaskRequest request,
         CancellationToken cancellationToken = default
@@ -49,7 +65,7 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
                     request.TaskId,
                     request.ConversationId,
                     request.ProjectId,
-                    request.ContextId,
+                    ContextId: null,
                     request.Input,
                     request.Resume,
                     request.OwnerUserId

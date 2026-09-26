@@ -562,7 +562,7 @@ public partial class AgentflowTurnExecutorTests : IDisposable
         };
         var settings = new ExecutionSettings(
             projectId,
-            task.ContextId,
+            conversationId,
             new Dictionary<string, string> { ["SESSION_ONLY"] = "session" }
         );
         var runtime = AgentflowRuntimeFactory.CreateRuntime(

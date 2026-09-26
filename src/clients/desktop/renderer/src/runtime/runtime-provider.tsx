@@ -13,7 +13,7 @@ import { ExecutionPlatformProvider } from "@agw/chat";
 import { configureExecutionRuntime, executionSessionManager } from "@agw/chat-runtime";
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type InfiniteData, type QueryClient } from "@agw/components/query";
-import { getProjectConversations, type ConversationPage } from "@agw/projects";
+import { getProjectConversationDetails, type ConversationPage } from "@agw/projects";
 import { toast } from "sonner";
 import {
   classifyDesktopConnection,
@@ -171,7 +171,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
       void resolveTurnNotificationTitle(
         key.serverId,
         key.projectId,
-        key.contextId,
+        key.conversationId,
         activeProfileIdRef.current,
         queryClientRef.current,
       ).then((title) => {
@@ -382,7 +382,7 @@ const TURN_NOTIFICATION_TITLE_TIMEOUT_MS = 3_000;
 async function resolveTurnNotificationTitle(
   serverId: string,
   projectId: string,
-  contextId: string,
+  conversationId: string,
   activeServerId: string | null,
   queryClient: QueryClient | null,
 ): Promise<string | undefined> {
@@ -393,19 +393,20 @@ async function resolveTurnNotificationTitle(
   for (const [, data] of cachedPages ?? []) {
     const cached = data?.pages
       .flatMap((page) => page.items)
-      .find((summary) => summary.contextId === contextId);
+      .find((summary) => summary.conversationId === conversationId);
     if (cached?.title.trim()) return cached.title.trim();
   }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TURN_NOTIFICATION_TITLE_TIMEOUT_MS);
   try {
-    const page = await getProjectConversations(projectId, {
-      contextId,
-      pageSize: 20,
-      signal: controller.signal,
-    });
-    return page.items[0]?.title?.trim() || undefined;
+    const details = await getProjectConversationDetails(
+      projectId,
+      conversationId,
+      undefined,
+      controller.signal,
+    );
+    return details.title.trim() || undefined;
   } catch {
     return undefined;
   } finally {

@@ -18,7 +18,15 @@ function renderComposer(
   onSuggestion: (value: string, caretIndex: number) => SuggestionItem[] | Promise<SuggestionItem[]>,
   onExecute: (value: string) => void = () => {},
 ) {
-  render(React.createElement(UserInput, { onSuggestion, onExecute }));
+  render(
+    React.createElement(UserInput, {
+      onSuggestion,
+      onExecute: (value: string) => {
+        onExecute(value);
+        return true;
+      },
+    }),
+  );
   const textarea = screen.getByRole("combobox") as HTMLTextAreaElement;
   textarea.focus();
   fireEvent.change(textarea, { target: { value: "/x", selectionStart: 2 } });

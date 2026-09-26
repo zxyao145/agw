@@ -107,7 +107,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         var token = TestContext.Current.CancellationToken;
         var task = await _kit.SeedConversationAsync();
         var settings = TurnPersistenceTestKit
-            .CreateSettings(task.ProjectId, task.ContextId)
+            .CreateSettings(task.ProjectId, task.ProjectConversationId)
             .WithPermissionMode(AgwPermissionMode.FullAccess)
             .WithHumanInteractionPolicy(HumanInteractionPolicy.Reject);
         var accepted = await AcceptAsync(task, settings: settings);
@@ -660,7 +660,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
                     new ExecutionTarget(_agentId, agentType),
                     task.ProjectConversationId,
                     TurnPersistenceTestKit.CreateInput("hello"),
-                    settings ?? TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ContextId),
+                    settings ?? TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),
                     stream
                 )
                 {
@@ -676,7 +676,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         var accepted = await AcceptAsync(
             task,
             settings: TurnPersistenceTestKit
-                .CreateSettings(task.ProjectId, task.ContextId)
+                .CreateSettings(task.ProjectId, task.ProjectConversationId)
                 .WithPermissionSnapshot(permissionMode, 0)
         );
         return accepted.Request.TurnId;
@@ -726,7 +726,9 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
             AgentType = AgentRuntimeType.Agent,
             Input = TurnPersistenceTestKit.CreateInput("hello"),
             Task = DurableExecutionMapper.FromProjection(task),
-            Settings = DurableExecutionMapper.FromSettings(TurnPersistenceTestKit.CreateSettings(projectId)),
+            Settings = DurableExecutionMapper.FromSettings(
+                TurnPersistenceTestKit.CreateSettings(projectId, task.ProjectConversationId)
+            ),
         };
     }
 }

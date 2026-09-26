@@ -19,11 +19,13 @@ public class ExecutionSettingsTests
 
         var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
 
+        var conversationId = Guid.CreateVersion7();
         Assert.Equal(
             AgwPermissionMode.FullAccess,
-            restored.ToRuntimeSettings(Guid.CreateVersion7(), "context").PermissionMode
+            restored.ToRuntimeSettings(Guid.CreateVersion7(), conversationId).PermissionMode
         );
-        var runtimeSettings = restored.ToRuntimeSettings(Guid.CreateVersion7(), "context");
+        var runtimeSettings = restored.ToRuntimeSettings(Guid.CreateVersion7(), conversationId);
+        Assert.Equal(conversationId, runtimeSettings.ConversationId);
         Assert.Equal(HumanInteractionPolicy.Reject, runtimeSettings.HumanInteractionPolicy);
         Assert.Equal(settings.PermissionVersion, runtimeSettings.PermissionVersion);
         Assert.Equal(settings.Resume, runtimeSettings.Resume);
@@ -50,6 +52,7 @@ public class ExecutionSettingsTests
     {
         var command = new SettingCommand(
             Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
             new Dictionary<string, string> { ["TOKEN"] = "original" }
         );
 
@@ -63,8 +66,20 @@ public class ExecutionSettingsTests
     public void Equals_WhenResumeDiffers_ReturnsFalse()
     {
         var projectId = Guid.CreateVersion7();
-        var left = SettingCommandMapper.FromCommand(new SettingCommand(projectId) { Resume = false });
-        var right = SettingCommandMapper.FromCommand(new SettingCommand(projectId) { Resume = true });
+        var conversationId = Guid.CreateVersion7();
+        var left = SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId) { Resume = false });
+        var right = SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId) { Resume = true });
+
+        Assert.NotEqual(left, right);
+    }
+
+    [Fact]
+    public void Equals_WhenConversationDiffers_ReturnsFalse()
+    {
+        var projectId = Guid.CreateVersion7();
+
+        var left = SettingCommandMapper.FromCommand(new SettingCommand(projectId, Guid.CreateVersion7()));
+        var right = SettingCommandMapper.FromCommand(new SettingCommand(projectId, Guid.CreateVersion7()));
 
         Assert.NotEqual(left, right);
     }
@@ -73,7 +88,8 @@ public class ExecutionSettingsTests
     public void PermissionMode_IsPreservedAndParticipatesInEquality()
     {
         var projectId = Guid.CreateVersion7();
-        var command = new SettingCommand(projectId, contextId: "context", permissionMode: AgwPermissionMode.FullAccess);
+        var conversationId = Guid.CreateVersion7();
+        var command = new SettingCommand(projectId, conversationId, permissionMode: AgwPermissionMode.FullAccess);
 
         var settings = SettingCommandMapper.FromCommand(command);
 
@@ -81,7 +97,7 @@ public class ExecutionSettingsTests
         Assert.NotEqual(
             settings,
             SettingCommandMapper.FromCommand(
-                new SettingCommand(projectId, contextId: "context", permissionMode: AgwPermissionMode.AlwaysAsk)
+                new SettingCommand(projectId, conversationId, permissionMode: AgwPermissionMode.AlwaysAsk)
             )
         );
         Assert.Equal("\"fullAccess\"", JsonSerializer.Serialize(AgwPermissionMode.FullAccess));
@@ -91,13 +107,14 @@ public class ExecutionSettingsTests
     public void ResultOnly_IsPreservedAndExcludedFromEquality()
     {
         var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
 
         var settings = SettingCommandMapper.FromCommand(
-            new SettingCommand(projectId, contextId: "context", resultOnly: true)
+            new SettingCommand(projectId, conversationId, resultOnly: true)
         );
 
         Assert.True(settings.ResultOnly);
-        Assert.Equal(settings, SettingCommandMapper.FromCommand(new SettingCommand(projectId, contextId: "context")));
+        Assert.Equal(settings, SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId)));
         Assert.False(settings.WithResultOnly(false).ResultOnly);
     }
 
@@ -112,6 +129,6 @@ public class ExecutionSettingsTests
         var snapshot = DurableExecutionMapper.FromSettings(settings);
         var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
 
-        Assert.True(restored.ToRuntimeSettings(Guid.CreateVersion7(), "context").ResultOnly);
+        Assert.True(restored.ToRuntimeSettings(Guid.CreateVersion7(), Guid.CreateVersion7()).ResultOnly);
     }
 }

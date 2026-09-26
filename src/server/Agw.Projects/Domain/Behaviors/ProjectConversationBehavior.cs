@@ -104,12 +104,16 @@ public sealed class ProjectConversationBehavior
         }
     }
 
-    public void EnsureExecutionContext(Guid projectId, string contextId)
+    /// <summary>
+    /// 校验对话属于该项目；调用方提供 context ID 时还要与保存值一致。
+    /// Ensures the conversation belongs to the project; a context ID supplied by the caller must also match the saved one.
+    /// </summary>
+    public void EnsureExecutionContext(Guid projectId, string? contextId)
     {
         var existingContextId = ContextIdUtil.NormalizeContextId(_conversation.ContextId);
         if (
             _conversation.ProjectId != projectId
-            || !string.Equals(existingContextId, contextId, StringComparison.Ordinal)
+            || (contextId != null && !string.Equals(existingContextId, contextId, StringComparison.Ordinal))
         )
         {
             throw new AgwException(

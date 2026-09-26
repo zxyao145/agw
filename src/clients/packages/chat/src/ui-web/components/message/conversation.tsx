@@ -1,6 +1,6 @@
 "use client";
 
-import type { InteractionResponse } from "@agw/execution-core";
+import { getMessageStreamingScopeId, type InteractionResponse } from "@agw/execution-core";
 import type { ConversationTurnInputSummary } from "@agw/projects";
 
 import * as React from "react";
@@ -64,6 +64,8 @@ export interface ChatSessionProps {
   onUserInputNavigate?: () => void;
   userInputs?: readonly ConversationTurnInputSummary[];
   onLoadUserInput?: (key: string) => Promise<boolean>;
+  /** 正在流式输出的 Turn 的 streamingScopeId。The streamingScopeId of the turn that is streaming. */
+  activeStreamingScopeId?: string | null;
   permissionMode?: PermissionMode;
   showCheckpointResume?: boolean;
   checkpointResumeDisabled?: boolean;
@@ -87,6 +89,7 @@ export function Conversation({
   onUserInputNavigate,
   userInputs,
   onLoadUserInput,
+  activeStreamingScopeId = null,
   permissionMode,
   showCheckpointResume = false,
   checkpointResumeDisabled = false,
@@ -283,6 +286,7 @@ export function Conversation({
                     onWorkSummaryToggle?.();
                     toggleWorkSummary(item.key);
                   }}
+                  activeStreamingScopeId={activeStreamingScopeId}
                   permissionMode={permissionMode}
                   showCheckpointResume={showCheckpointResume}
                   checkpointResumeDisabled={checkpointResumeDisabled}
@@ -302,6 +306,7 @@ function ConversationItem({
   item,
   workExpanded,
   onWorkToggle,
+  activeStreamingScopeId,
   permissionMode,
   showCheckpointResume,
   checkpointResumeDisabled,
@@ -311,6 +316,7 @@ function ConversationItem({
   item: ConversationRenderItem;
   workExpanded: boolean;
   onWorkToggle: () => void;
+  activeStreamingScopeId: string | null;
   permissionMode?: PermissionMode;
   showCheckpointResume: boolean;
   checkpointResumeDisabled: boolean;
@@ -506,7 +512,13 @@ function ConversationItem({
           ) : null}
         </div>
       ) : null}
-      <PresentedMessageComponent message={message} />
+      <PresentedMessageComponent
+        message={message}
+        streaming={
+          activeStreamingScopeId !== null &&
+          getMessageStreamingScopeId(message.source) === activeStreamingScopeId
+        }
+      />
       {item.type === "result" || message.alignment === "right" ? (
         <MessageActions message={message} />
       ) : null}

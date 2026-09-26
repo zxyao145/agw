@@ -14,7 +14,9 @@ type ComposerOptions = {
   isExecuting?: boolean;
   isDisabled?: boolean;
   isSubmitDisabled?: boolean;
-  hasAdditionalInput?: boolean;
+  canSubmitWithoutText?: boolean;
+  /** 提交是否被受理；默认受理。Whether a submission is accepted; accepted by default. */
+  accept?: boolean;
   onStop?: boolean;
   children?: unknown;
 };
@@ -29,8 +31,11 @@ function renderComposer(options: ComposerOptions = {}) {
         isExecuting: options.isExecuting,
         isDisabled: options.isDisabled,
         isSubmitDisabled: options.isSubmitDisabled,
-        hasAdditionalInput: options.hasAdditionalInput,
-        onExecute: (value: string) => options.executed?.push(value),
+        canSubmitWithoutText: options.canSubmitWithoutText,
+        onExecute: (value: string) => {
+          options.executed?.push(value);
+          return options.accept ?? true;
+        },
         onValueChange: (value: string) => options.values?.push(value),
         ...(options.onStop ? { onStop: () => options.stops?.push(1) } : {}),
       },
@@ -106,14 +111,49 @@ test("an in-progress composition does not send", () => {
   assert.deepEqual(executed, []);
 });
 
-test("additional input alone can be submitted without text", () => {
+test("code comments alone can be submitted without text", () => {
   const executed: string[] = [];
-  renderComposer({ executed, hasAdditionalInput: true });
+  renderComposer({ executed, canSubmitWithoutText: true });
 
   assert.equal(sendButton().hasAttribute("disabled"), false);
   fireEvent.click(sendButton());
 
   assert.deepEqual(executed, [""]);
+});
+
+test("blank text is empty content and is not submitted", () => {
+  const executed: string[] = [];
+  renderComposer({ executed });
+
+  type("   \n  ");
+  assert.equal(sendButton().hasAttribute("disabled"), true);
+  fireEvent.keyDown(composer(), { key: "Enter", ctrlKey: true });
+
+  assert.deepEqual(executed, []);
+});
+
+test("a rejected submission keeps the draft", () => {
+  const executed: string[] = [];
+  const values: string[] = [];
+  renderComposer({ executed, values, accept: false });
+
+  type("keep me");
+  fireEvent.click(sendButton());
+  fireEvent.keyDown(composer(), { key: "Enter", shiftKey: true });
+
+  assert.deepEqual(executed, ["keep me", "keep me"]);
+  assert.equal(composer().value, "keep me");
+  assert.deepEqual(values, ["keep me"]);
+});
+
+test("an accepted submission clears the draft and keeps focus on the input", () => {
+  renderComposer();
+
+  type("queued");
+  fireEvent.click(sendButton());
+
+  assert.equal(composer().value, "");
+  assert.equal(window.document.activeElement, composer());
 });
 
 test("a submit-only block keeps the textarea editable", () => {
@@ -130,28 +170,77 @@ test("a submit-only block keeps the textarea editable", () => {
 });
 
 test("a disabled composer blocks both editing and sending", () => {
-  renderComposer({ isDisabled: true, hasAdditionalInput: true });
+  renderComposer({ isDisabled: true, canSubmitWithoutText: true });
 
   assert.equal(composer().hasAttribute("disabled"), true);
   assert.equal(sendButton().hasAttribute("disabled"), true);
 });
 
-test("a running execution turns the action into a stop request", () => {
+test("a running execution without submittable content offers a stop request", () => {
   const executed: string[] = [];
   const stops: number[] = [];
   renderComposer({ executed, stops, isExecuting: true, onStop: true });
 
-  assert.equal(composer().hasAttribute("disabled"), true);
+  assert.equal(composer().hasAttribute("disabled"), false);
+  assert.equal(sendButton().getAttribute("aria-label"), "Stop execution");
   fireEvent.click(sendButton());
 
   assert.deepEqual(stops, [1]);
   assert.deepEqual(executed, []);
 });
 
+test("typing during a running execution turns the action back into sending", () => {
+  const executed: string[] = [];
+  const stops: number[] = [];
+  renderComposer({ executed, stops, isExecuting: true, onStop: true });
+
+  type("next step");
+  assert.equal(sendButton().getAttribute("aria-label"), "Send message");
+  fireEvent.click(sendButton());
+  type("then this");
+  fireEvent.keyDown(composer(), { key: "Enter", ctrlKey: true });
+
+  assert.deepEqual(executed, ["next step", "then this"]);
+  assert.deepEqual(stops, []);
+  assert.equal(sendButton().getAttribute("aria-label"), "Stop execution");
+});
+
+test("code comments during a running execution are sent instead of stopping", () => {
+  const executed: string[] = [];
+  const stops: number[] = [];
+  renderComposer({ executed, stops, isExecuting: true, onStop: true, canSubmitWithoutText: true });
+
+  fireEvent.click(sendButton());
+
+  assert.deepEqual(executed, [""]);
+  assert.deepEqual(stops, []);
+});
+
+test("the shortcut never stops a running execution", () => {
+  const stops: number[] = [];
+  renderComposer({ stops, isExecuting: true, onStop: true });
+
+  fireEvent.keyDown(composer(), { key: "Enter", ctrlKey: true });
+
+  assert.deepEqual(stops, []);
+});
+
 test("a running execution without a stop handler offers no action", () => {
   renderComposer({ isExecuting: true });
 
   assert.equal(sendButton().hasAttribute("disabled"), true);
+});
+
+test("the queue slot renders above the input box", () => {
+  renderComposer({
+    children: [React.createElement(UserInput.Queue, { key: "queue", children: "queued message" })],
+  });
+
+  const queued = screen.getByText("queued message");
+  assert.equal(
+    queued.compareDocumentPosition(composer()) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+    window.Node.DOCUMENT_POSITION_FOLLOWING,
+  );
 });
 
 test("insertText keeps the draft and inserts at the caret", async () => {

@@ -5,7 +5,7 @@ import { ExecutionActivityStore } from "./execution-activity-store.ts";
 
 test("detaching a running project keeps it active and records unread completion", () => {
   const store = new ExecutionActivityStore();
-  const key = { serverId: "local", projectId: "project-1", contextId: "context-1" };
+  const key = { serverId: "local", projectId: "project-1", conversationId: "conversation-1" };
 
   store.attach(key);
   store.turnStarted(key);
@@ -22,8 +22,8 @@ test("detaching a running project keeps it active and records unread completion"
 
 test("project aggregation prioritizes approval, failure, and running tasks", () => {
   const store = new ExecutionActivityStore();
-  const first = { serverId: "local", projectId: "project-1", contextId: "first" };
-  const second = { serverId: "local", projectId: "project-1", contextId: "second" };
+  const first = { serverId: "local", projectId: "project-1", conversationId: "first" };
+  const second = { serverId: "local", projectId: "project-1", conversationId: "second" };
 
   store.turnStarted(first);
   store.turnStarted(second);

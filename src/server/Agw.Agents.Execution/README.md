@@ -78,7 +78,9 @@ Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后�
 
 模型输出的重试、网络错误和诊断消息不代表执行结束；客户端只在 `turn-finished` 或恢复查询确认空闲后解除发送阻塞。SignalR 关闭或启动响应丢失时保留未确认的执行状态。
 
-打开已有会话（包括页面刷新、重新打开窗口和本地 attachment 丢失）时，客户端先调用 `FindInProcessExecution(projectId, contextId)`，按当前用户和规范化后的项目会话查找仍在运行的原连接。历史消息加载完成不代表执行已经结束；状态查询完成前禁止发送，查询失败保留重试入口。返回原连接 ID 后复用下面的状态查询和停止流程。新建空会话不需要等待历史恢复。
+打开已有会话（包括页面刷新、重新打开窗口和本地 attachment 丢失）时，客户端先调用 `FindInProcessExecution(projectId, conversationId)`，按当前用户、项目和对话查找仍在运行的原连接。历史消息加载完成不代表执行已经结束；状态查询完成前禁止发送，查询失败保留重试入口。返回原连接 ID 后复用下面的状态查询和停止流程。发起查询的连接自己的 Turn 已写出 `turn-finished` 时不会返回这条连接：它的客户端已经收到结果，之后发来的命令在服务端等待这个 Turn 释放资源。新建空会话不需要等待历史恢复。
+
+Web 与 Desktop 的输入队列只在收到 `turn-finished`、状态为 `completed`、且 `turnId` 等于该条目 `executionId` 时发送下一条。连接关闭、或重连后没有活动执行而该条目尚未收到 `turn-start` 时，结果无法确认：条目带着原 `executionId` 回到队首并锁定编辑，队列暂停；重发沿用同一 `executionId`，服务端按 turnId 只受理一次。
 
 InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查询原连接，返回 `true` 表示仍在执行或释放资源。`connectionId` 必须是启动该轮执行时的原连接 ID，连续重连不得替换；服务端校验连接所有者，外来和不存在的连接均返回 `false`，且不会中断外来执行。恢复中的客户端每秒查询一次，原执行退出前保留停止按钮；停止时传入 `interrupt=true`，请求取消后仍等待服务端确认退出。此接口恢复执行状态和停止能力，不重放断线期间的 InProcess 消息。客户端与服务端应一起更新；恢复接口不可用时保留重试入口，不推断执行已结束。
 
@@ -193,13 +195,13 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 
 | Command | 作用 | 是否改变 connection 状态 |
 | --- | --- | --- |
-| `SettingCommand` | 设置 project、context、环境变量和默认权限策略 | 是；settings 变化时清理旧 runtime、task 和 target |
-| `ExecCommand` | 指定 conversation、Agent/Agentflow 目标和用户输入，启动一个 turn | 是；持久化 conversation/task 后创建或复用 runtime |
+| `SettingCommand` | 绑定必填的 `conversationId`，并设置 project、环境变量和默认权限策略；配置草稿对话不会创建对话 | 是；settings 变化时清理旧 runtime、task 和 target |
+| `ExecCommand` | 指定与连接配置一致的 conversation、Agent/Agentflow 目标和用户输入，启动一个 turn | 是；持久化 conversation/task 后创建或复用 runtime |
 | `InterruptCommand` | 请求中断当前 turn | 否；只转发给当前 `ActiveTurn` |
 | `SetModeCommand` | 切换支持 mode 的 Agent | 是；空闲时立即应用，活动 turn 结束后应用最后一次请求 |
 | `SetPermissionModeCommand` | 选择下轮工具审批策略 | 是；更新下轮 settings，当前 turn 和待答请求保持快照；外部 runtime 按权限版本在下轮重建 |
 | `HumanResponseCommand` | 提交审批或用户信息交互响应 | InProcess 转发给当前 turn；Durable 经 Session 持久化回答并推进恢复状态 |
-| `SubscribeExecutionCommand` | 按 `executionId` 和 event stream cursor 重新订阅集群执行 | 是；替换当前消息订阅，不启动新执行 |
+| `SubscribeExecutionCommand` | 按 `executionId` 和 event stream cursor 重新订阅属于已配置对话的集群执行；其他对话的执行按不存在处理 | 是；替换当前消息订阅，不启动新执行 |
 | `ResumeCheckpointCommand` | 从一个精确的 Agentflow checkpoint occurrence 创建新执行分支 | 是；校验并裁剪 checkpoint 之后的历史，再启动恢复 turn |
 
 `SettingCommand.Resume` 是服务端属性，带有 `[JsonIgnore]`。transport command 自身的等价性不包含 `Resume`；复制出的 `ExecutionSettings` 会包含它，因为 resume 变化需要使 connection-owned runtime 失效。
@@ -289,7 +291,7 @@ SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider �
 DispatchCommand(AgentRunCommand)
 GetExecutionProvider() -> "InProcess" | "Distributed"
 GetAgentflowCheckpoints(agentflowId) -> AgentflowCheckpointAvailability[]
-FindInProcessExecution(projectId, contextId) -> originalConnectionId | null
+FindInProcessExecution(projectId, conversationId) -> originalConnectionId | null
 RecoverInProcessExecution(originalConnectionId, interrupt) -> boolean
 ```
 
@@ -360,7 +362,9 @@ flowchart TB
 
 ### 应用 Settings
 
-`SettingCommandHandler` 只把 transport contract 转换为不可变 `ExecutionSettings`，然后调用 `ExecutionConnectionContext.ApplySettingsAsync`。Context 在活动 turn 期间返回 busy error；空闲且内容变化时释放旧 runtime，并清空 resolved task、workspace 和 target。
+`SettingCommandHandler` 只把 transport contract 转换为不可变 `ExecutionSettings`，缺少 `conversationId` 时抛出 `InvalidParam`，然后调用 `ExecutionConnectionContext.ApplySettingsAsync`。settings 内容变化时，仍在运行的 turn 使 Context 抛出 `ExecutionBusy`（4090021），客户端据此知道设置没有生效；已经写出结束消息、只剩释放资源的进程内 turn 先等待空闲。空闲且内容变化时释放旧 runtime，并清空 resolved task、workspace 和 target。
+
+连接只按 `conversationId` 标识对话。需要 `contextId` 的操作（checkpoint 查询与恢复）通过 `IProjectTaskFacade.FindContextIdAsync` 按项目、对话和当前用户读取已保存对话的 `ContextId`；对话尚未保存或属于其他用户时，查询返回空列表，恢复返回 `ResourceNotFound`。
 
 权限策略的初始值由 `SettingCommand.permissionMode` 保存。`SetPermissionModeCommand` 只修改下一 turn 的设置；当前 turn、待处理审批以及同一 Distributed turn 的恢复均使用启动时快照。权限版本随选择变化递增，因此 `A → B → A` 也会在下一轮使旧授权失效。外部 SDK 实例需要变更模式时，在下一轮开始前重建并恢复 provider session，不重放用户输入。Agentflow 所有节点共享本轮快照，权限变更不删除已有 checkpoint。
 
@@ -413,9 +417,9 @@ sequenceDiagram
 具体步骤如下：
 
 1. `ExecCommandHandler` 校验 `agentId`，然后把命令交给 connection context。
-2. Context 拒绝同一条 connection 上的并发 turn；没有 settings 时创建内置 project 的默认快照。
-3. 首次执行要求客户端提供 `conversationId`。`IProjectTaskFacade` 按当前用户和 Project 创建或校验该 conversation，在同一次提交中写入初始 task record；提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。
-4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint，并必须与 conversation 一致；它不再替代 conversation 资源主键。
+2. Context 用 `ExecutionBusy` 拒绝同一条 connection 上的并发 turn；进程内 turn 已经通过广播写出结束消息时视为正在收尾，Context 等待它空闲后受理新命令，因此客户端收到 `turn-finished` 后立即发出的下一轮不会被拒绝。没有 settings 时创建内置 project 的默认快照，并绑定本命令的对话。
+3. `conversationId` 必须与连接配置的对话一致。`IProjectTaskFacade` 按当前用户和 Project 创建或读取该 conversation：已有对话沿用保存的 `ContextId`，新对话在首次受理时生成 UUIDv7 `ContextId`；同一次提交中写入初始 task record，提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。
+4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint。客户端不再发送它；Facade 与 A2A、Job 等内部入口仍可以按已知的 `contextId` 创建或定位对话，并校验它与对话一致。
 5. target 改变时释放旧 runtime；同一 Agent target 在每个新 turn 开始前查询当前用户的 definition 更新时间，只有项目、context、generation 和 definition 版本均匹配才复用。definition 修改后整体重建 runtime，使模型、provider、凭证、环境变量及 Extra 同步更新；保留 conversation 和外部 provider session 绑定，沿用恢复流程。当前运行或等待人工响应的 turn 不受影响，SignalR 连接无需断开。重建失败时清除已释放的 runtime 引用，后续请求可重试。
 6. Context 从当前 connection 状态创建 `ExecutionStartRequest`；`InProcessExecutionStarter` 结合绑定的用户、message sink 和回调生成 `RuntimeTurnContext`，再调用 RuntimeFactory。
 7. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
@@ -538,7 +542,7 @@ Execution.Provider
 | Agent / Agentflow node 的模型 session | 既有 PostgreSQL `agent_session_state` | 复用现有会话连续性，不新增第二份 session 状态 |
 | 跨 Server 排他权 | PostgreSQL advisory lock | 同一 execution 同时只有一个 Server 执行 segment |
 | token/message replay cursor | `IExecutionEventStream` | PostgreSQL 或 Redis Stream 实现，支持实时输出与断线重放，不参与执行判定 |
-| 当前 executionId/cursor | 客户端 localStorage | 页面刷新后发现并重新订阅执行 |
+| 当前 executionId/cursor | 客户端 localStorage，按服务端、项目和对话保存；按执行上下文保存的旧记录在读取会话资料时迁移 | 页面刷新后发现并重新订阅执行 |
 | Card 渲染作用域 | 启动清单中的原始用户消息 ID | Server B 恢复时仍能用 `streamingScopeId + callId` 命中历史 Tool call |
 
 状态机只使用一张 `durable_execution` 表，没有为 checkpoint、pending 或 response 分表。除 `BaseEntity` 审计列外，核心字段为：
