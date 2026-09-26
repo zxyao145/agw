@@ -42,6 +42,7 @@ public class DbSeeder
     private static readonly Guid GeneralAgentId = Guid.Parse("11111111-1111-1111-6666-000000000001");
     private static readonly Guid LocationExtractorAgentId = Guid.Parse("11111111-1111-1111-6666-000000000002");
     private static readonly Guid AmapPoiSearchAgentId = Guid.Parse("11111111-1111-1111-6666-000000000003");
+    private static readonly Guid AmapMcpServerId = Guid.Parse("11111111-1111-1111-9999-000000000001");
 
     private static readonly Guid XiaohongshuAgentflowId = Guid.Parse("11111111-1111-1111-7777-000000000001");
 
@@ -101,6 +102,7 @@ public class DbSeeder
             var providers = await SeedProvidersAsync();
             var defaultModelProvider = await SeedDefaultModelAsync(providers);
             var agents = await SeedDefaultAgentsAsync(defaultModelProvider.Id);
+            await SeedAmapMcpServerAsync(agents["amap-poi-search"].Id);
             await SeedBuiltInClassSkillsAsync();
             var skill = await SeedDefaultSkillAsync();
             if (skill != null)
@@ -464,6 +466,38 @@ public class DbSeeder
         }
 
         return agents;
+    }
+
+    private async Task SeedAmapMcpServerAsync(Guid agentId)
+    {
+        var server = await _context.McpToolServers.FirstOrDefaultAsync(x =>
+            x.Id == AmapMcpServerId && x.CreateBy == Constants.AdminUserId
+            || x.Name == "amap-maps-streamableHTTP" && x.CreateBy == Constants.AdminUserId
+        );
+        if (server == null)
+        {
+            var now = _timeProvider.GetUtcNow();
+            server = new McpServer
+            {
+                Id = AmapMcpServerId,
+                Name = "amap-maps-streamableHTTP",
+                Description = "Amap MCP Server",
+                TransportType = "http",
+                Url = "https://mcp.amap.com/mcp?key=<key>",
+                CreateBy = Constants.AdminUserId,
+                CreateTime = now,
+                UpdateBy = Constants.AdminUserId,
+                UpdateTime = now,
+            };
+            _context.McpToolServers.Add(server);
+        }
+
+        if (await _context.AgentMcpToolServers.AnyAsync(x => x.AgentId == agentId && x.McpToolServerId == server.Id))
+        {
+            return;
+        }
+
+        _context.AgentMcpToolServers.Add(new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = server.Id });
     }
 
     private static IReadOnlyList<Agent> CreateDefaultAgentDefinitions(Guid modelProviderId, DateTimeOffset now)

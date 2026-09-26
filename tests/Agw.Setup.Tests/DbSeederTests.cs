@@ -111,6 +111,18 @@ public class DbSeederTests : IDisposable
             Assert.Equal(LocationExtractorAgentId, agents.Single(x => x.Name == "location-extractor").Id);
             Assert.Equal(AmapPoiSearchAgentId, agents.Single(x => x.Name == "amap-poi-search").Id);
             Assert.All(agents, agent => Assert.Equal(ModelProviderId, agent.ModelProviderId));
+            var mcpServer = await context.McpToolServers.SingleAsync(
+                server => server.Name == "amap-maps-streamableHTTP",
+                TestContext.Current.CancellationToken
+            );
+            Assert.Equal("Amap MCP Server", mcpServer.Description);
+            Assert.Equal("http", mcpServer.TransportType);
+            Assert.Equal("https://mcp.amap.com/mcp?key=<key>", mcpServer.Url);
+            Assert.Equal(Constants.AdminUserId, mcpServer.CreateBy);
+            Assert.Equal(Constants.AdminUserId, mcpServer.UpdateBy);
+            var relation = await context.AgentMcpToolServers.SingleAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(AmapPoiSearchAgentId, relation.AgentId);
+            Assert.Equal(mcpServer.Id, relation.McpToolServerId);
             Assert.Collection(
                 agents.Single(x => x.Name == "general-agent").Tools,
                 value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
