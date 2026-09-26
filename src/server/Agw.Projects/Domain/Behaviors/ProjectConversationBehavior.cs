@@ -29,7 +29,8 @@ public sealed class ProjectConversationBehavior
             return fallback;
         }
 
-        return trimmed[..Math.Min(trimmed.Length, MaxTitleLength)];
+        var firstLine = trimmed.Split(['\r', '\n'], 2)[0];
+        return firstLine[..Math.Min(firstLine.Length, MaxTitleLength)];
     }
 
     public void SetInitialTitle(string? requestedTitle, string? input)

@@ -6,10 +6,14 @@ namespace Agw.Projects.Tests;
 
 public class ProjectConversationBehaviorTests
 {
-    [Fact]
-    public void DeriveTitle_PaddedInput_ReturnsTrimmedText()
+    [Theory]
+    [InlineData("  this is a chat title  ")]
+    [InlineData("  this is a chat title\nsecond line  ")]
+    [InlineData("  this is a chat title\r\nsecond line  ")]
+    [InlineData("  this is a chat title\rsecond line  ")]
+    public void DeriveTitle_PaddedInput_ReturnsTrimmedFirstLine(string input)
     {
-        var title = ProjectConversationBehavior.DeriveTitle("  this is a chat title  ");
+        var title = ProjectConversationBehavior.DeriveTitle(input);
 
         Assert.Equal("this is a chat title", title);
     }
@@ -17,7 +21,7 @@ public class ProjectConversationBehaviorTests
     [Fact]
     public void DeriveTitle_LongInput_KeepsFirstEightyCharacters()
     {
-        var title = ProjectConversationBehavior.DeriveTitle(new string('a', 100));
+        var title = ProjectConversationBehavior.DeriveTitle(new string('a', 100) + "\nsecond line");
 
         Assert.Equal(new string('a', 80), title);
     }
