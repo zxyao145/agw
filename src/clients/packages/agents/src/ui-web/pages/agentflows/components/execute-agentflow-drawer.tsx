@@ -36,6 +36,7 @@ export function ExecuteAgentflowDrawer({
       revision: `${agentflow?.id ?? "none"}:${resetSignal}`,
       contextId: null,
       messages: [],
+      historyTurns: [],
       usage: EMPTY_TOKEN_USAGE,
       olderMessagesCursor: null,
       hasOlderMessages: false,

@@ -11751,7 +11751,8 @@
         "required": [
           "items",
           "nextCursor",
-          "hasMore"
+          "hasMore",
+          "turns"
         ],
         "type": "object",
         "properties": {
@@ -11768,6 +11769,46 @@
             ]
           },
           "hasMore": {
+            "type": "boolean"
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectConversationMessageTurnResponse"
+            }
+          }
+        }
+      },
+      "ProjectConversationMessageTurnResponse": {
+        "required": [
+          "turnId",
+          "status",
+          "input",
+          "results",
+          "hasProcessMessages"
+        ],
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "input": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "#/components/schemas/AgwMessage" }
+            ]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgwMessage"
+            }
+          },
+          "hasProcessMessages": {
             "type": "boolean"
           }
         }

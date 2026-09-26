@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AiMessage } from "@agw/api";
+import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import { buildConversationRenderModel } from "./conversation-render-model";
 import { formatWorkedDuration } from "./work-summary";
 
@@ -88,6 +88,113 @@ test("multiple turns retain their own processes and stable keys when history is 
   assert.equal(summaries[1].key, first.key);
   assert.equal(summaries[0].items.length, 1);
   assert.equal(summaries[1].items.length, 1);
+});
+
+test("a completed turn folds from a later history page and keeps its identity as pages arrive", () => {
+  const turnId = "turn-1";
+  const input = {
+    ...message("input", "user", "2026-09-25T16:28:12.993Z"),
+    additionalProperties: { turnId },
+  };
+  const early = { ...message("early", "assistant"), additionalProperties: { turnId } };
+  const result = {
+    ...message("result", "assistant", "2026-09-25T19:18:17.772Z", true),
+    additionalProperties: { type: "result", turnId },
+  };
+  const late = { ...message("late", "assistant"), additionalProperties: { turnId } };
+  const historyTurn: ConversationHistoryTurn = {
+    turnId,
+    status: "completed",
+    input,
+    results: [result],
+    hasProcessMessages: true,
+  };
+  const options = { historyTurns: [historyTurn] };
+
+  const latest = buildConversationRenderModel([late], options);
+  assert.deepEqual(
+    latest.map((item) => item.type),
+    ["message", "work-summary", "result"],
+  );
+  assert.equal(latest[1].type, "work-summary");
+  if (latest[1].type !== "work-summary") return;
+  assert.equal(latest[1].durationMs, 10_204_779);
+  assert.equal(formatWorkedDuration(latest[1].durationMs), "Worked for 2h 50m 4s");
+  assert.equal(latest[1].key, `work-summary:${turnId}`);
+  assert.deepEqual(
+    latest[1].items.map((item) => item.type),
+    ["message"],
+  );
+
+  const older = buildConversationRenderModel([early, result, late], options);
+  const full = buildConversationRenderModel([input, early, result, late], options);
+  assert.deepEqual(
+    older.map((item) => item.type),
+    latest.map((item) => item.type),
+  );
+  assert.deepEqual(
+    full.map((item) => item.type),
+    latest.map((item) => item.type),
+  );
+  for (const items of [older, full]) {
+    const summary = items[1];
+    assert.equal(summary.type, "work-summary");
+    if (summary.type !== "work-summary") continue;
+    assert.equal(summary.key, latest[1].key);
+    assert.equal(summary.durationMs, latest[1].durationMs);
+    assert.deepEqual(
+      summary.items.map((item) => item.type === "message" && item.message.source.messageId),
+      ["early", "late"],
+    );
+    assert.equal(items.filter((item) => item.type === "result").length, 1);
+  }
+
+  const active = buildConversationRenderModel([late], {
+    ...options,
+    isCurrentTurnActive: true,
+  });
+  assert.ok(active.every((item) => item.type !== "work-summary"));
+});
+
+test("paged turns keep ordered Results visible and do not fold empty work", () => {
+  const turnId = "turn-2";
+  const input = {
+    ...message("input-2", "user", "2026-09-20T01:00:00Z"),
+    additionalProperties: { turnId },
+  };
+  const result = {
+    ...message("result-2", "assistant", "2026-09-20T01:05:00Z", true),
+    additionalProperties: { type: "result", turnId },
+  };
+  const finalResult = {
+    ...message("final-2", "assistant", "2026-09-20T01:07:00Z", true),
+    additionalProperties: { type: "result", turnId },
+  };
+  const historyTurn: ConversationHistoryTurn = {
+    turnId,
+    status: "completed",
+    input,
+    results: [result, finalResult],
+    hasProcessMessages: false,
+  };
+  const empty = buildConversationRenderModel([result], { historyTurns: [historyTurn] });
+  assert.ok(empty.every((item) => item.type !== "work-summary"));
+
+  const process = { ...message("process-2", "assistant"), additionalProperties: { turnId } };
+  const items = buildConversationRenderModel([process, result], {
+    historyTurns: [{ ...historyTurn, hasProcessMessages: true }],
+  });
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["message", "work-summary", "result", "result"],
+  );
+  assert.equal(items[1].type === "work-summary" && items[1].durationMs, 420_000);
+  assert.deepEqual(
+    items
+      .filter((item) => item.type === "result")
+      .map((item) => (item.type === "result" ? item.message.source.messageId : null)),
+    ["result-2", "final-2"],
+  );
 });
 
 test("node inputs stay inside their parent turn and hidden control messages stay hidden", () => {

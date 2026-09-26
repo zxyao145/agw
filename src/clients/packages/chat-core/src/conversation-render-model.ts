@@ -35,7 +35,7 @@ import {
 import { isSystemInjectedMessage } from "./message-source";
 import { parseMessageProposedPlan, type ProposedPlanPresentation } from "./proposed-plan";
 import { formatStructuredResult, normalizeStructuredResult } from "./structured-result";
-import { collapseCompletedWork } from "./work-summary";
+import { collapseCompletedWork, includeHistoryTurnAnchors } from "./work-summary";
 
 const HIDDEN_CONTROL_TYPES = new Set([
   TURN_START_MESSAGE_TYPE,
@@ -229,6 +229,7 @@ export type BuildConversationRenderModelOptions = {
   collapseToolRuns?: boolean;
   activeAgentId?: string | null;
   agentResultFormats?: readonly AgentResultFormat[];
+  historyTurns?: readonly import("@agw/api").ConversationHistoryTurn[];
 };
 
 export type ResultFormat = import("@agw/api").components["schemas"]["ResultFormat"];
@@ -521,7 +522,9 @@ export function buildConversationRenderModel(
   messages: readonly AiMessage[],
   options: BuildConversationRenderModelOptions = {},
 ): ConversationRenderItem[] {
-  const visibleMessages = prepareVisibleMessages(messages);
+  const visibleMessages = prepareVisibleMessages(
+    includeHistoryTurnAnchors(messages, options.historyTurns ?? []),
+  );
   const hiddenSystemToolKeys = getHiddenSystemToolKeys(visibleMessages);
   const processed = processMessages(visibleMessages);
   const { byGroupKey: todoSnapshotsByGroupKey, byIdentity: todoSnapshotsByIdentity } =
@@ -720,6 +723,7 @@ export function buildConversationRenderModel(
   return collapseCompletedWork(
     options.collapseToolRuns ? collapseConsecutiveToolItems(items) : items,
     options.isCurrentTurnActive === true || options.pendingInteraction != null,
+    options.historyTurns,
   );
 }
 

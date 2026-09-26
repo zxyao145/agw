@@ -392,6 +392,7 @@ export function ChatWorkspace({
     revision: 0,
     contextId: null,
     messages: [],
+    historyTurns: [],
     usage: EMPTY_TOKEN_USAGE,
     olderMessagesCursor: null,
     hasOlderMessages: false,
@@ -687,6 +688,7 @@ export function ChatWorkspace({
     replaceChatSession({
       contextId: null,
       messages: [],
+      historyTurns: [],
       usage: EMPTY_TOKEN_USAGE,
       olderMessagesCursor: null,
       hasOlderMessages: false,
@@ -740,6 +742,7 @@ export function ChatWorkspace({
         replaceChatSession({
           contextId: details.contextId,
           messages: messagePage.items,
+          historyTurns: messagePage.turns,
           usage: details.usage,
           olderMessagesCursor: messagePage.nextCursor,
           hasOlderMessages: messagePage.hasMore,
@@ -943,6 +946,7 @@ export function ChatWorkspace({
       replaceChatSession({
         contextId: null,
         messages: [],
+        historyTurns: [],
         usage: EMPTY_TOKEN_USAGE,
         olderMessagesCursor: null,
         hasOlderMessages: false,

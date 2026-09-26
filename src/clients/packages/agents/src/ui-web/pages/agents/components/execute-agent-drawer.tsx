@@ -32,6 +32,7 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
       revision: `${executingAgent?.id ?? "none"}:${resetSignal}`,
       contextId: null,
       messages: [],
+      historyTurns: [],
       usage: EMPTY_TOKEN_USAGE,
       olderMessagesCursor: null,
       hasOlderMessages: false,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { installLayoutMetrics, setupDomEnvironment } from "@agw/test-harness";
 
-import type { AiMessage } from "@agw/api";
+import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 
 const environment = await setupDomEnvironment();
 const { React, act, fireEvent, render, screen } = environment;
@@ -34,19 +34,29 @@ function Harness({
   active = false,
   conversationKey = "a",
   history = messages,
+  historyTurns = [],
   onToggle = () => {},
+  onExpansionChange = () => {},
+  hasOlderMessages = false,
+  autoLoadBlockedSummaryKey = null,
+  onAutoLoadOlderMessages,
 }: {
   active?: boolean;
   conversationKey?: string;
   history?: AiMessage[];
+  historyTurns?: ConversationHistoryTurn[];
   onToggle?: () => void;
+  onExpansionChange?: (keys: ReadonlySet<string>) => void;
+  hasOlderMessages?: boolean;
+  autoLoadBlockedSummaryKey?: string | null;
+  onAutoLoadOlderMessages?: () => void;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [ready, setReady] = React.useState(false);
   React.useLayoutEffect(() => setReady(true), []);
   const items = React.useMemo(
-    () => buildConversationRenderModel(history, { isCurrentTurnActive: active }),
-    [history, active],
+    () => buildConversationRenderModel(history, { isCurrentTurnActive: active, historyTurns }),
+    [history, historyTurns, active],
   );
   return React.createElement(
     "div",
@@ -57,6 +67,10 @@ function Harness({
         conversationKey,
         scrollElementRef: ref,
         onWorkSummaryToggle: onToggle,
+        onWorkSummaryExpansionChange: onExpansionChange,
+        hasOlderMessages,
+        autoLoadBlockedSummaryKey,
+        onAutoLoadOlderMessages,
       }),
   );
 }
@@ -80,6 +94,115 @@ test("completed work defaults closed, preserves Result actions and toggles proce
   assert.equal(toggles, 1);
   fireEvent.click(trigger);
   assert.equal(screen.queryByText("Checking implementation"), null);
+});
+
+test("a paged completed turn starts closed and keeps expansion while earlier process arrives", async () => {
+  const turnId = "turn-paged";
+  const input = {
+    ...messages[0],
+    additionalProperties: { turnId },
+  };
+  const result = {
+    ...messages[2],
+    additionalProperties: { type: "result", turnId },
+  };
+  const late = {
+    ...messages[1],
+    messageId: "late-process",
+    contents: [{ type: "TextContent", content: "Late work" }],
+    additionalProperties: { turnId },
+  };
+  const early = {
+    ...messages[1],
+    messageId: "early-process",
+    contents: [{ type: "TextContent", content: "Early work" }],
+    additionalProperties: { turnId },
+  };
+  const historyTurns: ConversationHistoryTurn[] = [
+    {
+      turnId,
+      status: "completed",
+      input,
+      results: [result],
+      hasProcessMessages: true,
+    },
+  ];
+  const observed: ReadonlySet<string>[] = [];
+  const onExpansionChange = (keys: ReadonlySet<string>) => observed.push(new Set(keys));
+  const view = render(
+    React.createElement(Harness, { history: [late], historyTurns, onExpansionChange }),
+  );
+  const trigger = await screen.findByRole("button", { name: "Worked for 17m 39s" });
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.ok(screen.getByText("Review the change"));
+  assert.ok(screen.getByText("Review complete"));
+  assert.equal(screen.queryByText("Late work"), null);
+  assert.equal(observed.at(-1)?.size, 0);
+
+  fireEvent.click(trigger);
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  assert.ok(screen.getByText("Late work"));
+  assert.ok(observed.at(-1)?.has(`work-summary:${turnId}`));
+
+  view.rerender(
+    React.createElement(Harness, {
+      history: [early, result, late],
+      historyTurns,
+      onExpansionChange,
+    }),
+  );
+  assert.equal(
+    screen.getByRole("button", { name: "Worked for 17m 39s" }).getAttribute("aria-expanded"),
+    "true",
+  );
+  assert.ok(screen.getByText("Early work"));
+  assert.ok(screen.getByText("Late work"));
+  assert.equal(screen.getAllByText("Review complete").length, 1);
+
+  view.rerender(
+    React.createElement(Harness, {
+      conversationKey: "next",
+      history: [early, result, late],
+      historyTurns,
+      onExpansionChange,
+    }),
+  );
+  assert.equal(
+    screen.getByRole("button", { name: "Worked for 17m 39s" }).getAttribute("aria-expanded"),
+    "false",
+  );
+  assert.equal(screen.queryByText("Late work"), null);
+  assert.equal(observed.at(-1)?.size, 0);
+});
+
+test("short folded history requests another page after its work is expanded", async () => {
+  const turnId = "short-turn";
+  const history = [{ ...messages[1], additionalProperties: { turnId } }];
+  const historyTurns: ConversationHistoryTurn[] = [
+    {
+      turnId,
+      status: "completed",
+      input: { ...messages[0], additionalProperties: { turnId } },
+      results: [{ ...messages[2], additionalProperties: { type: "result", turnId } }],
+      hasProcessMessages: true,
+    },
+  ];
+  let requests = 0;
+  render(
+    React.createElement(Harness, {
+      history,
+      historyTurns,
+      hasOlderMessages: true,
+      autoLoadBlockedSummaryKey: `work-summary:${turnId}`,
+      onAutoLoadOlderMessages: () => requests++,
+    }),
+  );
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+  assert.equal(requests, 0);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Worked for 17m 39s" }));
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+  assert.equal(requests, 1);
 });
 
 test("expansion survives rerenders and virtual unmounts, resets for resumed turns and new conversations", async () => {

@@ -54,6 +54,30 @@ test("history assigns a reconstructable scope per user turn", () => {
   );
 });
 
+test("history keeps a persisted turn scope when earlier pages are prepended", () => {
+  const process = textMessage({
+    messageId: "process",
+    role: "assistant",
+    author: "agent",
+    content: "working",
+    additionalProperties: { turnId: "turn-1" },
+  });
+  const latest = scopeMessagesByUserTurn([process]);
+  const withInput = scopeMessagesByUserTurn([
+    textMessage({
+      messageId: "input",
+      role: "user",
+      author: "$agw",
+      content: "start",
+      additionalProperties: { turnId: "turn-1" },
+    }),
+    process,
+  ]);
+
+  assert.equal(latest[0].streamingScopeId, "turn-1");
+  assert.equal(withInput[1].streamingScopeId, latest[0].streamingScopeId);
+});
+
 test("history preserves explicit persisted scopes before inferring a user turn", () => {
   const history = scopeMessagesByUserTurn([
     textMessage({ messageId: "user-1", role: "user", author: "$agw", content: "one" }),

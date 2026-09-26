@@ -202,6 +202,7 @@ public class ProjectConversationAppService
         }
 
         var messages = records.SelectMany(TaskExecutionMapper.ToAiMessages).ToList();
+        var turns = await GetMessageTurnPresentationsAsync(conversation.Id, records, cancellationToken);
         var cursorSequence =
             records.Count == 0 ? null
             : query.Direction == ProjectConversationMessageDirection.Newer ? records[^1].ConversationSequence
@@ -210,9 +211,95 @@ public class ProjectConversationAppService
         return new ProjectConversationMessagePageResponse(
             messages,
             hasMore && cursorSequence.HasValue ? EncodeCursor(cursorSequence.Value) : null,
-            hasMore
+            hasMore,
+            turns
         );
     }
+
+    private async Task<IReadOnlyList<ProjectConversationMessageTurnResponse>> GetMessageTurnPresentationsAsync(
+        Guid conversationId,
+        IReadOnlyList<ProjectConversationChatHistory> pageRecords,
+        CancellationToken cancellationToken
+    )
+    {
+        var turnIds = pageRecords.Select(record => record.TurnId).OfType<Guid>().Distinct().ToArray();
+        if (turnIds.Length == 0)
+            return [];
+
+        var turns = await _dbContext
+            .ProjectConversationTurns.AsNoTracking()
+            .Where(turn => turn.ProjectConversationId == conversationId && turnIds.Contains(turn.Id))
+            .ToDictionaryAsync(turn => turn.Id, cancellationToken);
+        var inputIds = turns.Values.Select(turn => turn.InputMessageId).ToArray();
+        var anchors = await GetMessageTurnAnchorsAsync(conversationId, turnIds, inputIds, cancellationToken);
+        var inputs = anchors.Where(record => inputIds.Contains(record.Id)).ToDictionary(record => record.Id);
+        var results = anchors
+            .Where(record => record.TurnId.HasValue && record.Purpose == ConversationMessagePurpose.Result)
+            .GroupBy(record => record.TurnId!.Value)
+            .ToDictionary(group => group.Key, group => group.SelectMany(TaskExecutionMapper.ToAiMessages).ToList());
+        var hasProcess = await GetProcessTurnIdsAsync(conversationId, turnIds, cancellationToken);
+
+        return turnIds
+            .Where(turns.ContainsKey)
+            .Select(turnId =>
+            {
+                var turn = turns[turnId];
+                return new ProjectConversationMessageTurnResponse
+                {
+                    TurnId = turnId,
+                    Status = turn.Status.ToString().ToLowerInvariant(),
+                    Input = inputs.TryGetValue(turn.InputMessageId, out var input)
+                        ? TaskExecutionMapper.ToAiMessages(input).FirstOrDefault()
+                        : null,
+                    Results = results.GetValueOrDefault(turnId) ?? [],
+                    HasProcessMessages = hasProcess.Contains(turnId),
+                };
+            })
+            .ToList();
+    }
+
+    private Task<List<ProjectConversationChatHistory>> GetMessageTurnAnchorsAsync(
+        Guid conversationId,
+        Guid[] turnIds,
+        Guid[] inputIds,
+        CancellationToken cancellationToken
+    ) =>
+        _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record =>
+                record.ConversationId == conversationId
+                && record.ConversationPayload != null
+                && (
+                    inputIds.Contains(record.Id)
+                    || (
+                        record.TurnId.HasValue
+                        && turnIds.Contains(record.TurnId.Value)
+                        && record.Purpose == ConversationMessagePurpose.Result
+                    )
+                )
+            )
+            .OrderBy(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken);
+
+    private async Task<HashSet<Guid>> GetProcessTurnIdsAsync(
+        Guid conversationId,
+        Guid[] turnIds,
+        CancellationToken cancellationToken
+    ) =>
+        (
+            await _dbContext
+                .ProjectConversationChatHistories.AsNoTracking()
+                .Where(record =>
+                    record.ConversationId == conversationId
+                    && record.TurnId.HasValue
+                    && turnIds.Contains(record.TurnId.Value)
+                    && record.Purpose == ConversationMessagePurpose.Message
+                    && record.ConversationPayload != null
+                )
+                .Select(record => record.TurnId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken)
+        ).ToHashSet();
 
     public async Task<ApplicationResult> ClearRecordsAsync(Guid projectId, Guid conversationId)
     {

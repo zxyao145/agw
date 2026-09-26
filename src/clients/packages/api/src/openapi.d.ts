@@ -6191,6 +6191,15 @@ export interface components {
       items: components["schemas"]["AgwMessage"][];
       nextCursor: null | string;
       hasMore: boolean;
+      turns: components["schemas"]["ProjectConversationMessageTurnResponse"][];
+    };
+    ProjectConversationMessageTurnResponse: {
+      /** Format: uuid */
+      turnId: string;
+      status: string;
+      input: null | components["schemas"]["AgwMessage"];
+      results: components["schemas"]["AgwMessage"][];
+      hasProcessMessages: boolean;
     };
     ProjectConversationResponse: {
       projectId: string;
