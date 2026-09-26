@@ -4,6 +4,7 @@ import type {
   ConversationMessageRenderItem,
   ConversationRenderItem,
 } from "./conversation-render-model";
+import { readMessageMeta } from "./message-presentation";
 
 type MessageItem = Extract<ConversationMessageRenderItem, { type: "message" | "plan" }>;
 
@@ -98,6 +99,7 @@ export function collapseCompletedWork(
       key: `work-summary:${turnId ?? input.key}`,
       alignment: "left",
       width: "full",
+      name: readMessageMeta(results[0].message.source)?.name ?? null,
       durationMs: Number.isFinite(duration) && duration >= 0 ? duration : null,
       items: process,
     });

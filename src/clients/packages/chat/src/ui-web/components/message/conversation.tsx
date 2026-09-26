@@ -326,6 +326,13 @@ function ConversationItem({
           onClick={onWorkToggle}
           className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
         >
+          {item.name ? (
+            <>
+              <span className="min-w-0 truncate font-medium text-foreground/70">
+                {item.name}
+              </span>{" "}
+            </>
+          ) : null}
           {formatWorkedDuration(item.durationMs)}
           <ChevronRight
             aria-hidden="true"

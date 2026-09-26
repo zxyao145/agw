@@ -231,7 +231,7 @@ function ChatSettingsDialog({
             <div className="grid gap-2">
               <Label>Conversation Information</Label>
               {conversationId === null ? (
-                <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                <div className="rounded-lg bg-muted/50 px-4 py-4 text-sm text-muted-foreground">
                   No active conversation.
                 </div>
               ) : (
@@ -264,7 +264,7 @@ function ChatSettingsDialog({
               )}
             </div>
 
-            <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
+            <div className="flex items-start justify-between gap-4 rounded-lg bg-muted/50 px-4 py-3">
               <div className="space-y-1">
                 <Label htmlFor="chat-settings-result-only" className="cursor-pointer">
                   Only Stream Turn Result
@@ -291,7 +291,7 @@ function ChatSettingsDialog({
               </div>
 
               {draftEnvVars.length === 0 ? (
-                <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                <div className="rounded-lg bg-muted/50 px-4 py-4 text-sm text-muted-foreground">
                   No environment variables configured.
                 </div>
               ) : (
