@@ -27,20 +27,6 @@ import {
   toast,
 } from "@agw/components";
 
-function encodeBase64Config(token: string): string {
-  const bytes = new TextEncoder().encode(
-    JSON.stringify({
-      version: 2,
-      serverUrl: window.location.origin,
-      token,
-      apiMajorVersion: 1,
-    }),
-  );
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
-}
-
 export default function SettingsPage() {
   const [session, setSession] = React.useState<AuthSession | null>(null);
   const [tokens, setTokens] = React.useState<ApiTokenSummary[]>([]);
@@ -72,12 +58,6 @@ export default function SettingsPage() {
     }
   };
 
-  const copyBase64Config = async () => {
-    if (!created) return;
-    await navigator.clipboard.writeText(encodeBase64Config(created.token));
-    toast.success("Base64 configuration copied");
-  };
-
   return (
     <div className="w-full max-w-4xl space-y-6 py-6">
       <div className="flex items-start justify-between gap-4">
@@ -104,7 +84,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <KeyRound className="h-5 w-5" />
-            API tokens
+            API Keys
           </CardTitle>
           <CardDescription>
             Token secrets are shown once and stored by the Server only as hashes.
@@ -113,7 +93,7 @@ export default function SettingsPage() {
         <CardContent className="space-y-5">
           <div className="flex gap-2">
             <div className="flex-1 space-y-2">
-              <Label htmlFor="token-name">Token name</Label>
+              <Label htmlFor="token-name">Key name</Label>
               <div className="flex gap-2">
                 <Input
                   id="token-name"
@@ -141,18 +121,14 @@ export default function SettingsPage() {
               <div className="mt-3 flex gap-2">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="default"
                   onClick={async () => {
                     await navigator.clipboard.writeText(created.token);
                     toast.success("API token copied");
                   }}
                 >
                   <Copy className="mr-2 h-4 w-4" />
-                  Copy token
-                </Button>
-                <Button size="sm" onClick={copyBase64Config}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy config
+                  Copy
                 </Button>
               </div>
             </div>
