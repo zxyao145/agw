@@ -12,8 +12,15 @@ namespace Agw.Agents.Execution.Agents.History;
 /// </summary>
 internal class ModelMessageAdapter : IAgentMessageAdapter<AgentResponseUpdate>
 {
-    private readonly Dictionary<string, (ChatRole Role, string? Author)> _headers = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, (Type Type, bool Opaque, int Index)> _tails = new(StringComparer.Ordinal);
+    private static readonly string[] BlockIds = Enumerable.Range(0, 64).Select(index => $"block:{index}").ToArray();
+
+    // ValueTuple 键按字段比较，每个增量不必拼接字符串。
+    // ValueTuple keys compare by field, so no string is concatenated per delta.
+    private readonly Dictionary<(string SourceId, string Purpose), (ChatRole Role, string? Author)> _headers = [];
+    private readonly Dictionary<
+        (string SourceId, string Role, string? Author, string Purpose),
+        (Type Type, bool Opaque, int Index)
+    > _tails = [];
 
     /// <summary>
     /// 为真时工具结果属于 Engine 事件并写入历史，且 System、User、Tool 消息只用于展示。
@@ -33,7 +40,7 @@ internal class ModelMessageAdapter : IAgentMessageAdapter<AgentResponseUpdate>
         if (IsExcluded(message))
             return null;
         var id = SourceId(message);
-        var headerKey = $"{id}:{AgentMessageProjection.GetPurpose(message)}";
+        var headerKey = (id, AgentMessageProjection.GetPurpose(message));
         if (_headers.TryGetValue(headerKey, out var previous))
         {
             message.Role = update.Role ?? previous.Role;
@@ -108,7 +115,7 @@ internal class ModelMessageAdapter : IAgentMessageAdapter<AgentResponseUpdate>
         if (content.AdditionalProperties?.GetValueOrDefault("blockId")?.ToString() is { Length: > 0 } explicitId)
             return explicitId;
 
-        var key = $"{sourceId}:{header.Role}:{header.AuthorName}:{AgentMessageProjection.GetPurpose(header)}";
+        var key = (sourceId, header.Role.Value, header.AuthorName, AgentMessageProjection.GetPurpose(header));
         if (!_tails.TryGetValue(key, out var tail))
             tail = (content.GetType(), content is TextReasoningContent { ProtectedData: not null }, 0);
         else if (
@@ -118,8 +125,15 @@ internal class ModelMessageAdapter : IAgentMessageAdapter<AgentResponseUpdate>
         )
             tail = (content.GetType(), content is TextReasoningContent { ProtectedData: not null }, tail.Index + 1);
         _tails[key] = tail;
-        return $"block:{tail.Index}";
+        return FormatBlockId(tail.Index);
     }
+
+    /// <summary>
+    /// 常用的块序号复用预先生成的字符串。
+    /// Common block indexes reuse pregenerated strings.
+    /// </summary>
+    protected static string FormatBlockId(int index) =>
+        (uint)index < (uint)BlockIds.Length ? BlockIds[index] : $"block:{index}";
 
     /// <summary>
     /// 不写入历史的消息：临时副本、交接前缀与工具状态消息（由工具状态持久化单独写入）。
@@ -234,7 +248,7 @@ internal sealed class ClaudeMessageAdapter : ModelMessageAdapter
         (content.RawRepresentation ?? update.RawRepresentation) is StreamEvent stream
         && stream.Event.TryGetProperty("index", out var index)
         && index.TryGetInt32(out var value)
-            ? $"block:{value}"
+            ? FormatBlockId(value)
             : base.GetBlockId(update, content, sourceId, header);
 
     /// <summary>

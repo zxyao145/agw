@@ -75,7 +75,8 @@ internal sealed class DurableExecutionEventLog
             return;
         try
         {
-            var last = await _projection.GetLastSequenceAsync(turnId, cancellationToken).ConfigureAwait(false);
+            var projected = await _projection.GetLastSequenceAsync(turnId, cancellationToken).ConfigureAwait(false);
+            var last = projected;
             var entries = new List<TurnBroadcastEntry>();
             var first = committed.Min(entry => entry.Sequence);
             while (last + 1 < first)
@@ -88,7 +89,9 @@ internal sealed class DurableExecutionEventLog
                 last = contiguous[^1].Sequence;
             }
             entries.AddRange(committed);
-            await _projection.PublishAsync(turnId, entries, cancellationToken).ConfigureAwait(false);
+            await _projection
+                .PublishAsync(turnId, entries, lastSequence: projected, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (RedisException exception)
         {

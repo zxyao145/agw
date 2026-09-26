@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
+using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Outbound;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
@@ -8,30 +11,42 @@ using Microsoft.Extensions.Options;
 namespace Agw.Agents.Execution.Turns;
 
 /// <summary>
-/// Turn 内一条已编号的消息；Sequence 即 turnSequence。
-/// One numbered message of a turn; Sequence is the turnSequence.
+/// Turn 内一条已编号的消息；Sequence 即 turnSequence。PayloadJson 是数据库中未加序号的载荷，只在已提交的事件上存在。
+/// One numbered message of a turn; Sequence is the turnSequence. PayloadJson is the unnumbered payload stored in the database and exists only on committed events.
 /// </summary>
-internal sealed record TurnBroadcastEntry(long Sequence, AgwMessage Message);
+internal readonly record struct TurnBroadcastEntry(long Sequence, AgwMessage Message, string? PayloadJson = null);
 
 /// <summary>
-/// 执行实例内一个 Turn 的广播：保存本 Turn 的回放缓冲，按序号交给订阅者。进程内模式由它为消息分配 turnSequence；
-/// Durable 模式只发布数据库已经提交并编号的事件。
+/// 执行实例内一个 Turn 的广播：保存本 Turn 的回放缓冲，按序号交给订阅者。进程内模式由它为消息分配 turnSequence，
+/// 并把同一消息在 CoalescingWindow 内相邻的流式文本增量合并成一条；Durable 模式只发布数据库已经提交并编号的事件。
 /// The broadcast of one turn inside the executing instance: keeps the turn's replay buffer and hands messages to subscribers in sequence order.
-/// In-process mode assigns the turnSequence here; Durable mode only publishes events the database has committed and numbered.
+/// In-process mode assigns the turnSequence here and merges adjacent streaming text deltas of one message within CoalescingWindow; Durable mode only publishes events the database has committed and numbered.
 /// </summary>
 internal sealed class TurnBroadcast : IExecutionMessageSink
 {
-    private readonly SemaphoreSlim _writeGate = new(1, 1);
-    private readonly object _gate = new();
-    private readonly List<TurnBroadcastEntry> _entries = [];
-    private readonly List<IExecutionMessageSink> _sinks = [];
-    private TaskCompletionSource _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private long _lastSequence;
+    /// <summary>
+    /// 进程内合并流式文本增量的时间窗口，与客户端 50 ms 的批量渲染间隔一致。
+    /// The window for merging in-process streaming text deltas, matching the client's 50 ms render batch interval.
+    /// </summary>
+    internal static readonly TimeSpan CoalescingWindow = TimeSpan.FromMilliseconds(50);
 
-    public TurnBroadcast(Guid turnId, string userId)
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private readonly Lock _gate = new();
+    private readonly List<TurnBroadcastEntry> _entries = [];
+    private readonly TimeProvider _timeProvider;
+    private IExecutionMessageSink[] _sinks = [];
+    private TaskCompletionSource _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool _changedObserved;
+    private long _lastSequence;
+    private AgwMessage? _pending;
+    private ITimer? _flushTimer;
+    private ExceptionDispatchInfo? _flushFailure;
+
+    public TurnBroadcast(Guid turnId, string userId, TimeProvider timeProvider)
     {
         TurnId = turnId;
         UserId = userId;
+        _timeProvider = timeProvider;
     }
 
     public Guid TurnId { get; }
@@ -56,8 +71,10 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
     public event Action<TurnBroadcast>? Finished;
 
     /// <summary>
-    /// 进程内输出：分配下一个序号，写入回放缓冲，再依次交给同步订阅者。
-    /// In-process output: assigns the next sequence, appends to the replay buffer, then hands the message to every inline subscriber.
+    /// 进程内输出：分配下一个序号，写入回放缓冲，再依次交给同步订阅者。可合并的流式文本增量先保存在待发布位置，
+    /// 同一消息的后续增量并入其中；其他消息或计时到期时先发布它，因此所有写入方的消息保持写入顺序。
+    /// In-process output: assigns the next sequence, appends to the replay buffer, then hands the message to every inline subscriber. A mergeable streaming text delta waits in the pending slot
+    /// and later deltas of the same message merge into it; any other message or the timer publishes it first, so messages from every writer keep their write order.
     /// </summary>
     public async ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
     {
@@ -65,23 +82,90 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
         await _writeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
-            TurnBroadcastEntry entry;
-            IExecutionMessageSink[] sinks;
-            bool finished;
-            lock (_gate)
+            // 计时发布时订阅者抛出的异常交给下一次写入，与直接写入时的失败传递方式一致。
+            // An exception a subscriber threw during a timed publication reaches the next write, as a direct write failure would.
+            if (_flushFailure is { } failure)
             {
-                entry = new TurnBroadcastEntry(_lastSequence + 1, Stamp(message, TurnId, _lastSequence + 1));
-                finished = Append(entry);
-                sinks = _sinks.ToArray();
+                _flushFailure = null;
+                failure.Throw();
             }
-            foreach (var sink in sinks)
-                await sink.WriteAsync(entry.Message, CancellationToken.None).ConfigureAwait(false);
-            if (finished)
-                Finished?.Invoke(this);
+
+            if (_pending != null)
+            {
+                if (StreamingMessageMerger.CanMerge(_pending, message))
+                {
+                    _pending = StreamingMessageMerger.Merge(_pending, message);
+                    return;
+                }
+                await PublishPendingAsync().ConfigureAwait(false);
+            }
+
+            if (StreamingMessageMerger.CanMerge(message))
+            {
+                _pending = StreamingMessageMerger.Own(message);
+                _flushTimer ??= _timeProvider.CreateTimer(
+                    static state => ((TurnBroadcast)state!).OnFlushTimer(),
+                    this,
+                    Timeout.InfiniteTimeSpan,
+                    Timeout.InfiniteTimeSpan
+                );
+                _flushTimer.Change(CoalescingWindow, Timeout.InfiniteTimeSpan);
+                return;
+            }
+
+            await PublishAsync(message).ConfigureAwait(false);
         }
         finally
         {
             _writeGate.Release();
+        }
+    }
+
+    private void OnFlushTimer() => _ = FlushPendingAsync();
+
+    private async Task FlushPendingAsync()
+    {
+        await _writeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            if (_pending != null)
+                await PublishPendingAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _flushFailure = ExceptionDispatchInfo.Capture(exception);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    private ValueTask PublishPendingAsync()
+    {
+        var pending = _pending!;
+        _pending = null;
+        _flushTimer!.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        return PublishAsync(pending);
+    }
+
+    private async ValueTask PublishAsync(AgwMessage message)
+    {
+        TurnBroadcastEntry entry;
+        IExecutionMessageSink[] sinks;
+        bool finished;
+        lock (_gate)
+        {
+            entry = new TurnBroadcastEntry(_lastSequence + 1, Stamp(message, TurnId, _lastSequence + 1));
+            finished = Append(entry);
+            sinks = _sinks;
+        }
+        foreach (var sink in sinks)
+            await sink.WriteAsync(entry.Message, CancellationToken.None).ConfigureAwait(false);
+        if (finished)
+        {
+            _flushTimer?.Dispose();
+            Finished?.Invoke(this);
         }
     }
 
@@ -100,7 +184,9 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
                     continue;
                 if (_entries.Count > 0 && entry.Sequence != _lastSequence + 1)
                     _entries.Clear();
-                finished |= Append(entry);
+                // 回放缓冲只需要消息；数据库载荷已经交给事件记录与投影。
+                // The replay buffer needs only the message; the stored payload already went to the event log and projection.
+                finished |= Append(entry with { PayloadJson = null });
             }
         }
         if (finished)
@@ -115,13 +201,21 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
     {
         ArgumentNullException.ThrowIfNull(sink);
         lock (_gate)
-            _sinks.Add(sink);
+            _sinks = [.. _sinks, sink];
     }
 
+    /// <summary>
+    /// 订阅者数组写时复制：发布消息时直接读取当前数组，不必每条消息复制一次。
+    /// The subscriber array is copied on write, so publishing reads the current array without copying it per message.
+    /// </summary>
     public void RemoveSink(IExecutionMessageSink sink)
     {
         lock (_gate)
-            _sinks.Remove(sink);
+        {
+            var index = Array.IndexOf(_sinks, sink);
+            if (index >= 0)
+                _sinks = [.. _sinks.AsSpan(0, index), .. _sinks.AsSpan(index + 1)];
+        }
     }
 
     /// <summary>
@@ -137,8 +231,8 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
             TurnBroadcastEntry[] replay;
             lock (_gate)
             {
-                replay = _entries.Where(entry => entry.Sequence > afterSequence).ToArray();
-                _sinks.Add(sink);
+                replay = EntriesAfter(afterSequence);
+                _sinks = [.. _sinks, sink];
             }
             foreach (var entry in replay)
                 await sink.WriteAsync(entry.Message, CancellationToken.None).ConfigureAwait(false);
@@ -157,11 +251,24 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
     {
         lock (_gate)
         {
+            _changedObserved = true;
             changed = _changed.Task;
             if (_entries.Count == 0 || _entries[0].Sequence > afterSequence + 1)
                 return [];
-            return _entries.Where(entry => entry.Sequence > afterSequence).ToArray();
+            return EntriesAfter(afterSequence);
         }
+    }
+
+    /// <summary>
+    /// 缓冲中的序号连续，按 afterSequence 直接算出起始下标后切片复制。调用方持有 _gate。
+    /// Buffered sequences are contiguous, so the start index follows from afterSequence and the tail is copied as a slice. The caller holds _gate.
+    /// </summary>
+    private TurnBroadcastEntry[] EntriesAfter(long afterSequence)
+    {
+        if (_entries.Count == 0)
+            return [];
+        var start = Math.Max(0, afterSequence + 1 - _entries[0].Sequence);
+        return start >= _entries.Count ? [] : CollectionsMarshal.AsSpan(_entries)[(int)start..].ToArray();
     }
 
     /// <summary>
@@ -189,8 +296,14 @@ internal sealed class TurnBroadcast : IExecutionMessageSink
         _lastSequence = entry.Sequence;
         var finished = !IsFinished && AgwMessageClassifier.IsTurnFinished(entry.Message);
         IsFinished |= finished;
-        _changed.TrySetResult();
-        _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // 只有读者取走过当前的 changed 任务时才需要唤醒并换一个新任务。
+        // Only when a reader took the current changed task does it need waking and replacing.
+        if (_changedObserved)
+        {
+            _changed.TrySetResult();
+            _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _changedObserved = false;
+        }
         return finished;
     }
 }
@@ -217,7 +330,7 @@ internal sealed class TurnBroadcastRegistry
             turnId,
             id =>
             {
-                var created = new TurnBroadcast(id, userId);
+                var created = new TurnBroadcast(id, userId, _timeProvider);
                 created.Finished += ScheduleRemoval;
                 return created;
             }

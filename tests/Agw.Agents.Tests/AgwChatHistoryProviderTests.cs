@@ -97,6 +97,55 @@ public sealed class AgwChatHistoryProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task ProvideChatHistoryAsync_WithinOneRun_ReusesUnchangedRowsAndRereadsChangedRows()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await Database.CreateAsync();
+        var projectId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
+        var first = CreateRecord(projectConversationId, 0, "first");
+        var second = CreateRecord(projectConversationId, 1, "second");
+        await database.SeedAsync(context =>
+        {
+            context.Projects.Add(CreateProject(projectId));
+            context.ProjectConversations.Add(CreateContext(projectConversationId, projectId, "context-1"));
+            context.ProjectConversationChatHistories.AddRange(first, second);
+        });
+        var provider = CreateProvider(database);
+        var session = new FakeAgentSession();
+        _sessionState.InitializeSessionState(session, "context-1", projectId);
+        var context = new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []);
+        provider.Begin(new FakeAgent(), session);
+
+        var initial = (await InvokeProvideChatHistoryAsync(provider, context, cancellationToken)).ToList();
+        var repeated = (await InvokeProvideChatHistoryAsync(provider, context, cancellationToken)).ToList();
+        await using (var update = database.CreateContext())
+        {
+            var row = await update.ProjectConversationChatHistories.SingleAsync(
+                item => item.Id == second.Id,
+                cancellationToken
+            );
+            row.ConversationPayload = JsonSerializer.Serialize(
+                new ChatMessage(ChatRole.User, "second, edited"),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            );
+            await update.SaveChangesAsync(cancellationToken);
+        }
+        var changed = (await InvokeProvideChatHistoryAsync(provider, context, cancellationToken)).ToList();
+        provider.End(session);
+        var outsideRun = (await InvokeProvideChatHistoryAsync(provider, context, cancellationToken)).ToList();
+
+        Assert.NotSame(initial[0], repeated[0]);
+        Assert.NotSame(initial[0].Contents, repeated[0].Contents);
+        Assert.Same(initial[0].Contents[0], repeated[0].Contents[0]);
+        Assert.Same(initial[1].Contents[0], repeated[1].Contents[0]);
+        Assert.Same(initial[0].Contents[0], changed[0].Contents[0]);
+        Assert.NotSame(initial[1].Contents[0], changed[1].Contents[0]);
+        Assert.Equal(["first", "second, edited"], changed.Select(message => message.Text));
+        Assert.NotSame(changed[0].Contents[0], outsideRun[0].Contents[0]);
+    }
+
+    [Fact]
     public async Task ProvideChatHistoryAsync_WhenContextContainsControlSnapshots_ExcludesThemFromModelHistory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

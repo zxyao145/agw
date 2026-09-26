@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Inbound.Facades;
 using Agw.Agents.Execution.Runtimes.Contracts;
@@ -92,10 +91,10 @@ public sealed class TurnReplayTests
                         MessageId = id,
                         CreatedAt = TimeProvider.System.GetUtcNow(),
                         Metadata = [],
-                        Payload = JsonSerializer.Serialize(
-                            new ChatMessage(ChatRole.Assistant, "persisted output") { MessageId = id.ToString("D") },
-                            WebJsonOptions.Default
-                        ),
+                        Message = new ChatMessage(ChatRole.Assistant, "persisted output")
+                        {
+                            MessageId = id.ToString("D"),
+                        },
                     },
                 ],
                 token

@@ -126,6 +126,7 @@ public static class DependencyInjection
         services.AddScoped<IToolsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
+        services.AddScoped<IDurableExecutionEventSequence, DurableExecutionEventSequence>();
         services.AddScoped<ITurnAcceptanceWriter, TurnAcceptanceWriter>();
         services.AddScoped<DurableTurnUpgrade>();
         services.AddScoped<InProcessTurnRecovery>();

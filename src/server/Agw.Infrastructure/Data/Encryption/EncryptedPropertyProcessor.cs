@@ -24,7 +24,7 @@ internal sealed class EncryptedPropertyProcessor
                     .Where(entry => entry.State is EntityState.Added or EntityState.Modified)
             )
             {
-                var encryptedProperties = EncryptedEntityMetadata.GetEncryptedProperties(entry.Metadata).ToList();
+                var encryptedProperties = EncryptedEntityMetadata.GetEncryptedProperties(entry.Metadata);
                 if (encryptedProperties.Count == 0)
                 {
                     continue;
@@ -70,7 +70,7 @@ internal sealed class EncryptedPropertyProcessor
             return;
         }
 
-        var encryptedProperties = EncryptedEntityMetadata.GetEncryptedProperties(entityType).ToList();
+        var encryptedProperties = EncryptedEntityMetadata.GetEncryptedProperties(entityType);
         if (encryptedProperties.Count == 0)
         {
             return;

@@ -330,6 +330,9 @@ Manifest、checkpoint、pending、response 和错误使用实体上的 `[Encrypt
 事件实现位于 [`Messaging/Durable`](../Messaging/Durable/)，默认使用 PostgreSQL 的 `execution_stream_entry` 表，也可配置 Redis Stream。
 
 - 默认按 250 毫秒或 100 条普通事件批量提交，达到任一条件即刷新；写入间隔设为 0 时逐次写入。
+- 同一消息相邻的流式文本增量在同一批次内合并成一条事件，合并规则与客户端的追加规则一致。批次第一次提交后载荷固定，重试沿用原事件 ID 与载荷。
+- 事件序号用一条 `UPDATE ... RETURNING` 在锁定执行行的事务中预留。
+- Redis 投影保存与 PostgreSQL 相同的未加序号载荷，读取时补上 turnId 与 turnSequence；一次发布的写入命令放在同一个批次中发送。
 - 每条事件保留 `ExecutionId + SegmentIndex + Sequence` 的逻辑位置；相同位置保留首次提交内容，cursor 用于从已读取位置之后继续回放。
 - 状态行保存有界的恢复快照；事件流按输出追加，避免每个 token 放大状态行或制造状态更新冲突。
 - 事件流故障会降低中间输出的回放能力；只要状态存储仍正常，执行仍可等待、回答和结束。缺失的普通输出不会凭空重建。

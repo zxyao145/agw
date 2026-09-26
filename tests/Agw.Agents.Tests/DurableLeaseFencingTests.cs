@@ -63,9 +63,15 @@ public sealed partial class DurableExecutionStoreTests
         var first = await AppendAsync(guard, id, lease.Epoch, batch);
 
         // Act
-        var retried = await AppendAsync(guard, id, lease.Epoch, batch);
+        var retried = await AppendAsync(guard, id, lease.Epoch, lookupCommitted: true, batch);
         var conflict = await Assert.ThrowsAsync<AgwException>(() =>
-            AppendAsync(guard, id, lease.Epoch, new PendingExecutionEvent(batch[0].EventId, TextMessage("changed")))
+            AppendAsync(
+                guard,
+                id,
+                lease.Epoch,
+                lookupCommitted: true,
+                new PendingExecutionEvent(batch[0].EventId, TextMessage("changed"))
+            )
         );
 
         // Assert
@@ -246,15 +252,25 @@ public sealed partial class DurableExecutionStoreTests
         Guid turnId,
         long leaseEpoch,
         params PendingExecutionEvent[] events
+    ) => AppendAsync(guard, turnId, leaseEpoch, lookupCommitted: false, events);
+
+    private static Task<IReadOnlyList<TurnBroadcastEntry>> AppendAsync(
+        IExecutionWriteGuard guard,
+        Guid turnId,
+        long leaseEpoch,
+        bool lookupCommitted,
+        params PendingExecutionEvent[] events
     ) =>
         guard.RunAsync(
             (services, token) =>
                 DurableExecutionEvents.AppendAsync(
                     services.GetRequiredService<IAgentsDbContext>(),
+                    services.GetRequiredService<IDurableExecutionEventSequence>(),
                     turnId,
                     leaseEpoch,
                     0,
                     events,
+                    lookupCommitted,
                     token
                 ),
             TestContext.Current.CancellationToken
@@ -309,10 +325,7 @@ public sealed partial class DurableExecutionStoreTests
                         MessageId = messageId,
                         CreatedAt = _clock.GetUtcNow(),
                         StepIndex = 1,
-                        Payload = JsonSerializer.Serialize(
-                            new ChatMessage(ChatRole.Assistant, "late") { MessageId = messageId.ToString("D") },
-                            new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                        ),
+                        Message = new ChatMessage(ChatRole.Assistant, "late") { MessageId = messageId.ToString("D") },
                         Metadata = [],
                     }
                 ),

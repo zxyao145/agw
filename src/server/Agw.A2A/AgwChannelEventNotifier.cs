@@ -10,7 +10,7 @@ public sealed class AgwChannelEventNotifier
     private const int SubscriberCapacity = 128;
     private const int MaximumSubscribers = 64;
     private readonly Dictionary<string, HashSet<Channel<StreamResponse>>> _subscribers = new(StringComparer.Ordinal);
-    private readonly object _subscriberLock = new();
+    private readonly Lock _subscriberLock = new();
     private readonly InMemoryApplicationLock _taskLocks = new();
     private int _subscriberCount;
 

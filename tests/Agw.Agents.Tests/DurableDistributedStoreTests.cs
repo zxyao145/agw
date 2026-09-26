@@ -222,6 +222,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
             (services, token) =>
                 DurableExecutionEvents.AppendAsync(
                     services.GetRequiredService<IAgentsDbContext>(),
+                    services.GetRequiredService<IDurableExecutionEventSequence>(),
                     turnId,
                     leaseEpoch,
                     0,
@@ -235,6 +236,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
                             )
                         ),
                     ],
+                    lookupCommitted: false,
                     token
                 ),
             TestContext.Current.CancellationToken

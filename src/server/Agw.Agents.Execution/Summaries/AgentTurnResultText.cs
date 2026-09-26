@@ -8,6 +8,10 @@ namespace Agw.Agents.Execution.Summaries;
 
 internal static class AgentTurnResultText
 {
+    // Execution 程序集的类型命名规则不允许源生成正则产生的 Runner 类型，这里使用缓存的实例。
+    // The Execution assembly's type naming rule rejects the Runner type a generated regex emits, so a cached instance is used.
+    private static readonly Regex OpeningFenceRegex = new(@"(?m)^[ \t]*(`{3,}|~{3,})[^\r\n]*\r?\n");
+
     public static string NormalizeJson(string text)
     {
         // Accept complete JSON first so scalar values cannot be mistaken for embedded containers.
@@ -26,7 +30,7 @@ internal static class AgentTurnResultText
             // Compatible endpoints may wrap their answer in a code fence or explanatory text.
         }
 
-        var openingFence = Regex.Match(text, @"(?m)^[ \t]*(`{3,}|~{3,})[^\r\n]*\r?\n");
+        var openingFence = OpeningFenceRegex.Match(text);
         if (openingFence.Success)
         {
             var bodyStart = openingFence.Index + openingFence.Length;
@@ -35,8 +39,8 @@ internal static class AgentTurnResultText
             ).Match(text, bodyStart);
             if (
                 !closingFence.Success
-                || ContainsContainerDelimiter(text[..openingFence.Index])
-                || ContainsContainerDelimiter(text[(closingFence.Index + closingFence.Length)..])
+                || ContainsContainerDelimiter(text.AsSpan(0, openingFence.Index))
+                || ContainsContainerDelimiter(text.AsSpan(closingFence.Index + closingFence.Length))
             )
             {
                 throw InvalidResult();
@@ -92,7 +96,7 @@ internal static class AgentTurnResultText
         return json ?? throw InvalidResult();
     }
 
-    private static bool ContainsContainerDelimiter(string text) => text.AsSpan().IndexOfAny("{}[]") >= 0;
+    private static bool ContainsContainerDelimiter(ReadOnlySpan<char> text) => text.IndexOfAny("{}[]") >= 0;
 
     private static AgwException InvalidResult() =>
         new(

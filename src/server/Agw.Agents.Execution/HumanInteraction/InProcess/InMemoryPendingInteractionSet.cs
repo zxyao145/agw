@@ -12,7 +12,7 @@ namespace Agw.Agents.Execution.HumanInteraction.InProcess;
 /// </summary>
 internal sealed class InMemoryPendingInteractionSet : PendingInteractionSet
 {
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly AgwPermissionMode? _permissionMode;
     private readonly IExecutionMessageSink? _requestOutput;
     private readonly Action<int>? _pendingCountChanged;

@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
@@ -102,10 +101,7 @@ public sealed class ConversationMessagePostgresTests
                     MessageId = id,
                     CreatedAt = now,
                     Metadata = [],
-                    Payload = JsonSerializer.Serialize(
-                        new ChatMessage(ChatRole.Assistant, text) { MessageId = id.ToString("D") },
-                        new JsonSerializerOptions(JsonSerializerDefaults.Web)
-                    ),
+                    Message = new ChatMessage(ChatRole.Assistant, text) { MessageId = id.ToString("D") },
                 };
             await writer.UpsertAsync(scope, [Snapshot("a")], token);
             await writer.UpsertAsync(scope, [Snapshot("ab")], token);

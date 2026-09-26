@@ -14,7 +14,7 @@ public sealed class RemoteSkillRefreshLockRouter : IRemoteSkillRefreshLock
     private readonly Func<DistributedLockProvider, string, IDistributedLockProvider> _providerFactory;
     private readonly ILogger<RemoteSkillRefreshLockRouter> _logger;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _inMemoryLocks = new();
-    private readonly object _distributedLockSync = new();
+    private readonly Lock _distributedLockSync = new();
     private int _singleNodeWarningLogged;
 
     private DistributedLockProvider? _distributedProvider;

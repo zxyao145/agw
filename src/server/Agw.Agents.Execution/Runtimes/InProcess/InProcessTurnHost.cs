@@ -11,7 +11,7 @@ namespace Agw.Agents.Execution.Runtimes.InProcess;
 /// </summary>
 internal sealed class InProcessTurnHost : IAsyncDisposable
 {
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Dictionary<string, Func<CancellationToken, Task>> _afterTurnActions = new(StringComparer.Ordinal);
     private readonly IAsyncDisposable _runtime;
     private ActiveTurn? _activeTurn;

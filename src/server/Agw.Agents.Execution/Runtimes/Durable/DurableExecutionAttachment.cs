@@ -23,7 +23,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     private readonly IExecutionMessageSink _messageSink;
     private readonly CancellationToken _hostToken;
     private readonly DurableExecutionCoordinator _coordinator;
-    private readonly object _stateLock = new();
+    private readonly Lock _stateLock = new();
     private Guid? _activeExecutionId;
     private CancellationTokenSource? _subscriptionCts;
     private Task _subscriptionTask = Task.CompletedTask;

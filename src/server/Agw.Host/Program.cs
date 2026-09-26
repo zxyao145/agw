@@ -137,53 +137,56 @@ public static class AgwHostApplication
             }
             var serviceVersion = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceVersion") ?? "1.0.0";
             var configuredOtlpEndpoint = builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint");
-            var otlpEndpoint = new Uri(
-                string.IsNullOrWhiteSpace(configuredOtlpEndpoint) ? "http://localhost:4317" : configuredOtlpEndpoint
-            );
 
-            builder
-                .Services.AddOpenTelemetry()
-                .ConfigureResource(resource =>
-                    resource.AddService(serviceName: serviceName, serviceVersion: serviceVersion)
-                )
-                .WithTracing(tracing =>
-                    tracing
-                        .AddAspNetCoreInstrumentation()
-                        .AddHttpClientInstrumentation()
-                        .AddEntityFrameworkCoreInstrumentation(options =>
-                        {
-                            options.EnrichWithIDbCommand = (activity, command) =>
-                            {
-                                activity.SetTag("db.command.text", command.CommandText);
-                            };
-                        })
-                        .AddSource("Agw.*")
-                        .AddSource("Microsoft.Agents.AI.Workflows")
-                        .AddOtlpExporter(options =>
-                        {
-                            options.Endpoint = otlpEndpoint;
-                        })
-                )
-                .WithMetrics(metrics =>
-                    metrics
-                        .AddAspNetCoreInstrumentation()
-                        .AddHttpClientInstrumentation()
-                        .AddMeter("Agw.*")
-                        .AddOtlpExporter(options =>
-                        {
-                            options.Endpoint = otlpEndpoint;
-                        })
-                );
-
-            builder.Logging.AddOpenTelemetry(logging =>
+            // 只有配置了 OTLP 端点时才注册 OpenTelemetry；没有监听者时 Activity 与指标不会被创建。
+            // OpenTelemetry is registered only when an OTLP endpoint is configured; without listeners no activities or metrics are created.
+            if (!string.IsNullOrWhiteSpace(configuredOtlpEndpoint))
             {
-                logging.IncludeFormattedMessage = true;
-                logging.IncludeScopes = true;
-                logging.AddOtlpExporter(options =>
+                var otlpEndpoint = new Uri(configuredOtlpEndpoint);
+                builder
+                    .Services.AddOpenTelemetry()
+                    .ConfigureResource(resource =>
+                        resource.AddService(serviceName: serviceName, serviceVersion: serviceVersion)
+                    )
+                    .WithTracing(tracing =>
+                        tracing
+                            .AddAspNetCoreInstrumentation()
+                            .AddHttpClientInstrumentation()
+                            .AddEntityFrameworkCoreInstrumentation(options =>
+                            {
+                                options.EnrichWithIDbCommand = (activity, command) =>
+                                {
+                                    activity.SetTag("db.command.text", command.CommandText);
+                                };
+                            })
+                            .AddSource("Agw.*")
+                            .AddSource("Microsoft.Agents.AI.Workflows")
+                            .AddOtlpExporter(options =>
+                            {
+                                options.Endpoint = otlpEndpoint;
+                            })
+                    )
+                    .WithMetrics(metrics =>
+                        metrics
+                            .AddAspNetCoreInstrumentation()
+                            .AddHttpClientInstrumentation()
+                            .AddMeter("Agw.*")
+                            .AddOtlpExporter(options =>
+                            {
+                                options.Endpoint = otlpEndpoint;
+                            })
+                    );
+
+                builder.Logging.AddOpenTelemetry(logging =>
                 {
-                    options.Endpoint = otlpEndpoint;
+                    logging.IncludeFormattedMessage = true;
+                    logging.IncludeScopes = true;
+                    logging.AddOtlpExporter(options =>
+                    {
+                        options.Endpoint = otlpEndpoint;
+                    });
                 });
-            });
+            }
 
             if (hasControlPlane)
             {

@@ -4,7 +4,7 @@ namespace Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 
 internal sealed class ClaudeToolApprovalCache
 {
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly Dictionary<string, Grants> _scopes = new(StringComparer.Ordinal);
 
     public bool Contains(string scope, long version, string tool, JsonNode? arguments)

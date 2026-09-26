@@ -114,7 +114,9 @@ public sealed partial class ConversationHistoryStore : IConversationHistoryStore
                 throw new AgwException(ErrorCodes.ConversationSessionConflict);
             if (pending != null && conversation == null && pending.IsExecutionBound)
                 throw new AgwException(ErrorCodes.ConversationSessionConflict);
-            var records =
+            // 模型历史只需要行 Id、序号、载荷与创建时间；投影查询不加载 Metadata，也不物化实体。
+            // Model history needs only the row Id, sequence, payload and creation time; the projected query loads no Metadata and materializes no entity.
+            var rows =
                 conversation == null
                     ? []
                     : await db
@@ -124,11 +126,18 @@ public sealed partial class ConversationHistoryStore : IConversationHistoryStore
                             && record.ConversationPayload != null
                             && record.HistoryScope == historyScope
                         )
+                        .Select(record => new HistoryRow
+                        {
+                            Id = record.Id,
+                            Sequence = record.ConversationSequence,
+                            Payload = record.ConversationPayload!,
+                            CreateTime = record.CreateTime,
+                        })
                         .ToListAsync(cancellationToken)
                         .ConfigureAwait(false);
             if (pending != null)
             {
-                var known = records.ToDictionary(record => record.Id);
+                var known = rows.ToDictionary(row => row.Id);
                 // 未提交记录的临时序号只用于排序：接在已提交的最大序号之后。
                 // Temporary sequences of uncommitted records only order them after the largest committed sequence.
                 var sequence =
@@ -142,26 +151,24 @@ public sealed partial class ConversationHistoryStore : IConversationHistoryStore
                 foreach (var record in pending.Snapshot())
                 {
                     if (known.TryGetValue(record.Id, out var existing))
-                    {
-                        existing.ConversationPayload = record.Payload;
-                        existing.Metadata = record.Metadata;
-                    }
+                        existing.Payload = record.Payload;
                     else if (string.Equals(record.HistoryScope, historyScope, StringComparison.Ordinal))
-                        records.Add(ToEntity(record, conversation?.Id ?? Guid.Empty, ++sequence));
+                        rows.Add(
+                            new HistoryRow
+                            {
+                                Id = record.Id,
+                                Sequence = ++sequence,
+                                Payload = record.Payload,
+                                CreateTime = record.CreatedAt,
+                            }
+                        );
                 }
             }
 
-            return records
-                .OrderBy(record => record.ConversationSequence ?? long.MinValue)
-                .ThenBy(record => record.CreateTime)
-                .ThenBy(record => record.Id)
-                .Select(record => new ConversationHistoryEntry(
-                    record.Id,
-                    record.ConversationSequence,
-                    record.ConversationPayload!,
-                    record.Metadata,
-                    record.CreateTime
-                ))
+            return rows.OrderBy(row => row.Sequence ?? long.MinValue)
+                .ThenBy(row => row.CreateTime)
+                .ThenBy(row => row.Id)
+                .Select(row => new ConversationHistoryEntry(row.Id, row.Sequence, row.Payload, null, row.CreateTime))
                 .ToList();
         }
         finally
@@ -377,8 +384,8 @@ public sealed partial class ConversationHistoryStore : IConversationHistoryStore
     }
 
     /// <summary>
-    /// 把投影快照转换为待写记录：校验消息身份，合并展示元数据，并用本存储的序列化选项写出消息。
-    /// Converts a projection snapshot into a pending record: validates the message identity, merges display metadata and writes the message with this store's serializer options.
+    /// 把投影快照转换为待写记录：校验消息身份，合并展示元数据，并用本存储的序列化选项写出消息。每个快照只序列化这一次。
+    /// Converts a projection snapshot into a pending record: validates the message identity, merges display metadata and writes the message with this store's serializer options. Each snapshot is serialized only here.
     /// </summary>
     private PendingHistoryRecord CreateSnapshotRecord(
         ConversationMessageWriteScope scope,
@@ -387,12 +394,11 @@ public sealed partial class ConversationHistoryStore : IConversationHistoryStore
     {
         if (scope.ProducerId == Guid.Empty || snapshot.MessageId == Guid.Empty)
             throw new AgwException(ErrorCodes.InvalidParam);
-        var message = JsonSerializer.Deserialize<ChatMessage>(snapshot.Payload, _jsonSerializerOptions);
-        if (message == null || !Guid.TryParse(message.MessageId, out var messageId) || messageId != snapshot.MessageId)
+        if (!Guid.TryParse(snapshot.Message.MessageId, out var messageId) || messageId != snapshot.MessageId)
             throw new AgwException(ErrorCodes.InvalidParam);
-        // 时间戳恢复为 DateTimeOffset 值再写出，负载中保持 RFC 3339 原文。
-        // The timestamp is restored as a DateTimeOffset value before writing, keeping its RFC 3339 text in the payload.
-        MessageTimestampMetadata.EnsureCreatedAt(message, snapshot.CreatedAt);
+        // 时间戳以 DateTimeOffset 值写出，负载中保持 RFC 3339 原文；在浅复制上补齐，捕获的消息保持不变。
+        // The timestamp is written as a DateTimeOffset value, keeping its RFC 3339 text in the payload; it is filled on a shallow copy so the captured message stays unchanged.
+        var message = MessageTimestampMetadata.EnsureCreatedAt(snapshot.Message.Clone(), snapshot.CreatedAt);
         var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message) ?? [];
         foreach (var (key, value) in snapshot.Metadata)
             metadata[key] = value;
@@ -469,6 +475,18 @@ public sealed partial class ConversationHistoryStore : IConversationHistoryStore
             CreateTime = record.CreatedAt,
             UpdateTime = record.CreatedAt,
         };
+
+    /// <summary>
+    /// 模型历史读取的一行：只含排序与模型输入需要的列，合并待写快照时替换载荷。
+    /// One row of the model history read: only the columns needed for ordering and model input; merging pending snapshots replaces its payload.
+    /// </summary>
+    private sealed class HistoryRow
+    {
+        public required Guid Id { get; init; }
+        public required long? Sequence { get; init; }
+        public required string Payload { get; set; }
+        public required DateTimeOffset CreateTime { get; init; }
+    }
 
     /// <summary>
     /// 待写的一行：CreatedAt 是消息在投影中第一次出现的时间，作为行的创建时间；归属列只在插入时写入。

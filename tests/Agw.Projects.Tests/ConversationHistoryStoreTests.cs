@@ -205,6 +205,26 @@ public sealed class ConversationHistoryStoreTests : IDisposable
         Assert.Equal(1, buffer.CommittedSequence);
     }
 
+    [Fact]
+    public async Task ReadAsync_UnchangedPendingSnapshot_ReusesSerializedPayload()
+    {
+        await using var fixture = await StoreFixture.CreateAsync(ConversationHistoryWriteMode.TurnEnd);
+        var token = TestContext.Current.CancellationToken;
+        var scope = fixture.WriteScope();
+        var buffer = fixture.BeginBuffer();
+        var source = new SnapshotSource { Current = Snapshot(Guid.NewGuid(), "pending") };
+        await buffer.ScheduleAsync(scope, source, 1, token);
+
+        var first = Assert.Single(await fixture.Store.ReadAsync(fixture.Conversation(), null, buffer, token));
+        var repeated = Assert.Single(await fixture.Store.ReadAsync(fixture.Conversation(), null, buffer, token));
+        source.Current = Snapshot(source.Current.MessageId, "pending, updated");
+        var changed = Assert.Single(await fixture.Store.ReadAsync(fixture.Conversation(), null, buffer, token));
+
+        Assert.Same(first.Payload, repeated.Payload);
+        Assert.Equal("pending, updated", Text(changed));
+        await buffer.CompleteAsync(null);
+    }
+
     [Theory]
     [InlineData("Unknown", "5", "10")]
     [InlineData("Interval", "0", "10")]
@@ -262,10 +282,7 @@ public sealed class ConversationHistoryStoreTests : IDisposable
             MessageId = id,
             CreatedAt = new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero),
             Metadata = [],
-            Payload = JsonSerializer.Serialize(
-                new ChatMessage(ChatRole.Assistant, text) { MessageId = id.ToString("D") },
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)
-            ),
+            Message = new ChatMessage(ChatRole.Assistant, text) { MessageId = id.ToString("D") },
         };
 
     /// <summary>

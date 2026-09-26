@@ -64,6 +64,7 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
+        services.AddScoped<IDurableExecutionEventSequence, DurableExecutionEventSequence>();
         services.AddScoped<IConversationTurnStore, ConversationTurnStore>();
         services.AddScoped<ITurnAcceptanceWriter, TurnAcceptanceWriter>();
         services.AddSingleton<IDurableExecutionLeases, DurableExecutionLeases>();

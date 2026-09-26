@@ -8,7 +8,7 @@ using Microsoft.Agents.AI;
 
 namespace Agw.Skills.Infrastructure.Remote;
 
-public sealed class RemoteSkillHttpClient : IRemoteSkillClient
+public sealed partial class RemoteSkillHttpClient : IRemoteSkillClient
 {
     public const string HttpClientName = "Agw.RemoteSkills";
 
@@ -18,16 +18,6 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
     private static readonly UTF8Encoding StrictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true
-    );
-    private static readonly Regex FrontmatterRegex = new(
-        "\\A\\uFEFF?^---\\s*$(.+?)^---\\s*$",
-        RegexOptions.Multiline | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5)
-    );
-    private static readonly Regex YamlKeyValueRegex = new(
-        "^([\\w-]+)\\s*:\\s*(?:[\"'](.+?)[\"']|(.+?))\\s*$",
-        RegexOptions.Multiline | RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5)
     );
     private readonly IHttpClientFactory _httpClientFactory;
 
@@ -201,7 +191,7 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
     private static RemoteSkillDefinition ParseSkillMarkdown(string content)
     {
         var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
-        var frontmatterMatch = FrontmatterRegex.Match(normalized);
+        var frontmatterMatch = FrontmatterRegex().Match(normalized);
         if (!frontmatterMatch.Success)
         {
             throw InvalidResponse("Remote SKILL.md must start with YAML frontmatter delimited by '---'.");
@@ -210,7 +200,7 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
         string? name = null;
         string? description = null;
         var frontmatter = frontmatterMatch.Groups[1].Value.Trim();
-        foreach (Match fieldMatch in YamlKeyValueRegex.Matches(frontmatter))
+        foreach (Match fieldMatch in YamlKeyValueRegex().Matches(frontmatter))
         {
             var key = fieldMatch.Groups[1].Value;
             var value = fieldMatch.Groups[2].Success
@@ -320,4 +310,18 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
     {
         return new AgwException(ErrorCodes.RemoteSkillResponseInvalid, message);
     }
+
+    [GeneratedRegex(
+        "\\A\\uFEFF?^---\\s*$(.+?)^---\\s*$",
+        RegexOptions.Multiline | RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 5000
+    )]
+    private static partial Regex FrontmatterRegex();
+
+    [GeneratedRegex(
+        "^([\\w-]+)\\s*:\\s*(?:[\"'](.+?)[\"']|(.+?))\\s*$",
+        RegexOptions.Multiline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 5000
+    )]
+    private static partial Regex YamlKeyValueRegex();
 }
