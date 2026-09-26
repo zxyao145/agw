@@ -13,7 +13,7 @@ public sealed class SettingsMigrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MigrationScripts_CreateSettingsDirectly_WithoutIntermediateTable(bool postgres)
+    public void InitialMigrationScripts_CreateSettingsWithoutForeignKeys(bool postgres)
     {
         var builder = new DbContextOptionsBuilder<AgwDbContext>();
         AgwDbContextOptionsConfigurator.Configure(
@@ -23,15 +23,13 @@ public sealed class SettingsMigrationTests
         );
         using var context = new AgwDbContext(builder.Options);
         Assert.False(context.Database.HasPendingModelChanges());
-        var migrations = context.Database.GetMigrations().ToArray();
-        var index = Array.FindIndex(
-            migrations,
-            migration => migration.EndsWith("_AddSettings", StringComparison.Ordinal)
-        );
-        Assert.True(index > 0);
+        var migration = Assert.Single(context.Database.GetMigrations());
+        Assert.EndsWith("_ReInit", migration, StringComparison.Ordinal);
+
         var migrator = context.GetService<IMigrator>();
-        var up = migrator.GenerateScript(migrations[index - 1], migrations[index]);
-        var down = migrator.GenerateScript(migrations[index], migrations[index - 1]);
+        var up = migrator.GenerateScript(Migration.InitialDatabase, migration);
+        var down = migrator.GenerateScript(migration, Migration.InitialDatabase);
+
         Assert.Contains("CREATE TABLE", up, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ix_setting_key", up);
         Assert.Contains("ix_setting_user_id_key", up);
@@ -47,11 +45,11 @@ public sealed class SettingsMigrationTests
     }
 
     [Fact]
-    public async Task SqliteMigration_CreatesAndRollsBackSettings_PreservesExistingTokens()
+    public async Task SqliteInitialMigration_CreatesAndRollsBackSettings()
     {
-        var ct = TestContext.Current.CancellationToken;
+        var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(ct);
+        await connection.OpenAsync(cancellationToken);
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(
                 connection,
@@ -60,38 +58,19 @@ public sealed class SettingsMigrationTests
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var context = new AgwDbContext(options);
+        var migration = Assert.Single(context.Database.GetMigrations());
         var migrator = context.GetService<IMigrator>();
-        var migrations = context.Database.GetMigrations().ToArray();
-        var index = Array.FindIndex(
-            migrations,
-            migration => migration.EndsWith("_AddSettings", StringComparison.Ordinal)
-        );
-        Assert.True(index > 0);
-        await migrator.MigrateAsync(migrations[index - 1], ct);
-        var tokenId = Guid.CreateVersion7();
-        var createdAt = DateTimeOffset.Parse("2026-09-12T07:08:09+00:00");
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO api_token (id,name,normalized_name,prefix,secret_hash,create_time,create_by) VALUES ({tokenId},'kept','KEPT','agw_prefix','existing-hash',{createdAt},'creator')",
-            ct
-        );
 
-        await migrator.MigrateAsync(migrations[index], ct);
-        Assert.Empty(await context.Settings.IgnoreQueryFilters().ToArrayAsync(ct));
-        var token = await context.ApiTokens.AsNoTracking().IgnoreQueryFilters().SingleAsync(ct);
-        Assert.Equal(tokenId, token.Id);
-        Assert.Equal("existing-hash", token.SecretHash);
-        Assert.Equal(createdAt, token.CreateTime);
-        Assert.Equal("creator", token.CreateBy);
+        await migrator.MigrateAsync(null, cancellationToken);
+        Assert.Empty(await context.Settings.IgnoreQueryFilters().ToArrayAsync(cancellationToken));
 
-        await migrator.MigrateAsync(migrations[index - 1], ct);
+        await migrator.MigrateAsync(Migration.InitialDatabase, cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText =
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('setting', 'server_auth_state')";
-        Assert.Equal(0L, await command.ExecuteScalarAsync(ct));
-        Assert.Equal(tokenId, (await context.ApiTokens.AsNoTracking().IgnoreQueryFilters().SingleAsync(ct)).Id);
+        Assert.Equal(0L, await command.ExecuteScalarAsync(cancellationToken));
 
-        // A rolled-back empty settings migration can be applied again.
-        await migrator.MigrateAsync(migrations[index], ct);
-        Assert.Empty(await context.Settings.IgnoreQueryFilters().ToArrayAsync(ct));
+        await migrator.MigrateAsync(migration, cancellationToken);
+        Assert.Empty(await context.Settings.IgnoreQueryFilters().ToArrayAsync(cancellationToken));
     }
 }

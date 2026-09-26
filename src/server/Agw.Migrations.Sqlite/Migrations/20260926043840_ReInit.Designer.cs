@@ -5,74 +5,69 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Agw.Migrations.Postgres.Migrations
+namespace Agw.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(AgwDbContext))]
-    [Migration("20260910115303_AddProjectAdditionalDirectories")]
-    partial class AddProjectAdditionalDirectories
+    [Migration("20260926043840_ReInit")]
+    partial class ReInit
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
-                .HasAnnotation("Relational:MaxIdentifierLength", 63);
-
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.Agentflow", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<bool>("Enable")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasDefaultValue(true)
                         .HasColumnName("enable");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<Guid?>("SummaryModelProviderId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("summary_model_provider_id");
 
                     b.Property<string>("SystemPrompt")
                         .IsRequired()
                         .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("system_prompt");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -84,56 +79,56 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowEdge", b =>
                 {
                     b.Property<Guid>("AgentflowId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 
                     b.Property<string>("EdgeId")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("edge_id");
 
                     b.Property<string>("ConditionJson")
                         .HasMaxLength(8000)
-                        .HasColumnType("character varying(8000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("condition_json");
 
                     b.Property<string>("ConfigJson")
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("config_json");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<int>("Kind")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("kind");
 
                     b.Property<string>("Label")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("label");
 
                     b.Property<string>("SourceNodeId")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("source_node_id");
 
                     b.Property<string>("TargetNodeId")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("target_node_id");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("AgentflowId", "EdgeId")
@@ -151,55 +146,55 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", b =>
                 {
                     b.Property<Guid>("AgentflowId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 
                     b.Property<string>("NodeId")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("node_id");
 
                     b.Property<string>("ConfigJson")
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("config_json");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Instructions")
                         .HasMaxLength(8000)
-                        .HasColumnType("character varying(8000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("instructions");
 
                     b.Property<int>("Kind")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("kind");
 
                     b.Property<string>("Name")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("PositionJson")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("position_json");
 
                     b.Property<Guid?>("RelateId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("relate_id");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("AgentflowId", "NodeId")
@@ -215,30 +210,30 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<Guid?>("AgentId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
 
                     b.Property<string>("AgentName")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_name");
 
                     b.Property<Guid>("AgentflowId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 
                     b.Property<string>("ContextId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("context_id");
 
                     b.Property<long>("DurationMilliseconds")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("duration_milliseconds");
 
                     b.Property<string>("Error")
@@ -253,34 +248,34 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<string>("NodeId")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("node_id");
 
                     b.Property<string>("NodeKind")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("node_kind");
 
                     b.Property<string>("NodeName")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("node_name");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<DateTimeOffset>("StartTimeUtc")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("start_time_utc");
 
                     b.Property<int>("Status")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status");
 
                     b.Property<Guid>("TaskId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("task_id");
 
                     b.HasKey("Id")
@@ -299,90 +294,94 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("display_name");
 
                     b.Property<bool>("Enable")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasDefaultValue(true)
                         .HasColumnName("enable");
 
                     b.Property<bool>("EnableSummary")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("enable_summary");
 
                     b.Property<string>("EnvironmentVariables")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("environment_variables");
 
                     b.Property<int>("ExternalAgentKind")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasDefaultValue(0)
                         .HasColumnName("external_agent_kind");
 
                     b.Property<string>("Extra")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("extra");
 
                     b.Property<Guid?>("ModelProviderId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("model_provider_id");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
+                    b.Property<string>("ResponseSchema")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("response_schema");
+
                     b.Property<Guid?>("SummaryModelProviderId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("summary_model_provider_id");
 
                     b.Property<string>("SystemPrompt")
                         .IsRequired()
                         .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("system_prompt");
 
                     b.Property<string>("Tools")
                         .IsRequired()
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("tools");
 
                     b.Property<int>("Type")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("type");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -401,11 +400,11 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentConnectionRelation", b =>
                 {
                     b.Property<Guid>("AgentId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
 
                     b.Property<Guid>("ConnectionId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("connection_id");
 
                     b.HasKey("AgentId", "ConnectionId")
@@ -423,11 +422,11 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentMcpServerRelation", b =>
                 {
                     b.Property<Guid>("AgentId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
 
                     b.Property<Guid>("McpToolServerId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("mcp_tool_server_id");
 
                     b.HasKey("AgentId", "McpToolServerId")
@@ -442,25 +441,25 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSessionStateEntry", b =>
                 {
                     b.Property<Guid>("ProjectConversationId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_conversation_id");
 
                     b.Property<Guid>("AgentId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
 
                     b.Property<string>("AgentflowNodeId")
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agentflow_node_id");
 
                     b.Property<string>("SerializedSession")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("serialized_session");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.HasKey("ProjectConversationId", "AgentId", "AgentflowNodeId")
@@ -478,11 +477,11 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSkillRelation", b =>
                 {
                     b.Property<Guid>("AgentId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
 
                     b.Property<Guid>("SkillId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("skill_id");
 
                     b.HasKey("AgentId", "SkillId")
@@ -498,74 +497,74 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("Arguments")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("arguments");
 
                     b.Property<string>("Command")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("command");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("enabled");
 
                     b.Property<string>("EnvironmentVariables")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("environment_variables");
 
                     b.Property<string>("Headers")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("headers");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("TransportType")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("transport_type");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("Url")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("url");
 
                     b.Property<string>("WorkingDirectory")
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("working_directory");
 
                     b.HasKey("Id")
@@ -578,49 +577,49 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CreateBy")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("normalized_name");
 
                     b.Property<string>("Prefix")
                         .IsRequired()
                         .HasMaxLength(12)
-                        .HasColumnType("character varying(12)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("prefix");
 
                     b.Property<string>("SecretHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("secret_hash");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -639,83 +638,278 @@ namespace Agw.Migrations.Postgres.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Auth.AuthDesktopLoginGrant", b =>
+                {
+                    b.Property<string>("CodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("code_hash");
+
+                    b.Property<string>("CodeChallenge")
+                        .IsRequired()
+                        .HasMaxLength(43)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("code_challenge");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<long>("ExpiresAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("expires_at_ms");
+
+                    b.Property<string>("ProviderId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider_id");
+
+                    b.Property<int>("SessionVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("session_version");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("CodeHash")
+                        .HasName("pk_auth_desktop_login_grant");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_auth_desktop_login_grant_expires_at_ms");
+
+                    b.ToTable("auth_desktop_login_grant", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Auth.AuthExternalIdentity", b =>
+                {
+                    b.Property<long>("UserId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("issuer");
+
+                    b.Property<string>("ProviderId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider_id");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_auth_external_identity");
+
+                    b.HasIndex("Issuer", "Subject")
+                        .IsUnique()
+                        .HasDatabaseName("ix_auth_external_identity_issuer_subject");
+
+                    b.ToTable("auth_external_identity", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Auth.AuthUser", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("email");
+
+                    b.Property<int>("SessionVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1)
+                        .HasColumnName("session_version");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_auth_user");
+
+                    b.ToTable("auth_user", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1001L,
+                            CreateBy = "1001",
+                            CreateTime = new DateTimeOffset(new DateTime(2026, 9, 17, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            DisplayName = "admin",
+                            SessionVersion = 1
+                        });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Auth.AuthUserIdSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<long>("NextId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("next_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_auth_user_id_sequence");
+
+                    b.ToTable("auth_user_id_sequence", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_auth_user_id_sequence_singleton", "id = 1");
+
+                            t.HasCheckConstraint("ck_auth_user_id_sequence_start", "next_id >= 10000");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            NextId = 10000L
+                        });
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.AgentflowCheckpointRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<Guid>("AgentflowId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 
                     b.Property<long>("BoundarySequence")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("boundary_sequence");
 
                     b.Property<string>("CheckpointJson")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("checkpoint_json");
 
                     b.Property<string>("ContextId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("context_id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("DefinitionFingerprint")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("definition_fingerprint");
 
                     b.Property<bool>("IsDurable")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("is_durable");
 
                     b.Property<string>("MarkersJson")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("markers_json");
 
                     b.Property<Guid>("ProjectConversationId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_conversation_id");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<Guid?>("SourceExecutionId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("source_execution_id");
 
                     b.Property<Guid>("TaskId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("task_id");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -725,7 +919,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasDatabaseName("ix_agentflow_checkpoint_source_execution_id");
 
                     b.HasIndex("ProjectConversationId", "AgentflowId", "BoundarySequence")
-                        .HasDatabaseName("ix_agentflow_checkpoint_project_conversation_id_agentflow_id_b");
+                        .HasDatabaseName("ix_agentflow_checkpoint_project_conversation_id_agentflow_id_boundary_sequence");
 
                     b.ToTable("agentflow_checkpoint", (string)null);
                 });
@@ -734,48 +928,52 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
-                    b.Property<Guid>("ExecutionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("execution_id");
+                    b.Property<long>("LeaseEpoch")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("lease_epoch");
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("payload_json");
 
                     b.Property<int>("SegmentIndex")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("segment_index");
 
-                    b.Property<int>("Sequence")
-                        .HasColumnType("integer")
-                        .HasColumnName("sequence");
+                    b.Property<Guid>("TurnId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_id");
+
+                    b.Property<long>("TurnSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("turn_sequence");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
                         .HasName("pk_execution_stream_entry");
 
-                    b.HasIndex("ExecutionId", "SegmentIndex", "Sequence")
+                    b.HasIndex("TurnId", "TurnSequence")
                         .IsUnique()
-                        .HasDatabaseName("ix_execution_stream_entry_execution_id_segment_index_sequence");
+                        .HasDatabaseName("ix_execution_stream_entry_turn_id_turn_sequence");
 
                     b.ToTable("execution_stream_entry", (string)null);
                 });
@@ -784,83 +982,111 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CheckpointJson")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("checkpoint_json");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("ErrorMessage")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("error_message");
+
+                    b.Property<long>("LastEventSequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("last_event_sequence");
+
+                    b.Property<long>("LeaseEpoch")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("lease_epoch");
+
+                    b.Property<long?>("LeaseExpiresAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("lease_expires_at");
 
                     b.Property<string>("ManifestJson")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("manifest_json");
 
                     b.Property<string>("PendingInteractionsJson")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("pending_interactions_json");
 
                     b.Property<Guid?>("ProjectConversationId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_conversation_id");
 
                     b.Property<Guid?>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<string>("ResponsesJson")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("responses_json");
 
                     b.Property<bool>("ScopeBackfilled")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("scope_backfilled");
 
                     b.Property<int>("SegmentIndex")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("segment_index");
 
                     b.Property<DateTimeOffset>("StateChangedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("state_changed_at");
 
                     b.Property<Guid>("StateVersion")
                         .IsConcurrencyToken()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("state_version");
 
                     b.Property<int>("Status")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status");
 
+                    b.Property<string>("TurnCheckpointJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_checkpoint_json");
+
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
+
+                    b.Property<string>("WorkerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("worker_id");
 
                     b.HasKey("Id")
                         .HasName("pk_durable_execution");
+
+                    b.HasIndex("Status", "LeaseExpiresAt")
+                        .HasDatabaseName("ix_durable_execution_status_lease_expires_at");
 
                     b.HasIndex("Status", "StateChangedAt")
                         .HasDatabaseName("ix_durable_execution_status_state_changed_at");
@@ -869,7 +1095,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasDatabaseName("ix_durable_execution_scope_backfilled_user_id_id");
 
                     b.HasIndex("UserId", "ProjectId", "ProjectConversationId", "Status")
-                        .HasDatabaseName("ix_durable_execution_user_id_project_id_project_conversation_i");
+                        .HasDatabaseName("ix_durable_execution_user_id_project_id_project_conversation_id_status");
 
                     b.ToTable("durable_execution", (string)null);
                 });
@@ -878,89 +1104,89 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("Alias")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("alias");
 
                     b.Property<string>("AuthSchemeId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("auth_scheme_id");
 
                     b.Property<string>("ConfigurationJson")
                         .IsRequired()
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("configuration_json");
 
                     b.Property<string>("ConnectorId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("connector_id");
 
                     b.Property<string>("CreateBy")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("display_name");
 
                     b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("enabled");
 
                     b.Property<DateTimeOffset?>("LastValidatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_validated_at_utc");
 
                     b.Property<string>("LastValidationErrorCode")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_validation_error_code");
 
                     b.Property<string>("PluginId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("plugin_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("status");
 
                     b.Property<string>("Subject")
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("subject");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("ValidationMetadataJson")
                         .HasMaxLength(8000)
-                        .HasColumnType("character varying(8000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("validation_metadata_json");
 
                     b.HasKey("Id")
@@ -986,52 +1212,52 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<Guid>("ConnectionId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("connection_id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<DateTimeOffset?>("ExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("expires_at_utc");
 
                     b.Property<int>("FormatVersion")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("format_version");
 
                     b.Property<string>("MetadataJson")
                         .HasMaxLength(8000)
-                        .HasColumnType("character varying(8000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("metadata_json");
 
                     b.Property<string>("Slot")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("slot");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("protected_value");
 
                     b.HasKey("Id")
@@ -1054,40 +1280,40 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("ConfigurationJson")
                         .IsRequired()
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("configuration_json");
 
                     b.Property<string>("CreateBy")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("enabled");
 
                     b.Property<string>("PluginId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("plugin_id");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1107,43 +1333,43 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<int>("FormatVersion")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("format_version");
 
                     b.Property<Guid>("PluginInstallationId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("plugin_installation_id");
 
                     b.Property<string>("Slot")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("slot");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("protected_value");
 
                     b.HasKey("Id")
@@ -1163,96 +1389,96 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTimeOffset?>("ActiveAttemptStartedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("active_attempt_started_at");
 
                     b.Property<Guid?>("ActiveExecutionId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("active_execution_id");
 
                     b.Property<Guid?>("AgentId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
 
                     b.Property<int?>("AgentType")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("agent_type");
 
                     b.Property<string>("CreateBy")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("is_enabled");
 
                     b.Property<string>("LastError")
                         .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_error");
 
                     b.Property<int>("MaxRetryCount")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("max_retry_count");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<DateTimeOffset>("NextRunTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("next_run_time");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<string>("Prompt")
                         .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("prompt");
 
                     b.Property<int>("RetryCount")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("retry_count");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
-                        .HasColumnType("bytea")
+                        .HasColumnType("BLOB")
                         .HasColumnName("row_version");
 
                     b.Property<int>("Status")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status");
 
                     b.Property<int>("TriggerType")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("trigger_type");
 
                     b.Property<string>("TriggerValue")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("trigger_value");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1278,52 +1504,52 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<int>("Attempt")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("attempt");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<DateTimeOffset?>("EndTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("end_time");
 
                     b.Property<string>("ErrorMessage")
                         .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("error_message");
 
                     b.Property<Guid>("JobId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("job_id");
 
                     b.Property<DateTimeOffset>("StartTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("start_time");
 
                     b.Property<bool>("Success")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("success");
 
                     b.Property<Guid>("TaskId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("task_id");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1339,53 +1565,53 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("AgentName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_name");
 
                     b.Property<long>("CachedInputTokenCount")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("cached_input_token_count");
 
                     b.Property<string>("ContextId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("context_id");
 
                     b.Property<long>("InputTokenCount")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("input_token_count");
 
                     b.Property<long>("OutputTokenCount")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("output_token_count");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<long>("ReasoningTokenCount")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("reasoning_token_count");
 
                     b.Property<DateTimeOffset>("RecordedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("recorded_at");
 
                     b.Property<long>("TotalTokenCount")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("total_token_count");
 
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1410,66 +1636,66 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("AdditionalDirectories")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("additional_directories")
                         .HasDefaultValueSql("'[]'");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("EnvironmentVariables")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("environment_variables");
 
                     b.Property<string>("ExtraSetting")
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("extra_setting");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("Tools")
                         .IsRequired()
                         .HasMaxLength(16000)
-                        .HasColumnType("character varying(16000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("tools");
 
                     b.Property<int>("Type")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("type");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("Workspace")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("workspace");
 
                     b.HasKey("Id")
@@ -1485,11 +1711,11 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConnectionRelation", b =>
                 {
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<Guid>("ConnectionId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("connection_id");
 
                     b.HasKey("ProjectId", "ConnectionId")
@@ -1508,52 +1734,52 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("ContextId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("context_id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<int>("Generation")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasDefaultValue(0)
                         .HasColumnName("generation");
 
                     b.Property<Guid?>("JobId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("job_id");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<string>("Title")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasDefaultValue("Untitled")
                         .HasColumnName("title");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1579,54 +1805,58 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<Guid>("AgentId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("ExternalAgentName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("external_agent_name");
 
                     b.Property<Guid>("ProjectConversationId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_conversation_id");
 
                     b.Property<string>("ProviderSessionId")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("provider_session_id");
 
+                    b.Property<long?>("SeenThroughSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("seen_through_sequence");
+
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
                         .HasName("pk_project_conversation_binding");
 
                     b.HasIndex("ExternalAgentName", "ProviderSessionId")
-                        .HasDatabaseName("ix_project_conversation_binding_external_agent_name_provider_s");
+                        .HasDatabaseName("ix_project_conversation_binding_external_agent_name_provider_session_id");
 
                     b.HasIndex("ProjectConversationId", "AgentId", "ExternalAgentName")
                         .IsUnique()
-                        .HasDatabaseName("ix_project_conversation_binding_project_conversation_id_agent_");
+                        .HasDatabaseName("ix_project_conversation_binding_project_conversation_id_agent_id_external_agent_name");
 
                     b.ToTable("project_conversation_binding", (string)null);
                 });
@@ -1635,16 +1865,20 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
 
                     b.Property<string>("AgentName")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("agent_name");
 
                     b.Property<Guid>("ConversationId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_conversation_id");
 
                     b.Property<string>("ConversationPayload")
@@ -1652,11 +1886,11 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("conversation_payload");
 
                     b.Property<long?>("ConversationSequence")
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("conversation_sequence");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Error")
@@ -1664,32 +1898,53 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("error");
 
                     b.Property<DateTimeOffset?>("FinishedTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("finished_time");
 
+                    b.Property<string>("HistoryScope")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("history_scope");
+
                     b.Property<Guid?>("JobId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("job_id");
 
                     b.Property<string>("Metadata")
-                        .HasColumnType("jsonb")
+                        .HasColumnType("TEXT")
                         .HasColumnName("metadata");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("message")
+                        .HasColumnName("purpose");
+
                     b.Property<int>("Status")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status");
+
+                    b.Property<int?>("StepIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("step_index");
 
                     b.Property<string>("TaskErrorMessage")
                         .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("task_error_message");
 
                     b.Property<Guid>("TaskId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("task_id");
 
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_id");
+
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1702,22 +1957,106 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_conversation_sequence");
 
                     b.HasIndex("TaskId", "ConversationSequence")
-                        .HasDatabaseName("ix_project_conversation_chat_history_task_id_conversation_sequ");
+                        .HasDatabaseName("ix_project_conversation_chat_history_task_id_conversation_sequence");
 
                     b.HasIndex("TaskId", "CreateTime")
                         .HasDatabaseName("ix_project_conversation_chat_history_task_id_create_time");
 
+                    b.HasIndex("TurnId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_turn_id_conversation_sequence");
+
+                    b.HasIndex("ConversationId", "HistoryScope", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_history_scope_conversation_sequence");
+
+                    b.HasIndex("ConversationId", "Purpose", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_purpose_conversation_sequence");
+
                     b.ToTable("project_conversation_chat_history", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationTurn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_code");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_at");
+
+                    b.Property<long>("FirstSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("first_sequence");
+
+                    b.Property<Guid>("InputMessageId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("input_message_id");
+
+                    b.Property<long?>("LastSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_sequence");
+
+                    b.Property<Guid>("ProjectConversationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_conversation_id");
+
+                    b.Property<string>("RuntimeType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("runtime_type");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<int>("StepCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("step_count");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_id");
+
+                    b.Property<Guid?>("TaskId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_conversation_turn");
+
+                    b.HasIndex("TaskId")
+                        .HasDatabaseName("ix_project_conversation_turn_task_id");
+
+                    b.HasIndex("ProjectConversationId", "FirstSequence")
+                        .HasDatabaseName("ix_project_conversation_turn_project_conversation_id_first_sequence");
+
+                    b.HasIndex("ProjectConversationId", "Status")
+                        .HasDatabaseName("ix_project_conversation_turn_project_conversation_id_status");
+
+                    b.ToTable("project_conversation_turn", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMcpServerRelation", b =>
                 {
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<Guid>("McpToolServerId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("mcp_tool_server_id");
 
                     b.HasKey("ProjectId", "McpToolServerId")
@@ -1733,26 +2072,26 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("content");
 
                     b.Property<string>("Path")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("path");
 
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -1771,11 +2110,11 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectSkillRelation", b =>
                 {
                     b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
                     b.Property<Guid>("SkillId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("skill_id");
 
                     b.HasKey("ProjectId", "SkillId")
@@ -1791,46 +2130,46 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<int>("MaxContextWindowTokens")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasDefaultValue(256000)
                         .HasColumnName("max_context_window_tokens");
 
                     b.Property<int>("MaxOutputTokens")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasDefaultValue(64000)
                         .HasColumnName("max_output_tokens");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1850,7 +2189,7 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<decimal>("CacheRead")
@@ -1862,11 +2201,11 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("cache_write");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<decimal>("InputPrice")
@@ -1874,7 +2213,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("input_price");
 
                     b.Property<Guid>("ModelId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("model_id");
 
                     b.Property<decimal>("OutputPrice")
@@ -1882,19 +2221,19 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("output_price");
 
                     b.Property<Guid>("ProviderId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("provider_id");
 
                     b.Property<int>("RpsLimit")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("rps_limit");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1913,44 +2252,44 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("Endpoint")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("endpoint");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<int>("ProviderType")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("provider_type");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -1967,45 +2306,45 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("ApiKey")
                         .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("api_key");
 
                     b.Property<int>("AuthType")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("auth_type");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<bool>("Enable")
-                        .HasColumnType("boolean")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("enable");
 
                     b.Property<string>("EnvName")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("env_name");
 
                     b.Property<Guid>("ProviderId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("provider_id");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -2017,25 +2356,85 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.ToTable("provider_auth_config", (string)null);
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Settings.Setting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("key");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("ValueJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("value_json");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_setting");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_setting_key")
+                        .HasFilter("user_id IS NULL");
+
+                    b.HasIndex("UserId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_setting_user_id_key")
+                        .HasFilter("user_id IS NOT NULL");
+
+                    b.ToTable("setting", (string)null);
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Skills.RemoteSkillCache", b =>
                 {
                     b.Property<Guid>("SkillId")
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("skill_id");
 
                     b.Property<string>("ContentJson")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("content_json");
 
                     b.Property<DateTimeOffset>("FetchedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("fetched_at");
 
                     b.Property<string>("SourceUrl")
                         .IsRequired()
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("source_url");
 
                     b.HasKey("SkillId")
@@ -2048,50 +2447,50 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("ContentPath")
                         .IsRequired()
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("content_path");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<int>("Kind")
-                        .HasColumnType("integer")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("kind");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("RemoteUrl")
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("remote_url");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
@@ -2108,51 +2507,51 @@ namespace Agw.Migrations.Postgres.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("content");
 
                     b.Property<string>("CreateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
                     b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
                     b.Property<string>("Description")
                         .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("normalized_name");
 
                     b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_by");
 
                     b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -2227,7 +2626,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_connection_relation_integration_connection_connection");
+                        .HasConstraintName("fk_agent_connection_relation_integration_connection_connection_id");
 
                     b.Navigation("Agent");
 
@@ -2269,7 +2668,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_session_state_project_conversation_project_conversati");
+                        .HasConstraintName("fk_agent_session_state_project_conversation_project_conversation_id");
 
                     b.Navigation("Agent");
 
@@ -2302,7 +2701,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_checkpoint_project_conversation_project_conversat");
+                        .HasConstraintName("fk_agentflow_checkpoint_project_conversation_project_conversation_id");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.ConnectionCredential", b =>
@@ -2312,7 +2711,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_integration_connection_credential_integration_connection_co");
+                        .HasConstraintName("fk_integration_connection_credential_integration_connection_connection_id");
 
                     b.Navigation("Connection");
                 });
@@ -2324,7 +2723,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("PluginInstallationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_plugin_installation_credential_plugin_installation_plugin_i");
+                        .HasConstraintName("fk_plugin_installation_credential_plugin_installation_plugin_installation_id");
 
                     b.Navigation("PluginInstallation");
                 });
@@ -2348,7 +2747,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_connection_relation_integration_connection_connecti");
+                        .HasConstraintName("fk_project_connection_relation_integration_connection_connection_id");
 
                     b.HasOne("Agw.Shared.Data.Entities.Projects.Project", "Project")
                         .WithMany("ProjectConnectionRelations")
@@ -2381,7 +2780,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_conversation_binding_project_conversation_project_c");
+                        .HasConstraintName("fk_project_conversation_binding_project_conversation_project_conversation_id");
 
                     b.Navigation("ProjectConversation");
                 });
@@ -2393,7 +2792,19 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasForeignKey("ConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_conversation_chat_history_project_conversation_proj");
+                        .HasConstraintName("fk_project_conversation_chat_history_project_conversation_project_conversation_id");
+
+                    b.Navigation("ProjectConversation");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationTurn", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
+                        .WithMany()
+                        .HasForeignKey("ProjectConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_conversation_turn_project_conversation_project_conversation_id");
 
                     b.Navigation("ProjectConversation");
                 });
