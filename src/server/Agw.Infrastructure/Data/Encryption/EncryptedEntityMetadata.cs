@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Agw.Shared.Data.Encryption;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,8 @@ namespace Agw.Infrastructure.Data.Encryption;
 
 internal static class EncryptedEntityMetadata
 {
+    private static readonly ConditionalWeakTable<IEntityType, IProperty[]> EncryptedPropertiesByEntityType = new();
+
     public static void Validate(ModelBuilder modelBuilder)
     {
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
@@ -60,10 +63,18 @@ internal static class EncryptedEntityMetadata
         }
     }
 
-    public static IEnumerable<IProperty> GetEncryptedProperties(IEntityType entityType) =>
-        entityType
-            .GetProperties()
-            .Where(property => property.PropertyInfo?.GetCustomAttribute<EncryptedAttribute>() != null);
+    /// <summary>
+    /// 实体类型的加密属性；每个模型中的实体类型只通过反射查找一次。
+    /// The encrypted properties of an entity type; each entity type of a model is inspected by reflection once.
+    /// </summary>
+    public static IReadOnlyList<IProperty> GetEncryptedProperties(IEntityType entityType) =>
+        EncryptedPropertiesByEntityType.GetValue(
+            entityType,
+            static type =>
+                type.GetProperties()
+                    .Where(property => property.PropertyInfo?.GetCustomAttribute<EncryptedAttribute>() != null)
+                    .ToArray()
+        );
 
     private static IEnumerable<IMutableProperty> GetEncryptedProperties(IMutableEntityType entityType) =>
         entityType

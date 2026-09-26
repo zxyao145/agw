@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Agw.Agents.Execution.Context;
 using Agw.Projects.Contracts.History;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -16,6 +17,12 @@ namespace Agw.Agents.Execution.Agents.History;
 internal sealed class HistoryRecording
 {
     private readonly ConversationMessageWriteScope _scope;
+
+    /// <summary>
+    /// 写入范围的规范化 ContextId；每个增量判断所属对话时直接比较。
+    /// The write scope's normalized ContextId, compared directly when each delta checks its conversation.
+    /// </summary>
+    private readonly string _normalizedContextId;
     private readonly IConversationHistoryStore _store;
     private readonly IAgentMessageAdapter<AgentResponseUpdate> _adapter;
     private readonly AgentMessageProjection _projection;
@@ -41,6 +48,7 @@ internal sealed class HistoryRecording
     )
     {
         _scope = scope;
+        _normalizedContextId = ContextIdUtil.NormalizeContextId(scope.ContextId);
         _store = store;
         _adapter = adapter;
         _projection = new AgentMessageProjection(scope, timeProvider);
@@ -56,6 +64,12 @@ internal sealed class HistoryRecording
     internal bool Transient { get; }
 
     internal IAgentMessageAdapter<AgentResponseUpdate> Adapter => _adapter;
+
+    /// <summary>
+    /// 本次运行上一次读取的模型历史：行 Id 对应载荷与反序列化后的消息，由 AgwChatHistoryProvider 维护。
+    /// The model history from this run's previous read: row Id to payload and deserialized message, maintained by AgwChatHistoryProvider.
+    /// </summary>
+    internal Dictionary<Guid, (string Payload, ChatMessage Message)>? ModelHistory { get; set; }
 
     /// <summary>
     /// 本次运行是否已经开始过模型调用；由 Provider 在模型调用前标记。
@@ -164,10 +178,11 @@ internal sealed class HistoryRecording
 
     private static Guid CreateDeterministicGuid(string value)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value)).AsSpan(0, 16).ToArray();
-        bytes[7] = (byte)((bytes[7] & 0x0F) | 0x50);
-        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
-        return new Guid(bytes, bigEndian: true);
+        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+        Sha256Util.HashUtf8(value, hash);
+        hash[7] = (byte)((hash[7] & 0x0F) | 0x50);
+        hash[8] = (byte)((hash[8] & 0x3F) | 0x80);
+        return new Guid(hash[..16], bigEndian: true);
     }
 
     /// <summary>
@@ -251,11 +266,7 @@ internal sealed class HistoryRecording
 
     private bool BelongsTo(ConversationHistoryScope conversation) =>
         conversation.ProjectId == _scope.ProjectId
-        && string.Equals(
-            conversation.ContextId,
-            ContextIdUtil.NormalizeContextId(_scope.ContextId),
-            StringComparison.Ordinal
-        );
+        && string.Equals(conversation.ContextId, _normalizedContextId, StringComparison.Ordinal);
 
     /// <summary>
     /// 为 Agent 输出补上展示信息：没有作者时记录 Agent 名称，节点会话记录节点名称；消息自带的值保持不变。

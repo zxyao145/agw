@@ -13,7 +13,7 @@ namespace Agw.Projects.Application;
 /// 按 Turn 分页读取对话：Turn 列表与单个 Turn 的全部消息，只返回当前用户对话中的数据。
 /// Reads a conversation turn by turn: the turn list and all messages of one turn, returning only data of the current user's conversations.
 /// </summary>
-public sealed class ConversationTurnQueryService
+public sealed partial class ConversationTurnQueryService
 {
     private const int InputSummaryLength = 200;
 
@@ -263,7 +263,20 @@ public sealed class ConversationTurnQueryService
                         : message.Contents.OfType<UriContent>().FirstOrDefault()?.Uri.ToString() ?? "User input";
         }
 
-        text = Regex.Replace(text, @"\s+", " ").Trim();
-        return string.Concat(text.EnumerateRunes().Take(InputSummaryLength).Select(rune => rune.ToString()));
+        text = WhitespaceRegex().Replace(text, " ").Trim();
+        // 按 Unicode 标量截取：累加前 InputSummaryLength 个 Rune 的 UTF-16 长度，只分配一次结果字符串。
+        // Truncates by Unicode scalar: sums the UTF-16 length of the first InputSummaryLength runes and allocates the result once.
+        var length = 0;
+        var runes = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (runes++ == InputSummaryLength)
+                break;
+            length += rune.Utf16SequenceLength;
+        }
+        return text[..length];
     }
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
 }

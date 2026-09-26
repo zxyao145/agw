@@ -121,12 +121,7 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
             .RequestMessages.Select(message => Guid.TryParse(message.MessageId, out var id) ? id : Guid.Empty)
             .Where(id => id != Guid.Empty)
             .ToHashSet();
-        var messages = entries
-            .Where(entry => !requestRowIds.Contains(entry.Id))
-            .Select(entry => JsonSerializer.Deserialize<ChatMessage>(entry.Payload, JsonOptions))
-            .OfType<ChatMessage>()
-            .Where(message => !IsExcludedFromModelHistory(message))
-            .ToList();
+        var messages = ReadModelHistory(_recordings.GetValueOrDefault(session), entries, requestRowIds);
 
         // 旧会话可能残留没有对应响应的工具审批请求，FunctionInvokingChatClient 会在下一轮重放历史时直接抛错。
         // 响应也可能随本轮输入提交，因此合并检查后只过滤仍未答复的请求。
@@ -155,6 +150,52 @@ internal sealed class AgwChatHistoryProvider : ChatHistoryProvider
             .OfType<ChatMessage>()
             .ToList();
         return RemoveIncompleteFunctionCallsAndOrphanedResults(answered, requestMessages);
+    }
+
+    /// <summary>
+    /// <para>把历史行还原为模型消息。一次 Agent 运行的每次模型调用都会重新读取历史，运行内载荷未变的行复用已经反序列化的消息；
+    /// 交给模型请求的是复制出的消息对象、内容列表与属性字典，下游修改不会影响缓存。</para>
+    /// <para>Restores history rows into model messages. Every model call of one Agent run reads history again, and rows whose payload is unchanged within the run reuse the deserialized message;
+    /// the model request receives copied message objects, content lists and property dictionaries, so downstream changes never reach the cache.</para>
+    /// </summary>
+    private static List<ChatMessage> ReadModelHistory(
+        HistoryRecording? recording,
+        IReadOnlyList<ConversationHistoryEntry> entries,
+        HashSet<Guid> requestRowIds
+    )
+    {
+        var cache = recording?.ModelHistory;
+        var current = new Dictionary<Guid, (string Payload, ChatMessage Message)>(entries.Count);
+        var messages = new List<ChatMessage>(entries.Count);
+        foreach (var entry in entries)
+        {
+            if (requestRowIds.Contains(entry.Id))
+                continue;
+            var message =
+                cache != null
+                && cache.TryGetValue(entry.Id, out var cached)
+                && string.Equals(cached.Payload, entry.Payload, StringComparison.Ordinal)
+                    ? cached.Message
+                    : JsonSerializer.Deserialize<ChatMessage>(entry.Payload, JsonOptions);
+            if (message == null)
+                continue;
+            current[entry.Id] = (entry.Payload, message);
+            if (!IsExcludedFromModelHistory(message))
+                messages.Add(CopyForRequest(message));
+        }
+
+        if (recording != null)
+            recording.ModelHistory = current;
+        return messages;
+    }
+
+    private static ChatMessage CopyForRequest(ChatMessage message)
+    {
+        var copy = message.Clone();
+        copy.Contents = [.. message.Contents];
+        if (message.AdditionalProperties != null)
+            copy.AdditionalProperties = new AdditionalPropertiesDictionary(message.AdditionalProperties);
+        return copy;
     }
 
     private static ChatMessage? RemoveResultsCarriedByRequest(ChatMessage message, IReadOnlySet<string> callIds)

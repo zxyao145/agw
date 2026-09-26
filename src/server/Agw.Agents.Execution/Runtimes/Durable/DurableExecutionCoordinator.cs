@@ -152,10 +152,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             return await DurableExecutionEvents
                 .AppendAsync(
                     services.GetRequiredService<IAgentsDbContext>(),
+                    services.GetRequiredService<IDurableExecutionEventSequence>(),
                     request.TurnId,
                     request.Lease?.Epoch ?? 0,
                     0,
                     events,
+                    lookupCommitted: true,
                     token
                 )
                 .ConfigureAwait(false);
@@ -262,10 +264,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         await DurableExecutionEvents
                             .AppendAsync(
                                 services.GetRequiredService<IAgentsDbContext>(),
+                                services.GetRequiredService<IDurableExecutionEventSequence>(),
                                 executionId,
                                 0,
                                 snapshot.SegmentIndex,
                                 [finished],
+                                lookupCommitted: true,
                                 token
                             )
                             .ConfigureAwait(false)
@@ -913,10 +917,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     return await DurableExecutionEvents
                         .AppendAsync(
                             services.GetRequiredService<IAgentsDbContext>(),
+                            services.GetRequiredService<IDurableExecutionEventSequence>(),
                             lease.ExecutionId,
                             lease.Epoch,
                             result.SegmentIndex,
                             events,
+                            lookupCommitted: true,
                             token
                         )
                         .ConfigureAwait(false);

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace Agw.Auth.Application;
 
-public sealed class OidcOptions : IOidcProviderAvailability
+public sealed partial class OidcOptions : IOidcProviderAvailability
 {
     public string PublicBaseUrl { get; set; } = string.Empty;
 
@@ -65,10 +65,7 @@ public sealed class OidcOptions : IOidcProviderAvailability
             errors.Add("Auth:Oidc:WebBaseUrl must be an HTTPS origin (HTTP loopback is allowed in Development).");
         foreach (var (id, provider) in options.Providers)
         {
-            if (
-                id.Length is < 1 or > 64
-                || !Regex.IsMatch(id, "^[a-z0-9]+(-[a-z0-9]+)*$", RegexOptions.CultureInvariant)
-            )
+            if (id.Length is < 1 or > 64 || !ProviderIdRegex().IsMatch(id))
                 errors.Add("OIDC provider IDs must use lowercase kebab-case and at most 64 characters.");
             if (!provider.Enabled)
                 continue;
@@ -147,6 +144,9 @@ public sealed class OidcOptions : IOidcProviderAvailability
             uri.Scheme == Uri.UriSchemeHttps
             || environment.IsDevelopment() && uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback
         );
+
+    [GeneratedRegex("^[a-z0-9]+(-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
+    private static partial Regex ProviderIdRegex();
 }
 
 public sealed class OidcProviderOptions

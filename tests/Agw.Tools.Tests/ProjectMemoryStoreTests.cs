@@ -54,6 +54,42 @@ public sealed class ProjectMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task SearchAsync_Lines_SplitOnNewlineAndTrimCarriageReturn()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        await using (var database = new AgwDbContext(options))
+        {
+            await database.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var projectId = Guid.CreateVersion7();
+        await SeedProjectsAsync(options, cancellationToken, projectId);
+        var store = new ProjectMemoryStore(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            TimeProvider.System,
+            projectId
+        );
+        await store.WriteAsync("notes.md", "Alpha\r\nbeta\r\r\nGamma alpha\n", cancellationToken);
+
+        var alpha = Assert.Single(await store.SearchAsync("", "alpha$", cancellationToken: cancellationToken));
+        var blank = Assert.Single(await store.SearchAsync("", "^$", cancellationToken: cancellationToken));
+
+        Assert.Equal("notes.md", alpha.FileName);
+        Assert.Equal(
+            [(1, "Alpha"), (3, "Gamma alpha")],
+            alpha.MatchingLines.Select(line => (line.LineNumber, line.Line))
+        );
+        Assert.Equal([(4, "")], blank.MatchingLines.Select(line => (line.LineNumber, line.Line)));
+    }
+
+    [Fact]
     public async Task FileOperations_DifferentProjectsRemainIsolated()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

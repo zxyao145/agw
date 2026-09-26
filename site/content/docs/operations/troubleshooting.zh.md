@@ -53,7 +53,7 @@ translationKey: docs/operations/troubleshooting
 
 ## 日志与遥测
 
-`AgwLogDir` 默认 `./logs`，不随 `AgwDataDir` 自动变化。分离部署要查看对应角色日志。需要集中遥测时配置 `OpenTelemetry:OtlpEndpoint`；空值或缺失会回退到 `http://localhost:4317`，不代表禁用导出。
+`AgwLogDir` 默认 `./logs`，不随 `AgwDataDir` 自动变化。分离部署要查看对应角色日志。需要集中遥测时配置 `OpenTelemetry:OtlpEndpoint`；空值或缺失时不启用 OpenTelemetry 的追踪、指标和日志导出。
 
 历史采用 Interval 批量写入。Host 模板的 `ConversationHistory:FlushIntervalSeconds` 为 10 秒，省略时回退到 5 秒。即时输出与已落库历史存在时间差。
 

@@ -31,4 +31,9 @@ public static class JsonUtil
     {
         return JsonSerializer.Deserialize<T>(value, Options);
     }
+
+    public static T? Deserialize<T>(ReadOnlySpan<byte> utf8Json)
+    {
+        return JsonSerializer.Deserialize<T>(utf8Json, Options);
+    }
 }

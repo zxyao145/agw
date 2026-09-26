@@ -26,7 +26,7 @@ public sealed class JobHostedService : BackgroundService
     private readonly ConcurrentDictionary<Guid, byte> _runningProjects = new();
     private readonly Dictionary<Guid, Queue<ScheduledJob>> _projectBacklog = new();
     private readonly ConcurrentDictionary<Guid, Task> _runningExecutions = new();
-    private readonly object _queueLock = new();
+    private readonly Lock _queueLock = new();
     private readonly SemaphoreSlim _wakeSignal = new(0, int.MaxValue);
 
     public JobHostedService(

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
@@ -40,7 +38,7 @@ public static class ProjectWorkspacePaths
         return new ProjectWorkspaceSnapshot(
             primary,
             Array.AsReadOnly(directories),
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintData)))
+            Sha256Util.HashUtf8Hex(fingerprintData)
         );
     }
 

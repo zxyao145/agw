@@ -85,6 +85,57 @@ public class AgentTelemetryLoggingTests
     }
 
     [Fact]
+    public async Task RunAsync_DebugEnabled_LogsMessageSummaryWithoutBodies()
+    {
+        var logger = new CapturingLogger<AgentTelemetryMiddleware>();
+        var middleware = new AgentTelemetryMiddleware(providerSessionState: null!, usageRecorder: null!, logger);
+        var agent = CreateAgent("persisted-agent");
+
+        await middleware.RunAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            session: null,
+            options: null,
+            agent,
+            TestContext.Current.CancellationToken
+        );
+
+        var input = Assert.Single(logger.Entries, entry => Equals(entry.GetProperty("Direction"), "input"));
+        Assert.Equal(1, input.GetProperty("MessageCount"));
+        Assert.Equal(5, input.GetProperty("TextLength"));
+        Assert.Equal(1, Assert.IsType<Dictionary<string, int>>(input.GetProperty("ContentTypes"))[nameof(TextContent)]);
+        Assert.DoesNotContain("hello", input.Message, StringComparison.Ordinal);
+        var output = Assert.Single(logger.Entries, entry => Equals(entry.GetProperty("Direction"), "output"));
+        Assert.Equal(8, output.GetProperty("TextLength"));
+        Assert.DoesNotContain("response", output.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_DebugDisabled_LogsNoMessageSummary()
+    {
+        var logger = new CapturingLogger<AgentTelemetryMiddleware>(LogLevel.Information);
+        var middleware = new AgentTelemetryMiddleware(providerSessionState: null!, usageRecorder: null!, logger);
+        var agent = CreateAgent("persisted-agent");
+        var updates = new List<AgentResponseUpdate>();
+
+        await foreach (
+            var update in middleware.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "hello")],
+                session: null,
+                options: null,
+                agent,
+                TestContext.Current.CancellationToken
+            )
+        )
+        {
+            updates.Add(update);
+        }
+
+        Assert.Equal("response", updates.ToAgentResponse().Text);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Debug);
+        Assert.Equal(2, logger.Entries.Count(entry => entry.Level == LogLevel.Information));
+    }
+
+    [Fact]
     public async Task RunAsync_WorkflowExecutorSpan_DoesNotAddAgentNameTag()
     {
         using var listener = new ActivityListener
@@ -151,12 +202,19 @@ public class AgentTelemetryLoggingTests
 
     private sealed class CapturingLogger<T> : ILogger<T>
     {
+        private readonly LogLevel _minimumLevel;
+
+        public CapturingLogger(LogLevel minimumLevel = LogLevel.Trace)
+        {
+            _minimumLevel = minimumLevel;
+        }
+
         public List<LogEntry> Entries { get; } = [];
 
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull => null;
 
-        public bool IsEnabled(LogLevel logLevel) => true;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= _minimumLevel;
 
         public void Log<TState>(
             LogLevel logLevel,
@@ -166,6 +224,8 @@ public class AgentTelemetryLoggingTests
             Func<TState, Exception?, string> formatter
         )
         {
+            if (!IsEnabled(logLevel))
+                return;
             var properties = state as IEnumerable<KeyValuePair<string, object?>> ?? [];
             Entries.Add(new LogEntry(logLevel, formatter(state, exception), properties.ToList()));
         }

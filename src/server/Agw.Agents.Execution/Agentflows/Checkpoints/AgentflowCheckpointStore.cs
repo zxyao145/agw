@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
@@ -789,8 +788,9 @@ public sealed class AgentflowCheckpointStore
     private static Guid CreateDeterministicGuid(Guid seed, params string[] values)
     {
         var input = string.Join("\u001f", new[] { seed.ToString("N") }.Concat(values));
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return new Guid(bytes.AsSpan(0, 16));
+        Span<byte> hash = stackalloc byte[SHA256.HashSizeInBytes];
+        Sha256Util.HashUtf8(input, hash);
+        return new Guid(hash[..16]);
     }
 
     private static string GetHistoryLockName(Guid projectId, string contextId) =>

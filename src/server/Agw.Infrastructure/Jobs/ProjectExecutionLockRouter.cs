@@ -11,7 +11,7 @@ public sealed class ProjectExecutionLockRouter : IProjectExecutionLock
     private readonly IOptionsMonitor<DistributedLockSettings> _settings;
     private readonly InMemoryProjectExecutionLock _inMemoryLock;
     private readonly Func<DistributedLockProvider, string, IDistributedLockProvider> _providerFactory;
-    private readonly object _distributedLockSync = new();
+    private readonly Lock _distributedLockSync = new();
 
     private DistributedLockProvider? _distributedProvider;
     private string? _distributedConnectionString;

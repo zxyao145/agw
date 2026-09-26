@@ -16,7 +16,6 @@ using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Projects.Infrastructure;
 using Agw.Shared.Configuration;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
@@ -64,6 +63,7 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
+        services.AddScoped<IDurableExecutionEventSequence, DurableExecutionEventSequence>();
         services.AddScoped<IConversationTurnStore, ConversationTurnStore>();
         services.AddScoped<ITurnAcceptanceWriter, TurnAcceptanceWriter>();
         services.AddSingleton<IDurableExecutionLeases, DurableExecutionLeases>();

@@ -12,7 +12,7 @@ public sealed class ApplicationLockRouter : IApplicationLock
     private readonly IOptionsMonitor<DistributedLockSettings> _settings;
     private readonly InMemoryApplicationLock _inMemoryLock;
     private readonly Func<DistributedLockProvider, string, IDistributedLockProvider> _providerFactory;
-    private readonly object _distributedLockSync = new();
+    private readonly Lock _distributedLockSync = new();
 
     private DistributedLockProvider? _distributedProvider;
     private string? _distributedConnectionString;

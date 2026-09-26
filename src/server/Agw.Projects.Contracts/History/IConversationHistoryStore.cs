@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Agw.Shared.Contracts.Coordination;
+using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Contracts.History;
 
@@ -22,11 +23,15 @@ public sealed record ConversationMessageWriteScope
     public bool IsExecutionBound { get; init; }
 }
 
+/// <summary>
+/// 投影捕获的一条消息。Message 在捕获后不再修改，历史存储用自己的序列化选项写出它。
+/// One message captured from a projection. Message is not modified after capture, and the history store writes it with its own serializer options.
+/// </summary>
 public sealed record ConversationMessageSnapshot
 {
     public required Guid MessageId { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
-    public required string Payload { get; init; }
+    public required ChatMessage Message { get; init; }
     public string? Author { get; init; }
     public int? StepIndex { get; init; }
     public bool IsResult { get; init; }
@@ -119,8 +124,8 @@ public interface IConversationHistoryStore
     );
 
     /// <summary>
-    /// 按对话顺序读取指定历史作用域的记录；给出缓冲时合并其中尚未提交的内容。
-    /// Reads the records of one history scope in conversation order, merging uncommitted buffer content when a buffer is given.
+    /// 按对话顺序读取指定历史作用域的记录；给出缓冲时合并其中尚未提交的内容。返回的条目只包含模型历史需要的列，Metadata 为空。
+    /// Reads the records of one history scope in conversation order, merging uncommitted buffer content when a buffer is given. Entries carry only the columns model history needs, with Metadata left null.
     /// </summary>
     Task<IReadOnlyList<ConversationHistoryEntry>> ReadAsync(
         ConversationHistoryScope scope,

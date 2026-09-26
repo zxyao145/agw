@@ -83,12 +83,12 @@ test("changing the password sends both fields to the server", async () => {
   });
 });
 
-test("a created token offers both copy actions with a shared secret", async () => {
+test("a created token offers the copy action with the shared secret", async () => {
   render(React.createElement(SettingsPage));
   await screen.findByText("MacBook");
 
   await act(async () => {
-    fireEvent.change(screen.getByLabelText("Token name"), { target: { value: "Test client" } });
+    fireEvent.change(screen.getByLabelText("Key name"), { target: { value: "Test client" } });
   });
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -98,20 +98,7 @@ test("a created token offers both copy actions with a shared secret", async () =
   assert.ok(screen.getByText("agw_secret_value"));
 
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Copy token" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
   });
   assert.equal(await window.navigator.clipboard.readText(), "agw_secret_value");
-
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Copy config" }));
-  });
-  const copied = await window.navigator.clipboard.readText();
-  const decoded = Buffer.from(
-    copied.replaceAll("-", "+").replaceAll("_", "/"),
-    "base64",
-  ).toString();
-  const config = JSON.parse(decoded);
-  assert.equal(config.version, 2);
-  assert.equal(config.token, "agw_secret_value");
-  assert.equal(config.apiMajorVersion, 1);
 });

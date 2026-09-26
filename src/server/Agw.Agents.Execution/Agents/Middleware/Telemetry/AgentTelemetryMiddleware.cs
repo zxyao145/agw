@@ -91,8 +91,12 @@ public sealed class AgentTelemetryMiddleware
         var agentName = innerAgent.Name;
         var inputMessages = messages.ToList();
         _logger.LogInformation("Executing agent {AgentName}", agentName);
-        _logger.LogDebug("Agent {AgentName} input: {@Input}", agentName, inputMessages);
-        List<AgentResponseUpdate> updates = [];
+        // 输出摘要只在启用 Debug 时收集，参数在调用 LogDebug 之前就会求值。
+        // The output summary is collected only when Debug is enabled, because arguments are evaluated before LogDebug runs.
+        var debug = _logger.IsEnabled(LogLevel.Debug);
+        if (debug)
+            LogMessages("input", agentName, inputMessages);
+        List<AgentResponseUpdate>? updates = debug ? [] : null;
         // 累计器属于当前枚举，不存放在单例字段中，避免并行执行相互混入用量。
         // Keep the accumulator local to this enumeration so concurrent singleton calls cannot mix usage.
         var combinedUsage = new UsageDetails();
@@ -110,7 +114,7 @@ public sealed class AgentTelemetryMiddleware
                     hasUsage = true;
                 }
 
-                updates.Add(update);
+                updates?.Add(update);
                 yield return update;
             }
         }
@@ -125,7 +129,8 @@ public sealed class AgentTelemetryMiddleware
         }
 
         _logger.LogInformation("Executed agent {AgentName}", agentName);
-        _logger.LogDebug("Agent {AgentName} output: {@Output}", agentName, updates.ToAgentResponse());
+        if (updates != null)
+            LogMessages("output", agentName, updates.ToAgentResponse().Messages);
     }
 
     /// <summary>
@@ -167,7 +172,9 @@ public sealed class AgentTelemetryMiddleware
         var agentName = innerAgent.Name;
         var inputMessages = messages.ToList();
         _logger.LogInformation("Executing agent {AgentName}", agentName);
-        _logger.LogDebug("Agent {AgentName} input: {@Input}", agentName, inputMessages);
+        var debug = _logger.IsEnabled(LogLevel.Debug);
+        if (debug)
+            LogMessages("input", agentName, inputMessages);
         var response = await innerAgent
             .RunAsync(inputMessages, session, options, cancellationToken)
             .ConfigureAwait(false);
@@ -177,8 +184,42 @@ public sealed class AgentTelemetryMiddleware
         }
 
         _logger.LogInformation("Executed agent {AgentName}", agentName);
-        _logger.LogDebug("Agent {AgentName} output: {@Output}", agentName, response);
+        if (debug)
+            LogMessages("output", agentName, response.Messages);
         return response;
+    }
+
+    /// <summary>
+    /// <para>记录消息摘要：消息数量、文本长度与各内容类型的数量，不写入消息正文。</para>
+    /// <para>Logs a message summary: message count, text length and the count of each content type, without message bodies.</para>
+    /// </summary>
+    private void LogMessages(string direction, string? agentName, IList<ChatMessage> messages)
+    {
+        var contentTypes = new Dictionary<string, int>(StringComparer.Ordinal);
+        var textLength = 0;
+        foreach (var message in messages)
+        {
+            foreach (var content in message.Contents)
+            {
+                var typeName = content.GetType().Name;
+                contentTypes[typeName] = contentTypes.GetValueOrDefault(typeName) + 1;
+                textLength += content switch
+                {
+                    TextContent text => text.Text?.Length ?? 0,
+                    TextReasoningContent reasoning => reasoning.Text?.Length ?? 0,
+                    _ => 0,
+                };
+            }
+        }
+
+        _logger.LogDebug(
+            "Agent {AgentName} {Direction}: {MessageCount} messages, {TextLength} text chars, contents {ContentTypes}",
+            agentName,
+            direction,
+            messages.Count,
+            textLength,
+            contentTypes
+        );
     }
 
     /// <summary>

@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using System.Text;
+using Agw.Shared.Utils;
 
 namespace Agw.Auth.Security;
 
@@ -25,5 +25,5 @@ public static class ApiTokenSecret
 
     public static string GetLookupPrefix(string secret) => secret[..Math.Min(secret.Length, LookupPrefixLength)];
 
-    public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    public static string Hash(string value) => Sha256Util.HashUtf8Hex(value);
 }

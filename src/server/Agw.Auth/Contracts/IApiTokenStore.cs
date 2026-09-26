@@ -1,5 +1,12 @@
+using System.ComponentModel;
+
 namespace Agw.Auth.Contracts;
 
+/// <summary>
+/// <para>不可变的验证结果，HybridCache 的本地缓存直接复用同一实例。</para>
+/// <para>An immutable validation result, so HybridCache's local cache reuses the same instance.</para>
+/// </summary>
+[ImmutableObject(true)]
 public sealed record ApiTokenIdentity(
     string UserId,
     Guid? TokenId = null,

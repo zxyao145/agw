@@ -200,7 +200,7 @@ All fields below use the prefix `OpenTelemetry:`.
 | --- | --- | --- |
 | `ServiceName` | Template: Agw | Telemetry service name. Split Hosts replace the template value Agw with `Agw.ControlPlane` or `Agw.DataPlane`; when omitted, the fallback is `Agw.{HostProfile}`. |
 | `ServiceVersion` | 1.0.0 | Service-version label in telemetry. |
-| `OtlpEndpoint` | Template: empty; effective fallback: http://localhost:4317 | OTLP receiver URL. Empty or omitted values still use the fallback; they do not disable export. |
+| `OtlpEndpoint` | Template: empty | OTLP receiver URL. Empty or omitted values disable OpenTelemetry tracing, metrics, and log export. |
 
 
 
@@ -212,7 +212,7 @@ All fields below use the prefix `OpenTelemetry:`.
 | `Logging:LogLevel:Microsoft.AspNetCore` | Warning | ASP.NET Core category level. |
 | `Logging:LogLevel:Microsoft.EntityFrameworkCore` | Warning | EF Core category level. |
 | `Serilog:Using` | Console, File, Async sinks | Assemblies providing Serilog configuration extensions. |
-| `Serilog:MinimumLevel:Default` | Debug | Default minimum level for the current Serilog pipeline. |
+| `Serilog:MinimumLevel:Default` | Information; Development: Debug | Default minimum level for the current Serilog pipeline. |
 | `Serilog:MinimumLevel:Override:Microsoft.AspNetCore` | Warning | Override the ASP.NET Core category. |
 | `Serilog:MinimumLevel:Override:Microsoft.EntityFrameworkCore` | Warning | Override the EF Core category. |
 | `Serilog:MinimumLevel:Override:System` | Warning | Override System; additional categories use the same structure. |
@@ -241,7 +241,7 @@ Authorization: Bearer agw_<your-token>
 
 A request made directly on the Server host is authenticated automatically as administrator `1001`, without a password or API Key, when all of these hold: it comes from a loopback address, carries no forwarding headers, targets `localhost` or a loopback IP as the host name, and carries no authentication header or sign-in Cookie. Requests through a reverse proxy or from another host do not qualify.
 
-API Key plaintext is returned only on creation. Store and supply it through the environment or Secrets, and revoke unused keys. Authentication uses the key creator’s stable ID. Multiple login accounts come from the third-party sign-in configuration below; there are currently no configuration keys for roles, API Key scopes, or JWT.
+API Key plaintext is returned only on creation. Store and supply it through the environment or Secrets, and revoke unused keys. Authentication uses the key creator’s stable ID. Each Server caches a successfully validated API Key for 30 seconds. Revoking a key clears the cache of the Server that handles the revocation at once; in a split deployment without a shared distributed cache, other replicas stop accepting the key within 30 seconds. Multiple login accounts come from the third-party sign-in configuration below; there are currently no configuration keys for roles, API Key scopes, or JWT.
 
 Administrator password hashes, initialization state, and session versions are stored in the database’s global `auth` group in `setting`; API Key hashes are in `api_token`. Management features maintain these values; they are not appsettings entries. Password changes update the session version. Hosts refresh every second and discard cached credentials if refresh fails. To recover a forgotten password, stop Server and run `agw-server auth reset-password`; split deployments use `agw-control-plane auth reset-password`. The new password needs 12–256 characters, and resetting it invalidates all existing Web sessions.
 

@@ -313,12 +313,12 @@ public class AgentRuntimeFactoryCompositionTests
         await agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        var loggedInput = Assert.IsAssignableFrom<IEnumerable<ChatMessage>>(
-            Assert
-                .Single(logger.Entries, entry => entry.Level == LogLevel.Debug && entry.GetProperty("Input") != null)
-                .GetProperty("Input")
+        var loggedInput = Assert.Single(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Debug && Equals(entry.GetProperty("Direction"), "input")
         );
-        Assert.Equal(["current request"], loggedInput.Select(message => message.Text));
+        Assert.Equal(1, loggedInput.GetProperty("MessageCount"));
+        Assert.Equal(request.Text.Length, loggedInput.GetProperty("TextLength"));
         Assert.Equal(
             ["private memory\n\n## Current Request\n\ncurrent request"],
             innerAgent.RequestMessages.Select(message => message.Text)
@@ -347,12 +347,12 @@ public class AgentRuntimeFactoryCompositionTests
         ) { }
 
         // Assert
-        var loggedInput = Assert.IsAssignableFrom<IEnumerable<ChatMessage>>(
-            Assert
-                .Single(logger.Entries, entry => entry.Level == LogLevel.Debug && entry.GetProperty("Input") != null)
-                .GetProperty("Input")
+        var loggedInput = Assert.Single(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Debug && Equals(entry.GetProperty("Direction"), "input")
         );
-        Assert.Equal(["current request"], loggedInput.Select(message => message.Text));
+        Assert.Equal(1, loggedInput.GetProperty("MessageCount"));
+        Assert.Equal(request.Text.Length, loggedInput.GetProperty("TextLength"));
         Assert.Equal(
             ["private memory\n\n## Current Request\n\ncurrent request"],
             innerAgent.RequestMessages.Select(message => message.Text)

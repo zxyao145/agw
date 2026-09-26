@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO.Enumeration;
 using System.Text.RegularExpressions;
 using Agw.Files.Abstracts;
@@ -11,18 +12,26 @@ public sealed class LocalFileSystem : ILocalFileSystem
 {
     private static readonly TimeSpan SearchRegexTimeout = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// 内容搜索整体读入内存的文件大小上限；更大的文件逐行读取。
+    /// The size limit for reading a file into memory during content search; larger files are read line by line.
+    /// </summary>
+    private const long MaxBufferedSearchFileBytes = 16 * 1024 * 1024;
+
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
 
     private readonly string _rootPath;
+    private readonly string _rootFullPath;
     private readonly string _normalizedRoot;
 
     public LocalFileSystem(string rootPath)
     {
         _rootPath = rootPath;
+        _rootFullPath = Path.GetFullPath(rootPath);
         _normalizedRoot =
-            Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            _rootFullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
     }
 
@@ -70,8 +79,7 @@ public sealed class LocalFileSystem : ILocalFileSystem
 
     private string ToRelativePath(string fullPath)
     {
-        var rootFullPath = Path.GetFullPath(_rootPath);
-        if (fullPath.Equals(rootFullPath, StringComparison.Ordinal))
+        if (fullPath.Equals(_rootFullPath, StringComparison.Ordinal))
         {
             return "";
         }
@@ -182,9 +190,18 @@ public sealed class LocalFileSystem : ILocalFileSystem
             yield break;
         }
 
-        var entries = Directory.EnumerateFileSystemEntries(
+        // 类型、大小与修改时间直接读取枚举得到的 FileSystemEntry，每个条目不再额外调用文件系统。
+        // Type, size and modification time come from the enumerated FileSystemEntry, with no extra file system call per entry.
+        var ignoreCase = PathComparison == StringComparison.OrdinalIgnoreCase;
+        var entries = new FileSystemEnumerable<FileEntry>(
             fullPath,
-            searchPattern,
+            (ref FileSystemEntry entry) =>
+                new FileEntry(
+                    Path: ToRelativePath(entry.ToFullPath()),
+                    IsDirectory: entry.IsDirectory,
+                    Size: entry.IsDirectory ? 0 : entry.Length,
+                    LastModifiedUtc: entry.LastWriteTimeUtc
+                ),
             new EnumerationOptions
             {
                 AttributesToSkip = recursive ? FileAttributes.ReparsePoint : (FileAttributes)0,
@@ -192,35 +209,16 @@ public sealed class LocalFileSystem : ILocalFileSystem
                 RecurseSubdirectories = recursive,
                 ReturnSpecialDirectories = false,
             }
-        );
+        )
+        {
+            ShouldIncludePredicate = (ref FileSystemEntry entry) =>
+                FileSystemName.MatchesSimpleExpression(searchPattern, entry.FileName, ignoreCase),
+        };
 
         foreach (var entry in entries)
         {
             ct.ThrowIfCancellationRequested();
-
-            var relativePath = ToRelativePath(entry);
-            bool isDir = Directory.Exists(entry);
-
-            if (isDir)
-            {
-                var dirInfo = new DirectoryInfo(entry);
-                yield return new FileEntry(
-                    Path: relativePath,
-                    IsDirectory: true,
-                    Size: 0,
-                    LastModifiedUtc: dirInfo.LastWriteTimeUtc
-                );
-            }
-            else
-            {
-                var fileInfo = new FileInfo(entry);
-                yield return new FileEntry(
-                    Path: relativePath,
-                    IsDirectory: false,
-                    Size: fileInfo.Length,
-                    LastModifiedUtc: fileInfo.LastWriteTimeUtc
-                );
-            }
+            yield return entry;
         }
     }
 
@@ -273,157 +271,298 @@ public sealed class LocalFileSystem : ILocalFileSystem
             matcher.AddInclude(options.FilenameGlob);
         }
 
-        HashSet<string>? excludedDirectoryNames = null;
+        // 目录名与扩展名直接用 ReadOnlySpan<char> 查找，每个条目不再分配字符串。
+        // Directory names and extensions are looked up with ReadOnlySpan<char>, allocating no string per entry.
+        HashSet<string>.AlternateLookup<ReadOnlySpan<char>>? excludedDirectoryNames = null;
         if (options.ExcludedDirectoryNames is { Count: > 0 })
         {
             excludedDirectoryNames = new HashSet<string>(
                 options.ExcludedDirectoryNames,
                 StringComparer.OrdinalIgnoreCase
-            );
+            ).GetAlternateLookup<ReadOnlySpan<char>>();
+        }
+
+        HashSet<string>.AlternateLookup<ReadOnlySpan<char>>? includeExtensions = null;
+        if (options.IncludeExtensions is { Count: > 0 })
+        {
+            includeExtensions = new HashSet<string>(
+                options.IncludeExtensions,
+                StringComparer.Ordinal
+            ).GetAlternateLookup<ReadOnlySpan<char>>();
         }
 
         var hitCount = 0;
         var fileCount = 0;
         long totalBytes = 0;
+        var hits = new List<SearchHit>();
+        char[]? buffer = null;
 
-        foreach (var file in EnumerateSearchFiles(fullPath, options.Recursive, excludedDirectoryNames, ct))
+        try
         {
-            ct.ThrowIfCancellationRequested();
-
-            if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
+            foreach (var file in EnumerateSearchFiles(fullPath, options.Recursive, excludedDirectoryNames, ct))
             {
-                yield break;
-            }
+                ct.ThrowIfCancellationRequested();
 
-            if (options.MaxFiles.HasValue && fileCount >= options.MaxFiles.Value)
-            {
-                yield break;
-            }
+                if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
+                {
+                    yield break;
+                }
 
-            if (options.IncludeExtensions is { Count: > 0 })
-            {
-                var ext = Path.GetExtension(file).TrimStart('.').ToLowerInvariant();
-                if (!options.IncludeExtensions.Contains(ext))
+                if (options.MaxFiles.HasValue && fileCount >= options.MaxFiles.Value)
+                {
+                    yield break;
+                }
+
+                if (includeExtensions is { } extensions && !HasIncludedExtension(file.FullPath, extensions))
                 {
                     continue;
                 }
-            }
 
-            var searchRelativePath = Path.GetRelativePath(fullPath, file).Replace(Path.DirectorySeparatorChar, '/');
-            if (matcher?.Match(searchRelativePath).HasMatches == false)
-            {
-                continue;
-            }
-
-            long fileSize;
-            try
-            {
-                fileSize = new FileInfo(file).Length;
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                continue;
-            }
-
-            if (options.MaxFileSizeBytes.HasValue && fileSize > options.MaxFileSizeBytes.Value)
-            {
-                continue;
-            }
-
-            if (options.MaxTotalBytes.HasValue && (fileSize > options.MaxTotalBytes.Value - totalBytes))
-            {
-                yield break;
-            }
-
-            fileCount++;
-            totalBytes += fileSize;
-
-            var relativePath = ToRelativePath(file);
-            StreamReader reader;
-            try
-            {
-                reader = new StreamReader(file, detectEncodingFromByteOrderMarks: true);
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                continue;
-            }
-
-            using (reader)
-            {
-                var lineNumber = 0;
-                while (true)
+                var searchRelativePath = Path.GetRelativePath(fullPath, file.FullPath)
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                if (matcher?.Match(searchRelativePath).HasMatches == false)
                 {
-                    ct.ThrowIfCancellationRequested();
+                    continue;
+                }
 
-                    string? line;
+                if (options.MaxFileSizeBytes.HasValue && file.Length > options.MaxFileSizeBytes.Value)
+                {
+                    continue;
+                }
+
+                if (options.MaxTotalBytes.HasValue && (file.Length > options.MaxTotalBytes.Value - totalBytes))
+                {
+                    yield break;
+                }
+
+                fileCount++;
+                totalBytes += file.Length;
+
+                var relativePath = ToRelativePath(file.FullPath);
+                if (file.Length > MaxBufferedSearchFileBytes)
+                {
+                    // 超出缓冲上限的文件逐行读取，内存占用与行长度相关。
+                    // Files beyond the buffer limit are read line by line, so memory follows the line length.
+                    StreamReader reader;
                     try
                     {
-                        line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                        reader = new StreamReader(file.FullPath, detectEncodingFromByteOrderMarks: true);
                     }
                     catch (IOException)
                     {
-                        break;
+                        continue;
                     }
-
-                    if (line == null || line.Contains('\0'))
-                    {
-                        break;
-                    }
-
-                    lineNumber++;
-                    bool isMatch;
-                    var regexTimedOut = false;
-                    try
-                    {
-                        isMatch = regex.IsMatch(line);
-                    }
-                    catch (RegexMatchTimeoutException)
-                    {
-                        isMatch = false;
-                        regexTimedOut = true;
-                    }
-
-                    if (regexTimedOut)
-                    {
-                        yield break;
-                    }
-
-                    if (!isMatch)
+                    catch (UnauthorizedAccessException)
                     {
                         continue;
                     }
 
-                    if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
+                    using (reader)
+                    {
+                        var lineNumber = 0;
+                        while (true)
+                        {
+                            ct.ThrowIfCancellationRequested();
+
+                            string? line;
+                            try
+                            {
+                                line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                            }
+                            catch (IOException)
+                            {
+                                break;
+                            }
+
+                            if (line == null || line.Contains('\0'))
+                            {
+                                break;
+                            }
+
+                            lineNumber++;
+                            bool isMatch;
+                            var regexTimedOut = false;
+                            try
+                            {
+                                isMatch = regex.IsMatch(line);
+                            }
+                            catch (RegexMatchTimeoutException)
+                            {
+                                isMatch = false;
+                                regexTimedOut = true;
+                            }
+
+                            if (regexTimedOut)
+                            {
+                                yield break;
+                            }
+
+                            if (!isMatch)
+                            {
+                                continue;
+                            }
+
+                            if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
+                            {
+                                yield break;
+                            }
+
+                            hitCount++;
+                            yield return new SearchHit(relativePath, lineNumber, line);
+                        }
+                    }
+                }
+                else
+                {
+                    // UTF-8 解码后的字符数不超过字节数，文件整体读入 ArrayPool 缓冲区，逐行匹配时只为命中的行分配字符串。
+                    // Decoded UTF-8 never has more chars than bytes, so the file is read into an ArrayPool buffer and only matching lines allocate strings.
+                    var capacity = (int)Math.Max(file.Length, 1);
+                    if (buffer == null || buffer.Length < capacity)
+                    {
+                        if (buffer != null)
+                        {
+                            ArrayPool<char>.Shared.Return(buffer);
+                        }
+                        buffer = ArrayPool<char>.Shared.Rent(capacity);
+                    }
+
+                    int length;
+                    try
+                    {
+                        using var reader = new StreamReader(file.FullPath, detectEncodingFromByteOrderMarks: true);
+                        length = await reader.ReadBlockAsync(buffer.AsMemory(0, capacity), ct).ConfigureAwait(false);
+                    }
+                    catch (IOException)
+                    {
+                        continue;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        continue;
+                    }
+
+                    hits.Clear();
+                    var timedOut = CollectHits(
+                        buffer.AsSpan(0, length),
+                        regex,
+                        relativePath,
+                        options.MaxHits - hitCount,
+                        hits,
+                        ct
+                    );
+                    foreach (var hit in hits)
+                    {
+                        hitCount++;
+                        yield return hit;
+                    }
+
+                    if (timedOut)
                     {
                         yield break;
                     }
-
-                    hitCount++;
-                    yield return new SearchHit(relativePath, lineNumber, line);
                 }
+            }
+        }
+        finally
+        {
+            if (buffer != null)
+            {
+                ArrayPool<char>.Shared.Return(buffer);
             }
         }
     }
 
-    private static IEnumerable<string> EnumerateSearchFiles(
-        string rootPath,
-        bool recursive,
-        HashSet<string>? excludedDirectoryNames,
+    /// <summary>
+    /// 在内存中的文件内容里按 StreamReader.ReadLine 的换行规则逐行匹配；遇到含 '\0' 的行按二进制文件停止。返回是否发生了正则超时。
+    /// Matches in-memory file content line by line with StreamReader.ReadLine's line breaks; a line containing '\0' stops the file as binary. Returns whether the regex timed out.
+    /// </summary>
+    private static bool CollectHits(
+        ReadOnlySpan<char> content,
+        Regex regex,
+        string relativePath,
+        int? remainingHits,
+        List<SearchHit> hits,
         CancellationToken cancellationToken
     )
     {
-        var files = new FileSystemEnumerable<string>(
+        var lineNumber = 0;
+        while (!content.IsEmpty)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var lineEnd = content.IndexOfAny('\r', '\n');
+            ReadOnlySpan<char> line;
+            if (lineEnd < 0)
+            {
+                line = content;
+                content = [];
+            }
+            else
+            {
+                line = content[..lineEnd];
+                var separatorLength =
+                    content[lineEnd] == '\r' && lineEnd + 1 < content.Length && content[lineEnd + 1] == '\n' ? 2 : 1;
+                content = content[(lineEnd + separatorLength)..];
+            }
+
+            if (line.Contains('\0'))
+            {
+                return false;
+            }
+
+            lineNumber++;
+            bool isMatch;
+            try
+            {
+                isMatch = regex.IsMatch(line);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return true;
+            }
+
+            if (!isMatch)
+            {
+                continue;
+            }
+
+            if (remainingHits.HasValue && hits.Count >= remainingHits.Value)
+            {
+                return false;
+            }
+
+            hits.Add(new SearchHit(relativePath, lineNumber, line.ToString()));
+        }
+
+        return false;
+    }
+
+    private static bool HasIncludedExtension(
+        string path,
+        HashSet<string>.AlternateLookup<ReadOnlySpan<char>> extensions
+    )
+    {
+        const int StackLimit = 256;
+        var extension = Path.GetExtension(path.AsSpan()).TrimStart('.');
+        if (extension.Length > StackLimit)
+        {
+            return extensions.Contains(extension.ToString().ToLowerInvariant());
+        }
+
+        Span<char> lowered = stackalloc char[StackLimit];
+        var written = extension.ToLowerInvariant(lowered);
+        return extensions.Contains(lowered[..written]);
+    }
+
+    private static IEnumerable<SearchFile> EnumerateSearchFiles(
+        string rootPath,
+        bool recursive,
+        HashSet<string>.AlternateLookup<ReadOnlySpan<char>>? excludedDirectoryNames,
+        CancellationToken cancellationToken
+    )
+    {
+        var files = new FileSystemEnumerable<SearchFile>(
             rootPath,
-            static (ref FileSystemEntry entry) => entry.ToFullPath(),
+            static (ref FileSystemEntry entry) => new SearchFile(entry.ToFullPath(), entry.Length),
             new EnumerationOptions
             {
                 AttributesToSkip = FileAttributes.ReparsePoint,
@@ -436,10 +575,9 @@ public sealed class LocalFileSystem : ILocalFileSystem
             ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory,
         };
 
-        if (excludedDirectoryNames != null)
+        if (excludedDirectoryNames is { } excluded)
         {
-            files.ShouldRecursePredicate = (ref FileSystemEntry entry) =>
-                !excludedDirectoryNames.Contains(entry.FileName.ToString());
+            files.ShouldRecursePredicate = (ref FileSystemEntry entry) => !excluded.Contains(entry.FileName);
         }
 
         foreach (var file in files)
@@ -448,4 +586,10 @@ public sealed class LocalFileSystem : ILocalFileSystem
             yield return file;
         }
     }
+
+    /// <summary>
+    /// 枚举得到的待搜索文件：完整路径与枚举时读到的长度。
+    /// A file to search from the enumeration: its full path and the length read while enumerating.
+    /// </summary>
+    private readonly record struct SearchFile(string FullPath, long Length);
 }

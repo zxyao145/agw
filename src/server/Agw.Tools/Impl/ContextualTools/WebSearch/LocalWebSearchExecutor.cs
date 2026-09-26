@@ -10,7 +10,7 @@ namespace Agw.Tools.Impl.ContextualTools.WebSearch;
 /// Executes HTTP-based web searches for the contextual Tool's local fallback.
 /// Tool registration, permissions, and AI function creation belong to WebSearchContextualTool.
 /// </summary>
-internal sealed class LocalWebSearchExecutor
+internal sealed partial class LocalWebSearchExecutor
 {
     private const int DefaultMaxResults = 5;
     private const int MaximumMaxResults = 10;
@@ -25,32 +25,86 @@ internal sealed class LocalWebSearchExecutor
         _httpClientFactory = httpClientFactory;
     }
 
-    private static readonly Regex GoogleHeadingRegex = new(
+    private const RegexOptions HtmlRegexOptions =
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant;
+
+    private static readonly Regex[] GoogleSnippetRegexes =
+    [
+        GoogleSnippetDivRegex(),
+        GoogleSnippetSpanRegex(),
+        GoogleSnippetDataRegex(),
+    ];
+
+    private static readonly Regex[] BingSnippetRegexes = [BingCaptionSnippetRegex(), BingParagraphSnippetRegex()];
+
+    [GeneratedRegex(
         @"<a\b[^>]*href=[""']([^""']*(?:/url\?(?:[^""']*?[?&])?(?:q|url)=[^""']+|https?://[^""']+))[""'][^>]*>[\s\S]*?<h3\b[^>]*>([\s\S]*?)</h3>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-    );
+        HtmlRegexOptions
+    )]
+    private static partial Regex GoogleHeadingRegex();
 
-    private static readonly Regex BingBlockRegex = new(
-        @"<li\b[^>]*class=[""'][^""']*b_algo[^""']*[""'][^>]*>([\s\S]*?)</li>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-    );
+    [GeneratedRegex(@"<li\b[^>]*class=[""'][^""']*b_algo[^""']*[""'][^>]*>([\s\S]*?)</li>", HtmlRegexOptions)]
+    private static partial Regex BingBlockRegex();
 
-    private static readonly Regex BaiduHeadingRegex = new(
+    [GeneratedRegex(
         @"<h3\b[^>]*>[\s\S]*?<a\b[^>]*href=[""']([^""']+)[""'][^>]*>([\s\S]*?)</a>[\s\S]*?</h3>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-    );
+        HtmlRegexOptions
+    )]
+    private static partial Regex BaiduHeadingRegex();
 
-    private static readonly Regex StripScriptStyleRegex = new(
-        @"<script\b[^>]*>[\s\S]*?</script>|<style\b[^>]*>[\s\S]*?</style>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-    );
+    [GeneratedRegex(@"<script\b[^>]*>[\s\S]*?</script>|<style\b[^>]*>[\s\S]*?</style>", HtmlRegexOptions)]
+    private static partial Regex StripScriptStyleRegex();
 
-    private static readonly Regex StripTagsRegex = new(
-        @"<[^>]+>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-    );
+    [GeneratedRegex(@"<[^>]+>", HtmlRegexOptions)]
+    private static partial Regex StripTagsRegex();
 
-    private static readonly Regex CollapseWhitespaceRegex = new(@"\s+", RegexOptions.CultureInvariant);
+    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant)]
+    private static partial Regex CollapseWhitespaceRegex();
+
+    [GeneratedRegex(
+        @"unusual traffic|detected unusual traffic|sorry/index|To continue, please type",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    )]
+    private static partial Regex GoogleBlockedRegex();
+
+    [GeneratedRegex(
+        @"百度安全验证|网络不给力|请输入验证码|verify",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    )]
+    private static partial Regex BaiduBlockedRegex();
+
+    [GeneratedRegex(@"<h2\b[^>]*>\s*<a\b[^>]*href=[""']([^""']+)[""'][^>]*>([\s\S]*?)</a>\s*</h2>", HtmlRegexOptions)]
+    private static partial Regex BingHeadingRegex();
+
+    [GeneratedRegex(
+        @"<(div|span|p)\b[^>]*class=[""'][^""']*(?:c-abstract|content-right_[^""']*|content-right|c-span-last|c-color-text|result-op[^""']*)[^""']*[""'][^>]*>([\s\S]*?)</\1>",
+        HtmlRegexOptions
+    )]
+    private static partial Regex BaiduSnippetRegex();
+
+    [GeneratedRegex(
+        @"<div\b[^>]*class=[""'][^""']*(?:VwiC3b|yXK7lf|MUxGbd|kvH3mc)[^""']*[""'][^>]*>([\s\S]*?)</div>",
+        HtmlRegexOptions
+    )]
+    private static partial Regex GoogleSnippetDivRegex();
+
+    [GeneratedRegex(
+        @"<span\b[^>]*class=[""'][^""']*(?:aCOpRe|hgKElc)[^""']*[""'][^>]*>([\s\S]*?)</span>",
+        HtmlRegexOptions
+    )]
+    private static partial Regex GoogleSnippetSpanRegex();
+
+    [GeneratedRegex(@"<div\b[^>]*data-sncf=[""'][^""']*[""'][^>]*>([\s\S]*?)</div>", HtmlRegexOptions)]
+    private static partial Regex GoogleSnippetDataRegex();
+
+    [GeneratedRegex(
+        @"<div\b[^>]*class=[""'][^""']*b_caption[^""']*[""'][^>]*>[\s\S]*?<p\b[^>]*>([\s\S]*?)</p>",
+        HtmlRegexOptions
+    )]
+    private static partial Regex BingCaptionSnippetRegex();
+
+    [GeneratedRegex(@"<p\b[^>]*>([\s\S]*?)</p>", HtmlRegexOptions)]
+    private static partial Regex BingParagraphSnippetRegex();
 
     [Description(
         """
@@ -181,13 +235,7 @@ internal sealed class LocalWebSearchExecutor
         var html = await SendSearchRequestAsync(client, "Google", searchUrl, "en-US,en;q=0.9", cancellationToken)
             .ConfigureAwait(false);
 
-        if (
-            Regex.IsMatch(
-                html,
-                @"unusual traffic|detected unusual traffic|sorry/index|To continue, please type",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-            )
-        )
+        if (GoogleBlockedRegex().IsMatch(html))
         {
             throw new AgwException(ErrorCodes.FetchFailed, "Google blocked background crawling for this request.");
         }
@@ -236,13 +284,7 @@ internal sealed class LocalWebSearchExecutor
             )
             .ConfigureAwait(false);
 
-        if (
-            Regex.IsMatch(
-                html,
-                @"百度安全验证|网络不给力|请输入验证码|verify",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-            )
-        )
+        if (BaiduBlockedRegex().IsMatch(html))
         {
             throw new AgwException(ErrorCodes.FetchFailed, "Baidu blocked background crawling for this request.");
         }
@@ -287,7 +329,7 @@ internal sealed class LocalWebSearchExecutor
 
     private static List<SearchHit> ExtractGoogleResults(string html, int maxResults)
     {
-        var headings = GoogleHeadingRegex.Matches(html);
+        var headings = GoogleHeadingRegex().Matches(html);
         var results = new List<SearchHit>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -316,15 +358,7 @@ internal sealed class LocalWebSearchExecutor
             var nextStart =
                 index + 1 < headings.Count ? headings[index + 1].Index : Math.Min(start + 6000, html.Length);
             var section = html[start..Math.Min(nextStart, Math.Min(start + 6000, html.Length))];
-            var snippet = ExtractSnippet(
-                section,
-                [
-                    @"<div\b[^>]*class=[""'][^""']*(?:VwiC3b|yXK7lf|MUxGbd|kvH3mc)[^""']*[""'][^>]*>([\s\S]*?)</div>",
-                    @"<span\b[^>]*class=[""'][^""']*(?:aCOpRe|hgKElc)[^""']*[""'][^>]*>([\s\S]*?)</span>",
-                    @"<div\b[^>]*data-sncf=[""'][^""']*[""'][^>]*>([\s\S]*?)</div>",
-                ],
-                title
-            );
+            var snippet = ExtractSnippet(section, GoogleSnippetRegexes, title);
 
             results.Add(
                 new SearchHit
@@ -341,7 +375,7 @@ internal sealed class LocalWebSearchExecutor
 
     private static List<SearchHit> ExtractBingResults(string html, int maxResults)
     {
-        var blocks = BingBlockRegex.Matches(html);
+        var blocks = BingBlockRegex().Matches(html);
         var results = new List<SearchHit>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -353,11 +387,7 @@ internal sealed class LocalWebSearchExecutor
             }
 
             var section = block.Groups[1].Value;
-            var headingMatch = Regex.Match(
-                section,
-                @"<h2\b[^>]*>\s*<a\b[^>]*href=[""']([^""']+)[""'][^>]*>([\s\S]*?)</a>\s*</h2>",
-                RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-            );
+            var headingMatch = BingHeadingRegex().Match(section);
             if (!headingMatch.Success)
             {
                 continue;
@@ -376,14 +406,7 @@ internal sealed class LocalWebSearchExecutor
                 continue;
             }
 
-            var snippet = ExtractSnippet(
-                section,
-                [
-                    @"<div\b[^>]*class=[""'][^""']*b_caption[^""']*[""'][^>]*>[\s\S]*?<p\b[^>]*>([\s\S]*?)</p>",
-                    @"<p\b[^>]*>([\s\S]*?)</p>",
-                ],
-                title
-            );
+            var snippet = ExtractSnippet(section, BingSnippetRegexes, title);
 
             results.Add(
                 new SearchHit
@@ -400,7 +423,7 @@ internal sealed class LocalWebSearchExecutor
 
     private static List<SearchHit> ExtractBaiduResults(string html, int maxResults)
     {
-        var headings = BaiduHeadingRegex.Matches(html);
+        var headings = BaiduHeadingRegex().Matches(html);
         var results = new List<SearchHit>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -424,11 +447,7 @@ internal sealed class LocalWebSearchExecutor
             var nextStart =
                 index + 1 < headings.Count ? headings[index + 1].Index : Math.Min(start + 4000, html.Length);
             var section = html[start..Math.Min(nextStart, Math.Min(start + 4000, html.Length))];
-            var snippetMatches = Regex.Matches(
-                section,
-                @"<(div|span|p)\b[^>]*class=[""'][^""']*(?:c-abstract|content-right_[^""']*|content-right|c-span-last|c-color-text|result-op[^""']*)[^""']*[""'][^>]*>([\s\S]*?)</\1>",
-                RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-            );
+            var snippetMatches = BaiduSnippetRegex().Matches(section);
             var snippet =
                 snippetMatches
                     .Cast<Match>()
@@ -497,15 +516,11 @@ internal sealed class LocalWebSearchExecutor
         return true;
     }
 
-    private static string ExtractSnippet(string section, string[] patterns, string title)
+    private static string ExtractSnippet(string section, Regex[] patterns, string title)
     {
         foreach (var pattern in patterns)
         {
-            var match = Regex.Match(
-                section,
-                pattern,
-                RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
-            );
+            var match = pattern.Match(section);
             if (!match.Success)
             {
                 continue;
@@ -557,9 +572,9 @@ internal sealed class LocalWebSearchExecutor
     private static string StripHtml(string input)
     {
         var decoded = WebUtility.HtmlDecode(input);
-        var withoutScripts = StripScriptStyleRegex.Replace(decoded, " ");
-        var withoutTags = StripTagsRegex.Replace(withoutScripts, " ");
-        return CollapseWhitespaceRegex.Replace(withoutTags, " ").Trim();
+        var withoutScripts = StripScriptStyleRegex().Replace(decoded, " ");
+        var withoutTags = StripTagsRegex().Replace(withoutScripts, " ");
+        return CollapseWhitespaceRegex().Replace(withoutTags, " ").Trim();
     }
 
     private static string NormalizeUrl(string url)

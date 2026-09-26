@@ -34,6 +34,12 @@ internal sealed class DurableEventSink : IExecutionMessageSink, IAsyncDisposable
     private volatile ExceptionDispatchInfo? _failure;
     private int _closed;
 
+    /// <summary>
+    /// 待写批次已经尝试提交过；重试时需要查询其中已经提交的事件。
+    /// The pending batch has been attempted; a retry must read the events of it that were committed.
+    /// </summary>
+    private bool _attempted;
+
     public DurableEventSink(
         IExecutionWriteGuard writeGuard,
         DurableLease lease,
@@ -76,9 +82,12 @@ internal sealed class DurableEventSink : IExecutionMessageSink, IAsyncDisposable
                     _signal.Release();
             }
 
-            // 生产者可能在 WriteAsync 返回后继续修改内容；批次保存独立的序列化快照。
-            // Producers may mutate content after WriteAsync returns; the batch keeps an independent serialized snapshot.
-            _pending.Add(PendingExecutionEvent.Create(message));
+            // 生产者可能在 WriteAsync 返回后继续修改内容；批次保存独立的序列化快照或副本。
+            // 同一消息相邻的流式文本增量在提交前并入同一个事件，客户端在提交后才收到它们，合并不增加延迟。
+            // Producers may mutate content after WriteAsync returns; the batch keeps an independent serialized snapshot or copy.
+            // Adjacent streaming text deltas of one message merge into one event before commit; clients receive them only after the commit, so merging adds no delay.
+            if (_pending.Count == 0 || !_pending[^1].TryMerge(message))
+                _pending.Add(PendingExecutionEvent.Create(message));
             if (_options.WriteIntervalMilliseconds == 0 || _pending.Count >= _options.WriteBatchSize)
                 await FlushCoreAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -112,22 +121,27 @@ internal sealed class DurableEventSink : IExecutionMessageSink, IAsyncDisposable
             return;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _ownershipLost);
         var batch = _pending.ToArray();
-        // 失败的批次保持原事件 ID，重试时已提交的部分返回原序号。
-        // A failed batch keeps its event IDs, so a retry returns the original sequences of any committed part.
+        // 失败的批次保持原事件 ID，重试时查询已提交的部分并返回原序号；第一次提交不需要这次查询。
+        // A failed batch keeps its event IDs, so a retry reads any committed part and returns its original sequences; a first attempt skips that read.
+        var lookupCommitted = _attempted;
+        _attempted = true;
         var committed = await _writeGuard
             .RunAsync(
                 (services, token) =>
                     DurableExecutionEvents.AppendAsync(
                         services.GetRequiredService<IAgentsDbContext>(),
+                        services.GetRequiredService<IDurableExecutionEventSequence>(),
                         _lease.ExecutionId,
                         _lease.Epoch,
                         _segmentIndex,
                         batch,
+                        lookupCommitted,
                         token
                     ),
                 linked.Token
             )
             .ConfigureAwait(false);
+        _attempted = false;
         _pending.Clear();
         _flushAt = null;
         _broadcast.PublishCommitted(committed);

@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.TryAddScoped<ICurrentUser>(provider => provider.GetRequiredService<UserInfoService>());
         services.TryAddScoped<IApiTokenRepository, ApiTokenRepository>();
         services.TryAddScoped<ApiTokenNameUniquenessDomainService>();
+        services.AddHybridCache();
         services.TryAddScoped<IApiTokenStore, ApiTokenAppService>();
         return services;
     }

@@ -206,7 +206,7 @@ OpenTelemetry 用于把运行指标和调用追踪等信息发送到监控系统
 | --- | --- | --- |
 | `ServiceName` | `appsettings.json` Agw | 监控系统中显示的服务名称。分离 Host 遇到`appsettings.json`值 Agw 时会改为 `Agw.ControlPlane` 或 `Agw.DataPlane`；未设置时使用 `Agw.{Host角色}`。 |
 | `ServiceVersion` | 1.0.0 | 监控系统中显示的版本号，方便区分不同版本的运行情况。 |
-| `OtlpEndpoint` | `appsettings.json`空；实际回退 http://localhost:4317 | 接收运行指标、调用追踪等数据的监控服务地址。留空或不填时，仍会尝试发送到 `http://localhost:4317`；留空不会关闭发送。 |
+| `OtlpEndpoint` | `appsettings.json`空 | 接收运行指标、调用追踪等数据的监控服务地址。留空或不填时，不启用 OpenTelemetry 的追踪、指标和日志导出。 |
 
 ### 日志配置
 
@@ -218,7 +218,7 @@ OpenTelemetry 用于把运行指标和调用追踪等信息发送到监控系统
 | `Logging:LogLevel:Microsoft.AspNetCore` | Warning | Web 请求处理相关日志的详细程度。 |
 | `Logging:LogLevel:Microsoft.EntityFrameworkCore` | Warning | 数据库访问相关日志的详细程度。 |
 | `Serilog:Using` | Console、File、Async sinks | 启用控制台、文件和异步输出功能所需的日志组件。一般无需修改。 |
-| `Serilog:MinimumLevel:Default` | Debug | Serilog 默认保留的最低日志级别。低于该级别的日志不会输出。 |
+| `Serilog:MinimumLevel:Default` | Information；Development 为 Debug | Serilog 默认保留的最低日志级别。低于该级别的日志不会输出。 |
 | `Serilog:MinimumLevel:Override:Microsoft.AspNetCore` | Warning | 单独设置 Web 请求相关日志的最低级别。 |
 | `Serilog:MinimumLevel:Override:Microsoft.EntityFrameworkCore` | Warning | 单独设置数据库访问日志的最低级别。 |
 | `Serilog:MinimumLevel:Override:System` | Warning | 单独设置 System 系统组件日志的最低级别；其他类别可按同样方式设置。 |
@@ -247,7 +247,7 @@ Authorization: Bearer agw_<your-token>
 
 在 Server 所在主机上直接访问时，满足以下全部条件的请求会自动以管理员 `1001` 的身份通过认证，不需要密码或 API Key：来源是回环地址，没有任何转发请求头，访问的主机名是 `localhost` 或回环 IP，且请求不带认证请求头或登录 Cookie。经过反向代理或从其他主机访问的请求不满足这些条件。
 
-创建 API Key 时为它起一个便于识别的名称，并保存当时显示的完整值；之后不会再次显示。自动化程序可以从环境变量或机密配置中读取它。不再使用时撤销该 API Key。Server 会按创建者的身份判断它能访问哪些资源。多账号登录通过下一节的第三方登录配置；当前不提供角色、API Key 权限范围（scopes）或 JWT 的配置。
+创建 API Key 时为它起一个便于识别的名称，并保存当时显示的完整值；之后不会再次显示。自动化程序可以从环境变量或机密配置中读取它。不再使用时撤销该 API Key。Server 会按创建者的身份判断它能访问哪些资源。每个 Server 会把验证通过的 API Key 缓存 30 秒：处理撤销请求的 Server 立即清除缓存；分离部署且没有共享的分布式缓存时，其他副本最多 30 秒后停止接受该 API Key。多账号登录通过下一节的第三方登录配置；当前不提供角色、API Key 权限范围（scopes）或 JWT 的配置。
 
 密码和 API Key 都以用于验证的哈希值保存在数据库中，不保存原文。管理员认证信息位于 `setting` 表的 `auth` 分组，API Key 信息位于 `api_token` 表，由管理功能自动维护，无需在 appsettings 中填写。修改管理员密码后，各 Server 会检查新的登录状态版本；检查每秒进行一次，读取失败时不再沿用缓存的认证信息。忘记密码可先停止 Server，再运行 `agw-server auth reset-password`；分离部署使用 `agw-control-plane auth reset-password`。新密码需要 12–256 个字符，重置后已有的 Web 登录会话全部失效。
 

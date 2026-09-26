@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Security.Claims;
 using Agw.Auth.Contracts;
@@ -18,6 +19,7 @@ public sealed partial class ConversationHistoryStore
     {
         private readonly Dictionary<Guid, long> _messageOrder = [];
         private readonly List<PendingSource> _sources = [];
+        private readonly ConditionalWeakTable<ConversationMessageSnapshot, PendingHistoryRecord> _records = new();
         private long _nextMessageOrder;
         private readonly CancellationToken _ownershipLost;
         private readonly IExecutionWriteGuard? _writeGuard;
@@ -82,10 +84,19 @@ public sealed partial class ConversationHistoryStore
                     pending
                         .Source.CapturePending()
                         .Where(snapshot => _messageOrder.ContainsKey(snapshot.MessageId))
-                        .Select(snapshot => Store.CreateSnapshotRecord(pending.Scope, snapshot))
+                        .Select(snapshot => GetRecord(pending.Scope, snapshot))
                 )
                 .OrderBy(GetMessageOrder)
                 .ToList();
+
+        /// <summary>
+        /// 同一个快照对象只转换一次：读取与提交反复捕获未变化的消息时复用已序列化的记录。
+        /// Each snapshot object is converted once: reads and commits that capture an unchanged message again reuse its serialized record.
+        /// </summary>
+        private PendingHistoryRecord GetRecord(
+            ConversationMessageWriteScope scope,
+            ConversationMessageSnapshot snapshot
+        ) => _records.GetValue(snapshot, captured => Store.CreateSnapshotRecord(scope, captured));
 
         public void EnsureActive()
         {
@@ -104,12 +115,17 @@ public sealed partial class ConversationHistoryStore
         {
             ArgumentNullException.ThrowIfNull(scope);
             ArgumentNullException.ThrowIfNull(source);
+            // 写入范围通常已经是规范化的 ContextId，相等时不再解析。
+            // A write scope usually already carries the normalized ContextId, which then skips parsing.
             if (
                 scope.ProjectId != Scope.ProjectId
-                || !string.Equals(
-                    ContextIdUtil.NormalizeContextId(scope.ContextId),
-                    Scope.ContextId,
-                    StringComparison.Ordinal
+                || (
+                    !string.Equals(scope.ContextId, Scope.ContextId, StringComparison.Ordinal)
+                    && !string.Equals(
+                        ContextIdUtil.NormalizeContextId(scope.ContextId),
+                        Scope.ContextId,
+                        StringComparison.Ordinal
+                    )
                 )
             )
                 throw new AgwException(
@@ -237,9 +253,7 @@ public sealed partial class ConversationHistoryStore
                         .ToArray()
             );
             var records = _sources
-                .SelectMany(pending =>
-                    captured[pending.Source].Select(snapshot => Store.CreateSnapshotRecord(pending.Scope, snapshot))
-                )
+                .SelectMany(pending => captured[pending.Source].Select(snapshot => GetRecord(pending.Scope, snapshot)))
                 .OrderBy(GetMessageOrder)
                 .ToList();
             long? committed;

@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Auth.Security;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -85,6 +87,57 @@ public sealed class ApiTokenAppServiceTests : IDisposable
         Assert.True(revoked);
         Assert.Null(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
         Assert.Empty(await fixture.Store.ListTokensAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ValidateTokenAsync_WithinCacheDuration_ReusesValidatedIdentity()
+    {
+        await using var fixture = await TokenStoreFixture.CreateAsync();
+        var created = await fixture.Store.CreateTokenAsync("CLI", TestContext.Current.CancellationToken);
+        var first = await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken);
+
+        await fixture.Context.ApiTokens.ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+        var second = await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(first);
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public async Task RevokeTokenAsync_AfterValidation_InvalidatesCachedIdentity()
+    {
+        await using var fixture = await TokenStoreFixture.CreateAsync();
+        var created = await fixture.Store.CreateTokenAsync("CLI", TestContext.Current.CancellationToken);
+        Assert.NotNull(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
+
+        var revoked = await fixture.Store.RevokeTokenAsync(created.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(revoked);
+        Assert.Null(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ValidateTokenAsync_UnknownToken_DoesNotCacheTheFailure()
+    {
+        await using var fixture = await TokenStoreFixture.CreateAsync();
+        const string secret = "agw_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG";
+        Assert.Null(await fixture.Store.ValidateTokenAsync(secret, TestContext.Current.CancellationToken));
+
+        fixture.Context.ApiTokens.Add(
+            new ApiToken
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "Imported",
+                NormalizedName = "IMPORTED",
+                Prefix = ApiTokenSecret.GetLookupPrefix(secret),
+                SecretHash = ApiTokenSecret.Hash(secret),
+            }
+        );
+        await fixture.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var identity = await fixture.Store.ValidateTokenAsync(secret, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(identity);
+        Assert.Equal("creator-42", identity.UserId);
     }
 
     private sealed class TokenStoreFixture : IAsyncDisposable

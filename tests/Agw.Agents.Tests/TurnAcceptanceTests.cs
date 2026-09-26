@@ -4,8 +4,6 @@ using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Application.History;
-using Agw.Projects.Contracts.Execution;
-using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;

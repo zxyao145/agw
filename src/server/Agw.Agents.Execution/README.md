@@ -58,7 +58,9 @@ Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后�
 
 外层 Agent/Agentflow 回合与 durable segment 拥有写入作用域，嵌套节点复用当前作用域。流式入口通过 `RunStreaming` 在每次 `MoveNextAsync` 和 `DisposeAsync` 恢复历史及会话代次上下文；普通 Task 执行使用 `BeginScope`。仅在异步迭代器内部设置 AsyncLocal 不能跨 yield 保持该上下文。回合正常结束、取消、异常和枚举器释放都会尝试提交剩余历史。SDK session state 保存与 checkpoint 的历史序号计算先获取历史刷新屏障，阻止并发追加越过恢复边界；然后沿用 Project → History/Session 的锁顺序。历史提交仍验证原始 owner 和 Generation；失效作用域不能重新创建被删除的 Conversation。
 
-分布式普通事件由 segment sink 按 `Execution:Distributed:EventStream:WriteIntervalMilliseconds`（默认 250）或 `WriteBatchSize`（默认 100）提交，间隔为 0 时逐条写入。普通事件先排空，再保存分段结果并发布 pending/terminal；状态轮询在发出控制消息前重新排空尾部事件。作废 attempt 的待写事件被丢弃，回放故障继续沿用现有降级行为。
+进程内执行由 `TurnBroadcast` 分配 turnSequence，并把同一消息 50 ms 内相邻的流式文本增量合并成一条；其他消息或计时到期时先发布合并结果，所有写入方的消息保持写入顺序。
+
+分布式普通事件由 segment sink 按 `Execution:Distributed:EventStream:WriteIntervalMilliseconds`（默认 250）或 `WriteBatchSize`（默认 100）提交，间隔为 0 时逐条写入。同一批次内相邻的流式文本增量合并成一条事件；批次第一次提交时不查询已提交事件，重试时才查询并沿用原事件 ID 与载荷。普通事件先排空，再保存分段结果并发布 pending/terminal；状态轮询在发出控制消息前重新排空尾部事件。作废 attempt 的待写事件被丢弃，回放故障继续沿用现有降级行为。
 
 配置、恢复边界和异常退出影响见 [执行持久化说明](Persistence/README.md)。
 

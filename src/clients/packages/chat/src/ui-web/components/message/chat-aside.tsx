@@ -81,12 +81,12 @@ export function ChatAside({ usage, todos }: ChatAsideProps) {
               <li key={todo.id} className="flex items-start gap-2 rounded-lg px-1 py-1">
                 {todo.isComplete ? (
                   <CheckCircle2
-                    className="mt-0.5 size-4 shrink-0 text-emerald-600"
+                    className="mt-2 size-4 shrink-0 text-emerald-600"
                     aria-hidden="true"
                   />
                 ) : (
                   <Circle
-                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                    className="mt-2 size-4 shrink-0 text-muted-foreground"
                     aria-hidden="true"
                   />
                 )}

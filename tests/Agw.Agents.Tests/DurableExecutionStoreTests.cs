@@ -11,13 +11,14 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
-using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 using Agw.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
@@ -569,6 +570,69 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         var start = Assert.Single(await _kit.ReadEventsAsync(id));
         Assert.Equal(1, start.TurnSequence);
     }
+
+    [Fact]
+    public async Task DurableEventSink_AdjacentTextDeltas_CommitAsOneEvent()
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        var accepted = await AcceptAsync();
+        var id = accepted.Request.TurnId;
+        var lease = await ClaimAsync(id);
+        using var ownership = new CancellationTokenSource();
+        var broadcast = _kit.Broadcasts.GetOrCreate(id, UserId);
+        var sink = new DurableEventSink(
+            _kit.Leases.CreateGuard(lease, ownership),
+            lease,
+            segmentIndex: 0,
+            broadcast,
+            _kit.Services.GetRequiredService<DurableExecutionEventLog>(),
+            new ExecutionEventStreamOptions { WriteIntervalMilliseconds = 60_000 },
+            _clock,
+            ownership.Token
+        );
+
+        // Act
+        await using (sink)
+        {
+            await sink.WriteAsync(TextDelta("message-1", "Hel"), token);
+            await sink.WriteAsync(TextDelta("message-1", "lo"), token);
+            await sink.WriteAsync(
+                new AgwMessage("message-2", "agent", AiRole.Assistant, [new AgwFunctionCallContent { Content = "{}" }]),
+                token
+            );
+            await sink.WriteAsync(TextDelta("message-1", "!"), token);
+        }
+
+        // Assert
+        var events = await _kit.ReadEventsAsync(id);
+        Assert.Equal([1L, 2L, 3L, 4L], events.Select(entry => entry.TurnSequence));
+        Assert.Equal(["Hello", "", "!"], events.Skip(1).Select(entry => TextOf(entry.PayloadJson)));
+        Assert.Equal(4, (await _kit.ReadExecutionAsync(id)).LastEventSequence);
+        Assert.Equal(
+            ["Hello", "", "!"],
+            broadcast.ReadAfter(1, out _).Select(entry => TextOf(entry.Message)).ToArray()
+        );
+    }
+
+    private static AgwMessage TextDelta(string messageId, string text) =>
+        new(
+            messageId,
+            "agent",
+            AiRole.Assistant,
+            [
+                new AgwTextContent
+                {
+                    Content = text,
+                    AdditionalProperties = new AdditionalPropertiesDictionary { ["blockId"] = "block:0" },
+                },
+            ]
+        );
+
+    private static string TextOf(string payloadJson) => TextOf(JsonUtil.Deserialize<AgwMessage>(payloadJson)!);
+
+    private static string TextOf(AgwMessage message) =>
+        string.Concat(message.Contents.OfType<AgwTextContent>().Select(content => content.Content));
 
     /// <summary>
     /// 经受理事务登记一条 Queued 的 Durable 执行；本测试的协调器没有本地执行能力。

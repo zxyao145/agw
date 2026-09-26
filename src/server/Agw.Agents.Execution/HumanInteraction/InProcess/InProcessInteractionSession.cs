@@ -10,7 +10,7 @@ namespace Agw.Agents.Execution.HumanInteraction.InProcess;
 /// </summary>
 public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInteractionChannel
 {
-    private readonly object _sync = new();
+    private readonly Lock _sync = new();
     private readonly Dictionary<string, PendingInteraction> _pending = new(StringComparer.Ordinal);
     private readonly IExecutionMessageSink _sink;
     private readonly InteractionPermissionState _permissions;

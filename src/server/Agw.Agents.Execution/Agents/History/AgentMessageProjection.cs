@@ -41,11 +41,11 @@ internal interface IAgentMessageAdapter<in TEvent>
 internal sealed class AgentMessageProjection : IConversationMessageSource
 {
     private static readonly JsonSerializerOptions JsonOptions = WebJsonOptions.Default;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly ConversationMessageWriteScope _scope;
     private readonly TimeProvider _timeProvider;
-    private readonly Dictionary<string, MessageEntry> _messages = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, MessageEntry> _aliases = new(StringComparer.Ordinal);
+    private readonly Dictionary<MessageIdentity, MessageEntry> _messages = [];
+    private readonly Dictionary<MessageIdentity, MessageEntry> _aliases = [];
     private bool _completed;
 
     internal AgentMessageProjection(ConversationMessageWriteScope scope, TimeProvider timeProvider)
@@ -70,11 +70,14 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
         lock (_gate)
         {
             var purpose = GetPurpose(message);
-            var identity = JsonSerializer.Serialize(
-                new object?[] { message.MessageId, message.Role.Value, message.AuthorName, purpose, stepIndex }
+            var identity = new MessageIdentity(
+                message.MessageId,
+                message.Role.Value,
+                message.AuthorName,
+                purpose,
+                stepIndex,
+                newMessage ? Guid.CreateVersion7() : Guid.Empty
             );
-            if (newMessage)
-                identity += Guid.CreateVersion7().ToString("D");
             if (!_messages.TryGetValue(identity, out var entry) && !_aliases.TryGetValue(identity, out entry))
             {
                 entry = newMessage
@@ -95,14 +98,14 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
             }
             if (entry.Completed)
             {
-                var passthrough = Clone(entry.Header);
+                var passthrough = CopyHeader(entry.Header);
                 passthrough.Contents = message.Contents.Select(CloneContent).ToList();
                 Stamp(passthrough, entry);
                 return passthrough;
             }
             entry.Streamed = true;
             MergeHeader(entry, message, purpose);
-            var output = Clone(entry.Header);
+            var output = CopyHeader(entry.Header);
             foreach (var value in message.Contents)
             {
                 var content = CloneContent(value);
@@ -121,6 +124,8 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
                 }
                 else
                 {
+                    // 输出与块各持有一份副本：输出交给调用方后可能被修改，块的属性随后续增量更新。
+                    // The output and the block each hold a copy: the output may be changed after it reaches the caller, and the block's properties follow later deltas.
                     block = new BlockEntry
                     {
                         Content = CloneContent(content),
@@ -164,15 +169,12 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
                 )
                 : null;
             if (entry is { Streamed: true } && !replaceStreamed)
-                return JsonSerializer.Deserialize<ChatMessage>(
-                    (entry.Cached ??= Snapshot(entry)).Payload,
-                    JsonOptions
-                )!;
+                return (entry.Cached ??= Snapshot(entry)).Message;
             if (entry == null)
             {
                 var entryId = rowId ?? Guid.CreateVersion7();
                 entry = CreateEntry(message, entryId, message.MessageId ?? entryId.ToString("D"), purpose, stepIndex);
-                _messages.Add($"put:{entryId:D}", entry);
+                _messages.Add(MessageIdentity.ForPut(entryId), entry);
             }
             MergeHeader(entry, message, purpose);
             entry.Blocks.Clear();
@@ -188,18 +190,18 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
             entry.Completed = true;
             entry.Dirty = true;
             entry.Cached = null;
-            return JsonSerializer.Deserialize<ChatMessage>((entry.Cached = Snapshot(entry)).Payload, JsonOptions)!;
+            return (entry.Cached = Snapshot(entry)).Message;
         }
     }
 
+    /// <summary>
+    /// 以持久化后的形式读取全部消息：每条消息经过一次 JSON 往返，调用方得到独立的副本。
+    /// Reads every message in its persisted form: each message makes one JSON round trip, so callers get independent copies.
+    /// </summary>
     internal IReadOnlyList<ChatMessage> ReadMessages()
     {
         lock (_gate)
-            return _messages
-                .Values.Select(entry =>
-                    JsonSerializer.Deserialize<ChatMessage>((entry.Cached ??= Snapshot(entry)).Payload, JsonOptions)!
-                )
-                .ToArray();
+            return _messages.Values.Select(entry => Clone((entry.Cached ??= Snapshot(entry)).Message)).ToArray();
     }
 
     internal void Complete()
@@ -241,20 +243,16 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
         }
     }
 
-    private MessageEntry CreateEntry(ChatMessage message, Guid id, string sourceId, string purpose, int? stepIndex)
-    {
-        var header = Clone(message);
-        header.Contents.Clear();
-        return new MessageEntry
+    private MessageEntry CreateEntry(ChatMessage message, Guid id, string sourceId, string purpose, int? stepIndex) =>
+        new()
         {
             Id = id,
             SourceId = sourceId,
             Purpose = purpose,
-            Header = header,
+            Header = CopyHeader(message),
             CreatedAt = message.CreatedAt ?? _timeProvider.GetUtcNow(),
             StepIndex = stepIndex,
         };
-    }
 
     private static void MergeHeader(MessageEntry entry, ChatMessage message, string purpose)
     {
@@ -274,7 +272,7 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
 
     private ConversationMessageSnapshot Snapshot(MessageEntry entry)
     {
-        var message = Clone(entry.Header);
+        var message = CopyHeader(entry.Header);
         message.Contents = entry
             .Blocks.Select(block =>
             {
@@ -299,7 +297,7 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
             Author = message.AuthorName,
             StepIndex = entry.StepIndex,
             IsResult = entry.Purpose == AgwMessageClassifier.ResultType,
-            Payload = JsonSerializer.Serialize(message, JsonOptions),
+            Message = message,
             Metadata = new()
             {
                 ["sourceMessageId"] = JsonSerializer.SerializeToElement(entry.SourceId),
@@ -358,8 +356,68 @@ internal sealed class AgentMessageProjection : IConversationMessageSource
     internal static ChatMessage Clone(ChatMessage value) =>
         JsonSerializer.Deserialize<ChatMessage>(JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions), JsonOptions)!;
 
+    /// <summary>
+    /// <para>复制一段内容。文本与推理是流式增量中最常见的内容，按类型直接复制可序列化的属性并复制属性字典与注释列表；
+    /// 其他类型经过一次 JSON 往返。两种方式都不保留 RawRepresentation。</para>
+    /// <para>Copies one content item. Text and reasoning are the most common streaming content, so their serializable properties are copied directly along with new property dictionaries and annotation lists;
+    /// other types make one JSON round trip. Neither keeps RawRepresentation.</para>
+    /// </summary>
     internal static AIContent CloneContent(AIContent value) =>
-        JsonSerializer.Deserialize<AIContent>(JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions), JsonOptions)!;
+        value switch
+        {
+            TextContent text when text.GetType() == typeof(TextContent) => new TextContent(text.Text)
+            {
+                Annotations = CopyAnnotations(text.Annotations),
+                AdditionalProperties = CopyProperties(text.AdditionalProperties),
+            },
+            TextReasoningContent reasoning when reasoning.GetType() == typeof(TextReasoningContent) =>
+                new TextReasoningContent(reasoning.Text)
+                {
+                    ProtectedData = reasoning.ProtectedData,
+                    Annotations = CopyAnnotations(reasoning.Annotations),
+                    AdditionalProperties = CopyProperties(reasoning.AdditionalProperties),
+                },
+            _ => JsonSerializer.Deserialize<AIContent>(
+                JsonSerializer.SerializeToUtf8Bytes(value, JsonOptions),
+                JsonOptions
+            )!,
+        };
+
+    /// <summary>
+    /// 复制消息头：角色、作者、ID、时间与新的属性字典，内容为空列表，不保留 RawRepresentation。
+    /// Copies a message header: role, author, ID, time and a new property dictionary, with an empty content list and no RawRepresentation.
+    /// </summary>
+    private static ChatMessage CopyHeader(ChatMessage value) =>
+        new()
+        {
+            Role = value.Role,
+            AuthorName = value.AuthorName,
+            MessageId = value.MessageId,
+            CreatedAt = value.CreatedAt,
+            AdditionalProperties = CopyProperties(value.AdditionalProperties),
+        };
+
+    private static AdditionalPropertiesDictionary? CopyProperties(AdditionalPropertiesDictionary? properties) =>
+        properties == null ? null : new AdditionalPropertiesDictionary(properties);
+
+    private static List<AIAnnotation>? CopyAnnotations(IList<AIAnnotation>? annotations) =>
+        annotations == null ? null : [.. annotations];
+
+    /// <summary>
+    /// 流式增量归属的消息身份；Nonce 区分强制新建的消息，Put 写入的行以空 MessageId 与行 Id 登记。
+    /// The message identity a streaming delta belongs to; Nonce distinguishes forced new messages, and rows written by Put register with an empty MessageId and their row Id.
+    /// </summary>
+    private readonly record struct MessageIdentity(
+        string MessageId,
+        string Role,
+        string? Author,
+        string Purpose,
+        int? StepIndex,
+        Guid Nonce
+    )
+    {
+        public static MessageIdentity ForPut(Guid entryId) => new("", "", null, "", null, entryId);
+    }
 
     private sealed class MessageEntry
     {

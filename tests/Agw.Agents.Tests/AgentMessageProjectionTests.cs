@@ -9,6 +9,43 @@ namespace Agw.Agents.Tests;
 public sealed class AgentMessageProjectionTests
 {
     [Fact]
+    public void CloneContent_TextAndReasoning_CopySerializableStateIntoIndependentCollections()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var citation = new CitationAnnotation { Title = "source" };
+        AIContent[] originals =
+        [
+            new TextContent("answer")
+            {
+                Annotations = [citation],
+                AdditionalProperties = new AdditionalPropertiesDictionary { ["blockId"] = "block:1" },
+                RawRepresentation = new object(),
+            },
+            new TextReasoningContent("thinking")
+            {
+                ProtectedData = "signature",
+                AdditionalProperties = new AdditionalPropertiesDictionary { ["blockId"] = "block:0" },
+                RawRepresentation = new object(),
+            },
+        ];
+
+        foreach (var original in originals)
+        {
+            var copy = AgentMessageProjection.CloneContent(original);
+            copy.AdditionalProperties!["blockId"] = "changed";
+
+            Assert.Equal(original.GetType(), copy.GetType());
+            Assert.Null(copy.RawRepresentation);
+            Assert.NotEqual("changed", original.AdditionalProperties!["blockId"]);
+            copy.AdditionalProperties["blockId"] = original.AdditionalProperties["blockId"];
+            Assert.Equal(JsonSerializer.Serialize(original, options), JsonSerializer.Serialize(copy, options));
+        }
+        var textCopy = AgentMessageProjection.CloneContent(originals[0]);
+        Assert.NotSame(originals[0].Annotations, textCopy.Annotations);
+        Assert.Same(citation, Assert.Single(textCopy.Annotations!));
+    }
+
+    [Fact]
     public void ModelDeltas_OmittedRoleAndAuthor_KeepMessageAndBlockBoundaries()
     {
         var projection = CreateProjection();
@@ -202,9 +239,9 @@ public sealed class AgentMessageProjectionTests
             MessageId = messageId,
         };
 
-    private static ChatMessage Deserialize(ConversationMessageSnapshot snapshot) =>
-        JsonSerializer.Deserialize<ChatMessage>(
-            snapshot.Payload,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        )!;
+    private static ChatMessage Deserialize(ConversationMessageSnapshot snapshot)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        return JsonSerializer.Deserialize<ChatMessage>(JsonSerializer.Serialize(snapshot.Message, options), options)!;
+    }
 }

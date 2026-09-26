@@ -150,12 +150,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
                         continue;
                     }
 
-                    var matches = entry
-                        .Content.Split('\n')
-                        .Select((line, index) => new { Line = line.TrimEnd('\r'), Number = index + 1 })
-                        .Where(line => regex.IsMatch(line.Line))
-                        .Select(line => new FileSearchMatch { LineNumber = line.Number, Line = line.Line })
-                        .ToList();
+                    var matches = FindMatchingLines(entry.Content, regex);
                     if (matches.Count > 0)
                     {
                         results.Add(
@@ -178,6 +173,34 @@ public sealed class ProjectMemoryStore : AgentFileStore
     {
         _ = NormalizePath(path, allowEmpty: true);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 按 '\n' 划分行并去掉行尾的 '\r'，用 ReadOnlySpan&lt;char&gt; 匹配，只为命中的行分配字符串。
+    /// Splits lines on '\n' and trims trailing '\r', matching with ReadOnlySpan&lt;char&gt; so only matching lines allocate strings.
+    /// </summary>
+    private static List<FileSearchMatch> FindMatchingLines(string content, Regex regex)
+    {
+        var matches = new List<FileSearchMatch>();
+        var remaining = content.AsSpan();
+        var lineNumber = 0;
+        while (true)
+        {
+            lineNumber++;
+            var lineEnd = remaining.IndexOf('\n');
+            var line = (lineEnd < 0 ? remaining : remaining[..lineEnd]).TrimEnd('\r');
+            if (regex.IsMatch(line))
+            {
+                matches.Add(new FileSearchMatch { LineNumber = lineNumber, Line = line.ToString() });
+            }
+
+            if (lineEnd < 0)
+            {
+                return matches;
+            }
+
+            remaining = remaining[(lineEnd + 1)..];
+        }
     }
 
     /// <summary>
