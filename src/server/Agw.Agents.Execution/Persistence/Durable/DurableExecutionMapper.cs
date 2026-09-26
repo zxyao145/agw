@@ -41,11 +41,11 @@ internal static class DurableExecutionMapper
     public static ExecutionSettings ToRuntimeSettings(
         this DurableExecutionSettings settings,
         Guid projectId,
-        string contextId
+        Guid conversationId
     ) =>
         new(
             projectId,
-            contextId,
+            conversationId,
             settings.EnvironmentVariables,
             settings.PermissionMode,
             settings.Resume,

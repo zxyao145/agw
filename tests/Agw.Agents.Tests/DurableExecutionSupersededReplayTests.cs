@@ -17,14 +17,15 @@ public sealed partial class DurableExecutionStoreTests
         var task = await _kit.SeedConversationAsync();
         var earlier = (await AcceptAsync(task)).Request.TurnId;
         Assert.True(await _kit.Coordinator.InterruptAsync(earlier, UserId, reason: null, token));
-        var beforeNewer = await ReplayAsync(earlier, cursor: null, untilFinished: true);
+        var conversationId = task.ProjectConversationId;
+        var beforeNewer = await ReplayAsync(earlier, conversationId, cursor: null, untilFinished: true);
         var later = (await AcceptAsync(task)).Request.TurnId;
 
         // Act: a replay from the start reads the event log; one after the start event reads this instance's broadcast buffer.
         // 执行：从头回放读取事件记录；从开始事件之后回放读取本实例的广播缓冲。
-        var fromEventLog = await ReplayAsync(earlier, cursor: null, untilFinished: true);
-        var fromBroadcast = await ReplayAsync(earlier, cursor: "1", untilFinished: true);
-        var latest = await ReplayAsync(later, cursor: null, untilFinished: false);
+        var fromEventLog = await ReplayAsync(earlier, conversationId, cursor: null, untilFinished: true);
+        var fromBroadcast = await ReplayAsync(earlier, conversationId, cursor: "1", untilFinished: true);
+        var latest = await ReplayAsync(later, conversationId, cursor: null, untilFinished: false);
 
         // Assert
         Assert.Equal([false, false], beforeNewer.Select(IsSuperseded));
@@ -50,14 +51,19 @@ public sealed partial class DurableExecutionStoreTests
     /// 从游标之后回放一个执行：到结束消息为止，或只取第一条消息。
     /// Replays an execution after a cursor: up to its finish message, or only the first message.
     /// </summary>
-    private async Task<List<AgwMessage>> ReplayAsync(Guid executionId, string? cursor, bool untilFinished)
+    private async Task<List<AgwMessage>> ReplayAsync(
+        Guid executionId,
+        Guid conversationId,
+        string? cursor,
+        bool untilFinished
+    )
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         var token = timeout.Token;
         var sink = new ReplaySink();
         await using var attachment = new DurableExecutionAttachment(UserId, sink, token, _kit.Coordinator);
-        await attachment.AttachAsync(executionId, cursor, token);
+        await attachment.AttachAsync(executionId, cursor, conversationId, token);
         var messages = new List<AgwMessage>();
         await foreach (var message in sink.ReadAllAsync(token))
         {

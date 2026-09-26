@@ -8,7 +8,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
     public ExecutionSettings(
         Guid projectId,
-        string? contextId = null,
+        Guid? conversationId = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         AgwPermissionMode? permissionMode = null,
         bool resume = false,
@@ -18,7 +18,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     )
     {
         ProjectId = projectId;
-        ContextId = contextId;
+        ConversationId = conversationId;
         _environmentVariables = new ReadOnlyDictionary<string, string>(
             new Dictionary<string, string>(environmentVariables ?? new Dictionary<string, string>())
         );
@@ -31,7 +31,11 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
     public Guid ProjectId { get; }
 
-    public string? ContextId { get; }
+    /// <summary>
+    /// 设置所属的 Project Conversation；为空时由第一次受理的 Turn 确定。
+    /// The Project Conversation the settings belong to; when empty, the first accepted turn decides it.
+    /// </summary>
+    public Guid? ConversationId { get; }
 
     public IReadOnlyDictionary<string, string> EnvironmentVariables => _environmentVariables;
 
@@ -58,7 +62,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     public ExecutionSettings WithPermissionMode(AgwPermissionMode permissionMode) =>
         new(
             ProjectId,
-            ContextId,
+            ConversationId,
             _environmentVariables,
             permissionMode,
             Resume,
@@ -68,21 +72,51 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         );
 
     internal ExecutionSettings WithPermissionSnapshot(AgwPermissionMode? mode, long version) =>
-        new(ProjectId, ContextId, _environmentVariables, mode, Resume, HumanInteractionPolicy, version, ResultOnly);
+        new(
+            ProjectId,
+            ConversationId,
+            _environmentVariables,
+            mode,
+            Resume,
+            HumanInteractionPolicy,
+            version,
+            ResultOnly
+        );
 
     public ExecutionSettings WithHumanInteractionPolicy(HumanInteractionPolicy policy) =>
-        new(ProjectId, ContextId, _environmentVariables, PermissionMode, Resume, policy, PermissionVersion, ResultOnly);
+        new(
+            ProjectId,
+            ConversationId,
+            _environmentVariables,
+            PermissionMode,
+            Resume,
+            policy,
+            PermissionVersion,
+            ResultOnly
+        );
 
     public ExecutionSettings WithResultOnly(bool resultOnly) =>
         new(
             ProjectId,
-            ContextId,
+            ConversationId,
             _environmentVariables,
             PermissionMode,
             Resume,
             HumanInteractionPolicy,
             PermissionVersion,
             resultOnly
+        );
+
+    internal ExecutionSettings WithConversationId(Guid conversationId) =>
+        new(
+            ProjectId,
+            conversationId,
+            _environmentVariables,
+            PermissionMode,
+            Resume,
+            HumanInteractionPolicy,
+            PermissionVersion,
+            ResultOnly
         );
 
     public bool Equals(ExecutionSettings? other)
@@ -94,7 +128,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
         return other != null
             && ProjectId == other.ProjectId
-            && string.Equals(ContextId, other.ContextId, StringComparison.Ordinal)
+            && ConversationId == other.ConversationId
             && PermissionMode == other.PermissionMode
             && Resume == other.Resume
             && HumanInteractionPolicy == other.HumanInteractionPolicy
@@ -107,7 +141,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     {
         var hash = new HashCode();
         hash.Add(ProjectId);
-        hash.Add(ContextId, StringComparer.Ordinal);
+        hash.Add(ConversationId);
         hash.Add(PermissionMode);
         hash.Add(Resume);
         hash.Add(HumanInteractionPolicy);

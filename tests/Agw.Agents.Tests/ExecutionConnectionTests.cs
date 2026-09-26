@@ -463,7 +463,7 @@ public class ExecutionConnectionTests
                     .GetValue(registry)!;
         connections["before-reload"] = connection;
         var projectId = fixture.Context.ProjectId!.Value;
-        var contextId = fixture.Context.ContextId!;
+        var conversationId = fixture.Context.ConversationId!.Value;
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await connection.DetachAsync(() => removed.TrySetResult());
         try
@@ -472,32 +472,47 @@ public class ExecutionConnectionTests
                 "before-reload",
                 await registry.FindInProcessExecutionAsync(
                     projectId,
-                    contextId,
+                    conversationId,
                     "user-id",
+                    "after-reload",
+                    TestContext.Current.CancellationToken
+                )
+            );
+            // 仍在运行的 Turn 对发起它的连接同样可见。A turn still running is also visible to the connection that started it.
+            Assert.Equal(
+                "before-reload",
+                await registry.FindInProcessExecutionAsync(
+                    projectId,
+                    conversationId,
+                    "user-id",
+                    "before-reload",
                     TestContext.Current.CancellationToken
                 )
             );
             Assert.Null(
                 await registry.FindInProcessExecutionAsync(
                     projectId,
-                    contextId,
+                    conversationId,
                     "another-user",
+                    "after-reload",
                     TestContext.Current.CancellationToken
                 )
             );
             Assert.Null(
                 await registry.FindInProcessExecutionAsync(
                     Guid.CreateVersion7(),
-                    contextId,
+                    conversationId,
                     "user-id",
+                    "after-reload",
                     TestContext.Current.CancellationToken
                 )
             );
             Assert.Null(
                 await registry.FindInProcessExecutionAsync(
                     projectId,
-                    "another-context",
+                    Guid.CreateVersion7(),
                     "user-id",
+                    "after-reload",
                     TestContext.Current.CancellationToken
                 )
             );
@@ -511,11 +526,70 @@ public class ExecutionConnectionTests
         Assert.Null(
             await registry.FindInProcessExecutionAsync(
                 projectId,
-                contextId,
+                conversationId,
                 "user-id",
+                "after-reload",
                 TestContext.Current.CancellationToken
             )
         );
+    }
+
+    [Fact]
+    public async Task FindInProcessExecution_TurnAfterFinishMessage_IsHiddenOnlyFromItsOwnConnection()
+    {
+        // Arrange: the connection's turn has written its finish message and is still releasing resources.
+        // 准备：连接上的 Turn 已写出结束消息，仍在释放资源。
+        var token = TestContext.Current.CancellationToken;
+        var sink = new FinishGateSink();
+        await using var fixture = await CreateFixtureAsync(messageSink: sink);
+        await using var connection = fixture.Connection;
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        var connections =
+            (ConcurrentDictionary<string, ExecutionConnection>)
+                typeof(ExecutionConnectionRegistry)
+                    .GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .GetValue(registry)!;
+        connections["settling"] = connection;
+        string? forItself;
+        string? forReloadedPage;
+        try
+        {
+            await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+            await sink.FirstFinish.WaitAsync(TurnTimeout, token);
+            var projectId = fixture.Context.ProjectId!.Value;
+            var conversationId = fixture.Context.ConversationId!.Value;
+
+            // Act
+            forItself = await registry.FindInProcessExecutionAsync(
+                projectId,
+                conversationId,
+                "user-id",
+                "settling",
+                token
+            );
+            forReloadedPage = await registry.FindInProcessExecutionAsync(
+                projectId,
+                conversationId,
+                "user-id",
+                "after-reload",
+                token
+            );
+        }
+        finally
+        {
+            sink.ReleaseFinish();
+        }
+        await fixture.Context.WhenIdleAsync();
+
+        // Assert: its own client already has the result; another page still waits for the release.
+        // 断言：它自己的客户端已有结果；另一个页面仍要等待释放完成。
+        Assert.Null(forItself);
+        Assert.Equal("settling", forReloadedPage);
     }
 
     private sealed class TestLifetime : IHostApplicationLifetime
@@ -529,7 +603,8 @@ public class ExecutionConnectionTests
 
     private static async Task<ConnectionFixture> CreateFixtureAsync(
         bool holdTurnOpen = false,
-        bool requestsApproval = false
+        bool requestsApproval = false,
+        IExecutionMessageSink? messageSink = null
     )
     {
         var provider = new ServiceCollection().BuildServiceProvider();
@@ -550,7 +625,7 @@ public class ExecutionConnectionTests
         var projectTasks = new FakeProjectTaskFacade(task, resolved => persistence.SeedConversationAsync(resolved));
         var context = new ExecutionConnectionContext(
             "user-id",
-            sink,
+            messageSink ?? sink,
             CancellationToken.None,
             persistence.CreateAcceptance(projectTasks, new FakeProjectRuntimeFacade()),
             projectTasks,
@@ -606,6 +681,20 @@ public class ExecutionConnectionTests
 
         private readonly ProjectTaskSnapshot _task;
         private readonly Func<AgentExecutionTask, Task> _seed;
+        private readonly HashSet<Guid> _savedConversationIds = [];
+
+        /// <summary>
+        /// 只有受理时解析过的对话才算已保存，与真实 Facade 一样按项目匹配。
+        /// Only a conversation resolved at acceptance counts as saved, matched by project as the real Facade does.
+        /// </summary>
+        public Task<string?> FindContextIdAsync(
+            Guid projectId,
+            Guid conversationId,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult(
+                projectId == _task.ProjectId && _savedConversationIds.Contains(conversationId) ? _task.ContextId : null
+            );
 
         /// <summary>
         /// seed 写入解析出的任务所属的对话，受理事务按真实规则校验它。
@@ -622,6 +711,7 @@ public class ExecutionConnectionTests
             CancellationToken cancellationToken = default
         )
         {
+            _savedConversationIds.Add(request.ConversationId);
             var resolved = _task with { ProjectConversationId = request.ConversationId };
             await _seed(
                 new AgentExecutionTask

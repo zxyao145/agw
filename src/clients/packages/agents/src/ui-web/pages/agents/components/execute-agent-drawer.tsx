@@ -30,7 +30,7 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
   const sessionSeed = React.useMemo(
     () => ({
       revision: `${executingAgent?.id ?? "none"}:${resetSignal}`,
-      contextId: null,
+      conversationId: null,
       messages: [],
       historyTurns: [],
       usage: EMPTY_TOKEN_USAGE,

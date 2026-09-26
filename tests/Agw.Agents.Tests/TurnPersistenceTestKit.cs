@@ -326,8 +326,8 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             Contents = [new AgwTextContent { Content = content }],
         };
 
-    public static ExecutionSettings CreateSettings(Guid projectId, string contextId = ContextId) =>
-        SettingCommandMapper.FromCommand(new SettingCommand(projectId, contextId: contextId));
+    public static ExecutionSettings CreateSettings(Guid projectId, Guid conversationId) =>
+        SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId));
 
     public async Task<ProjectConversationTurn> ReadTurnAsync(Guid turnId)
     {

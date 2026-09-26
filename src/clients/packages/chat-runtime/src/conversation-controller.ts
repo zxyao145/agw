@@ -43,16 +43,14 @@ export type ConversationTarget = { id: string; type: "agent" | "agentflow" };
 export type ConversationSessionSeed = {
   revision: string | number;
   conversationId: string | null;
-  contextId: string | null;
   messages: AiMessage[];
   usage?: TokenUsage;
 };
 
 export type ConversationRuntimeAdapter = {
   execution: ExecutionRuntimeConfig;
-  clearRecords?(projectId: string, contextId: string): Promise<void>;
+  clearRecords?(projectId: string, conversationId: string): Promise<void>;
   onConversationIdChange?(conversationId: string | null): void;
-  onContextIdChange?(contextId: string | null): void;
   onConversationChange?(): void | Promise<void>;
   onError?(error: unknown): void;
   createSession?(handlers: ExecutionHubHandlers): ExecutionSession;
@@ -70,7 +68,6 @@ export type ConversationControllerOptions = {
 
 export type ConversationControllerState = {
   conversationId: string | null;
-  contextId: string | null;
   rawMessages: AiMessage[];
   items: ConversationRenderItem[];
   usage: TokenUsage;
@@ -95,7 +92,9 @@ export class ConversationController {
   private agentResultFormatsKey: string;
   private state: ConversationControllerState;
   private session: ExecutionSession | null = null;
-  private configuredContextId: string | null = null;
+  private configuredConversationId: string | null = null;
+  /** 已通知给外部的对话 ID；配置连接时分配的草稿 ID 在首次发送时才通知。 */
+  private announcedConversationId: string | null;
   private activeStreamingScopeId: string | null = null;
   private resumeBuffer: AiMessage[] | null = null;
   private disposed = false;
@@ -104,9 +103,9 @@ export class ConversationController {
     this.options = options;
     this.agentResultFormatsKey = getAgentResultFormatsKey(options.agentResultFormats);
     const history = prepareHistory(options.sessionSeed.messages);
+    this.announcedConversationId = options.sessionSeed.conversationId;
     this.state = {
       conversationId: options.sessionSeed.conversationId,
-      contextId: options.sessionSeed.contextId,
       rawMessages: history,
       items: [],
       usage: options.sessionSeed.usage ?? EMPTY_TOKEN_USAGE,
@@ -149,9 +148,9 @@ export class ConversationController {
   public hydrate(seed: ConversationSessionSeed): void {
     this.activeStreamingScopeId = null;
     this.resumeBuffer = null;
+    this.announcedConversationId = seed.conversationId;
     this.patch({
       conversationId: seed.conversationId,
-      contextId: seed.contextId,
       rawMessages: prepareHistory(seed.messages),
       usage: seed.usage ?? EMPTY_TOKEN_USAGE,
       pendingInteraction: null,
@@ -175,8 +174,7 @@ export class ConversationController {
       return;
     }
 
-    const conversationId = this.ensureConversationId();
-    const contextId = this.ensureContextId();
+    const conversationId = this.ensureConversationId(true);
     const userMessage = createUserMessage(text, attachments);
     const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
     this.activeStreamingScopeId = userMessage.messageId;
@@ -188,7 +186,7 @@ export class ConversationController {
     });
 
     try {
-      const session = await this.ensureSession(contextId);
+      const session = await this.ensureSession(conversationId);
       await session.execute({
         conversationId,
         agentId: this.options.target.id,
@@ -212,9 +210,9 @@ export class ConversationController {
   }
 
   public async clearRecords(): Promise<void> {
-    const { contextId } = this.state;
-    if (!contextId || !this.options.projectId) return;
-    await this.options.adapter.clearRecords?.(this.options.projectId, contextId);
+    const { conversationId } = this.state;
+    if (!conversationId || !this.options.projectId) return;
+    await this.options.adapter.clearRecords?.(this.options.projectId, conversationId);
     this.patch({ rawMessages: [], usage: EMPTY_TOKEN_USAGE, pendingInteraction: null });
   }
 
@@ -224,7 +222,7 @@ export class ConversationController {
     this.patch({ agentMode: mode });
     try {
       await (
-        await this.ensureSession(this.ensureContextId())
+        await this.ensureSession(this.ensureConversationId(false))
       ).setMode(this.options.target.id, mode);
     } catch (error) {
       this.patch({ agentMode: previous });
@@ -236,7 +234,7 @@ export class ConversationController {
     const previous = this.state.permissionMode;
     this.patch({ permissionMode: mode, isTransitioning: true });
     try {
-      await (await this.ensureSession(this.ensureContextId())).setPermissionMode(mode);
+      await (await this.ensureSession(this.ensureConversationId(false))).setPermissionMode(mode);
     } catch (error) {
       this.patch({ permissionMode: previous });
       this.fail(error);
@@ -285,7 +283,7 @@ export class ConversationController {
     this.resumeBuffer = [];
     this.patch({ isTransitioning: true, pendingInteraction: null, error: null });
     try {
-      const session = await this.ensureSession(this.ensureContextId());
+      const session = await this.ensureSession(this.ensureConversationId(false));
       await session.resumeCheckpoint({
         checkpointOccurrenceId: occurrenceId,
         agentflowId: this.options.target.id,
@@ -313,7 +311,7 @@ export class ConversationController {
     this.listeners.clear();
   }
 
-  private async ensureSession(contextId: string): Promise<ExecutionSession> {
+  private async ensureSession(conversationId: string): Promise<ExecutionSession> {
     if (!this.options.projectId) throw new Error("A project is required.");
     if (!this.session) {
       const handlers: ExecutionHubHandlers = {
@@ -338,14 +336,14 @@ export class ConversationController {
         this.options.adapter.createSession?.(handlers) ??
         new ExecutionSession(handlers, this.options.adapter.execution);
     }
-    if (this.configuredContextId !== contextId) {
+    if (this.configuredConversationId !== conversationId) {
       await this.session.configure({
         projectId: this.options.projectId,
-        contextId,
+        conversationId,
         permissionMode: this.state.permissionMode,
         environmentVariables: this.options.environmentVariables,
       });
-      this.configuredContextId = contextId;
+      this.configuredConversationId = conversationId;
     }
     return this.session;
   }
@@ -420,19 +418,17 @@ export class ConversationController {
     }
   }
 
-  private ensureContextId(): string {
-    if (this.state.contextId) return this.state.contextId;
-    const contextId = createUuidV7();
-    this.patch({ contextId });
-    this.options.adapter.onContextIdChange?.(contextId);
-    return contextId;
-  }
-
-  private ensureConversationId(): string {
-    if (this.state.conversationId) return this.state.conversationId;
-    const conversationId = createUuidV7();
-    this.patch({ conversationId });
-    this.options.adapter.onConversationIdChange?.(conversationId);
+  /**
+   * 首次配置或发送前分配对话 ID；只有发送时才通知外部，配置连接不代表对话已经保存。
+   * Allocates the conversation ID before the first configuration or send; only a send announces it, because configuring a connection does not save the conversation.
+   */
+  private ensureConversationId(announce: boolean): string {
+    const conversationId = this.state.conversationId ?? createUuidV7();
+    if (this.state.conversationId === null) this.patch({ conversationId });
+    if (announce && this.announcedConversationId !== conversationId) {
+      this.announcedConversationId = conversationId;
+      this.options.adapter.onConversationIdChange?.(conversationId);
+    }
     return conversationId;
   }
 
@@ -477,7 +473,7 @@ export class ConversationController {
   private async disposeSession(): Promise<void> {
     const session = this.session;
     this.session = null;
-    this.configuredContextId = null;
+    this.configuredConversationId = null;
     if (session) await session.dispose().catch(() => undefined);
   }
 }

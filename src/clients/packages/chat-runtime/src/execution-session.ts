@@ -125,11 +125,23 @@ export type { AgentMode };
 
 export type ExecutionSetting = {
   projectId: string;
-  contextId: string;
+  /** 连接所属的对话；草稿对话同样使用它，首次受理时服务端才保存对话。 */
+  conversationId: string;
   environmentVariables?: Record<string, string> | null;
   permissionMode?: PermissionMode;
   resultOnly?: boolean;
 };
+
+/**
+ * 服务端明确拒绝启动，或确认该 executionId 不存在；这次发送没有执行。
+ * The server explicitly refused the start, or confirmed the executionId does not exist; this send did not run.
+ */
+export class ExecutionStartRejectedError extends Error {
+  public constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = "ExecutionStartRejectedError";
+  }
+}
 
 export type ExecutionConfigurationResult = {
   restoredDurableExecution: boolean;
@@ -197,7 +209,7 @@ export { getMessageStreamingScopeId };
 
 const executionInterruptTimeoutMs = 3_000;
 
-/** 浏览器为当前服务端、项目和上下文保存的 durable attachment。 */
+/** 浏览器为当前服务端、项目和对话保存的 durable attachment。 */
 type PersistedDurableExecution = {
   /** 尚未确认结束的业务执行标识。 */
   executionId: string;
@@ -208,17 +220,69 @@ type PersistedDurableExecution = {
 /** 服务端声明的执行恢复能力；null 表示旧服务端未提供能力接口。 */
 type ExecutionProviderCapability = "in-process" | "distributed" | null;
 
-/** 为一个服务端上的项目会话生成互不冲突的 durable attachment 存储键。 */
+/** 重新订阅 durable execution 的结果：仍在运行、已经结束，或服务端确认不存在。 */
+type DurableRestoreResult = "active" | "finished" | "missing";
+
+/** 服务端以 AgwException 拒绝的命令在 SignalR 错误中带有 HubException 标记。 */
+function isServerRejection(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("HubException:");
+}
+
+function getAttachmentServer(runtime: ExecutionRuntimeConfig): string {
+  return runtime.baseUrl.replace(/\/+$/u, "") || "local";
+}
+
+/** 为一个服务端上的项目对话生成互不冲突的 durable attachment 存储键。 */
 export function getDurableExecutionStorageKey(
   runtime: ExecutionRuntimeConfig,
-  setting: ExecutionSetting,
+  setting: Pick<ExecutionSetting, "projectId" | "conversationId">,
 ): string {
-  const server = runtime.baseUrl.replace(/\/+$/u, "") || "local";
-  return `agw:durable-execution:v1:${JSON.stringify([
-    server,
+  return `agw:durable-execution:v2:${JSON.stringify([
+    getAttachmentServer(runtime),
     setting.projectId,
-    setting.contextId,
+    setting.conversationId,
   ])}`;
+}
+
+/** 按执行上下文保存的旧 durable attachment 存储键，只用于迁移。 */
+function getContextDurableExecutionStorageKey(
+  runtime: ExecutionRuntimeConfig,
+  projectId: string,
+  contextId: string,
+): string {
+  return `agw:durable-execution:v1:${JSON.stringify([
+    getAttachmentServer(runtime),
+    projectId,
+    contextId,
+  ])}`;
+}
+
+/**
+ * 把按执行上下文保存的 durable attachment 移到按对话保存的键下，保留 executionId 与 cursor；新键写入成功后删除旧记录。
+ * 必须在该对话的恢复配置之前调用，否则这次恢复读不到记录。
+ * Moves a durable attachment saved by execution context to the conversation key, keeping executionId and cursor; the old record is removed after the new key is written.
+ * It must run before the conversation's restore configuration, or that restore cannot find the record.
+ */
+export function migrateDurableExecutionAttachment(
+  conversation: { projectId: string; conversationId: string; contextId: string },
+  runtime: ExecutionRuntimeConfig = executionRuntime,
+): void {
+  const store = getAttachmentStore(runtime);
+  if (!store) return;
+  const contextKey = getContextDurableExecutionStorageKey(
+    runtime,
+    conversation.projectId,
+    conversation.contextId,
+  );
+  const persisted = readPersistedDurableExecution(contextKey, runtime);
+  if (!persisted) return;
+  const conversationKey = getDurableExecutionStorageKey(runtime, conversation);
+  // 新键已有记录时它更新，只删除旧记录。A record already under the new key is newer; only the old one is removed.
+  if (readPersistedDurableExecution(conversationKey, runtime) === null) {
+    store.setItem(conversationKey, JSON.stringify(persisted));
+  }
+  store.removeItem(contextKey);
 }
 
 /** 从浏览器存储读取并最低限度校验 durable attachment。 */
@@ -438,11 +502,11 @@ export class ExecutionSession {
         if (this.executionProvider === "in-process") {
           this.finishActiveTurn();
         } else {
-          const restoredDurableExecution = await this.restoreDurableSubscription(
+          const restored = await this.restoreDurableSubscription(
             persisted.executionId,
             persisted.cursor,
           );
-          return { restoredDurableExecution };
+          return { restoredDurableExecution: restored === "active" };
         }
       }
       if (this.executionProvider === "in-process") await this.discoverInProcessExecution();
@@ -482,15 +546,7 @@ export class ExecutionSession {
       this.executionConnectionId = this.connection.connectionId;
       await this.dispatch(buildExecCommand({ ...request, executionId }));
     } catch (error) {
-      if (!this.durableConfirmed) {
-        await this.reconcileInProcessStartFailure(error);
-      } else if (this.connection.state === HubConnectionState.Connected) {
-        try {
-          if (await this.restoreDurableSubscription(executionId, null)) return;
-        } catch {
-          // 短暂探测失败不能证明服务端未接受启动，因此保留 executionId 供后续恢复。
-        }
-      }
+      if (await this.reconcileStartFailure(executionId, error)) return;
       throw error;
     }
   }
@@ -545,17 +601,7 @@ export class ExecutionSession {
       );
       return resumeExecutionId;
     } catch (error) {
-      if (!this.durableConfirmed) {
-        await this.reconcileInProcessStartFailure(error);
-      } else if (this.connection.state === HubConnectionState.Connected) {
-        try {
-          if (await this.restoreDurableSubscription(resumeExecutionId, null)) {
-            return resumeExecutionId;
-          }
-        } catch {
-          // 与 execute 相同：无法确认服务端是否接受时保留 durable attachment。
-        }
-      }
+      if (await this.reconcileStartFailure(resumeExecutionId, error)) return resumeExecutionId;
       throw error;
     }
   }
@@ -869,11 +915,11 @@ export class ExecutionSession {
 
   /** 重新加载页面后不再有旧连接 ID，必须从服务端发现原执行。 */
   private async discoverInProcessExecution(): Promise<void> {
-    if (!this.setting?.projectId || !this.setting.contextId) return;
+    if (!this.setting?.projectId || !this.setting.conversationId) return;
     const connectionId = await this.connection.invoke<string | null>(
       "FindInProcessExecution",
       this.setting.projectId,
-      this.setting.contextId,
+      this.setting.conversationId,
     );
     if (this.disposed) return;
     if (connectionId === null) {
@@ -888,10 +934,31 @@ export class ExecutionSession {
     await this.recoverInProcessExecution();
   }
 
+  /**
+   * 启动命令失败后确认结果：执行已附着并仍在运行时返回 true；确认没有执行时抛出 ExecutionStartRejectedError；无法确认时返回 false 并保留状态供恢复。
+   * Confirms the outcome after a failed start command: returns true when the execution is attached and still running; throws ExecutionStartRejectedError when it is confirmed not to have run; returns false and keeps state for recovery when it cannot be confirmed.
+   */
+  private async reconcileStartFailure(executionId: string, error: unknown): Promise<boolean> {
+    if (!this.durableConfirmed) {
+      await this.reconcileInProcessStartFailure(error);
+      if (isServerRejection(error)) throw new ExecutionStartRejectedError(error);
+      return false;
+    }
+    if (this.connection.state !== HubConnectionState.Connected) return false;
+    let restored: DurableRestoreResult;
+    try {
+      restored = await this.restoreDurableSubscription(executionId, null);
+    } catch {
+      // 短暂探测失败不能证明服务端未接受启动，因此保留 executionId 供后续恢复。
+      return false;
+    }
+    if (restored === "missing") throw new ExecutionStartRejectedError(error);
+    return restored === "active";
+  }
+
   /** 发送失败不代表启动失败：只有明确拒绝或服务端确认空闲才能清理执行。 */
   private async reconcileInProcessStartFailure(error: unknown): Promise<void> {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("HubException:")) {
+    if (isServerRejection(error)) {
       this.finishActiveTurn();
       return;
     }
@@ -968,18 +1035,20 @@ export class ExecutionSession {
   private async restoreDurableSubscription(
     executionId: string,
     cursor: string | null,
-  ): Promise<boolean> {
+  ): Promise<DurableRestoreResult> {
     try {
       await this.connection.invoke(
         "DispatchCommand",
         buildSubscribeExecutionCommand(executionId, cursor),
       );
-      return this.hasActiveExecution();
+      return this.hasActiveExecution() ? "active" : "finished";
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
-      if (normalized.message.includes("404_0011")) {
+      // 服务端 HubException 的消息以七位错误码开头：4040011 为 DurableExecutionNotFound。
+      // A server HubException message starts with the seven-digit code: 4040011 is DurableExecutionNotFound.
+      if (normalized.message.includes("HubException: 4040011:")) {
         this.finishActiveTurn();
-        return false;
+        return "missing";
       }
       throw normalized;
     }

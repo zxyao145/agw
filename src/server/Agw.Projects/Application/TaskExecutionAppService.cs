@@ -154,7 +154,8 @@ public class TaskExecutionAppService
     }
 
     /// <summary>
-    /// 创建或复用 Project Conversation 和初始记录，并统一解析请求中的 context ID。
+    /// 创建或复用 Project Conversation 和初始记录；已有对话沿用保存的 context ID，新对话使用请求中的值或生成新值。
+    /// Creates or reuses the Project Conversation and its initial record; an existing conversation keeps its saved context ID, and a new one uses the requested value or a generated one.
     /// </summary>
     private async Task<ApplicationResult<TaskExecutionSnapshot>> CreateAsync(
         Guid projectId,
@@ -178,12 +179,14 @@ public class TaskExecutionAppService
             taskIdOverride.HasValue && taskIdOverride.Value != Guid.Empty
                 ? taskIdOverride.Value
                 : Guid.CreateVersion7();
-        var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
+        var requestedContextId = string.IsNullOrWhiteSpace(request.ContextId)
+            ? null
+            : ContextIdUtil.NormalizeContextId(request.ContextId);
 
         var (conversation, conversationCreated) = await GetOrCreateConversationAsync(
             project.Id,
             conversationId,
-            contextId,
+            requestedContextId,
             request,
             user,
             now
@@ -215,7 +218,7 @@ public class TaskExecutionAppService
             var concurrentConversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
                 item.Id == conversationId.Value
                 && item.ProjectId == project.Id
-                && item.ContextId == contextId
+                && (requestedContextId == null || item.ContextId == requestedContextId)
                 && item.CreateBy == user
             );
             if (concurrentConversation == null)
@@ -379,7 +382,7 @@ public class TaskExecutionAppService
     private async Task<(ProjectConversation Conversation, bool Created)> GetOrCreateConversationAsync(
         Guid projectId,
         Guid? conversationId,
-        string contextId,
+        string? requestedContextId,
         TaskCreateRequest request,
         string user,
         DateTimeOffset now
@@ -398,16 +401,19 @@ public class TaskExecutionAppService
             );
             if (conversation != null)
             {
-                new ProjectConversationBehavior(conversation).EnsureExecutionContext(projectId, contextId);
+                new ProjectConversationBehavior(conversation).EnsureExecutionContext(projectId, requestedContextId);
             }
         }
 
-        conversation ??= await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
-            item.ProjectId == projectId && item.ContextId == contextId && item.CreateBy == user
-        );
-        if (conversation != null && conversationId.HasValue)
+        if (conversation == null && requestedContextId != null)
         {
-            new ProjectConversationBehavior(conversation).EnsureIdentity(conversationId.Value);
+            conversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
+                item.ProjectId == projectId && item.ContextId == requestedContextId && item.CreateBy == user
+            );
+            if (conversation != null && conversationId.HasValue)
+            {
+                new ProjectConversationBehavior(conversation).EnsureIdentity(conversationId.Value);
+            }
         }
 
         if (conversation != null)
@@ -418,7 +424,7 @@ public class TaskExecutionAppService
             {
                 throw new AgwException(ErrorCodes.ResourceNotFound);
             }
-            conversation.ContextId = contextId;
+            conversation.ContextId = requestedContextId ?? ContextIdUtil.NormalizeContextId(conversation.ContextId);
             UpdateExistingConversation(conversation, request, user, now);
             return (conversation, false);
         }
@@ -428,7 +434,7 @@ public class TaskExecutionAppService
             Id = conversationId ?? Guid.CreateVersion7(),
             ProjectId = projectId,
             JobId = request.JobId,
-            ContextId = contextId,
+            ContextId = requestedContextId ?? ContextIdUtil.CreateConversationContextId(),
             CreateBy = user,
             CreateTime = now,
             UpdateBy = user,

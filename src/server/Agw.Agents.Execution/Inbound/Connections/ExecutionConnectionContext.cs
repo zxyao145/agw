@@ -22,8 +22,6 @@ namespace Agw.Agents.Execution.Inbound.Connections;
 public sealed class ExecutionConnectionContext : IAsyncDisposable
 {
     private const string SetModeAfterTurnActionKey = "set-mode";
-    internal const string BusyMessage =
-        "The previous execution is currently in progress, please wait and execute again.";
 
     private readonly string _userId;
     private readonly IExecutionMessageSink _messageSink;
@@ -43,6 +41,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private volatile bool _waitingForHuman;
     private readonly ExecutionPermissionService? _permissions;
     private ExecutionSettings? _turnSettings;
+    private TurnBroadcast? _turnBroadcast;
 
     /// <summary>
     /// 创建连接上下文；进程内协调器工厂与 Durable 协调器恰好提供一个，决定本连接的执行方式。
@@ -97,7 +96,11 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public Guid? ProjectConversationId => _resolvedTask?.ProjectConversationId;
 
-    public string? ContextId => _resolvedTask?.ContextId ?? Settings?.ContextId;
+    /// <summary>
+    /// 连接配置的 Project Conversation；执行、订阅与 checkpoint 操作都必须属于它。
+    /// The Project Conversation configured on this connection; executions, subscriptions and checkpoint operations must all belong to it.
+    /// </summary>
+    public Guid? ConversationId => Settings?.ConversationId;
 
     public AgentExecutionTask? ResolvedTask => _resolvedTask;
 
@@ -122,6 +125,37 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// 进程内 Turn 已经写出结束消息、只剩释放与 Turn 后动作时为 true；客户端收到结束消息后立即发来的命令等它收尾后受理。
+    /// True when an in-process turn has written its finish message and only disposal and after-turn actions remain; a command sent right after the client receives the finish message is accepted once it settles.
+    /// </summary>
+    private bool IsFinishingTurn => Host is { HasActiveTurn: true } && HasWrittenTurnFinish;
+
+    /// <summary>
+    /// 连接上最近的进程内 Turn 已写出结束消息，这条连接会把它送达自己的客户端；之后只剩释放与 Turn 后动作。
+    /// The latest in-process turn on this connection has written its finish message, which this connection delivers to its own client; only disposal and after-turn actions remain.
+    /// </summary>
+    internal bool HasWrittenTurnFinish => _turnBroadcast is { IsFinished: true };
+
+    /// <summary>
+    /// 仍在运行的 Turn 拒绝新的执行或设置；正在收尾的进程内 Turn 等待空闲。
+    /// A running turn rejects a new execution or new settings; an in-process turn that is settling is awaited until idle.
+    /// </summary>
+    private async Task EnsureIdleForNewTurnAsync()
+    {
+        if (!HasActiveTurn)
+        {
+            return;
+        }
+
+        if (!IsFinishingTurn)
+        {
+            throw new AgwException(ErrorCodes.ExecutionBusy);
+        }
+
+        await Host!.WhenIdleAsync();
+    }
+
     public async Task ApplySettingsAsync(ExecutionSettings settings, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
@@ -134,12 +168,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (HasActiveTurn)
-        {
-            await SendErrorAsync(BusyMessage);
-            return;
-        }
-
+        await EnsureIdleForNewTurnAsync();
         await ReleaseRuntimeAsync();
         Settings = settings.WithPermissionSnapshot(
             settings.PermissionMode,
@@ -157,27 +186,6 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         ArgumentNullException.ThrowIfNull(command);
-        if (HasActiveTurn)
-        {
-            if (
-                _attachment != null
-                && command.ExecutionId.HasValue
-                && command.ExecutionId == _attachment.ActiveExecutionId
-            )
-            {
-                await SubscribeExecutionAsync(command.ExecutionId.Value, cursor: null, cancellationToken);
-                return;
-            }
-
-            await SendErrorAsync(BusyMessage);
-            return;
-        }
-
-        if (Host != null)
-        {
-            await Host.WhenIdleAsync();
-        }
-
         var agentId =
             command.AgentId ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
         var conversationId =
@@ -187,7 +195,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.conversationId is required.");
         }
-        if (_resolvedTask != null && _resolvedTask.ProjectConversationId != conversationId)
+        if (
+            (Settings?.ConversationId is { } configuredConversationId && configuredConversationId != conversationId)
+            || (_resolvedTask != null && _resolvedTask.ProjectConversationId != conversationId)
+        )
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
@@ -195,7 +206,27 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             );
         }
 
-        Settings ??= ExecutionSettings.CreateDefault();
+        if (
+            HasActiveTurn
+            && _attachment != null
+            && command.ExecutionId.HasValue
+            && command.ExecutionId == _attachment.ActiveExecutionId
+        )
+        {
+            await SubscribeExecutionAsync(command.ExecutionId.Value, cursor: null, cancellationToken);
+            return;
+        }
+
+        await EnsureIdleForNewTurnAsync();
+        if (Host != null)
+        {
+            await Host.WhenIdleAsync();
+        }
+
+        if (Settings?.ConversationId == null)
+        {
+            Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithConversationId(conversationId);
+        }
         await RefreshResolvedTaskAsync(conversationId, cancellationToken);
         var target = new ExecutionTarget(agentId, command.AgentType);
         var requestedMode =
@@ -240,8 +271,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
         else
         {
-            accepted.Broadcast!.AddSink(_messageSink);
-            await accepted.Broadcast.WriteAsync(accepted.Start, CancellationToken.None);
+            _turnBroadcast = accepted.Broadcast!;
+            _turnBroadcast.AddSink(_messageSink);
+            await _turnBroadcast.WriteAsync(accepted.Start, CancellationToken.None);
         }
         await SendPermissionStatusAsync(starting: true);
         try
@@ -261,14 +293,14 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             await _acceptance.ReportStartFailureAsync(accepted, exception);
             if (_attachment != null)
             {
-                await _attachment.AttachAsync(request.TurnId, cursor: "1", cancellationToken);
+                await _attachment.AttachAsync(request.TurnId, cursor: "1", conversationId, cancellationToken);
             }
             return;
         }
 
         if (_attachment != null)
         {
-            await _attachment.AttachAsync(request.TurnId, cursor: "1", cancellationToken);
+            await _attachment.AttachAsync(request.TurnId, cursor: "1", conversationId, cancellationToken);
         }
         _target = target;
         if (requestedMode != null && Host != null)
@@ -286,7 +318,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         if (_attachment != null)
         {
-            await _attachment.AttachAsync(accepted.Request.TurnId, cursor: null, cancellationToken);
+            await _attachment.AttachAsync(
+                accepted.Request.TurnId,
+                cursor: null,
+                accepted.Request.Task.ProjectConversationId,
+                cancellationToken
+            );
             return;
         }
         if (accepted.Broadcast != null)
@@ -361,7 +398,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         if (_attachment != null)
         {
-            await _attachment.InterruptAsync(executionId, reason, cancellationToken);
+            await _attachment.InterruptAsync(executionId, reason, ConversationId, cancellationToken);
             return;
         }
 
@@ -384,7 +421,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(command);
         if (_attachment != null)
         {
-            await _attachment.RespondAsync(command, cancellationToken);
+            await _attachment.RespondAsync(command, ConversationId, cancellationToken);
             return;
         }
 
@@ -425,15 +462,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         var projectId = await ResolveProjectIdAsync(settings, cancellationToken).ConfigureAwait(false);
+        // 尚未保存的草稿对话、以及其他用户的对话都没有 checkpoint。
+        // A draft conversation that is not saved yet, like another user's conversation, has no checkpoints.
+        var contextId = await _projectTasks
+            .FindContextIdAsync(projectId, RequireConversationId(settings), cancellationToken)
+            .ConfigureAwait(false);
+        if (contextId == null)
+        {
+            return [];
+        }
+
         return await checkpointStore
-            .ListAsync(
-                projectId,
-                ContextIdUtil.ResolveContextId(settings.ContextId),
-                agentflowId,
-                _userId,
-                inProcessOccurrences,
-                cancellationToken
-            )
+            .ListAsync(projectId, contextId, agentflowId, _userId, inProcessOccurrences, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -490,7 +530,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 settings.PermissionMode
             );
         var projectId = await ResolveProjectIdAsync(settings, cancellationToken).ConfigureAwait(false);
-        var contextId = ContextIdUtil.ResolveContextId(settings.ContextId);
+        var conversationId = RequireConversationId(settings);
+        var contextId =
+            await _projectTasks.FindContextIdAsync(projectId, conversationId, cancellationToken).ConfigureAwait(false)
+            ?? throw new AgwException(ErrorCodes.ResourceNotFound, "The conversation was not found.");
 
         if (_attachment != null)
         {
@@ -499,6 +542,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     command.CheckpointOccurrenceId,
                     command.ResumeExecutionId,
                     projectId,
+                    conversationId,
                     contextId,
                     command.AgentflowId,
                     cancellationToken,
@@ -595,7 +639,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     internal Task WhenIdleAsync() => Host?.WhenIdleAsync() ?? Task.CompletedTask;
 
     /// <summary>
-    /// 将当前连接附着到已有 durable execution，并从指定 cursor 继续回放消息。
+    /// 将当前连接附着到属于已配置对话的 durable execution，并从指定 cursor 继续回放消息。
+    /// Attaches this connection to a durable execution of the configured conversation and continues replaying messages from the cursor.
     /// </summary>
     public async Task SubscribeExecutionAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
     {
@@ -606,10 +651,15 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 ErrorCodes.DurableExecutionUnavailable,
                 "Durable execution services are not configured."
             );
-        await attachment.AttachAsync(executionId, cursor, cancellationToken);
+        var settings =
+            Settings
+            ?? throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Execution settings must be configured before subscribing to an execution."
+            );
+        await attachment.AttachAsync(executionId, cursor, RequireConversationId(settings), cancellationToken);
         if (attachment.PermissionStatus is { } status)
         {
-            var settings = Settings ?? ExecutionSettings.CreateDefault();
             _turnSettings = settings.WithPermissionSnapshot(
                 status.ActivePermissionMode,
                 status.ActivePermissionVersion
@@ -638,6 +688,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             }
         }
     }
+
+    private static Guid RequireConversationId(ExecutionSettings settings) =>
+        settings.ConversationId
+        ?? throw new AgwException(
+            ErrorCodes.InvalidParam,
+            "Execution settings must be configured with a conversation before this operation."
+        );
 
     private async Task<Guid> ResolveProjectIdAsync(ExecutionSettings settings, CancellationToken cancellationToken)
     {
@@ -673,11 +730,6 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _target = null;
         _waitingForHuman = false;
     }
-
-    private Task SendErrorAsync(string message) =>
-        _messageSink
-            .WriteAsync(CreateMessage(new AgwErrorContent { Content = message }), CancellationToken.None)
-            .AsTask();
 
     private Task SendSystemMessageAsync(string message) =>
         _messageSink

@@ -37,7 +37,9 @@ export function WorkspaceHeader({
   const showMore = () => {
     Alert.alert("Conversation actions", undefined, [
       { text: "Quick Text", onPress: composer.openQuickText },
-      ...(workspace.selectedContextId && !workspace.isExecuting
+      ...(workspace.selectedConversationId &&
+      workspace.readyConversationId === workspace.selectedConversationId &&
+      !workspace.isExecuting
         ? [
             {
               text: "Clear Conversation",

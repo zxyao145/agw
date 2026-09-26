@@ -2,14 +2,37 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
+import { createUserMessage } from "@agw/chat-core";
 import type { ExecutionHubHandlers, ExecutionReconnectState } from "./execution-hub";
+import type { ExecutionSubmission } from "./execution-queue";
+import {
+  ExecutionStartRejectedError,
+  type ExecutionRequest,
+  type ExecutionSetting,
+} from "./execution-session";
 import { ExecutionSessionManager } from "./execution-session-manager";
 
 const sessionKey = {
   serverId: "server-a",
   projectId: "project-1",
-  contextId: "context-1",
+  conversationId: "conversation-1",
 };
+
+function createSubmission(
+  text: string,
+  options: { attachments?: ExecutionSubmission["attachments"]; fileCommentCount?: number } = {},
+): ExecutionSubmission {
+  return {
+    target: { agentId: "agent-1", agentType: 0 },
+    text,
+    attachments: options.attachments ?? [],
+    fileCommentCount: options.fileCommentCount ?? 0,
+    createMessage: (value, messageId) => ({
+      ...createUserMessage(value, options.attachments ?? []),
+      messageId,
+    }),
+  };
+}
 
 /** 创建满足会话管理器测试所需的最小执行客户端。 */
 function createExecutionClient() {
@@ -203,7 +226,10 @@ test("manager marks a restored durable execution active", async () => {
   }));
   const handle = manager.attach(sessionKey, { onMessage: () => undefined });
 
-  const result = await handle.configure({ projectId: "project-1", contextId: "context-1" });
+  const result = await handle.configure({
+    projectId: "project-1",
+    conversationId: "conversation-1",
+  });
 
   assert.deepEqual(result, { restoredDurableExecution: true });
   assert.equal(handle.getStatus(), "running");
@@ -215,7 +241,7 @@ test("manager creates independent clients for different conversation execution k
     createdClientCount += 1;
     return createExecutionClient();
   });
-  const otherSessionKey = { ...sessionKey, contextId: "context-2" };
+  const otherSessionKey = { ...sessionKey, conversationId: "conversation-2" };
   const first = manager.attach(sessionKey, { onMessage: () => undefined });
   const second = manager.attach(otherSessionKey, { onMessage: () => undefined });
 
@@ -231,25 +257,22 @@ test("manager restores the complete active turn instead of replaying capped delt
     clientHandlers = handlers;
     return createExecutionClient();
   });
-  const first = manager.attach(sessionKey, { onMessage: () => undefined });
-  const input = {
-    messageId: "user-1",
-    author: "$agw",
-    contents: [{ type: "TextContent", content: "run" }],
-  };
-
-  await first.execute({
-    conversationId: "conversation-1",
-    agentId: "agent-1",
-    agentType: 0,
-    input,
+  let userMessageId = "";
+  const first = manager.attach(sessionKey, {
+    onMessage: () => undefined,
+    onSubmissionStarted: (event) => {
+      userMessageId = event.message.messageId;
+    },
   });
+
+  await first.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  assert.equal(first.submit(createSubmission("run")), "started");
   clientHandlers?.onMessage({
     messageId: "turn-start-1",
     role: "system",
     author: "$agw",
     contents: [],
-    streamingScopeId: "user-1",
+    streamingScopeId: userMessageId,
     additionalProperties: { type: "agw-turn-start" },
   });
 
@@ -260,7 +283,7 @@ test("manager restores the complete active turn instead of replaying capped delt
       role: "assistant",
       author: "general-agent",
       contents: [{ type: "TextContent", content }],
-      streamingScopeId: "user-1",
+      streamingScopeId: userMessageId,
     });
   }
   const interaction = createQuestionInteraction("active-interaction");
@@ -274,7 +297,7 @@ test("manager restores the complete active turn instead of replaying capped delt
   assert.deepEqual(replayed, [interaction]);
   const snapshot = second.getActiveTurnSnapshot();
   assert.ok(snapshot);
-  assert.equal(snapshot.streamingScopeId, "user-1");
+  assert.equal(snapshot.streamingScopeId, userMessageId);
   assert.equal(snapshot.messages[0]?.role, "user");
   assert.equal(
     snapshot.messages.find((message) => message.messageId === "assistant-1")?.contents[0]?.content,
@@ -286,7 +309,7 @@ test("manager restores the complete active turn instead of replaying capped delt
     role: "system",
     author: "$agw",
     contents: [],
-    streamingScopeId: "user-1",
+    streamingScopeId: userMessageId,
     additionalProperties: { type: "agw-turn-finished", status: "completed" },
   });
   assert.equal(second.getActiveTurnSnapshot(), null);
@@ -313,7 +336,7 @@ test("manager preserves active recovery state when durable subscribe temporarily
   const handle = manager.attach(sessionKey, { onMessage: () => undefined });
 
   await assert.rejects(
-    handle.configure({ projectId: "project-1", contextId: "context-1" }),
+    handle.configure({ projectId: "project-1", conversationId: "conversation-1" }),
     /temporary subscribe failure/,
   );
 
@@ -403,7 +426,7 @@ test("manager clears a stale active status when reconnect finds no execution", a
   });
   const handle = manager.attach(sessionKey, { onMessage: () => undefined });
 
-  await handle.configure({ projectId: "project-1", contextId: "context-1" });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
   assert.equal(handle.getStatus(), "running");
 
   activeExecution = false;
@@ -630,7 +653,7 @@ test("manager notifies when reconnect finds the execution finished", async () =>
   const events: { status: string }[] = [];
   manager.subscribeTurnFinished((event) => events.push(event));
 
-  await handle.configure({ projectId: "project-1", contextId: "context-1" });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
   activeExecution = false;
   clientHandlers?.onReconnected?.();
 
@@ -763,7 +786,10 @@ test("manager notifies reconnect subscribers after any connection reconnects", (
     return createExecutionClient();
   });
   manager.attach(sessionKey, { onMessage: () => undefined });
-  manager.attach({ ...sessionKey, contextId: "context-2" }, { onMessage: () => undefined });
+  manager.attach(
+    { ...sessionKey, conversationId: "conversation-2" },
+    { onMessage: () => undefined },
+  );
   let reconnects = 0;
   const unsubscribe = manager.subscribeReconnected(() => {
     reconnects += 1;
@@ -783,23 +809,696 @@ test("manager does not notify when the execute command fails", async () => {
       throw new Error("dispatch failed");
     },
   }));
-  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+  const returned: string[] = [];
+  const handle = manager.attach(sessionKey, {
+    onMessage: () => undefined,
+    onSubmissionReturned: (event) => returned.push(event.error.message),
+  });
   const events: { status: string }[] = [];
   manager.subscribeTurnFinished((event) => events.push(event));
 
-  await assert.rejects(
-    handle.execute({
-      conversationId: "conversation-1",
-      agentId: "agent-1",
-      agentType: 0,
-      input: {
-        messageId: "user-1",
-        author: "$agw",
-        contents: [{ type: "TextContent", content: "run" }],
-      },
-    }),
-    /dispatch failed/,
-  );
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  assert.equal(handle.submit(createSubmission("run")), "started");
+  await settle();
 
+  assert.deepEqual(returned, ["dispatch failed"]);
   assert.equal(events.length, 0);
+});
+
+async function settle(): Promise<void> {
+  for (let index = 0; index < 20; index += 1) await Promise.resolve();
+}
+
+/**
+ * 可控的队列测试环境：execute 记录请求并进入执行，测试按请求写出开始与结束消息。
+ * A controllable queue environment: execute records the request and becomes active, and the test writes start and finish messages per request.
+ */
+function createQueueHarness(
+  options: {
+    execute?: (request: ExecutionRequest) => Promise<void>;
+    configure?: (setting: ExecutionSetting) => Promise<void>;
+  } = {},
+) {
+  let handlers!: ExecutionHubHandlers;
+  let active = false;
+  const executed: ExecutionRequest[] = [];
+  const configured: ExecutionSetting[] = [];
+  // 配置与发送按发生顺序记录。Configurations and sends are recorded in the order they happen.
+  const commands: string[] = [];
+  const interrupts: Array<string | undefined> = [];
+  const text = (request: ExecutionRequest | undefined) =>
+    request?.input.contents.find((content) => content.type === "TextContent")?.content;
+  const manager = new ExecutionSessionManager((value) => {
+    handlers = value;
+    return {
+      ...createExecutionClient(),
+      configure: async (setting: ExecutionSetting) => {
+        configured.push(setting);
+        commands.push(`configure:${JSON.stringify(setting.environmentVariables ?? {})}`);
+        await options.configure?.(setting);
+        return { restoredDurableExecution: false };
+      },
+      hasActiveExecution: () => active,
+      execute: async (request: ExecutionRequest) => {
+        executed.push(request);
+        commands.push(`execute:${text(request)}`);
+        active = true;
+        if (options.execute) {
+          try {
+            await options.execute(request);
+          } catch (error) {
+            active = false;
+            throw error;
+          }
+        }
+      },
+      interrupt: async (reason?: string) => {
+        interrupts.push(reason);
+      },
+    };
+  });
+  return {
+    manager,
+    executed,
+    configured,
+    commands,
+    interrupts,
+    text,
+    get handlers() {
+      return handlers;
+    },
+    setActive(value: boolean) {
+      active = value;
+    },
+    start(request: ExecutionRequest) {
+      handlers.onMessage(createTurnLifecycleMessage("agw-turn-start", request.executionId!));
+    },
+    finish(
+      request: ExecutionRequest,
+      status: "completed" | "failed" | "interrupted" = "completed",
+    ) {
+      active = false;
+      handlers.onMessage(
+        createTurnLifecycleMessage("agw-turn-finished", request.executionId!, status),
+      );
+    },
+  };
+}
+
+test("queue sends one entry after each completed turn in submission order", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const started: string[] = [];
+  const handle = harness.manager.attach(sessionKey, {
+    onMessage: () => undefined,
+    onSubmissionStarted: (event) => started.push(event.item.text),
+  });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+
+  // Act
+  assert.equal(handle.submit(createSubmission("first")), "started");
+  assert.equal(handle.submit(createSubmission("second")), "queued");
+  assert.equal(handle.submit(createSubmission("third")), "queued");
+  harness.start(harness.executed[0]!);
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  // Assert: exactly one entry follows each completion.
+  assert.deepEqual(harness.executed.map(harness.text), ["first", "second"]);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => item.text),
+    ["third"],
+  );
+  harness.start(harness.executed[1]!);
+  harness.finish(harness.executed[1]!);
+  await settle();
+  assert.deepEqual(harness.executed.map(harness.text), ["first", "second", "third"]);
+  assert.deepEqual(started, ["first", "second", "third"]);
+  assert.deepEqual(handle.getQueue().items, []);
+  assert.equal(new Set(harness.executed.map((request) => request.conversationId)).size, 1);
+});
+
+test("queue keeps sending in the background after the conversation is detached", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("first"));
+  handle.submit(createSubmission("second"));
+
+  // Act
+  handle.detach();
+  harness.start(harness.executed[0]!);
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  // Assert: the background entry started and the reattached chat restores its active turn.
+  assert.deepEqual(harness.executed.map(harness.text), ["first", "second"]);
+  const reattached = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  const snapshot = reattached.getActiveTurnSnapshot();
+  assert.equal(snapshot?.messages[0]?.messageId, harness.executed[1]!.input.messageId);
+  assert.equal(reattached.getStatus(), "running");
+});
+
+test("queue waits for configuration before sending the first entry", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+
+  assert.equal(handle.submit(createSubmission("draft")), "queued");
+  assert.deepEqual(harness.executed, []);
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+
+  assert.deepEqual(harness.executed.map(harness.text), ["draft"]);
+});
+
+test("queue rejects blank text and image-only input but accepts code comments", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  const image = {
+    id: "image-1",
+    name: "a.png",
+    mediaType: "image/png" as const,
+    size: 1,
+    dataUrl: "data:image/png;base64,AA==",
+  };
+
+  assert.throws(() => handle.submit(createSubmission("   ")), /Enter a prompt/);
+  assert.throws(
+    () => handle.submit(createSubmission("", { attachments: [image] })),
+    /Enter a prompt/,
+  );
+  assert.equal(handle.submit(createSubmission("", { fileCommentCount: 1 })), "queued");
+  assert.equal(handle.submit(createSubmission("look", { attachments: [image] })), "queued");
+  assert.equal(handle.getQueue().items.length, 2);
+});
+
+test("queue edits keep order, images and comments, and wait while the head is edited", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("running"));
+  handle.submit(createSubmission("head", { fileCommentCount: 2 }));
+  handle.submit(createSubmission("tail"));
+  const [head, tail] = handle.getQueue().items;
+
+  // Act: the head is being edited when the running turn completes.
+  handle.setEditingQueuedItem(head!.id);
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  // Assert
+  assert.equal(harness.executed.length, 1);
+  assert.throws(() => handle.updateQueuedItem(tail!.id, "  "), /Enter a prompt/);
+  handle.updateQueuedItem(head!.id, "");
+  assert.equal(harness.text(harness.executed[1]), undefined);
+  assert.equal(harness.executed.length, 2);
+  assert.equal(harness.executed[1]!.input.messageId, head!.id);
+  assert.equal(harness.executed[1]!.executionId, head!.executionId);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => item.id),
+    [tail!.id],
+  );
+});
+
+test("queue removal drops the entry and cancelling an edit lets the head send", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("running"));
+  handle.submit(createSubmission("removed"));
+  handle.submit(createSubmission("kept"));
+  const [removed, kept] = handle.getQueue().items;
+
+  handle.removeQueuedItem(removed!.id);
+  handle.setEditingQueuedItem(kept!.id);
+  harness.finish(harness.executed[0]!);
+  await settle();
+  assert.equal(harness.executed.length, 1);
+  handle.setEditingQueuedItem(null);
+
+  assert.deepEqual(harness.executed.map(harness.text), ["running", "kept"]);
+});
+
+test("switching conversations cancels an unsaved edit so the head can send", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("running"));
+  handle.submit(createSubmission("edited"));
+  handle.setEditingQueuedItem(handle.getQueue().items[0]!.id);
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  handle.detach();
+
+  assert.equal(handle.getQueue().editingItemId, null);
+  assert.deepEqual(harness.executed.map(harness.text), ["running", "edited"]);
+});
+
+for (const status of ["failed", "interrupted"] as const) {
+  test(`queue pauses after a ${status} turn, appends new entries, and resumes on request`, async () => {
+    // Arrange
+    const harness = createQueueHarness();
+    const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+    await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+    handle.submit(createSubmission("first"));
+    handle.submit(createSubmission("second"));
+
+    // Act
+    harness.start(harness.executed[0]!);
+    harness.finish(harness.executed[0]!, status);
+    await settle();
+    assert.equal(handle.submit(createSubmission("third")), "queued");
+
+    // Assert
+    assert.equal(harness.executed.length, 1);
+    assert.equal(handle.getQueue().paused, true);
+    assert.deepEqual(
+      handle.getQueue().items.map((item) => item.text),
+      ["second", "third"],
+    );
+    handle.resumeQueue();
+    assert.deepEqual(harness.executed.map(harness.text), ["first", "second"]);
+    assert.equal(handle.getQueue().paused, false);
+  });
+}
+
+test("a confirmed start rejection keeps the entry editable at the head and pauses", async () => {
+  // Arrange
+  let reject = true;
+  const harness = createQueueHarness({
+    execute: async () => {
+      if (reject) throw new ExecutionStartRejectedError(new Error("HubException: 4090021: busy"));
+    },
+  });
+  const returned: string[] = [];
+  const removedMessages: string[] = [];
+  const handle = harness.manager.attach(sessionKey, {
+    onMessage: () => undefined,
+    onSubmissionReturned: (event) => {
+      returned.push(event.item.text);
+      removedMessages.push(event.item.id);
+    },
+  });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+
+  // Act
+  handle.submit(createSubmission("first"));
+  handle.submit(createSubmission("second"));
+  await settle();
+
+  // Assert
+  const head = handle.getQueue().items[0]!;
+  assert.equal(head.text, "first");
+  assert.equal(head.uncertain, false);
+  assert.equal(handle.getQueue().paused, true);
+  assert.deepEqual(returned, ["first"]);
+  assert.deepEqual(removedMessages, [head.id]);
+  handle.updateQueuedItem(head.id, "first, edited");
+  reject = false;
+  handle.resumeQueue();
+  assert.equal(harness.text(harness.executed.at(-1)), "first, edited");
+  assert.equal(harness.executed.at(-1)!.executionId, head.executionId);
+});
+
+test("stop clears the queue before interrupting and rejects new entries until the turn ends", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("running"));
+  handle.submit(createSubmission("pending"));
+  harness.start(harness.executed[0]!);
+
+  // Act
+  await handle.stop("Stop requested by user.");
+
+  // Assert
+  assert.deepEqual(handle.getQueue().items, []);
+  assert.equal(handle.getQueue().stopping, true);
+  assert.deepEqual(harness.interrupts, ["Stop requested by user."]);
+  assert.throws(
+    () => handle.submit(createSubmission("too early")),
+    /wait for the current execution/,
+  );
+  harness.finish(harness.executed[0]!, "interrupted");
+  await settle();
+  assert.equal(handle.getQueue().stopping, false);
+  assert.equal(handle.getQueue().paused, false);
+  assert.deepEqual(harness.executed.map(harness.text), ["running"]);
+  assert.equal(handle.submit(createSubmission("after stop")), "started");
+});
+
+test("stop during a send that has not started cancels the queue and interrupts that send", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("dispatching"));
+  handle.submit(createSubmission("pending"));
+
+  await handle.stop();
+  harness.start(harness.executed[0]!);
+  harness.finish(harness.executed[0]!, "interrupted");
+  await settle();
+
+  assert.deepEqual(harness.executed.map(harness.text), ["dispatching"]);
+  assert.equal(harness.interrupts.length, 1);
+  assert.deepEqual(handle.getQueue().items, []);
+});
+
+test("duplicate and foreign finish messages do not send extra entries", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("first"));
+  handle.submit(createSubmission("second"));
+  handle.submit(createSubmission("third"));
+  harness.start(harness.executed[0]!);
+
+  // Act: a finish message of another turn arrives while the first one runs, then the first finishes twice.
+  harness.handlers.onMessage(
+    createTurnLifecycleMessage("agw-turn-finished", "other-turn", "completed"),
+  );
+  await settle();
+  assert.equal(harness.executed.length, 1);
+  harness.finish(harness.executed[0]!);
+  await settle();
+  harness.handlers.onMessage(
+    createTurnLifecycleMessage("agw-turn-finished", harness.executed[0]!.executionId!, "completed"),
+  );
+  await settle();
+
+  // Assert
+  assert.deepEqual(harness.executed.map(harness.text), ["first", "second"]);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => item.text),
+    ["third"],
+  );
+});
+
+test("a reconnect without an active execution pauses instead of sending the next entry", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const returned: boolean[] = [];
+  const handle = harness.manager.attach(sessionKey, {
+    onMessage: () => undefined,
+    onSubmissionReturned: (event) => returned.push(event.item.uncertain),
+  });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("unconfirmed"));
+  handle.submit(createSubmission("waiting"));
+
+  // Act: the start message never arrived and the reconnected server reports no active execution.
+  harness.setActive(false);
+  harness.handlers.onReconnected?.();
+  await settle();
+
+  // Assert: the unconfirmed entry returns locked, keeps its execution ID, and nothing else is sent.
+  assert.equal(harness.executed.length, 1);
+  const [head, next] = handle.getQueue().items;
+  assert.equal(head!.text, "unconfirmed");
+  assert.equal(head!.uncertain, true);
+  assert.equal(head!.executionId, harness.executed[0]!.executionId);
+  assert.equal(next!.text, "waiting");
+  assert.equal(handle.getQueue().paused, true);
+  assert.deepEqual(returned, [true]);
+  assert.throws(() => handle.setEditingQueuedItem(head!.id), /cannot be edited/);
+});
+
+test("a started turn whose outcome is lost is consumed and the rest of the queue pauses", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("started"));
+  handle.submit(createSubmission("waiting"));
+  harness.start(harness.executed[0]!);
+
+  harness.setActive(false);
+  harness.handlers.onClose?.(new Error("connection lost"));
+  await settle();
+
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => item.text),
+    ["waiting"],
+  );
+  assert.equal(handle.getQueue().paused, true);
+  assert.equal(harness.executed.length, 1);
+});
+
+test("disposing a conversation clears its queue", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("running"));
+  handle.submit(createSubmission("pending"));
+  const version = harness.manager.getQueueVersion();
+
+  await harness.manager.discard(sessionKey);
+
+  assert.deepEqual(harness.manager.getQueue(sessionKey).items, []);
+  assert.ok(harness.manager.getQueueVersion() > version);
+  assert.equal(harness.manager.has(sessionKey), false);
+});
+
+test("a superseded finish of the in-flight entry ends its wait and pauses the rest", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("first"));
+  handle.submit(createSubmission("second"));
+  handle.submit(createSubmission("third"));
+  harness.start(harness.executed[0]!);
+
+  // Act: another client started a newer turn, so the first entry's only finish message is superseded.
+  harness.setActive(false);
+  harness.handlers.onMessage(
+    markSuperseded(
+      createTurnLifecycleMessage(
+        "agw-turn-finished",
+        harness.executed[0]!.executionId!,
+        "completed",
+      ),
+    ),
+  );
+  await settle();
+
+  // Assert
+  assert.equal(harness.executed.length, 1);
+  assert.equal(handle.getQueue().paused, true);
+  assert.match(handle.getQueue().pauseReason ?? "", /newer message/);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => item.text),
+    ["second", "third"],
+  );
+  handle.resumeQueue();
+  assert.deepEqual(harness.executed.map(harness.text), ["first", "second"]);
+});
+
+test("a superseded finish that arrives after reconnecting lets the next submission start", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("first"));
+  harness.start(harness.executed[0]!);
+
+  // Act: the connection reconnects while the execution is still active, then the replayed finish is superseded.
+  harness.handlers.onReconnected?.();
+  await settle();
+  harness.setActive(false);
+  harness.handlers.onMessage(
+    markSuperseded(
+      createTurnLifecycleMessage(
+        "agw-turn-finished",
+        harness.executed[0]!.executionId!,
+        "completed",
+      ),
+    ),
+  );
+  await settle();
+
+  // Assert
+  assert.equal(handle.getQueue().paused, false);
+  assert.equal(handle.submit(createSubmission("second")), "started");
+  assert.deepEqual(harness.executed.map(harness.text), ["first", "second"]);
+});
+
+test("a superseded finish after a stop ends the stop so new entries are accepted", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("running"));
+  harness.start(harness.executed[0]!);
+  await handle.stop();
+
+  harness.setActive(false);
+  harness.handlers.onMessage(
+    markSuperseded(
+      createTurnLifecycleMessage(
+        "agw-turn-finished",
+        harness.executed[0]!.executionId!,
+        "interrupted",
+      ),
+    ),
+  );
+  await settle();
+
+  assert.equal(handle.getQueue().stopping, false);
+  assert.equal(handle.submit(createSubmission("after stop")), "started");
+});
+
+const baseSetting: ExecutionSetting = {
+  projectId: "project-1",
+  conversationId: "conversation-1",
+  environmentVariables: { MODE: "old" },
+  permissionMode: "fullAccess",
+  resultOnly: false,
+};
+
+test("a settings change during a running turn applies after it ends and before the next entry", async () => {
+  // Arrange
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure(baseSetting);
+  handle.submit(createSubmission("first"));
+  harness.start(harness.executed[0]!);
+
+  // Act: the environment variables change while the first turn runs, then the next entry is submitted.
+  const changed = { ...baseSetting, environmentVariables: { MODE: "new" } };
+  const result = await handle.configure(changed);
+  assert.equal(handle.submit(createSubmission("second")), "queued");
+  assert.deepEqual(harness.configured, [baseSetting]);
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  // Assert: the new settings were sent only after the turn ended, and before the next entry.
+  assert.deepEqual(result, { restoredDurableExecution: false });
+  assert.deepEqual(harness.configured, [baseSetting, changed]);
+  assert.deepEqual(harness.commands, [
+    'configure:{"MODE":"old"}',
+    "execute:first",
+    'configure:{"MODE":"new"}',
+    "execute:second",
+  ]);
+});
+
+test("a resultOnly change during a running turn also waits for the turn to end", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure(baseSetting);
+  handle.submit(createSubmission("first"));
+  harness.start(harness.executed[0]!);
+
+  await handle.configure({ ...baseSetting, resultOnly: true });
+  handle.submit(createSubmission("second"));
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  assert.deepEqual(
+    harness.configured.map((setting) => setting.resultOnly),
+    [false, true],
+  );
+  assert.deepEqual(harness.commands, [
+    'configure:{"MODE":"old"}',
+    "execute:first",
+    'configure:{"MODE":"old"}',
+    "execute:second",
+  ]);
+});
+
+test("unchanged settings during a running turn are sent at once", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure(baseSetting);
+  handle.submit(createSubmission("first"));
+  harness.start(harness.executed[0]!);
+
+  await handle.configure({ ...baseSetting, environmentVariables: { MODE: "old" } });
+
+  assert.equal(harness.configured.length, 2);
+  assert.equal(handle.getStatus(), "running");
+});
+
+test("the queue waits while settings are being applied", async () => {
+  // Arrange
+  let finishConfigure!: () => void;
+  let pending = false;
+  const harness = createQueueHarness({
+    configure: async () => {
+      if (!pending) return;
+      await new Promise<void>((resolve) => {
+        finishConfigure = resolve;
+      });
+    },
+  });
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure(baseSetting);
+
+  // Act: the connection is idle and a new configuration is still in progress when the entry is submitted.
+  pending = true;
+  const configuring = handle.configure({ ...baseSetting, environmentVariables: { MODE: "new" } });
+  const result = handle.submit(createSubmission("waits"));
+  await settle();
+
+  // Assert
+  assert.equal(result, "queued");
+  assert.deepEqual(harness.executed, []);
+  finishConfigure();
+  await configuring;
+  assert.deepEqual(harness.commands, [
+    'configure:{"MODE":"old"}',
+    'configure:{"MODE":"new"}',
+    "execute:waits",
+  ]);
+});
+
+test("a failed settings change keeps the queue waiting until it is resumed", async () => {
+  // Arrange
+  let failures = 0;
+  const harness = createQueueHarness({
+    configure: async (setting) => {
+      if (setting.environmentVariables?.MODE === "new" && failures < 1) {
+        failures += 1;
+        throw new Error("HubException: 4000001: Invalid params.");
+      }
+    },
+  });
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure(baseSetting);
+  handle.submit(createSubmission("first"));
+  harness.start(harness.executed[0]!);
+  await handle.configure({ ...baseSetting, environmentVariables: { MODE: "new" } });
+  handle.submit(createSubmission("second"));
+
+  // Act: applying the new settings after the turn fails.
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  // Assert: nothing is sent with the previous settings until the queue is resumed.
+  assert.deepEqual(harness.executed.map(harness.text), ["first"]);
+  assert.equal(handle.getQueue().paused, true);
+  assert.match(handle.getQueue().pauseReason ?? "", /Invalid params/);
+  handle.resumeQueue();
+  await settle();
+  assert.deepEqual(harness.commands.slice(-2), ['configure:{"MODE":"new"}', "execute:second"]);
+});
+
+test("a permission mode change keeps the recorded settings in step with the server", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure(baseSetting);
+  handle.submit(createSubmission("first"));
+  harness.start(harness.executed[0]!);
+
+  // The permission mode changes during the turn, then the same settings arrive with it.
+  await handle.setPermissionMode("alwaysAsk");
+  await handle.configure({ ...baseSetting, permissionMode: "alwaysAsk" });
+
+  assert.deepEqual(
+    harness.configured.map((setting) => setting.permissionMode),
+    ["fullAccess", "alwaysAsk"],
+  );
 });
