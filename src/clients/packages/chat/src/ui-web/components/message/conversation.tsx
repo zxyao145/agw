@@ -51,11 +51,14 @@ export interface ChatSessionProps {
   items: ConversationRenderItem[];
   conversationKey?: string;
   onWorkSummaryToggle?: () => void;
+  onWorkSummaryExpansionChange?: (keys: ReadonlySet<string>) => void;
   scrollElementRef: React.RefObject<HTMLDivElement | null>;
   hasOlderMessages?: boolean;
   isLoadingOlderMessages?: boolean;
   isInitialLoading?: boolean;
   onLoadOlderMessages?: () => void;
+  onAutoLoadOlderMessages?: () => void;
+  autoLoadBlockedSummaryKey?: string | null;
   userInputNavigationHost?: HTMLDivElement | null;
   onUserInputNavigate?: () => void;
   userInputs?: readonly ConversationTurnInputSummary[];
@@ -71,11 +74,14 @@ export function Conversation({
   items: renderItems,
   conversationKey,
   onWorkSummaryToggle,
+  onWorkSummaryExpansionChange,
   scrollElementRef,
   hasOlderMessages = false,
   isLoadingOlderMessages = false,
   isInitialLoading = false,
   onLoadOlderMessages,
+  onAutoLoadOlderMessages,
+  autoLoadBlockedSummaryKey,
   userInputNavigationHost = null,
   onUserInputNavigate,
   userInputs,
@@ -91,6 +97,35 @@ export function Conversation({
     expandedKeys,
     toggleWorkSummary,
   } = useWorkSummary(renderItems, conversationKey);
+  React.useEffect(() => {
+    onWorkSummaryExpansionChange?.(expandedKeys);
+  }, [expandedKeys, onWorkSummaryExpansionChange]);
+  React.useEffect(() => {
+    const scrollContainer = scrollElementRef.current;
+    if (
+      !scrollContainer ||
+      !hasOlderMessages ||
+      isLoadingOlderMessages ||
+      !onAutoLoadOlderMessages ||
+      (autoLoadBlockedSummaryKey && !expandedKeys.has(autoLoadBlockedSummaryKey))
+    ) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      if (scrollContainer.scrollHeight <= scrollContainer.clientHeight + 1) {
+        onAutoLoadOlderMessages();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    autoLoadBlockedSummaryKey,
+    expandedKeys,
+    hasOlderMessages,
+    isLoadingOlderMessages,
+    items.length,
+    onAutoLoadOlderMessages,
+    scrollElementRef,
+  ]);
   const hasHistoryLoader = hasOlderMessages || isLoadingOlderMessages;
   const rowOffset = hasHistoryLoader ? 1 : 0;
   const getItemKey = React.useCallback(

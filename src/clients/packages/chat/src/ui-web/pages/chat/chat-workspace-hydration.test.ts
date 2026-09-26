@@ -250,10 +250,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return conversation;
       },
       getProjectConversationMessages: async (_project: string, id: string) => {
-        if (id !== "conversation-1") return { items: [], hasMore: false, nextCursor: null };
+        if (id !== "conversation-1")
+          return { items: [], hasMore: false, nextCursor: null, turns: [] };
         messageRequests += 1;
         await historyReady;
-        return { items: messages, nextCursor: null, hasMore: false };
+        return { items: messages, nextCursor: null, hasMore: false, turns: [] };
       },
       // A cached sidebar publishes its summary in the child's effect, before the
       // workspace's route hydration effect. A summary is not a hydrated session.

@@ -20,6 +20,14 @@ export interface AiMessage {
   type?: string;
 }
 
+export interface ConversationHistoryTurn {
+  turnId: string;
+  status: string;
+  input: AiMessage | null;
+  results: AiMessage[];
+  hasProcessMessages: boolean;
+}
+
 export const MessageContentType = {
   DataContent: "DataContent",
   ErrorContent: "ErrorContent",

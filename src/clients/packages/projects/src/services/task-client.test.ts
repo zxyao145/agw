@@ -310,6 +310,7 @@ test("getProjectConversationMessages sends the directional cursor page query", a
         items: [],
         nextCursor: "next/cursor",
         hasMore: true,
+        turns: [],
       },
     });
   }) as typeof fetch;
@@ -328,7 +329,7 @@ test("getProjectConversationMessages sends the directional cursor page query", a
     },
   );
 
-  assert.deepEqual(result, { items: [], nextCursor: "next/cursor", hasMore: true });
+  assert.deepEqual(result, { items: [], nextCursor: "next/cursor", hasMore: true, turns: [] });
   assert.equal(
     requests[0]?.url,
     "/api/projects/project-1/conversations/11111111-1111-1111-1111-000000000012/messages?direction=older&cursor=before%2Fcursor&pageSize=25",

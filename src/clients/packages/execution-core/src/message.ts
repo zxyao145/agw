@@ -163,7 +163,10 @@ export function scopeMessagesByUserTurn<T extends ExecutionMessage>(messages: T[
 
     return scopeStreamingMessage(
       message,
-      getMessageStreamingScopeId(message) ?? currentScopeId ?? `history-prelude-${index}`,
+      getMessageStreamingScopeId(message) ??
+        readString(message.additionalProperties?.turnId) ??
+        currentScopeId ??
+        `history-prelude-${index}`,
     );
   });
 }

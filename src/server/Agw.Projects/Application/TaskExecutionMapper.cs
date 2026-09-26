@@ -85,9 +85,15 @@ public static class TaskExecutionMapper
         var message = record.ToChatMessage()?.ToAiMessage();
         if (message != null)
         {
+            var properties = record.TurnId.HasValue
+                ? new AdditionalPropertiesDictionary(message.AdditionalProperties ?? [])
+                : message.AdditionalProperties;
+            if (record.TurnId is { } turnId)
+                properties!["turnId"] = turnId.ToString("D");
             yield return message with
             {
                 CreatedAt = message.CreatedAt ?? record.CreateTime,
+                AdditionalProperties = properties,
             };
         }
     }

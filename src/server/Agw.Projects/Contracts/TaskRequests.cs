@@ -93,5 +93,15 @@ public sealed record ProjectConversationResumeStateResponse(string? TargetType, 
 public sealed record ProjectConversationMessagePageResponse(
     IReadOnlyList<AgwMessage> Items,
     string? NextCursor,
-    bool HasMore
+    bool HasMore,
+    IReadOnlyList<ProjectConversationMessageTurnResponse> Turns
 );
+
+public sealed record ProjectConversationMessageTurnResponse
+{
+    public required Guid TurnId { get; init; }
+    public required string Status { get; init; }
+    public AgwMessage? Input { get; init; }
+    public required IReadOnlyList<AgwMessage> Results { get; init; }
+    public required bool HasProcessMessages { get; init; }
+}

@@ -1,4 +1,4 @@
-import type { AiMessage, components } from "@agw/api";
+import type { AiMessage, ConversationHistoryTurn, components } from "@agw/api";
 import { normalizeTokenUsage, type TokenUsage, type TokenUsageInput } from "@agw/api";
 
 import { ApiError, type AgwApiClient } from "@agw/api";
@@ -117,6 +117,7 @@ export type ConversationMessagePage = {
   items: AiMessage[];
   nextCursor: string | null;
   hasMore: boolean;
+  turns: ConversationHistoryTurn[];
 };
 
 export type ProjectConversationSummaryResponse = {
@@ -149,6 +150,7 @@ export type ProjectConversationMessagePageResponse = {
   items?: AiMessage[] | null;
   nextCursor?: string | null;
   hasMore: boolean;
+  turns: ConversationHistoryTurn[];
 };
 
 export type ConversationMessagePageOptions = {
@@ -255,6 +257,7 @@ export async function getProjectConversationMessages(
     items: response.items ?? [],
     nextCursor: response.nextCursor ?? null,
     hasMore: response.hasMore,
+    turns: response.turns,
   };
 }
 
