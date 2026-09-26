@@ -54,6 +54,22 @@ test("arrow keys wrap through suggestions and Enter inserts the active item with
   assert.deepEqual(sent, []);
 });
 
+test("Tab inserts the active suggestion without sending", async () => {
+  const sent: string[] = [];
+  const textarea = renderComposer(
+    () => suggestions,
+    (value) => sent.push(value),
+  );
+
+  fireEvent.keyDown(textarea, { key: "ArrowDown" });
+  assert.equal(fireEvent.keyDown(textarea, { key: "Tab" }), false);
+  await waitFor(() => assert.strictEqual(document.activeElement, textarea));
+  assert.equal(textarea.value, "/beta ");
+  assert.equal(textarea.selectionStart, textarea.value.length);
+  assert.equal(screen.queryByRole("listbox"), null);
+  assert.deepEqual(sent, []);
+});
+
 test("mouse selection inserts the clicked suggestion and restores the caret", async () => {
   const textarea = renderComposer(() => suggestions);
 
