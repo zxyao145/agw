@@ -600,6 +600,10 @@ div[role="option"]:hover {
   @apply max-w-[80%] rounded-lg bg-[#f3f5fc] px-3 py-3 text-[#17191d];
 }
 
+.agw-msg-user .agw-msg-body > * {
+  max-width: 100%;
+}
+
 .agw-msg-result {
   @apply w-full rounded-md border border-[#e4e4e5] bg-card p-3;
 }
