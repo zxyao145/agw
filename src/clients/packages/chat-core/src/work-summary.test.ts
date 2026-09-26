@@ -48,6 +48,54 @@ test("completed work keeps inputs and every Result visible without mutating sour
   assert.ok(items[2].type === "result" && items[2].hasWorkSummary);
 });
 
+test("the summary names the Agent of the first Result while the Result keeps no header", () => {
+  const messages = turn();
+  const unnamed = buildConversationRenderModel(messages)[1];
+  assert.ok(unnamed.type === "work-summary");
+  assert.equal(unnamed.name, null);
+
+  messages[2].author = "claude-code";
+  messages.push({
+    ...message("node-result", "assistant", "2026-09-20T01:20:00Z", true),
+    additionalProperties: { type: "result", nodeName: "Reviewer" },
+  });
+  const items = buildConversationRenderModel(messages);
+  assert.ok(items[1].type === "work-summary");
+  assert.equal(items[1].name, "claude-code");
+  assert.ok(items[2].type === "result");
+  assert.equal(items[2].message.meta, null);
+
+  messages[2].additionalProperties = { type: "result", nodeName: "Planner" };
+  const node = buildConversationRenderModel(messages)[1];
+  assert.ok(node.type === "work-summary");
+  assert.equal(node.name, "Planner");
+});
+
+test("a history page without process messages still names the summary from its Result", () => {
+  const turnId = "turn-named";
+  const input = {
+    ...message("input", "user", "2026-09-20T01:00:00Z"),
+    additionalProperties: { turnId },
+  };
+  const result = {
+    ...message("result", "assistant", "2026-09-20T01:00:20Z", true),
+    author: "claude-code",
+    additionalProperties: { type: "result", turnId },
+  };
+  const items = buildConversationRenderModel([result], {
+    historyTurns: [
+      { turnId, status: "completed", input, results: [result], hasProcessMessages: true },
+    ],
+  });
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["message", "work-summary", "result"],
+  );
+  assert.ok(items[1].type === "work-summary");
+  assert.equal(items[1].items.length, 0);
+  assert.equal(items[1].name, "claude-code");
+});
+
 test("active turns stay visible, including a Result received before completion", () => {
   const items = buildConversationRenderModel([...turn("1"), ...turn("2")], {
     isCurrentTurnActive: true,

@@ -34,6 +34,11 @@ export interface UserInputProps {
   onExecute?: (value: string) => void;
   onStop?: () => void;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  /**
+   * 用户编辑输入（含发送后清空）时通知新值；ref 的 setInput 不触发。
+   * Reports the new value after user edits, including the clear after sending; ref setInput does not.
+   */
+  onValueChange?: (value: string) => void;
 
   // Textarea configuration
   placeholder?: string;
@@ -333,6 +338,7 @@ function UserInputContainer({
   onExecute,
   onStop,
   onPaste,
+  onValueChange,
   placeholder = "Type your message...",
   rows = 1,
   maxHeight = "max-h-60",
@@ -370,6 +376,7 @@ function UserInputContainer({
         const nextCursor = selectionStart + insertedText.length;
         suggestionRequestRef.current += 1;
         setInput(newValue);
+        onValueChange?.(newValue);
         setSuggestions([]);
         setActiveSuggestionIndex(0);
         setTimeout(() => {
@@ -381,13 +388,14 @@ function UserInputContainer({
         }, 0);
       },
     }),
-    [input],
+    [input, onValueChange],
   );
 
   const handleSuggestionClick = (suggestion: SuggestionItem) => {
     const replacement = replaceSuggestion(input, suggestion.text, suggestionCaretRef.current);
     suggestionRequestRef.current += 1;
     setInput(replacement.value);
+    onValueChange?.(replacement.value);
     setSuggestions([]);
     setActiveSuggestionIndex(0);
 
@@ -406,6 +414,7 @@ function UserInputContainer({
     suggestionRequestRef.current = requestId;
     suggestionCaretRef.current = caretIndex;
     setInput(value);
+    onValueChange?.(value);
     setActiveSuggestionIndex(0);
     if (!onSuggestion) {
       if (suggestions.length > 0) {
@@ -453,6 +462,7 @@ function UserInputContainer({
     onExecute?.(input);
     suggestionRequestRef.current += 1;
     setInput("");
+    onValueChange?.("");
     setSuggestions([]);
     setActiveSuggestionIndex(0);
   };

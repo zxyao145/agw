@@ -36,6 +36,7 @@ import { AgentflowCheckpointCard } from "./agentflow-checkpoint-card";
 import { HumanGateApproval } from "./human-gate-approval";
 import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
+import { MessageActions } from "./message-actions";
 import { PresentedMessageComponent } from "./presented-message";
 import { ToolState } from "./tool-state";
 import {
@@ -325,6 +326,13 @@ function ConversationItem({
           onClick={onWorkToggle}
           className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
         >
+          {item.name ? (
+            <>
+              <span className="min-w-0 truncate font-medium text-foreground/70">
+                {item.name}
+              </span>{" "}
+            </>
+          ) : null}
           {formatWorkedDuration(item.durationMs)}
           <ChevronRight
             aria-hidden="true"
@@ -461,7 +469,7 @@ function ConversationItem({
   return (
     <div
       className={cn(
-        "mx-4 max-w-full",
+        "group/message mx-4 max-w-full",
         item.type === "result" &&
           (item.hasWorkSummary ? "pt-2" : "mt-8 border-t border-dashed pt-4"),
       )}
@@ -499,6 +507,9 @@ function ConversationItem({
         </div>
       ) : null}
       <PresentedMessageComponent message={message} />
+      {item.type === "result" || message.alignment === "right" ? (
+        <MessageActions message={message} />
+      ) : null}
     </div>
   );
 }

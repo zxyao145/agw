@@ -584,8 +584,11 @@ div[role="option"]:hover {
   }
 }
 
+.agw-input-queue{
+  @apply pointer-events-auto;
+}
 .agw-msg-body {
-  @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-4;
+  @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-3;
 }
 
 .agw-conversation-list {
@@ -598,6 +601,10 @@ div[role="option"]:hover {
 
 .agw-msg-user {
   @apply max-w-[80%] rounded-lg bg-[#f3f5fc] px-3 py-3 text-[#17191d];
+}
+
+.agw-msg-user .agw-msg-body > * {
+  max-width: 100%;
 }
 
 .agw-msg-result {
