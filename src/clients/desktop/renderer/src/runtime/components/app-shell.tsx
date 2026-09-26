@@ -91,10 +91,10 @@ const SETTINGS_GROUPS: ReadonlyArray<{ label: string; items: SettingsNavItem[] }
     ],
   },
   {
-    label: "Desktop & Server",
+    label: "Others",
     items: [
       settingsItem(APP_ROUTES.quickPrompts, { icon: Sparkles }),
-      settingsItem(APP_ROUTES.settings, { label: "Connections & app", icon: Server }),
+      settingsItem(APP_ROUTES.settings, { label: "Servers", icon: Server }),
       { href: "/settings/#appearance", label: "Appearance & close", icon: Moon },
       { href: "/settings/#about", label: "About", icon: Info },
     ],

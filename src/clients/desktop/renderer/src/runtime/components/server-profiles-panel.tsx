@@ -134,12 +134,10 @@ export function ServerProfilesPanel() {
     <>
       <section id="local-server" className="scroll-mt-4 space-y-5">
         <div className="flex flex-col ">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-            Desktop & Server
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Others</p>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="mt-1 text-2xl font-semibold">Connections and app</h1>
+              <h1 className="mt-1 text-2xl font-semibold">Servers</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Manage Server profiles, close behavior, package details, and uninstall data.
               </p>
