@@ -2,8 +2,10 @@ using Agw.Jobs.Application.Facades;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Contracts.Metrics;
+using Agw.Jobs.Domain.Repositories;
+using Agw.Jobs.Domain.Services;
 using Agw.Jobs.Execution;
-using Agw.Jobs.Scheduling;
+using Agw.Jobs.Infrastructure;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Skills.Contracts.Registration;
@@ -35,11 +37,12 @@ public static class DependencyInjection
             services.AddScoped<JobAttemptRunner>();
             services.AddScoped<IJobAttemptOutcomeRecorder, JobAttemptOutcomeRecorder>();
             services.AddSingleton<JobSchedulerWakeSignal>();
-            services.AddSingleton<JobScheduleCalculator>();
         }
         services.AddSingleton<IAgentSkillRegistration, JobManagementSkillRegistration>();
         services.AddSingleton<IAgwGeneratedToolModule>(Agw.Generated.Agw.Jobs.AgwToolModule.Instance);
         services.AddScoped<Application.Tools.JobManagementToolExecutor>();
+        services.AddScoped<IJobRepository, JobRepository>();
+        services.AddScoped<JobDefinitionDomainService>();
         services.AddScoped<JobAppService>();
         services.AddScoped<IJobMetricsFacade, JobMetricsFacade>();
         return services;

@@ -4,11 +4,13 @@ using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Contracts;
-using Agw.Jobs.Scheduling;
+using Agw.Jobs.Domain.Services;
+using Agw.Jobs.Infrastructure;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -380,17 +382,25 @@ public class JobAppServiceTests : IDisposable
             var schedulerWakeSignal = new JobSchedulerWakeSignal(timeProvider);
             var userInfo = new TestUserInfoService();
             var projectResolver = new ProjectResolver(dbContext, userInfo);
-            var taskService = new TaskExecutionAppService(dbContext, projectResolver, timeProvider, userInfo);
+            var taskService = new TaskExecutionAppService(
+                dbContext,
+                projectResolver,
+                new ConversationHistoryDomainService(),
+                timeProvider,
+                userInfo
+            );
             var taskResolver = new TaskAppService(dbContext, projectResolver, taskService, userInfo);
             var service = new JobAppService(
                 dbContext,
                 new ProjectTaskFacade(taskService, dbContext, taskResolver, userInfo),
-                new JobScheduleCalculator(),
+                new JobDefinitionDomainService(
+                    new JobRepository(dbContext),
+                    new TestProjectRuntimeFacade(),
+                    new TestAgentCatalogFacade()
+                ),
                 schedulerWakeSignal,
                 timeProvider,
-                userInfo,
-                new TestProjectRuntimeFacade(),
-                new TestAgentCatalogFacade()
+                userInfo
             );
 
             return new JobAppServiceFixture(

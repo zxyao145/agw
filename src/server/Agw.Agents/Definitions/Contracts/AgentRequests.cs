@@ -1,5 +1,5 @@
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Definitions.Domain.Decisions;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Tooling;

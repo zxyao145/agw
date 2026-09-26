@@ -188,11 +188,6 @@ public sealed class AuthController : ControllerBase
     {
         if (!IsInteractiveUser())
             return ErrorCodes.InteractiveAdminRequired.ToApiResult();
-        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 64)
-            return ApiResult.BadRequest(
-                "Token name must be between 1 and 64 characters.",
-                ErrorCodes.InvalidParam.Code
-            );
         return ApiResult.Ok(await _tokenStore.CreateTokenAsync(request.Name, cancellationToken));
     }
 

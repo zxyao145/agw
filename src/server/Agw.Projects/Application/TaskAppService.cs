@@ -1,6 +1,6 @@
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
-using Agw.Projects.Domain.Rules;
+using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Exceptions;
 using Bens.Results;
 using Microsoft.EntityFrameworkCore;
@@ -64,7 +64,7 @@ public class TaskAppService : ITaskAppService
         var request = new TaskCreateRequest(
             JobId: null,
             Input: normalizedInput,
-            Title: TaskTitleRules.Create(normalizedInput),
+            Title: ProjectConversationBehavior.DeriveTitle(normalizedInput),
             ContextId: contextId
         );
 

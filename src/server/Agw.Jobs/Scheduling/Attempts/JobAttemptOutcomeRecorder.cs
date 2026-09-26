@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Auth.Contracts;
 using Agw.Jobs.Application.Persistence;
+using Agw.Jobs.Domain.Behaviors;
 using Agw.Jobs.Execution;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Jobs;
@@ -29,21 +30,18 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
     private readonly IJobOutcomeTransaction _transaction;
     private readonly IJobsDbContext _dbContext;
     private readonly IProjectTaskFacade _projectTasks;
-    private readonly JobScheduleCalculator _scheduleCalculator;
     private readonly TimeProvider _timeProvider;
 
     public JobAttemptOutcomeRecorder(
         IJobsDbContext dbContext,
         IJobOutcomeTransaction transaction,
         IProjectTaskFacade projectTasks,
-        JobScheduleCalculator scheduleCalculator,
         TimeProvider timeProvider
     )
     {
         _dbContext = dbContext;
         _transaction = transaction;
         _projectTasks = projectTasks;
-        _scheduleCalculator = scheduleCalculator;
         _timeProvider = timeProvider;
     }
 
@@ -79,18 +77,13 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
                 .Jobs.SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
                 .ConfigureAwait(false);
         }
-        if (
-            job == null
-            || job.Status != JobStatus.Running
-            || job.ActiveExecutionId != executionId
-            || !job.ActiveAttemptStartedAt.HasValue
-        )
+        if (job == null || !new JobBehavior(job).IsActiveAttempt(executionId))
         {
             return new JobAttemptResult.Drop();
         }
 
         var normalizedError = success ? null : errorMessage ?? "The Job attempt failed.";
-        var startedAt = job.ActiveAttemptStartedAt.Value;
+        var startedAt = job.ActiveAttemptStartedAt.GetValueOrDefault();
         if (!JobAgentExecutor.TryResolveOwnerUserId(job, out var ownerUserId))
         {
             return await RecordMissingOwnerAsync(job, executionId, startedAt, cancellationToken).ConfigureAwait(false);
@@ -119,47 +112,11 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         }
 
         var now = _timeProvider.GetUtcNow();
-        var attempt = job.RetryCount + 1;
-        JobAttemptResult result;
-        if (success)
-        {
-            var nextRunTime = job.IsEnabled ? _scheduleCalculator.GetNextRunTime(job, now) : null;
-            job.RetryCount = 0;
-            job.LastError = null;
-            if (nextRunTime.HasValue)
-            {
-                job.Status = JobStatus.Pending;
-                job.NextRunTime = nextRunTime.Value;
-                result = new JobAttemptResult.Reschedule(ScheduledJob.FromJob(job));
-            }
-            else
-            {
-                job.Status = JobStatus.Paused;
-                job.IsEnabled = false;
-                result = new JobAttemptResult.Drop();
-            }
-        }
-        else
-        {
-            var retryCount = attempt;
-            job.RetryCount = retryCount;
-            job.LastError = normalizedError;
-            if (job.IsEnabled && retryCount <= job.MaxRetryCount)
-            {
-                job.Status = JobStatus.Pending;
-                job.NextRunTime = now.Add(JobSchedulingDefaults.RetryDelay);
-                result = new JobAttemptResult.Reschedule(ScheduledJob.FromJob(job));
-            }
-            else
-            {
-                job.Status = JobStatus.Paused;
-                job.IsEnabled = false;
-                result = new JobAttemptResult.Drop();
-            }
-        }
-
-        job.ActiveExecutionId = null;
-        job.ActiveAttemptStartedAt = null;
+        var behavior = new JobBehavior(job);
+        var attempt = behavior.GetCurrentAttempt();
+        var rescheduled = success
+            ? behavior.TryRescheduleAfterSuccess(now)
+            : behavior.TryRescheduleAfterFailure(normalizedError!, now.Add(JobSchedulingDefaults.RetryDelay));
         job.UpdateBy = SchedulerUser;
         job.UpdateTime = now;
         await _dbContext.JobLogs.AddAsync(
@@ -182,9 +139,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         );
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return result is JobAttemptResult.Reschedule
-            ? new JobAttemptResult.Reschedule(ScheduledJob.FromJob(job))
-            : result;
+        return rescheduled ? new JobAttemptResult.Reschedule(ScheduledJob.FromJob(job)) : new JobAttemptResult.Drop();
     }
 
     private async Task<JobAttemptResult> RecordMissingOwnerAsync(
@@ -194,17 +149,12 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         CancellationToken cancellationToken
     )
     {
-        const string errorMessage = "The Job owner is missing.";
         var now = _timeProvider.GetUtcNow();
-        var attempt = job.RetryCount + 1;
+        var behavior = new JobBehavior(job);
+        var attempt = behavior.GetCurrentAttempt();
         using var systemScope = UserInfoUtil.PushSystemScope();
 
-        job.RetryCount = attempt;
-        job.LastError = errorMessage;
-        job.Status = JobStatus.Paused;
-        job.IsEnabled = false;
-        job.ActiveExecutionId = null;
-        job.ActiveAttemptStartedAt = null;
+        behavior.PauseForMissingOwner();
         job.UpdateBy = SchedulerUser;
         job.UpdateTime = now;
         await _dbContext.JobLogs.AddAsync(
@@ -217,7 +167,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
                 EndTime = now,
                 Success = false,
                 Attempt = attempt,
-                ErrorMessage = errorMessage,
+                ErrorMessage = job.LastError,
                 CreateBy = SchedulerUser,
                 CreateTime = now,
                 UpdateBy = SchedulerUser,

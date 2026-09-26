@@ -12,7 +12,8 @@ using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;
-using Agw.Skills.Domain.Rules;
+using Agw.Skills.Domain.Behaviors;
+using Agw.Skills.Domain.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -25,6 +26,7 @@ public class SkillAppService
 {
     private readonly ISkillsDbContext _dbContext;
     private readonly IAgentReferenceFacade _agentReferences;
+    private readonly SkillNameUniquenessDomainService _nameUniquenessDomainService;
     private readonly AgwDataPaths _dataPaths;
     private readonly ILogger<SkillAppService> _logger;
     private readonly IReadOnlySet<Guid> _builtInSkillIds;
@@ -36,6 +38,7 @@ public class SkillAppService
     public SkillAppService(
         ISkillsDbContext dbContext,
         IAgentReferenceFacade agentReferences,
+        SkillNameUniquenessDomainService nameUniquenessDomainService,
         AgwDataPaths dataPaths,
         ILogger<SkillAppService> logger,
         IRemoteSkillClient remoteSkillClient,
@@ -47,6 +50,7 @@ public class SkillAppService
     {
         _dbContext = dbContext;
         _agentReferences = agentReferences;
+        _nameUniquenessDomainService = nameUniquenessDomainService;
         _dataPaths = dataPaths;
         _logger = logger;
         _remoteSkillClient = remoteSkillClient;
@@ -120,12 +124,10 @@ public class SkillAppService
         ArgumentNullException.ThrowIfNull(skill);
 
         skill.RemoteUrl = remoteUrl;
-        return skill.Kind switch
-        {
-            SkillKind.Local => await CreateLocalAsync(skill, archive, cancellationToken),
-            SkillKind.Remote => await CreateRemoteAsync(skill, archive, cancellationToken),
-            _ => throw new AgwException(ErrorCodes.SkillKindInvalid),
-        };
+        new SkillBehavior(skill).EnsureCreatable(archive != null);
+        return skill.Kind == SkillKind.Local
+            ? await CreateLocalAsync(skill, archive!, cancellationToken)
+            : await CreateRemoteAsync(skill, cancellationToken);
     }
 
     public async Task<SkillDetails?> UpdateAsync(
@@ -147,20 +149,12 @@ public class SkillAppService
             return null;
         }
 
-        EnsureMutable(existing);
-        return existing.Kind switch
-        {
-            SkillKind.Local => await UpdateLocalAsync(
-                existing,
-                name,
-                description,
-                archive,
-                remoteUrl,
-                cancellationToken
-            ),
-            SkillKind.Remote => await UpdateRemoteAsync(existing, archive, remoteUrl, cancellationToken),
-            _ => throw new AgwException(ErrorCodes.SkillKindInvalid),
-        };
+        var behavior = new SkillBehavior(existing);
+        behavior.EnsureMutable(_builtInSkillIds.Contains(existing.Id));
+        behavior.EnsureUpdatable(name, archive != null, remoteUrl);
+        return existing.Kind == SkillKind.Local
+            ? await UpdateLocalAsync(existing, name, description, archive, cancellationToken)
+            : await UpdateRemoteAsync(existing, remoteUrl, cancellationToken);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -176,7 +170,7 @@ public class SkillAppService
             return false;
         }
 
-        EnsureMutable(existing);
+        new SkillBehavior(existing).EnsureMutable(_builtInSkillIds.Contains(existing.Id));
         if (existing.Kind == SkillKind.Remote)
         {
             await using var lease = await _remoteSkillRefreshLock.AcquireAsync(existing.Id, cancellationToken);
@@ -188,25 +182,12 @@ public class SkillAppService
 
     private async Task<SkillDetails> CreateLocalAsync(
         Skill skill,
-        IFormFile? archive,
+        IFormFile archive,
         CancellationToken cancellationToken
     )
     {
-        if (archive == null)
-        {
-            throw new AgwException(ErrorCodes.SkillArchiveCannotBeEmpty);
-        }
-
-        if (!string.IsNullOrWhiteSpace(skill.RemoteUrl))
-        {
-            throw new AgwException(ErrorCodes.SkillKindInvalid, "Local skills cannot define a remote URL.");
-        }
-
-        await EnsureNameAvailableAsync(skill.Name, null, cancellationToken);
-        skill.RemoteUrl = null;
-        SkillRules.Validate(skill.Name, skill.Description);
-        skill.Id = skill.Id == Guid.Empty ? Guid.CreateVersion7() : skill.Id;
-        skill.ContentPath = SkillRules.GetContentPath(skill.Kind, skill.Id);
+        new SkillBehavior(skill).DefineLocal(skill.Name, skill.Description);
+        await _nameUniquenessDomainService.EnsureNameAvailableAsync(skill, cancellationToken);
         await using var preparedDirectory = await PrepareArchiveDirectoryAsync(skill.Name, skill.Description, archive);
 
         await _dbContext.Skills.AddAsync(skill, cancellationToken);
@@ -219,27 +200,13 @@ public class SkillAppService
         return await GetAsync(skill.Id) ?? new SkillDetails(skill, [], false);
     }
 
-    private async Task<SkillDetails> CreateRemoteAsync(
-        Skill skill,
-        IFormFile? archive,
-        CancellationToken cancellationToken
-    )
+    private async Task<SkillDetails> CreateRemoteAsync(Skill skill, CancellationToken cancellationToken)
     {
-        if (archive != null)
-        {
-            throw new AgwException(ErrorCodes.RemoteSkillArchiveNotAllowed);
-        }
-
         var remoteUrl = _remoteSkillClient.NormalizeUrl(skill.RemoteUrl);
         var definition = await _remoteSkillClient.FetchAsync(remoteUrl, cancellationToken);
-        await EnsureNameAvailableAsync(definition.Name, null, cancellationToken);
+        new SkillBehavior(skill).DefineRemote(remoteUrl, definition.Name, definition.Description);
+        await _nameUniquenessDomainService.EnsureNameAvailableAsync(skill, cancellationToken);
 
-        skill.Name = definition.Name;
-        skill.Description = definition.Description;
-        skill.RemoteUrl = remoteUrl;
-        SkillRules.Validate(skill.Name, skill.Description);
-        skill.Id = skill.Id == Guid.Empty ? Guid.CreateVersion7() : skill.Id;
-        skill.ContentPath = SkillRules.GetContentPath(skill.Kind, skill.Id);
         await _dbContext.Skills.AddAsync(skill, cancellationToken);
         await _dbContext.RemoteSkillCaches.AddAsync(CreateCache(skill, definition), cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -247,7 +214,7 @@ public class SkillAppService
         _logger.LogInformation(
             "Created remote skill {SkillName} from {RemoteLocation}",
             skill.Name,
-            GetRemoteLocationForLogging(skill.RemoteUrl)
+            GetRemoteLocationForLogging(remoteUrl)
         );
         return await GetAsync(skill.Id) ?? new SkillDetails(skill, [], false);
     }
@@ -257,31 +224,12 @@ public class SkillAppService
         string name,
         string description,
         IFormFile? archive,
-        string? remoteUrl,
         CancellationToken cancellationToken
     )
     {
-        if (!string.IsNullOrWhiteSpace(remoteUrl))
-        {
-            throw new AgwException(ErrorCodes.SkillKindInvalid, "Local skills cannot define a remote URL.");
-        }
-
-        var normalizedName = name.Trim();
-        if (!string.Equals(existing.Name, normalizedName, StringComparison.Ordinal) && archive == null)
-        {
-            throw new AgwException(
-                ErrorCodes.SkillNameUpdateRequiresArchive,
-                "Updating the skill name requires uploading a new archive so SKILL.md can stay consistent."
-            );
-        }
-
-        await EnsureNameAvailableAsync(normalizedName, existing.Id, cancellationToken);
-
         var originalPath = GetSkillAbsolutePath(existing);
-        SkillRules.Validate(normalizedName, description);
-        existing.Name = normalizedName;
-        existing.Description = description.Trim();
-        existing.ContentPath = SkillRules.GetContentPath(existing.Kind, existing.Id);
+        new SkillBehavior(existing).DefineLocal(name, description);
+        await _nameUniquenessDomainService.EnsureNameAvailableAsync(existing, cancellationToken);
         var targetPath = GetSkillAbsolutePath(existing);
 
         PreparedSkillDirectory? preparedDirectory = null;
@@ -315,28 +263,18 @@ public class SkillAppService
 
     private async Task<SkillDetails?> UpdateRemoteAsync(
         Skill existing,
-        IFormFile? archive,
         string? remoteUrl,
         CancellationToken cancellationToken
     )
     {
-        if (archive != null)
-        {
-            throw new AgwException(ErrorCodes.RemoteSkillArchiveNotAllowed);
-        }
-
         await using var lease = await _remoteSkillRefreshLock.AcquireAsync(existing.Id, cancellationToken);
         var normalizedUrl = _remoteSkillClient.NormalizeUrl(
             string.IsNullOrWhiteSpace(remoteUrl) ? existing.RemoteUrl : remoteUrl
         );
         var definition = await _remoteSkillClient.FetchAsync(normalizedUrl, cancellationToken);
-        await EnsureNameAvailableAsync(definition.Name, existing.Id, cancellationToken);
+        new SkillBehavior(existing).DefineRemote(normalizedUrl, definition.Name, definition.Description);
+        await _nameUniquenessDomainService.EnsureNameAvailableAsync(existing, cancellationToken);
 
-        existing.RemoteUrl = normalizedUrl;
-        SkillRules.Validate(definition.Name, definition.Description);
-        existing.Name = definition.Name.Trim();
-        existing.Description = definition.Description.Trim();
-        existing.ContentPath = SkillRules.GetContentPath(existing.Kind, existing.Id);
         var cache = await _dbContext.RemoteSkillCaches.SingleOrDefaultAsync(
             item => item.SkillId == existing.Id,
             cancellationToken
@@ -356,7 +294,7 @@ public class SkillAppService
             "Updated remote skill {SkillId} ({SkillName}) from {RemoteLocation}",
             existing.Id,
             existing.Name,
-            GetRemoteLocationForLogging(existing.RemoteUrl)
+            GetRemoteLocationForLogging(normalizedUrl)
         );
         return await GetAsync(existing.Id);
     }
@@ -417,33 +355,9 @@ public class SkillAppService
             .ToList();
     }
 
-    private void EnsureMutable(Skill skill)
-    {
-        if (IsBuiltIn(skill))
-        {
-            throw new AgwException(ErrorCodes.BuiltInSkillImmutable);
-        }
-    }
-
-    private bool IsBuiltIn(Skill skill) => skill.Kind == SkillKind.BuiltIn || _builtInSkillIds.Contains(skill.Id);
+    private bool IsBuiltIn(Skill skill) => new SkillBehavior(skill).IsBuiltIn(_builtInSkillIds.Contains(skill.Id));
 
     private string ResolveOwnerUserId() => _currentUser.RequiredUserId;
-
-    private async Task EnsureNameAvailableAsync(string name, Guid? excludedSkillId, CancellationToken cancellationToken)
-    {
-        var ownerUserId = ResolveOwnerUserId();
-        var existing = await _dbContext.Skills.SingleOrDefaultAsync(
-            skill =>
-                skill.Name == name
-                && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
-                && (!excludedSkillId.HasValue || skill.Id != excludedSkillId.Value),
-            cancellationToken
-        );
-        if (existing != null)
-        {
-            throw new AgwException(ErrorCodes.SkillAlreadyExists, $"Skill '{name}' already exists.");
-        }
-    }
 
     private RemoteSkillCache CreateCache(Skill skill, RemoteSkillDefinition definition)
     {

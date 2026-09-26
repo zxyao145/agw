@@ -2,6 +2,7 @@ using System.Text.Json;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.EntityFrameworkCore;
 
@@ -165,8 +166,7 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
         {
             conversation.ContextId = request.ContextId;
             conversation.Title = request.Title;
-            conversation.UpdateBy = currentOwnerUserId;
-            conversation.UpdateTime = request.StatusTimestamp;
+            new ProjectConversationBehavior(conversation).StampUpdate(currentOwnerUserId, request.StatusTimestamp);
         }
 
         foreach (var record in records.Where(record => record.ConversationId == conversation.Id))

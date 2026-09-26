@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Agw.Agents.Definitions.Domain.Decisions;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Definitions.Agents;

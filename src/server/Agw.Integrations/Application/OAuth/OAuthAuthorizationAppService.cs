@@ -10,6 +10,7 @@ using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.OAuth;
+using Agw.Integrations.Domain.Behaviors;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Exceptions;
@@ -21,7 +22,6 @@ namespace Agw.Integrations.Application.OAuth;
 
 public sealed class OAuthAuthorizationAppService
 {
-    private const string PendingAuthorizationCode = "integration.pending_authorization";
     private const string AuthorizationDeniedCode = "integration.oauth_authorization_denied";
     private const string TokenExchangeFailedCode = "integration.oauth_token_exchange_failed";
     private const string RefreshFailedCode = "integration.oauth_refresh_failed";
@@ -144,9 +144,7 @@ public sealed class OAuthAuthorizationAppService
             parameters["code_challenge_method"] = "S256";
         }
 
-        context.Connection.Status = ConnectionStatus.PendingAuthorization;
-        context.Connection.LastValidationErrorCode = PendingAuthorizationCode;
-        context.Connection.LastValidatedAtUtc = null;
+        new ConnectionBehavior(context.Connection).BeginAuthorization();
         context.Connection.UpdateBy = user;
         context.Connection.UpdateTime = _timeProvider.GetUtcNow();
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -321,10 +319,7 @@ public sealed class OAuthAuthorizationAppService
             var subject = await ResolveSubjectAsync(context, token, required: false, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             await SaveTokensAsync(context.Connection, token, preserveMissingRefreshToken: true, user);
-            if (!string.IsNullOrWhiteSpace(subject))
-            {
-                context.Connection.Subject = subject;
-            }
+            new ConnectionBehavior(context.Connection).RefreshSubject(subject);
             MarkReady(context.Connection, user);
             await _dbContext.SaveChangesAsync(cancellationToken);
             return new OAuthRefreshResponse { ConnectionId = connectionId, ExpiresAtUtc = token.ExpiresAtUtc };
@@ -686,9 +681,7 @@ public sealed class OAuthAuthorizationAppService
     private void MarkReady(IntegrationConnection connection, string user)
     {
         var now = _timeProvider.GetUtcNow();
-        connection.Status = ConnectionStatus.Ready;
-        connection.LastValidatedAtUtc = now;
-        connection.LastValidationErrorCode = null;
+        new ConnectionBehavior(connection).MarkAuthorized(now);
         connection.UpdateBy = user;
         connection.UpdateTime = now;
     }
@@ -701,9 +694,7 @@ public sealed class OAuthAuthorizationAppService
         CancellationToken cancellationToken = default
     )
     {
-        connection.Status = status;
-        connection.LastValidatedAtUtc = null;
-        connection.LastValidationErrorCode = errorCode;
+        new ConnectionBehavior(connection).MarkAuthorizationFailed(status, errorCode);
         connection.UpdateBy = user;
         connection.UpdateTime = _timeProvider.GetUtcNow();
         await _dbContext.SaveChangesAsync(cancellationToken);

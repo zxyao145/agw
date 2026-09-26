@@ -12,6 +12,8 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts;
+using Agw.Skills.Domain.Services;
+using Agw.Skills.Infrastructure;
 using Agw.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
@@ -52,15 +54,17 @@ public class SkillAppServicePersistenceTests
             await using var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(cancellationToken);
             var remote = new RemoteClient();
+            var currentUser = new TestCurrentUser("tester");
             var service = new SkillAppService(
                 context,
                 new TestAgentReferenceFacade(new EfRepository<AgentSkillRelation>(context), context),
+                new SkillNameUniquenessDomainService(new SkillRepository(context, currentUser)),
                 paths,
                 NullLogger<SkillAppService>.Instance,
                 remote,
                 new RefreshLock(),
                 clock,
-                new TestCurrentUser("tester")
+                currentUser
             );
 
             // Act
@@ -150,6 +154,7 @@ public class SkillAppServicePersistenceTests
     public async Task CreateAsync_BuiltInSkill_RejectsBeforePersistence()
     {
         var service = new SkillAppService(
+            null!,
             null!,
             null!,
             null!,

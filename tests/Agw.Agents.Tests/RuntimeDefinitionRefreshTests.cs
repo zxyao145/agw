@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
@@ -310,7 +309,7 @@ public sealed class RuntimeDefinitionRefreshTests
                 ExternalAgentKind = kind,
                 ModelProviderId = Guid.CreateVersion7(),
             };
-            var app = new AgentAppService(Db, null!, Providers, null!, User, null!);
+            var app = TestAgentAppService.Create(Db, null!, Providers, null!, User, null!);
             var configuration = new AgentRuntimeConfiguration(app, Projects);
             var checker = new AgentRuntimeFactory(
                 app,

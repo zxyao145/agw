@@ -5,7 +5,6 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-using Agw.Shared.Tooling;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
 
@@ -90,12 +89,6 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
     {
-        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
-        if (toolsError != null)
-        {
-            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
-        }
-
         var agent = new Agent
         {
             DisplayName = request.DisplayName,
@@ -128,12 +121,6 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
-        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
-        if (toolsError != null)
-        {
-            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
-        }
-
         var updated = await _agentAppService.UpdateAgentAsync(id, request.ToCommand());
 
         return updated == null

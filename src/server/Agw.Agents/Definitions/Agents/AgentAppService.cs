@@ -1,9 +1,9 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
-using Agw.Agents.Definitions.Domain.Decisions;
+using Agw.Agents.Definitions.Domain.Services;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
-using Agw.Integrations.Contracts.References;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
@@ -21,27 +21,18 @@ public sealed record AgentModelRuntimeConfiguration(
 
 public class AgentAppService
 {
-    private static readonly (AgentUpdateField Field, string JsonName)[] ExternalUnsupportedFields =
-    [
-        (AgentUpdateField.SystemPrompt, "systemPrompt"),
-        (AgentUpdateField.Tools, "tools"),
-        (AgentUpdateField.SkillIds, "skillIds"),
-        (AgentUpdateField.McpToolServerIds, "mcpToolServerIds"),
-        (AgentUpdateField.ConnectionIds, "connectionIds"),
-        (AgentUpdateField.EnableSummary, "enableSummary"),
-        (AgentUpdateField.SummaryModelProviderId, "summaryModelProviderId"),
-    ];
-
     private readonly IAgentsDbContext _dbContext;
+    private readonly AgentDefinitionDomainService _definitionDomainService;
+    private readonly AgentResourceBindingDomainService _resourceBindingDomainService;
     private readonly IAgentDeletionCoordinator _deletionCoordinator;
-    private readonly IConnectionReferenceFacade _connectionReferences;
     private readonly IModelProviderReferenceFacade _modelProviderReferences;
     private readonly ISkillReferenceFacade _skillReferences;
     private readonly IUserInfoService _userInfoService;
 
     public AgentAppService(
         IAgentsDbContext dbContext,
-        IConnectionReferenceFacade connectionReferences,
+        AgentDefinitionDomainService definitionDomainService,
+        AgentResourceBindingDomainService resourceBindingDomainService,
         IModelProviderReferenceFacade modelProviderReferences,
         ISkillReferenceFacade skillReferences,
         IUserInfoService userInfoService,
@@ -49,7 +40,8 @@ public class AgentAppService
     )
     {
         _dbContext = dbContext;
-        _connectionReferences = connectionReferences;
+        _definitionDomainService = definitionDomainService;
+        _resourceBindingDomainService = resourceBindingDomainService;
         _modelProviderReferences = modelProviderReferences;
         _skillReferences = skillReferences;
         _userInfoService = userInfoService;
@@ -60,7 +52,7 @@ public class AgentAppService
     {
         var user = _userInfoService.RequiredUserId;
         var agents = await CreateAgentQuery(user).ToListAsync();
-        await FilterVisibleReferenceRelationsAsync(agents).ConfigureAwait(false);
+        await _resourceBindingDomainService.RetainVisibleRelationsAsync(agents).ConfigureAwait(false);
         return agents.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime).ToList();
     }
 
@@ -68,7 +60,7 @@ public class AgentAppService
     {
         var user = _userInfoService.RequiredUserId;
         var agents = await CreateAgentQuery(user).Where(agent => agent.Enable).ToListAsync();
-        await FilterVisibleReferenceRelationsAsync(agents).ConfigureAwait(false);
+        await _resourceBindingDomainService.RetainVisibleRelationsAsync(agents).ConfigureAwait(false);
         return agents.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime).ToList();
     }
 
@@ -85,7 +77,7 @@ public class AgentAppService
             pageSize,
             cancellationToken
         );
-        await FilterVisibleReferenceRelationsAsync(page.Items).ConfigureAwait(false);
+        await _resourceBindingDomainService.RetainVisibleRelationsAsync(page.Items).ConfigureAwait(false);
         return page;
     }
 
@@ -102,7 +94,7 @@ public class AgentAppService
             pageSize,
             cancellationToken
         );
-        await FilterVisibleReferenceRelationsAsync(page.Items).ConfigureAwait(false);
+        await _resourceBindingDomainService.RetainVisibleRelationsAsync(page.Items).ConfigureAwait(false);
         return page;
     }
 
@@ -112,7 +104,7 @@ public class AgentAppService
         var agent = await CreateAgentQuery(user).FirstOrDefaultAsync(agent => agent.Id == id);
         if (agent != null)
         {
-            await FilterVisibleReferenceRelationsAsync([agent]).ConfigureAwait(false);
+            await _resourceBindingDomainService.RetainVisibleRelationsAsync([agent]).ConfigureAwait(false);
         }
         return agent;
     }
@@ -123,7 +115,7 @@ public class AgentAppService
         var agent = await CreateAgentQuery(user).FirstOrDefaultAsync(agent => agent.Id == id);
         if (agent != null)
         {
-            await FilterVisibleReferenceRelationsAsync([agent]).ConfigureAwait(false);
+            await _resourceBindingDomainService.RetainVisibleRelationsAsync([agent]).ConfigureAwait(false);
         }
         return agent;
     }
@@ -184,37 +176,29 @@ public class AgentAppService
         IEnumerable<Guid>? connectionIds
     )
     {
-        var user = _userInfoService.RequiredUserId;
-        if (
-            await HasInvalidModelProviderAsync(agent.ModelProviderId)
-            || await HasInvalidModelProviderAsync(agent.SummaryModelProviderId)
-        )
+        _ = _userInfoService.RequiredUserId;
+        if (!await _definitionDomainService.AreModelProvidersVisibleAsync(agent))
         {
             return null;
         }
 
         if (agent.Type == AgentType.External)
         {
-            await GetExternalModelRuntimeConfigurationAsync(agent.ExternalAgentKind, agent.ModelProviderId);
-        }
-        if (agent.Type == AgentType.External)
-            agent.Extra = AgentExtraSettings.Normalize(agent.Extra);
-        agent.ResponseSchema = AgentResponseSchema.Normalize(agent.ResponseSchema);
-        EnsureResponseSchemaSupported(agent.ExternalAgentKind, agent.ResponseSchema);
-        new AgentBehavior(agent).PrepareForCreate();
-        if (await _dbContext.Agents.AnyAsync(existing => existing.CreateBy == user && existing.Name == agent.Name))
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "An agent with this name already exists. Choose a different name."
+            await _definitionDomainService.EnsureExternalModelProviderSupportedAsync(
+                agent.ExternalAgentKind,
+                agent.ModelProviderId
             );
+            agent.Extra = AgentExtraSettings.Normalize(agent.Extra);
         }
+        agent.ResponseSchema = AgentResponseSchema.Normalize(agent.ResponseSchema);
+        new AgentBehavior(agent).PrepareForCreate();
+        await _definitionDomainService.EnsureNameAvailableAsync(agent);
         if (agent.Type == AgentType.External && ExternalAgentDefaults.ShouldUseDefaultExtra(agent.Extra))
         {
             agent.Extra = ExternalAgentDefaults.GetDefaultExtra(agent.ExternalAgentKind);
         }
         await _dbContext.Agents.AddAsync(agent);
-        await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds, user);
+        await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds);
         await SyncAgentSkillRelationsAsync(agent.Id, skillIds);
         await SyncAgentConnectionRelationsAsync(agent.Id, connectionIds);
         await _dbContext.SaveChangesAsync();
@@ -232,45 +216,33 @@ public class AgentAppService
             return null;
         }
 
+        var update = CreateUpdate(command);
+        var behavior = new AgentBehavior(existing);
+        behavior.EnsureUpdateAllowed(update);
         if (existing.Type == AgentType.External)
         {
-            ValidateExternalAgentUpdate(command);
-            if (command.IsSpecified(AgentUpdateField.ResponseSchema))
-            {
-                EnsureResponseSchemaSupported(
-                    existing.ExternalAgentKind,
-                    AgentResponseSchema.Normalize(command.ResponseSchema)
-                );
-            }
-            var modelProviderId = command.IsSpecified(AgentUpdateField.ModelProviderId)
-                ? command.ModelProviderId
-                : existing.ModelProviderId;
-            if (await HasInvalidModelProviderAsync(modelProviderId))
+            var modelProviderId = behavior.ResolveModelProviderId(update);
+            if (!await _definitionDomainService.IsModelProviderVisibleAsync(modelProviderId))
             {
                 return null;
             }
-            await GetExternalModelRuntimeConfigurationAsync(existing.ExternalAgentKind, modelProviderId);
-        }
-        else
-        {
-            ValidateSystemAgentUpdate(command);
+            await _definitionDomainService.EnsureExternalModelProviderSupportedAsync(
+                existing.ExternalAgentKind,
+                modelProviderId
+            );
         }
 
-        new AgentBehavior(existing).ApplyUpdate(CreateUpdateDecision(command));
-
-        if (
-            await HasInvalidModelProviderAsync(existing.ModelProviderId)
-            || await HasInvalidModelProviderAsync(existing.SummaryModelProviderId)
-        )
+        behavior.ApplyUpdate(update);
+        if (!await _definitionDomainService.AreModelProvidersVisibleAsync(existing))
         {
             return null;
         }
 
         // Preserve audit stamping even when only bindings change or the update is a no-op.
         _dbContext.Agents.Entry(existing).Property(agent => agent.DisplayName).IsModified = true;
-        if (existing.Type == AgentType.System)
+        if (behavior.UpdatesResourceBindings())
         {
-            await SyncAgentMcpToolServerRelationsAsync(existing.Id, command.McpToolServerIds, user);
+            await SyncAgentMcpToolServerRelationsAsync(existing.Id, command.McpToolServerIds);
             await SyncAgentSkillRelationsAsync(existing.Id, command.SkillIds);
             if (command.IsSpecified(AgentUpdateField.ConnectionIds))
             {
@@ -306,84 +278,9 @@ public class AgentAppService
     public Task<bool> DeleteAgentAsync(Guid id, CancellationToken cancellationToken = default) =>
         _deletionCoordinator.DeleteAsync(id, _userInfoService.RequiredUserId, cancellationToken);
 
-    private async Task<bool> HasInvalidModelProviderAsync(Guid? modelProviderId)
-    {
-        if (!modelProviderId.HasValue)
-        {
-            return false;
-        }
-
-        var visibleIds = await _modelProviderReferences
-            .FilterVisibleModelProviderIdsAsync([modelProviderId.Value])
-            .ConfigureAwait(false);
-        return !visibleIds.Contains(modelProviderId.Value);
-    }
-
-    private static void ValidateExternalAgentUpdate(AgentUpdateCommand command)
-    {
-        var unsupportedFields = ExternalUnsupportedFields
-            .Where(field => command.IsSpecified(field.Field))
-            .Select(field => field.JsonName)
-            .ToArray();
-        if (unsupportedFields.Length > 0)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"External agents cannot update fields: {string.Join(", ", unsupportedFields)}."
-            );
-        }
-
-        if (command.IsSpecified(AgentUpdateField.DisplayName) && command.DisplayName == null)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "displayName cannot be null.");
-        }
-
-        if (command.IsSpecified(AgentUpdateField.Description) && command.Description == null)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "description cannot be null.");
-        }
-    }
-
-    private static void ValidateSystemAgentUpdate(AgentUpdateCommand command)
-    {
-        var missingFields = new List<string>();
-        if (!command.IsSpecified(AgentUpdateField.DisplayName) || command.DisplayName == null)
-        {
-            missingFields.Add("displayName");
-        }
-
-        if (!command.IsSpecified(AgentUpdateField.Description) || command.Description == null)
-        {
-            missingFields.Add("description");
-        }
-
-        if (!command.IsSpecified(AgentUpdateField.SystemPrompt) || command.SystemPrompt == null)
-        {
-            missingFields.Add("systemPrompt");
-        }
-
-        if (!command.IsSpecified(AgentUpdateField.ModelProviderId))
-        {
-            missingFields.Add("modelProviderId");
-        }
-
-        if (command.IsSpecified(AgentUpdateField.EnableSummary) && command.EnableSummary == null)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "enableSummary cannot be null.");
-        }
-
-        if (missingFields.Count > 0)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"System agent update requires fields: {string.Join(", ", missingFields)}."
-            );
-        }
-    }
-
-    // 归一化已指定的取值后交给 AgentBehavior，由它按 Agent 类型决定哪些字段写入实体。
-    // Normalize the specified values and hand them to AgentBehavior, which decides per agent type which fields reach the entity.
-    private static AgentUpdateDecision CreateUpdateDecision(AgentUpdateCommand command) =>
+    // 归一化已指定取值中的 JSON 后交给 AgentBehavior，由它按 Agent 类型校验并决定哪些字段写入实体。
+    // Normalize the JSON in the specified values and hand them to AgentBehavior, which validates them per agent type and decides which fields reach the entity.
+    private static AgentUpdate CreateUpdate(AgentUpdateCommand command) =>
         new()
         {
             SpecifiedFields = command.SpecifiedFields,
@@ -403,40 +300,21 @@ public class AgentAppService
                 : command.ResponseSchema,
         };
 
-    // Pi runs cannot enforce a response schema, so configuration is rejected instead of degrading silently.
-    private static void EnsureResponseSchemaSupported(EngineKind kind, string? responseSchema)
-    {
-        if (kind == EngineKind.Pi && responseSchema != null)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Pi agents do not support responseSchema.");
-        }
-    }
-
-    private async Task SyncAgentMcpToolServerRelationsAsync(
-        Guid agentId,
-        IEnumerable<Guid>? mcpToolServerIds,
-        string user
-    )
+    private async Task SyncAgentMcpToolServerRelationsAsync(Guid agentId, IEnumerable<Guid>? mcpToolServerIds)
     {
         var existingLinks = await _dbContext.AgentMcpToolServers.Where(link => link.AgentId == agentId).ToListAsync();
-        var requestedIds = (mcpToolServerIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
-        var validIds =
-            requestedIds.Count == 0
-                ? []
-                : await _dbContext
-                    .McpToolServers.Where(server => requestedIds.Contains(server.Id) && server.CreateBy == user)
-                    .Select(server => server.Id)
-                    .ToListAsync();
-        if (validIds.Count != requestedIds.Count)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
+        var (addedIds, removedIds) = await _resourceBindingDomainService
+            .PlanMcpToolServerBindingsAsync(
+                existingLinks.Select(link => link.McpToolServerId).ToList(),
+                mcpToolServerIds
+            )
+            .ConfigureAwait(false);
 
-        foreach (var link in existingLinks.Where(link => !validIds.Contains(link.McpToolServerId)))
+        foreach (var link in existingLinks.Where(link => removedIds.Contains(link.McpToolServerId)))
         {
             _dbContext.AgentMcpToolServers.Remove(link);
         }
-        foreach (var serverId in validIds.Except(existingLinks.Select(link => link.McpToolServerId)))
+        foreach (var serverId in addedIds)
         {
             await _dbContext.AgentMcpToolServers.AddAsync(
                 new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = serverId }
@@ -447,21 +325,15 @@ public class AgentAppService
     private async Task SyncAgentSkillRelationsAsync(Guid agentId, IEnumerable<Guid>? skillIds)
     {
         var existingLinks = await _dbContext.AgentSkillRelations.Where(link => link.AgentId == agentId).ToListAsync();
-        var requestedIds = (skillIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
-        var visibleSkillIds =
-            requestedIds.Count == 0
-                ? new HashSet<Guid>()
-                : await _skillReferences.FilterVisibleSkillIdsAsync(requestedIds).ConfigureAwait(false);
-        if (visibleSkillIds.Count != requestedIds.Count)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
+        var (addedIds, removedIds) = await _resourceBindingDomainService
+            .PlanSkillBindingsAsync(existingLinks.Select(link => link.SkillId).ToList(), skillIds)
+            .ConfigureAwait(false);
 
-        foreach (var link in existingLinks.Where(link => !visibleSkillIds.Contains(link.SkillId)))
+        foreach (var link in existingLinks.Where(link => removedIds.Contains(link.SkillId)))
         {
             _dbContext.AgentSkillRelations.Remove(link);
         }
-        foreach (var skillId in visibleSkillIds.Except(existingLinks.Select(link => link.SkillId)))
+        foreach (var skillId in addedIds)
         {
             await _dbContext.AgentSkillRelations.AddAsync(
                 new AgentSkillRelation { AgentId = agentId, SkillId = skillId }
@@ -481,85 +353,20 @@ public class AgentAppService
         return query.AsNoTracking().AsSplitQuery();
     }
 
-    private async Task FilterVisibleReferenceRelationsAsync(IReadOnlyList<Agent> agents)
-    {
-        await FilterVisibleSkillRelationsAsync(agents).ConfigureAwait(false);
-        await FilterVisibleConnectionRelationsAsync(agents).ConfigureAwait(false);
-    }
-
-    private async Task FilterVisibleSkillRelationsAsync(IReadOnlyList<Agent> agents)
-    {
-        var skillIds = agents
-            .SelectMany(agent => agent.AgentSkillRelations)
-            .Select(relation => relation.SkillId)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
-        if (skillIds.Length == 0)
-        {
-            return;
-        }
-
-        var visibleSkillIds = await _skillReferences.FilterVisibleSkillIdsAsync(skillIds).ConfigureAwait(false);
-        foreach (var agent in agents)
-        {
-            agent.AgentSkillRelations = agent
-                .AgentSkillRelations.Where(relation => visibleSkillIds.Contains(relation.SkillId))
-                .ToList();
-        }
-    }
-
-    private async Task FilterVisibleConnectionRelationsAsync(IReadOnlyList<Agent> agents)
-    {
-        var connectionIds = agents
-            .SelectMany(agent => agent.AgentConnectionRelations)
-            .Select(relation => relation.ConnectionId)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
-        if (connectionIds.Length == 0)
-        {
-            return;
-        }
-
-        var visibleConnectionIds = await _connectionReferences
-            .FilterOwnedConnectionIdsAsync(connectionIds)
-            .ConfigureAwait(false);
-        foreach (var agent in agents)
-        {
-            agent.AgentConnectionRelations = agent
-                .AgentConnectionRelations.Where(relation => visibleConnectionIds.Contains(relation.ConnectionId))
-                .ToList();
-        }
-    }
-
     private async Task SyncAgentConnectionRelationsAsync(Guid agentId, IEnumerable<Guid>? connectionIds)
     {
         var existingLinks = await _dbContext
             .AgentConnectionRelations.Where(link => link.AgentId == agentId)
             .ToListAsync();
-        var ownedExistingIds = await _connectionReferences
-            .FilterOwnedConnectionIdsAsync(existingLinks.Select(link => link.ConnectionId).ToArray())
+        var (addedIds, removedIds) = await _resourceBindingDomainService
+            .PlanConnectionBindingsAsync(existingLinks.Select(link => link.ConnectionId).ToList(), connectionIds)
             .ConfigureAwait(false);
-        var requestedIds = (connectionIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
-        var ownedConnectionIds =
-            requestedIds.Count == 0
-                ? new HashSet<Guid>()
-                : await _connectionReferences.FilterOwnedConnectionIdsAsync(requestedIds).ConfigureAwait(false);
-        if (ownedConnectionIds.Count != requestedIds.Count)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
 
-        foreach (
-            var link in existingLinks.Where(link =>
-                ownedExistingIds.Contains(link.ConnectionId) && !ownedConnectionIds.Contains(link.ConnectionId)
-            )
-        )
+        foreach (var link in existingLinks.Where(link => removedIds.Contains(link.ConnectionId)))
         {
             _dbContext.AgentConnectionRelations.Remove(link);
         }
-        foreach (var connectionId in ownedConnectionIds.Except(existingLinks.Select(link => link.ConnectionId)))
+        foreach (var connectionId in addedIds)
         {
             await _dbContext.AgentConnectionRelations.AddAsync(
                 new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }

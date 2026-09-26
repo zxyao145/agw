@@ -1,4 +1,3 @@
-using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Summaries;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -64,7 +63,7 @@ public class SummaryChatClientFactoryTests
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var userInfo = new TestUserInfoService();
-        var appService = new AgentAppService(
+        var appService = TestAgentAppService.Create(
             null!,
             null!,
             new TestModelProviderReferenceFacade(

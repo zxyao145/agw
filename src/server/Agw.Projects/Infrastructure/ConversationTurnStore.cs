@@ -4,7 +4,7 @@ using Agw.Auth.Contracts;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.History;
-using Agw.Projects.Domain.Rules;
+using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -47,9 +47,7 @@ public sealed class ConversationTurnStore : IConversationTurnStore
             .ConfigureAwait(false);
         if (existing != null)
         {
-            // 同一用户在同一对话重发同一 turnId 才是同一次受理。
-            // Only the same user resending the same turnId in the same conversation is the same acceptance.
-            return existing.ProjectConversationId == request.ConversationId
+            return new ProjectConversationTurnBehavior(existing).IsSameAcceptance(request.ConversationId)
                 ? new ConversationTurnAcceptance(Map(existing), Created: false)
                 : throw new AgwException(ErrorCodes.ResourceNotFound);
         }
@@ -91,11 +89,9 @@ public sealed class ConversationTurnStore : IConversationTurnStore
                 request.TargetType == ConversationTurnTargetType.Agentflow
                     ? AgentRuntimeType.Agentflow
                     : AgentRuntimeType.Agent,
-            Status = ProjectConversationTurnStatus.Accepted,
             InputMessageId = request.Input?.MessageId ?? Guid.Empty,
-            FirstSequence = sequence,
-            StartedAt = now,
         };
+        new ProjectConversationTurnBehavior(turn).Accept(sequence, now);
         _dbContext.ProjectConversationTurns.Add(turn);
         await _dbContext
             .SaveConversationChangesAsync(conversation.Id, request.Generation, cancellationToken)
@@ -115,9 +111,8 @@ public sealed class ConversationTurnStore : IConversationTurnStore
     public async Task MarkRunningAsync(Guid turnId, CancellationToken cancellationToken)
     {
         var turn = await LoadAsync(turnId, cancellationToken).ConfigureAwait(false);
-        if (turn.Status != ProjectConversationTurnStatus.Accepted)
+        if (!new ProjectConversationTurnBehavior(turn).TryMarkRunning())
             return;
-        turn.Status = ProjectConversationTurnStatus.Running;
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -167,9 +162,8 @@ public sealed class ConversationTurnStore : IConversationTurnStore
     public async Task CompleteStepAsync(Guid turnId, int stepCount, CancellationToken cancellationToken)
     {
         var turn = await LoadAsync(turnId, cancellationToken).ConfigureAwait(false);
-        if (IsFinished(turn.Status) || stepCount <= turn.StepCount)
+        if (!new ProjectConversationTurnBehavior(turn).TryCompleteStep(stepCount))
             return;
-        turn.StepCount = stepCount;
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -181,26 +175,20 @@ public sealed class ConversationTurnStore : IConversationTurnStore
         CancellationToken cancellationToken
     )
     {
-        if (
-            status
-            is not (
-                ConversationTurnStatus.Completed
-                or ConversationTurnStatus.Failed
-                or ConversationTurnStatus.Interrupted
-            )
-        )
-            throw new AgwException(ErrorCodes.InvalidParam, $"Turn status '{status}' is not terminal.");
         var turn = await LoadAsync(turnId, cancellationToken).ConfigureAwait(false);
-        if (IsFinished(turn.Status))
-            return;
-        turn.Status = (ProjectConversationTurnStatus)status;
-        turn.StepCount = Math.Max(turn.StepCount, stepCount);
-        turn.ErrorCode = errorCode;
-        turn.FinishedAt = _timeProvider.GetUtcNow();
-        turn.LastSequence = await _dbContext
+        var lastSequence = await _dbContext
             .ProjectConversationChatHistories.Where(history => history.TurnId == turnId)
             .MaxAsync(history => history.ConversationSequence, cancellationToken)
             .ConfigureAwait(false);
+        var finished = new ProjectConversationTurnBehavior(turn).TryFinish(
+            (ProjectConversationTurnStatus)status,
+            stepCount,
+            errorCode,
+            _timeProvider.GetUtcNow(),
+            lastSequence
+        );
+        if (!finished)
+            return;
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -241,14 +229,9 @@ public sealed class ConversationTurnStore : IConversationTurnStore
                 UpdateTime = now,
             }
         );
-        var title = TaskTitleRules.Create(
-            string.Concat(message.Contents.OfType<TextContent>().Select(content => content.Text)).Trim()
+        new ProjectConversationBehavior(conversation).TryAdoptDerivedTitle(
+            string.Concat(message.Contents.OfType<TextContent>().Select(content => content.Text))
         );
-        if (
-            string.Equals(conversation.Title, TaskTitleRules.DefaultTitle, StringComparison.Ordinal)
-            && !string.Equals(title, TaskTitleRules.DefaultTitle, StringComparison.Ordinal)
-        )
-            conversation.Title = title;
     }
 
     private async Task<ProjectConversationTurn> LoadAsync(Guid turnId, CancellationToken cancellationToken) =>
@@ -256,12 +239,6 @@ public sealed class ConversationTurnStore : IConversationTurnStore
             .ProjectConversationTurns.SingleOrDefaultAsync(turn => turn.Id == turnId, cancellationToken)
             .ConfigureAwait(false)
         ?? throw new AgwException(ErrorCodes.ResourceNotFound);
-
-    private static bool IsFinished(ProjectConversationTurnStatus status) =>
-        status
-            is ProjectConversationTurnStatus.Completed
-                or ProjectConversationTurnStatus.Failed
-                or ProjectConversationTurnStatus.Interrupted;
 
     internal static ConversationTurnSnapshot Map(ProjectConversationTurn turn) =>
         new(

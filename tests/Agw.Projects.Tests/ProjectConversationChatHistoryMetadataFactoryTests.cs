@@ -1,5 +1,4 @@
 using Agw.Projects.Application.History;
-using Agw.Projects.Domain.Rules;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
@@ -58,13 +57,5 @@ public class ProjectConversationChatHistoryMetadataFactoryTests
         var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
 
         Assert.Equal("execute", metadata!["agentMode"].GetString());
-    }
-
-    [Fact]
-    public void Create_UsesTrimmedInputPrefix()
-    {
-        var title = TaskTitleRules.Create("  this is a chat title  ");
-
-        Assert.Equal("this is a chat title", title);
     }
 }

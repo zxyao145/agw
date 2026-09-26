@@ -1,4 +1,4 @@
-using Agw.Agents.Definitions.Domain.Decisions;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Definitions.Agents;

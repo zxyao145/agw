@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Auth.Domain.Behaviors;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Providers.Contracts;
@@ -710,17 +711,19 @@ public sealed class UserScopeFilterTests
             CreateTime = now,
         };
 
-    private static ApiToken CreateApiToken(string owner, string name, DateTimeOffset now) =>
-        new()
+    private static ApiToken CreateApiToken(string owner, string name, DateTimeOffset now)
+    {
+        var token = new ApiToken
         {
             Id = Guid.CreateVersion7(),
-            Name = name,
-            NormalizedName = ApiTokenNameRules.NormalizeName(name),
             Prefix = "agw_test",
             SecretHash = new string('a', 64),
             CreateBy = owner,
             CreateTime = now,
         };
+        new ApiTokenBehavior(token).AssignName(name);
+        return token;
+    }
 
     private static UserMemory CreateUserMemory(string owner, DateTimeOffset now) =>
         new()

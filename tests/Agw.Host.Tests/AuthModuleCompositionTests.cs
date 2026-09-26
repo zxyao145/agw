@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using Agw.Auth.Api;
+using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Shared.Runtime;
@@ -150,6 +151,8 @@ public sealed class AuthModuleCompositionTests
         builder.Services.AddSingleton<IApiTokenStore>(provider =>
             provider.GetRequiredService<AuthenticationStateStoreStub>()
         );
+        builder.Services.AddScoped<IAuthDbContext>(_ => null!);
+        builder.Services.AddScoped<IApiTokenCredentialReader>(_ => null!);
         builder.Services.AddSingleton<IServerInitializationState, InitializationStateStub>();
 
         var app = builder.Build();

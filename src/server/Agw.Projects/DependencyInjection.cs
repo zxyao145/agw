@@ -3,6 +3,7 @@ using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Metrics;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Projects.Domain.Services;
 using Agw.Projects.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,8 @@ public static class DependencyInjection
             Agw.Projects.Contracts.IUserProjectInitializer,
             Agw.Projects.Application.UserProjectInitializer
         >();
+        services.AddScoped<ConversationHistoryDomainService>();
+        services.AddScoped<ProjectResourceBindingDomainService>();
         services.AddScoped<ITaskAppService, TaskAppService>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
         services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();

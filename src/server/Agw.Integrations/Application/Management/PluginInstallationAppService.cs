@@ -2,7 +2,9 @@ using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
+using Agw.Integrations.Domain.Behaviors;
 using Agw.Integrations.Domain.Plugins;
+using Agw.Integrations.Domain.Services;
 using Agw.Shared.Data.Entities.Integrations;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,12 +12,9 @@ namespace Agw.Integrations.Application.Management;
 
 public sealed class PluginInstallationAppService
 {
-    private const string NeedsConfigurationCode = "integration.needs_configuration";
-    private const string PendingAuthorizationCode = "integration.pending_authorization";
-
     private readonly IIntegrationsDbContext _dbContext;
     private readonly IPluginCatalog _pluginCatalog;
-    private readonly CredentialMutationService _credentialMutations;
+    private readonly PluginInstallationReadinessDomainService _installationReadiness;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
     private readonly IntegrationMutationCoordinator _mutations;
@@ -23,7 +22,7 @@ public sealed class PluginInstallationAppService
     public PluginInstallationAppService(
         IIntegrationsDbContext dbContext,
         IPluginCatalog pluginCatalog,
-        CredentialMutationService credentialMutations,
+        PluginInstallationReadinessDomainService installationReadiness,
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
         IntegrationMutationCoordinator mutations
@@ -31,7 +30,7 @@ public sealed class PluginInstallationAppService
     {
         _dbContext = dbContext;
         _pluginCatalog = pluginCatalog;
-        _credentialMutations = credentialMutations;
+        _installationReadiness = installationReadiness;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
         _mutations = mutations;
@@ -55,6 +54,7 @@ public sealed class PluginInstallationAppService
         cancellationToken = mutation.Token;
         var connectorId = definition.Connector.Id;
         var authSchemeId = definition.AuthScheme.Id;
+        var now = _timeProvider.GetUtcNow();
         var installation = await _dbContext
             .PluginInstallations.Include(item => item.Credentials)
             .FirstOrDefaultAsync(item => item.PluginId == pluginId && item.CreateBy == user, cancellationToken);
@@ -67,7 +67,7 @@ public sealed class PluginInstallationAppService
                 Enabled = request.Enabled,
                 ConfigurationJson = "{}",
                 CreateBy = user,
-                CreateTime = _timeProvider.GetUtcNow(),
+                CreateTime = now,
             };
             await _dbContext.PluginInstallations.AddAsync(installation, cancellationToken);
         }
@@ -75,7 +75,7 @@ public sealed class PluginInstallationAppService
         {
             installation.Enabled = request.Enabled;
             installation.UpdateBy = user;
-            installation.UpdateTime = _timeProvider.GetUtcNow();
+            installation.UpdateTime = now;
         }
 
         var slotFactory = (string fieldId) =>
@@ -109,114 +109,28 @@ public sealed class PluginInstallationAppService
         );
         installation.ConfigurationJson = IntegrationConfigurationCodec.Write(allConfiguration);
 
-        await _credentialMutations.ApplyInstallationAsync(installation, input.SecretUpdates, connectorId, authSchemeId);
-        await InvalidateConnectionsAsync(installation, definition, cancellationToken);
+        new PluginInstallationBehavior(installation).ApplySecretUpdates(
+            definition,
+            input.SecretsToSet,
+            input.ClearedSecretFieldIds,
+            user,
+            now
+        );
+        var affectedConnections = await _installationReadiness.ResetAffectedConnectionsAsync(
+            installation,
+            definition,
+            input.Configuration,
+            cancellationToken
+        );
+        foreach (var connection in affectedConnections)
+        {
+            connection.UpdateBy = user;
+            connection.UpdateTime = now;
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Map(installation, definition, input.Configuration);
-    }
-
-    private async Task InvalidateConnectionsAsync(
-        PluginInstallation installation,
-        ResolvedIntegrationDefinition definition,
-        CancellationToken cancellationToken
-    )
-    {
-        var user = _userInfoService.RequiredUserId;
-        var query = _dbContext
-            .Connections.Include(connection => connection.Credentials)
-            .Where(connection => connection.PluginId == installation.PluginId && connection.CreateBy == user);
-        if (installation.Enabled)
-        {
-            query = query.Where(connection =>
-                connection.ConnectorId == definition.Connector.Id && connection.AuthSchemeId == definition.AuthScheme.Id
-            );
-        }
-
-        var connections = await query.ToListAsync(cancellationToken);
-        var scopeConfigured = installation.Enabled && HasRequiredConfiguration(installation, definition);
-        var now = _timeProvider.GetUtcNow();
-        foreach (var connection in connections)
-        {
-            _mutations.InvalidateAuthorization(connection);
-            connection.LastValidatedAtUtc = null;
-            connection.ValidationMetadataJson = null;
-            connection.UpdateBy = user;
-            connection.UpdateTime = now;
-
-            if (!connection.Enabled)
-            {
-                SetStatus(connection, ConnectionStatus.Disabled, null);
-            }
-            else if (!installation.Enabled || !scopeConfigured)
-            {
-                SetStatus(connection, ConnectionStatus.NeedsConfiguration, NeedsConfigurationCode);
-            }
-            else if (
-                definition.AuthScheme.Type == AuthSchemeType.OAuth2
-                && !connection.Credentials.Any(credential =>
-                    string.Equals(
-                        credential.Slot,
-                        IntegrationCredentialSlots.OAuthAccessToken,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-            )
-            {
-                SetStatus(connection, ConnectionStatus.PendingAuthorization, PendingAuthorizationCode);
-            }
-            else
-            {
-                SetStatus(connection, ConnectionStatus.Unverified, null);
-            }
-        }
-    }
-
-    private static bool HasRequiredConfiguration(
-        PluginInstallation installation,
-        ResolvedIntegrationDefinition definition
-    )
-    {
-        var configuration = IntegrationConfigurationCodec.Read(installation.ConfigurationJson);
-        foreach (var field in definition.AuthScheme.InstallationFields.Where(field => field.IsRequired))
-        {
-            if (field.Type == FormFieldType.Secret)
-            {
-                var slot = IntegrationCredentialSlots.InstallationField(
-                    definition.Connector.Id,
-                    definition.AuthScheme.Id,
-                    field.Id
-                );
-                if (
-                    !installation.Credentials.Any(credential =>
-                        string.Equals(credential.Slot, slot, StringComparison.OrdinalIgnoreCase)
-                    )
-                )
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                var key = IntegrationConfigurationCodec.InstallationKey(
-                    definition.Connector.Id,
-                    definition.AuthScheme.Id,
-                    field.Id
-                );
-                if (!configuration.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private static void SetStatus(Connection connection, ConnectionStatus status, string? errorCode)
-    {
-        connection.Status = status;
-        connection.LastValidationErrorCode = errorCode;
     }
 
     private static PluginInstallationResponse Map(

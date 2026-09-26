@@ -1,7 +1,8 @@
 using System.Linq.Expressions;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
-using Agw.Projects.Domain.Rules;
+using Agw.Projects.Domain.Behaviors;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -12,18 +13,21 @@ public class TaskExecutionAppService
 {
     private readonly IProjectsDbContext _dbContext;
     private readonly ProjectResolver _projectResolver;
+    private readonly ConversationHistoryDomainService _historyDomainService;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
 
     public TaskExecutionAppService(
         IProjectsDbContext dbContext,
         ProjectResolver projectResolver,
+        ConversationHistoryDomainService historyDomainService,
         TimeProvider timeProvider,
         IUserInfoService userInfoService
     )
     {
         _dbContext = dbContext;
         _projectResolver = projectResolver;
+        _historyDomainService = historyDomainService;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
     }
@@ -175,16 +179,12 @@ public class TaskExecutionAppService
                 ? taskIdOverride.Value
                 : Guid.CreateVersion7();
         var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
-        var title = string.IsNullOrWhiteSpace(request.Title)
-            ? TaskTitleRules.Create(request.Input)
-            : request.Title.Trim();
 
         var (conversation, conversationCreated) = await GetOrCreateConversationAsync(
             project.Id,
             conversationId,
             contextId,
-            request.JobId,
-            title,
+            request,
             user,
             now
         );
@@ -228,7 +228,7 @@ public class TaskExecutionAppService
             }
 
             conversation = concurrentConversation;
-            UpdateExistingConversation(conversation, request.JobId, title, user, now);
+            UpdateExistingConversation(conversation, request, user, now);
             await _dbContext.ProjectConversationChatHistories.AddAsync(record);
             await _dbContext.SaveConversationChangesAsync(conversation.Id, conversation.Generation);
         }
@@ -245,14 +245,13 @@ public class TaskExecutionAppService
             return ApplicationResult.NotFound();
         }
 
-        if (string.IsNullOrWhiteSpace(title))
+        var behavior = new ProjectConversationBehavior(context);
+        if (!behavior.TryRename(title))
         {
             return ApplicationResult.Invalid("title is required.");
         }
 
-        context.Title = title.Trim();
-        context.UpdateBy = user;
-        context.UpdateTime = _timeProvider.GetUtcNow();
+        behavior.StampUpdate(user, _timeProvider.GetUtcNow());
         await _dbContext.SaveChangesAsync();
         return ApplicationResult.Success();
     }
@@ -317,7 +316,7 @@ public class TaskExecutionAppService
     public async Task<ProjectConversationChatHistory?> GetLatestRecordAsync(Guid taskId)
     {
         var records = await GetOrderedRecordsByTaskIdAsync(taskId, ResolveOwnerUserId());
-        return ProjectConversationChatHistoryRules.GetLatest(records);
+        return _historyDomainService.GetLatest(records);
     }
 
     public Task<TaskProjection?> MarkSucceededAsync(Guid id, string user) =>
@@ -333,7 +332,7 @@ public class TaskExecutionAppService
         string user
     )
     {
-        var records = ProjectConversationChatHistoryRules.Order(
+        var records = _historyDomainService.Order(
             await _dbContext
                 .ProjectConversationChatHistories.Where(record =>
                     record.TaskId == id
@@ -357,18 +356,16 @@ public class TaskExecutionAppService
         }
 
         var task = TaskExecutionMapper.ToTask(context, records);
-        if (task.Status != TaskExecutionStatus.Running)
+        var finished = _historyDomainService.TryFinishTask(
+            records,
+            task.Status,
+            status,
+            errorMessage,
+            _timeProvider.GetUtcNow()
+        );
+        if (!finished)
         {
             return null;
-        }
-
-        var now = _timeProvider.GetUtcNow();
-        foreach (var record in records)
-        {
-            record.Status = status;
-            record.TaskErrorMessage = status == TaskExecutionStatus.Succeeded ? null : errorMessage;
-            record.FinishedTime = now;
-            record.UpdateTime = now;
         }
 
         await _dbContext.SaveChangesAsync();
@@ -383,8 +380,7 @@ public class TaskExecutionAppService
         Guid projectId,
         Guid? conversationId,
         string contextId,
-        Guid? jobId,
-        string title,
+        TaskCreateRequest request,
         string user,
         DateTimeOffset now
     )
@@ -402,31 +398,16 @@ public class TaskExecutionAppService
             );
             if (conversation != null)
             {
-                var existingContextId = ContextIdUtil.NormalizeContextId(conversation.ContextId);
-                if (
-                    conversation.ProjectId != projectId
-                    || !string.Equals(existingContextId, contextId, StringComparison.Ordinal)
-                )
-                {
-                    throw new AgwException(
-                        ErrorCodes.InvalidParam,
-                        "The supplied conversation identity does not match the execution context."
-                    );
-                }
-
-                conversation.ContextId = existingContextId;
+                new ProjectConversationBehavior(conversation).EnsureExecutionContext(projectId, contextId);
             }
         }
 
         conversation ??= await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
             item.ProjectId == projectId && item.ContextId == contextId && item.CreateBy == user
         );
-        if (conversation != null && conversationId.HasValue && conversation.Id != conversationId.Value)
+        if (conversation != null && conversationId.HasValue)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "The supplied conversation identity does not match the execution context."
-            );
+            new ProjectConversationBehavior(conversation).EnsureIdentity(conversationId.Value);
         }
 
         if (conversation != null)
@@ -438,7 +419,7 @@ public class TaskExecutionAppService
                 throw new AgwException(ErrorCodes.ResourceNotFound);
             }
             conversation.ContextId = contextId;
-            UpdateExistingConversation(conversation, jobId, title, user, now);
+            UpdateExistingConversation(conversation, request, user, now);
             return (conversation, false);
         }
 
@@ -446,40 +427,29 @@ public class TaskExecutionAppService
         {
             Id = conversationId ?? Guid.CreateVersion7(),
             ProjectId = projectId,
-            JobId = jobId,
+            JobId = request.JobId,
             ContextId = contextId,
-            Title = string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim(),
             CreateBy = user,
             CreateTime = now,
             UpdateBy = user,
             UpdateTime = now,
         };
+        new ProjectConversationBehavior(conversation).SetInitialTitle(request.Title, request.Input);
         await _dbContext.ProjectConversations.AddAsync(conversation);
         return (conversation, true);
     }
 
     private static void UpdateExistingConversation(
         ProjectConversation conversation,
-        Guid? jobId,
-        string title,
+        TaskCreateRequest request,
         string user,
         DateTimeOffset now
     )
     {
-        if (
-            !string.IsNullOrWhiteSpace(title) && string.Equals(conversation.Title, "Untitled", StringComparison.Ordinal)
-        )
-        {
-            conversation.Title = title;
-        }
-
-        if (conversation.JobId == null && jobId.HasValue)
-        {
-            conversation.JobId = jobId.Value;
-        }
-
-        conversation.UpdateBy = user;
-        conversation.UpdateTime = now;
+        var behavior = new ProjectConversationBehavior(conversation);
+        behavior.TryAdoptRequestedTitle(request.Title, request.Input);
+        behavior.TryBindJob(request.JobId);
+        behavior.StampUpdate(user, now);
     }
 
     private async Task<ProjectConversation?> GetContextByTaskAsync(Guid projectId, Guid taskId)
@@ -540,7 +510,7 @@ public class TaskExecutionAppService
     )
     {
         var records = await GetRecordsByTaskIdAsync(taskId, ownerUserId).ConfigureAwait(false);
-        return ProjectConversationChatHistoryRules.Order(records);
+        return _historyDomainService.Order(records);
     }
 
     private async Task<IReadOnlyList<ProjectConversationChatHistory>> GetRecordsByTaskIdAsync(

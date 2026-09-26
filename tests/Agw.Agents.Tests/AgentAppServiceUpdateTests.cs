@@ -506,7 +506,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         _database.Context.AgentConnectionRelations.AddRange(connectionRelations ?? []);
         _database.Context.SaveChanges();
 
-        return new AgentAppService(
+        return TestAgentAppService.Create(
             _database.Context,
             new TestConnectionReferenceFacade(connectionRepository, userInfo),
             new TestModelProviderReferenceFacade(

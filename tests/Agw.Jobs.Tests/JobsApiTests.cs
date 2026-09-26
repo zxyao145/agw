@@ -10,7 +10,9 @@ using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Api;
 using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Application.Services;
-using Agw.Jobs.Scheduling;
+using Agw.Jobs.Domain.Repositories;
+using Agw.Jobs.Domain.Services;
+using Agw.Jobs.Infrastructure;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Jobs;
@@ -153,7 +155,8 @@ public class JobsApiTests : IDisposable
             builder.Services.AddScoped<IUnitOfWork>(serviceProvider =>
                 serviceProvider.GetRequiredService<AgwDbContext>()
             );
-            builder.Services.AddSingleton<JobScheduleCalculator>();
+            builder.Services.AddScoped<IJobRepository, JobRepository>();
+            builder.Services.AddScoped<JobDefinitionDomainService>();
             builder.Services.AddSingleton<JobSchedulerWakeSignal>();
             builder.Services.AddScoped<IUserInfoService, UserInfoService>();
             builder.Services.AddScoped<

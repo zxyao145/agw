@@ -299,7 +299,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             _database.Context.SaveChanges();
         }
 
-        return new AgentAppService(
+        return TestAgentAppService.Create(
             _database.Context,
             new TestConnectionReferenceFacade(new TestRepository<Connection>(), userInfo),
             new TestModelProviderReferenceFacade(

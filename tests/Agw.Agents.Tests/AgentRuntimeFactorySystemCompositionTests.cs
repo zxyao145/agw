@@ -548,7 +548,7 @@ public class AgentRuntimeFactorySystemCompositionTests
         var providerRepository = new EfRepository<Provider>(dbContext);
         var skillRepository = new EfRepository<Skill>(dbContext);
         var userInfo = new TestUserInfoService();
-        return new AgentAppService(
+        return TestAgentAppService.Create(
             dbContext,
             new TestConnectionReferenceFacade(connectionRepository, userInfo),
             new TestModelProviderReferenceFacade(

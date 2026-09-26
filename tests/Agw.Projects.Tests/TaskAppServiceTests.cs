@@ -1,5 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -444,6 +445,7 @@ public partial class TaskAppServiceTests
         var taskExecutionAppService = new TaskExecutionAppService(
             persistence,
             projectResolver,
+            new ConversationHistoryDomainService(),
             TimeProvider.System,
             userInfo
         );

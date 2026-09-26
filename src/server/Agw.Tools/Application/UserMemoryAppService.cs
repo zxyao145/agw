@@ -3,6 +3,8 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Application.Persistence;
+using Agw.Tools.Domain.Behaviors;
+using Agw.Tools.Domain.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tools.Application;
@@ -28,23 +30,24 @@ public sealed record UserMemoryContextEntry(string Name, string Content);
 
 public sealed class UserMemoryAppService
 {
-    public const int MaxNameLength = 64;
-    public const int MaxDescriptionLength = 300;
     public const int MaxUserIdLength = 256;
 
     private static readonly int[] SupportedPageSizes = [10, 20, 50];
 
     private readonly IToolsDbContext _dbContext;
+    private readonly UserMemoryNameUniquenessDomainService _nameUniquenessDomainService;
     private readonly IApplicationLock _applicationLock;
     private readonly IUserInfoService _userInfoService;
 
     public UserMemoryAppService(
         IToolsDbContext dbContext,
+        UserMemoryNameUniquenessDomainService nameUniquenessDomainService,
         IApplicationLock applicationLock,
         IUserInfoService userInfoService
     )
     {
         _dbContext = dbContext;
+        _nameUniquenessDomainService = nameUniquenessDomainService;
         _applicationLock = applicationLock;
         _userInfoService = userInfoService;
     }
@@ -171,7 +174,7 @@ public sealed class UserMemoryAppService
     public async Task<UserMemoryDetails?> GetByNameAsync(string name, CancellationToken cancellationToken = default)
     {
         var normalizedUserId = GetCurrentUserId();
-        var normalizedName = NormalizeName(name).Normalized;
+        var normalizedName = UserMemoryBehavior.NormalizeName(name).Normalized;
         var memory = await _dbContext
             .UserMemories.AsNoTracking()
             .SingleOrDefaultAsync(
@@ -190,23 +193,12 @@ public sealed class UserMemoryAppService
     )
     {
         var normalizedUserId = GetCurrentUserId();
-        var normalizedName = NormalizeName(name);
-        var normalizedDescription = NormalizeDescription(description);
-        ValidateContent(content);
+        var memory = new UserMemory { Id = Guid.CreateVersion7(), UserId = normalizedUserId };
+        new UserMemoryBehavior(memory).Define(name, description, content);
 
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
-        await EnsureNameAvailableAsync(normalizedUserId, normalizedName.Normalized, excludedId: null, cancellationToken)
-            .ConfigureAwait(false);
-        var memory = new UserMemory
-        {
-            Id = Guid.CreateVersion7(),
-            UserId = normalizedUserId,
-            Name = normalizedName.Display,
-            NormalizedName = normalizedName.Normalized,
-            Description = normalizedDescription,
-            Content = content,
-        };
+        await _nameUniquenessDomainService.EnsureNameAvailableAsync(memory, cancellationToken).ConfigureAwait(false);
         await _dbContext.UserMemories.AddAsync(memory, cancellationToken).ConfigureAwait(false);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return MapDetails(memory);
@@ -221,10 +213,6 @@ public sealed class UserMemoryAppService
     )
     {
         var normalizedUserId = GetCurrentUserId();
-        var normalizedName = NormalizeName(name);
-        var normalizedDescription = NormalizeDescription(description);
-        ValidateContent(content);
-
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
         var memory = await _dbContext
@@ -238,12 +226,8 @@ public sealed class UserMemoryAppService
             return null;
         }
 
-        await EnsureNameAvailableAsync(normalizedUserId, normalizedName.Normalized, id, cancellationToken)
-            .ConfigureAwait(false);
-        memory.Name = normalizedName.Display;
-        memory.NormalizedName = normalizedName.Normalized;
-        memory.Description = normalizedDescription;
-        memory.Content = content;
+        new UserMemoryBehavior(memory).Define(name, description, content);
+        await _nameUniquenessDomainService.EnsureNameAvailableAsync(memory, cancellationToken).ConfigureAwait(false);
         _dbContext.UserMemories.Entry(memory).Property(item => item.Name).IsModified = true;
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return MapDetails(memory);
@@ -257,38 +241,25 @@ public sealed class UserMemoryAppService
     )
     {
         var normalizedUserId = GetCurrentUserId();
-        var normalizedName = NormalizeName(name);
-        ValidateContent(content);
+        var normalizedName = UserMemoryBehavior.NormalizeName(name).Normalized;
 
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
         var memory = await _dbContext
             .UserMemories.SingleOrDefaultAsync(
-                item => item.UserId == normalizedUserId && item.NormalizedName == normalizedName.Normalized,
+                item => item.UserId == normalizedUserId && item.NormalizedName == normalizedName,
                 cancellationToken
             )
             .ConfigureAwait(false);
         if (memory == null)
         {
-            memory = new UserMemory
-            {
-                Id = Guid.CreateVersion7(),
-                UserId = normalizedUserId,
-                Name = normalizedName.Display,
-                NormalizedName = normalizedName.Normalized,
-                Description = NormalizeDescription(description),
-                Content = content,
-            };
+            memory = new UserMemory { Id = Guid.CreateVersion7(), UserId = normalizedUserId };
+            new UserMemoryBehavior(memory).Define(name, description, content);
             await _dbContext.UserMemories.AddAsync(memory, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            memory.Name = normalizedName.Display;
-            memory.Content = content;
-            if (description != null)
-            {
-                memory.Description = NormalizeDescription(description);
-            }
+            new UserMemoryBehavior(memory).RewriteByName(name, content, description);
             _dbContext.UserMemories.Entry(memory).Property(item => item.Name).IsModified = true;
         }
 
@@ -313,7 +284,7 @@ public sealed class UserMemoryAppService
     public async Task<bool> DeleteByNameAsync(string name, CancellationToken cancellationToken = default)
     {
         var normalizedUserId = GetCurrentUserId();
-        var normalizedName = NormalizeName(name).Normalized;
+        var normalizedName = UserMemoryBehavior.NormalizeName(name).Normalized;
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
         var memory = await _dbContext
@@ -330,29 +301,6 @@ public sealed class UserMemoryAppService
         _dbContext.UserMemories.Remove(memory);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
-    }
-
-    private async Task EnsureNameAvailableAsync(
-        string userId,
-        string normalizedName,
-        Guid? excludedId,
-        CancellationToken cancellationToken
-    )
-    {
-        var exists = await _dbContext
-            .UserMemories.AsNoTracking()
-            .AnyAsync(
-                memory =>
-                    memory.UserId == userId
-                    && memory.NormalizedName == normalizedName
-                    && (!excludedId.HasValue || memory.Id != excludedId.Value),
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (exists)
-        {
-            throw new AgwException(ErrorCodes.UserMemoryNameAlreadyExists);
-        }
     }
 
     private Task<IApplicationLockLease> AcquireMutationLockAsync(string userId, CancellationToken cancellationToken) =>
@@ -377,46 +325,6 @@ public sealed class UserMemoryAppService
         }
 
         return normalized;
-    }
-
-    private static (string Display, string Normalized) NormalizeName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new AgwException(ErrorCodes.UserMemoryNameRequired);
-        }
-
-        var display = name.Trim();
-        if (display.Length > MaxNameLength)
-        {
-            throw new AgwException(ErrorCodes.UserMemoryNameTooLong);
-        }
-
-        return (display, display.ToUpperInvariant());
-    }
-
-    private static string? NormalizeDescription(string? description)
-    {
-        if (string.IsNullOrWhiteSpace(description))
-        {
-            return null;
-        }
-
-        var normalized = description.Trim();
-        if (normalized.Length > MaxDescriptionLength)
-        {
-            throw new AgwException(ErrorCodes.UserMemoryDescriptionTooLong);
-        }
-
-        return normalized;
-    }
-
-    private static void ValidateContent(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            throw new AgwException(ErrorCodes.UserMemoryContentRequired);
-        }
     }
 
     private static void ValidatePaging(int pageIndex, int pageSize)

@@ -5,6 +5,7 @@ using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application.Persistence;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
@@ -723,9 +724,11 @@ public class ProjectAppServiceTests : IDisposable
 
         return new ProjectAppService(
             dbContext,
-            new TestAgentCatalogFacade(new EfRepository<McpServer>(dbContext)),
-            new SkillReferenceFacade(dbContext, userInfo),
-            new ConnectionReferenceFacade(dbContext, userInfo),
+            new ProjectResourceBindingDomainService(
+                new TestAgentCatalogFacade(new EfRepository<McpServer>(dbContext)),
+                new SkillReferenceFacade(dbContext, userInfo),
+                new ConnectionReferenceFacade(dbContext, userInfo)
+            ),
             deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             new ProjectResolver(dbContext, userInfo),
             userInfo,

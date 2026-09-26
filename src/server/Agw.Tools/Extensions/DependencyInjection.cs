@@ -1,5 +1,7 @@
 using Agw.Tools.Abstractions.Generated;
 using Agw.Tools.Application;
+using Agw.Tools.Domain.Repositories;
+using Agw.Tools.Domain.Services;
 using Agw.Tools.Generated;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +24,8 @@ public static class DependencyInjection
 
     public static IServiceCollection AddTools(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddScoped<IUserMemoryRepository, UserMemoryRepository>();
+        services.AddScoped<UserMemoryNameUniquenessDomainService>();
         services.AddScoped<UserMemoryAppService>();
         services.AddScoped<AgwToolInvocationContext>();
         services.AddScoped<IAgwToolInvocationContext>(static serviceProvider =>

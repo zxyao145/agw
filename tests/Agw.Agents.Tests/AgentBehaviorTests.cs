@@ -1,5 +1,5 @@
 using Agw.Agents.Definitions.Domain.Behaviors;
-using Agw.Agents.Definitions.Domain.Decisions;
+using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
@@ -192,16 +192,95 @@ public class AgentBehaviorTests
         };
 
         var exception = Assert.Throws<AgwException>(() =>
+            new AgentBehavior(agent).ApplyUpdate(CreateSystemUpdate(modelProviderId: null))
+        );
+
+        Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
+    }
+
+    [Fact]
+    public void ApplyUpdate_SystemAgentMissingRequiredFields_ThrowsInvalidParamWithoutChange()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "system-agent",
+            DisplayName = "Before",
+            Type = AgentType.System,
+            ModelProviderId = Guid.CreateVersion7(),
+        };
+
+        var exception = Assert.Throws<AgwException>(() =>
             new AgentBehavior(agent).ApplyUpdate(
-                new AgentUpdateDecision
+                new AgentUpdate
                 {
-                    SpecifiedFields = new HashSet<AgentUpdateField> { AgentUpdateField.ModelProviderId },
-                    ModelProviderId = null,
+                    SpecifiedFields = new HashSet<AgentUpdateField> { AgentUpdateField.DisplayName },
+                    DisplayName = "After",
                 }
             )
         );
 
-        Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Contains("systemPrompt", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("Before", agent.DisplayName);
+    }
+
+    [Fact]
+    public void ApplyUpdate_ExternalAgentWithRuntimeFields_ThrowsInvalidParamWithoutChange()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "external-agent",
+            DisplayName = "Before",
+            Type = AgentType.External,
+            ExternalAgentKind = EngineKind.ClaudeCode,
+        };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new AgentBehavior(agent).ApplyUpdate(
+                new AgentUpdate
+                {
+                    SpecifiedFields = new HashSet<AgentUpdateField>
+                    {
+                        AgentUpdateField.DisplayName,
+                        AgentUpdateField.SystemPrompt,
+                        AgentUpdateField.Tools,
+                    },
+                    DisplayName = "After",
+                    SystemPrompt = "updated-prompt",
+                    Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
+                }
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Contains("systemPrompt, tools", exception.Message, StringComparison.Ordinal);
+        Assert.Equal("Before", agent.DisplayName);
+    }
+
+    [Fact]
+    public void ApplyUpdate_PiAgentWithResponseSchema_ThrowsInvalidParam()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "pi-agent",
+            Type = AgentType.External,
+            ExternalAgentKind = EngineKind.Pi,
+        };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new AgentBehavior(agent).ApplyUpdate(
+                new AgentUpdate
+                {
+                    SpecifiedFields = new HashSet<AgentUpdateField> { AgentUpdateField.ResponseSchema },
+                    ResponseSchema = "{\"type\":\"object\"}",
+                }
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
     [Fact]
@@ -224,26 +303,17 @@ public class AgentBehaviorTests
         };
         var originalTools = agent.Tools;
         var updatedModelProviderId = Guid.CreateVersion7();
-        var updatedSummaryModelProviderId = Guid.CreateVersion7();
 
         new AgentBehavior(agent).ApplyUpdate(
-            new AgentUpdateDecision
+            new AgentUpdate
             {
                 SpecifiedFields = new HashSet<AgentUpdateField>
                 {
                     AgentUpdateField.DisplayName,
-                    AgentUpdateField.SystemPrompt,
-                    AgentUpdateField.Tools,
-                    AgentUpdateField.EnableSummary,
                     AgentUpdateField.ModelProviderId,
-                    AgentUpdateField.SummaryModelProviderId,
                 },
                 DisplayName = "After",
-                SystemPrompt = "updated-prompt",
-                Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
-                EnableSummary = true,
                 ModelProviderId = updatedModelProviderId,
-                SummaryModelProviderId = updatedSummaryModelProviderId,
             }
         );
 
@@ -276,7 +346,7 @@ public class AgentBehaviorTests
         };
 
         new AgentBehavior(agent).ApplyUpdate(
-            new AgentUpdateDecision
+            new AgentUpdate
             {
                 SpecifiedFields = new HashSet<AgentUpdateField> { AgentUpdateField.Extra },
                 Extra = "{\"sandbox\":false}",
@@ -300,15 +370,9 @@ public class AgentBehaviorTests
         };
 
         new AgentBehavior(agent).ApplyUpdate(
-            new AgentUpdateDecision
+            CreateSystemUpdate(modelProviderId, AgentUpdateField.Extra) with
             {
-                SpecifiedFields = new HashSet<AgentUpdateField>
-                {
-                    AgentUpdateField.Extra,
-                    AgentUpdateField.ModelProviderId,
-                },
                 Extra = "{\"managed\":false}",
-                ModelProviderId = modelProviderId,
             }
         );
 
@@ -329,19 +393,58 @@ public class AgentBehaviorTests
         };
 
         new AgentBehavior(agent).ApplyUpdate(
-            new AgentUpdateDecision
+            CreateSystemUpdate(modelProviderId, AgentUpdateField.EnvironmentVariables) with
             {
-                SpecifiedFields = new HashSet<AgentUpdateField>
-                {
-                    AgentUpdateField.EnvironmentVariables,
-                    AgentUpdateField.ModelProviderId,
-                },
                 EnvironmentVariables = new Dictionary<string, string> { ["AFTER"] = "" },
-                ModelProviderId = modelProviderId,
             }
         );
 
         Assert.Single(agent.EnvironmentVariables);
         Assert.Equal("", agent.EnvironmentVariables["AFTER"]);
     }
+
+    [Fact]
+    public void PrepareForCreate_DuplicateToolNames_ThrowsInvalidParam()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            ModelProviderId = Guid.CreateVersion7(),
+            Tools =
+            [
+                new ToolValue { Definition = new WebFetchToolDefinition() },
+                new ToolValue { Definition = new WebFetchToolDefinition() },
+            ],
+        };
+
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Theory]
+    [InlineData(AgentType.System, true)]
+    [InlineData(AgentType.External, false)]
+    public void UpdatesResourceBindings_AgentType_OnlySystemAgentsReplaceBindings(AgentType type, bool expected)
+    {
+        var agent = new Agent { Type = type };
+
+        Assert.Equal(expected, new AgentBehavior(agent).UpdatesResourceBindings());
+    }
+
+    private static AgentUpdate CreateSystemUpdate(Guid? modelProviderId, params AgentUpdateField[] additionalFields) =>
+        new()
+        {
+            SpecifiedFields = new HashSet<AgentUpdateField>([
+                AgentUpdateField.DisplayName,
+                AgentUpdateField.Description,
+                AgentUpdateField.SystemPrompt,
+                AgentUpdateField.ModelProviderId,
+                .. additionalFields,
+            ]),
+            DisplayName = "System Agent",
+            Description = "Handles system work.",
+            SystemPrompt = "You are helpful.",
+            ModelProviderId = modelProviderId,
+        };
 }

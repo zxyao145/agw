@@ -3,6 +3,7 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Skills.Application.Facades;
@@ -201,9 +202,11 @@ public class ProjectTraceCleanupTests
         var userInfo = new TestUserInfoService();
         return new ProjectAppService(
             dbContext,
-            new AgentCatalogFacade(dbContext, userInfo),
-            new SkillReferenceFacade(dbContext, userInfo),
-            new ConnectionReferenceFacade(dbContext, userInfo),
+            new ProjectResourceBindingDomainService(
+                new AgentCatalogFacade(dbContext, userInfo),
+                new SkillReferenceFacade(dbContext, userInfo),
+                new ConnectionReferenceFacade(dbContext, userInfo)
+            ),
             new ProjectDeletionCoordinator(
                 dbContext,
                 Agw.Shared.Coordination.InMemoryApplicationLock.Shared,

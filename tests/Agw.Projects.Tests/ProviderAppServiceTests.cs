@@ -4,6 +4,8 @@ using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Services;
+using Agw.Providers.Infrastructure;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
@@ -446,12 +448,14 @@ public class ProviderAppServiceTests
 
     private static ProviderAppService CreateService(AgwDbContext dbContext)
     {
+        var user = new TestUserInfoService("tester");
         return new ProviderAppService(
             dbContext,
-            new ModelProviderUsageGuard(
+            new ProviderModelBindingDomainService(
+                new ProviderModelRepository(dbContext, user),
                 new TestAgentReferenceFacade(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
             ),
-            new TestUserInfoService("tester")
+            user
         );
     }
 

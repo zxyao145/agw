@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Agw.Auth.Api;
+using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Auth.Security;
@@ -278,7 +279,8 @@ public sealed class OAuth2FlowIntegrationTests
                 sp.GetRequiredService<AgwDbContext>()
             );
             builder.Services.AddScoped<IUserProjectInitializer, UserProjectInitializer>();
-            builder.Services.AddScoped<IApiTokenStore, EfApiTokenStore>();
+            builder.Services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AgwDbContext>());
+            builder.Services.AddScoped<IApiTokenCredentialReader, EfApiTokenCredentialReader>();
             builder.Services.AddScoped<IOidcIdentityStore, EfOidcIdentityStore>();
             builder.Services.AddControllersWithViews().AddApplicationPart(typeof(AuthController).Assembly);
             builder.Services.AddApiResult();

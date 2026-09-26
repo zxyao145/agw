@@ -1,4 +1,6 @@
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.Services;
+using Agw.Agents.Definitions.Persistence;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -321,11 +323,14 @@ public sealed partial class AgentflowAppServiceTests
         var userInfo = new TestUserInfoService();
         return new AgentflowAppService(
             dbContext,
-            new TestModelProviderReferenceFacade(
-                new EfRepository<ModelProviderRelation>(dbContext),
-                new EfRepository<AgwAiModel>(dbContext),
-                new EfRepository<Provider>(dbContext),
-                userInfo
+            new AgentflowDefinitionDomainService(
+                new AgentDefinitionRepository(dbContext, userInfo),
+                new TestModelProviderReferenceFacade(
+                    new EfRepository<ModelProviderRelation>(dbContext),
+                    new EfRepository<AgwAiModel>(dbContext),
+                    new EfRepository<Provider>(dbContext),
+                    userInfo
+                )
             ),
             new TestTimeProvider(UtcNow),
             userInfo

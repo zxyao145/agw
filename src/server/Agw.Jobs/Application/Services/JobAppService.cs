@@ -1,12 +1,11 @@
-using System.Globalization;
-using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Contracts;
-using Agw.Jobs.Scheduling;
+using Agw.Jobs.Domain.Behaviors;
+using Agw.Jobs.Domain.Services;
+using Agw.Jobs.Domain.ValueObjects;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
-using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
@@ -20,33 +19,27 @@ public class JobAppService
     private readonly IJobsDbContext _dbContext;
     private readonly IApplicationLock _applicationLock;
     private readonly IProjectTaskFacade _projectTasks;
-    private readonly JobScheduleCalculator _jobScheduleCalculator;
+    private readonly JobDefinitionDomainService _definitionDomainService;
     private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
-    private readonly IProjectRuntimeFacade _projects;
-    private readonly IAgentCatalogFacade _agentCatalog;
 
     public JobAppService(
         IJobsDbContext dbContext,
         IProjectTaskFacade projectTasks,
-        JobScheduleCalculator jobScheduleCalculator,
+        JobDefinitionDomainService definitionDomainService,
         JobSchedulerWakeSignal schedulerWakeSignal,
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
-        IProjectRuntimeFacade projects,
-        IAgentCatalogFacade agentCatalog,
         IApplicationLock? applicationLock = null
     )
     {
         _dbContext = dbContext;
         _projectTasks = projectTasks;
-        _jobScheduleCalculator = jobScheduleCalculator;
+        _definitionDomainService = definitionDomainService;
         _schedulerWakeSignal = schedulerWakeSignal;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
-        _projects = projects;
-        _agentCatalog = agentCatalog;
         _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
@@ -147,29 +140,31 @@ public class JobAppService
         using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
         cancellationToken = mutation.Token;
 
-        await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
-        await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
+        await _definitionDomainService
+            .EnsureTargetsVisibleAsync(request.ProjectId, request.AgentType, request.AgentId, user)
+            .ConfigureAwait(false);
         var now = _timeProvider.GetUtcNow();
-        var entity = new Job
+        var definition = new JobDefinition
         {
-            Id = Guid.CreateVersion7(),
             ProjectId = request.ProjectId,
             AgentType = request.AgentType,
             AgentId = request.AgentId,
-            Name = await ResolveNameAsync(request.Name, user, now),
+            Name = await _definitionDomainService.ResolveNameAsync(request.Name, user, now),
             Prompt = request.Prompt,
             TriggerType = request.TriggerType,
             TriggerValue = request.TriggerValue,
-            NextRunTime = now,
             MaxRetryCount = request.MaxRetryCount,
             IsEnabled = request.IsEnabled,
-            Status = JobStatus.Pending,
+        };
+        var entity = new Job
+        {
+            Id = Guid.CreateVersion7(),
             CreateBy = user,
             CreateTime = now,
             UpdateBy = user,
             UpdateTime = now,
         };
-        entity.NextRunTime = ResolveNextRunTime(entity, now);
+        new JobBehavior(entity).Create(definition, now);
 
         await _dbContext.Jobs.AddAsync(entity, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -197,8 +192,9 @@ public class JobAppService
             return null;
         }
 
-        await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
-        await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
+        await _definitionDomainService
+            .EnsureTargetsVisibleAsync(request.ProjectId, request.AgentType, request.AgentId, user)
+            .ConfigureAwait(false);
         return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true, cancellationToken);
     }
 
@@ -224,8 +220,9 @@ public class JobAppService
             return null;
         }
 
-        await EnsureProjectVisibleAsync(projectId, user).ConfigureAwait(false);
-        await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
+        await _definitionDomainService
+            .EnsureTargetsVisibleAsync(projectId, request.AgentType, request.AgentId, user)
+            .ConfigureAwait(false);
         request.ProjectId = projectId;
         return await UpdateEntityAsync(entity, request, user, recalculateSchedule, cancellationToken);
     }
@@ -238,30 +235,22 @@ public class JobAppService
         CancellationToken cancellationToken = default
     )
     {
-        EnsureMutable(entity);
-        if (request.Status == JobStatus.Running)
-        {
-            throw new AgwException(
-                ErrorCodes.JobActiveAttemptConflict,
-                "Job Running status is owned by the scheduler."
-            );
-        }
-
         var now = _timeProvider.GetUtcNow();
-        var nextRunTime = entity.NextRunTime;
-        entity.ProjectId = request.ProjectId;
-        entity.AgentType = request.AgentType;
-        entity.AgentId = request.AgentId;
-        entity.Name = await ResolveNameAsync(request.Name, user, now);
-        entity.Prompt = request.Prompt;
-        entity.TriggerType = request.TriggerType;
-        entity.TriggerValue = request.TriggerValue;
-        entity.MaxRetryCount = request.MaxRetryCount;
-        entity.IsEnabled = request.IsEnabled;
-        entity.Status = request.Status;
+        var definition = new JobDefinition
+        {
+            ProjectId = request.ProjectId,
+            AgentType = request.AgentType,
+            AgentId = request.AgentId,
+            Name = await _definitionDomainService.ResolveNameAsync(request.Name, user, now),
+            Prompt = request.Prompt,
+            TriggerType = request.TriggerType,
+            TriggerValue = request.TriggerValue,
+            MaxRetryCount = request.MaxRetryCount,
+            IsEnabled = request.IsEnabled,
+        };
+        new JobBehavior(entity).Update(definition, request.Status, recalculateSchedule, now);
         entity.UpdateBy = user;
         entity.UpdateTime = now;
-        entity.NextRunTime = recalculateSchedule ? ResolveNextRunTime(entity, now) : nextRunTime;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return entity;
@@ -298,7 +287,7 @@ public class JobAppService
             return false;
         }
 
-        EnsureMutable(entity);
+        new JobBehavior(entity).EnsureMutable();
 
         await _dbContext.JobLogs.Where(log => log.JobId == entity.Id).ExecuteDeleteAsync().ConfigureAwait(false);
         _dbContext.Jobs.Remove(entity);
@@ -314,7 +303,7 @@ public class JobAppService
             return null;
         }
 
-        EnsureMutable(entity);
+        new JobBehavior(entity).EnsureMutable();
 
         await _dbContext
             .JobLogs.Where(log => log.JobId == entity.Id)
@@ -325,57 +314,5 @@ public class JobAppService
         return entity;
     }
 
-    private async Task<string> ResolveNameAsync(string? requestedName, string user, DateTimeOffset now)
-    {
-        if (!string.IsNullOrWhiteSpace(requestedName))
-        {
-            return requestedName.Trim();
-        }
-
-        var count = await _dbContext.Jobs.CountAsync(job => job.CreateBy == user);
-        return $"job-{count + 1}-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
-    }
-
-    private static void EnsureMutable(Job job)
-    {
-        if (job.Status == JobStatus.Running || job.ActiveExecutionId.HasValue)
-        {
-            throw new AgwException(ErrorCodes.JobActiveAttemptConflict);
-        }
-    }
-
-    private DateTimeOffset ResolveNextRunTime(Job entity, DateTimeOffset now)
-    {
-        var nextRunTime = _jobScheduleCalculator.GetNextRunTime(entity, now);
-        if (!nextRunTime.HasValue)
-        {
-            return DateTimeOffset.MaxValue;
-        }
-
-        return nextRunTime.Value;
-    }
-
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
-
-    private async Task EnsureProjectVisibleAsync(Guid projectId, string user)
-    {
-        var project = await _projects.GetForCurrentUserAsync(projectId).ConfigureAwait(false);
-        if (project == null)
-        {
-            throw new AgwException(ErrorCodes.ResourceNotFound);
-        }
-    }
-
-    private async Task EnsureAgentTargetVisibleAsync(AgentRuntimeType? agentType, Guid? agentId, string user)
-    {
-        if (!agentType.HasValue || !agentId.HasValue)
-        {
-            return;
-        }
-
-        if (!await _agentCatalog.IsOwnedTargetAsync(agentType.Value, agentId.Value, user).ConfigureAwait(false))
-        {
-            throw new AgwException(ErrorCodes.InvalidParam);
-        }
-    }
 }

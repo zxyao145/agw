@@ -1,4 +1,6 @@
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.Services;
+using Agw.Agents.Definitions.Persistence;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared.Data.Abstractions;
@@ -34,7 +36,11 @@ public class McpToolServerAppServiceTests
         var agent = new Agent { Name = "agent", Type = AgentType.External };
         context.Agents.Add(agent);
         await context.SaveChangesAsync(cancellationToken);
-        var service = new McpToolServerAppService(context, user);
+        var service = new McpToolServerAppService(
+            context,
+            new AgentResourceBindingDomainService(new AgentDefinitionRepository(context, user), null!, null!),
+            user
+        );
 
         // Act
         var server = await service.CreateMcpToolServerAsync(
