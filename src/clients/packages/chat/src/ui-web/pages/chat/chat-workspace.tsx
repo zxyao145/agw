@@ -58,6 +58,7 @@ import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import { buildChatHref } from "../../../lib/chat-route";
+import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import { cn } from "@agw/components";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -685,6 +686,9 @@ export function ChatWorkspace({
     setIsLoadingConversation(false);
     setConversationId(null);
     setContextId(null);
+    // 新对话重新确定执行目标，不沿用上一个对话的选择。
+    // A new conversation resolves its own target instead of keeping the previous conversation's one.
+    setSelectedTargetValue(null);
     replaceChatSession({
       contextId: null,
       messages: [],
@@ -730,7 +734,13 @@ export function ChatWorkspace({
           }),
         ]);
         abortController.signal.throwIfAborted();
-        const restoredTargetValue = getResumeTargetValue(details.resumeState);
+        // 本地为该对话选择过的目标优先，其次是服务端记录的最近目标。
+        // The target chosen locally for this conversation wins over the server's latest target.
+        const restoredTargetValue =
+          conversationComposerStorage.get(
+            { serverId: executionServerId, projectId },
+            details.conversationId,
+          ).targetValue ?? getResumeTargetValue(details.resumeState);
 
         hydratedConversationKeyRef.current = getConversationHydrationKey(
           projectId,
@@ -752,9 +762,7 @@ export function ChatWorkspace({
               ? details.resumeState.agentMode
               : null,
         });
-        if (restoredTargetValue) {
-          setSelectedTargetValue(restoredTargetValue);
-        }
+        setSelectedTargetValue(restoredTargetValue);
         syncRoute(projectId, details.conversationId);
         return details;
       } finally {
@@ -765,7 +773,7 @@ export function ChatWorkspace({
         }
       }
     },
-    [replaceChatSession, syncRoute],
+    [executionServerId, replaceChatSession, syncRoute],
   );
 
   React.useEffect(() => {
@@ -830,39 +838,43 @@ export function ChatWorkspace({
     });
   }, [projects, queryProjectId]);
 
+  // 当前目标为空或不可用时，依次采用对话的本地选择、项目最近的选择、默认 Agent、第一个目标。
+  // 目标列表加载前保留当前值，避免清掉对话恢复出的目标。
+  // When the current target is empty or unavailable, use the conversation's local choice, the project's
+  // latest choice, the default Agent, then the first target. Keep the value until the target list loads.
   React.useEffect(() => {
     if (targetOptions.length === 0) {
+      return;
+    }
+
+    const isAvailable = (value: string | null | undefined): value is string =>
+      Boolean(value) && targetOptions.some((option) => getTargetValue(option) === value);
+    if (isAvailable(selectedTargetValue)) {
+      return;
+    }
+
+    if (!selectedProjectId) {
       setSelectedTargetValue(null);
       return;
     }
 
-    setSelectedTargetValue((current) => {
-      if (current && targetOptions.some((option) => getTargetValue(option) === current)) {
-        return current;
-      }
+    const storedTargetValue = [
+      conversationComposerStorage.get(
+        { serverId: executionServerId, projectId: selectedProjectId },
+        conversationId,
+      ).targetValue,
+      chatSettingsStorage.get(selectedProjectId).targetValue,
+    ].find(isAvailable);
+    if (storedTargetValue) {
+      setSelectedTargetValue(storedTargetValue);
+      return;
+    }
 
-      if (!selectedProjectId) {
-        return null;
-      }
-
-      const storedTargetValue = chatSettingsStorage.get(selectedProjectId).targetValue;
-      if (
-        storedTargetValue &&
-        targetOptions.some((option) => getTargetValue(option) === storedTargetValue)
-      ) {
-        return storedTargetValue;
-      }
-
-      const defaultAgent = targetOptions.find(
-        (option) => option.type === "agent" && option.label === DEFAULT_AGENT_LABEL,
-      );
-      if (defaultAgent) {
-        return getTargetValue(defaultAgent);
-      }
-
-      return getTargetValue(targetOptions[0]);
-    });
-  }, [selectedProjectId, targetOptions]);
+    const defaultAgent = targetOptions.find(
+      (option) => option.type === "agent" && option.label === DEFAULT_AGENT_LABEL,
+    );
+    setSelectedTargetValue(getTargetValue(defaultAgent ?? targetOptions[0]));
+  }, [conversationId, executionServerId, selectedProjectId, selectedTargetValue, targetOptions]);
 
   React.useEffect(() => {
     const routeAction = getChatRouteSessionAction({
@@ -966,9 +978,14 @@ export function ChatWorkspace({
       setSelectedTargetValue(nextTargetValue);
       if (selectedProjectId) {
         chatSettingsStorage.set(selectedProjectId, { targetValue: nextTargetValue });
+        conversationComposerStorage.set(
+          { serverId: executionServerId, projectId: selectedProjectId },
+          conversationId,
+          { targetValue: nextTargetValue },
+        );
       }
     },
-    [selectedProjectId, selectedTargetValue],
+    [conversationId, executionServerId, selectedProjectId, selectedTargetValue],
   );
 
   const handleAgentSelect = React.useCallback(
@@ -995,9 +1012,20 @@ export function ChatWorkspace({
     [selectedProjectId, syncRoute],
   );
 
-  const handleChatConversationIdChange = React.useCallback((nextConversationId: string | null) => {
-    setConversationId(nextConversationId);
-  }, []);
+  const handleChatConversationIdChange = React.useCallback(
+    (nextConversationId: string | null) => {
+      // 新对话首次发送时获得 ID：把新对话记录中的目标交给这个 ID，输入草稿随发送消耗。
+      // A new conversation gets its ID on the first send: its target moves to that ID and the sent draft is dropped.
+      if (selectedProjectId && conversationId === null && nextConversationId) {
+        const scope = { serverId: executionServerId, projectId: selectedProjectId };
+        const { targetValue } = conversationComposerStorage.get(scope, null);
+        conversationComposerStorage.remove(scope, null);
+        conversationComposerStorage.set(scope, nextConversationId, { targetValue });
+      }
+      setConversationId(nextConversationId);
+    },
+    [conversationId, executionServerId, selectedProjectId],
+  );
 
   const handleConversationAccepted = React.useCallback(
     (acceptedConversationId: string) => {
@@ -1119,20 +1147,18 @@ export function ChatWorkspace({
   const handleConversationDeleted = React.useCallback(
     (deletedConversationId: string) => {
       if (!selectedProjectId) return;
-      executionSessionManager.conversationStatuses.remove(
-        { serverId: executionServerId, projectId: selectedProjectId },
-        deletedConversationId,
-      );
+      const scope = { serverId: executionServerId, projectId: selectedProjectId };
+      executionSessionManager.conversationStatuses.remove(scope, deletedConversationId);
+      conversationComposerStorage.remove(scope, deletedConversationId);
     },
     [executionServerId, selectedProjectId],
   );
 
   const handleProjectConversationsCleared = React.useCallback(() => {
     if (!selectedProjectId) return;
-    executionSessionManager.conversationStatuses.removeScope({
-      serverId: executionServerId,
-      projectId: selectedProjectId,
-    });
+    const scope = { serverId: executionServerId, projectId: selectedProjectId };
+    executionSessionManager.conversationStatuses.removeScope(scope);
+    conversationComposerStorage.removeConversations(scope);
   }, [executionServerId, selectedProjectId]);
 
   const renderConversationList = React.useCallback(
@@ -1368,6 +1394,7 @@ export function ChatWorkspace({
                           />
                         </div>
                       }
+                      persistInputDraft
                       conversationId={conversationId}
                       sessionSeed={chatSessionSeed}
                       isLoadingConversation={

@@ -9,6 +9,7 @@ const { UserInput } = await import("./user-input.tsx");
 
 type ComposerOptions = {
   executed?: string[];
+  values?: string[];
   stops?: number[];
   isExecuting?: boolean;
   isDisabled?: boolean;
@@ -30,6 +31,7 @@ function renderComposer(options: ComposerOptions = {}) {
         isSubmitDisabled: options.isSubmitDisabled,
         hasAdditionalInput: options.hasAdditionalInput,
         onExecute: (value: string) => options.executed?.push(value),
+        onValueChange: (value: string) => options.values?.push(value),
         ...(options.onStop ? { onStop: () => options.stops?.push(1) } : {}),
       },
       options.children as never,
@@ -186,6 +188,25 @@ test("setInput replaces the whole draft", async () => {
 
   assert.equal(composer().value, "new draft");
   assert.equal(ref.current?.value, "new draft");
+});
+
+test("user edits and the clear after sending report the value while setInput stays silent", async () => {
+  const values: string[] = [];
+  const { ref } = renderComposer({ values });
+
+  await act(async () => {
+    ref.current?.setInput("restored draft");
+  });
+  assert.deepEqual(values, []);
+
+  type("read");
+  composer().setSelectionRange(4, 4);
+  await act(async () => {
+    ref.current?.insertText("@file.ts");
+  });
+  fireEvent.click(sendButton());
+
+  assert.deepEqual(values, ["read", "read@file.ts ", ""]);
 });
 
 test("the composer hosts context, toolbar, and help slots", () => {

@@ -56,6 +56,8 @@ interface ChatInputProps {
   onClearPendingFileComments: () => void;
   placeholder?: string;
   userInputRef?: React.RefObject<UserInputRef | null>;
+  /** 用户编辑输入后的新值，用于保存草稿。 */
+  onInputDraftChange?: (value: string) => void;
   /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
   topLeft?: React.ReactNode;
 }
@@ -89,6 +91,7 @@ export function ChatInput({
   onClearPendingFileComments,
   placeholder,
   userInputRef: externalUserInputRef,
+  onInputDraftChange,
   topLeft,
 }: ChatInputProps) {
   const internalUserInputRef = React.useRef<UserInputRef | null>(null);
@@ -170,6 +173,7 @@ export function ChatInput({
       onExecute={handleExecute}
       onStop={isTransitioning ? undefined : onInterrupt}
       onPaste={handlePaste}
+      onValueChange={onInputDraftChange}
       onSuggestion={handleSuggestion}
       placeholder={placeholder}
     >

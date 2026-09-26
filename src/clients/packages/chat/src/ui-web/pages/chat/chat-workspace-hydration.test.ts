@@ -9,7 +9,9 @@ import { createRoot } from "react-dom/client";
 import { transformSync } from "esbuild";
 
 import { buildChatHref } from "../../../lib/chat-route";
+import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import * as sessionRouting from "./lib/session-routing";
+import { getTargetValue } from "./lib/target-options";
 import type { ChatProps } from "../../components/message/chat";
 import type { ChatWorkspaceProps } from "./chat-workspace";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
@@ -122,8 +124,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
       isTransitioning: boolean;
       isExecuting: boolean;
       onExecute: (text: string, attachments: []) => void;
+      onInputDraftChange?: (value: string) => void;
+      userInputRef?: { current: unknown };
       topLeft?: React.ReactNode;
     };
+    inputValue?: string;
     newChat?: () => void;
     refreshSignal?: number;
     conversationStatuses?: ReadonlyMap<string, string>;
@@ -377,6 +382,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
       "./chat-input": {
         ChatInput: (props: NonNullable<typeof observed.input>) => {
           observed.input = props;
+          // Record the value Chat writes into the composer when it restores or clears the input.
+          if (props.userInputRef) {
+            props.userInputRef.current = {
+              setInput: (value: string) => {
+                observed.inputValue = value;
+              },
+            };
+          }
           // The workspace passes the agent selector through the input's top-left slot,
           // so mount it here to keep observing target changes.
           return React.createElement(React.Fragment, null, props.topLeft ?? null);
@@ -489,6 +502,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
         "a new drawer session gets a new context",
       );
     } else {
+      if (kind === "composer") {
+        // A draft saved before the page loaded.
+        conversationComposerStorage.set(
+          { serverId: "local", projectId: "project-1" },
+          "conversation-1",
+          { input: "saved draft" },
+        );
+      }
       await React.act(async () => renderWorkspace());
       assert.equal(observed.input?.isTransitioning, true);
       await React.act(async () => observed.input!.onExecute("too early", []));
@@ -753,6 +774,67 @@ async function checkConversationSession(kind: string, strictMode = false) {
         searchParams = new URLSearchParams(dom.window.location.search);
         await React.act(async () => renderWorkspace());
       }
+      if (kind === "composer") {
+        const scope = { serverId: "local", projectId: "project-1" };
+        const agent2 = getTargetValue({ type: "agent", id: "agent-2" });
+        const targetId = () => observed.chat?.target?.id;
+        async function startNewChat() {
+          await React.act(async () => observed.newChat!());
+          searchParams = new URLSearchParams(dom.window.location.search);
+          await React.act(async () => renderWorkspace());
+        }
+
+        assert.equal(targetId(), "agent-1", "without a local choice the server's target applies");
+        assert.equal(observed.inputValue, "saved draft", "loading the page restores the draft");
+        await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+        await React.act(async () => observed.input!.onInputDraftChange!("edited draft"));
+
+        await navigate("conversation-2");
+        await React.act(async () =>
+          pending
+            .get("conversation-2")!
+            .resolve({ ...conversation, conversationId: "conversation-2", contextId: "context-2" }),
+        );
+        assert.equal(targetId(), "agent-1", "another conversation keeps its own target");
+        assert.equal(observed.inputValue, "", "another conversation keeps its own draft");
+
+        await navigate("conversation-1");
+        assert.equal(targetId(), "agent-2", "returning restores the conversation's target");
+        assert.equal(
+          observed.inputValue,
+          "edited draft",
+          "returning restores the conversation's draft",
+        );
+
+        await startNewChat();
+        assert.equal(
+          targetId(),
+          "agent-1",
+          "a new conversation without its own choice uses defaults",
+        );
+        assert.equal(observed.inputValue, "");
+        await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+        await React.act(async () => observed.input!.onInputDraftChange!("new conversation draft"));
+        await navigate("conversation-1");
+        await startNewChat();
+        assert.equal(targetId(), "agent-2", "the new conversation keeps its own target");
+        assert.equal(observed.inputValue, "new conversation draft");
+
+        // UserInput reports the empty value right after handing the text to onExecute.
+        await React.act(async () => {
+          observed.input!.onExecute("new conversation draft", []);
+          observed.input!.onInputDraftChange!("");
+        });
+        assert.equal(executions.length, 1);
+        assert.equal(executions[0].agentId, "agent-2");
+        assert.deepEqual(
+          conversationComposerStorage.get(scope, executions[0].conversationId),
+          { targetValue: agent2 },
+          "the first send hands the target to the new conversation ID",
+        );
+        assert.deepEqual(conversationComposerStorage.get(scope, null), {});
+        return;
+      }
       if (["new-chat", "project-switch", "clear-history"].includes(kind)) {
         if (kind === "new-chat") {
           assert.ok(observed.newChat);
@@ -889,6 +971,7 @@ for (const [kind, name] of [
   ["project-switch", "switching projects starts a fresh conversation and context"],
   ["clear-history", "clearing history preserves conversation and context identities"],
   ["history-refresh", "a running turn refreshes history at its boundaries without polling"],
+  ["composer", "each conversation keeps its own local Agent choice and input draft"],
 ]) {
   test(name, () => checkConversationSession(kind));
 }
