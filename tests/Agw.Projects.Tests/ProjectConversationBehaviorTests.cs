@@ -19,11 +19,11 @@ public class ProjectConversationBehaviorTests
     }
 
     [Fact]
-    public void DeriveTitle_LongInput_KeepsFirstEightyCharacters()
+    public void DeriveTitle_LongInput_KeepsFirstFortyCharacters()
     {
         var title = ProjectConversationBehavior.DeriveTitle(new string('a', 100) + "\nsecond line");
 
-        Assert.Equal(new string('a', 80), title);
+        Assert.Equal(new string('a', 40), title);
     }
 
     [Fact]

@@ -8,7 +8,7 @@ public sealed class ProjectConversationBehavior
     public const string DefaultTitle = "New Chat";
 
     private const string PlaceholderTitle = "Untitled";
-    private const int MaxTitleLength = 80;
+    private const int MaxTitleLength = 40;
 
     private readonly ProjectConversation _conversation;
 
