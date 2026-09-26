@@ -134,6 +134,46 @@ test("agent metadata renders name, author, and model", async () => {
   assert.equal(screen.getByText("claude-opus-5").getAttribute("title"), "claude-opus-5");
 });
 
+test("message actions reveal on hover anywhere in the conversation item", async () => {
+  const message = textMessage("m1", "Review the change", "right");
+  message.meta = { name: "Reviewer", author: null, model: null };
+  const view = renderConversation({
+    items: [{ key: "m1", type: "message", alignment: "right", width: "normal", message }],
+  });
+
+  const copy = await screen.findByRole("button", { name: "Copy message" });
+  const item = view.container.querySelector('[data-msg-id="m1"]');
+  assert.equal(copy.closest(".group\\/message"), item);
+  assert.ok(item?.contains(screen.getByText("Reviewer")));
+  assert.equal(copy.closest(".max-h-80"), null);
+});
+
+test("only user and result messages expose message actions", async () => {
+  const view = renderConversation({
+    items: [
+      messageItem("user", "Review the change", "right"),
+      messageItem("agent", "Reviewing now"),
+      {
+        key: "result",
+        type: "result",
+        alignment: "left",
+        width: "full",
+        message: textMessage("result", "Review complete", "left"),
+      },
+    ],
+  });
+
+  await screen.findByText("Review complete");
+  assert.deepEqual(
+    ["user", "agent", "result"].map((id) => {
+      const item = view.container.querySelector<HTMLElement>(`[data-msg-id="${id}"]`);
+      assert.ok(item);
+      return within(item).queryByRole("button", { name: "Copy message" }) !== null;
+    }),
+    [true, false, true],
+  );
+});
+
 test("a tool run renders its name, summary, and status", async () => {
   renderConversation({
     items: [

@@ -151,7 +151,7 @@ test("plan content renders the Plan Card", () => {
   assert.ok(screen.getByRole("heading", { name: "Rollout", level: 1 }));
 });
 
-test("a result message is titled and offers message actions", () => {
+test("a result message is titled", () => {
   renderMessage(
     presented(
       [{ type: "markdown", markdown: "Done", sourceType: "TextContent" }],
@@ -161,14 +161,12 @@ test("a result message is titled and offers message actions", () => {
   );
 
   assert.ok(screen.getByText("Result"));
-  assert.ok(screen.getByRole("button", { name: "Copy message" }));
 });
 
-test("an ordinary agent message carries no title and no message actions", () => {
+test("an ordinary agent message carries no title", () => {
   renderMessage(presented([{ type: "markdown", markdown: "Working", sourceType: "TextContent" }]));
 
   assert.equal(screen.queryByText("Result"), null);
-  assert.equal(screen.queryByRole("button", { name: "Copy message" }), null);
 });
 
 test("tool use and tool result messages are titled by their direction", () => {
@@ -201,7 +199,7 @@ test("several contents render in order inside one message", () => {
   assert.ok(html.indexOf("first") < html.indexOf("second"));
 });
 
-test("a user message scrolls its content under the height cap and keeps message actions outside it", () => {
+test("a user message scrolls its content under the height cap", () => {
   const view = renderMessage(
     presented(
       [{ type: "plain", text: "long question", sourceType: "TextContent" }],
@@ -213,7 +211,6 @@ test("a user message scrolls its content under the height cap and keeps message 
 
   assert.ok(area);
   assert.ok(area.contains(screen.getByText("long question")));
-  assert.equal(area.contains(screen.getByRole("button", { name: "Copy message" })), false);
 });
 
 test("a result message renders without the height cap", () => {
