@@ -103,6 +103,10 @@ public class AgentSuggestionAppService
             );
         }
 
+        // 包含关系下的 Tool Block 共享同名成员（例如 file-access 包含 file-readonly-access），同一个工具只提示一次。
+        // Tool Blocks related by inclusion share member names (for example, file-access includes file-readonly-access),
+        // so each tool is suggested once.
+        var blockMemberToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var definition in resolvedToolValues.ToolBlocks)
         {
             var toolBlock = _toolRegistryService.GetTool(definition.GetDefinitionName());
@@ -112,11 +116,13 @@ public class AgentSuggestionAppService
             }
 
             suggestions.AddRange(
-                toolBlock.MemberToolNames.Select(memberToolName => new AgentSuggestionResponse(
-                    ToCommandText(memberToolName),
-                    JoinDescription("Tool", toolBlock.DisplayName, toolBlock.Description),
-                    AgentSuggestionKind.Tool
-                ))
+                toolBlock
+                    .MemberToolNames.Where(memberToolName => blockMemberToolNames.Add(memberToolName))
+                    .Select(memberToolName => new AgentSuggestionResponse(
+                        ToCommandText(memberToolName),
+                        JoinDescription("Tool", toolBlock.DisplayName, toolBlock.Description),
+                        AgentSuggestionKind.Tool
+                    ))
             );
         }
 

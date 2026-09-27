@@ -14,9 +14,14 @@ namespace Agw.Tools.Tests;
 public sealed class FileAccessPermissionTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task InvokingAsync_ExistingContext_AddsOnlyFileToolsAndInstructions(bool additionalDirectory)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task InvokingAsync_ExistingContext_AddsOnlyFileToolsAndInstructions(
+        bool additionalDirectory,
+        bool readonlyAccess
+    )
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
@@ -38,9 +43,12 @@ public sealed class FileAccessPermissionTests
                     ? [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), root.CreateSubdirectory("extra").FullName)]
                     : []
             );
-            var block = new FileAccessToolBlock(new FileSystemResolver(root.FullName));
+            var resolver = new FileSystemResolver(root.FullName);
+            IToolBlock block = readonlyAccess
+                ? new FileReadonlyAccessToolBlock(resolver)
+                : new FileAccessToolBlock(resolver);
             await using var contribution = await block.MaterializeAsync(
-                new FileAccessToolBlockDefinition(),
+                readonlyAccess ? new FileReadonlyAccessToolBlockDefinition() : new FileAccessToolBlockDefinition(),
                 new ToolMaterializationContext
                 {
                     Agent = new Agent(),
@@ -97,6 +105,56 @@ public sealed class FileAccessPermissionTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MaterializeAsync_WithFileAccess_ExposesEachFileToolOnce(bool readonlyAccess)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var workspace = Directory.CreateTempSubdirectory("agw-file-blocks-").FullName;
+        try
+        {
+            ToolBlockDefinition[] definitions = readonlyAccess
+                ? [new FileReadonlyAccessToolBlockDefinition(), new FileAccessToolBlockDefinition()]
+                : [new FileAccessToolBlockDefinition()];
+            var registry = CreateRegistry(new FileSystemResolver(workspace));
+            await using var contribution = await registry.MaterializeAsync(
+                definitions,
+                ToolBlockScope.Agent,
+                new ToolMaterializationContext
+                {
+                    Agent = new Agent(),
+                    Project = new Project { Id = Guid.CreateVersion7(), Workspace = workspace },
+                    Workspace = workspace,
+                    DefaultMode = "execute",
+                },
+                token
+            );
+            using var model = new FileToolModel("file_access_read");
+            var agent = new ChatClientAgent(model);
+            var session = await agent.CreateSessionAsync(token);
+
+            var tools = new List<AITool>();
+            foreach (var provider in contribution.ContextProviders)
+            {
+                var context = await provider.InvokingAsync(
+                    new AIContextProvider.InvokingContext(agent, session, new AIContext()),
+                    token
+                );
+                tools.AddRange(context.Tools!);
+            }
+
+            Assert.Equal(
+                registry.GetDescriptor(ToolBlockNames.FileAccess).MemberToolNames.Order(StringComparer.Ordinal),
+                tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal)
+            );
+        }
+        finally
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("file_access_read")]
     [InlineData("file_access_write")]
     public async Task RunAsync_AdditionalDirectory_RoutesToolUsingCapturedSnapshot(string toolName)
@@ -116,10 +174,11 @@ public sealed class FileAccessPermissionTests
                 primary,
                 [new ProjectWorkspaceDirectory(directoryId, extra)]
             );
-            await using var contribution = await new FileAccessToolBlock(
-                new FileSystemResolver(primary)
-            ).MaterializeAsync(
-                new FileAccessToolBlockDefinition(),
+            var resolver = new FileSystemResolver(primary);
+            var readTool = toolName == "file_access_read";
+            IToolBlock block = readTool ? new FileReadonlyAccessToolBlock(resolver) : new FileAccessToolBlock(resolver);
+            await using var contribution = await block.MaterializeAsync(
+                readTool ? new FileReadonlyAccessToolBlockDefinition() : new FileAccessToolBlockDefinition(),
                 new ToolMaterializationContext
                 {
                     Agent = new Agent(),
@@ -176,19 +235,19 @@ public sealed class FileAccessPermissionTests
         try
         {
             await File.WriteAllTextAsync(Path.Combine(workspace, "hello.txt"), "hello", token);
-            var registry = new ToolBlockRegistry([new FileAccessToolBlock(new FileSystemResolver(workspace))]);
-            await using var contribution = await registry.MaterializeAsync(
-                [new FileAccessToolBlockDefinition()],
-                ToolBlockScope.Agent,
-                new ToolMaterializationContext
-                {
-                    Agent = new Agent(),
-                    Project = new Project { Id = Guid.CreateVersion7(), Workspace = workspace },
-                    Workspace = workspace,
-                    DefaultMode = "execute",
-                },
-                token
-            );
+            await using var contribution = await CreateRegistry(new FileSystemResolver(workspace))
+                .MaterializeAsync(
+                    [new FileReadonlyAccessToolBlockDefinition(), new FileAccessToolBlockDefinition()],
+                    ToolBlockScope.Agent,
+                    new ToolMaterializationContext
+                    {
+                        Agent = new Agent(),
+                        Project = new Project { Id = Guid.CreateVersion7(), Workspace = workspace },
+                        Workspace = workspace,
+                        DefaultMode = "execute",
+                    },
+                    token
+                );
             using var model = new FileToolModel(toolName);
             var agent = new ChatClientAgent(
                 model,
@@ -223,6 +282,9 @@ public sealed class FileAccessPermissionTests
             Directory.Delete(workspace, recursive: true);
         }
     }
+
+    private static ToolBlockRegistry CreateRegistry(IAgwFileSystemResolver resolver) =>
+        new([new FileReadonlyAccessToolBlock(resolver), new FileAccessToolBlock(resolver)]);
 
     private sealed class FileSystemResolver : IAgwFileSystemResolver
     {

@@ -6473,6 +6473,7 @@ export interface components {
       | components["schemas"]["ToolBlockDefinitionModeToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionProjectMemoryToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionUserMemoryToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionFileAccessToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"];
     ToolBlockDefinitionBackgroundAgentsToolBlockDefinition: {
@@ -6483,6 +6484,11 @@ export interface components {
     ToolBlockDefinitionFileAccessToolBlockDefinition: {
       /** @enum {string} */
       name: "file-access";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition: {
+      /** @enum {string} */
+      name: "file-readonly-access";
       options: components["schemas"]["EmptyToolOptions"];
     };
     ToolBlockDefinitionModeToolBlockDefinition: {

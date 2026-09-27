@@ -4,6 +4,7 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.ExternalAgents;
+using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -14,6 +15,7 @@ using Agw.Shared.Results;
 using Agw.Shared.Tooling;
 using Agw.Tools.Impl.ContextualTools.Shell;
 using Agw.Tools.Impl.ContextualTools.WebSearch;
+using Agw.Tools.Impl.ToolBlocks.FileAccess;
 using Agw.Tools.Impl.ToolBlocks.Mode;
 using Agw.Tools.Impl.ToolBlocks.Todo;
 using Agw.Tools.ToolBlocks;
@@ -172,6 +174,40 @@ public class AgentSuggestionAppServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSuggestionsAsync_SystemAgent_SuggestsSharedFileToolsOnce()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "system-agent",
+            Type = AgentType.System,
+            Tools = [new ToolBlockValue { Definition = new FileReadonlyAccessToolBlockDefinition() }],
+        };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Tools = [new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() }],
+        };
+        var service = CreateService(agents: [agent], projects: [project]);
+
+        var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
+
+        Assert.Equal(
+            [
+                "/file_access_delete",
+                "/file_access_grep",
+                "/file_access_ls",
+                "/file_access_read",
+                "/file_access_read_lines",
+                "/file_access_replace",
+                "/file_access_replace_lines",
+                "/file_access_write",
+            ],
+            response.Suggestions.Select(static suggestion => suggestion.Text)
+        );
+    }
+
+    [Fact]
     public async Task GetSuggestionsAsync_WithoutProject_UsesOnlyAgentCapabilities()
     {
         var agentSkill = new Skill { Id = Guid.CreateVersion7(), Name = "agent-skill" };
@@ -314,7 +350,12 @@ public class AgentSuggestionAppServiceTests : IDisposable
                 new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>()),
                 new ShellContextualTool(new ConfigurationBuilder().Build()),
             ],
-            new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()])
+            new ToolBlockRegistry([
+                new TodoToolBlock(),
+                new ModeToolBlock(),
+                new FileReadonlyAccessToolBlock(new UnusedFileSystemResolver()),
+                new FileAccessToolBlock(new UnusedFileSystemResolver()),
+            ])
         );
         var skillRepository = new TestRepository<Skill>(ownedSkills);
         var userInfo = new TestUserInfoService();
@@ -329,6 +370,12 @@ public class AgentSuggestionAppServiceTests : IDisposable
             registry,
             userInfo
         );
+    }
+
+    private sealed class UnusedFileSystemResolver : IAgwFileSystemResolver
+    {
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
+            throw new InvalidOperationException("Suggestions must not resolve Project file systems.");
     }
 
     private sealed class TestProjectRuntimeFacade : IProjectRuntimeFacade

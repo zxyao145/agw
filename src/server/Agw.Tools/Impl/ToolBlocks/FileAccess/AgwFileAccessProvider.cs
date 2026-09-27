@@ -17,10 +17,12 @@ namespace Agw.Tools.Impl.ToolBlocks.FileAccess;
 /// Every tool accepts an optional <c>directoryId</c>: omitted or <see langword="null"/> selects the primary directory,
 /// otherwise it must be the ID of an additional directory in the snapshot. File operations, path validation, and write
 /// serialization happen in <see cref="IAgwFileSystem"/>; this provider defines the tools and formats their results.
-/// Tool permissions and approval come from the <see cref="FileAccessToolBlock"/> member metadata.
+/// Tool permissions and approval come from the <see cref="FileAccessToolBlock"/> member metadata, and
+/// <see cref="AgwFileReadonlyAccessProvider"/> exposes the read tools of <see cref="Tools"/> without creating others.
 /// 每个工具都接受可选的 <c>directoryId</c>：省略或为 <see langword="null"/> 时使用主目录，否则必须是快照中某个附加目录的 ID。
 /// 文件操作、路径校验和写入互斥都在 <see cref="IAgwFileSystem"/> 中完成，本类只定义工具并整理结果。
-/// 工具权限与审批由 <see cref="FileAccessToolBlock"/> 的成员元数据决定。
+/// 工具权限与审批由 <see cref="FileAccessToolBlock"/> 的成员元数据决定；<see cref="AgwFileReadonlyAccessProvider"/>
+/// 直接暴露 <see cref="Tools"/> 中的读取工具，不另外创建工具。
 /// </remarks>
 internal sealed class AgwFileAccessProvider : AIContextProvider
 {
@@ -69,10 +71,16 @@ internal sealed class AgwFileAccessProvider : AIContextProvider
 
     public override IReadOnlyList<string> StateKeys => [];
 
+    /// <summary>
+    /// Gets the read and write tools, created once per provider.
+    /// 本 Provider 的读取与写入工具，每个 Provider 只创建一次。
+    /// </summary>
+    internal IReadOnlyList<AITool> Tools => _tools ??= CreateTools();
+
     protected override ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context,
         CancellationToken cancellationToken = default
-    ) => ValueTask.FromResult(new AIContext { Instructions = Instructions, Tools = _tools ??= CreateTools() });
+    ) => ValueTask.FromResult(new AIContext { Instructions = Instructions, Tools = Tools });
 
     [Description(
         "Write a file with the given name and content. By default, does not overwrite an existing file unless overwrite is set to true."

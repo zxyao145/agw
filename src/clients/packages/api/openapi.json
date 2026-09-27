@@ -13005,6 +13005,9 @@
             "$ref": "#/components/schemas/ToolBlockDefinitionUserMemoryToolBlockDefinition"
           },
           {
+            "$ref": "#/components/schemas/ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition"
+          },
+          {
             "$ref": "#/components/schemas/ToolBlockDefinitionFileAccessToolBlockDefinition"
           },
           {
@@ -13018,6 +13021,7 @@
             "mode": "#/components/schemas/ToolBlockDefinitionModeToolBlockDefinition",
             "project-memory": "#/components/schemas/ToolBlockDefinitionProjectMemoryToolBlockDefinition",
             "user-memory": "#/components/schemas/ToolBlockDefinitionUserMemoryToolBlockDefinition",
+            "file-readonly-access": "#/components/schemas/ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition",
             "file-access": "#/components/schemas/ToolBlockDefinitionFileAccessToolBlockDefinition",
             "background-agents": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"
           }
@@ -13049,6 +13053,23 @@
           "name": {
             "enum": [
               "file-access"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "file-readonly-access"
             ],
             "type": "string"
           },

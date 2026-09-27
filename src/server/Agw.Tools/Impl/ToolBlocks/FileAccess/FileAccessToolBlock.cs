@@ -18,16 +18,14 @@ public sealed class FileAccessToolBlock : IToolBlock
             "Reads and modifies files in the project workspace.",
             ToolBlockScope.Agent | ToolBlockScope.Project,
             [
-                new(AgwFileAccessProvider.ReadFileToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
-                new(AgwFileAccessProvider.ReadLinesToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
-                new(AgwFileAccessProvider.LsToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
-                new(AgwFileAccessProvider.GrepToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
+                .. FileReadonlyAccessToolBlock.Members,
                 new(AgwFileAccessProvider.WriteToolName, AgwToolPermission.Write),
                 new(AgwFileAccessProvider.DeleteFileToolName, AgwToolPermission.Write),
                 new(AgwFileAccessProvider.ReplaceToolName, AgwToolPermission.Write),
                 new(AgwFileAccessProvider.ReplaceLinesToolName, AgwToolPermission.Write),
             ],
-            requiresWorkspace: true
+            requiresWorkspace: true,
+            includedToolBlockNames: [ToolBlockNames.FileReadonlyAccess]
         );
 
     public ValueTask<ToolContribution> MaterializeAsync(
@@ -40,6 +38,20 @@ public sealed class FileAccessToolBlock : IToolBlock
         contribution.PlanModeAllowedToolNames.UnionWith(
             Descriptor.Members.Where(static member => member.AllowInPlanMode).Select(static member => member.Name)
         );
+        contribution.ContextProviders.Add(CreateProvider(_fileSystemResolver, context));
+        return ValueTask.FromResult(contribution);
+    }
+
+    /// <summary>
+    /// Creates the file access provider from the turn's workspace snapshot, or from the Project configuration when no
+    /// snapshot was captured.
+    /// 使用本轮捕获的工作区快照创建文件访问 Provider；没有快照时按 Project 配置创建。
+    /// </summary>
+    internal static AgwFileAccessProvider CreateProvider(
+        IAgwFileSystemResolver fileSystemResolver,
+        ToolMaterializationContext context
+    )
+    {
         var snapshot =
             context.WorkspaceSnapshot
             ?? ProjectWorkspacePaths.CreateSnapshot(
@@ -49,7 +61,6 @@ public sealed class FileAccessToolBlock : IToolBlock
                     directory => new Agw.Shared.Runtime.ProjectWorkspaceDirectory(directory.Id, directory.Path)
                 )
             );
-        contribution.ContextProviders.Add(new AgwFileAccessProvider(_fileSystemResolver, context.ProjectId, snapshot));
-        return ValueTask.FromResult(contribution);
+        return new AgwFileAccessProvider(fileSystemResolver, context.ProjectId, snapshot);
     }
 }

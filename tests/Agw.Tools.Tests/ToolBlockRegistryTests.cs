@@ -55,6 +55,94 @@ public sealed class ToolBlockRegistryTests
     }
 
     [Fact]
+    public void Constructor_IncludingBlockDeclaresIncludedMembers_AllowsSharedMembers()
+    {
+        var registry = new ToolBlockRegistry([
+            new RecordingToolBlock("readonly", ToolBlockScope.Agent, ["read"]),
+            new RecordingToolBlock(
+                "full",
+                ToolBlockScope.Agent,
+                ["read", "write"],
+                includedToolBlockNames: ["readonly"]
+            ),
+        ]);
+
+        Assert.True(registry.TryGetMemberOwner("read", out _));
+        Assert.True(registry.TryGetMemberOwner("write", out var writeOwner));
+        Assert.Equal("full", writeOwner);
+    }
+
+    [Fact]
+    public void Constructor_SharedMemberDeclaredDifferently_Throws()
+    {
+        var blocks = new[]
+        {
+            new RecordingToolBlock("readonly", ToolBlockScope.Agent, ["read"]),
+            new RecordingToolBlock(
+                "full",
+                ToolBlockScope.Agent,
+                ["read"],
+                includedToolBlockNames: ["readonly"],
+                memberPermission: AgwToolPermission.Write
+            ),
+        };
+
+        var exception = Assert.Throws<AgwException>(() => new ToolBlockRegistry(blocks));
+
+        Assert.Contains("must declare member 'read' of included Tool Block 'readonly' identically", exception.Message);
+    }
+
+    [Fact]
+    public void Constructor_IncludedBlockNotRegistered_Throws()
+    {
+        var exception = Assert.Throws<AgwException>(() =>
+            new ToolBlockRegistry([
+                new RecordingToolBlock("full", ToolBlockScope.Agent, ["read"], includedToolBlockNames: ["readonly"]),
+            ])
+        );
+
+        Assert.Contains("includes unknown Tool Block 'readonly'", exception.Message);
+    }
+
+    [Fact]
+    public async Task MaterializeAsync_IncludedBlockEnabledWithIncludingBlock_MaterializesOnlyIncludingBlock()
+    {
+        var included = new RecordingToolBlock("readonly", ToolBlockScope.Agent);
+        var including = new RecordingToolBlock("full", ToolBlockScope.Agent, includedToolBlockNames: ["readonly"]);
+        var registry = new ToolBlockRegistry([included, including]);
+        var context = CreateContext();
+
+        await using var contribution = await registry.MaterializeAsync(
+            [new TestToolBlockDefinition("readonly"), new TestToolBlockDefinition("full")],
+            ToolBlockScope.Agent,
+            context,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(0, included.MaterializationCount);
+        Assert.Equal(1, including.MaterializationCount);
+        Assert.Equal(["full", "readonly"], context.EnabledToolBlockNames.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task MaterializeAsync_IncludedBlockEnabledAlone_MaterializesIncludedBlock()
+    {
+        var included = new RecordingToolBlock("readonly", ToolBlockScope.Agent);
+        var including = new RecordingToolBlock("full", ToolBlockScope.Agent, includedToolBlockNames: ["readonly"]);
+        var registry = new ToolBlockRegistry([included, including]);
+
+        await using var contribution = await registry.MaterializeAsync(
+            [new TestToolBlockDefinition("readonly")],
+            ToolBlockScope.Agent,
+            CreateContext(),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(1, included.MaterializationCount);
+        Assert.Equal(0, including.MaterializationCount);
+    }
+
+    [Fact]
     public async Task MaterializeAsync_UnknownDefinition_Throws()
     {
         var registry = new ToolBlockRegistry([]);
@@ -126,7 +214,9 @@ public sealed class ToolBlockRegistryTests
             string id,
             ToolBlockScope scopes,
             IReadOnlyList<string>? memberToolNames = null,
-            bool throwOnMaterialize = false
+            bool throwOnMaterialize = false,
+            IReadOnlyList<string>? includedToolBlockNames = null,
+            AgwToolPermission memberPermission = AgwToolPermission.None
         )
         {
             _throwOnMaterialize = throwOnMaterialize;
@@ -135,9 +225,8 @@ public sealed class ToolBlockRegistryTests
                 id,
                 id,
                 scopes,
-                (memberToolNames ?? [])
-                    .Select(static name => new ToolBlockMemberDescriptor(name, AgwToolPermission.None))
-                    .ToArray()
+                (memberToolNames ?? []).Select(name => new ToolBlockMemberDescriptor(name, memberPermission)).ToArray(),
+                includedToolBlockNames: includedToolBlockNames
             );
         }
 

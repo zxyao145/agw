@@ -12,6 +12,8 @@ Tool Capability
 
 Tool 对模型暴露一个可调用操作，可以单独添加或删除。ToolBlock 表示行为和状态必须保持一致的一组 Tool，因此其成员只能整体选择、物化和删除。
 
+ToolBlock 可以包含另一个 ToolBlock，前提是以相同声明列出被包含 Block 的全部成员。只有存在这种包含关系的 Block 之间才允许同名成员；两者同时启用时只物化包含方，同一个工具名只暴露一次。
+
 当前 ToolBlock：
 
 - `todo`：`todos_add`、`todos_list`、`todos_complete` 等 Todo 工具。
@@ -21,7 +23,8 @@ Tool 对模型暴露一个可调用操作，可以单独添加或删除。ToolBl
   Filesystem 模式下，指向同一 Workspace 的多个项目也共享记忆。
 - `user-memory`：只存数据库、绑定当前认证用户的 Markdown 记忆。它可跨
   Agent、Project 和会话使用，但其他用户不可见。
-- `file-access`：限定在 `Project.Workspace` 下的 Harness 文件工具。
+- `file-access`：限定在本轮目录快照下的文件读取与写入工具，可用 `directoryId` 选择 Project 附加目录，省略时使用主目录 `Project.Workspace`；它包含 `file-readonly-access`。
+- `file-readonly-access`：只提供 `file-access` 中的 `file_access_read`、`file_access_read_lines`、`file_access_ls`、`file_access_grep`，工具实例与成员声明都相同。
 - `background-agents`：只允许一层的后台 Agent 委派工具。
 - `background-agents` 的全部成员统一声明 `ReadOnly`，包括启动、继续和清理任务，父级工具调用均免审批；Plan 模式可用性仍独立声明。
 
