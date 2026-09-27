@@ -387,7 +387,7 @@ export function ConversationList({
         </div>
       </div>
 
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto agw-scrollbar space-y-px pt-2">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto agw-scrollbar space-y-px">
         {conversationsQuery.isPending ? (
           <div className="space-y-2 p-1" aria-label="Loading conversations">
             {Array.from({ length: 5 }, (_, index) => (
