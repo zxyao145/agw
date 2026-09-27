@@ -41,7 +41,7 @@ function createWorkspace(overrides: Record<string, unknown> = {}) {
     targets: [selectedTarget],
     selectedTarget,
     selectedTargetValue: "agent:agent-1",
-    selectedContextId: "context-1",
+    readyConversationId: "conversation-1",
     commandSource: { mode: "system" as const, suggestions: agentSuggestions },
     agentSuggestions,
     supportsAgentMode: false,
@@ -106,7 +106,7 @@ test("keeps the draft and disables sending until the selected conversation is re
   initialText = "Keep this draft";
   workspaceState = createWorkspace({
     selectedConversationId: "conversation-1",
-    selectedContextId: null,
+    readyConversationId: null,
   });
   const view = await render(<Composer safeBottom={0} />);
 
@@ -114,7 +114,7 @@ test("keeps the draft and disables sending until the selected conversation is re
   await fireEvent.press(view.getByLabelText("Send message"));
   expect(view.getByLabelText("Message").props.value).toBe("Keep this draft");
 
-  workspaceState = { ...workspaceState, selectedContextId: "context-1" };
+  workspaceState = { ...workspaceState, readyConversationId: "conversation-1" };
   await view.rerender(<Composer safeBottom={0} />);
   expect(view.getByLabelText("Send message")).toBeEnabled();
   await fireEvent.press(view.getByLabelText("Send message"));
@@ -255,7 +255,7 @@ test("clears suggestions when execution starts", async () => {
   await waitFor(() => expect(view.queryByLabelText("Suggestions")).toBeNull());
 });
 
-test("clears suggestions after submit and when the context changes", async () => {
+test("clears suggestions after submit and when the ready conversation changes", async () => {
   const view = await render(<Composer safeBottom={0} />);
   const input = view.getByLabelText("Message");
   await fireEvent.changeText(input, "/dep");
@@ -269,7 +269,7 @@ test("clears suggestions after submit and when the context changes", async () =>
 
   await fireEvent.changeText(input, "/dep");
   expect(await view.findByLabelText("Use suggestion /deploy")).toBeTruthy();
-  workspaceState = { ...workspaceState, selectedContextId: "context-2" };
+  workspaceState = { ...workspaceState, readyConversationId: "conversation-2" };
   await view.rerender(<Composer safeBottom={0} />);
 
   await waitFor(() => expect(view.queryByLabelText("Suggestions")).toBeNull());

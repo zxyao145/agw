@@ -141,9 +141,9 @@ test("sets mode only when requested and reuses the connection across turns", asy
   );
   fake.emit(
     createMessage("finished-1", {
-      type: "turn-finished",
+      type: "agw-turn-finished",
       status: "completed",
-      executionId: "execution-1",
+      turnId: "execution-1",
     }),
   );
   await firstTurn;
@@ -158,9 +158,9 @@ test("sets mode only when requested and reuses the connection across turns", asy
   await flushPromises();
   fake.emit(
     createMessage("finished-2", {
-      type: "turn-finished",
+      type: "agw-turn-finished",
       status: "completed",
-      executionId: "execution-2",
+      turnId: "execution-2",
     }),
   );
   await secondTurn;
@@ -226,9 +226,9 @@ test("reconnect restores settings and the active turn without resending mode", a
 
   fake.emit(
     createMessage("finished-1", {
-      type: "turn-finished",
+      type: "agw-turn-finished",
       status: "completed",
-      executionId: "execution-1",
+      turnId: "execution-1",
     }),
   );
   await turn;
@@ -261,9 +261,9 @@ test("interrupt targets the active execution", async () => {
 
   fake.emit(
     createMessage("finished-1", {
-      type: "turn-finished",
+      type: "agw-turn-finished",
       status: "interrupted",
-      executionId: "execution-1",
+      turnId: "execution-1",
     }),
   );
   await turn;

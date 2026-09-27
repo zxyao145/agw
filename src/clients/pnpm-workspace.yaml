@@ -34,7 +34,7 @@ catalog:
   react: 19.3.0
   react-dom: 19.3.0
   react-markdown: 10.1.0
-  react-native: 0.87.1
+  react-native: 0.86.3
   react-native-enriched-markdown: 1.0.2
   react-native-svg: 15.15.5
   remark-gfm: 4.0.1
