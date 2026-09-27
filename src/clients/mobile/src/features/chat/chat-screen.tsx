@@ -17,7 +17,7 @@ export const ChatScreen = React.forwardRef<NativeConversationHistoryHandle>(
         conversationKey={JSON.stringify([
           workspace.selectedProjectId,
           workspace.selectedConversationId,
-          workspace.selectedContextId,
+          workspace.readyConversationId,
         ])}
         isCurrentTurnActive={workspace.isExecuting}
         activeAgentId={

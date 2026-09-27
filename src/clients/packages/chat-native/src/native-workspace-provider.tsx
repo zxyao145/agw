@@ -81,7 +81,11 @@ export type NativeWorkspaceContextValue = {
   selectDirectory(directoryId: string | null): void;
   selectedTargetValue: string | null;
   selectedConversationId: string | null;
-  selectedContextId: string | null;
+  /**
+   * 本地状态已就绪、可以执行的对话：已载入历史的选中对话，或本客户端创建的草稿对话。
+   * The conversation whose local state is ready to execute: the selected conversation with loaded history, or a draft this client created.
+   */
+  readyConversationId: string | null;
   selectedProject: Project | null;
   selectedTarget: ChatTargetOption | null;
   permissionMode: PermissionMode;
@@ -184,7 +188,9 @@ function NativeWorkspaceSession({
   const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = React.useState<string | null>(null);
-  const [selectedContextId, setSelectedContextId] = React.useState<string | null>(null);
+  // 本地状态已就绪、可以执行的对话：已载入历史的选中对话，或本客户端创建的草稿对话。
+  // The conversation whose local state is ready to execute: the selected conversation with loaded history, or a draft this client created.
+  const [readyConversationId, setReadyConversationId] = React.useState<string | null>(null);
   const [permissionMode, setPermissionModeState] = React.useState<PermissionMode>("fullAccess");
   const [activePermissionMode, setActivePermissionMode] = React.useState<PermissionMode | null>(
     null,
@@ -226,7 +232,10 @@ function NativeWorkspaceSession({
   const stopTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratedConversationRef = React.useRef<string | null>(null);
   const selectedConversationIdRef = React.useRef<string | null>(null);
-  const selectedContextIdRef = React.useRef<string | null>(null);
+  const readyConversationIdRef = React.useRef<string | null>(null);
+  // 首次配置或发送前分配的草稿对话 ID；服务端受理首轮后才成为选中的对话。
+  // The draft conversation ID allocated before the first configuration or send; it becomes the selected conversation once the server accepts the first turn.
+  const draftConversationIdRef = React.useRef<string | null>(null);
   const activeStreamingScopeRef = React.useRef<string | null>(null);
   const confirmedAgentModeRef = React.useRef<AgentMode>(DEFAULT_AGENT_MODE);
   const batcherRef = React.useRef<StreamingMessageBatcher<AiMessage> | null>(null);
@@ -535,6 +544,19 @@ function NativeWorkspaceSession({
           activeStreamingScopeRef.current ??
           incoming.messageId;
         setIsExecuting(true);
+        // 首轮被受理后草稿对话才保存到服务端，此时成为选中的对话。
+        // A draft conversation is saved on the server once its first turn is accepted, and becomes the selected conversation then.
+        const draftConversationId = draftConversationIdRef.current;
+        if (
+          draftConversationId &&
+          selectedConversationIdRef.current === null &&
+          selectedProjectId
+        ) {
+          draftConversationIdRef.current = null;
+          selectedConversationIdRef.current = draftConversationId;
+          hydratedConversationRef.current = `${selectedProjectId}:${draftConversationId}`;
+          setSelectedConversationId(draftConversationId);
+        }
         return;
       }
 
@@ -563,7 +585,7 @@ function NativeWorkspaceSession({
         generation,
       );
     },
-    [refreshConversations, selectedTarget],
+    [refreshConversations, selectedProjectId, selectedTarget],
   );
 
   const disposeExecutionSession = React.useCallback((resetReconnectState = true) => {
@@ -577,27 +599,32 @@ function NativeWorkspaceSession({
     if (session) void session.dispose().catch(() => undefined);
   }, []);
 
-  const ensureContextId = React.useCallback(() => {
-    const contextId = selectedContextIdRef.current ?? createUuidV7();
-    if (selectedContextIdRef.current === null) {
-      selectedContextIdRef.current = contextId;
-      setSelectedContextId(contextId);
-    }
-    return contextId;
-  }, []);
+  /** 选中的对话还没有载入历史。The selected conversation has not loaded its history yet. */
+  const isConversationLoading = React.useCallback(
+    () =>
+      selectedConversationIdRef.current !== null &&
+      readyConversationIdRef.current !== selectedConversationIdRef.current,
+    [],
+  );
 
+  /**
+   * 首次配置或发送前分配对话 ID；新对话使用草稿 ID，它不代表对话已经保存到服务端。
+   * Allocates the conversation ID before the first configuration or send; a new conversation uses a draft ID that does not mean it is saved.
+   */
   const ensureConversationId = React.useCallback(() => {
-    const conversationId = selectedConversationIdRef.current ?? createUuidV7();
-    if (selectedConversationIdRef.current === null) {
-      selectedConversationIdRef.current = conversationId;
-      setSelectedConversationId(conversationId);
-    }
-    return conversationId;
+    const existingConversationId =
+      selectedConversationIdRef.current ?? draftConversationIdRef.current;
+    if (existingConversationId) return existingConversationId;
+    const draftConversationId = createUuidV7();
+    draftConversationIdRef.current = draftConversationId;
+    readyConversationIdRef.current = draftConversationId;
+    setReadyConversationId(draftConversationId);
+    return draftConversationId;
   }, []);
 
   const ensureConfiguredSession = React.useCallback(
     async (
-      contextId: string,
+      conversationId: string,
       nextPermissionMode: PermissionMode,
     ): Promise<{
       session: MobileExecutionSession;
@@ -607,7 +634,7 @@ function NativeWorkspaceSession({
         throw new Error("Please select a project.");
       }
 
-      const sessionKey = JSON.stringify([workspaceScope, selectedProjectId, contextId]);
+      const sessionKey = JSON.stringify([workspaceScope, selectedProjectId, conversationId]);
       let session = executionSessionRef.current;
       if (!session || executionSessionKeyRef.current !== sessionKey) {
         disposeExecutionSession();
@@ -638,7 +665,7 @@ function NativeWorkspaceSession({
             permissionMode: nextPermissionMode,
             promise: session.configure({
               projectId: selectedProjectId,
-              contextId,
+              conversationId,
               permissionMode: nextPermissionMode,
             }),
           };
@@ -712,8 +739,8 @@ function NativeWorkspaceSession({
         : null;
     if (!key) {
       hydratedConversationRef.current = null;
-      selectedContextIdRef.current = null;
-      setSelectedContextId(null);
+      readyConversationIdRef.current = draftConversationIdRef.current;
+      setReadyConversationId(draftConversationIdRef.current);
       setMessages([]);
       setClaudeCommands([]);
       setPendingInteraction(null);
@@ -722,8 +749,8 @@ function NativeWorkspaceSession({
     }
     if (conversationDetailsQuery.data && hydratedConversationRef.current !== key) {
       hydratedConversationRef.current = key;
-      selectedContextIdRef.current = conversationDetailsQuery.data.contextId;
-      setSelectedContextId(conversationDetailsQuery.data.contextId);
+      readyConversationIdRef.current = conversationDetailsQuery.data.conversationId;
+      setReadyConversationId(conversationDetailsQuery.data.conversationId);
       const nextAgentMode = getLatestAgentMode(conversationDetailsQuery.data.messages);
       const claudeHistory = prepareClaudeHistory(conversationDetailsQuery.data.messages);
       confirmedAgentModeRef.current = nextAgentMode;
@@ -736,7 +763,7 @@ function NativeWorkspaceSession({
 
   React.useEffect(() => {
     if (
-      !selectedContextId ||
+      !readyConversationId ||
       selectedTarget?.type !== "agentflow" ||
       !messages.some((message) => getAgentflowCheckpointMessage(message))
     ) {
@@ -745,7 +772,7 @@ function NativeWorkspaceSession({
     }
 
     let active = true;
-    void ensureConfiguredSession(selectedContextId, permissionMode)
+    void ensureConfiguredSession(readyConversationId, permissionMode)
       .then((configured) => configured?.session.listAgentflowCheckpoints(selectedTarget.id))
       .then((checkpoints) => {
         if (active && checkpoints) setCheckpointAvailability(checkpoints);
@@ -754,7 +781,7 @@ function NativeWorkspaceSession({
     return () => {
       active = false;
     };
-  }, [ensureConfiguredSession, messages, permissionMode, selectedContextId, selectedTarget]);
+  }, [ensureConfiguredSession, messages, permissionMode, readyConversationId, selectedTarget]);
 
   React.useEffect(() => {
     executionGenerationRef.current += 1;
@@ -762,11 +789,12 @@ function NativeWorkspaceSession({
     batcherRef.current?.discard();
     disposeExecutionSession();
     selectedConversationIdRef.current = null;
-    selectedContextIdRef.current = null;
+    draftConversationIdRef.current = null;
+    readyConversationIdRef.current = null;
     setSelectedProjectId(null);
     setSelectedTargetValue(null);
     setSelectedConversationId(null);
-    setSelectedContextId(null);
+    setReadyConversationId(null);
     setMessages([]);
     setClaudeCommands([]);
     setIsExecuting(false);
@@ -792,10 +820,11 @@ function NativeWorkspaceSession({
     disposeExecutionSession();
     hydratedConversationRef.current = null;
     selectedConversationIdRef.current = null;
-    selectedContextIdRef.current = null;
+    draftConversationIdRef.current = null;
+    readyConversationIdRef.current = null;
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
     setSelectedConversationId(null);
-    setSelectedContextId(null);
+    setReadyConversationId(null);
     setMessages([]);
     setClaudeCommands([]);
     setAgentModeState(DEFAULT_AGENT_MODE);
@@ -812,11 +841,12 @@ function NativeWorkspaceSession({
       batcherRef.current?.discard();
       disposeExecutionSession();
       selectedConversationIdRef.current = null;
-      selectedContextIdRef.current = null;
+      draftConversationIdRef.current = null;
+      readyConversationIdRef.current = null;
       confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
       setSelectedProjectId(projectId);
       setSelectedConversationId(null);
-      setSelectedContextId(null);
+      setReadyConversationId(null);
       setMessages([]);
       setClaudeCommands([]);
       setAgentModeState(DEFAULT_AGENT_MODE);
@@ -837,10 +867,11 @@ function NativeWorkspaceSession({
       disposeExecutionSession();
       hydratedConversationRef.current = null;
       selectedConversationIdRef.current = conversationId;
-      selectedContextIdRef.current = null;
+      draftConversationIdRef.current = null;
+      readyConversationIdRef.current = null;
       confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
       setSelectedConversationId(conversationId);
-      setSelectedContextId(null);
+      setReadyConversationId(null);
       setMessages([]);
       setClaudeCommands([]);
       setAgentModeState(DEFAULT_AGENT_MODE);
@@ -857,15 +888,11 @@ function NativeWorkspaceSession({
       const previousPermissionMode = permissionMode;
       setPermissionModeState(nextPermissionMode);
       setOperationError(null);
-      if (
-        !selectedProjectId ||
-        (selectedConversationIdRef.current !== null && selectedContextIdRef.current === null)
-      )
-        return;
+      if (!selectedProjectId || isConversationLoading()) return;
 
-      const contextId = ensureContextId();
+      const conversationId = ensureConversationId();
       const generation = executionGenerationRef.current;
-      void ensureConfiguredSession(contextId, nextPermissionMode)
+      void ensureConfiguredSession(conversationId, nextPermissionMode)
         .then((configured) => {
           if (
             !configured ||
@@ -884,7 +911,8 @@ function NativeWorkspaceSession({
     },
     [
       ensureConfiguredSession,
-      ensureContextId,
+      ensureConversationId,
+      isConversationLoading,
       permissionMode,
       selectedProjectId,
       supportedPermissionModes,
@@ -893,8 +921,7 @@ function NativeWorkspaceSession({
 
   const setAgentMode = React.useCallback(
     (nextAgentMode: AgentMode) => {
-      if (selectedConversationIdRef.current !== null && selectedContextIdRef.current === null)
-        return;
+      if (isConversationLoading()) return;
       if (!selectedProjectId || !selectedTarget || selectedTarget.type !== "agent") {
         setOperationError("Please select a mode-capable agent.");
         return;
@@ -905,9 +932,9 @@ function NativeWorkspaceSession({
       modeChangeGenerationRef.current = changeGeneration;
       setAgentModeState(nextAgentMode);
       setOperationError(null);
-      const contextId = ensureContextId();
+      const conversationId = ensureConversationId();
       const executionGeneration = executionGenerationRef.current;
-      void ensureConfiguredSession(contextId, permissionMode)
+      void ensureConfiguredSession(conversationId, permissionMode)
         .then((configured) => {
           if (
             !configured ||
@@ -932,7 +959,8 @@ function NativeWorkspaceSession({
     [
       agentMode,
       ensureConfiguredSession,
-      ensureContextId,
+      ensureConversationId,
+      isConversationLoading,
       permissionMode,
       selectedProjectId,
       selectedTarget,
@@ -950,13 +978,12 @@ function NativeWorkspaceSession({
         !selectedProjectId ||
         !selectedTarget ||
         isExecuting ||
-        (selectedConversationIdRef.current !== null && selectedContextIdRef.current === null) ||
+        isConversationLoading() ||
         (!text.trim() && attachments.length === 0)
       ) {
         return;
       }
       const conversationId = ensureConversationId();
-      const contextId = ensureContextId();
       const executionId = createUuidV7();
       const userMessage = createUserMessage(text, attachments);
       const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
@@ -970,7 +997,7 @@ function NativeWorkspaceSession({
       setOperationError(null);
 
       try {
-        const configured = await ensureConfiguredSession(contextId, permissionMode);
+        const configured = await ensureConfiguredSession(conversationId, permissionMode);
         if (!configured || generation !== executionGenerationRef.current) return;
         await configured.session.execute({
           conversationId,
@@ -1001,7 +1028,7 @@ function NativeWorkspaceSession({
     [
       ensureConfiguredSession,
       ensureConversationId,
-      ensureContextId,
+      isConversationLoading,
       isExecuting,
       permissionMode,
       permissionUnavailable,
@@ -1060,7 +1087,7 @@ function NativeWorkspaceSession({
 
   const resumeCheckpoint = React.useCallback(
     async (occurrenceId: string) => {
-      if (!selectedProjectId || !selectedContextId || selectedTarget?.type !== "agentflow") {
+      if (!selectedProjectId || !readyConversationId || selectedTarget?.type !== "agentflow") {
         return;
       }
       ensureIdle();
@@ -1079,7 +1106,7 @@ function NativeWorkspaceSession({
       setOperationError(null);
 
       try {
-        const configured = await ensureConfiguredSession(selectedContextId, permissionMode);
+        const configured = await ensureConfiguredSession(readyConversationId, permissionMode);
         if (!configured || generation !== executionGenerationRef.current) return;
         await configured.session.resumeCheckpoint({
           checkpointOccurrenceId: occurrenceId,
@@ -1112,20 +1139,23 @@ function NativeWorkspaceSession({
       ensureIdle,
       messages,
       permissionMode,
-      selectedContextId,
+      readyConversationId,
       selectedProjectId,
       selectedTarget,
     ],
   );
 
   const clearCurrentConversation = React.useCallback(async () => {
-    if (!conversationService || !selectedProjectId || !selectedConversationId || !selectedContextId)
+    if (
+      !conversationService ||
+      !selectedProjectId ||
+      !selectedConversationId ||
+      readyConversationId !== selectedConversationId
+    )
       return;
     ensureIdle();
     const conversationToClear = selectedConversationId;
-    const contextToClear = selectedContextId;
     // Clearing records keeps the conversation identity; only New Chat replaces it.
-    selectedContextIdRef.current = contextToClear;
     const cleared = await conversationService.clearProjectConversationRecords(
       selectedProjectId,
       conversationToClear,
@@ -1140,10 +1170,7 @@ function NativeWorkspaceSession({
     ] as const;
     await queryClient.cancelQueries({ queryKey: detailsQueryKey, exact: true });
     queryClient.removeQueries({ queryKey: detailsQueryKey, exact: true });
-    if (
-      selectedConversationIdRef.current !== conversationToClear ||
-      selectedContextIdRef.current !== contextToClear
-    ) {
+    if (selectedConversationIdRef.current !== conversationToClear) {
       await refreshConversations();
       return;
     }
@@ -1152,8 +1179,9 @@ function NativeWorkspaceSession({
     batcherRef.current?.discard();
     disposeExecutionSession();
     hydratedConversationRef.current = `${selectedProjectId}:${conversationToClear}`;
+    readyConversationIdRef.current = conversationToClear;
     setSelectedConversationId(conversationToClear);
-    setSelectedContextId(contextToClear);
+    setReadyConversationId(conversationToClear);
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
     setMessages([]);
     setClaudeCommands([]);
@@ -1167,9 +1195,9 @@ function NativeWorkspaceSession({
     ensureIdle,
     workspaceScope,
     queryClient,
+    readyConversationId,
     refreshConversations,
     selectedConversationId,
-    selectedContextId,
     selectedProjectId,
   ]);
 
@@ -1235,7 +1263,7 @@ function NativeWorkspaceSession({
       selectDirectory: setSelectedDirectoryId,
       selectedTargetValue,
       selectedConversationId,
-      selectedContextId,
+      readyConversationId,
       selectedProject,
       selectedTarget,
       permissionMode,
@@ -1313,7 +1341,7 @@ function NativeWorkspaceSession({
       selectedDirectoryId,
       selectedTargetValue,
       selectedConversationId,
-      selectedContextId,
+      readyConversationId,
       selectedProject,
       selectedTarget,
       permissionMode,

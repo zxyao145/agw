@@ -18,29 +18,44 @@ public class ExecutionRequestsTests
     public void Deserialize_SettingCommand_ReturnsSettingCommand()
     {
         var projectId = Guid.CreateVersion7();
-        var contextId = Guid.CreateVersion7().ToString("D");
+        var conversationId = Guid.CreateVersion7();
         const string json = """
             {
               "type": "SettingCommand",
               "settingContent": "{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}",
               "projectId": "__PROJECT_ID__",
-              "contextId": "__CONTEXT_ID__"
+              "conversationId": "__CONVERSATION_ID__"
             }
             """;
-        var payload = json.Replace("__PROJECT_ID__", projectId.ToString()).Replace("__CONTEXT_ID__", contextId);
+        var payload = json.Replace("__PROJECT_ID__", projectId.ToString())
+            .Replace("__CONVERSATION_ID__", conversationId.ToString());
 
         var request = Deserialize(payload);
 
         var settingRequest = Assert.IsType<SettingCommand>(request);
         Assert.Equal(projectId, settingRequest.ProjectId);
-        Assert.Equal(contextId, settingRequest.ContextId);
+        Assert.Equal(conversationId, settingRequest.ConversationId);
+    }
+
+    [Fact]
+    public void FromCommand_SettingCommandWithoutConversation_ThrowsInvalidParam()
+    {
+        var request = Assert.IsType<SettingCommand>(
+            Deserialize($$"""{"type":"SettingCommand","projectId":"{{Guid.CreateVersion7()}}"}""")
+        );
+
+        var exception = Assert.Throws<Agw.Shared.Exceptions.AgwException>(() =>
+            SettingCommandMapper.FromCommand(request)
+        );
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
     [Fact]
     public void Deserialize_SettingCommand_WithEnvironmentVariables_ReturnsEnvironmentVariables()
     {
         var projectId = Guid.CreateVersion7();
-        var contextId = Guid.CreateVersion7().ToString("D");
+        var conversationId = Guid.CreateVersion7();
         const string json = """
             {
               "type": "SettingCommand",
@@ -50,10 +65,11 @@ public class ExecutionRequestsTests
                 "EMPTY_VALUE": ""
               },
               "projectId": "__PROJECT_ID__",
-              "contextId": "__CONTEXT_ID__"
+              "conversationId": "__CONVERSATION_ID__"
             }
             """;
-        var payload = json.Replace("__PROJECT_ID__", projectId.ToString()).Replace("__CONTEXT_ID__", contextId);
+        var payload = json.Replace("__PROJECT_ID__", projectId.ToString())
+            .Replace("__CONVERSATION_ID__", conversationId.ToString());
 
         var request = Deserialize(payload);
 
@@ -84,9 +100,9 @@ public class ExecutionRequestsTests
     public void Equals_WhenOnlyResumeDiffers_ReturnsTrue()
     {
         var projectId = Guid.CreateVersion7();
-        var contextId = Guid.CreateVersion7().ToString("D");
-        var left = new SettingCommand(projectId, contextId: contextId) { Resume = false };
-        var right = new SettingCommand(projectId, contextId: contextId) { Resume = true };
+        var conversationId = Guid.CreateVersion7();
+        var left = new SettingCommand(projectId, conversationId) { Resume = false };
+        var right = new SettingCommand(projectId, conversationId) { Resume = true };
 
         Assert.Equal(left, right);
     }
@@ -129,9 +145,9 @@ public class ExecutionRequestsTests
     public void Equals_WhenResultOnlyDiffers_ReturnsFalse()
     {
         var projectId = Guid.CreateVersion7();
-        var contextId = Guid.CreateVersion7().ToString("D");
-        var left = new SettingCommand(projectId, contextId: contextId, resultOnly: false);
-        var right = new SettingCommand(projectId, contextId: contextId, resultOnly: true);
+        var conversationId = Guid.CreateVersion7();
+        var left = new SettingCommand(projectId, conversationId, resultOnly: false);
+        var right = new SettingCommand(projectId, conversationId, resultOnly: true);
 
         Assert.NotEqual(left, right);
     }
@@ -140,12 +156,16 @@ public class ExecutionRequestsTests
     public void Equals_WhenEnvironmentVariablesDiffer_ReturnsFalse()
     {
         var projectId = Guid.CreateVersion7();
-        var contextId = Guid.CreateVersion7().ToString("D");
+        var conversationId = Guid.CreateVersion7();
 
-        var left = CreateSettingCommand(projectId, contextId, new Dictionary<string, string> { ["AGW_TOKEN"] = "one" });
+        var left = CreateSettingCommand(
+            projectId,
+            conversationId,
+            new Dictionary<string, string> { ["AGW_TOKEN"] = "one" }
+        );
         var right = CreateSettingCommand(
             projectId,
-            contextId,
+            conversationId,
             new Dictionary<string, string> { ["AGW_TOKEN"] = "two" }
         );
 
@@ -300,14 +320,14 @@ public class ExecutionRequestsTests
 
     private static SettingCommand CreateSettingCommand(
         Guid projectId,
-        string contextId,
+        Guid conversationId,
         IReadOnlyDictionary<string, string> environmentVariables
     )
     {
         return new SettingCommand(
             projectId,
-            environmentVariables: new Dictionary<string, string>(environmentVariables),
-            contextId: contextId
+            conversationId,
+            environmentVariables: new Dictionary<string, string>(environmentVariables)
         );
     }
 

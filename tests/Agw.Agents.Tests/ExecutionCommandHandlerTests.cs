@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
@@ -37,17 +38,19 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var task = CreateTask("old");
         var context = CreateContext(task);
         var handler = new SettingCommandHandler();
+        var command = CreateExecCommand(Guid.CreateVersion7());
         await handler.HandleAsync(
-            new SettingCommand(task.ProjectId, contextId: "old"),
+            new SettingCommand(task.ProjectId, command.ConversationId!.Value),
             context,
             TestContext.Current.CancellationToken
         );
-        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
         await context.WhenIdleAsync();
         var runtime = Assert.Single(Runtimes.Created);
+        var nextConversationId = Guid.CreateVersion7();
 
         await handler.HandleAsync(
-            new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
+            new SettingCommand(Guid.CreateVersion7(), nextConversationId),
             context,
             TestContext.Current.CancellationToken
         );
@@ -56,35 +59,37 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         Assert.Null(context.ResolvedTask);
         Assert.Null(context.Workspace);
         Assert.Null(context.Target);
-        Assert.Equal("new", context.Settings!.ContextId);
+        Assert.Equal(nextConversationId, context.Settings!.ConversationId);
         await context.DisposeAsync();
     }
 
     [Fact]
-    public async Task SettingCommand_ActiveTurn_SendsBusyWithoutChangingSettings()
+    public async Task SettingCommand_ActiveTurn_ThrowsBusyWithoutChangingSettings()
     {
         var sink = new CapturingSink();
         var task = CreateTask("current");
         Runtimes.HoldTurnOpen = true;
         var context = CreateContext(task, sink: sink);
-        var current = new SettingCommand(task.ProjectId, contextId: "current");
+        var command = CreateExecCommand(Guid.CreateVersion7());
+        var current = new SettingCommand(task.ProjectId, command.ConversationId!.Value);
         await context.ApplySettingsAsync(
             SettingCommandMapper.FromCommand(current),
             TestContext.Current.CancellationToken
         );
-        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
         await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
-        await new SettingCommandHandler().HandleAsync(
-            new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
-            context,
-            TestContext.Current.CancellationToken
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            new SettingCommandHandler().HandleAsync(
+                new SettingCommand(Guid.CreateVersion7(), Guid.CreateVersion7()),
+                context,
+                TestContext.Current.CancellationToken
+            )
         );
 
-        Assert.Equal("current", context.Settings!.ContextId);
-        Assert.IsType<AgwErrorContent>(
-            Assert.Single(sink.Messages, message => message.Contents[0] is AgwErrorContent).Contents[0]
-        );
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.ExecutionBusy.Code, exception.Code);
+        Assert.Equal(current.ConversationId, context.Settings!.ConversationId);
+        Assert.DoesNotContain(sink.Messages, message => message.Contents.Any(content => content is AgwErrorContent));
 
         Runtimes.ReleaseHeldTurns();
         await context.WhenIdleAsync();
@@ -99,16 +104,17 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         Runtimes.HoldTurnOpen = true;
         var context = CreateContext(task, sink: sink);
         var handler = new SettingCommandHandler();
+        var command = CreateExecCommand(Guid.CreateVersion7());
         await handler.HandleAsync(
-            new SettingCommand(task.ProjectId, contextId: "current"),
+            new SettingCommand(task.ProjectId, command.ConversationId!.Value),
             context,
             TestContext.Current.CancellationToken
         );
-        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
         await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await handler.HandleAsync(
-            new SettingCommand(task.ProjectId, contextId: "current"),
+            new SettingCommand(task.ProjectId, command.ConversationId.Value),
             context,
             TestContext.Current.CancellationToken
         );
@@ -155,7 +161,12 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             coordinator: null!
         );
 
-        await attachment.InterruptAsync(executionId: null, "nothing running", TestContext.Current.CancellationToken);
+        await attachment.InterruptAsync(
+            executionId: null,
+            "nothing running",
+            conversationId: null,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Collection(
             sink.Messages,
@@ -479,7 +490,8 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         AgentExecutionTask task,
         IExecutionMessageSink? sink = null,
         IProjectTaskFacade? projectTasks = null,
-        IProjectRuntimeFacade? projects = null
+        IProjectRuntimeFacade? projects = null,
+        AgentflowCheckpointStore? checkpointStore = null
     )
     {
         projectTasks ??= new FakeProjectTaskFacade(task, _persistence);
@@ -493,7 +505,8 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             ),
             projectTasks,
             _kit.CreateFactory(_agents.ContextFactory, _persistence),
-            durableCoordinator: null
+            durableCoordinator: null,
+            checkpointStore
         );
     }
 
@@ -535,6 +548,20 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
 
         private readonly ProjectTaskSnapshot _task;
         private readonly TurnPersistenceTestKit _persistence;
+        private readonly HashSet<Guid> _savedConversationIds = [];
+
+        /// <summary>
+        /// 只有受理时解析过的对话才算已保存，与真实 Facade 一样按项目匹配。
+        /// Only a conversation resolved at acceptance counts as saved, matched by project as the real Facade does.
+        /// </summary>
+        public Task<string?> FindContextIdAsync(
+            Guid projectId,
+            Guid conversationId,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult(
+                projectId == _task.ProjectId && _savedConversationIds.Contains(conversationId) ? _task.ContextId : null
+            );
 
         public FakeProjectTaskFacade(AgentExecutionTask task, TurnPersistenceTestKit persistence)
         {
@@ -557,6 +584,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         {
             ResolveCount++;
             LastRequest = request;
+            _savedConversationIds.Add(request.ConversationId);
             var resolved = _task with { ProjectConversationId = request.ConversationId, Generation = Generation ?? 0 };
             await _persistence.SeedConversationAsync(
                 new AgentExecutionTask

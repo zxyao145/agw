@@ -141,6 +141,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const activity = useExecutionActivity();
   const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
   const [sidebarVisible, setSidebarVisible] = React.useState(true);
+  const projectTabsRef = React.useRef<HTMLElement>(null);
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
   const chatReturnHref = buildChatHref("/desktop/chat", {
     projectId: activeProjectId,
@@ -159,6 +160,33 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const loadedProjectIds = projects.map((project) => project.id);
   const storedTabs = desktop.runtimeState?.settings.projectTabsByServer[serverId] ?? [];
   const [browserTabs, setBrowserTabs] = React.useState<string[]>([DEFAULT_PROJECT_ID]);
+
+  React.useEffect(() => {
+    const projectTabs = projectTabsRef.current;
+    if (!projectTabs) return;
+
+    const scrollTabs = (event: WheelEvent) => {
+      if (
+        event.ctrlKey ||
+        Math.abs(event.deltaX) >= Math.abs(event.deltaY) ||
+        projectTabs.scrollWidth <= projectTabs.clientWidth
+      ) {
+        return;
+      }
+
+      const unit =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? projectTabs.clientWidth
+            : 1;
+      event.preventDefault();
+      projectTabs.scrollLeft += event.deltaY * unit;
+    };
+
+    projectTabs.addEventListener("wheel", scrollTabs, { passive: false });
+    return () => projectTabs.removeEventListener("wheel", scrollTabs);
+  }, []);
 
   React.useEffect(() => {
     if (desktop.isDesktop) return;
@@ -284,8 +312,8 @@ function ChatShell({ children }: { children: React.ReactNode }) {
         >
           {sidebarVisible ? <PanelLeftClose /> : <PanelLeftOpen />}
         </button>
-        <nav className="agw-project-tabs" aria-label="Open projects">
-          <div className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
+        <nav ref={projectTabsRef} className="agw-project-tabs" aria-label="Open projects">
+          <div className="flex shrink-0 items-center gap-1">
             {tabs.map((projectId) => {
               const status = activity.getProjectStatus(projectId);
               return (
@@ -310,15 +338,15 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                 </div>
               );
             })}
-            <DesktopProjectPicker
-              projects={projects}
-              activeProjectId={activeProjectId}
-              isLoading={projectsQuery.isLoading}
-              errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
-              onSelect={openProject}
-              onCreate={createProject}
-            />
           </div>
+          <DesktopProjectPicker
+            projects={projects}
+            activeProjectId={activeProjectId}
+            isLoading={projectsQuery.isLoading}
+            errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
+            onSelect={openProject}
+            onCreate={createProject}
+          />
         </nav>
 
         <DropdownMenu>

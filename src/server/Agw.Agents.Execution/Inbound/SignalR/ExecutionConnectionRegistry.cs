@@ -99,19 +99,24 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
 
     public async Task<string?> FindInProcessExecutionAsync(
         Guid projectId,
-        string contextId,
+        Guid conversationId,
         string userId,
+        string callerConnectionId,
         CancellationToken cancellationToken
     )
     {
-        if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(contextId))
+        if (projectId == Guid.Empty || conversationId == Guid.Empty)
             throw new AgwException(ErrorCodes.InvalidParam);
-        var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
         foreach (var (connectionId, connection) in _connections)
         {
             if (
                 string.Equals(connection.UserId, userId, StringComparison.Ordinal)
-                && await connection.IsActiveConversationAsync(projectId, normalizedContextId, cancellationToken)
+                && await connection.IsActiveConversationAsync(
+                    projectId,
+                    conversationId,
+                    queriedBySelf: string.Equals(connectionId, callerConnectionId, StringComparison.Ordinal),
+                    cancellationToken
+                )
             )
             {
                 return connectionId;

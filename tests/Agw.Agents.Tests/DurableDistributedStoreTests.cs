@@ -191,7 +191,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
                     new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
                     task.ProjectConversationId,
                     TurnPersistenceTestKit.CreateInput("hello"),
-                    TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ContextId),
+                    TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),
                     Stream: true
                 )
                 {

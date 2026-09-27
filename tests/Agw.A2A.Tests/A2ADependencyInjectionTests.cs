@@ -173,6 +173,12 @@ public class A2ADependencyInjectionTests
         public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
             Task.FromResult<int?>(0);
 
+        public Task<string?> FindContextIdAsync(
+            Guid projectId,
+            Guid conversationId,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
         public Task<ProjectTaskSnapshot> ResolveAsync(
             ResolveProjectTaskRequest request,
             CancellationToken cancellationToken = default

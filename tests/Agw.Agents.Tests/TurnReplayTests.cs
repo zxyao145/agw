@@ -177,7 +177,7 @@ public sealed class TurnReplayTests
                 TurnPersistenceTestKit.UserId,
                 target,
                 task,
-                TurnPersistenceTestKit.CreateSettings(task.ProjectId),
+                TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),
                 TurnPersistenceTestKit.CreateInput("run"),
                 true,
                 ProjectWorkspacePaths.CreateSnapshot(task.ProjectId, AppContext.BaseDirectory, [])

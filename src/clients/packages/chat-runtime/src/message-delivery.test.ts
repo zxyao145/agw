@@ -47,7 +47,7 @@ test("existing message channel delivers every delta without revision negotiation
     { baseUrl: "https://agw.test", token: null, attachmentStore: null },
   );
   try {
-    await session.configure({ projectId: "project", contextId: "context" });
+    await session.configure({ projectId: "project", conversationId: "conversation" });
     const receive = handlers.get("ReceiveMessage")!;
     receive(update("a"));
     receive(update("a"));

@@ -522,6 +522,11 @@ public static class ErrorCodes
         "Quick prompts changed. Reload and try again.",
         HttpStatusCode.Conflict
     );
+    public static readonly ErrorCode ExecutionBusy = new(
+        409_0021,
+        "The previous execution is currently in progress, please wait and execute again.",
+        HttpStatusCode.Conflict
+    );
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(
         429_0001,

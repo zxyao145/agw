@@ -16,6 +16,12 @@ public class ContextIdUtil
     }
 
     /// <summary>
+    /// 为新建的 Project Conversation 生成唯一的 context ID。
+    /// Generates a unique context ID for a newly created Project Conversation.
+    /// </summary>
+    public static string CreateConversationContextId() => Guid.CreateVersion7().Normalize();
+
+    /// <summary>
     /// 解析可选 context ID；空值生成新标识，非空值转换为规范格式。
     /// </summary>
     public static string ResolveContextId(string? contextId)

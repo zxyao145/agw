@@ -218,7 +218,7 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
                 new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
                 task.ProjectConversationId,
                 input ?? TurnPersistenceTestKit.CreateInput("hello"),
-                TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ContextId),
+                TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),
                 Stream: true
             )
             {

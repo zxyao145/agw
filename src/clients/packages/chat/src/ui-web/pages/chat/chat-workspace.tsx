@@ -81,6 +81,7 @@ import { getApiErrorMessage } from "@agw/api";
 import {
   executionSessionManager,
   getExecutionReconnectProgress,
+  migrateDurableExecutionAttachment,
   type ExecutionReconnectState,
 } from "@agw/chat-runtime";
 import { useExecutionPlatform } from "../../execution-platform";
@@ -384,6 +385,7 @@ export function ChatWorkspace({
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [executionReconnectState, setExecutionReconnectState] =
     React.useState<ExecutionReconnectState | null>(null);
+  const reconnectRetryRef = React.useRef<(() => Promise<void>) | null>(null);
   const [isNarrowViewport, setIsNarrowViewport] = React.useState(false);
   const isMobile = sidebarVisible === undefined && isNarrowViewport;
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
@@ -392,10 +394,9 @@ export function ChatWorkspace({
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [conversationId, setConversationId] = React.useState<string | null>(queryConversationId);
-  const [contextId, setContextId] = React.useState<string | null>(null);
   const [chatSessionSeed, setChatSessionSeed] = React.useState<ChatSessionSeed>({
     revision: 0,
-    contextId: null,
+    conversationId: null,
     messages: [],
     historyTurns: [],
     usage: EMPTY_TOKEN_USAGE,
@@ -689,12 +690,11 @@ export function ChatWorkspace({
     hydratedConversationKeyRef.current = null;
     setIsLoadingConversation(false);
     setConversationId(null);
-    setContextId(null);
     // 新对话重新确定执行目标，不沿用上一个对话的选择。
     // A new conversation resolves its own target instead of keeping the previous conversation's one.
     setSelectedTargetValue(null);
     replaceChatSession({
-      contextId: null,
+      conversationId: null,
       messages: [],
       historyTurns: [],
       usage: EMPTY_TOKEN_USAGE,
@@ -746,15 +746,21 @@ export function ChatWorkspace({
             details.conversationId,
           ).targetValue ?? getResumeTargetValue(details.resumeState);
 
+        // 按执行上下文保存的旧 durable attachment 必须在 Chat 恢复配置之前移到对话键下。
+        // An old durable attachment saved by execution context must move to the conversation key before Chat restores its configuration.
+        migrateDurableExecutionAttachment({
+          projectId,
+          conversationId: details.conversationId,
+          contextId: details.contextId,
+        });
         hydratedConversationKeyRef.current = getConversationHydrationKey(
           projectId,
           details.conversationId,
         );
         setSelectedProjectId(projectId);
         setConversationId(details.conversationId);
-        setContextId(details.contextId);
         replaceChatSession({
-          contextId: details.contextId,
+          conversationId: details.conversationId,
           messages: messagePage.items,
           historyTurns: messagePage.turns,
           usage: details.usage,
@@ -958,9 +964,8 @@ export function ChatWorkspace({
       setSelectedProjectId(nextProjectId);
       setSelectedTargetValue(null);
       setConversationId(null);
-      setContextId(null);
       replaceChatSession({
-        contextId: null,
+        conversationId: null,
         messages: [],
         historyTurns: [],
         usage: EMPTY_TOKEN_USAGE,
@@ -1004,39 +1009,20 @@ export function ChatWorkspace({
     [handleTargetChange],
   );
 
-  const handleChatContextIdChange = React.useCallback(
-    (nextContextId: string | null) => {
-      setContextId(nextContextId);
-      if (nextContextId == null) {
-        hydratedConversationKeyRef.current = null;
-        setConversationId(null);
-        syncRoute(selectedProjectId, null);
-      }
-    },
-    [selectedProjectId, syncRoute],
-  );
-
-  const handleChatConversationIdChange = React.useCallback(
-    (nextConversationId: string | null) => {
-      // 新对话首次发送时获得 ID：把新对话记录中的目标交给这个 ID，输入草稿随发送消耗。
-      // A new conversation gets its ID on the first send: its target moves to that ID and the sent draft is dropped.
-      if (selectedProjectId && conversationId === null && nextConversationId) {
-        const scope = { serverId: executionServerId, projectId: selectedProjectId };
-        const { targetValue } = conversationComposerStorage.get(scope, null);
-        conversationComposerStorage.remove(scope, null);
-        conversationComposerStorage.set(scope, nextConversationId, { targetValue });
-      }
-      setConversationId(nextConversationId);
-    },
-    [conversationId, executionServerId, selectedProjectId],
-  );
-
   const handleConversationAccepted = React.useCallback(
     (acceptedConversationId: string) => {
       if (!selectedProjectId) {
         return;
       }
 
+      // 新对话被受理后才有服务端记录：新对话记录中的目标与之后输入的草稿都交给这个 ID。
+      // A new conversation has a server record only once accepted: the target and any draft typed since then move to this ID.
+      if (conversationId === null) {
+        const scope = { serverId: executionServerId, projectId: selectedProjectId };
+        const values = conversationComposerStorage.get(scope, null);
+        conversationComposerStorage.remove(scope, null);
+        conversationComposerStorage.set(scope, acceptedConversationId, values);
+      }
       hydratedConversationKeyRef.current = getConversationHydrationKey(
         selectedProjectId,
         acceptedConversationId,
@@ -1044,7 +1030,7 @@ export function ChatWorkspace({
       setConversationId(acceptedConversationId);
       syncRoute(selectedProjectId, acceptedConversationId);
     },
-    [selectedProjectId, syncRoute],
+    [conversationId, executionServerId, selectedProjectId, syncRoute],
   );
 
   const handleConversationSelect = React.useCallback(
@@ -1154,6 +1140,8 @@ export function ChatWorkspace({
       const scope = { serverId: executionServerId, projectId: selectedProjectId };
       executionSessionManager.conversationStatuses.remove(scope, deletedConversationId);
       conversationComposerStorage.remove(scope, deletedConversationId);
+      // 删除对话时释放它的执行连接与队列。Deleting a conversation releases its execution connection and queue.
+      void executionSessionManager.discard({ ...scope, conversationId: deletedConversationId });
     },
     [executionServerId, selectedProjectId],
   );
@@ -1163,6 +1151,7 @@ export function ChatWorkspace({
     const scope = { serverId: executionServerId, projectId: selectedProjectId };
     executionSessionManager.conversationStatuses.removeScope(scope);
     conversationComposerStorage.removeConversations(scope);
+    void executionSessionManager.discardProject(scope);
   }, [executionServerId, selectedProjectId]);
 
   const renderConversationList = React.useCallback(
@@ -1235,17 +1224,22 @@ export function ChatWorkspace({
 
   /** 立即执行当前 Server 的本次重连，并继续恢复对应的 execution 会话。 */
   const handleReconnectRetry = React.useCallback(() => {
-    if (!selectedProjectId || !contextId) return;
-    void executionSessionManager
-      .retryConnection({
-        serverId: executionServerId,
-        projectId: selectedProjectId,
-        contextId,
-      })
-      .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Failed to retry connection");
-      });
-  }, [contextId, executionServerId, selectedProjectId]);
+    const retry = reconnectRetryRef.current;
+    if (!retry) return;
+    void retry().catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : "Failed to retry connection");
+    });
+  }, []);
+
+  // Chat 给出当前对话（含草稿对话）的重连状态与重试入口。
+  // Chat reports the reconnect state and retry action of the current conversation, draft conversations included.
+  const handleReconnectStateChange = React.useCallback(
+    (state: ExecutionReconnectState | null, retry: () => Promise<void>) => {
+      reconnectRetryRef.current = retry;
+      setExecutionReconnectState(state);
+    },
+    [],
+  );
 
   // Chat/Files 切换栏；由 Shell 控制侧栏时，切换按钮放在 Shell 中。
   // Chat/Files toolbar; the sidebar toggle belongs to the Shell when it controls visibility.
@@ -1416,20 +1410,18 @@ export function ChatWorkspace({
                         Number(chatSessionSeed.revision) > 0 &&
                         queryProjectId === selectedProjectId &&
                         queryConversationId === conversationId &&
-                        chatSessionSeed.contextId === contextId
+                        chatSessionSeed.conversationId === conversationId
                       }
                       environmentVariables={environmentVariables}
                       resultOnly={resultOnly}
-                      onConversationIdChange={handleChatConversationIdChange}
                       onConversationAccepted={handleConversationAccepted}
-                      onContextIdChange={handleChatContextIdChange}
                       onConversationChange={refreshConversationList}
                       directoryId={selectedDirectory?.id}
                       searchDirectoryIds={searchDirectoryIds}
                       directories={projectDirectories}
                       pendingFileComments={comments}
                       onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
-                      onReconnectStateChange={setExecutionReconnectState}
+                      onReconnectStateChange={handleReconnectStateChange}
                     />
                   </div>
                 </div>

@@ -287,11 +287,13 @@ div[role="option"]:hover {
   }
 
   .agw-project-tabs {
-    @apply flex min-w-0 flex-1 items-center gap-1 overflow-hidden;
+    @apply flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain;
+    -webkit-app-region: no-drag;
+    scrollbar-width: none;
   }
 
   .agw-project-tab {
-    @apply flex h-8 max-w-44 items-center rounded-[9px] border border-transparent text-muted-foreground transition-colors;
+    @apply flex h-8 max-w-44 shrink-0 items-center rounded-[9px] border border-transparent text-muted-foreground transition-colors;
   }
 
   .agw-project-tab:hover {
@@ -585,7 +587,7 @@ div[role="option"]:hover {
 }
 
 .agw-input-queue {
-  @apply pointer-events-auto;
+  @apply pointer-events-auto pl-3 pr-3;
 }
 .agw-msg-body {
   @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-3;

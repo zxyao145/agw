@@ -52,10 +52,11 @@ internal sealed class AgentflowTurnTestHost
         Guid? conversationId = null
     )
     {
+        var task = CreateTask(projectId, contextId, taskId, conversationId);
         await using var runtime = AgentflowRuntimeFactory.CreateRuntime(
             agentflowId,
-            CreateTask(projectId, contextId, taskId, conversationId),
-            new ExecutionSettings(projectId ?? Guid.Empty, contextId, environmentVariables),
+            task,
+            new ExecutionSettings(task.ProjectId, task.ProjectConversationId, environmentVariables),
             deferHumanInteractions: false
         );
         await foreach (
@@ -84,10 +85,11 @@ internal sealed class AgentflowTurnTestHost
         string? contextId = null
     )
     {
+        var task = CreateTask(projectId, contextId, taskId, conversationId: null);
         await using var runtime = AgentflowRuntimeFactory.CreateRuntime(
             agentflowId,
-            CreateTask(projectId, contextId, taskId, conversationId: null),
-            new ExecutionSettings(projectId ?? Guid.Empty, contextId),
+            task,
+            new ExecutionSettings(task.ProjectId, task.ProjectConversationId),
             deferHumanInteractions: true
         );
         var messages = new List<AgwMessage>();

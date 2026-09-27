@@ -15,7 +15,8 @@ export type NativeChatBindings = {
   selectedProjectId: string | null;
   selectedDirectoryId?: string | null;
   selectedConversationId: string | null;
-  selectedContextId: string | null;
+  /** 本地状态已就绪、可以执行的对话。The conversation whose local state is ready to execute. */
+  readyConversationId: string | null;
   selectedTargetValue: string | null;
   selectedTarget: ChatTargetOption | null;
   selectedProject: {
@@ -108,7 +109,8 @@ export function NativeChatProvider({
         if (
           (!text.trim() && attachments.length === 0) ||
           bindings.isExecuting ||
-          (bindings.selectedConversationId && !bindings.selectedContextId)
+          (bindings.selectedConversationId &&
+            bindings.readyConversationId !== bindings.selectedConversationId)
         )
           return;
         const submittedText = text;

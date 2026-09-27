@@ -614,7 +614,10 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         .CreateRuntimeAsync(
                             manifest.AgentId,
                             manifest.Task.ToProjection(),
-                            manifest.Settings.ToRuntimeSettings(manifest.Task.ProjectId, manifest.Task.ContextId),
+                            manifest.Settings.ToRuntimeSettings(
+                                manifest.Task.ProjectId,
+                                manifest.Task.ProjectConversationId
+                            ),
                             token
                         )
                         .ConfigureAwait(false)
@@ -684,7 +687,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 await using var runtime = AgentflowRuntimeFactory.CreateRuntime(
                     manifest.AgentId,
                     manifest.Task.ToProjection(),
-                    manifest.Settings.ToRuntimeSettings(manifest.Task.ProjectId, manifest.Task.ContextId),
+                    manifest.Settings.ToRuntimeSettings(manifest.Task.ProjectId, manifest.Task.ProjectConversationId),
                     deferHumanInteractions: true
                 );
                 scope.BindInteractions(
@@ -742,6 +745,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             snapshot.Manifest.ExecutionId,
             snapshot.Status,
             CreateEnvelope(snapshot.Manifest).StreamingScopeId,
+            snapshot.Manifest.Task.ProjectConversationId,
             snapshot.Manifest.Settings.PermissionMode,
             snapshot.Manifest.Settings.NextPermissionMode ?? snapshot.Manifest.Settings.PermissionMode,
             Math.Max(snapshot.Manifest.Settings.NextPermissionVersion, snapshot.Manifest.Settings.PermissionVersion),

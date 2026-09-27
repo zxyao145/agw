@@ -218,7 +218,7 @@ public partial class AgentflowTurnExecutorTests
         AgentflowRuntimeFactory.CreateRuntime(
             fixture.Flow.Id,
             manifest.Task.ToProjection(),
-            new ExecutionSettings(manifest.Task.ProjectId, manifest.Task.ContextId),
+            new ExecutionSettings(manifest.Task.ProjectId, manifest.Task.ProjectConversationId),
             deferHumanInteractions: false
         );
 
