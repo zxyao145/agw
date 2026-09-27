@@ -609,8 +609,17 @@ div[role="option"]:hover {
   max-width: 100%;
 }
 
+.agw-msg-result-collapse-btn {
+  @apply flex mb-1 cursor-pointer items-center gap-1.5 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring;
+}
+
+/* agent name */
+.agw-msg-result-collapse-btn > span {
+  @apply min-w-0 truncate font-medium text-foreground/70;
+}
+
 .agw-msg-result {
-  @apply w-full rounded-md border border-[#e4e4e5] bg-card p-3;
+  @apply w-full rounded-md bg-card;
 }
 
 .msg-content {
