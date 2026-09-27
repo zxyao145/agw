@@ -584,7 +584,7 @@ div[role="option"]:hover {
   }
 }
 
-.agw-input-queue{
+.agw-input-queue {
   @apply pointer-events-auto;
 }
 .agw-msg-body {
