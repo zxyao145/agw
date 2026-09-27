@@ -22,6 +22,18 @@ public sealed class LocalFileSystem : ILocalFileSystem
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
 
+    /// <summary>
+    /// 按完整路径哈希选取的写锁，同一进程内不同实例（包括嵌套根目录）对同一文件的写入与读改写操作互斥。
+    /// Write locks selected by full-path hash, so writes and read-modify-write operations on the same file are mutually
+    /// exclusive across instances in the process, including nested roots.
+    /// </summary>
+    private static readonly SemaphoreSlim[] PathLocks = Enumerable
+        .Range(0, 64)
+        .Select(static _ => new SemaphoreSlim(1, 1))
+        .ToArray();
+
+    private static readonly StringComparer PathLockComparer = StringComparer.FromComparison(PathComparison);
+
     private readonly string _rootPath;
     private readonly string _rootFullPath;
     private readonly string _normalizedRoot;
@@ -62,6 +74,19 @@ public sealed class LocalFileSystem : ILocalFileSystem
                 ErrorCodes.FilePathOutsideRoot,
                 $"Path '{path}' is outside the allowed root directory."
             );
+        }
+
+        return fullPath;
+    }
+
+    private string ResolveFilePath(string path)
+    {
+        var fullPath = ResolvePath(path);
+        // ResolvePath 保证结果位于根目录下，长度不超过根目录前缀的只能是根目录本身。
+        // ResolvePath keeps the result under the root, so only the root itself is no longer than the root prefix.
+        if (fullPath.Length <= _normalizedRoot.Length)
+        {
+            throw new AgwException(ErrorCodes.FilePathRequired, "A file path must not be empty.");
         }
 
         return fullPath;
@@ -145,14 +170,62 @@ public sealed class LocalFileSystem : ILocalFileSystem
 
     public async Task WriteAllTextAsync(string path, string content, CancellationToken ct)
     {
-        var fullPath = ResolvePath(path);
-        var dir = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-        {
-            Directory.CreateDirectory(dir);
-        }
-        await File.WriteAllTextAsync(fullPath, content, ct);
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await AcquirePathLockAsync(fullPath, ct).ConfigureAwait(false);
+        await WriteFileAsync(fullPath, content, ct).ConfigureAwait(false);
     }
+
+    public async Task<bool> CreateTextFileAsync(string path, string content, CancellationToken ct)
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await AcquirePathLockAsync(fullPath, ct).ConfigureAwait(false);
+        if (File.Exists(fullPath))
+        {
+            return false;
+        }
+
+        await WriteFileAsync(fullPath, content, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<string>> ReadLinesAsync(
+        string path,
+        int startLine,
+        int? endLine,
+        CancellationToken ct
+    )
+    {
+        var fullPath = ResolveFilePath(path);
+        var content = await ReadExistingFileAsync(path, fullPath, ct).ConfigureAwait(false);
+        return TextContentEditor.SliceLines(content, startLine, endLine);
+    }
+
+    public async Task<int> ReplaceTextAsync(
+        string path,
+        string oldString,
+        string newString,
+        bool replaceAll,
+        CancellationToken ct
+    )
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await AcquirePathLockAsync(fullPath, ct).ConfigureAwait(false);
+        var content = await ReadExistingFileAsync(path, fullPath, ct).ConfigureAwait(false);
+        var (newContent, count) = TextContentEditor.ApplyReplace(content, oldString, newString, replaceAll);
+        await WriteFileAsync(fullPath, newContent, ct).ConfigureAwait(false);
+        return count;
+    }
+
+    public async Task ReplaceLinesAsync(string path, IReadOnlyList<AgwFileLineEdit> edits, CancellationToken ct)
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await AcquirePathLockAsync(fullPath, ct).ConfigureAwait(false);
+        var content = await ReadExistingFileAsync(path, fullPath, ct).ConfigureAwait(false);
+        var newContent = TextContentEditor.ApplyReplaceLines(content, edits);
+        await WriteFileAsync(fullPath, newContent, ct).ConfigureAwait(false);
+    }
+
+    public IAgwFileSystem GetSubFileSystem(string path) => new LocalFileSystem(ResolvePath(path));
 
     public Task CreateDirectoryAsync(string path, CancellationToken ct)
     {
@@ -161,9 +234,10 @@ public sealed class LocalFileSystem : ILocalFileSystem
         return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(string path, CancellationToken ct)
+    public async Task DeleteAsync(string path, CancellationToken ct)
     {
         var fullPath = ResolvePath(path);
+        using var pathLock = await AcquirePathLockAsync(fullPath, ct).ConfigureAwait(false);
 
         if (File.Exists(fullPath))
         {
@@ -173,8 +247,6 @@ public sealed class LocalFileSystem : ILocalFileSystem
         {
             Directory.Delete(fullPath, recursive: true);
         }
-
-        return Task.CompletedTask;
     }
 
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(
@@ -222,7 +294,7 @@ public sealed class LocalFileSystem : ILocalFileSystem
         }
     }
 
-    public async IAsyncEnumerable<SearchHit> SearchAsync(
+    public async IAsyncEnumerable<AgwFileSearchResult> SearchAsync(
         string rootPath,
         SearchOptions options,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct
@@ -294,7 +366,6 @@ public sealed class LocalFileSystem : ILocalFileSystem
         var hitCount = 0;
         var fileCount = 0;
         long totalBytes = 0;
-        var hits = new List<SearchHit>();
         char[]? buffer = null;
 
         try
@@ -338,7 +409,8 @@ public sealed class LocalFileSystem : ILocalFileSystem
                 fileCount++;
                 totalBytes += file.Length;
 
-                var relativePath = ToRelativePath(file.FullPath);
+                var matches = new List<AgwFileSearchMatch>();
+                bool stopSearch;
                 if (file.Length > MaxBufferedSearchFileBytes)
                 {
                     // 超出缓冲上限的文件逐行读取，内存占用与行长度相关。
@@ -359,57 +431,14 @@ public sealed class LocalFileSystem : ILocalFileSystem
 
                     using (reader)
                     {
-                        var lineNumber = 0;
-                        while (true)
-                        {
-                            ct.ThrowIfCancellationRequested();
-
-                            string? line;
-                            try
-                            {
-                                line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
-                            }
-                            catch (IOException)
-                            {
-                                break;
-                            }
-
-                            if (line == null || line.Contains('\0'))
-                            {
-                                break;
-                            }
-
-                            lineNumber++;
-                            bool isMatch;
-                            var regexTimedOut = false;
-                            try
-                            {
-                                isMatch = regex.IsMatch(line);
-                            }
-                            catch (RegexMatchTimeoutException)
-                            {
-                                isMatch = false;
-                                regexTimedOut = true;
-                            }
-
-                            if (regexTimedOut)
-                            {
-                                yield break;
-                            }
-
-                            if (!isMatch)
-                            {
-                                continue;
-                            }
-
-                            if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
-                            {
-                                yield break;
-                            }
-
-                            hitCount++;
-                            yield return new SearchHit(relativePath, lineNumber, line);
-                        }
+                        stopSearch = await CollectStreamedMatchesAsync(
+                                reader,
+                                regex,
+                                options.MaxHits - hitCount,
+                                matches,
+                                ct
+                            )
+                            .ConfigureAwait(false);
                     }
                 }
                 else
@@ -441,25 +470,29 @@ public sealed class LocalFileSystem : ILocalFileSystem
                         continue;
                     }
 
-                    hits.Clear();
-                    var timedOut = CollectHits(
+                    stopSearch = CollectMatches(
                         buffer.AsSpan(0, length),
                         regex,
-                        relativePath,
                         options.MaxHits - hitCount,
-                        hits,
+                        matches,
                         ct
                     );
-                    foreach (var hit in hits)
-                    {
-                        hitCount++;
-                        yield return hit;
-                    }
+                }
 
-                    if (timedOut)
+                hitCount += matches.Count;
+                if (matches.Count > 0)
+                {
+                    yield return new AgwFileSearchResult
                     {
-                        yield break;
-                    }
+                        FileName = ToRelativePath(file.FullPath),
+                        Snippet = matches[0].Line,
+                        MatchingLines = matches,
+                    };
+                }
+
+                if (stopSearch)
+                {
+                    yield break;
                 }
             }
         }
@@ -473,15 +506,72 @@ public sealed class LocalFileSystem : ILocalFileSystem
     }
 
     /// <summary>
+    /// 逐行读取超出缓冲上限的文件并收集命中；遇到含 '\0' 的行按二进制文件停止。返回整个搜索是否应当停止（正则超时或达到命中上限）。
+    /// Reads a file beyond the buffer limit line by line and collects matches; a line containing '\0' stops the file as
+    /// binary. Returns whether the whole search should stop (regex timeout or hit limit reached).
+    /// </summary>
+    private static async Task<bool> CollectStreamedMatchesAsync(
+        StreamReader reader,
+        Regex regex,
+        int? remainingHits,
+        List<AgwFileSearchMatch> matches,
+        CancellationToken cancellationToken
+    )
+    {
+        var lineNumber = 0;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            string? line;
+            try
+            {
+                line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+
+            if (line == null || line.Contains('\0'))
+            {
+                return false;
+            }
+
+            lineNumber++;
+            bool isMatch;
+            try
+            {
+                isMatch = regex.IsMatch(line);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return true;
+            }
+
+            if (!isMatch)
+            {
+                continue;
+            }
+
+            if (remainingHits.HasValue && matches.Count >= remainingHits.Value)
+            {
+                return true;
+            }
+
+            matches.Add(new AgwFileSearchMatch { LineNumber = lineNumber, Line = line });
+        }
+    }
+
+    /// <summary>
     /// 在内存中的文件内容里按 StreamReader.ReadLine 的换行规则逐行匹配；遇到含 '\0' 的行按二进制文件停止。返回是否发生了正则超时。
     /// Matches in-memory file content line by line with StreamReader.ReadLine's line breaks; a line containing '\0' stops the file as binary. Returns whether the regex timed out.
     /// </summary>
-    private static bool CollectHits(
+    private static bool CollectMatches(
         ReadOnlySpan<char> content,
         Regex regex,
-        string relativePath,
         int? remainingHits,
-        List<SearchHit> hits,
+        List<AgwFileSearchMatch> matches,
         CancellationToken cancellationToken
     )
     {
@@ -525,12 +615,12 @@ public sealed class LocalFileSystem : ILocalFileSystem
                 continue;
             }
 
-            if (remainingHits.HasValue && hits.Count >= remainingHits.Value)
+            if (remainingHits.HasValue && matches.Count >= remainingHits.Value)
             {
                 return false;
             }
 
-            hits.Add(new SearchHit(relativePath, lineNumber, line.ToString()));
+            matches.Add(new AgwFileSearchMatch { LineNumber = lineNumber, Line = line.ToString() });
         }
 
         return false;
@@ -585,6 +675,50 @@ public sealed class LocalFileSystem : ILocalFileSystem
             cancellationToken.ThrowIfCancellationRequested();
             yield return file;
         }
+    }
+
+    private static async Task WriteFileAsync(string fullPath, string content, CancellationToken ct)
+    {
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await File.WriteAllTextAsync(fullPath, content, ct).ConfigureAwait(false);
+    }
+
+    private static Task<string> ReadExistingFileAsync(string path, string fullPath, CancellationToken ct)
+    {
+        if (!File.Exists(fullPath))
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"File '{path}' was not found.");
+        }
+
+        return File.ReadAllTextAsync(fullPath, ct);
+    }
+
+    private static async Task<PathLock> AcquirePathLockAsync(string fullPath, CancellationToken ct)
+    {
+        var semaphore = PathLocks[(int)((uint)PathLockComparer.GetHashCode(fullPath) % (uint)PathLocks.Length)];
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        return new PathLock(semaphore);
+    }
+
+    /// <summary>
+    /// 已获取的路径写锁，释放时归还信号量。
+    /// An acquired path write lock that returns its semaphore when disposed.
+    /// </summary>
+    private readonly struct PathLock : IDisposable
+    {
+        private readonly SemaphoreSlim _semaphore;
+
+        public PathLock(SemaphoreSlim semaphore)
+        {
+            _semaphore = semaphore;
+        }
+
+        public void Dispose() => _semaphore.Release();
     }
 
     /// <summary>

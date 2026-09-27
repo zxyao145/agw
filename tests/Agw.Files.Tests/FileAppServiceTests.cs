@@ -626,11 +626,37 @@ public class FileAppServiceTests
             CancellationToken ct
         ) => _inner.EnumerateAsync(path, searchPattern, recursive, ct);
 
-        public IAsyncEnumerable<Agw.Files.Abstracts.Dtos.SearchHit> SearchAsync(
+        public IAsyncEnumerable<Agw.Files.Abstracts.Dtos.AgwFileSearchResult> SearchAsync(
             string rootPath,
             Agw.Files.Abstracts.Dtos.SearchOptions options,
             CancellationToken ct
         ) => _inner.SearchAsync(rootPath, options, ct);
+
+        public Task<bool> CreateTextFileAsync(string path, string content, CancellationToken ct) =>
+            _inner.CreateTextFileAsync(path, content, ct);
+
+        public Task<IReadOnlyList<string>> ReadLinesAsync(
+            string path,
+            int startLine,
+            int? endLine,
+            CancellationToken ct
+        ) => _inner.ReadLinesAsync(path, startLine, endLine, ct);
+
+        public Task<int> ReplaceTextAsync(
+            string path,
+            string oldString,
+            string newString,
+            bool replaceAll,
+            CancellationToken ct
+        ) => _inner.ReplaceTextAsync(path, oldString, newString, replaceAll, ct);
+
+        public Task ReplaceLinesAsync(
+            string path,
+            IReadOnlyList<Agw.Files.Abstracts.Dtos.AgwFileLineEdit> edits,
+            CancellationToken ct
+        ) => _inner.ReplaceLinesAsync(path, edits, ct);
+
+        public IAgwFileSystem GetSubFileSystem(string path) => new NonLocalFileSystem(_inner.GetSubFileSystem(path));
     }
 
     private sealed class FakeFileSystemResolver : IAgwFileSystemResolver

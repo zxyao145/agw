@@ -1,9 +1,11 @@
 using System.Text;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Tools.Impl.ToolBlocks.Storage;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Agw.Tools.Impl.ToolBlocks.FileAccess;
 
@@ -13,12 +15,14 @@ namespace Agw.Tools.Impl.ToolBlocks.FileAccess;
 /// </summary>
 /// <remarks>
 /// Every tool accepts an optional <c>directoryId</c>: omitted or <see langword="null"/> selects the primary directory,
-/// otherwise it must be the ID of an additional directory in the snapshot. Tool permissions and approval come from the
-/// <see cref="FileAccessToolBlock"/> member metadata.
+/// otherwise it must be the ID of an additional directory in the snapshot. File operations, path validation, and write
+/// serialization happen in <see cref="IAgwFileSystem"/>; this provider defines the tools and formats their results.
+/// Tool permissions and approval come from the <see cref="FileAccessToolBlock"/> member metadata.
 /// 每个工具都接受可选的 <c>directoryId</c>：省略或为 <see langword="null"/> 时使用主目录，否则必须是快照中某个附加目录的 ID。
+/// 文件操作、路径校验和写入互斥都在 <see cref="IAgwFileSystem"/> 中完成，本类只定义工具并整理结果。
 /// 工具权限与审批由 <see cref="FileAccessToolBlock"/> 的成员元数据决定。
 /// </remarks>
-internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposable
+internal sealed class AgwFileAccessProvider : AIContextProvider
 {
     public const string WriteToolName = "file_access_write";
     public const string ReadFileToolName = "file_access_read";
@@ -52,7 +56,6 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
 
     private readonly ProjectAgentFileStore _primaryStore;
     private readonly Dictionary<Guid, ProjectAgentFileStore> _additionalStores;
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private AITool[]? _tools;
 
     public AgwFileAccessProvider(IAgwFileSystemResolver resolver, Guid projectId, ProjectWorkspaceSnapshot snapshot)
@@ -71,12 +74,6 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     ) => ValueTask.FromResult(new AIContext { Instructions = Instructions, Tools = _tools ??= CreateTools() });
 
-    public ValueTask DisposeAsync()
-    {
-        _writeLock.Dispose();
-        return ValueTask.CompletedTask;
-    }
-
     [Description(
         "Write a file with the given name and content. By default, does not overwrite an existing file unless overwrite is set to true."
     )]
@@ -89,21 +86,13 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
     )
     {
         var store = ResolveStore(directoryId);
-        var path = AgwStorePaths.NormalizeRelativePath(fileName);
-
-        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        if (overwrite)
         {
-            if (!overwrite && await store.FileExistsAsync(path, cancellationToken).ConfigureAwait(false))
-            {
-                return $"File '{fileName}' already exists. To replace it, write again with overwrite set to true.";
-            }
-
-            await store.WriteAsync(path, content, cancellationToken).ConfigureAwait(false);
+            await store.WriteAsync(fileName, content, cancellationToken).ConfigureAwait(false);
         }
-        finally
+        else if (!await store.CreateFileAsync(fileName, content, cancellationToken).ConfigureAwait(false))
         {
-            _writeLock.Release();
+            return $"File '{fileName}' already exists. To replace it, write again with overwrite set to true.";
         }
 
         return $"File '{fileName}' written.";
@@ -118,9 +107,7 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     )
     {
-        var store = ResolveStore(directoryId);
-        var path = AgwStorePaths.NormalizeRelativePath(fileName);
-        var content = await store.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+        var content = await ResolveStore(directoryId).ReadAsync(fileName, cancellationToken).ConfigureAwait(false);
         return content ?? $"File '{fileName}' not found.";
     }
 
@@ -135,15 +122,13 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     )
     {
-        var store = ResolveStore(directoryId);
-        var path = AgwStorePaths.NormalizeRelativePath(fileName);
-        var content = await store.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-        if (content == null)
+        var lines = await ResolveStore(directoryId)
+            .ReadLinesAsync(fileName, startLine, endLine, cancellationToken)
+            .ConfigureAwait(false);
+        if (lines == null)
         {
             return $"File '{fileName}' not found.";
         }
-
-        var lines = AgwFileEditor.SliceLines(content, startLine, endLine);
 
         // 每行保留自己的结束符，因此结束符同时充当行分隔符。
         // Each line keeps its terminator, so it doubles as the row separator.
@@ -163,19 +148,8 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     )
     {
-        var store = ResolveStore(directoryId);
-        var path = AgwStorePaths.NormalizeRelativePath(fileName);
-
-        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var deleted = await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
-            return deleted ? $"File '{fileName}' deleted." : $"File '{fileName}' not found.";
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
+        var deleted = await ResolveStore(directoryId).DeleteAsync(fileName, cancellationToken).ConfigureAwait(false);
+        return deleted ? $"File '{fileName}' deleted." : $"File '{fileName}' not found.";
     }
 
     [Description(
@@ -188,12 +162,18 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     )
     {
-        var store = ResolveStore(directoryId);
         var target = string.IsNullOrWhiteSpace(directory) ? string.Empty : directory;
-        var entries = await store.ListChildrenAsync(target, cancellationToken).ConfigureAwait(false);
+        var entries = await ResolveStore(directoryId)
+            .ListChildrenAsync(target, cancellationToken)
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(globPattern))
+        {
+            return [.. entries];
+        }
 
-        var matcher = string.IsNullOrWhiteSpace(globPattern) ? null : AgwStorePaths.CreateGlobMatcher(globPattern);
-        return entries.Where(entry => AgwStorePaths.MatchesGlob(entry.Name, matcher)).ToList();
+        var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+        matcher.AddInclude(globPattern);
+        return entries.Where(entry => matcher.Match(entry.Name).HasMatches).ToList();
     }
 
     [Description(
@@ -208,26 +188,10 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     )
     {
-        var store = ResolveStore(directoryId);
-        var path = AgwStorePaths.NormalizeRelativePath(fileName);
-
-        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var content = await store.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-            if (content == null)
-            {
-                return $"File '{fileName}' not found.";
-            }
-
-            var (newContent, count) = AgwFileEditor.ApplyReplace(content, oldString, newString, replaceAll);
-            await store.WriteAsync(path, newContent, cancellationToken).ConfigureAwait(false);
-            return $"Replaced {count} occurrence(s) in '{fileName}'.";
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
+        var count = await ResolveStore(directoryId)
+            .ReplaceTextAsync(fileName, oldString, newString, replaceAll, cancellationToken)
+            .ConfigureAwait(false);
+        return count == null ? $"File '{fileName}' not found." : $"Replaced {count} occurrence(s) in '{fileName}'.";
     }
 
     [Description(
@@ -240,26 +204,10 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     )
     {
-        var store = ResolveStore(directoryId);
-        var path = AgwStorePaths.NormalizeRelativePath(fileName);
-
-        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var content = await store.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-            if (content == null)
-            {
-                return $"File '{fileName}' not found.";
-            }
-
-            var newContent = AgwFileEditor.ApplyReplaceLines(content, edits);
-            await store.WriteAsync(path, newContent, cancellationToken).ConfigureAwait(false);
-            return $"Replaced {edits.Count} line(s) in '{fileName}'.";
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
+        var replaced = await ResolveStore(directoryId)
+            .ReplaceLinesAsync(fileName, edits, cancellationToken)
+            .ConfigureAwait(false);
+        return replaced ? $"Replaced {edits.Count} line(s) in '{fileName}'." : $"File '{fileName}' not found.";
     }
 
     [Description(
@@ -281,28 +229,16 @@ internal sealed class AgwFileAccessProvider : AIContextProvider, IAsyncDisposabl
         CancellationToken cancellationToken = default
     )
     {
-        var store = ResolveStore(directoryId);
-        var pattern = string.IsNullOrWhiteSpace(globPattern) ? null : globPattern;
-        var target = AgwStorePaths.NormalizeRelativePath(directory ?? string.Empty, isDirectory: true);
-        var results = await store
-            .SearchAsync(target, regexPattern, pattern, recursive: true, cancellationToken)
+        var results = await ResolveStore(directoryId)
+            .SearchAsync(
+                directory ?? string.Empty,
+                regexPattern,
+                string.IsNullOrWhiteSpace(globPattern) ? null : globPattern,
+                recursive: true,
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        if (target.Length == 0)
-        {
-            return [.. results];
-        }
-
-        // Store 返回的 FileName 相对于搜索目录；这里改为相对于根目录，使其可以直接用于 file_access_read/replace/delete。
-        // The store returns FileName relative to the searched directory; re-root it so it composes directly with
-        // file_access_read/replace/delete.
-        return results
-            .Select(result => new AgwFileSearchResult
-            {
-                FileName = $"{target}/{result.FileName}",
-                Snippet = result.Snippet,
-                MatchingLines = result.MatchingLines,
-            })
-            .ToList();
+        return [.. results];
     }
 
     private AITool[] CreateTools()

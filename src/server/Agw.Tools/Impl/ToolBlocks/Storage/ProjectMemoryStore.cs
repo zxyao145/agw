@@ -1,6 +1,7 @@
 using System.IO.Enumeration;
 using System.Text.RegularExpressions;
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
@@ -155,7 +156,7 @@ public sealed class ProjectMemoryStore : AgwAgentFileStore
                         results.Add(
                             new AgwFileSearchResult
                             {
-                                FileName = relativePath,
+                                FileName = entry.Path,
                                 Snippet = matches[0].Line,
                                 MatchingLines = matches,
                             }
@@ -168,10 +169,80 @@ public sealed class ProjectMemoryStore : AgwAgentFileStore
             .ConfigureAwait(false);
     }
 
+    public override async Task<int?> ReplaceTextAsync(
+        string path,
+        string oldString,
+        string newString,
+        bool replaceAll,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var count = 0;
+        var edited = await EditContentAsync(
+                path,
+                content =>
+                {
+                    var replacement = TextContentEditor.ApplyReplace(content, oldString, newString, replaceAll);
+                    count = replacement.Count;
+                    return replacement.Content;
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return edited ? count : null;
+    }
+
+    public override Task<bool> ReplaceLinesAsync(
+        string path,
+        IReadOnlyList<AgwFileLineEdit> edits,
+        CancellationToken cancellationToken = default
+    ) => EditContentAsync(path, content => TextContentEditor.ApplyReplaceLines(content, edits), cancellationToken);
+
     public override Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
     {
         _ = NormalizePath(path, allowEmpty: true);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 在写入锁内读取、修改并写回一条记忆内容；记录不存在时返回 false。
+    /// Reads, edits, and writes back one memory entry under the write locks; returns false when the entry does not exist.
+    /// </summary>
+    private async Task<bool> EditContentAsync(
+        string path,
+        Func<string, string> edit,
+        CancellationToken cancellationToken
+    )
+    {
+        var normalizedPath = NormalizePath(path);
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(_projectId), cancellationToken)
+            .ConfigureAwait(false);
+        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
+        return await UsePersistenceAsync(async persistence =>
+            {
+                var ownerUserId = ResolveOwnerUserId();
+                var content = await persistence
+                    .ReadAsync(_projectId, ownerUserId, normalizedPath, cancellationToken)
+                    .ConfigureAwait(false);
+                if (content == null)
+                {
+                    return false;
+                }
+
+                await persistence
+                    .WriteAsync(
+                        _projectId,
+                        ownerUserId,
+                        normalizedPath,
+                        edit(content),
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            })
+            .ConfigureAwait(false);
     }
 
     /// <summary>

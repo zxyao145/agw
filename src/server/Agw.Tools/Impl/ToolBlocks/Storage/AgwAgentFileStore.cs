@@ -1,28 +1,30 @@
+using Agw.Files.Abstracts.Dtos;
+
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
 
 /// <summary>
-/// Provides an abstract base class for file storage operations.
-/// 文件存储操作的抽象基类。
+/// Provides an abstract base class for the storage behind the file and memory tools.
+/// 文件工具与记忆工具所用存储的抽象基类。
 /// </summary>
 /// <remarks>
 /// <para>
-/// All paths are relative to an implementation-defined root, use forward slashes as separators, and must not escape
-/// the root (e.g., via <c>..</c> segments). Each implementation enforces this.
-/// 所有路径都相对于实现定义的根目录，使用正斜杠分隔，且不得越出根目录（例如通过 <c>..</c> 段），由各实现负责校验。
+/// All paths are relative to an implementation-defined root and use forward slashes as separators. File-backed
+/// implementations delegate every file operation, including path validation, to <see cref="IAgwFileSystem"/>.
+/// 所有路径都相对于实现定义的根目录并使用正斜杠分隔；基于文件的实现把所有文件操作（包括路径校验）交给 <see cref="IAgwFileSystem"/>。
 /// </para>
 /// <para>
-/// <see cref="SearchAsync"/> must number matches over the content <see cref="ReadAsync"/> returns, treating
-/// <c>\n</c>, <c>\r\n</c>, or a lone <c>\r</c> as a line terminator, the same split <see cref="AgwFileEditor"/> uses.
-/// Otherwise grep and the line editor disagree and a line edit lands on a line the caller never saw.
-/// <see cref="SearchAsync"/> 必须基于 <see cref="ReadAsync"/> 返回的内容编号，并把 <c>\n</c>、<c>\r\n</c> 或单独的 <c>\r</c>
-/// 视为行结束符，与 <see cref="AgwFileEditor"/> 的切分规则一致；否则 grep 与按行编辑的行号不一致，编辑会作用到调用方没见过的行。
+/// <see cref="SearchAsync"/> must number matches the way <see cref="TextContentEditor"/> splits lines, treating
+/// <c>\n</c>, <c>\r\n</c>, or a lone <c>\r</c> as a line terminator. Otherwise grep and the line editor disagree and a
+/// line edit lands on a line the caller never saw.
+/// <see cref="SearchAsync"/> 必须按 <see cref="TextContentEditor"/> 的切分规则编号，把 <c>\n</c>、<c>\r\n</c> 或单独的 <c>\r</c>
+/// 视为行结束符；否则 grep 与按行编辑的行号不一致，编辑会作用到调用方没见过的行。
 /// </para>
 /// </remarks>
 public abstract class AgwAgentFileStore
 {
     /// <summary>
-    /// Writes content to a file, creating or overwriting it.
-    /// 写入文件内容，文件不存在时创建，存在时覆盖。
+    /// Writes content to the specified file, replacing its content.
+    /// 把内容写入指定文件并覆盖原有内容。
     /// </summary>
     public abstract Task WriteAsync(string path, string content, CancellationToken cancellationToken = default);
 
@@ -48,8 +50,8 @@ public abstract class AgwAgentFileStore
     );
 
     /// <summary>
-    /// Checks whether a file exists.
-    /// 检查文件是否存在。
+    /// Checks whether the specified file exists.
+    /// 判断是否存在指定的文件。
     /// </summary>
     public abstract Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default);
 
@@ -65,7 +67,7 @@ public abstract class AgwAgentFileStore
     /// </param>
     /// <param name="recursive">Whether descendant files are searched in addition to direct children.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>Results whose <see cref="AgwFileSearchResult.FileName"/> is relative to <paramref name="directory"/>.</returns>
+    /// <returns>Results whose <see cref="AgwFileSearchResult.FileName"/> is relative to the store root.</returns>
     public abstract Task<IReadOnlyList<AgwFileSearchResult>> SearchAsync(
         string directory,
         string regexPattern,
@@ -75,8 +77,32 @@ public abstract class AgwAgentFileStore
     );
 
     /// <summary>
-    /// Ensures a directory exists, creating it if necessary.
-    /// 确保目录存在，不存在时创建。
+    /// Replaces text by <see cref="TextContentEditor.ApplyReplace"/> and returns the replacement count, or
+    /// <see langword="null"/> when the file does not exist.
+    /// 按 <see cref="TextContentEditor.ApplyReplace"/> 的规则替换文本并返回替换次数；文件不存在时返回 <see langword="null"/>。
+    /// </summary>
+    public abstract Task<int?> ReplaceTextAsync(
+        string path,
+        string oldString,
+        string newString,
+        bool replaceAll,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Applies whole-line edits by <see cref="TextContentEditor.ApplyReplaceLines"/> and returns whether the file
+    /// existed.
+    /// 按 <see cref="TextContentEditor.ApplyReplaceLines"/> 的规则整行替换，并返回文件是否存在。
+    /// </summary>
+    public abstract Task<bool> ReplaceLinesAsync(
+        string path,
+        IReadOnlyList<AgwFileLineEdit> edits,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Creates the specified directory.
+    /// 创建指定目录。
     /// </summary>
     public abstract Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default);
 }

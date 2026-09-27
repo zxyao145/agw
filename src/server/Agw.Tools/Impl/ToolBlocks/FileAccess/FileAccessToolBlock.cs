@@ -49,9 +49,7 @@ public sealed class FileAccessToolBlock : IToolBlock
                     directory => new Agw.Shared.Runtime.ProjectWorkspaceDirectory(directory.Id, directory.Path)
                 )
             );
-        var provider = new AgwFileAccessProvider(_fileSystemResolver, context.ProjectId, snapshot);
-        contribution.ContextProviders.Add(provider);
-        contribution.AddResource(provider);
+        contribution.ContextProviders.Add(new AgwFileAccessProvider(_fileSystemResolver, context.ProjectId, snapshot));
         return ValueTask.FromResult(contribution);
     }
 }

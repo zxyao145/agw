@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Files.Abstracts;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
@@ -24,9 +25,13 @@ public sealed class ProjectMemoryProviderTests : IDisposable
         ProjectMemoryProvider.WriteToolName,
     ];
 
-    private readonly DirectoryInfo _workspace = Directory.CreateTempSubdirectory("agw-project-memory-provider-");
+    private readonly string _workspace = Directory
+        .CreateDirectory(
+            Path.Combine(AppContext.BaseDirectory, "project-memory-provider", Guid.CreateVersion7().ToString("N"))
+        )
+        .FullName;
 
-    public void Dispose() => _workspace.Delete(recursive: true);
+    public void Dispose() => Directory.Delete(_workspace, recursive: true);
 
     [Fact]
     public async Task InvokingAsync_ExposesProjectToolsWithoutSessionState()
@@ -174,6 +179,41 @@ public sealed class ProjectMemoryProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task ReplaceLinesAsync_ExpectedLineMismatch_ThrowsInvalidParamAndKeepsContent()
+    {
+        var store = CreateStore();
+        var context = await InvokeProviderAsync(CreateProvider(store));
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await GetFunction(context, ProjectMemoryProvider.WriteToolName)
+            .InvokeAsync(Arguments(("fileName", "notes.md"), ("content", "alpha\nbeta\n")), cancellationToken);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await GetFunction(context, ProjectMemoryProvider.ReplaceLinesToolName)
+                .InvokeAsync(
+                    Arguments(
+                        ("fileName", "notes.md"),
+                        (
+                            "edits",
+                            new List<AgwFileLineEdit>
+                            {
+                                new()
+                                {
+                                    LineNumber = 2,
+                                    NewLine = "delta\n",
+                                    ExpectedLine = "stale",
+                                },
+                            }
+                        )
+                    ),
+                    cancellationToken
+                )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal("alpha\nbeta\n", await store.ReadAsync("notes.md", cancellationToken));
+    }
+
+    [Fact]
     public async Task WriteAsync_NestedOrInternalNameIsRejected()
     {
         var context = await InvokeProviderAsync(CreateProvider(CreateStore()));
@@ -198,7 +238,7 @@ public sealed class ProjectMemoryProviderTests : IDisposable
 
     private ProjectAgentFileStore CreateStore() =>
         new(
-            new LocalFileSystemResolver(new LocalFileSystem(_workspace.FullName)),
+            new LocalFileSystemResolver(new LocalFileSystem(_workspace)),
             Guid.CreateVersion7(),
             ProjectMemoryToolBlock.FileSystemRoot
         );
@@ -299,6 +339,20 @@ public sealed class ProjectMemoryProviderTests : IDisposable
             bool recursive = false,
             CancellationToken cancellationToken = default
         ) => Task.FromResult<IReadOnlyList<AgwFileSearchResult>>([]);
+
+        public override Task<int?> ReplaceTextAsync(
+            string path,
+            string oldString,
+            string newString,
+            bool replaceAll,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<int?>(null);
+
+        public override Task<bool> ReplaceLinesAsync(
+            string path,
+            IReadOnlyList<AgwFileLineEdit> edits,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(false);
 
         public override Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
         {

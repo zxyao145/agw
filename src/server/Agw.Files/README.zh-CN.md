@@ -18,6 +18,7 @@
 | 项目文件列举、读取、删除、Git diff、暂存/取消暂存、重置和文件名搜索 | `Agw.Files.Application.Files.FileAppService` |
 | HTTP 参数和响应映射 | `Agw.Files.Api.FilesController`；预期失败抛出 `AgwException`，由共享的 `AgwApiExceptionMiddleware` 映射为 Bens.Results 信封 |
 | Local 文件系统实现与项目解析 | `Agw.Files.Infrastructure.Storage` |
+| 文件创建、按行读取、文本替换、按行编辑、按文件分组的内容搜索、子目录限定与同一文件的写入互斥 | `IAgwFileSystem`、`LocalFileSystem`；文本编辑算法在 `Agw.Files.Abstracts.TextContentEditor`，文件工具共用的 `AgwFileLineEdit`、`AgwFileSearchResult`、`AgwFileSearchMatch`、`AgwFileStoreEntry` 在 `Agw.Files.Abstracts.Dtos` |
 | 文件系统公共接口与 Git 返回模型 | `Agw.Files.Abstracts`、`Agw.Files.Abstracts.Dtos` |
 | Git 命令执行 | `Agw.Files.Infrastructure.Git` |
 | 面向 Agent 的文件工具 | `Agw.Tools.Impl.ToolBlocks.FileAccess` |

@@ -4,6 +4,12 @@ using Agw.Shared.Runtime;
 
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
 
+/// <summary>
+/// 基于 Project 目录 <see cref="IAgwFileSystem"/> 的文件工具存储；文件操作与路径校验都由 <see cref="IAgwFileSystem"/> 完成，
+/// 这里只负责选择目录以及限制返回给模型的内容规模。
+/// File-tool storage over a Project directory's <see cref="IAgwFileSystem"/>. File operations and path validation are
+/// done by <see cref="IAgwFileSystem"/>; this class only selects the directory and bounds what reaches the model.
+/// </summary>
 public sealed class ProjectAgentFileStore : AgwAgentFileStore
 {
     private const int MaxListEntries = 1_000;
@@ -49,47 +55,60 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
         _projectId = projectId;
         _workspaceSnapshot = workspaceSnapshot ?? ExecutionContextSlot.GetWorkspaceSnapshot(projectId);
         _directoryId = directoryId;
-        _rootPath = string.IsNullOrWhiteSpace(rootPath) ? null : NormalizeScopedPath(rootPath, allowEmpty: false);
+        _rootPath = string.IsNullOrWhiteSpace(rootPath) ? null : rootPath;
     }
 
     public override async Task WriteAsync(string path, string content, CancellationToken cancellationToken = default)
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
-        await fileSystem.WriteAllTextAsync(ScopePath(path), content, cancellationToken).ConfigureAwait(false);
+        await fileSystem.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 创建文件；文件已存在时不写入并返回 false。
+    /// Creates a file; returns false without writing when the file already exists.
+    /// </summary>
+    public async Task<bool> CreateFileAsync(string path, string content, CancellationToken cancellationToken = default)
+    {
+        var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
+        return await fileSystem.CreateTextFileAsync(path, content, cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<string?> ReadAsync(string path, CancellationToken cancellationToken = default)
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
-        var scopedPath = ScopePath(path);
-        var entry = await fileSystem.StatAsync(scopedPath, cancellationToken).ConfigureAwait(false);
-        if (entry is not { IsDirectory: false })
-        {
-            return null;
-        }
+        return await IsReadableFileAsync(fileSystem, path, cancellationToken).ConfigureAwait(false)
+            ? await fileSystem.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false)
+            : null;
+    }
 
-        if (entry.Size > MaxReadableFileSizeBytes)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"File '{path}' exceeds the 128 KiB file-access read limit. "
-                    + "Use file_access_grep to locate the relevant content instead."
-            );
-        }
-
-        return await fileSystem.ReadAllTextAsync(scopedPath, cancellationToken).ConfigureAwait(false);
+    /// <summary>
+    /// 读取从 1 开始、首尾都包含的行区间，每行保留结束符；文件不存在时返回 <see langword="null"/>。
+    /// Reads the 1-based inclusive line range with terminators kept, or returns <see langword="null"/> when the file does
+    /// not exist.
+    /// </summary>
+    public async Task<IReadOnlyList<string>?> ReadLinesAsync(
+        string path,
+        int startLine,
+        int? endLine,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
+        return await IsReadableFileAsync(fileSystem, path, cancellationToken).ConfigureAwait(false)
+            ? await fileSystem.ReadLinesAsync(path, startLine, endLine, cancellationToken).ConfigureAwait(false)
+            : null;
     }
 
     public override async Task<bool> DeleteAsync(string path, CancellationToken cancellationToken = default)
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
-        var scopedPath = ScopePath(path);
-        if (!await fileSystem.ExistsFileAsync(scopedPath, cancellationToken).ConfigureAwait(false))
+        if (!await fileSystem.ExistsFileAsync(path, cancellationToken).ConfigureAwait(false))
         {
             return false;
         }
 
-        await fileSystem.DeleteAsync(scopedPath, cancellationToken).ConfigureAwait(false);
+        await fileSystem.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -99,11 +118,10 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
     )
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
-        var scopedDirectory = ScopePath(directory);
         var entries = new List<AgwFileStoreEntry>();
         await foreach (
             var entry in fileSystem
-                .EnumerateAsync(scopedDirectory, "*", recursive: false, cancellationToken)
+                .EnumerateAsync(directory, "*", recursive: false, cancellationToken)
                 .ConfigureAwait(false)
         )
         {
@@ -133,7 +151,7 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
     public override async Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default)
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
-        return await fileSystem.ExistsFileAsync(ScopePath(path), cancellationToken).ConfigureAwait(false);
+        return await fileSystem.ExistsFileAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<IReadOnlyList<AgwFileSearchResult>> SearchAsync(
@@ -145,13 +163,13 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
     )
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
-        var scopedDirectory = ScopePath(directory);
-        var results = new Dictionary<string, AgwFileSearchResult>(StringComparer.OrdinalIgnoreCase);
+        var results = new List<AgwFileSearchResult>();
         var resultCharacters = 0;
+        var budgetExhausted = false;
         await foreach (
-            var hit in fileSystem
+            var fileResult in fileSystem
                 .SearchAsync(
-                    scopedDirectory,
+                    directory,
                     new SearchOptions(
                         regexPattern,
                         IsRegex: true,
@@ -169,59 +187,129 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
                 .ConfigureAwait(false)
         )
         {
-            var relativePath = GetPathRelativeToDirectory(scopedDirectory, hit.Path);
-            if (!recursive && relativePath.Contains('/'))
+            // 按字符预算截断返回给模型的命中行；预算用完时停止整个搜索。
+            // Truncate the lines returned to the model within a character budget; stop the whole search once it runs out.
+            AgwFileSearchResult? result = null;
+            foreach (var match in fileResult.MatchingLines)
             {
-                continue;
+                var fixedCharacters = result == null ? fileResult.FileName.Length : 0;
+                var lineCopies = result == null ? 2 : 1;
+                var availableLineCharacters =
+                    (MaxSearchResultCharacters - resultCharacters - fixedCharacters) / lineCopies;
+                var maxLineCharacters = Math.Min(MaxSearchLineCharacters, availableLineCharacters);
+                if (
+                    maxLineCharacters <= 0
+                    || (match.Line.Length > maxLineCharacters && maxLineCharacters <= TruncatedLineSuffix.Length)
+                )
+                {
+                    budgetExhausted = true;
+                    break;
+                }
+
+                var line = TruncateSearchLine(match.Line, maxLineCharacters);
+                if (result == null)
+                {
+                    result = new AgwFileSearchResult
+                    {
+                        FileName = fileResult.FileName,
+                        Snippet = line,
+                        MatchingLines = [],
+                    };
+                    results.Add(result);
+                    resultCharacters += fixedCharacters + line.Length;
+                }
+
+                result.MatchingLines.Add(new AgwFileSearchMatch { LineNumber = match.LineNumber, Line = line });
+                resultCharacters += line.Length;
             }
 
-            var isFirstMatch = !results.TryGetValue(relativePath, out var result);
-            var fixedCharacters = isFirstMatch ? relativePath.Length : 0;
-            var lineCopies = isFirstMatch ? 2 : 1;
-            var availableLineCharacters = (MaxSearchResultCharacters - resultCharacters - fixedCharacters) / lineCopies;
-            var maxLineCharacters = Math.Min(MaxSearchLineCharacters, availableLineCharacters);
-            if (
-                maxLineCharacters <= 0
-                || (hit.Line.Length > maxLineCharacters && maxLineCharacters <= TruncatedLineSuffix.Length)
-            )
+            if (budgetExhausted)
             {
                 break;
             }
-
-            var line = TruncateSearchLine(hit.Line, maxLineCharacters);
-            if (result == null)
-            {
-                result = new AgwFileSearchResult
-                {
-                    FileName = relativePath,
-                    Snippet = line,
-                    MatchingLines = [],
-                };
-                results.Add(relativePath, result);
-                resultCharacters += fixedCharacters + line.Length;
-            }
-
-            result.MatchingLines.Add(new AgwFileSearchMatch { LineNumber = hit.LineNumber, Line = line });
-            resultCharacters += line.Length;
         }
 
-        return results.Values.OrderBy(static result => result.FileName, StringComparer.OrdinalIgnoreCase).ToArray();
+        return results.OrderBy(static result => result.FileName, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public override async Task<int?> ReplaceTextAsync(
+        string path,
+        string oldString,
+        string newString,
+        bool replaceAll,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
+        return await IsReadableFileAsync(fileSystem, path, cancellationToken).ConfigureAwait(false)
+            ? await fileSystem
+                .ReplaceTextAsync(path, oldString, newString, replaceAll, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+    }
+
+    public override async Task<bool> ReplaceLinesAsync(
+        string path,
+        IReadOnlyList<AgwFileLineEdit> edits,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
+        if (!await IsReadableFileAsync(fileSystem, path, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        await fileSystem.ReplaceLinesAsync(path, edits, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     public override async Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
-        await fileSystem.CreateDirectoryAsync(ScopePath(path), cancellationToken).ConfigureAwait(false);
+        await fileSystem.CreateDirectoryAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<IAgwFileSystem> ResolveAsync(CancellationToken cancellationToken) =>
-        (
-            _workspaceSnapshot == null
-                ? await _resolver.ResolveAsync(_projectId, _directoryId, cancellationToken).ConfigureAwait(false)
-                : await _resolver
-                    .ResolveSnapshotAsync(_projectId, _workspaceSnapshot, _directoryId, cancellationToken)
-                    .ConfigureAwait(false)
-        ) ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
+    private async Task<IAgwFileSystem> ResolveAsync(CancellationToken cancellationToken)
+    {
+        var fileSystem =
+            (
+                _workspaceSnapshot == null
+                    ? await _resolver.ResolveAsync(_projectId, _directoryId, cancellationToken).ConfigureAwait(false)
+                    : await _resolver
+                        .ResolveSnapshotAsync(_projectId, _workspaceSnapshot, _directoryId, cancellationToken)
+                        .ConfigureAwait(false)
+            ) ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
+        return _rootPath == null ? fileSystem : fileSystem.GetSubFileSystem(_rootPath);
+    }
+
+    /// <summary>
+    /// 判断路径是否为可读取的文件；文件超过读取上限时抛出异常，引导模型改用 grep。
+    /// Returns whether the path is a readable file; a file over the read limit throws, pointing the model to grep.
+    /// </summary>
+    private static async Task<bool> IsReadableFileAsync(
+        IAgwFileSystem fileSystem,
+        string path,
+        CancellationToken cancellationToken
+    )
+    {
+        var entry = await fileSystem.StatAsync(path, cancellationToken).ConfigureAwait(false);
+        if (entry is not { IsDirectory: false })
+        {
+            return false;
+        }
+
+        if (entry.Size > MaxReadableFileSizeBytes)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"File '{path}' exceeds the 128 KiB file-access read limit. "
+                    + "Use file_access_grep to locate the relevant content instead."
+            );
+        }
+
+        return true;
+    }
 
     private static string TruncateSearchLine(string line, int maxCharacters)
     {
@@ -231,50 +319,5 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
         }
 
         return string.Concat(line.AsSpan(0, maxCharacters - TruncatedLineSuffix.Length), TruncatedLineSuffix);
-    }
-
-    private string ScopePath(string path)
-    {
-        if (_rootPath == null)
-        {
-            return path;
-        }
-
-        var normalizedPath = NormalizeScopedPath(path, allowEmpty: true);
-        return normalizedPath.Length == 0 ? _rootPath : $"{_rootPath}/{normalizedPath}";
-    }
-
-    private static string NormalizeScopedPath(string path, bool allowEmpty)
-    {
-        ArgumentNullException.ThrowIfNull(path);
-        var normalizedPath = path.Replace('\\', '/').Trim('/');
-        if (
-            (!allowEmpty && normalizedPath.Length == 0)
-            || Path.IsPathRooted(path)
-            || normalizedPath.Split('/').Any(static part => part is "." or "..")
-        )
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Scoped file-store paths must be non-rooted relative paths."
-            );
-        }
-
-        return normalizedPath;
-    }
-
-    private static string GetPathRelativeToDirectory(string directory, string path)
-    {
-        var normalizedPath = path.Replace('\\', '/');
-        var normalizedDirectory = directory.Trim('/', '\\').Replace('\\', '/');
-        if (normalizedDirectory.Length == 0)
-        {
-            return normalizedPath;
-        }
-
-        var prefix = normalizedDirectory + "/";
-        return normalizedPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? normalizedPath[prefix.Length..]
-            : normalizedPath;
     }
 }

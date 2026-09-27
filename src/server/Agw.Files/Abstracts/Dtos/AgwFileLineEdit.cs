@@ -1,10 +1,12 @@
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 
-namespace Agw.Tools.Impl.ToolBlocks.Storage;
+namespace Agw.Files.Abstracts.Dtos;
 
 /// <summary>
-/// Represents a single whole-line replacement used by the <c>replace_lines</c> tools.
-/// 表示 <c>replace_lines</c> 工具使用的单行整体替换。
+/// Represents a single whole-line replacement used by <see cref="IAgwFileSystem.ReplaceLinesAsync"/> and the
+/// <c>replace_lines</c> tools, whose parameter schema is generated from this type.
+/// 表示 <see cref="IAgwFileSystem.ReplaceLinesAsync"/> 与 <c>replace_lines</c> 工具使用的单行整体替换，工具的参数 Schema 由本类型生成。
 /// </summary>
 public sealed class AgwFileLineEdit
 {

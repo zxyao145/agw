@@ -70,7 +70,7 @@ public sealed class ProjectAgentFileStoreTests
             store.WriteAsync("../outside.md", "invalid", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
     }
 
     [Fact]

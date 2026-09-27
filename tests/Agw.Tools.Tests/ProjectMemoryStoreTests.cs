@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Tools;
 using Agw.Shared.Coordination;
@@ -87,6 +88,86 @@ public sealed class ProjectMemoryStoreTests : IDisposable
             alpha.MatchingLines.Select(line => (line.LineNumber, line.Line))
         );
         Assert.Equal([(4, "")], blank.MatchingLines.Select(line => (line.LineNumber, line.Line)));
+    }
+
+    [Fact]
+    public async Task ReplaceTextAsync_ExistingEntry_ReplacesContentAndReturnsCount()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        await using (var database = new AgwDbContext(options))
+        {
+            await database.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var projectId = Guid.CreateVersion7();
+        await SeedProjectsAsync(options, cancellationToken, projectId);
+        var store = new ProjectMemoryStore(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            TimeProvider.System,
+            projectId
+        );
+        await store.WriteAsync("notes.md", "value value", cancellationToken);
+
+        var count = await store.ReplaceTextAsync("notes.md", "value", "other", replaceAll: true, cancellationToken);
+
+        Assert.Equal(2, count);
+        Assert.Equal("other other", await store.ReadAsync("notes.md", cancellationToken));
+    }
+
+    [Fact]
+    public async Task ReplaceLinesAsync_ExistingEntry_ReplacesLineAndMissingEntryReturnsFalse()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        await using (var database = new AgwDbContext(options))
+        {
+            await database.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var projectId = Guid.CreateVersion7();
+        await SeedProjectsAsync(options, cancellationToken, projectId);
+        var store = new ProjectMemoryStore(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            TimeProvider.System,
+            projectId
+        );
+        await store.WriteAsync("notes.md", "alpha\nbeta\n", cancellationToken);
+
+        var replaced = await store.ReplaceLinesAsync(
+            "notes.md",
+            [
+                new AgwFileLineEdit
+                {
+                    LineNumber = 2,
+                    NewLine = "delta\n",
+                    ExpectedLine = "beta",
+                },
+            ],
+            cancellationToken
+        );
+        var missing = await store.ReplaceLinesAsync(
+            "missing.md",
+            [new AgwFileLineEdit { LineNumber = 1, NewLine = "x\n" }],
+            cancellationToken
+        );
+
+        Assert.True(replaced);
+        Assert.False(missing);
+        Assert.Equal("alpha\ndelta\n", await store.ReadAsync("notes.md", cancellationToken));
+        Assert.Null(await store.ReadAsync("missing.md", cancellationToken));
     }
 
     [Fact]

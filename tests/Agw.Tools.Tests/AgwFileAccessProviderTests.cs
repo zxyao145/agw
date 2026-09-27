@@ -1,20 +1,24 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Files.Abstracts;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Agw.Tools.Impl.ToolBlocks.FileAccess;
-using Agw.Tools.Impl.ToolBlocks.Storage;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Tests;
 
-public sealed class AgwFileAccessProviderTests : IAsyncDisposable
+public sealed class AgwFileAccessProviderTests : IDisposable
 {
-    private readonly DirectoryInfo _root = Directory.CreateTempSubdirectory("agw-file-access-provider-");
+    private readonly string _root = Path.Combine(
+        AppContext.BaseDirectory,
+        "file-access-provider",
+        Guid.CreateVersion7().ToString("N")
+    );
     private readonly Guid _directoryId = Guid.CreateVersion7();
     private readonly string _primary;
     private readonly string _extra;
@@ -22,8 +26,8 @@ public sealed class AgwFileAccessProviderTests : IAsyncDisposable
 
     public AgwFileAccessProviderTests()
     {
-        _primary = _root.CreateSubdirectory("primary").FullName;
-        _extra = _root.CreateSubdirectory("extra").FullName;
+        _primary = Directory.CreateDirectory(Path.Combine(_root, "primary")).FullName;
+        _extra = Directory.CreateDirectory(Path.Combine(_root, "extra")).FullName;
         var projectId = Guid.CreateVersion7();
         var snapshot = ProjectWorkspacePaths.CreateSnapshot(
             projectId,
@@ -33,11 +37,7 @@ public sealed class AgwFileAccessProviderTests : IAsyncDisposable
         _provider = new AgwFileAccessProvider(new SnapshotFileSystemResolver(), projectId, snapshot);
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _provider.DisposeAsync();
-        _root.Delete(recursive: true);
-    }
+    public void Dispose() => Directory.Delete(_root, recursive: true);
 
     [Fact]
     public async Task WriteAsync_ExistingFileWithoutOverwrite_KeepsContent()
@@ -101,6 +101,18 @@ public sealed class AgwFileAccessProviderTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ReadLinesAsync_MissingFile_ReturnsNotFound()
+    {
+        var result = await InvokeAsync(
+            AgwFileAccessProvider.ReadLinesToolName,
+            ("fileName", "missing.txt"),
+            ("startLine", 1)
+        );
+
+        Assert.Equal("File 'missing.txt' not found.", ResultText(result));
+    }
+
+    [Fact]
     public async Task ReplaceLinesAsync_MatchingExpectedLine_ReplacesThatLine()
     {
         var token = TestContext.Current.CancellationToken;
@@ -160,7 +172,7 @@ public sealed class AgwFileAccessProviderTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ReplaceAsync_MultipleOccurrencesWithoutReplaceAll_ThrowsInvalidParam()
+    public async Task ReplaceAsync_MultipleOccurrencesWithoutReplaceAll_ThrowsMultipleMatches()
     {
         var token = TestContext.Current.CancellationToken;
         var path = Path.Combine(_primary, "notes.txt");
@@ -175,7 +187,7 @@ public sealed class AgwFileAccessProviderTests : IAsyncDisposable
             )
         );
 
-        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal(ErrorCodes.MultipleMatches.Code, exception.Code);
         Assert.Contains("replaceAll=true", exception.Message, StringComparison.Ordinal);
         Assert.Equal("value value", await File.ReadAllTextAsync(path, token));
     }
@@ -248,13 +260,13 @@ public sealed class AgwFileAccessProviderTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ReadAsync_PathTraversal_ThrowsInvalidParam()
+    public async Task ReadAsync_PathTraversal_ThrowsPathOutsideRoot()
     {
         var exception = await Assert.ThrowsAsync<AgwException>(async () =>
-            await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "../primary/secret.txt"))
+            await InvokeAsync(AgwFileAccessProvider.ReadFileToolName, ("fileName", "../extra/secret.txt"))
         );
 
-        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
     }
 
     [Theory]

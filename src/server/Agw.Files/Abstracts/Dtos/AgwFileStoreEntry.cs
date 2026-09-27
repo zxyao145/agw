@@ -1,10 +1,10 @@
 using System.Text.Json.Serialization;
 
-namespace Agw.Tools.Impl.ToolBlocks.Storage;
+namespace Agw.Files.Abstracts.Dtos;
 
 /// <summary>
-/// Represents a single direct child of a directory returned by <see cref="AgwAgentFileStore.ListChildrenAsync"/>.
-/// 表示 <see cref="AgwAgentFileStore.ListChildrenAsync"/> 返回的一个目录直接子项。
+/// Represents a single direct child of a listed directory, as returned by the <c>ls</c> tools.
+/// 表示所列目录的一个直接子项，是 <c>ls</c> 工具的返回结构。
 /// </summary>
 public sealed class AgwFileStoreEntry
 {
