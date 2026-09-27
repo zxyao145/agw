@@ -140,7 +140,7 @@ public partial class AgentflowTurnExecutorTests
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -152,7 +152,7 @@ public partial class AgentflowTurnExecutorTests
 
         var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 1, [CreateResponse(manifest, request, true)], waiting.Checkpoint),
+            new(manifest.TurnId, 1, [CreateResponse(manifest, request, true)], waiting.Checkpoint),
             sink,
             TestContext.Current.CancellationToken
         );

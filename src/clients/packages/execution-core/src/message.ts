@@ -142,6 +142,17 @@ function cloneStreamingMessage<T extends ExecutionMessage>(message: T): T {
   return cloned;
 }
 
+/**
+ * 给本地创建的用户消息写入所属 turnId，使它与服务端保存的输入行形状一致：历史锚点按 turnId + messageId 识别输入。
+ * Writes the owning turnId on a locally created user message so it matches the input row the server stores: history anchors identify inputs by turnId + messageId.
+ */
+export function markTurnMessage<T extends ExecutionMessage>(message: T, turnId: string): T {
+  return {
+    ...message,
+    additionalProperties: { ...message.additionalProperties, turnId },
+  };
+}
+
 export function scopeStreamingMessage<T extends ExecutionMessage>(
   message: T,
   streamingScopeId: string,

@@ -17,12 +17,12 @@ internal enum DurableExecutionSegmentStatus
 /// <summary>
 /// 调用可恢复分段所需的输入，包括上一分段的人机回答和 Agentflow checkpoint。
 /// </summary>
-/// <param name="ExecutionId">当前业务执行标识。</param>
+/// <param name="TurnId">当前 Turn 标识。</param>
 /// <param name="SegmentIndex">从零开始的分段序号。</param>
 /// <param name="ResolvedInteractions">上一等待边界已解析的人工回答。</param>
 /// <param name="Checkpoint">上一分段输出的 Agentflow checkpoint。</param>
 internal sealed record DurableExecutionSegmentInput(
-    Guid ExecutionId,
+    Guid TurnId,
     int SegmentIndex,
     IReadOnlyList<DurableResolvedInteraction> ResolvedInteractions,
     DurableAgentflowCheckpoint? Checkpoint
@@ -38,9 +38,9 @@ internal sealed record DurableExecutionSegmentInput(
 internal sealed record DurableExecutionSegmentResult
 {
     /// <summary>
-    /// 获取产生该结果的业务执行标识。
+    /// 获取产生该结果的 Turn 标识。
     /// </summary>
-    public required Guid ExecutionId { get; init; }
+    public required Guid TurnId { get; init; }
 
     /// <summary>
     /// 获取产生该结果的分段序号。
@@ -82,21 +82,21 @@ internal sealed record DurableExecutionSegmentResult
     public int StepCount { get; init; }
 }
 
-internal sealed record DurableExecutionOutcome(Guid ExecutionId, DurableExecutionStatus Status, string? ErrorMessage);
+internal sealed record DurableExecutionOutcome(Guid TurnId, DurableExecutionStatus Status, string? ErrorMessage);
 
 /// <summary>
 /// 协调层返回给 connection attachment 的最小执行状态。
 /// </summary>
-/// <param name="ExecutionId">业务执行标识。</param>
+/// <param name="TurnId">Turn 标识。</param>
 /// <param name="Status">当前执行状态。</param>
-/// <param name="StreamingScopeId">原始用户消息标识，用于把恢复消息绑定到同一轮历史。</param>
+/// <param name="StreamingScopeId">Turn 的渲染作用域（TurnId 的字符串形式），用于把恢复消息绑定到同一轮历史。</param>
 /// <param name="ConversationId">执行所属的 Project Conversation。The Project Conversation the execution belongs to.</param>
 /// <param name="ActivePermissionMode">Permission snapshot for this turn.</param>
 /// <param name="NextPermissionMode">Selected permission for the next turn.</param>
 /// <param name="NextPermissionVersion">Version of the selected permission.</param>
 /// <param name="ActivePermissionVersion">Version of this turn's immutable permission snapshot.</param>
 internal sealed record DurableExecutionStatusResponse(
-    Guid ExecutionId,
+    Guid TurnId,
     DurableExecutionStatus Status,
     string StreamingScopeId,
     Guid ConversationId,

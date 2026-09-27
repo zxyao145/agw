@@ -379,7 +379,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
                 ?? DurableExecutionJson.Serialize(
                     new DurableExecutionManifest
                     {
-                        ExecutionId = id,
+                        TurnId = id,
                         UserId = owner,
                         WorkspaceSnapshot = Agw.Shared.Utils.ProjectWorkspacePaths.CreateSnapshot(projectId, null),
                         AgentId = Guid.CreateVersion7(),

@@ -35,7 +35,7 @@ public enum AgentExecutionPermissionMode
 public sealed record AgentTarget(AgentTargetKind Kind, Guid? Id = null, string? Name = null);
 
 public sealed record AgentExecutionRequest(
-    Guid ExecutionId,
+    Guid TurnId,
     string OwnerUserId,
     AgentTarget Target,
     ProjectTaskSnapshot Task,
@@ -46,7 +46,7 @@ public sealed record AgentExecutionRequest(
 );
 
 public sealed record AgentExecutionResult(
-    Guid ExecutionId,
+    Guid TurnId,
     AgentExecutionState State,
     IReadOnlyList<AgwMessage> Messages,
     string? ErrorMessage = null
@@ -70,20 +70,20 @@ public interface IAgentExecutionFacade
 public interface IDurableAgentExecutionFacade
 {
     Task<AgentExecutionResult> GetOutcomeAsync(
-        Guid executionId,
+        Guid turnId,
         string ownerUserId,
         CancellationToken cancellationToken = default
     );
 
     IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
-        Guid executionId,
+        Guid turnId,
         string ownerUserId,
         string? afterCursor,
         CancellationToken cancellationToken = default
     );
 
     Task<bool> InterruptAsync(
-        Guid executionId,
+        Guid turnId,
         string ownerUserId,
         string reason,
         CancellationToken cancellationToken = default

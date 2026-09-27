@@ -225,7 +225,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
                 && job.ProjectId == target.ProjectId
                 && job.CreateBy == target.OwnerUserId
                 && job.Status != JobStatus.Running
-                && job.ActiveExecutionId == null
+                && job.ActiveTurnId == null
             )
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -338,9 +338,9 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             && execution.ProjectId == projectId
             && (!conversationId.HasValue || execution.ProjectConversationId == conversationId.Value)
         );
-        var executionIds = executions.Select(execution => execution.Id);
+        var turnIds = executions.Select(execution => execution.Id);
         await _dbContext
-            .DurableExecutionEvents.Where(entry => executionIds.Contains(entry.TurnId))
+            .DurableExecutionEvents.Where(entry => turnIds.Contains(entry.TurnId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
         await executions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);

@@ -239,13 +239,13 @@ public class ExecutionRequestsTests
     }
 
     [Fact]
-    public void Deserialize_ExecCommand_WithExecutionId_PreservesExecutionIdentity()
+    public void Deserialize_ExecCommand_WithTurnId_PreservesTurnId()
     {
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var payload = $$"""
             {
               "type": "ExecCommand",
-              "executionId": "{{executionId}}",
+              "turnId": "{{turnId}}",
               "agentType": 0,
               "input": {
                 "messageId": "msg-1",
@@ -256,24 +256,24 @@ public class ExecutionRequestsTests
 
         var request = Assert.IsType<ExecCommand>(Deserialize(payload));
 
-        Assert.Equal(executionId, request.ExecutionId);
+        Assert.Equal(turnId, request.TurnId);
     }
 
     [Fact]
-    public void Deserialize_SubscribeExecutionCommand_ReturnsCursor()
+    public void Deserialize_SubscribeTurnCommand_ReturnsCursor()
     {
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var payload = $$"""
             {
-              "type": "SubscribeExecutionCommand",
-              "executionId": "{{executionId}}",
+              "type": "SubscribeTurnCommand",
+              "turnId": "{{turnId}}",
               "cursor": "4-7"
             }
             """;
 
-        var request = Assert.IsType<SubscribeExecutionCommand>(Deserialize(payload));
+        var request = Assert.IsType<SubscribeTurnCommand>(Deserialize(payload));
 
-        Assert.Equal(executionId, request.ExecutionId);
+        Assert.Equal(turnId, request.TurnId);
         Assert.Equal("4-7", request.Cursor);
     }
 

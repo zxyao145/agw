@@ -59,7 +59,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
             job.Status = JobStatus.Paused;
             job.IsEnabled = false;
             job.LastError = "The Job owner is missing.";
-            job.ActiveExecutionId = null;
+            job.ActiveTurnId = null;
             job.ActiveAttemptStartedAt = null;
             job.UpdateTime = now;
             job.UpdateBy = "scheduler";
@@ -70,14 +70,14 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
             return null;
         }
 
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         job.Status = JobStatus.Running;
-        job.ActiveExecutionId = executionId;
+        job.ActiveTurnId = turnId;
         job.ActiveAttemptStartedAt = now;
         job.UpdateTime = now;
         job.UpdateBy = "scheduler";
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return new JobAttemptClaim(job, executionId, now, job.RetryCount + 1);
+        return new JobAttemptClaim(job, turnId, now, job.RetryCount + 1);
     }
 }

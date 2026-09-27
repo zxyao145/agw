@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
+import { markTurnMessage, replaceStreamingScope, scopeStreamingMessage } from "@agw/execution-core";
+import { buildConversationRenderModel } from "./conversation-render-model.ts";
 import {
   collapseConsecutiveSystemMessages,
   formatSystemMessageContent,
@@ -340,4 +342,70 @@ test("does not add historical agent metadata to tool messages", () => {
 test("uses the first line for collapsed message previews", () => {
   assert.equal(getMessagePreview("Planning the change\nMore detail"), "Planning the change");
   assert.match(getMessagePreview("reasoning ".repeat(40).trim()), /…$/);
+});
+
+test("a turn-scoped active snapshot replaces the same turn loaded from history", () => {
+  const messageId = "01a0e1de-8e83-737e-b788-938fedc88c59";
+  const turnId = "01a0e1de-8e83-737e-b788-9405bedfb1df";
+  const historyInput: AiMessage = {
+    messageId,
+    createdAt: "2026-09-27T07:57:34.263+00:00",
+    author: "$agw",
+    role: "user",
+    contents: [{ type: "TextContent", content: "hello" }],
+    additionalProperties: { turnId },
+  };
+  const history = prepareConversationHistory([historyInput]).messages;
+  assert.deepEqual(
+    history.map((message) => message.streamingScopeId),
+    [turnId],
+  );
+
+  // 快照里的用户消息与队列发送时一样带有 turnId；助手消息由服务端打上 turnId 与 turnSequence。
+  // The snapshot's user message carries turnId as the queue sends it; assistant messages are stamped with turnId and turnSequence by the server.
+  const snapshot = prepareConversationHistory([
+    scopeStreamingMessage(
+      markTurnMessage(
+        {
+          messageId,
+          createdAt: "2026-09-27T07:57:34.263Z",
+          author: "$agw",
+          role: "user",
+          contents: [{ type: "TextContent", content: "hello" }],
+        },
+        turnId,
+      ),
+      turnId,
+    ),
+    scopeStreamingMessage(
+      {
+        messageId: "assistant-1",
+        role: "assistant",
+        author: "general-agent",
+        contents: [{ type: "TextContent", content: "working" }],
+        additionalProperties: { turnId, turnSequence: 2 },
+      },
+      turnId,
+    ),
+  ]).messages;
+  const restored = replaceStreamingScope(history, snapshot, turnId);
+
+  assert.deepEqual(
+    restored.map((message) => [message.messageId, message.streamingScopeId]),
+    [
+      [messageId, turnId],
+      ["assistant-1", turnId],
+    ],
+  );
+
+  const items = buildConversationRenderModel(restored, {
+    isCurrentTurnActive: true,
+    historyTurns: [
+      { turnId, status: "running", input: historyInput, results: [], hasProcessMessages: false },
+    ],
+  });
+  assert.deepEqual(
+    items.map((item) => (item.type === "message" ? item.message.source.messageId : item.type)),
+    [messageId, "assistant-1"],
+  );
 });

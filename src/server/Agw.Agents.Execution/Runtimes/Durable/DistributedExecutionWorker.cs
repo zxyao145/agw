@@ -78,13 +78,13 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 .GetClaimableAsync(capacity + _scheduler.RunningCount, cancellationToken)
                 .ConfigureAwait(false);
             var claimed = 0;
-            foreach (var executionId in candidates)
+            foreach (var turnId in candidates)
             {
                 if (claimed >= capacity)
                     break;
-                if (_scheduler.IsRunning(executionId))
+                if (_scheduler.IsRunning(turnId))
                     continue;
-                if (await _scheduler.TryStartAsync(executionId, cancellationToken).ConfigureAwait(false))
+                if (await _scheduler.TryStartAsync(turnId, cancellationToken).ConfigureAwait(false))
                     claimed++;
             }
         }

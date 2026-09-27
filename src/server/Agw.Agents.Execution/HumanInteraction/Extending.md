@@ -65,7 +65,7 @@ var tool = new HumanInteractionRequiredAIFunction(function, new TitleInputProtoc
 ```json
 {
   "type": "HumanResponseCommand",
-  "executionId": "019f05b6-2400-7000-8000-000000000001",
+  "turnId": "019f05b6-2400-7000-8000-000000000001",
   "response": {
     "kind": "user-input",
     "interactionId": "server-assigned-id",

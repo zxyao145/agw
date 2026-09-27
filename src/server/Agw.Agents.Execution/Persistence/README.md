@@ -84,7 +84,7 @@ Persistence/
 
 ```mermaid
 flowchart TB
-    SignalR["SignalR 命令"] --> Session["DurableExecutionSession"]
+    SignalR["SignalR 命令"] --> Session["DurableExecutionAttachment"]
     Facade["A2A / Jobs 执行 Facade"] --> Client["IDurableExecutionClient"]
     Session --> Coordinator["DurableExecutionCoordinator"]
     Client --> Coordinator
@@ -198,7 +198,7 @@ stateDiagram-v2
 
 ### 5.1 首次登记与领取
 
-1. 调用方提供稳定的 `executionId`，准备目标、用户输入、项目任务和设置。
+1. 调用方提供稳定的 `turnId`，准备目标、用户输入、项目任务和设置。
 2. Coordinator 调用 `RegisterAsync`。Store 校验 owner，生成 manifest，取得项目生命周期锁，并通过 `SaveConversationChangesAsync` 校验会话代次后写入 `Queued`。
 3. Worker 扫描归属完整的 `Queued`、`Resuming`，以及超过 `RecoveryProbeSeconds` 的 `Running` 记录。`WaitingForHuman` 不进入可运行队列。
 4. Worker 取得 `DurableExecutionLock`，再调用 `TryBeginSegmentAsync`。该方法重新校验记录与会话，将状态改为 `Running`，保存并返回新的 `StateVersion`。
@@ -223,7 +223,7 @@ sequenceDiagram
     W->>S: 保存 checkpoint、pending、WaitingForHuman
     D->>S: 查询已提交的 pending
     D-->>C: 人工交互请求
-    C->>D: executionId、requestId、回答
+    C->>D: turnId、requestId、回答
     D->>S: 在 execution 锁内保存 response
     S-->>D: 全部回答齐全时变为 Resuming
     W->>S: 领取下一分段
@@ -233,7 +233,7 @@ sequenceDiagram
 
 进入等待时，`SaveSegmentResultAsync` 将 `SegmentIndex` 加 1，并在一次状态提交中保存 checkpoint、pending，清空上一边界的回答。Pending 的 `requestId` 必须非空、不重复且长度不超过 128。
 
-每次回答由 `SubmitHumanResponseAsync` 按 `executionId + owner + requestId` 处理。相同回答重试保持幂等；已保存的同一请求提交不同回答会冲突；只有全部 pending 都有对应 response，状态才推进到 `Resuming`。恢复输入会再次校验回答数量、请求对应关系和 execution ID。
+每次回答由 `SubmitHumanResponseAsync` 按 `turnId + owner + requestId` 处理。相同回答重试保持幂等；已保存的同一请求提交不同回答会冲突；只有全部 pending 都有对应 response，状态才推进到 `Resuming`。恢复输入会再次校验回答数量、请求对应关系和 turnId。
 
 - System Agent 恢复 SDK Session，将回答还原为 `ToolApprovalResponseContent`；需要用户信息的 Tool 再通过 `ResolvedHumanInteractionChannel` 取得已保存的回答。
 - Agentflow 用 JSON checkpoint 重建 workflow 执行上下文，并注入已解析的回答。
@@ -333,7 +333,7 @@ Manifest、checkpoint、pending、response 和错误使用实体上的 `[Encrypt
 - 同一消息相邻的流式文本增量在同一批次内合并成一条事件，合并规则与客户端的追加规则一致。批次第一次提交后载荷固定，重试沿用原事件 ID 与载荷。
 - 事件序号用一条 `UPDATE ... RETURNING` 在锁定执行行的事务中预留。
 - Redis 投影保存与 PostgreSQL 相同的未加序号载荷，读取时补上 turnId 与 turnSequence；一次发布的写入命令放在同一个批次中发送。
-- 每条事件保留 `ExecutionId + SegmentIndex + Sequence` 的逻辑位置；相同位置保留首次提交内容，cursor 用于从已读取位置之后继续回放。
+- 每条事件保留 `TurnId + SegmentIndex + Sequence` 的逻辑位置；相同位置保留首次提交内容，cursor 用于从已读取位置之后继续回放。
 - 状态行保存有界的恢复快照；事件流按输出追加，避免每个 token 放大状态行或制造状态更新冲突。
 - 事件流故障会降低中间输出的回放能力；只要状态存储仍正常，执行仍可等待、回答和结束。缺失的普通输出不会凭空重建。
 - Redis TTL 只控制事件保留；它不负责保存 durable execution 的权威状态。
@@ -418,23 +418,23 @@ Redis 是事件回放的可选实现，启用后仍需要 PostgreSQL 状态库�
 | 步骤 | 命令 / 操作 | 关键要求 |
 | --- | --- | --- |
 | 1 | `SettingCommand` | 设置 `projectId`、`contextId`、环境变量和权限模式 |
-| 2 | `ExecCommand` | 指定 Agent / Agentflow、会话和输入；Distributed 使用稳定 `executionId` 且 `stream=true` |
+| 2 | `ExecCommand` | 指定 Agent / Agentflow、会话和输入；Distributed 使用稳定 `turnId` 且 `stream=true` |
 | 3 | 保存收到的消息与 cursor | cursor 仅表示事件消费位置，不是执行状态或检查点 ID |
-| 4 | `HumanResponseCommand` | 携带 `executionId` 和类型化 `response`（`kind`、`interactionId`、决定或用户输入） |
-| 5 | 重连后重发设置，再发送 `SubscribeExecutionCommand` | 使用原 execution ID 和最后 cursor，附着已有执行；不创建新 execution |
+| 4 | `HumanResponseCommand` | 携带 `turnId` 和类型化 `response`（`kind`、`interactionId`、决定或用户输入） |
+| 5 | 重连后重发设置，再发送 `SubscribeTurnCommand` | 使用原 turnId 和最后 cursor，附着已有 Turn；不创建新 Turn |
 | 6 | `InterruptCommand` | 明确中断指定 execution；断开连接只会结束 Distributed 的当前订阅 |
 
-为同一次启动重试保留相同 execution ID 和输入标识，避免网络重试创建多个执行。执行已登记后需要的是重新订阅时，应使用 `SubscribeExecutionCommand`。
+为同一次启动重试保留相同 turnId 和输入标识，避免网络重试创建多个 Turn。Turn 已登记后需要的是重新订阅时，应使用 `SubscribeTurnCommand`。
 
 `SettingCommand.Resume` 是服务端内部属性，带 `[JsonIgnore]`，不能通过发送同名 JSON 字段控制恢复。人工回答必须来自响应命令，模型生成的 Tool 参数不能冒充用户回答。
 
 ### 9.2 从 Agentflow 检查点创建分支
 
-先通过 `GetAgentflowCheckpoints(agentflowId)` 取得 occurrence 及可用性，再发送 `ResumeCheckpointCommand(checkpointOccurrenceId, resumeExecutionId, agentflowId)`。
+先通过 `GetAgentflowCheckpoints(agentflowId)` 取得 occurrence 及可用性，再发送 `ResumeCheckpointCommand(checkpointOccurrenceId, resumeTurnId, agentflowId)`。
 
 - occurrence 标识某一次具体到达，不能只用节点名；循环中同一个节点可能产生多次 occurrence。
 - 恢复会校验 owner、图定义指纹、记录可读性和当前活动执行，并按 `BoundarySequence` 裁剪该边界之后的历史，再启动新分支。
-- 新分支使用新的稳定 `resumeExecutionId`；同一次恢复的网络重试复用该 ID。
+- 新分支使用新的稳定 `resumeTurnId`；同一次恢复的网络重试复用该 ID。
 - Distributed 要求来源 execution 已结束，并等待其释放锁，再原子处理历史裁剪和新分支登记；首个恢复分段使用已保存的 checkpoint。
 - InProcess 额外要求当前 Runtime 仍持有对应 occurrence；仅有数据库记录不足以绕过该条件。
 - 检查点记录的 `IsDurable` 必须匹配当前恢复模式，不能通过切换 Provider 把 InProcess occurrence 当作 Distributed 检查点恢复。

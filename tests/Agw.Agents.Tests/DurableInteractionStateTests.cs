@@ -93,7 +93,7 @@ public sealed partial class DurableExecutionStoreTests
             lease,
             new()
             {
-                ExecutionId = id,
+                TurnId = id,
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [InteractionTestData.Tool("late-tool")],
@@ -132,7 +132,7 @@ public sealed partial class DurableExecutionStoreTests
             lease,
             new()
             {
-                ExecutionId = id,
+                TurnId = id,
                 SegmentIndex = 1,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [second],
@@ -168,7 +168,7 @@ public sealed partial class DurableExecutionStoreTests
             lease,
             new()
             {
-                ExecutionId = id,
+                TurnId = id,
                 SegmentIndex = running.SegmentIndex,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = requests,

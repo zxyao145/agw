@@ -5,25 +5,25 @@ using Agw.Agents.Execution.Commands.Abstracts;
 namespace Agw.Agents.Execution.Commands.Subscribe;
 
 /// <summary>
-/// 将当前 SignalR connection 重新附着到已有 durable execution，并从可选 cursor 继续消息回放。
+/// 将当前 SignalR connection 重新附着到已有 durable Turn，并从可选 cursor 继续消息回放。
 /// </summary>
-public sealed class SubscribeExecutionCommand : AgentRunCommand
+public sealed class SubscribeTurnCommand : AgentRunCommand
 {
     /// <summary>
-    /// 创建 durable execution 重新订阅命令。
+    /// 创建 durable Turn 重新订阅命令。
     /// </summary>
     [JsonConstructor]
     [SetsRequiredMembers]
-    public SubscribeExecutionCommand(Guid executionId, string? cursor = null)
+    public SubscribeTurnCommand(Guid turnId, string? cursor = null)
     {
-        ExecutionId = executionId;
+        TurnId = turnId;
         Cursor = cursor;
     }
 
     /// <summary>
-    /// 获取或设置需要重新附着的 durable execution。
+    /// 获取或设置需要重新附着的 durable Turn。
     /// </summary>
-    public Guid ExecutionId { get; set; }
+    public Guid TurnId { get; set; }
 
     /// <summary>
     /// 获取或设置客户端最后确认的 Redis Stream cursor；为空时从头回放。

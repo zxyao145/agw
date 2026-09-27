@@ -71,7 +71,7 @@ public sealed class AgentflowCheckpointSupport
     }
 
     internal async Task<RecordedAgentflowCheckpoint?> RecordCheckpointAsync(
-        Guid? sourceExecutionId,
+        Guid? sourceTurnId,
         Guid projectId,
         Guid conversationId,
         string contextId,
@@ -110,7 +110,7 @@ public sealed class AgentflowCheckpointSupport
 
         return await _checkpointStore
             .RecordAsync(
-                sourceExecutionId,
+                sourceTurnId,
                 projectId,
                 conversationId,
                 contextId,

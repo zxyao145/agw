@@ -38,10 +38,10 @@ function createSubmission(
 function createExecutionClient() {
   return {
     configure: async () => ({ restoredDurableExecution: false }),
-    hasActiveExecution: () => false,
+    hasRunningTurn: () => false,
     execute: async () => undefined,
     listAgentflowCheckpoints: async () => [],
-    resumeCheckpoint: async () => "execution-resumed",
+    resumeCheckpoint: async () => "turn-resumed",
     setMode: async () => undefined,
     setPermissionMode: async () => undefined,
     interrupt: async () => undefined,
@@ -222,7 +222,7 @@ test("manager marks a restored durable execution active", async () => {
   const manager = new ExecutionSessionManager(() => ({
     ...createExecutionClient(),
     configure: async () => ({ restoredDurableExecution: true }),
-    hasActiveExecution: () => true,
+    hasRunningTurn: () => true,
   }));
   const handle = manager.attach(sessionKey, { onMessage: () => undefined });
 
@@ -258,22 +258,24 @@ test("manager restores the complete active turn instead of replaying capped delt
     return createExecutionClient();
   });
   let userMessageId = "";
+  let turnId = "";
   const first = manager.attach(sessionKey, {
     onMessage: () => undefined,
     onSubmissionStarted: (event) => {
       userMessageId = event.message.messageId;
+      turnId = event.item.turnId;
     },
   });
 
   await first.configure({ projectId: "project-1", conversationId: "conversation-1" });
   assert.equal(first.submit(createSubmission("run")), "started");
+  assert.notEqual(turnId, userMessageId);
   clientHandlers?.onMessage({
     messageId: "turn-start-1",
     role: "system",
     author: "$agw",
     contents: [],
-    streamingScopeId: userMessageId,
-    additionalProperties: { type: "agw-turn-start" },
+    additionalProperties: { type: "agw-turn-start", turnId, streamingScopeId: turnId },
   });
 
   const deltas = Array.from({ length: 250 }, (_, index) => String(index % 10));
@@ -283,7 +285,7 @@ test("manager restores the complete active turn instead of replaying capped delt
       role: "assistant",
       author: "general-agent",
       contents: [{ type: "TextContent", content }],
-      streamingScopeId: userMessageId,
+      additionalProperties: { turnId },
     });
   }
   const interaction = createQuestionInteraction("active-interaction");
@@ -297,8 +299,14 @@ test("manager restores the complete active turn instead of replaying capped delt
   assert.deepEqual(replayed, [interaction]);
   const snapshot = second.getActiveTurnSnapshot();
   assert.ok(snapshot);
-  assert.equal(snapshot.streamingScopeId, userMessageId);
+  assert.equal(snapshot.streamingScopeId, turnId);
   assert.equal(snapshot.messages[0]?.role, "user");
+  assert.equal(snapshot.messages[0]?.messageId, userMessageId);
+  assert.equal(snapshot.messages[0]?.additionalProperties?.turnId, turnId);
+  assert.deepEqual(
+    snapshot.messages.map((message) => message.streamingScopeId),
+    snapshot.messages.map(() => turnId),
+  );
   assert.equal(
     snapshot.messages.find((message) => message.messageId === "assistant-1")?.contents[0]?.content,
     deltas.join(""),
@@ -309,8 +317,7 @@ test("manager restores the complete active turn instead of replaying capped delt
     role: "system",
     author: "$agw",
     contents: [],
-    streamingScopeId: userMessageId,
-    additionalProperties: { type: "agw-turn-finished", status: "completed" },
+    additionalProperties: { type: "agw-turn-finished", status: "completed", turnId },
   });
   assert.equal(second.getActiveTurnSnapshot(), null);
 });
@@ -330,7 +337,7 @@ test("manager preserves active recovery state when durable subscribe temporarily
         clientHandlers?.onReconnectFailed?.(failedState);
         throw new Error("temporary subscribe failure");
       },
-      hasActiveExecution: () => true,
+      hasRunningTurn: () => true,
     };
   });
   const handle = manager.attach(sessionKey, { onMessage: () => undefined });
@@ -415,13 +422,13 @@ test("manager keeps reconnect state until the manual retry succeeds", async () =
 
 test("manager clears a stale active status when reconnect finds no execution", async () => {
   let clientHandlers: ExecutionHubHandlers | undefined;
-  let activeExecution = true;
+  let activeTurn = true;
   const manager = new ExecutionSessionManager((handlers) => {
     clientHandlers = handlers;
     return {
       ...createExecutionClient(),
       configure: async () => ({ restoredDurableExecution: true }),
-      hasActiveExecution: () => activeExecution,
+      hasRunningTurn: () => activeTurn,
     };
   });
   const handle = manager.attach(sessionKey, { onMessage: () => undefined });
@@ -429,7 +436,7 @@ test("manager clears a stale active status when reconnect finds no execution", a
   await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
   assert.equal(handle.getStatus(), "running");
 
-  activeExecution = false;
+  activeTurn = false;
   clientHandlers?.onReconnected?.();
 
   assert.equal(handle.getStatus(), "idle");
@@ -640,13 +647,13 @@ test("manager stops notifying after the turn finished listener unsubscribes", ()
 
 test("manager notifies when reconnect finds the execution finished", async () => {
   let clientHandlers: ExecutionHubHandlers | undefined;
-  let activeExecution = true;
+  let activeTurn = true;
   const manager = new ExecutionSessionManager((handlers) => {
     clientHandlers = handlers;
     return {
       ...createExecutionClient(),
       configure: async () => ({ restoredDurableExecution: true }),
-      hasActiveExecution: () => activeExecution,
+      hasRunningTurn: () => activeTurn,
     };
   });
   const handle = manager.attach(sessionKey, { onMessage: () => undefined });
@@ -654,7 +661,7 @@ test("manager notifies when reconnect finds the execution finished", async () =>
   manager.subscribeTurnFinished((event) => events.push(event));
 
   await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
-  activeExecution = false;
+  activeTurn = false;
   clientHandlers?.onReconnected?.();
 
   assert.deepEqual(events, [{ key: sessionKey, status: "completed" }]);
@@ -858,7 +865,7 @@ function createQueueHarness(
         await options.configure?.(setting);
         return { restoredDurableExecution: false };
       },
-      hasActiveExecution: () => active,
+      hasRunningTurn: () => active,
       execute: async (request: ExecutionRequest) => {
         executed.push(request);
         commands.push(`execute:${text(request)}`);
@@ -891,7 +898,7 @@ function createQueueHarness(
       active = value;
     },
     start(request: ExecutionRequest) {
-      handlers.onMessage(createTurnLifecycleMessage("agw-turn-start", request.executionId!));
+      handlers.onMessage(createTurnLifecycleMessage("agw-turn-start", request.turnId!));
     },
     finish(
       request: ExecutionRequest,
@@ -899,7 +906,7 @@ function createQueueHarness(
     ) {
       active = false;
       handlers.onMessage(
-        createTurnLifecycleMessage("agw-turn-finished", request.executionId!, status),
+        createTurnLifecycleMessage("agw-turn-finished", request.turnId!, status),
       );
     },
   };
@@ -1014,7 +1021,7 @@ test("queue edits keep order, images and comments, and wait while the head is ed
   assert.equal(harness.text(harness.executed[1]), undefined);
   assert.equal(harness.executed.length, 2);
   assert.equal(harness.executed[1]!.input.messageId, head!.id);
-  assert.equal(harness.executed[1]!.executionId, head!.executionId);
+  assert.equal(harness.executed[1]!.turnId, head!.turnId);
   assert.deepEqual(
     handle.getQueue().items.map((item) => item.id),
     [tail!.id],
@@ -1119,7 +1126,7 @@ test("a confirmed start rejection keeps the entry editable at the head and pause
   reject = false;
   handle.resumeQueue();
   assert.equal(harness.text(harness.executed.at(-1)), "first, edited");
-  assert.equal(harness.executed.at(-1)!.executionId, head.executionId);
+  assert.equal(harness.executed.at(-1)!.turnId, head.turnId);
 });
 
 test("stop clears the queue before interrupting and rejects new entries until the turn ends", async () => {
@@ -1186,7 +1193,7 @@ test("duplicate and foreign finish messages do not send extra entries", async ()
   harness.finish(harness.executed[0]!);
   await settle();
   harness.handlers.onMessage(
-    createTurnLifecycleMessage("agw-turn-finished", harness.executed[0]!.executionId!, "completed"),
+    createTurnLifecycleMessage("agw-turn-finished", harness.executed[0]!.turnId!, "completed"),
   );
   await settle();
 
@@ -1220,7 +1227,7 @@ test("a reconnect without an active execution pauses instead of sending the next
   const [head, next] = handle.getQueue().items;
   assert.equal(head!.text, "unconfirmed");
   assert.equal(head!.uncertain, true);
-  assert.equal(head!.executionId, harness.executed[0]!.executionId);
+  assert.equal(head!.turnId, harness.executed[0]!.turnId);
   assert.equal(next!.text, "waiting");
   assert.equal(handle.getQueue().paused, true);
   assert.deepEqual(returned, [true]);
@@ -1278,7 +1285,7 @@ test("a superseded finish of the in-flight entry ends its wait and pauses the re
     markSuperseded(
       createTurnLifecycleMessage(
         "agw-turn-finished",
-        harness.executed[0]!.executionId!,
+        harness.executed[0]!.turnId!,
         "completed",
       ),
     ),
@@ -1313,7 +1320,7 @@ test("a superseded finish that arrives after reconnecting lets the next submissi
     markSuperseded(
       createTurnLifecycleMessage(
         "agw-turn-finished",
-        harness.executed[0]!.executionId!,
+        harness.executed[0]!.turnId!,
         "completed",
       ),
     ),
@@ -1339,7 +1346,7 @@ test("a superseded finish after a stop ends the stop so new entries are accepted
     markSuperseded(
       createTurnLifecycleMessage(
         "agw-turn-finished",
-        harness.executed[0]!.executionId!,
+        harness.executed[0]!.turnId!,
         "interrupted",
       ),
     ),

@@ -18,7 +18,7 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
         _projectTasks = projectTasks;
     }
 
-    public async Task ExecuteAsync(Job job, Guid executionId, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(Job job, Guid turnId, CancellationToken cancellationToken)
     {
         if (job.AgentId == null || job.AgentType == null)
         {
@@ -35,7 +35,7 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
             .GetOrCreateAsync(
                 new StartProjectTaskRequest(
                     job.ProjectId,
-                    executionId,
+                    turnId,
                     job.Id,
                     prompt,
                     title,
@@ -48,14 +48,14 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
             .ConfigureAwait(false);
         var input = new AgwUserInput
         {
-            MessageId = executionId.ToString("D"),
+            MessageId = turnId.ToString("D"),
             Author = Constants.DefaultInputAuthor,
             Contents = [new AgwTextContent { Content = prompt }],
         };
         _ = await _agentExecutions
             .ExecuteAsync(
                 new AgentExecutionRequest(
-                    executionId,
+                    turnId,
                     ownerUserId,
                     new AgentTarget(Map(job.AgentType.Value), job.AgentId.Value),
                     task,

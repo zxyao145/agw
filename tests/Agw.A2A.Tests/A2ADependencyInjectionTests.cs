@@ -62,7 +62,7 @@ public class A2ADependencyInjectionTests
         Assert.NotNull(result);
         Assert.NotNull(execution.Request);
         Assert.Equal("alpha", execution.Request!.Target.Name);
-        Assert.Equal(taskId, execution.Request.ExecutionId);
+        Assert.Equal(taskId, execution.Request.TurnId);
     }
 
     [Theory]
@@ -121,7 +121,7 @@ public class A2ADependencyInjectionTests
         ) =>
             Task.FromResult(
                 new Agw.Agents.Contracts.Execution.AgentExecutionResult(
-                    request.ExecutionId,
+                    request.TurnId,
                     AgentExecutionState.Completed,
                     []
                 )
@@ -141,16 +141,16 @@ public class A2ADependencyInjectionTests
     private sealed class FakeDurableAgentExecutionFacade : IDurableAgentExecutionFacade
     {
         public Task<Agw.Agents.Contracts.Execution.AgentExecutionResult> GetOutcomeAsync(
-            Guid executionId,
+            Guid turnId,
             string ownerUserId,
             CancellationToken cancellationToken = default
         ) =>
             Task.FromResult(
-                new Agw.Agents.Contracts.Execution.AgentExecutionResult(executionId, AgentExecutionState.Completed, [])
+                new Agw.Agents.Contracts.Execution.AgentExecutionResult(turnId, AgentExecutionState.Completed, [])
             );
 
         public async IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
-            Guid executionId,
+            Guid turnId,
             string ownerUserId,
             string? afterCursor,
             [EnumeratorCancellation] CancellationToken cancellationToken = default
@@ -161,7 +161,7 @@ public class A2ADependencyInjectionTests
         }
 
         public Task<bool> InterruptAsync(
-            Guid executionId,
+            Guid turnId,
             string ownerUserId,
             string reason,
             CancellationToken cancellationToken = default

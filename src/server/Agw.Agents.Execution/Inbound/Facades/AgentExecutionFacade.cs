@@ -68,12 +68,12 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
                 {
                     throw new AgwException(ErrorCodes.AgentExecutionFailed, FindErrorText(messages));
                 }
-                return new AgentExecutionResult(request.ExecutionId, AgentExecutionState.Completed, messages);
+                return new AgentExecutionResult(request.TurnId, AgentExecutionState.Completed, messages);
             }
             messages.Add(message);
             if (IsHumanInteraction(message))
             {
-                return new AgentExecutionResult(request.ExecutionId, AgentExecutionState.WaitingForHuman, messages);
+                return new AgentExecutionResult(request.TurnId, AgentExecutionState.WaitingForHuman, messages);
             }
         }
 
@@ -104,20 +104,20 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
     }
 
     public async Task<AgentExecutionResult> GetOutcomeAsync(
-        Guid executionId,
+        Guid turnId,
         string ownerUserId,
         CancellationToken cancellationToken = default
     )
     {
         using var userScope = PushExecutionUser(ownerUserId);
         var outcome = await DurableCoordinator
-            .GetOutcomeAsync(executionId, ownerUserId, cancellationToken)
+            .GetOutcomeAsync(turnId, ownerUserId, cancellationToken)
             .ConfigureAwait(false);
-        return new AgentExecutionResult(outcome.ExecutionId, Map(outcome.Status), [], outcome.ErrorMessage);
+        return new AgentExecutionResult(outcome.TurnId, Map(outcome.Status), [], outcome.ErrorMessage);
     }
 
     public async IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
-        Guid executionId,
+        Guid turnId,
         string ownerUserId,
         string? afterCursor,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
@@ -126,12 +126,7 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
         using var userScope = PushExecutionUser(ownerUserId);
         await foreach (
             var entry in DurableCoordinator
-                .ReadAsync(
-                    executionId,
-                    ownerUserId,
-                    DurableExecutionAttachment.ParseCursor(afterCursor),
-                    cancellationToken
-                )
+                .ReadAsync(turnId, ownerUserId, DurableExecutionAttachment.ParseCursor(afterCursor), cancellationToken)
                 .ConfigureAwait(false)
         )
         {
@@ -143,7 +138,7 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
     }
 
     public async Task<bool> InterruptAsync(
-        Guid executionId,
+        Guid turnId,
         string ownerUserId,
         string reason,
         CancellationToken cancellationToken = default
@@ -151,7 +146,7 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
     {
         using var userScope = PushExecutionUser(ownerUserId);
         return await DurableCoordinator
-            .InterruptAsync(executionId, ownerUserId, reason, cancellationToken)
+            .InterruptAsync(turnId, ownerUserId, reason, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -184,7 +179,7 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
             .AcceptAsync(
                 new TurnAcceptanceRequest(
                     UserInfoUtil.RequiredUserId,
-                    request.ExecutionId,
+                    request.TurnId,
                     target,
                     task.ProjectConversationId,
                     request.Input,

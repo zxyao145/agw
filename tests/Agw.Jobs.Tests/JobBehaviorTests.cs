@@ -117,7 +117,7 @@ public class JobBehaviorTests
         Assert.Equal(UtcNow.AddMinutes(15), job.NextRunTime);
         Assert.Equal(0, job.RetryCount);
         Assert.Null(job.LastError);
-        Assert.Null(job.ActiveExecutionId);
+        Assert.Null(job.ActiveTurnId);
         Assert.Null(job.ActiveAttemptStartedAt);
     }
 
@@ -131,7 +131,7 @@ public class JobBehaviorTests
         Assert.False(rescheduled);
         Assert.Equal(JobStatus.Paused, job.Status);
         Assert.False(job.IsEnabled);
-        Assert.Null(job.ActiveExecutionId);
+        Assert.Null(job.ActiveTurnId);
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public class JobBehaviorTests
         Assert.Equal("The Job owner is missing.", job.LastError);
         Assert.Equal(JobStatus.Paused, job.Status);
         Assert.False(job.IsEnabled);
-        Assert.Null(job.ActiveExecutionId);
+        Assert.Null(job.ActiveTurnId);
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public class JobBehaviorTests
         var job = CreateRunningJob(TriggerType.Interval, "00:15:00");
 
         Assert.False(new JobBehavior(job).IsActiveAttempt(Guid.CreateVersion7()));
-        Assert.True(new JobBehavior(job).IsActiveAttempt(job.ActiveExecutionId!.Value));
+        Assert.True(new JobBehavior(job).IsActiveAttempt(job.ActiveTurnId!.Value));
     }
 
     private static JobDefinition CreateDefinition(
@@ -210,7 +210,7 @@ public class JobBehaviorTests
             Status = JobStatus.Running,
             IsEnabled = true,
             MaxRetryCount = 3,
-            ActiveExecutionId = Guid.CreateVersion7(),
+            ActiveTurnId = Guid.CreateVersion7(),
             ActiveAttemptStartedAt = UtcNow.AddMinutes(-1),
         };
 }

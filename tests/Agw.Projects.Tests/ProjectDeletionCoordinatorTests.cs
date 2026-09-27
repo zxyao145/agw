@@ -32,7 +32,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var otherProjectId = Guid.CreateVersion7();
         var otherConversationId = Guid.CreateVersion7();
         var jobId = await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
-        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
+        var turnId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
         var otherJobId = await SeedProjectGraphAsync(
             options,
             otherProjectId,
@@ -40,12 +40,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
             "other-user",
             "context-2"
         );
-        var otherExecutionId = await SeedDurableExecutionAsync(
-            options,
-            otherProjectId,
-            otherConversationId,
-            "other-user"
-        );
+        var otherTurnId = await SeedDurableExecutionAsync(options, otherProjectId, otherConversationId, "other-user");
         await using var dbContext = new AgwDbContext(options);
         var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
 
@@ -135,19 +130,19 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.Contains(await assertContext.JobLogs.ToListAsync(cancellationToken), log => log.JobId == otherJobId);
         Assert.DoesNotContain(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
-            execution => execution.Id == executionId
+            execution => execution.Id == turnId
         );
         Assert.DoesNotContain(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.TurnId == executionId
+            entry => entry.TurnId == turnId
         );
         Assert.Contains(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
-            execution => execution.Id == otherExecutionId
+            execution => execution.Id == otherTurnId
         );
         Assert.Contains(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.TurnId == otherExecutionId
+            entry => entry.TurnId == otherTurnId
         );
         Assert.Contains(
             await assertContext.ProjectConversations.ToListAsync(cancellationToken),
@@ -222,7 +217,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
-        var executionId = await SeedDurableExecutionAsync(
+        var turnId = await SeedDurableExecutionAsync(
             options,
             projectId,
             conversationId,
@@ -233,7 +228,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         await using var context = new AgwDbContext(options);
         var coordinator = TestProjectPersistence.CreateDeletionCoordinator(context);
         await context
-            .DurableExecutions.Where(row => row.Id == executionId)
+            .DurableExecutions.Where(row => row.Id == turnId)
             .ExecuteUpdateAsync(
                 setters =>
                     setters
@@ -253,7 +248,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.False(await context.ProjectConversations.AnyAsync(row => row.Id == conversationId, token));
         Assert.False(
             await context
-                .DurableExecutions.Where(row => row.Id == executionId)
+                .DurableExecutions.Where(row => row.Id == turnId)
                 .Select(row => row.ScopeBackfilled)
                 .SingleAsync(token)
         );
@@ -273,10 +268,10 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var wrongProjectId = Guid.CreateVersion7();
         await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "actual");
         await SeedProjectGraphAsync(options, wrongProjectId, Guid.CreateVersion7(), "tester", "wrong");
-        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
+        var turnId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
         await using var context = new AgwDbContext(options);
         await context
-            .DurableExecutions.Where(row => row.Id == executionId)
+            .DurableExecutions.Where(row => row.Id == turnId)
             .ExecuteUpdateAsync(
                 setters =>
                     setters
@@ -290,7 +285,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
             TimeProvider.System,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<DurableExecutionScopeMaintenance>.Instance
         );
-        Assert.False(await maintenance.ValidateExecutionAsync(executionId, token));
+        Assert.False(await maintenance.ValidateExecutionAsync(turnId, token));
         var coordinator = new ProjectDeletionCoordinator(
             context,
             InMemoryApplicationLock.Shared,
@@ -304,7 +299,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         // Assert
         Assert.True(deleted);
         var retained = await context
-            .DurableExecutions.Where(row => row.Id == executionId)
+            .DurableExecutions.Where(row => row.Id == turnId)
             .Select(row => new
             {
                 row.ProjectId,
@@ -315,7 +310,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.Null(retained.ProjectId);
         Assert.Null(retained.ProjectConversationId);
         Assert.Equal(DurableExecutionStatus.Failed, retained.Status);
-        Assert.True(await context.DurableExecutionEvents.AnyAsync(row => row.TurnId == executionId, token));
+        Assert.True(await context.DurableExecutionEvents.AnyAsync(row => row.TurnId == turnId, token));
         Assert.True(await context.Projects.AnyAsync(row => row.Id == projectId, token));
     }
 
@@ -331,7 +326,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
-        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
+        var turnId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
         var otherConversationId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -348,7 +343,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
             );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
-        var otherExecutionId = await SeedDurableExecutionAsync(options, projectId, otherConversationId, "tester");
+        var otherTurnId = await SeedDurableExecutionAsync(options, projectId, otherConversationId, "tester");
         await using var dbContext = new AgwDbContext(options);
         var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
 
@@ -364,19 +359,19 @@ public sealed partial class ProjectDeletionCoordinatorTests
         await using var assertContext = new AgwDbContext(options);
         Assert.DoesNotContain(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
-            execution => execution.Id == executionId
+            execution => execution.Id == turnId
         );
         Assert.DoesNotContain(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.TurnId == executionId
+            entry => entry.TurnId == turnId
         );
         Assert.Contains(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
-            execution => execution.Id == otherExecutionId
+            execution => execution.Id == otherTurnId
         );
         Assert.Contains(
             await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
-            entry => entry.TurnId == otherExecutionId
+            entry => entry.TurnId == otherTurnId
         );
         Assert.Contains(
             await assertContext.Projects.ToListAsync(cancellationToken),
@@ -397,7 +392,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var conversationId = Guid.CreateVersion7();
         await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
         const string invalidManifest = "sensitive-invalid-manifest";
-        var executionId = await SeedDurableExecutionAsync(
+        var turnId = await SeedDurableExecutionAsync(
             options,
             projectId,
             conversationId,
@@ -427,7 +422,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         await using var assertContext = new AgwDbContext(options);
         Assert.Contains(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
-            execution => execution.Id == executionId
+            execution => execution.Id == turnId
         );
     }
 
@@ -456,7 +451,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
                     TriggerValue = "60",
                     NextRunTime = now,
                     Status = JobStatus.Running,
-                    ActiveExecutionId = Guid.CreateVersion7(),
+                    ActiveTurnId = Guid.CreateVersion7(),
                     ActiveAttemptStartedAt = now,
                     CreateBy = "tester",
                     CreateTime = now,
@@ -542,7 +537,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
-        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
+        var turnId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
         var unrelatedProjectId = Guid.CreateVersion7();
         var unrelatedConversationId = Guid.CreateVersion7();
         var unrelated = await SeedDurableExecutionAsync(options, unrelatedProjectId, unrelatedConversationId, "tester");
@@ -550,7 +545,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         foreach (
             var row in new[]
             {
-                (Id: executionId, Project: projectId, Conversation: conversationId),
+                (Id: turnId, Project: projectId, Conversation: conversationId),
                 (Id: unrelated, Project: unrelatedProjectId, Conversation: unrelatedConversationId),
             }
         )
@@ -754,12 +749,12 @@ public sealed partial class ProjectDeletionCoordinatorTests
     )
     {
         await using var context = new AgwDbContext(options);
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var now = TimeProvider.System.GetUtcNow();
         context.DurableExecutions.Add(
             new DurableExecutionRecord
             {
-                Id = executionId,
+                Id = turnId,
                 UserId = ownerUserId,
                 ProjectId = indexed ? projectId : null,
                 ProjectConversationId = indexed ? conversationId : null,
@@ -770,7 +765,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
                         new
                         {
                             schemaVersion = 1,
-                            executionId,
+                            turnId,
                             userId = ownerUserId,
                             workspaceSnapshot = Agw.Shared.Utils.ProjectWorkspacePaths.CreateSnapshot(projectId, null),
                             agentId = Guid.CreateVersion7(),
@@ -799,14 +794,14 @@ public sealed partial class ProjectDeletionCoordinatorTests
             new DurableExecutionEventRecord
             {
                 Id = Guid.CreateVersion7(),
-                TurnId = executionId,
+                TurnId = turnId,
                 SegmentIndex = 0,
                 TurnSequence = 1,
                 PayloadJson = "{}",
             }
         );
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-        return executionId;
+        return turnId;
     }
 
     private static async Task<SqliteConnection> OpenConnectionAsync()

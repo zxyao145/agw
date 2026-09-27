@@ -24,7 +24,7 @@ export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
   conversationId: string;
   agentId: string;
   agentType: number;
-  executionId?: string;
+  turnId?: string;
   stream?: boolean;
   input: TInput;
 };
@@ -75,13 +75,13 @@ export type InteractionResponse = { interactionId: string } & (
   | { kind: "user-input"; cancelled: boolean; responseData?: unknown }
 );
 export type HumanResponseCommandInput = {
-  executionId?: string;
+  turnId?: string;
   response: InteractionResponse;
 };
 
 export type ResumeCheckpointCommandInput = {
   checkpointOccurrenceId: string;
-  resumeExecutionId: string;
+  resumeTurnId: string;
   agentflowId: string;
 };
 
@@ -117,16 +117,16 @@ export function buildExecCommand<TInput>(request: ExecutionCommandRequest<TInput
     conversationId: request.conversationId,
     agentId: request.agentId,
     agentType: request.agentType,
-    ...(request.executionId ? { executionId: request.executionId } : {}),
+    ...(request.turnId ? { turnId: request.turnId } : {}),
     stream: request.stream ?? true,
     input: request.input,
   };
 }
 
-export function buildInterruptCommand(executionId?: string, reason?: string) {
+export function buildInterruptCommand(turnId?: string, reason?: string) {
   return {
     type: "InterruptCommand" as const,
-    ...(executionId ? { executionId } : {}),
+    ...(turnId ? { turnId } : {}),
     ...(reason === undefined ? {} : { reason }),
   };
 }
@@ -146,10 +146,10 @@ export function buildSetPermissionModeCommand(permissionMode: PermissionMode) {
   };
 }
 
-export function buildSubscribeExecutionCommand(executionId: string, cursor?: string | null) {
+export function buildSubscribeTurnCommand(turnId: string, cursor?: string | null) {
   return {
-    type: "SubscribeExecutionCommand" as const,
-    executionId,
+    type: "SubscribeTurnCommand" as const,
+    turnId,
     ...(cursor ? { cursor } : {}),
   };
 }
@@ -157,7 +157,7 @@ export function buildSubscribeExecutionCommand(executionId: string, cursor?: str
 export function buildHumanResponseCommand(input: HumanResponseCommandInput) {
   return {
     type: "HumanResponseCommand" as const,
-    ...(input.executionId ? { executionId: input.executionId } : {}),
+    ...(input.turnId ? { turnId: input.turnId } : {}),
     response: input.response,
   };
 }
@@ -166,7 +166,7 @@ export function buildResumeCheckpointCommand(input: ResumeCheckpointCommandInput
   return {
     type: "ResumeCheckpointCommand" as const,
     checkpointOccurrenceId: input.checkpointOccurrenceId,
-    resumeExecutionId: input.resumeExecutionId,
+    resumeTurnId: input.resumeTurnId,
     agentflowId: input.agentflowId,
   };
 }

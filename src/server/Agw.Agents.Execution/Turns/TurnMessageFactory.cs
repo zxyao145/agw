@@ -6,8 +6,8 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.Execution.Turns;
 
 /// <summary>
-/// 一个 Turn 的身份：开始与结束消息的字段来源。StreamingScopeId 是客户端输入消息的原始 ID，本 Turn 的输出显示在这条输入下。
-/// The identity of one turn: the source of the start and finish message fields. StreamingScopeId is the client's original input message ID that the turn's output renders under.
+/// 一个 Turn 的身份：开始与结束消息的字段来源。StreamingScopeId 是 TurnId 的字符串形式，客户端用它把实时消息与按 turnId 划分的历史记录放在同一轮下。
+/// The identity of one turn: the source of the start and finish message fields. StreamingScopeId is the TurnId as a string, which clients use to place live messages and turnId-scoped history in the same turn.
 /// </summary>
 internal sealed record TurnEnvelope(
     Guid TurnId,

@@ -14,7 +14,7 @@ public sealed class AgentflowCheckpointRecordConfiguration : IEntityTypeConfigur
         builder.Property(item => item.DefinitionFingerprint).HasMaxLength(64).IsRequired();
         builder.Property(item => item.MarkersJson).IsRequired();
         builder.Property(item => item.CheckpointJson).IsRequired();
-        builder.HasIndex(item => item.SourceExecutionId);
+        builder.HasIndex(item => item.SourceTurnId);
         builder.HasIndex(item => new
         {
             item.ProjectConversationId,

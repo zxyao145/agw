@@ -47,7 +47,7 @@ public sealed class DurableExecutionLeases : IDurableExecutionLeases
     }
 
     public async Task<DurableLease?> TryClaimAsync(
-        Guid executionId,
+        Guid turnId,
         string workerId,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken
@@ -63,7 +63,7 @@ public sealed class DurableExecutionLeases : IDurableExecutionLeases
         var expiresAt = now + leaseDuration;
         var version = Guid.CreateVersion7();
         var claimed = await dbContext
-            .DurableExecutions.Where(item => item.Id == executionId)
+            .DurableExecutions.Where(item => item.Id == turnId)
             .Where(item =>
                 item.Status == DurableExecutionStatus.Queued
                 || item.Status == DurableExecutionStatus.Resuming
@@ -85,12 +85,12 @@ public sealed class DurableExecutionLeases : IDurableExecutionLeases
             return null;
         var epoch = await dbContext
             .DurableExecutions.AsNoTracking()
-            .Where(item => item.Id == executionId)
+            .Where(item => item.Id == turnId)
             .Select(item => item.LeaseEpoch)
             .SingleAsync(cancellationToken)
             .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new DurableLease(executionId, workerId, epoch);
+        return new DurableLease(turnId, workerId, epoch);
     }
 
     public async Task<bool> RenewAsync(DurableLease lease, TimeSpan leaseDuration, CancellationToken cancellationToken)
@@ -112,7 +112,7 @@ public sealed class DurableExecutionLeases : IDurableExecutionLeases
         new WriteGuard(_scopeFactory, _timeProvider, lease, ownershipLost);
 
     public async Task<T> RunLockedAsync<T>(
-        Guid executionId,
+        Guid turnId,
         Func<IServiceProvider, CancellationToken, Task<T>> write,
         CancellationToken cancellationToken
     )
@@ -124,7 +124,7 @@ public sealed class DurableExecutionLeases : IDurableExecutionLeases
             .Database.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
         var locked = await dbContext
-            .DurableExecutions.Where(item => item.Id == executionId)
+            .DurableExecutions.Where(item => item.Id == turnId)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(item => item.LeaseEpoch, item => item.LeaseEpoch),
                 cancellationToken
@@ -147,7 +147,7 @@ public sealed class DurableExecutionLeases : IDurableExecutionLeases
         DateTimeOffset now
     ) =>
         dbContext.DurableExecutions.Where(item =>
-            item.Id == lease.ExecutionId
+            item.Id == lease.TurnId
             && item.WorkerId == lease.WorkerId
             && item.LeaseEpoch == lease.Epoch
             && item.Status == DurableExecutionStatus.Running

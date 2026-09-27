@@ -90,7 +90,7 @@ internal static class ExecutionTestScopes
             Generation = manifest.Task.Generation,
             WorkspaceSnapshot =
                 manifest.WorkspaceSnapshot ?? new ProjectWorkspaceSnapshot("/workspace", [], "fingerprint"),
-            TurnId = manifest.ExecutionId,
+            TurnId = manifest.TurnId,
             TurnTargetId = manifest.AgentId,
             RuntimeType = manifest.AgentType,
             AgentId = manifest.AgentType == AgentRuntimeType.Agent ? manifest.AgentId : null,

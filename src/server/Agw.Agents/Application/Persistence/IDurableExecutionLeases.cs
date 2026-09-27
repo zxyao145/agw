@@ -19,7 +19,7 @@ public interface IDurableExecutionLeases
     /// Claims one record with a conditional update: writes this instance's WorkerId, increments LeaseEpoch and sets a new expiry; returns null when another instance claimed first.
     /// </summary>
     Task<DurableLease?> TryClaimAsync(
-        Guid executionId,
+        Guid turnId,
         string workerId,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken
@@ -42,7 +42,7 @@ public interface IDurableExecutionLeases
     /// The transaction of a user command: writes after locking the execution row without requiring a lease; it excludes lease-checked transactions so event sequences stay contiguous.
     /// </summary>
     Task<T> RunLockedAsync<T>(
-        Guid executionId,
+        Guid turnId,
         Func<IServiceProvider, CancellationToken, Task<T>> write,
         CancellationToken cancellationToken
     );

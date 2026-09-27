@@ -102,7 +102,7 @@ public class ExecutionCommandRegistrationTests
             {
               "type": "ResumeCheckpointCommand",
               "checkpointOccurrenceId": "0190c7e9-19f3-7fb5-8c16-21b70989f001",
-              "resumeExecutionId": "0190c7e9-19f3-7fb5-8c16-21b70989f002",
+              "resumeTurnId": "0190c7e9-19f3-7fb5-8c16-21b70989f002",
               "agentflowId": "0190c7e9-19f3-7fb5-8c16-21b70989f003"
             }
             """,

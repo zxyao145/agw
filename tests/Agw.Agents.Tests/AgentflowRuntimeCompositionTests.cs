@@ -206,7 +206,7 @@ public partial class AgentflowTurnExecutorTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
-                new(manifest.ExecutionId, 0, [], null),
+                new(manifest.TurnId, 0, [], null),
                 new FailingSegmentSink(failure),
                 TestContext.Current.CancellationToken
             )

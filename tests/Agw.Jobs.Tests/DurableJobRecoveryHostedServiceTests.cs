@@ -18,14 +18,14 @@ public sealed class DurableJobRecoveryHostedServiceTests
     [Fact]
     public async Task RecoverJobAsync_ExecutionWasNotRegistered_RecordsCurrentAttemptFailure()
     {
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var job = new Job
         {
             Id = Guid.CreateVersion7(),
             ProjectId = Guid.CreateVersion7(),
             Status = JobStatus.Running,
             IsEnabled = true,
-            ActiveExecutionId = executionId,
+            ActiveTurnId = turnId,
             ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
             CreateBy = "owner",
         };
@@ -61,7 +61,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         await Assert.IsAssignableFrom<Task>(invocation);
 
         Assert.Equal(job.Id, recorder.JobId);
-        Assert.Equal(executionId, recorder.ExecutionId);
+        Assert.Equal(turnId, recorder.TurnId);
         Assert.False(recorder.Success);
         Assert.Contains("was not registered", recorder.ErrorMessage, StringComparison.Ordinal);
     }
@@ -69,14 +69,14 @@ public sealed class DurableJobRecoveryHostedServiceTests
     [Fact]
     public async Task RecoverJobAsync_MissingOwner_RecordsFailureWithoutRetryingForever()
     {
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var job = new Job
         {
             Id = Guid.CreateVersion7(),
             ProjectId = Guid.CreateVersion7(),
             Status = JobStatus.Running,
             IsEnabled = true,
-            ActiveExecutionId = executionId,
+            ActiveTurnId = turnId,
             ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
             CreateBy = string.Empty,
         };
@@ -113,7 +113,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         await Assert.IsAssignableFrom<Task>(invocation);
 
         Assert.Equal(job.Id, recorder.JobId);
-        Assert.Equal(executionId, recorder.ExecutionId);
+        Assert.Equal(turnId, recorder.TurnId);
         Assert.False(recorder.Success);
         Assert.Equal("The Job owner is missing.", recorder.ErrorMessage);
         Assert.Equal(0, executionFacade.GetOutcomeCalls);
@@ -133,7 +133,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
             Id = Guid.NewGuid(),
             ProjectId = Guid.NewGuid(),
             Status = JobStatus.Running,
-            ActiveExecutionId = Guid.NewGuid(),
+            ActiveTurnId = Guid.NewGuid(),
             ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
             CreateBy = "owner",
         };
@@ -209,7 +209,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         public int GetOutcomeCalls { get; private set; }
 
         public Task<AgentExecutionResult> GetOutcomeAsync(
-            Guid executionId,
+            Guid turnId,
             string ownerUserId,
             CancellationToken cancellationToken = default
         )
@@ -219,7 +219,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         }
 
         public async IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
-            Guid executionId,
+            Guid turnId,
             string ownerUserId,
             string? afterCursor,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
@@ -230,7 +230,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         }
 
         public Task<bool> InterruptAsync(
-            Guid executionId,
+            Guid turnId,
             string ownerUserId,
             string reason,
             CancellationToken cancellationToken = default
@@ -241,20 +241,20 @@ public sealed class DurableJobRecoveryHostedServiceTests
     {
         public TaskCompletionSource Recorded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Guid? JobId { get; private set; }
-        public Guid? ExecutionId { get; private set; }
+        public Guid? TurnId { get; private set; }
         public bool Success { get; private set; }
         public string? ErrorMessage { get; private set; }
 
         public Task<JobAttemptResult> RecordAsync(
             Guid jobId,
-            Guid executionId,
+            Guid turnId,
             bool success,
             string? errorMessage,
             CancellationToken cancellationToken
         )
         {
             JobId = jobId;
-            ExecutionId = executionId;
+            TurnId = turnId;
             Success = success;
             ErrorMessage = errorMessage;
             Recorded.TrySetResult();

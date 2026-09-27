@@ -45,8 +45,8 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         Assert.NotNull(accepted.Broadcast);
         Assert.True(AgwMessageClassifier.IsTurnStart(accepted.Start));
         Assert.Equal(1L, accepted.Start.AdditionalProperties?[TurnMessageFactory.TurnSequenceKey]);
-        Assert.Equal(input.MessageId, accepted.Start.AdditionalProperties?["streamingScopeId"]);
         var turnId = accepted.Request.TurnId;
+        Assert.Equal(turnId.ToString("D"), accepted.Start.AdditionalProperties?["streamingScopeId"]);
         var inputId = Guid.Parse(input.MessageId);
         var turn = await _kit.ReadTurnAsync(turnId);
         Assert.Equal(ProjectConversationTurnStatus.Accepted, turn.Status);

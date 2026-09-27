@@ -14,7 +14,7 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 | `ExecutionConnection` | 一条 SignalR 实时连接 | 串行分派命令、管理 attached 状态和 connection 级 DI scope |
 | `ExecutionConnectionContext` | 同一条 SignalR 连接 | 维护 settings、task、workspace、target 和 runtime 失效规则 |
 | `IExecutionStarter` 实现 | 同一条 SignalR 连接 | 统一接受启动；InProcess 实现持有可复用 Runtime，Durable 实现委托 Session |
-| `DurableExecutionSession` | 一条连接对持久执行的 attachment | 管理 executionId、订阅、回答、中断与重连；不拥有后台 execution |
+| `DurableExecutionAttachment` | 一条连接对持久 Turn 的 attachment | 管理 turnId、订阅、回答、中断与重连；不拥有后台 execution |
 | `RuntimeBase` | 同一执行目标的多轮对话 | 持有当前 `ActiveTurn`，负责中断、等待空闲和释放 |
 | `ActiveTurn` | 一次 `ExecCommand` | 跟踪执行任务、取消源和 HumanGate 响应入口 |
 
@@ -80,7 +80,7 @@ Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后�
 
 打开已有会话（包括页面刷新、重新打开窗口和本地 attachment 丢失）时，客户端先调用 `FindInProcessExecution(projectId, conversationId)`，按当前用户、项目和对话查找仍在运行的原连接。历史消息加载完成不代表执行已经结束；状态查询完成前禁止发送，查询失败保留重试入口。返回原连接 ID 后复用下面的状态查询和停止流程。发起查询的连接自己的 Turn 已写出 `turn-finished` 时不会返回这条连接：它的客户端已经收到结果，之后发来的命令在服务端等待这个 Turn 释放资源。新建空会话不需要等待历史恢复。
 
-Web 与 Desktop 的输入队列只在收到 `turn-finished`、状态为 `completed`、且 `turnId` 等于该条目 `executionId` 时发送下一条。连接关闭、或重连后没有活动执行而该条目尚未收到 `turn-start` 时，结果无法确认：条目带着原 `executionId` 回到队首并锁定编辑，队列暂停；重发沿用同一 `executionId`，服务端按 turnId 只受理一次。
+Web 与 Desktop 的输入队列只在收到 `turn-finished`、状态为 `completed`、且消息的 `turnId` 等于该条目发送时使用的 `turnId` 时发送下一条。连接关闭、或重连后没有活动执行而该条目尚未收到 `turn-start` 时，结果无法确认：条目带着原 `turnId` 回到队首并锁定编辑，队列暂停；重发沿用同一 `turnId`，服务端按 turnId 只受理一次。
 
 InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查询原连接，返回 `true` 表示仍在执行或释放资源。`connectionId` 必须是启动该轮执行时的原连接 ID，连续重连不得替换；服务端校验连接所有者，外来和不存在的连接均返回 `false`，且不会中断外来执行。恢复中的客户端每秒查询一次，原执行退出前保留停止按钮；停止时传入 `interrupt=true`，请求取消后仍等待服务端确认退出。此接口恢复执行状态和停止能力，不重放断线期间的 InProcess 消息。客户端与服务端应一起更新；恢复接口不可用时保留重试入口，不推断执行已结束。
 
@@ -201,7 +201,7 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 | `SetModeCommand` | 切换支持 mode 的 Agent | 是；空闲时立即应用，活动 turn 结束后应用最后一次请求 |
 | `SetPermissionModeCommand` | 选择下轮工具审批策略 | 是；更新下轮 settings，当前 turn 和待答请求保持快照；外部 runtime 按权限版本在下轮重建 |
 | `HumanResponseCommand` | 提交审批或用户信息交互响应 | InProcess 转发给当前 turn；Durable 经 Session 持久化回答并推进恢复状态 |
-| `SubscribeExecutionCommand` | 按 `executionId` 和 event stream cursor 重新订阅属于已配置对话的集群执行；其他对话的执行按不存在处理 | 是；替换当前消息订阅，不启动新执行 |
+| `SubscribeTurnCommand` | 按 `turnId` 和 event stream cursor 重新订阅属于已配置对话的集群 Turn；其他对话的 Turn 按不存在处理 | 是；替换当前消息订阅，不启动新执行 |
 | `ResumeCheckpointCommand` | 从一个精确的 Agentflow checkpoint occurrence 创建新执行分支 | 是；校验并裁剪 checkpoint 之后的历史，再启动恢复 turn |
 
 `SettingCommand.Resume` 是服务端属性，带有 `[JsonIgnore]`。transport command 自身的等价性不包含 `Resume`；复制出的 `ExecutionSettings` 会包含它，因为 resume 变化需要使 connection-owned runtime 失效。
@@ -225,7 +225,7 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 - 通过 `InProcessExecutionStarter` 管理可跨 turn 复用的 `RuntimeBase`；
 - 当前 user、消息 sink 和 waiting-for-human 状态，并向 Starter 绑定 Host token。
 
-集群 provider 的持久 identity 与订阅生命周期由独立的 `DurableExecutionSession` 持有。Context 的普通启动统一调用 `IExecutionStarter`；订阅、中断、回答与 checkpoint 控制仍使用既有 Session 或 Runtime 路径。
+集群 provider 的持久 identity 与订阅生命周期由独立的 `DurableExecutionAttachment` 持有。Context 的普通启动统一调用 `IExecutionStarter`；订阅、中断、回答与 checkpoint 控制仍使用既有 Session 或 Runtime 路径。
 
 它通过 `ApplySettingsAsync`、`StartTurnAsync`、`InterruptTurnAsync`、`SubmitHumanDecisionAsync`、checkpoint 查询和 checkpoint 恢复提供原子操作，并以只读属性共享 project/context/workspace/agent/task/user 数据；它不公开 `RuntimeBase`、`ActiveTurn` 或状态 setter。`ExecCommand` 启动后台 turn 后会很快返回，command gate 随即释放，后续 interrupt 和 HumanGate response 才能进入。
 
@@ -253,7 +253,7 @@ External Agent 通过持久化的 `Agent.ExternalAgentKind` 选择 Claude Code�
 
 每轮执行入口捕获主目录、附加目录和配置指纹，保存在 `RuntimeTurnContext.WorkspaceSnapshot`，并通过 `ProjectWorkspaceContext` 传到 Agent、Agentflow、工具和后台子执行。目录设置保存后文件面板立即刷新，本轮不变，下一轮按新指纹重建 runtime；conversation ID、provider session ID 与持久化历史沿用原值。
 
-Durable manifest 保存同一快照，重复注册相同 executionId、恢复 segment 和人工交互续跑均复用它。旧清单缺少快照时在 execution lease 内补齐单主目录配置并持久化，不把新增附加目录带入旧执行。目录无法访问时报告该目录错误，不切回主目录。
+Durable manifest 保存同一快照，重复注册相同 turnId、恢复 segment 和人工交互续跑均复用它。旧清单缺少快照时在 execution lease 内补齐单主目录配置并持久化，不把新增附加目录带入旧执行。目录无法访问时报告该目录错误，不切回主目录。
 
 Claude Code 的 `AddDirectories` 和 Codex 的 `ThreadOptions.AdditionalDirectories` 合并项目附加目录与 SDK 显式配置，再按规范化路径去重。Pi 通过每轮上下文获取目录清单；三种 Agent 的默认 cwd 均保持主目录。`file_access_*` 的可选 `directoryId` 绑定本轮目录，聊天文件引用在没有附加目录时使用 `@<relativePath>`，配置附加目录后使用 `@<absolutePath>`，含空格时为路径加双引号；调用相对路径文件工具时，Agent 将完整路径转换为对应目录的 `directoryId` 和相对路径，主目录省略 `directoryId`。Docker Shell 把附加目录挂载到 `/project-directories/{id}`，默认 cwd 为 `/workspace`。目录关联沿用现有权限模式，不增加逐目录授权或 OS 沙箱。
 
@@ -318,7 +318,7 @@ flowchart TB
     Dispatcher --> Mode["SetModeCommandHandler"]
     Dispatcher --> Permission["SetPermissionModeCommandHandler"]
     Dispatcher --> Human["HumanResponseCommandHandler"]
-    Dispatcher --> Subscribe["SubscribeExecutionCommandHandler"]
+    Dispatcher --> Subscribe["SubscribeTurnCommandHandler"]
     Dispatcher --> Checkpoint["ResumeCheckpointCommandHandler"]
 
     Setting --> Context["ExecutionConnectionContext"]
@@ -335,7 +335,7 @@ flowchart TB
     Starter --> InProcessStarter["InProcessExecutionStarter"]
     InProcessStarter --> Factory["RuntimeFactory"]
     Starter --> DurableStarter["DurableExecutionStarter"]
-    DurableStarter --> Session["DurableExecutionSession"]
+    DurableStarter --> Session["DurableExecutionAttachment"]
     Session --> Coordinator["DurableExecutionCoordinator"]
     Coordinator --> State[("持久执行状态")]
     State --> Worker["DistributedExecutionWorker"]
@@ -542,8 +542,8 @@ Execution.Provider
 | Agent / Agentflow node 的模型 session | 既有 PostgreSQL `agent_session_state` | 复用现有会话连续性，不新增第二份 session 状态 |
 | 跨 Server 排他权 | PostgreSQL advisory lock | 同一 execution 同时只有一个 Server 执行 segment |
 | token/message replay cursor | `IExecutionEventStream` | PostgreSQL 或 Redis Stream 实现，支持实时输出与断线重放，不参与执行判定 |
-| 当前 executionId/cursor | 客户端 localStorage，按服务端、项目和对话保存；按执行上下文保存的旧记录在读取会话资料时迁移 | 页面刷新后发现并重新订阅执行 |
-| Card 渲染作用域 | 启动清单中的原始用户消息 ID | Server B 恢复时仍能用 `streamingScopeId + callId` 命中历史 Tool call |
+| 当前 turnId/cursor | 客户端 localStorage，按服务端、项目和对话保存；按执行上下文保存的旧记录在读取会话资料时迁移 | 页面刷新后发现并重新订阅 Turn |
+| Card 渲染作用域 | 启动清单中的 `StreamingScopeId`（等于 turnId） | Server B 恢复时仍能用 `streamingScopeId + callId` 命中历史 Tool call |
 
 状态机只使用一张 `durable_execution` 表，没有为 checkpoint、pending 或 response 分表。除 `BaseEntity` 审计列外，核心字段为：
 
@@ -559,7 +559,7 @@ Execution.Provider
 
 升级前应排空旧执行，并同步更新 Server 和客户端。本次清理不修改数据库字段、索引和迁移历史。相关持久化适配器仍显式注入维护服务与锁；调用方取消和非预期锁取消继续传播。
 
-PostgreSQL event stream 另使用一张 `execution_stream_entry` append-only 表，保存 `ExecutionId + SegmentIndex + Sequence + 加密 PayloadJson`。这张表不能与状态行合并：流式 token 数量无界且写入频繁，把它们放入 `durable_execution` 会持续放大单行、制造状态更新冲突。它也不能复用对话历史表，因为对话历史不具备 execution cursor 和逐条传输消息语义。
+PostgreSQL event stream 另使用一张 `execution_stream_entry` append-only 表，保存 `TurnId + SegmentIndex + Sequence + 加密 PayloadJson`。这张表不能与状态行合并：流式 token 数量无界且写入频繁，把它们放入 `durable_execution` 会持续放大单行、制造状态更新冲突。它也不能复用对话历史表，因为对话历史不具备 execution cursor 和逐条传输消息语义。
 
 无人值守的 Durable Job 不消费 event stream。Control Plane 通过轻量 outcome 投影每秒检查一次状态，只在失败终态额外读取加密错误；A2A 和交互式连接仍按 cursor 消费消息流。这样 Job 完成等待不会按运行时长持续加载 manifest 或回放输出。
 
@@ -574,8 +574,8 @@ PostgreSQL event stream 另使用一张 `execution_stream_entry` append-only 表
 
 ```mermaid
 flowchart LR
-    Client["Web / Desktop<br/>executionId + cursor"] <-->|"SignalR"| Pod["任意 Agw Server"]
-    Pod --> Session["DurableExecutionSession<br/>attach / respond / interrupt"]
+    Client["Web / Desktop<br/>turnId + cursor"] <-->|"SignalR"| Pod["任意 Agw Server"]
+    Pod --> Session["DurableExecutionAttachment<br/>attach / respond / interrupt"]
     Session --> Coordinator["DurableExecutionCoordinator"]
     Coordinator --> State[("PostgreSQL<br/>state + checkpoint<br/>pending + response")]
     Worker["DistributedExecutionWorker"] --> State
@@ -589,7 +589,7 @@ flowchart LR
     Coordinator --> Stream
 ```
 
-`ExecutionConnectionContext` 经统一的 `IExecutionStarter` 启动执行，Durable 实现委托 `DurableExecutionSession`。Session 是连接 attachment，不拥有后台任务；断开 SignalR 只停止当前订阅。Coordinator 每次访问状态都创建独立 DI scope，因此后台订阅不会持有已经释放的 request-scope `DbContext`。
+`ExecutionConnectionContext` 经统一的 `IExecutionStarter` 启动执行，Durable 实现委托 `DurableExecutionAttachment`。它是连接对持久 Turn 的订阅，不拥有后台任务；断开 SignalR 只停止当前订阅。Coordinator 每次访问状态都创建独立 DI scope，因此后台订阅不会持有已经释放的 request-scope `DbContext`。
 
 ### 首次执行、暂停与回答
 
@@ -603,10 +603,10 @@ sequenceDiagram
     participant L as PG DistributedLock
     participant E as Event Stream (PG / Redis)
 
-    C->>P: ExecCommand(conversationId, stable executionId)
+    C->>P: ExecCommand(conversationId, stable turnId)
     P->>PG: INSERT manifest + status=Queued
     W->>PG: poll runnable execution
-    W->>L: acquire(executionId)
+    W->>L: acquire(turnId)
     W->>PG: status=Running
     W->>E: append streaming output
     W->>W: defer ask_user_question at approval boundary
@@ -614,17 +614,17 @@ sequenceDiagram
     P->>PG: poll current status
     P-->>C: interaction-request(kind=user-input)
 
-    C->>P: HumanResponseCommand(executionId, response.interactionId)
-    P->>L: acquire(executionId)
+    C->>P: HumanResponseCommand(turnId, response.interactionId)
+    P->>L: acquire(turnId)
     P->>PG: append response; all answered => Resuming
-    W->>L: acquire(executionId)
+    W->>L: acquire(turnId)
     W->>PG: status=Running
     W->>W: restore checkpoint and inject response
     W->>E: append resumed output
     W->>PG: Completed or next WaitingForHuman
 ```
 
-问题只在 checkpoint、pending 和 `WaitingForHuman` 已经提交后展示，因此回答不会指向尚未持久化的请求。恢复消息同时携带启动清单中的原始用户消息 ID 作为 `streamingScopeId`；它与持久化的 `callId` 一起把 Card 精确放回原 Tool call，不能使用 Server B 新建的 `turn-start.messageId`。模型 Tool 参数中的 `answers` 不会被当作用户回答；客户端只接收 questions/metadata，真正回答由 `HumanResponseCommand.response.responseData` 提交。
+问题只在 checkpoint、pending 和 `WaitingForHuman` 已经提交后展示，因此回答不会指向尚未持久化的请求。恢复消息同时携带启动清单中的 `StreamingScopeId`（等于 turnId）作为 `streamingScopeId`；它与持久化的 `callId` 一起把 Card 精确放回原 Tool call，不能使用 Server B 新建的 `turn-start.messageId`。模型 Tool 参数中的 `answers` 不会被当作用户回答；客户端只接收 questions/metadata，真正回答由 `HumanResponseCommand.response.responseData` 提交。
 
 恢复路径分两种：
 
@@ -650,12 +650,12 @@ stateDiagram-v2
     Resuming --> Interrupted
 ```
 
-- 客户端先生成稳定 `executionId`。同一 ID + 相同 manifest 重试是幂等；同一 ID + 不同 owner 或 manifest 返回 conflict。
-- Worker 只把 `Queued`、`Resuming` 和可能由旧 Server 遗留的 `Running` 当作候选；真正执行前必须获得相同 executionId 的 PostgreSQL advisory lock。
+- 客户端先生成稳定 `turnId`。同一 ID + 相同 manifest 重试是幂等；同一 ID + 不同 owner 或 manifest 返回 conflict。
+- Worker 只把 `Queued`、`Resuming` 和可能由旧 Server 遗留的 `Running` 当作候选；真正执行前必须获得相同 turnId 的 PostgreSQL advisory lock。
 - `StateVersion` 是乐观并发 token。中断会直接写入 `Interrupted` 并更新版本，已在运行的 segment 不能用迟到结果覆盖它。
 - checkpoint、pending、response 都通过 EF 加密拦截器落库；状态转换与对应 JSON 在一次 `SaveChanges` 中提交。
 - 两种 event stream 实现都以 `segment-sequence` 作为确定性位置，segment 重放不会在同一逻辑位置重复追加。消息缺失时，订阅端会根据 PostgreSQL 终态合成 `turn-finished`；Redis 额外使用 TTL 控制保留时间。
-- 执行语义是 at-least-once。若进程在有副作用的 Tool 已成功、但 segment result 尚未提交时退出，新 Server 会重放该 segment；Tool 必须使用 executionId/requestId 或业务键实现幂等，本实现不宣称 exactly-once。
+- 执行语义是 at-least-once。若进程在有副作用的 Tool 已成功、但 segment result 尚未提交时退出，新 Server 会重放该 segment；Tool 必须使用 turnId/requestId 或业务键实现幂等，本实现不宣称 exactly-once。
 
 ### K8s 滚动更新
 
@@ -671,7 +671,7 @@ sequenceDiagram
     Old->>PG: checkpoint + pending 已持久化
     Note over Old: Pod terminated，PG lock 自动释放
     C--xOld: SignalR disconnected
-    C->>New: reconnect + SubscribeExecutionCommand(executionId, cursor)
+    C->>New: reconnect + SubscribeTurnCommand(turnId, cursor)
     New->>PG: authorize + read status/pending
     New->>Stream: replay after cursor
     New-->>C: remaining output / current pending request
@@ -759,7 +759,7 @@ stateDiagram-v2
 
 上述状态图描述 `InProcess` 模式：断线不会直接取消普通运行中的 turn。`ExecutionConnection` 先标记为 detached，message sink 随后丢弃输出；后台任务继续完成持久化，空闲后再释放 connection scope。若断线时正在等待 HumanGate，由于客户端无法再响应，当前 turn 会被中断。应用关闭时，host cancellation token 会终止仍在执行的任务。
 
-`Distributed` 模式下，断线只取消当前 event stream/PostgreSQL 状态订阅并立即释放 connection scope，不 interrupt execution。客户端重连或页面重开后重新发送 settings 与 `SubscribeExecutionCommand`；用户显式发送 `InterruptCommand(executionId)` 才会把 PostgreSQL 状态推进到 `Interrupted`。
+`Distributed` 模式下，断线只取消当前 event stream/PostgreSQL 状态订阅并立即释放 connection scope，不 interrupt execution。客户端重连或页面重开后重新发送 settings 与 `SubscribeTurnCommand`；用户显式发送 `InterruptCommand(turnId)` 才会把 PostgreSQL 状态推进到 `Interrupted`。
 
 ## 状态归属与并发约束
 
@@ -776,7 +776,7 @@ stateDiagram-v2
 | settings/task/target/user/workspace/message sink 快照 | `RuntimeTurnContext` | AsyncLocal，只读、仅在 turn 内可见 |
 | durable manifest / owner / status / segment | PostgreSQL | 单行 execution 状态机 |
 | pending / response / checkpoint / error | PostgreSQL | 加密 JSON，与状态转换原子提交 |
-| execution 排他权 | PostgreSQL DistributedLock | 按 executionId 获取 advisory lock |
+| execution 排他权 | PostgreSQL DistributedLock | 按 turnId 获取 advisory lock |
 | durable output cursor | `IExecutionEventStream` | PostgreSQL 或 Redis Stream；缺失终态时以状态表合成，不作为执行事实来源 |
 
 `ExecutionConnection` 的 command gate 保护命令级状态变更，`RuntimeBase` 的 lock 保护活动 turn。两个锁解决的问题不同，不应合并：前者负责命令串行化，后者负责后台 turn 生命周期。

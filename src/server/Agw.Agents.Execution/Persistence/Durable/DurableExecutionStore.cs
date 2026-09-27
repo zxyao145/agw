@@ -79,7 +79,7 @@ internal static class DurableExecutionSnapshotExtensions
             .PendingInteractions.Select(item => new DurableResolvedInteraction(item, responses[item.InteractionId]))
             .ToArray();
         return new DurableExecutionSegmentInput(
-            snapshot.Manifest.ExecutionId,
+            snapshot.Manifest.TurnId,
             snapshot.SegmentIndex,
             resolved,
             snapshot.Checkpoint
@@ -128,7 +128,7 @@ internal sealed class DurableExecutionStore
         DurableExecutionJson.Serialize(
             new DurableExecutionManifest
             {
-                ExecutionId = request.TurnId,
+                TurnId = request.TurnId,
                 UserId = request.UserId,
                 AgentId = request.Target.AgentId,
                 AgentType = request.Target.AgentType,
@@ -140,10 +140,10 @@ internal sealed class DurableExecutionStore
             }
         );
 
-    internal async Task<DurableExecutionSnapshot> GetAsync(Guid executionId, CancellationToken cancellationToken)
+    internal async Task<DurableExecutionSnapshot> GetAsync(Guid turnId, CancellationToken cancellationToken)
     {
         var record =
-            await FindAsync(executionId, userId: null, tracking: false, cancellationToken).ConfigureAwait(false)
+            await FindAsync(turnId, userId: null, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         return ToSnapshot(record);
     }
@@ -152,29 +152,26 @@ internal sealed class DurableExecutionStore
     /// 读取刚领取的记录；清单或所属范围无效的记录被隔离并返回空。
     /// Reads a just-claimed record; a record with an invalid manifest or scope is quarantined and null is returned.
     /// </summary>
-    internal async Task<DurableExecutionSnapshot?> LoadClaimedAsync(
-        Guid executionId,
-        CancellationToken cancellationToken
-    )
+    internal async Task<DurableExecutionSnapshot?> LoadClaimedAsync(Guid turnId, CancellationToken cancellationToken)
     {
         var record = await _scopeMaintenance
-            .LoadValidatedExecutionAsync(executionId, cancellationToken)
+            .LoadValidatedExecutionAsync(turnId, cancellationToken)
             .ConfigureAwait(false);
         return record == null ? null : ToSnapshot(record);
     }
 
     /// <summary>
-    /// 按 executionId 和 owner 同时加载快照，避免向其他用户泄露执行是否存在。
-    /// Loads the snapshot by executionId and owner together so the existence of another user's execution is not disclosed.
+    /// 按 turnId 和 owner 同时加载快照，避免向其他用户泄露执行是否存在。
+    /// Loads the snapshot by turnId and owner together so the existence of another user's execution is not disclosed.
     /// </summary>
     internal async Task<DurableExecutionSnapshot> GetAuthorizedAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         CancellationToken cancellationToken
     )
     {
         var record =
-            await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
+            await FindAsync(turnId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         var snapshot = ToSnapshot(record);
         await EnsureSessionCurrentAsync(snapshot, cancellationToken);
@@ -186,14 +183,14 @@ internal sealed class DurableExecutionStore
     /// The encrypted error is loaded only for failed executions.
     /// </summary>
     internal async Task<DurableExecutionOutcome> GetAuthorizedOutcomeAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         CancellationToken cancellationToken
     )
     {
         var state = await _dbContext
             .DurableExecutions.AsNoTracking()
-            .Where(item => item.Id == executionId && item.UserId == userId)
+            .Where(item => item.Id == turnId && item.UserId == userId)
             .Select(item => new { item.Id, item.Status })
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -205,7 +202,7 @@ internal sealed class DurableExecutionStore
         string? errorMessage = null;
         if (state.Status == DurableExecutionStatus.Failed)
         {
-            var record = await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false);
+            var record = await FindAsync(turnId, userId, tracking: false, cancellationToken).ConfigureAwait(false);
             errorMessage = record?.ErrorMessage;
         }
 
@@ -223,7 +220,7 @@ internal sealed class DurableExecutionStore
     {
         ArgumentNullException.ThrowIfNull(result);
         var record =
-            await FindAsync(result.ExecutionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
+            await FindAsync(result.TurnId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         if (record.Status != DurableExecutionStatus.Running || record.SegmentIndex != result.SegmentIndex)
         {
@@ -242,14 +239,10 @@ internal sealed class DurableExecutionStore
     /// 受理后、执行开始前的失败：在调用方的事务中把 Queued 或 Running 的记录写为 Failed；记录已经被其他命令结束时返回假。
     /// A failure after acceptance and before execution: writes a Queued or Running record as Failed inside the caller's transaction; returns false when another command already ended it.
     /// </summary>
-    internal async Task<bool> FailAcceptedAsync(
-        Guid executionId,
-        string errorMessage,
-        CancellationToken cancellationToken
-    )
+    internal async Task<bool> FailAcceptedAsync(Guid turnId, string errorMessage, CancellationToken cancellationToken)
     {
         var record =
-            await FindAsync(executionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
+            await FindAsync(turnId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         if (record.Status is not (DurableExecutionStatus.Queued or DurableExecutionStatus.Running))
             return false;
@@ -259,7 +252,7 @@ internal sealed class DurableExecutionStore
     }
 
     internal async Task<DurableExecutionSnapshot> SetPermissionModeAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         AgwPermissionMode mode,
         CancellationToken cancellationToken
@@ -268,13 +261,13 @@ internal sealed class DurableExecutionStore
         if (!Enum.IsDefined(mode))
             throw new AgwException(ErrorCodes.InvalidParam, "Unknown permission mode.");
         await using var permissionLock = await _applicationLock
-            .AcquireAsync($"agw:execution:permissions:{executionId:N}", cancellationToken)
+            .AcquireAsync($"agw:turn:permissions:{turnId:N}", cancellationToken)
             .ConfigureAwait(false);
         for (var attempt = 0; ; attempt++)
         {
             ClearTrackedDurableExecutions();
             var record =
-                await FindAsync(executionId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
+                await FindAsync(turnId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
                 ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
             var snapshot = ToSnapshot(record);
             await EnsureSessionCurrentAsync(snapshot, cancellationToken).ConfigureAwait(false);
@@ -334,12 +327,12 @@ internal sealed class DurableExecutionStore
     {
         ArgumentNullException.ThrowIfNull(request);
         await using var permissionLock = await _applicationLock
-            .AcquireAsync($"agw:execution:permissions:{request.ExecutionId:N}", cancellationToken)
+            .AcquireAsync($"agw:turn:permissions:{request.TurnId:N}", cancellationToken)
             .ConfigureAwait(false);
         var requestId = request.Response.InteractionId;
         ClearTrackedDurableExecutions();
         var record =
-            await FindAsync(request.ExecutionId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
+            await FindAsync(request.TurnId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         var snapshot = ToSnapshot(record);
         await EnsureSessionCurrentAsync(snapshot, cancellationToken);
@@ -394,8 +387,7 @@ internal sealed class DurableExecutionStore
         catch (DbUpdateConcurrencyException)
         {
             ClearTrackedDurableExecutions();
-            var current = await GetAuthorizedAsync(request.ExecutionId, userId, cancellationToken)
-                .ConfigureAwait(false);
+            var current = await GetAuthorizedAsync(request.TurnId, userId, cancellationToken).ConfigureAwait(false);
             if (current.Status == DurableExecutionStatus.Interrupted)
             {
                 throw new AgwException(ErrorCodes.HumanInteractionNotFound);
@@ -411,11 +403,11 @@ internal sealed class DurableExecutionStore
     /// Writes an unfinished execution as Interrupted and clears its lease inside the caller's transaction; returns whether this write ended it. The conditional update locks the execution row,
     /// excluding lease-checked transactions, so every later write of a running instance is rejected.
     /// </summary>
-    internal async Task<bool> InterruptAsync(Guid executionId, string userId, CancellationToken cancellationToken)
+    internal async Task<bool> InterruptAsync(Guid turnId, string userId, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
         var updatedCount = await _dbContext
-            .DurableExecutions.Where(item => item.Id == executionId && item.UserId == userId)
+            .DurableExecutions.Where(item => item.Id == turnId && item.UserId == userId)
             .Where(DurableExecutionQueries.Active)
             .ExecuteUpdateAsync(
                 setters =>
@@ -440,13 +432,13 @@ internal sealed class DurableExecutionStore
         }
 
         _ =
-            await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
+            await FindAsync(turnId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         return false;
     }
 
     private Task<DurableExecutionRecord?> FindAsync(
-        Guid executionId,
+        Guid turnId,
         string? userId,
         bool tracking,
         CancellationToken cancellationToken
@@ -462,7 +454,7 @@ internal sealed class DurableExecutionStore
             query = query.Where(item => item.UserId == userId);
         }
 
-        return query.SingleOrDefaultAsync(item => item.Id == executionId, cancellationToken);
+        return query.SingleOrDefaultAsync(item => item.Id == turnId, cancellationToken);
     }
 
     /// <summary>
@@ -560,7 +552,7 @@ internal sealed class DurableExecutionStore
                 $"Execution '{record.Id}' uses unsupported manifest schema version '{manifest.SchemaVersion}'."
             );
         }
-        if (manifest.ExecutionId != record.Id)
+        if (manifest.TurnId != record.Id)
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,

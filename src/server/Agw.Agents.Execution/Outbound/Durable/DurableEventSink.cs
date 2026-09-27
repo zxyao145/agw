@@ -131,7 +131,7 @@ internal sealed class DurableEventSink : IExecutionMessageSink, IAsyncDisposable
                     DurableExecutionEvents.AppendAsync(
                         services.GetRequiredService<IAgentsDbContext>(),
                         services.GetRequiredService<IDurableExecutionEventSequence>(),
-                        _lease.ExecutionId,
+                        _lease.TurnId,
                         _lease.Epoch,
                         _segmentIndex,
                         batch,
@@ -145,7 +145,7 @@ internal sealed class DurableEventSink : IExecutionMessageSink, IAsyncDisposable
         _pending.Clear();
         _flushAt = null;
         _broadcast.PublishCommitted(committed);
-        await _eventLog.PublishAsync(_lease.ExecutionId, committed, CancellationToken.None).ConfigureAwait(false);
+        await _eventLog.PublishAsync(_lease.TurnId, committed, CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task RunTimerAsync()

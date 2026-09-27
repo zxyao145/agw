@@ -894,9 +894,9 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
 
-                    b.Property<Guid?>("SourceExecutionId")
+                    b.Property<Guid?>("SourceTurnId")
                         .HasColumnType("uuid")
-                        .HasColumnName("source_execution_id");
+                        .HasColumnName("source_turn_id");
 
                     b.Property<Guid>("TaskId")
                         .HasColumnType("uuid")
@@ -919,8 +919,8 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_agentflow_checkpoint");
 
-                    b.HasIndex("SourceExecutionId")
-                        .HasDatabaseName("ix_agentflow_checkpoint_source_execution_id");
+                    b.HasIndex("SourceTurnId")
+                        .HasDatabaseName("ix_agentflow_checkpoint_source_turn_id");
 
                     b.HasIndex("ProjectConversationId", "AgentflowId", "BoundarySequence")
                         .HasDatabaseName("ix_agentflow_checkpoint_project_conversation_id_agentflow_id_b");
@@ -1400,9 +1400,9 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("active_attempt_started_at");
 
-                    b.Property<Guid?>("ActiveExecutionId")
+                    b.Property<Guid?>("ActiveTurnId")
                         .HasColumnType("uuid")
-                        .HasColumnName("active_execution_id");
+                        .HasColumnName("active_turn_id");
 
                     b.Property<Guid?>("AgentId")
                         .HasColumnType("uuid")
@@ -1488,9 +1488,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_job");
 
-                    b.HasIndex("ActiveExecutionId")
+                    b.HasIndex("ActiveTurnId")
                         .IsUnique()
-                        .HasDatabaseName("ix_job_active_execution_id");
+                        .HasDatabaseName("ix_job_active_turn_id");
 
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_task_project");
@@ -1500,7 +1500,7 @@ namespace Agw.Migrations.Postgres.Migrations
 
                     b.ToTable("job", null, t =>
                         {
-                            t.HasCheckConstraint("ck_job_active_attempt", "(status = 2 AND active_execution_id IS NOT NULL AND active_attempt_started_at IS NOT NULL) OR (status <> 2 AND active_execution_id IS NULL AND active_attempt_started_at IS NULL)");
+                            t.HasCheckConstraint("ck_job_active_attempt", "(status = 2 AND active_turn_id IS NOT NULL AND active_attempt_started_at IS NOT NULL) OR (status <> 2 AND active_turn_id IS NULL AND active_attempt_started_at IS NULL)");
                         });
                 });
 

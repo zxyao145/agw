@@ -23,6 +23,7 @@ import {
   isSupersededTurnMessage,
   isTurnStartMessage,
   mergeStreamingMessages,
+  markTurnMessage,
   scopeStreamingMessage,
 } from "@agw/execution-core";
 import { ConversationStatusStore } from "./conversation-status-store";
@@ -53,7 +54,7 @@ type ExecutionClient = Pick<
   | "interruptAndWait"
   | "submitHumanResponse"
   | "retryConnection"
-  | "hasActiveExecution"
+  | "hasRunningTurn"
   | "dispose"
 >;
 
@@ -145,7 +146,7 @@ export type ManagedExecutionHandle = {
   resumeCheckpoint(args: {
     checkpointOccurrenceId: string;
     agentflowId: string;
-    resumeExecutionId?: string;
+    resumeTurnId?: string;
   }): Promise<string>;
   setMode(agentId: string, mode: AgentMode): Promise<void>;
   setPermissionMode(permissionMode: PermissionMode): Promise<void>;
@@ -277,7 +278,7 @@ export class ExecutionSessionManager {
         attachedEntry.queue.push({
           ...submission,
           id: itemId,
-          executionId: createUuidV7(),
+          turnId: createUuidV7(),
           uncertain: false,
         });
         // 新的提交重新尝试应用失败的设置。A new submission retries applying settings that failed.
@@ -334,7 +335,7 @@ export class ExecutionSessionManager {
         attachedEntry.stopping =
           attachedEntry.inFlight !== null ||
           this.activity.isActive(key) ||
-          attachedEntry.client.hasActiveExecution();
+          attachedEntry.client.hasRunningTurn();
         this.emitQueueChange(attachedEntry);
         try {
           await attachedEntry.client.interrupt(reason);
@@ -355,7 +356,7 @@ export class ExecutionSessionManager {
         try {
           return await attachedEntry.client.resumeCheckpoint(args);
         } catch (error) {
-          if (!attachedEntry.client.hasActiveExecution()) this.activity.turnFinished(key, "failed");
+          if (!attachedEntry.client.hasRunningTurn()) this.activity.turnFinished(key, "failed");
           throw error;
         }
       },
@@ -508,13 +509,13 @@ export class ExecutionSessionManager {
     // Lifecycle messages without conversation or turn IDs, or superseded by a newer turn, leave statuses to the next snapshot.
     const superseded = isSupersededTurnMessage(message);
     const turn = superseded ? null : getTurnIdentity(message);
-    // 队列按条目的 executionId 识别自己的 Turn，被取代的消息同样适用。The queue recognizes its own turn by the entry's executionId, superseded messages included.
+    // 队列按条目的 turnId 识别自己的 Turn，被取代的消息同样适用。The queue recognizes its own turn by the entry's turnId, superseded messages included.
     const turnId = readTurnId(message);
     if (isTurnStartMessage(message)) {
       this.clearPendingInteraction(entry);
       this.activity.turnStarted(entry.key);
       if (turn) this.conversationStatuses.turnStarted(entry.key, turn.conversationId, turn.turnId);
-      if (entry.inFlight && turnId === entry.inFlight.item.executionId)
+      if (entry.inFlight && turnId === entry.inFlight.item.turnId)
         entry.inFlight.started = true;
     } else if (interaction) {
       entry.pendingInteractions.set(interaction.interactionId, message);
@@ -567,7 +568,7 @@ export class ExecutionSessionManager {
     const wasStopping = entry.stopping;
     entry.stopping = false;
     const inFlight = entry.inFlight;
-    const endsQueueTurn = inFlight ? turnId === inFlight.item.executionId : wasActive;
+    const endsQueueTurn = inFlight ? turnId === inFlight.item.turnId : wasActive;
     if (!endsQueueTurn) {
       if (wasStopping) this.emitQueueChange(entry);
       return;
@@ -658,14 +659,14 @@ export class ExecutionSessionManager {
       const result = await entry.client.configure(setting);
       if (this.isAttached(entry)) {
         entry.appliedSetting = setting;
-        if (result.restoredDurableExecution || entry.client.hasActiveExecution()) {
+        if (result.restoredDurableExecution || entry.client.hasRunningTurn()) {
           this.activity.turnStarted(entry.key);
         }
       }
       return result;
     } catch (error) {
       if (this.isAttached(entry)) {
-        if (entry.client.hasActiveExecution()) this.activity.turnStarted(entry.key);
+        if (entry.client.hasRunningTurn()) this.activity.turnStarted(entry.key);
         entry.configurationFailed = true;
         if (!entry.inFlight && entry.queue.length > 0) {
           this.pauseQueue(entry, toError(error).message);
@@ -685,22 +686,22 @@ export class ExecutionSessionManager {
 
   /** 连接上仍有进行中的 Turn。A turn is still running on the connection. */
   private isTurnRunning(entry: Entry): boolean {
-    return this.activity.isActive(entry.key) || entry.client.hasActiveExecution();
+    return this.activity.isActive(entry.key) || entry.client.hasRunningTurn();
   }
 
   private dispatch(entry: Entry, item: QueuedExecution): void {
-    const message = item.createMessage(item.text, item.id);
+    const message = markTurnMessage(item.createMessage(item.text, item.id), item.turnId);
     const input = toExecutionUserInput(message);
     const request: ExecutionRequest = {
       conversationId: entry.key.conversationId,
       agentId: item.target.agentId,
       agentType: item.target.agentType,
-      executionId: item.executionId,
+      turnId: item.turnId,
       stream: true,
       input,
     };
     entry.inFlight = { item, started: false };
-    this.beginActiveTurn(entry, input);
+    this.beginActiveTurn(entry, item.turnId, message);
     this.activity.turnStarted(entry.key);
     this.emitQueueChange(entry);
     entry.handler?.onSubmissionStarted?.({ item, message });
@@ -716,7 +717,7 @@ export class ExecutionSessionManager {
   private handleDispatchFailure(entry: Entry, item: QueuedExecution, error: Error): void {
     if (this.entries.get(getExecutionSessionKey(entry.key)) !== entry) return;
     const inFlight = entry.inFlight;
-    if (inFlight?.item !== item || inFlight.started || entry.client.hasActiveExecution()) return;
+    if (inFlight?.item !== item || inFlight.started || entry.client.hasRunningTurn()) return;
     entry.inFlight = null;
     entry.activeTurn = null;
     this.activity.turnFinished(entry.key, "failed");
@@ -768,23 +769,16 @@ export class ExecutionSessionManager {
     });
   }
 
-  private beginActiveTurn(entry: Entry, input: ExecutionRequest["input"]): void {
-    const streamingScopeId = input.messageId;
+  /**
+   * 活动 Turn 的 scope 是 turnId，即服务端的 turnId：历史记录按 turnId 划分 scope，快照与历史因此能互相替换。
+   * The active turn's scope is the turnId, the server's turnId: history is scoped by turnId, so the snapshot and history replace each other.
+   */
+  private beginActiveTurn(entry: Entry, turnId: string, message: AiMessage): void {
+    const streamingScopeId = turnId;
     entry.activeTurn = {
       streamingScopeId,
       replayable: true,
-      messages: [
-        scopeStreamingMessage(
-          {
-            messageId: input.messageId,
-            createdAt: input.createdAt,
-            author: input.author,
-            role: "user",
-            contents: input.contents,
-          },
-          streamingScopeId,
-        ),
-      ],
+      messages: [scopeStreamingMessage(message, streamingScopeId)],
     };
     entry.pendingMessages = [];
     entry.pendingInteractions.clear();
@@ -854,7 +848,7 @@ export class ExecutionSessionManager {
    */
   private handleReconnected(entry: Entry): void {
     entry.reconnectState = null;
-    if (entry.client.hasActiveExecution()) {
+    if (entry.client.hasRunningTurn()) {
       this.activity.turnStarted(entry.key);
     } else {
       const wasActive = this.activity.isActive(entry.key);

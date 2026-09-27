@@ -157,7 +157,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         }
         return { restoredDurableExecution: false };
       },
-      hasActiveExecution: () => active,
+      hasRunningTurn: () => active,
       execute: async (request: ExecutionRequest) => {
         executions.push(request);
         commands.push(
@@ -166,7 +166,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         active = true;
       },
       listAgentflowCheckpoints: async () => [],
-      resumeCheckpoint: async () => "execution-resumed",
+      resumeCheckpoint: async () => "turn-resumed",
       setMode: async () => undefined,
       setPermissionMode: async () => undefined,
       interrupt: async () => undefined,
@@ -183,13 +183,13 @@ async function checkConversationSession(kind: string, strictMode = false) {
     type: "agw-turn-start" | "agw-turn-finished",
     execution: ExecutionRequest,
   ): import("@agw/api").AiMessage => ({
-    messageId: `${type}-${execution.executionId}`,
+    messageId: `${type}-${execution.turnId}`,
     role: "system",
     contents: [],
     additionalProperties: {
       type,
       conversationId: execution.conversationId,
-      turnId: execution.executionId,
+      turnId: execution.turnId,
       ...(type === "agw-turn-finished" ? { status: "completed" } : {}),
     },
   });
@@ -835,7 +835,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.equal(observed.conversationStatuses?.get("conversation-1"), "running");
         assert.equal(
           observed.currentConversationTurnId,
-          executions[0].executionId,
+          executions[0].turnId,
           "the turn ID lets history fetch the conversation a running turn creates",
         );
         await React.act(async () => {

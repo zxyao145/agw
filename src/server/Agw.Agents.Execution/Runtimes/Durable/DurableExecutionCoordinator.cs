@@ -53,7 +53,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     private readonly TimeSpan _streamPollingInterval;
     private readonly DurableSegmentScheduler? _scheduler;
     private readonly AgentflowCheckpointStore? _checkpointStore;
-    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _localExecutions = new();
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _localTurns = new();
 
     public DurableExecutionCoordinator(
         IServiceScopeFactory scopeFactory,
@@ -171,18 +171,18 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     }
 
     public async Task<DurableExecutionOutcome> GetOutcomeAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         CancellationToken cancellationToken
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        return await store.GetAuthorizedOutcomeAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+        return await store.GetAuthorizedOutcomeAsync(turnId, userId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SetPermissionModeAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         AgwPermissionMode mode,
         CancellationToken cancellationToken
@@ -190,7 +190,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        await store.SetPermissionModeAsync(executionId, userId, mode, cancellationToken).ConfigureAwait(false);
+        await store.SetPermissionModeAsync(turnId, userId, mode, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -204,9 +204,9 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     )
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.ExecutionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Response.InteractionId))
+        if (request.TurnId == Guid.Empty || string.IsNullOrWhiteSpace(request.Response.InteractionId))
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "executionId and interactionId are required.");
+            throw new AgwException(ErrorCodes.InvalidParam, "turnId and interactionId are required.");
         }
         if (request.Response.InteractionId.Trim().Length > 128)
         {
@@ -219,12 +219,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     }
 
     public async Task<DurableExecutionStatusResponse> GetStatusAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         CancellationToken cancellationToken
     )
     {
-        var snapshot = await GetSnapshotAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+        var snapshot = await GetSnapshotAsync(turnId, userId, cancellationToken).ConfigureAwait(false);
         return ToStatus(snapshot);
     }
 
@@ -233,31 +233,31 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// Writes Interrupted, the turn outcome and the finish event in a transaction that locks the execution row; later writes of a running instance fail the lease check, and a local execution is cancelled at once.
     /// </summary>
     public async Task<bool> InterruptAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         string? reason,
         CancellationToken cancellationToken
     )
     {
-        var snapshot = await GetSnapshotAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+        var snapshot = await GetSnapshotAsync(turnId, userId, cancellationToken).ConfigureAwait(false);
         var finished = PendingExecutionEvent.Create(
             TurnMessageFactory.CreateFinished(CreateEnvelope(snapshot.Manifest), AgwTurnStatus.Interrupted, 0, null)
         );
         var (interrupted, committed) = await _leases
             .RunLockedAsync(
-                executionId,
+                turnId,
                 async (services, token) =>
                 {
                     if (
                         !await services
                             .GetRequiredService<DurableExecutionStore>()
-                            .InterruptAsync(executionId, userId, token)
+                            .InterruptAsync(turnId, userId, token)
                             .ConfigureAwait(false)
                     )
                         return (false, (IReadOnlyList<TurnBroadcastEntry>)[]);
                     await services
                         .GetRequiredService<IConversationTurnStore>()
-                        .FinishAsync(executionId, ConversationTurnStatus.Interrupted, 0, null, token)
+                        .FinishAsync(turnId, ConversationTurnStatus.Interrupted, 0, null, token)
                         .ConfigureAwait(false);
                     return (
                         true,
@@ -265,7 +265,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                             .AppendAsync(
                                 services.GetRequiredService<IAgentsDbContext>(),
                                 services.GetRequiredService<IDurableExecutionEventSequence>(),
-                                executionId,
+                                turnId,
                                 0,
                                 snapshot.SegmentIndex,
                                 [finished],
@@ -280,9 +280,9 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             .ConfigureAwait(false);
         if (!interrupted)
             return false;
-        if (_localExecutions.TryGetValue(executionId, out var local))
+        if (_localTurns.TryGetValue(turnId, out var local))
             await local.CancelAsync().ConfigureAwait(false);
-        await PublishAsync(executionId, userId, committed).ConfigureAwait(false);
+        await PublishAsync(turnId, userId, committed).ConfigureAwait(false);
         return true;
     }
 
@@ -292,7 +292,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// </summary>
     public async Task ResumeCheckpointAsync(
         Guid occurrenceId,
-        Guid resumeExecutionId,
+        Guid resumeTurnId,
         Guid projectId,
         string contextId,
         Guid agentflowId,
@@ -310,7 +310,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         await checkpointStore
             .PrepareDistributedResumeAsync(
                 occurrenceId,
-                resumeExecutionId,
+                resumeTurnId,
                 projectId,
                 contextId,
                 agentflowId,
@@ -326,22 +326,22 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// After authorization, reads committed events after the cursor: this instance's broadcast buffer when it keeps the turn, filling missing parts from the event log. Stops after the finish event.
     /// </summary>
     internal async IAsyncEnumerable<TurnBroadcastEntry> ReadAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         long afterSequence,
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        _ = await GetSnapshotAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+        _ = await GetSnapshotAsync(turnId, userId, cancellationToken).ConfigureAwait(false);
         var cursor = afterSequence;
         var nextStatusCheck = _timeProvider.GetUtcNow() + StatusPollingInterval;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var broadcast = _broadcasts.Find(executionId, userId);
+            var broadcast = _broadcasts.Find(turnId, userId);
             Task changed = Task.CompletedTask;
             var entries = broadcast?.ReadAfter(cursor, out changed) ?? [];
             if (entries.Count == 0)
-                entries = await _eventLog.ReadAsync(executionId, cursor, cancellationToken).ConfigureAwait(false);
+                entries = await _eventLog.ReadAsync(turnId, cursor, cancellationToken).ConfigureAwait(false);
             var delivered = false;
             foreach (var entry in entries)
             {
@@ -360,12 +360,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             if (now >= nextStatusCheck)
             {
                 nextStatusCheck = now + StatusPollingInterval;
-                var snapshot = await GetSnapshotAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+                var snapshot = await GetSnapshotAsync(turnId, userId, cancellationToken).ConfigureAwait(false);
                 if (IsTerminal(snapshot.Status))
                 {
                     // 终态与结束事件在同一事务提交；记录被隔离时没有结束事件，按持久状态补发一次。
                     // Terminal states commit with their finish event; a quarantined record has none, so one is issued from the persisted state.
-                    var tail = await _eventLog.ReadAsync(executionId, cursor, cancellationToken).ConfigureAwait(false);
+                    var tail = await _eventLog.ReadAsync(turnId, cursor, cancellationToken).ConfigureAwait(false);
                     if (tail.Count > 0)
                         continue;
                     yield return new TurnBroadcastEntry(
@@ -394,13 +394,13 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// 以执行所属用户的身份判断会话中是否已有排在这个 Turn 之后的 Turn。
     /// Determines, as the execution's owner, whether the conversation already has a turn ordered after this one.
     /// </summary>
-    internal async Task<bool> IsSupersededAsync(Guid executionId, string userId, CancellationToken cancellationToken)
+    internal async Task<bool> IsSupersededAsync(Guid turnId, string userId, CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         using var owner = UserInfoUtil.Push(CreateUserPrincipal(userId));
         return await scope
             .ServiceProvider.GetRequiredService<IConversationTurnStore>()
-            .IsSupersededAsync(executionId, cancellationToken)
+            .IsSupersededAsync(turnId, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -411,7 +411,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     internal async Task RunLeasedSegmentAsync(DurableLease lease, CancellationToken stoppingToken)
     {
         using var ownership = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        if (!_localExecutions.TryAdd(lease.ExecutionId, ownership))
+        if (!_localTurns.TryAdd(lease.TurnId, ownership))
             return;
         try
         {
@@ -421,7 +421,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             {
                 snapshot = await scope
                     .ServiceProvider.GetRequiredService<DurableExecutionStore>()
-                    .LoadClaimedAsync(lease.ExecutionId, ownership.Token)
+                    .LoadClaimedAsync(lease.TurnId, ownership.Token)
                     .ConfigureAwait(false);
             }
             if (snapshot == null)
@@ -446,14 +446,14 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 {
                     _logger.LogError(
                         exception,
-                        "Durable execution {ExecutionId} segment {SegmentIndex} failed.",
-                        lease.ExecutionId,
+                        "Durable execution {TurnId} segment {SegmentIndex} failed.",
+                        lease.TurnId,
                         snapshot.SegmentIndex
                     );
                     reportedFailure = false;
                     result = new DurableExecutionSegmentResult
                     {
-                        ExecutionId = lease.ExecutionId,
+                        TurnId = lease.TurnId,
                         SegmentIndex = snapshot.SegmentIndex,
                         Status = DurableExecutionSegmentStatus.Failed,
                         ErrorMessage = exception.Message,
@@ -471,7 +471,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         }
         finally
         {
-            _localExecutions.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(lease.ExecutionId, ownership));
+            _localTurns.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(lease.TurnId, ownership));
         }
     }
 
@@ -496,7 +496,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             .CreateAsync(
                 new ExecutionContextRequest(
                     manifest.UserId,
-                    input.ExecutionId,
+                    input.TurnId,
                     manifest.AgentType,
                     manifest.AgentId,
                     task,
@@ -513,13 +513,13 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             guard,
             lease,
             input.SegmentIndex,
-            _broadcasts.GetOrCreate(input.ExecutionId, manifest.UserId),
+            _broadcasts.GetOrCreate(input.TurnId, manifest.UserId),
             _eventLog,
             _options.EventStream,
             _timeProvider,
             ownershipLost
         );
-        var turn = new TurnRecord(_scopeFactory, input.ExecutionId, GetInputMessageId(manifest), guard);
+        var turn = new TurnRecord(_scopeFactory, input.TurnId, GetInputMessageId(manifest), guard);
         var scope = ExecutionScope.Create(
             context,
             task.TaskId,
@@ -721,7 +721,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     new InteractionIdentity
                     {
                         InteractionId = item.Request.InteractionId,
-                        TurnId = input.ExecutionId,
+                        TurnId = input.TurnId,
                         NodeId = item.Request.Source.NodeId ?? InteractionIdentity.StandaloneNodeId,
                         ActivationIndex = 0,
                         StepIndex = 0,
@@ -742,7 +742,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// </summary>
     internal static DurableExecutionStatusResponse ToStatus(DurableExecutionSnapshot snapshot) =>
         new(
-            snapshot.Manifest.ExecutionId,
+            snapshot.Manifest.TurnId,
             snapshot.Status,
             CreateEnvelope(snapshot.Manifest).StreamingScopeId,
             snapshot.Manifest.Task.ProjectConversationId,
@@ -758,16 +758,11 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// </summary>
     internal static TurnEnvelope CreateEnvelope(DurableExecutionManifest manifest) =>
         new(
-            manifest.ExecutionId,
+            manifest.TurnId,
             manifest.Task.ProjectConversationId,
             manifest.AgentId,
             manifest.AgentType,
-            manifest.StreamingScopeId
-                ?? (
-                    string.IsNullOrWhiteSpace(manifest.Input.MessageId)
-                        ? manifest.ExecutionId.ToString("D")
-                        : manifest.Input.MessageId
-                )
+            manifest.StreamingScopeId ?? manifest.TurnId.ToString("D")
         );
 
     /// <summary>
@@ -806,7 +801,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
 
             return new DurableExecutionSegmentResult
             {
-                ExecutionId = manifest.ExecutionId,
+                TurnId = manifest.TurnId,
                 SegmentIndex = input.SegmentIndex,
                 Status = outcome.Status switch
                 {
@@ -835,7 +830,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             await sink.WriteAsync(CreateFailureMessage(exception), CancellationToken.None).ConfigureAwait(false);
             return new DurableExecutionSegmentResult
             {
-                ExecutionId = manifest.ExecutionId,
+                TurnId = manifest.TurnId,
                 SegmentIndex = input.SegmentIndex,
                 Status = DurableExecutionSegmentStatus.Failed,
                 ErrorMessage = exception.Message,
@@ -868,7 +863,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         InteractionMessageMapper.Create(
                             interaction,
                             Guid.CreateVersion7().ToString("N"),
-                            lease.ExecutionId,
+                            lease.TurnId,
                             envelope.StreamingScopeId
                         )
                     )
@@ -911,7 +906,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         await services
                             .GetRequiredService<IConversationTurnStore>()
                             .FinishAsync(
-                                lease.ExecutionId,
+                                lease.TurnId,
                                 TurnRecord.ToTerminalStatus(terminalStatus),
                                 result.StepCount,
                                 result.ErrorCode,
@@ -922,7 +917,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         .AppendAsync(
                             services.GetRequiredService<IAgentsDbContext>(),
                             services.GetRequiredService<IDurableExecutionEventSequence>(),
-                            lease.ExecutionId,
+                            lease.TurnId,
                             lease.Epoch,
                             result.SegmentIndex,
                             events,
@@ -934,7 +929,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 cancellationToken
             )
             .ConfigureAwait(false);
-        await PublishAsync(lease.ExecutionId, snapshot.Manifest.UserId, committed).ConfigureAwait(false);
+        await PublishAsync(lease.TurnId, snapshot.Manifest.UserId, committed).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -963,12 +958,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     /// 已提交的事件发布到本实例广播与 Redis 投影。
     /// Publishes committed events to this instance's broadcast and the Redis projection.
     /// </summary>
-    private async Task PublishAsync(Guid executionId, string userId, IReadOnlyList<TurnBroadcastEntry> committed)
+    private async Task PublishAsync(Guid turnId, string userId, IReadOnlyList<TurnBroadcastEntry> committed)
     {
         if (committed.Count == 0)
             return;
-        _broadcasts.Find(executionId, userId)?.PublishCommitted(committed);
-        await _eventLog.PublishAsync(executionId, committed, CancellationToken.None).ConfigureAwait(false);
+        _broadcasts.Find(turnId, userId)?.PublishCommitted(committed);
+        await _eventLog.PublishAsync(turnId, committed, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1015,14 +1010,14 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         );
 
     private async Task<DurableExecutionSnapshot> GetSnapshotAsync(
-        Guid executionId,
+        Guid turnId,
         string userId,
         CancellationToken cancellationToken
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        return await store.GetAuthorizedAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+        return await store.GetAuthorizedAsync(turnId, userId, cancellationToken).ConfigureAwait(false);
     }
 
     private static ClaimsPrincipal CreateUserPrincipal(string userId) =>

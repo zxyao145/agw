@@ -21,7 +21,7 @@ public partial class AgentflowTurnExecutorTests
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             token
         );
@@ -36,7 +36,7 @@ public partial class AgentflowTurnExecutorTests
         var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(
-                manifest.ExecutionId,
+                manifest.TurnId,
                 1,
                 [CreateResponse(manifest, first, true), CreateResponse(manifest, unmatched, true)],
                 waiting.Checkpoint
@@ -65,7 +65,7 @@ public partial class AgentflowTurnExecutorTests
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             token
         );
@@ -73,7 +73,7 @@ public partial class AgentflowTurnExecutorTests
 
         var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 1, [CreateResponse(manifest, first, true)], waiting.Checkpoint),
+            new(manifest.TurnId, 1, [CreateResponse(manifest, first, true)], waiting.Checkpoint),
             sink,
             token
         );
@@ -100,7 +100,7 @@ public partial class AgentflowTurnExecutorTests
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             token
         );
@@ -109,7 +109,7 @@ public partial class AgentflowTurnExecutorTests
         var resumed = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(
-                manifest.ExecutionId,
+                manifest.TurnId,
                 1,
                 [
                     CreateResponse(manifest, first, false),

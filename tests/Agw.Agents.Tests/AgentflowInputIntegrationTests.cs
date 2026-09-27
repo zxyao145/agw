@@ -34,7 +34,7 @@ public partial class AgentflowTurnExecutorTests
         {
             Settings = manifest.Settings with { PermissionMode = AgwPermissionMode.FullAccess },
         };
-        var input = new DurableExecutionSegmentInput(manifest.ExecutionId, 0, [], null);
+        var input = new DurableExecutionSegmentInput(manifest.TurnId, 0, [], null);
         var ledger = new List<DurableResolvedInteraction>();
         var sink = new RecordingSegmentSink();
         DurableExecutionSegmentResult? result = null;
@@ -56,7 +56,7 @@ public partial class AgentflowTurnExecutorTests
                 })
                 .ToArray();
             ledger.AddRange(answered);
-            input = new(manifest.ExecutionId, segment + 1, answered, result.Checkpoint)
+            input = new(manifest.TurnId, segment + 1, answered, result.Checkpoint)
             {
                 InputCatalog = result.InputCatalog,
                 ResolvedInputs = ledger.ToArray(),

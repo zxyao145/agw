@@ -24,6 +24,7 @@ import {
   isModeControlMessage,
   isTurnStartMessage,
   isUserTurnMessage,
+  markTurnMessage,
   mergeStreamingMessage,
   scopeStreamingMessage,
   type AgentMode,
@@ -175,9 +176,12 @@ export class ConversationController {
     }
 
     const conversationId = this.ensureConversationId(true);
-    const userMessage = createUserMessage(text, attachments);
-    const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
-    this.activeStreamingScopeId = userMessage.messageId;
+    // turnId 就是服务端的 turnId，也是本轮所有消息与历史记录共用的 scope。
+    // The turnId is the server's turnId and the scope shared by this turn's messages and history.
+    const turnId = createUuidV7();
+    const userMessage = markTurnMessage(createUserMessage(text, attachments), turnId);
+    const scopedUserMessage = scopeStreamingMessage(userMessage, turnId);
+    this.activeStreamingScopeId = turnId;
     this.patch({
       rawMessages: [...this.state.rawMessages, scopedUserMessage],
       pendingInteraction: null,
@@ -191,12 +195,12 @@ export class ConversationController {
         conversationId,
         agentId: this.options.target.id,
         agentType: this.options.target.type === "agentflow" ? 1 : 0,
-        executionId: createUuidV7(),
+        turnId,
         stream: true,
         input: toExecutionUserInput(userMessage),
       });
     } catch (error) {
-      if (!this.session?.hasActiveExecution()) this.activeStreamingScopeId = null;
+      if (!this.session?.hasRunningTurn()) this.activeStreamingScopeId = null;
       this.fail(error);
     }
   }
@@ -254,7 +258,7 @@ export class ConversationController {
       return;
     const session = this.session;
     try {
-      await session.submitHumanResponse({ executionId: request.executionId, response });
+      await session.submitHumanResponse({ turnId: request.turnId, response });
       if (this.session === session) {
         this.pendingInteractions.delete(response.interactionId);
         this.patch({
@@ -279,7 +283,7 @@ export class ConversationController {
     );
     if (checkpointIndex < 0) return;
 
-    const resumeExecutionId = createUuidV7();
+    const resumeTurnId = createUuidV7();
     this.resumeBuffer = [];
     this.patch({ isTransitioning: true, pendingInteraction: null, error: null });
     try {
@@ -287,7 +291,7 @@ export class ConversationController {
       await session.resumeCheckpoint({
         checkpointOccurrenceId: occurrenceId,
         agentflowId: this.options.target.id,
-        resumeExecutionId,
+        resumeTurnId,
       });
       const retained = this.state.rawMessages.slice(0, checkpointIndex + 1);
       const buffered = this.resumeBuffer;
@@ -324,7 +328,7 @@ export class ConversationController {
         onReconnecting: (state) => this.patch({ reconnectState: state }),
         onReconnectFailed: (state) => this.patch({ reconnectState: state }),
         onReconnected: () => {
-          const isExecuting = this.session?.hasActiveExecution() ?? false;
+          const isExecuting = this.session?.hasRunningTurn() ?? false;
           if (!isExecuting) this.activeStreamingScopeId = null;
           this.patch({
             reconnectState: null,
@@ -466,7 +470,7 @@ export class ConversationController {
 
   private fail(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    this.patch({ error: message, isExecuting: this.session?.hasActiveExecution() ?? false });
+    this.patch({ error: message, isExecuting: this.session?.hasRunningTurn() ?? false });
     this.options.adapter.onError?.(error);
   }
 

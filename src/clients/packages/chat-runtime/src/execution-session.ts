@@ -18,7 +18,7 @@ import {
   buildSetModeCommand,
   buildSetPermissionModeCommand,
   buildSettingCommand as buildCoreSettingCommand,
-  buildSubscribeExecutionCommand as buildCoreSubscribeExecutionCommand,
+  buildSubscribeTurnCommand as buildCoreSubscribeTurnCommand,
   DEFAULT_AGENT_MODE,
   executionReconnectDelaysMs,
   executionSilentReconnectAttempts,
@@ -133,8 +133,8 @@ export type ExecutionSetting = {
 };
 
 /**
- * 服务端明确拒绝启动，或确认该 executionId 不存在；这次发送没有执行。
- * The server explicitly refused the start, or confirmed the executionId does not exist; this send did not run.
+ * 服务端明确拒绝启动，或确认该 turnId 不存在；这次发送没有执行。
+ * The server explicitly refused the start, or confirmed the turnId does not exist; this send did not run.
  */
 export class ExecutionStartRejectedError extends Error {
   public constructor(cause: unknown) {
@@ -156,7 +156,7 @@ export type ExecutionRequest = ExecutionTarget & {
   /** 客户端生成的 Project Conversation 标识。 */
   conversationId: string;
   /** 客户端生成的稳定执行标识，用于 durable 启动幂等和断线恢复。 */
-  executionId?: string;
+  turnId?: string;
   stream?: boolean;
   input: ExecutionUserInput;
 };
@@ -200,8 +200,8 @@ export function buildExecCommand(request: ExecutionRequest) {
 }
 
 /** 创建重新附着 durable execution 并继续消息回放的 SignalR 命令。 */
-export function buildSubscribeExecutionCommand(executionId: string, cursor?: string | null) {
-  return buildCoreSubscribeExecutionCommand(executionId, cursor);
+export function buildSubscribeTurnCommand(turnId: string, cursor?: string | null) {
+  return buildCoreSubscribeTurnCommand(turnId, cursor);
 }
 
 /** 读取服务端持久化的作用域；委托给 platform-neutral 的 execution-core，保持单一来源。 */
@@ -212,7 +212,7 @@ const executionInterruptTimeoutMs = 3_000;
 /** 浏览器为当前服务端、项目和对话保存的 durable attachment。 */
 type PersistedDurableExecution = {
   /** 尚未确认结束的业务执行标识。 */
-  executionId: string;
+  turnId: string;
   /** 客户端已经收到的最大 turnSequence。 */
   cursor: string | null;
 };
@@ -259,9 +259,9 @@ function getContextDurableExecutionStorageKey(
 }
 
 /**
- * 把按执行上下文保存的 durable attachment 移到按对话保存的键下，保留 executionId 与 cursor；新键写入成功后删除旧记录。
+ * 把按执行上下文保存的 durable attachment 移到按对话保存的键下，保留 turnId 与 cursor；新键写入成功后删除旧记录。
  * 必须在该对话的恢复配置之前调用，否则这次恢复读不到记录。
- * Moves a durable attachment saved by execution context to the conversation key, keeping executionId and cursor; the old record is removed after the new key is written.
+ * Moves a durable attachment saved by execution context to the conversation key, keeping turnId and cursor; the old record is removed after the new key is written.
  * It must run before the conversation's restore configuration, or that restore cannot find the record.
  */
 export function migrateDurableExecutionAttachment(
@@ -300,9 +300,9 @@ function readPersistedDurableExecution(
     const value = getAttachmentStore(runtime)?.getItem(key);
     if (!value) return null;
     const parsed = JSON.parse(value) as Partial<PersistedDurableExecution>;
-    return typeof parsed.executionId === "string" && parsed.executionId.trim().length > 0
+    return typeof parsed.turnId === "string" && parsed.turnId.trim().length > 0
       ? {
-          executionId: parsed.executionId,
+          turnId: parsed.turnId,
           cursor: typeof parsed.cursor === "string" ? parsed.cursor : null,
         }
       : null;
@@ -377,10 +377,10 @@ export class ExecutionSession {
   /** 当前项目会话对应的浏览器存储键。 */
   private durableStorageKey: string | undefined;
   /** 当前启动或附着的 durable execution。 */
-  private activeExecutionId: string | null = null;
+  private activeTurnId: string | null = null;
   /** 当前客户端已经消费到的 Redis Stream cursor。 */
   private streamCursor: string | null = null;
-  /** 标记 executionId 已被 durable 服务端确认，断线时不得误判执行结束。 */
+  /** 标记 turnId 已被 durable 服务端确认，断线时不得误判执行结束。 */
   private durableConfirmed = false;
   /** 服务端选择的执行提供程序能力。 */
   private executionProvider: ExecutionProviderCapability = null;
@@ -467,7 +467,7 @@ export class ExecutionSession {
         return;
       }
 
-      if (!this.disposed && this.hasActiveExecution()) {
+      if (!this.disposed && this.hasRunningTurn()) {
         this.failReconnect(error ?? new Error("Execution connection closed."));
         return;
       }
@@ -489,7 +489,7 @@ export class ExecutionSession {
     this.durableStorageKey = getDurableExecutionStorageKey(this.runtime, setting);
     const persisted = readPersistedDurableExecution(this.durableStorageKey, this.runtime);
     if (persisted) {
-      this.activeExecutionId = persisted.executionId;
+      this.activeTurnId = persisted.turnId;
       this.streamCursor = persisted.cursor;
       this.durableConfirmed = true;
       this.hasActiveTurn = true;
@@ -503,7 +503,7 @@ export class ExecutionSession {
           this.finishActiveTurn();
         } else {
           const restored = await this.restoreDurableSubscription(
-            persisted.executionId,
+            persisted.turnId,
             persisted.cursor,
           );
           return { restoredDurableExecution: restored === "active" };
@@ -519,15 +519,15 @@ export class ExecutionSession {
     return { restoredDurableExecution: false };
   }
 
-  public hasActiveExecution(): boolean {
-    return this.hasActiveTurn || (this.durableConfirmed && this.activeExecutionId !== null);
+  public hasRunningTurn(): boolean {
+    return this.hasActiveTurn || (this.durableConfirmed && this.activeTurnId !== null);
   }
 
   public async execute(request: ExecutionRequest): Promise<void> {
-    if (this.hasActiveExecution()) throw new Error("This conversation already has a running task.");
-    const executionId = request.executionId ?? globalThis.crypto.randomUUID();
-    this.activeExecutionId = executionId;
-    this.activeStreamingScopeId = request.input.messageId;
+    if (this.hasRunningTurn()) throw new Error("This conversation already has a running task.");
+    const turnId = request.turnId ?? globalThis.crypto.randomUUID();
+    this.activeTurnId = turnId;
+    this.activeStreamingScopeId = turnId;
     this.streamCursor = null;
     this.durableConfirmed = this.executionProvider === "distributed";
     this.hasActiveTurn = true;
@@ -535,7 +535,7 @@ export class ExecutionSession {
       writePersistedDurableExecution(
         this.durableStorageKey,
         {
-          executionId,
+          turnId,
           cursor: null,
         },
         this.runtime,
@@ -544,9 +544,9 @@ export class ExecutionSession {
     try {
       await this.ensureConnected();
       this.executionConnectionId = this.connection.connectionId;
-      await this.dispatch(buildExecCommand({ ...request, executionId }));
+      await this.dispatch(buildExecCommand({ ...request, turnId }));
     } catch (error) {
-      if (await this.reconcileStartFailure(executionId, error)) return;
+      if (await this.reconcileStartFailure(turnId, error)) return;
       throw error;
     }
   }
@@ -570,11 +570,11 @@ export class ExecutionSession {
   public async resumeCheckpoint(args: {
     checkpointOccurrenceId: string;
     agentflowId: string;
-    resumeExecutionId?: string;
+    resumeTurnId?: string;
   }): Promise<string> {
-    if (this.hasActiveExecution()) throw new Error("This conversation already has a running task.");
-    const resumeExecutionId = args.resumeExecutionId ?? globalThis.crypto.randomUUID();
-    this.activeExecutionId = resumeExecutionId;
+    if (this.hasRunningTurn()) throw new Error("This conversation already has a running task.");
+    const resumeTurnId = args.resumeTurnId ?? globalThis.crypto.randomUUID();
+    this.activeTurnId = resumeTurnId;
     this.streamCursor = null;
     this.durableConfirmed = this.executionProvider === "distributed";
     this.hasActiveTurn = true;
@@ -582,7 +582,7 @@ export class ExecutionSession {
       writePersistedDurableExecution(
         this.durableStorageKey,
         {
-          executionId: resumeExecutionId,
+          turnId: resumeTurnId,
           cursor: null,
         },
         this.runtime,
@@ -595,13 +595,13 @@ export class ExecutionSession {
       await this.dispatch(
         buildResumeCheckpointCommand({
           checkpointOccurrenceId: args.checkpointOccurrenceId,
-          resumeExecutionId,
+          resumeTurnId,
           agentflowId: args.agentflowId,
         }),
       );
-      return resumeExecutionId;
+      return resumeTurnId;
     } catch (error) {
-      if (await this.reconcileStartFailure(resumeExecutionId, error)) return resumeExecutionId;
+      if (await this.reconcileStartFailure(resumeTurnId, error)) return resumeTurnId;
       throw error;
     }
   }
@@ -627,7 +627,7 @@ export class ExecutionSession {
       await this.recoverInProcessExecution(true);
       return;
     }
-    await this.dispatch(buildInterruptCommand(this.activeExecutionId ?? undefined, reason));
+    await this.dispatch(buildInterruptCommand(this.activeTurnId ?? undefined, reason));
   }
 
   public async interruptAndWait(reason?: string): Promise<void> {
@@ -652,7 +652,7 @@ export class ExecutionSession {
   public async submitHumanResponse(args: HumanResponseCommandInput): Promise<void> {
     await this.dispatch(
       buildHumanResponseCommand({
-        executionId: args.executionId ?? this.activeExecutionId ?? undefined,
+        turnId: args.turnId ?? this.activeTurnId ?? undefined,
         response: args.response,
       }),
     );
@@ -901,13 +901,13 @@ export class ExecutionSession {
     if (this.disposed || !this.setting) return;
     await this.refreshExecutionProvider();
     await this.connection.invoke("DispatchCommand", buildSettingCommand(this.setting));
-    if (!this.durableConfirmed && this.hasActiveExecution()) {
+    if (!this.durableConfirmed && this.hasRunningTurn()) {
       this.recoveringInProcess = true;
       // skipNegotiation 的 WebSocket 连接没有客户端 connectionId，按会话发现原执行。
       if (this.executionConnectionId) await this.recoverInProcessExecution();
       else await this.discoverInProcessExecution();
-    } else if (this.durableConfirmed && this.activeExecutionId) {
-      await this.restoreDurableSubscription(this.activeExecutionId, this.streamCursor);
+    } else if (this.durableConfirmed && this.activeTurnId) {
+      await this.restoreDurableSubscription(this.activeTurnId, this.streamCursor);
     } else if (this.executionProvider === "in-process") {
       await this.discoverInProcessExecution();
     }
@@ -938,7 +938,7 @@ export class ExecutionSession {
    * 启动命令失败后确认结果：执行已附着并仍在运行时返回 true；确认没有执行时抛出 ExecutionStartRejectedError；无法确认时返回 false 并保留状态供恢复。
    * Confirms the outcome after a failed start command: returns true when the execution is attached and still running; throws ExecutionStartRejectedError when it is confirmed not to have run; returns false and keeps state for recovery when it cannot be confirmed.
    */
-  private async reconcileStartFailure(executionId: string, error: unknown): Promise<boolean> {
+  private async reconcileStartFailure(turnId: string, error: unknown): Promise<boolean> {
     if (!this.durableConfirmed) {
       await this.reconcileInProcessStartFailure(error);
       if (isServerRejection(error)) throw new ExecutionStartRejectedError(error);
@@ -947,9 +947,9 @@ export class ExecutionSession {
     if (this.connection.state !== HubConnectionState.Connected) return false;
     let restored: DurableRestoreResult;
     try {
-      restored = await this.restoreDurableSubscription(executionId, null);
+      restored = await this.restoreDurableSubscription(turnId, null);
     } catch {
-      // 短暂探测失败不能证明服务端未接受启动，因此保留 executionId 供后续恢复。
+      // 短暂探测失败不能证明服务端未接受启动，因此保留 turnId 供后续恢复。
       return false;
     }
     if (restored === "missing") throw new ExecutionStartRejectedError(error);
@@ -978,7 +978,7 @@ export class ExecutionSession {
   /** 旧连接仍可继续执行；确认其空闲前保留 busy，并把停止操作路由给原连接。 */
   private async recoverInProcessExecution(interrupt = false): Promise<void> {
     const connectionId = this.executionConnectionId;
-    const executionId = this.activeExecutionId;
+    const turnId = this.activeTurnId;
     if (!connectionId) throw new Error("Cannot confirm the previous execution's state.");
     this.clearRecoveryTimer();
     const revision = ++this.recoveryRevision;
@@ -993,7 +993,7 @@ export class ExecutionSession {
       if (
         this.disposed ||
         revision !== this.recoveryRevision ||
-        this.activeExecutionId !== executionId
+        this.activeTurnId !== turnId
       )
         return;
       throw error;
@@ -1001,7 +1001,7 @@ export class ExecutionSession {
     if (
       this.disposed ||
       revision !== this.recoveryRevision ||
-      this.activeExecutionId !== executionId
+      this.activeTurnId !== turnId
     )
       return;
     if (typeof active !== "boolean")
@@ -1033,15 +1033,15 @@ export class ExecutionSession {
 
   /** 尝试重新订阅指定执行；只有明确不存在时才清理本地 attachment。 */
   private async restoreDurableSubscription(
-    executionId: string,
+    turnId: string,
     cursor: string | null,
   ): Promise<DurableRestoreResult> {
     try {
       await this.connection.invoke(
         "DispatchCommand",
-        buildSubscribeExecutionCommand(executionId, cursor),
+        buildSubscribeTurnCommand(turnId, cursor),
       );
-      return this.hasActiveExecution() ? "active" : "finished";
+      return this.hasRunningTurn() ? "active" : "finished";
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
       // 服务端 HubException 的消息以七位错误码开头：4040011 为 DurableExecutionNotFound。
@@ -1075,16 +1075,16 @@ export class ExecutionSession {
     const position = getTurnPosition(message);
     if (!position) return;
     const received =
-      this.activeExecutionId === position.turnId && this.streamCursor !== null
+      this.activeTurnId === position.turnId && this.streamCursor !== null
         ? Number(this.streamCursor)
         : 0;
-    this.activeExecutionId = position.turnId;
+    this.activeTurnId = position.turnId;
     this.durableConfirmed = true;
     if (position.turnSequence > received) this.streamCursor = String(position.turnSequence);
     writePersistedDurableExecution(
       this.durableStorageKey,
       {
-        executionId: position.turnId,
+        turnId: position.turnId,
         cursor: this.streamCursor,
       },
       this.runtime,
@@ -1106,7 +1106,7 @@ export class ExecutionSession {
     this.executionConnectionId = null;
     this.recoveringInProcess = false;
     this.hasActiveTurn = false;
-    this.activeExecutionId = null;
+    this.activeTurnId = null;
     this.activeStreamingScopeId = null;
     this.streamCursor = null;
     this.durableConfirmed = false;

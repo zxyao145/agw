@@ -19,9 +19,9 @@ public sealed record DurableExecutionManifest
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
     /// <summary>
-    /// 获取本次业务执行的稳定标识。
+    /// 获取本次 Turn 的稳定标识。
     /// </summary>
-    public required Guid ExecutionId { get; init; }
+    public required Guid TurnId { get; init; }
 
     /// <summary>
     /// 获取发起执行的稳定用户标识。
@@ -57,8 +57,8 @@ public sealed record DurableExecutionManifest
     public ProjectWorkspaceSnapshot? WorkspaceSnapshot { get; init; }
 
     /// <summary>
-    /// 客户端输入消息的原始 ID，Turn 的开始与结束消息用它关联输入。
-    /// The client's original input message ID, which the turn's start and finish messages use to relate to the input.
+    /// Turn 的渲染作用域，等于 TurnId 的字符串形式；为空时按 TurnId 还原。
+    /// The turn's rendering scope, equal to TurnId as a string; a missing value is restored from TurnId.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? StreamingScopeId { get; init; }

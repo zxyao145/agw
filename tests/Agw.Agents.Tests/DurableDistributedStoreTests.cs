@@ -93,7 +93,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
                         .ApplySegmentResultAsync(
                             new DurableExecutionSegmentResult
                             {
-                                ExecutionId = id,
+                                TurnId = id,
                                 SegmentIndex = 0,
                                 Status = DurableExecutionSegmentStatus.Completed,
                             },
@@ -204,12 +204,12 @@ public sealed class DurableDistributedStoreTests : IDisposable
 
     private static async Task<DurableLease> ClaimAsync(
         TurnPersistenceTestKit kit,
-        Guid executionId,
+        Guid turnId,
         string workerId,
         TimeSpan duration
     ) =>
         Assert.IsType<DurableLease>(
-            await kit.Leases.TryClaimAsync(executionId, workerId, duration, TestContext.Current.CancellationToken)
+            await kit.Leases.TryClaimAsync(turnId, workerId, duration, TestContext.Current.CancellationToken)
         );
 
     private static Task<IReadOnlyList<TurnBroadcastEntry>> AppendAsync(

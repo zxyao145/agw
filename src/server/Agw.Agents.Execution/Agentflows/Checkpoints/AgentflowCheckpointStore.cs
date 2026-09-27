@@ -42,7 +42,7 @@ public sealed class AgentflowCheckpointStore
     }
 
     internal async Task<RecordedAgentflowCheckpoint?> RecordAsync(
-        Guid? sourceExecutionId,
+        Guid? sourceTurnId,
         Guid projectId,
         Guid conversationId,
         string contextId,
@@ -75,7 +75,7 @@ public sealed class AgentflowCheckpointStore
         }
 
         var occurrenceId = CreateDeterministicGuid(
-            sourceExecutionId ?? taskId,
+            sourceTurnId ?? taskId,
             checkpoint.SessionId,
             checkpoint.CheckpointId
         );
@@ -178,7 +178,7 @@ public sealed class AgentflowCheckpointStore
                         var record = new AgentflowCheckpointRecord
                         {
                             Id = occurrenceId,
-                            SourceExecutionId = sourceExecutionId,
+                            SourceTurnId = sourceTurnId,
                             ProjectId = projectId,
                             ProjectConversationId = conversationId,
                             ContextId = contextId,
@@ -277,14 +277,14 @@ public sealed class AgentflowCheckpointStore
                 contextId,
                 agentflowId,
                 userId,
-                resumeExecutionId: null,
+                resumeTurnId: null,
                 cancellationToken
             )
             .ConfigureAwait(false);
 
     internal async Task<AgentflowCheckpointSnapshot> PrepareDistributedResumeAsync(
         Guid occurrenceId,
-        Guid resumeExecutionId,
+        Guid resumeTurnId,
         Guid projectId,
         string contextId,
         Guid agentflowId,
@@ -298,13 +298,13 @@ public sealed class AgentflowCheckpointStore
                 contextId,
                 agentflowId,
                 userId,
-                resumeExecutionId,
+                resumeTurnId,
                 cancellationToken,
                 permissionSettings
             )
             .ConfigureAwait(false);
 
-    internal async Task<Guid?> GetSourceExecutionIdAsync(
+    internal async Task<Guid?> GetSourceTurnIdAsync(
         Guid occurrenceId,
         string userId,
         CancellationToken cancellationToken
@@ -315,7 +315,7 @@ public sealed class AgentflowCheckpointStore
         return await dbContext
             .AgentflowCheckpoints.AsNoTracking()
             .Where(item => item.Id == occurrenceId && item.UserId == userId)
-            .Select(item => item.SourceExecutionId)
+            .Select(item => item.SourceTurnId)
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
     }
@@ -326,7 +326,7 @@ public sealed class AgentflowCheckpointStore
         string contextId,
         Guid agentflowId,
         string userId,
-        Guid? resumeExecutionId,
+        Guid? resumeTurnId,
         CancellationToken cancellationToken,
         DurableExecutionSettings? permissionSettings = null
     )
@@ -362,12 +362,12 @@ public sealed class AgentflowCheckpointStore
         await using var historyLock = await _applicationLock
             .AcquireAsync(GetHistoryLockName(projectId, contextId), cancellationToken)
             .ConfigureAwait(false);
-        if (resumeExecutionId.HasValue)
+        if (resumeTurnId.HasValue)
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
             var existingResume = await dbContext
                 .DurableExecutions.AsNoTracking()
-                .SingleOrDefaultAsync(item => item.Id == resumeExecutionId.Value, cancellationToken)
+                .SingleOrDefaultAsync(item => item.Id == resumeTurnId.Value, cancellationToken)
                 .ConfigureAwait(false);
             if (existingResume != null)
             {
@@ -426,18 +426,18 @@ public sealed class AgentflowCheckpointStore
                             contextId,
                             agentflowId,
                             userId,
-                            resumeExecutionId.HasValue,
+                            resumeTurnId.HasValue,
                             token
                         )
                         .ConfigureAwait(false);
                     var record = validated.Record;
                     var snapshot = validated.Snapshot;
 
-                    if (resumeExecutionId.HasValue)
+                    if (resumeTurnId.HasValue)
                     {
                         var existingResume = await session
                             .Agents.DurableExecutions.AsNoTracking()
-                            .SingleOrDefaultAsync(item => item.Id == resumeExecutionId.Value, token)
+                            .SingleOrDefaultAsync(item => item.Id == resumeTurnId.Value, token)
                             .ConfigureAwait(false);
                         if (existingResume != null)
                         {
@@ -469,7 +469,7 @@ public sealed class AgentflowCheckpointStore
                         await RegisterResumeExecutionAsync(
                                 session.Agents,
                                 record,
-                                resumeExecutionId.Value,
+                                resumeTurnId.Value,
                                 userId,
                                 token,
                                 permissionSettings
@@ -491,14 +491,12 @@ public sealed class AgentflowCheckpointStore
                         )
                         .ExecuteDeleteAsync(token)
                         .ConfigureAwait(false);
-                    if (resumeExecutionId.HasValue)
+                    if (resumeTurnId.HasValue)
                     {
                         // 恢复分支是一个新的 Turn：Turn 行与序号 1 的开始事件随执行记录一起提交。
                         // The resume branch is a new turn: its turn row and the start event with sequence 1 commit with the execution record.
-                        await session
-                            .AcceptResumeTurnAsync(resumeExecutionId.Value, record, token)
-                            .ConfigureAwait(false);
-                        AddResumeStartEvent(session.Agents, resumeExecutionId.Value, record, userId);
+                        await session.AcceptResumeTurnAsync(resumeTurnId.Value, record, token).ConfigureAwait(false);
+                        AddResumeStartEvent(session.Agents, resumeTurnId.Value, record, userId);
                     }
                     return new AgentflowCheckpointPersistenceResult<AgentflowCheckpointSnapshot>(
                         snapshot,
@@ -606,24 +604,24 @@ public sealed class AgentflowCheckpointStore
     private async Task RegisterResumeExecutionAsync(
         IAgentsDbContext dbContext,
         AgentflowCheckpointRecord checkpointRecord,
-        Guid resumeExecutionId,
+        Guid resumeTurnId,
         string userId,
         CancellationToken cancellationToken,
         DurableExecutionSettings? permissionSettings = null
     )
     {
-        if (!checkpointRecord.IsDurable || !checkpointRecord.SourceExecutionId.HasValue)
+        if (!checkpointRecord.IsDurable || !checkpointRecord.SourceTurnId.HasValue)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "The selected checkpoint is not a durable checkpoint.");
         }
-        if (resumeExecutionId == Guid.Empty)
+        if (resumeTurnId == Guid.Empty)
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "resumeExecutionId is required.");
+            throw new AgwException(ErrorCodes.InvalidParam, "resumeTurnId is required.");
         }
 
         var existing = await dbContext
             .DurableExecutions.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == resumeExecutionId, cancellationToken)
+            .SingleOrDefaultAsync(item => item.Id == resumeTurnId, cancellationToken)
             .ConfigureAwait(false);
         if (existing != null)
         {
@@ -640,7 +638,7 @@ public sealed class AgentflowCheckpointStore
             await dbContext
                 .DurableExecutions.AsNoTracking()
                 .SingleOrDefaultAsync(
-                    item => item.Id == checkpointRecord.SourceExecutionId.Value && item.UserId == userId,
+                    item => item.Id == checkpointRecord.SourceTurnId.Value && item.UserId == userId,
                     cancellationToken
                 )
                 .ConfigureAwait(false)
@@ -660,8 +658,8 @@ public sealed class AgentflowCheckpointStore
 
         var manifest = ReadExecutionManifest(source) with
         {
-            ExecutionId = resumeExecutionId,
-            StreamingScopeId = resumeExecutionId.ToString("D"),
+            TurnId = resumeTurnId,
+            StreamingScopeId = resumeTurnId.ToString("D"),
             ResumeCheckpointOccurrenceId = checkpointRecord.Id,
             ResumeCheckpointNodeIds = DeserializeMarkers(checkpointRecord.MarkersJson)
                 .Select(item => item.NodeId)
@@ -683,7 +681,7 @@ public sealed class AgentflowCheckpointStore
         dbContext.DurableExecutions.Add(
             new DurableExecutionRecord
             {
-                Id = resumeExecutionId,
+                Id = resumeTurnId,
                 UserId = userId,
                 ProjectId = checkpointRecord.ProjectId,
                 ProjectConversationId = checkpointRecord.ProjectConversationId,
@@ -709,25 +707,25 @@ public sealed class AgentflowCheckpointStore
     /// </summary>
     private static void AddResumeStartEvent(
         IAgentsDbContext dbContext,
-        Guid resumeExecutionId,
+        Guid resumeTurnId,
         AgentflowCheckpointRecord checkpointRecord,
         string userId
     )
     {
         var start = TurnMessageFactory.CreateStarted(
             new TurnEnvelope(
-                resumeExecutionId,
+                resumeTurnId,
                 checkpointRecord.ProjectConversationId,
                 checkpointRecord.AgentflowId,
                 AgentRuntimeType.Agentflow,
-                resumeExecutionId.ToString("D")
+                resumeTurnId.ToString("D")
             )
         );
         dbContext.DurableExecutionEvents.Add(
             new DurableExecutionEventRecord
             {
                 Id = Guid.CreateVersion7(),
-                TurnId = resumeExecutionId,
+                TurnId = resumeTurnId,
                 TurnSequence = 1,
                 LeaseEpoch = 0,
                 SegmentIndex = 0,
@@ -741,7 +739,7 @@ public sealed class AgentflowCheckpointStore
     private static AgentflowCheckpointSnapshot ToSnapshot(AgentflowCheckpointRecord record) =>
         new(
             record.Id,
-            record.SourceExecutionId,
+            record.SourceTurnId,
             record.AgentflowId,
             record.BoundarySequence,
             record.DefinitionFingerprint,

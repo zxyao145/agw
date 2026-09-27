@@ -10,7 +10,7 @@ import {
   buildInterruptCommand,
   buildResumeCheckpointCommand,
   buildSettingCommand,
-  buildSubscribeExecutionCommand,
+  buildSubscribeTurnCommand,
   DEFAULT_AGENT_MODE,
   executionReconnectDelaysMs,
   getAgentMode,
@@ -48,9 +48,9 @@ const interactionResponses: InteractionResponse[] = [
 
 for (const [index, response] of interactionResponses.entries()) {
   test(`human response ${index} preserves its discriminated nested wire shape`, () => {
-    assert.deepEqual(buildHumanResponseCommand({ executionId: "execution-1", response }), {
+    assert.deepEqual(buildHumanResponseCommand({ turnId: "turn-1", response }), {
       type: "HumanResponseCommand",
-      executionId: "execution-1",
+      turnId: "turn-1",
       response,
     });
     assert.deepEqual(buildHumanResponseCommand({ response }), {
@@ -104,7 +104,7 @@ test("shared execution commands match the server contract", () => {
       conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
-      executionId: "execution-1",
+      turnId: "turn-1",
       input,
     }),
     {
@@ -112,14 +112,14 @@ test("shared execution commands match the server contract", () => {
       conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
-      executionId: "execution-1",
+      turnId: "turn-1",
       stream: true,
       input,
     },
   );
-  assert.deepEqual(buildInterruptCommand("execution-1", "stop"), {
+  assert.deepEqual(buildInterruptCommand("turn-1", "stop"), {
     type: "InterruptCommand",
-    executionId: "execution-1",
+    turnId: "turn-1",
     reason: "stop",
   });
   assert.deepEqual(buildSetModeCommand("agent-1", "plan"), {
@@ -131,14 +131,14 @@ test("shared execution commands match the server contract", () => {
     type: "SetPermissionModeCommand",
     permissionMode: "alwaysAsk",
   });
-  assert.deepEqual(buildSubscribeExecutionCommand("execution-1", "3-9"), {
-    type: "SubscribeExecutionCommand",
-    executionId: "execution-1",
+  assert.deepEqual(buildSubscribeTurnCommand("turn-1", "3-9"), {
+    type: "SubscribeTurnCommand",
+    turnId: "turn-1",
     cursor: "3-9",
   });
   assert.deepEqual(
     buildHumanResponseCommand({
-      executionId: "execution-1",
+      turnId: "turn-1",
       response: {
         kind: "user-input",
         interactionId: "request-1",
@@ -148,7 +148,7 @@ test("shared execution commands match the server contract", () => {
     }),
     {
       type: "HumanResponseCommand",
-      executionId: "execution-1",
+      turnId: "turn-1",
       response: {
         kind: "user-input",
         interactionId: "request-1",
@@ -160,13 +160,13 @@ test("shared execution commands match the server contract", () => {
   assert.deepEqual(
     buildResumeCheckpointCommand({
       checkpointOccurrenceId: "checkpoint-1",
-      resumeExecutionId: "execution-2",
+      resumeTurnId: "turn-2",
       agentflowId: "agentflow-1",
     }),
     {
       type: "ResumeCheckpointCommand",
       checkpointOccurrenceId: "checkpoint-1",
-      resumeExecutionId: "execution-2",
+      resumeTurnId: "turn-2",
       agentflowId: "agentflow-1",
     },
   );

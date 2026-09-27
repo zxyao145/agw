@@ -73,7 +73,7 @@ for (const status of ["completed", "failed", "interrupted", "recovered"]) {
           return {
             configure: async () => ({ restoredDurableExecution: false }),
             execute: async () => undefined,
-            hasActiveExecution: () => active,
+            hasRunningTurn: () => active,
             dispose: async () => undefined,
           } as unknown as ExecutionSession;
         },
@@ -284,7 +284,7 @@ test("controller completes parallel gates individually without server re-publica
       contents: [],
       additionalProperties: {
         type: "interaction-request",
-        executionId: "execution-1",
+        turnId: "turn-1",
         interaction: {
           kind: "workflow-gate",
           interactionId,
@@ -312,7 +312,7 @@ test("controller completes parallel gates individually without server re-publica
   assert.deepEqual(
     submissions,
     ["second", "first"].map((interactionId) => ({
-      executionId: "execution-1",
+      turnId: "turn-1",
       response: { kind: "workflow-gate", interactionId, approved: true },
     })),
   );
@@ -357,7 +357,7 @@ test("response identity rejects stale kinds and preserves a newer pending intera
     contents: [],
     additionalProperties: {
       type: "interaction-request",
-      executionId: "request-execution",
+      turnId: "request-turn",
       interaction: {
         kind: "user-input",
         interactionId,
@@ -388,7 +388,7 @@ test("response identity rejects stale kinds and preserves a newer pending intera
   finish();
   await pending;
 
-  assert.deepEqual(submissions, [{ executionId: "request-execution", response }]);
+  assert.deepEqual(submissions, [{ turnId: "request-turn", response }]);
   assert.equal(controller.getSnapshot().pendingInteraction?.interactionId, "second");
   await controller.dispose();
 });
@@ -408,7 +408,7 @@ test("conversation controller owns raw messages, control state, usage, and rende
     setMode: async () => undefined,
     setPermissionMode: async () => undefined,
     submitHumanResponse: async () => undefined,
-    resumeCheckpoint: async () => "execution-2",
+    resumeCheckpoint: async () => "turn-2",
     listAgentflowCheckpoints: async () => [],
     dispose: async () => undefined,
   } as unknown as ExecutionSession;
@@ -496,7 +496,7 @@ test("command errors retain an active turn and block another send until recovery
   let sends = 0;
   const session = {
     configure: async () => ({ restoredDurableExecution: false }),
-    hasActiveExecution: () => active,
+    hasRunningTurn: () => active,
     execute: async () => {
       sends++;
       throw new Error("Startup response lost");
@@ -640,5 +640,31 @@ test("controller accepts live node inputs and deduplicates replay without creati
   assert.equal(messages[1].streamingScopeId, messages[0].streamingScopeId);
   assert.equal(messages[1].contents[0].content, "review result");
   assert.equal(controller.getSnapshot().isExecuting, true);
+  await controller.dispose();
+});
+
+test("controller scopes the sent user message by the turnId it sends as the turn", async () => {
+  let executed: Parameters<ExecutionSession["execute"]>[0] | undefined;
+  const session = {
+    configure: async () => ({ restoredDurableExecution: false }),
+    execute: async (request: Parameters<ExecutionSession["execute"]>[0]) => {
+      executed = request;
+    },
+    dispose: async () => undefined,
+  } as unknown as ExecutionSession;
+  const controller = new ConversationController({
+    adapter: {
+      execution: { baseUrl: "https://agw.test", token: null },
+      createSession: () => session,
+    },
+    projectId: "project-1",
+    target: { id: "agent-1", type: "agent" },
+    sessionSeed: { revision: 1, conversationId: "conversation-1", messages: [] },
+  });
+  await controller.send("hello", []);
+  const user = controller.getSnapshot().rawMessages[0];
+  assert.ok(executed?.turnId);
+  assert.equal(user.streamingScopeId, executed.turnId);
+  assert.notEqual(user.streamingScopeId, user.messageId);
   await controller.dispose();
 });

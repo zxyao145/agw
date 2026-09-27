@@ -276,7 +276,7 @@ namespace Agw.Migrations.Sqlite.Migrations
                     retry_count = table.Column<int>(type: "INTEGER", nullable: false),
                     max_retry_count = table.Column<int>(type: "INTEGER", nullable: false),
                     last_error = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
-                    active_execution_id = table.Column<Guid>(type: "TEXT", nullable: true),
+                    active_turn_id = table.Column<Guid>(type: "TEXT", nullable: true),
                     active_attempt_started_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
                     row_version = table.Column<byte[]>(type: "BLOB", nullable: false),
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
@@ -289,7 +289,7 @@ namespace Agw.Migrations.Sqlite.Migrations
                     table.PrimaryKey("pk_job", x => x.id);
                     table.CheckConstraint(
                         "ck_job_active_attempt",
-                        "(status = 2 AND active_execution_id IS NOT NULL AND active_attempt_started_at IS NOT NULL) OR (status <> 2 AND active_execution_id IS NULL AND active_attempt_started_at IS NULL)"
+                        "(status = 2 AND active_turn_id IS NOT NULL AND active_attempt_started_at IS NOT NULL) OR (status <> 2 AND active_turn_id IS NULL AND active_attempt_started_at IS NULL)"
                     );
                 }
             );
@@ -737,7 +737,7 @@ namespace Agw.Migrations.Sqlite.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    source_execution_id = table.Column<Guid>(type: "TEXT", nullable: true),
+                    source_turn_id = table.Column<Guid>(type: "TEXT", nullable: true),
                     project_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     project_conversation_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     context_id = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
@@ -1035,9 +1035,9 @@ namespace Agw.Migrations.Sqlite.Migrations
             );
 
             migrationBuilder.CreateIndex(
-                name: "ix_agentflow_checkpoint_source_execution_id",
+                name: "ix_agentflow_checkpoint_source_turn_id",
                 table: "agentflow_checkpoint",
-                column: "source_execution_id"
+                column: "source_turn_id"
             );
 
             migrationBuilder.CreateIndex(
@@ -1156,9 +1156,9 @@ namespace Agw.Migrations.Sqlite.Migrations
             );
 
             migrationBuilder.CreateIndex(
-                name: "ix_job_active_execution_id",
+                name: "ix_job_active_turn_id",
                 table: "job",
-                column: "active_execution_id",
+                column: "active_turn_id",
                 unique: true
             );
 

@@ -14,7 +14,7 @@ public sealed class AgentflowCheckpointRecord : BaseEntity
 {
     public Guid Id { get; set; }
 
-    public Guid? SourceExecutionId { get; set; }
+    public Guid? SourceTurnId { get; set; }
 
     public Guid ProjectId { get; set; }
 

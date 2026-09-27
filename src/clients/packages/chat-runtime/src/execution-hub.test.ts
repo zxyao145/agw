@@ -168,7 +168,7 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
     active = true;
     connection.state = HubConnectionState.Disconnected;
     close(new Error("Connection lost"));
-    assert.equal(session.hasActiveExecution(), true);
+    assert.equal(session.hasRunningTurn(), true);
     assert.equal(upperCloses, 0, "an active transport close must not reach the UI onClose handler");
     assert.equal(reconnectFailures, 1);
     void session.retryConnection();
@@ -176,7 +176,7 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
     assert.equal(restored, 1);
     assert.equal(stops, 0);
     assert.deepEqual(recoveryCalls, [["original-connection", false]]);
-    assert.equal(session.hasActiveExecution(), true);
+    assert.equal(session.hasRunningTurn(), true);
     await session.interrupt();
     assert.deepEqual(recoveryCalls.at(-1), ["original-connection", true]);
 
@@ -194,7 +194,7 @@ test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connect
     close(new Error("Connection lost after completion"));
     await session.retryConnection();
     assert.equal(restored, restoredBeforeNextTurn + 1);
-    assert.equal(session.hasActiveExecution(), false);
+    assert.equal(session.hasRunningTurn(), false);
     assert.equal(stops, 0);
   } finally {
     await session.dispose();
@@ -205,19 +205,19 @@ test("human response dispatch binds the nested response to the requested or acti
   const { ExecutionSession } = await import("./execution-session.ts");
   const commands: unknown[] = [];
   const session = Object.assign(Object.create(ExecutionSession.prototype), {
-    activeExecutionId: "active-execution",
+    activeTurnId: "active-turn",
     dispatch: async (command: unknown) => {
       commands.push(command);
     },
   }) as InstanceType<typeof ExecutionSession>;
   const response = { kind: "user-input" as const, interactionId: "input-1", cancelled: true };
 
-  await session.submitHumanResponse({ response, executionId: undefined });
-  await session.submitHumanResponse({ response, executionId: "request-execution" });
+  await session.submitHumanResponse({ response, turnId: undefined });
+  await session.submitHumanResponse({ response, turnId: "request-turn" });
 
   assert.deepEqual(commands, [
-    { type: "HumanResponseCommand", executionId: "active-execution", response },
-    { type: "HumanResponseCommand", executionId: "request-execution", response },
+    { type: "HumanResponseCommand", turnId: "active-turn", response },
+    { type: "HumanResponseCommand", turnId: "request-turn", response },
   ]);
 });
 
@@ -311,7 +311,7 @@ test("buildExecCommand includes a durable execution identity when supplied", asy
   assert.deepEqual(
     buildExecCommand({
       conversationId: "conversation-1",
-      executionId: "execution-1",
+      turnId: "turn-1",
       agentId: "agent-1",
       agentType: 0,
       input,
@@ -319,7 +319,7 @@ test("buildExecCommand includes a durable execution identity when supplied", asy
     {
       type: "ExecCommand",
       conversationId: "conversation-1",
-      executionId: "execution-1",
+      turnId: "turn-1",
       agentId: "agent-1",
       agentType: 0,
       stream: true,
@@ -328,12 +328,12 @@ test("buildExecCommand includes a durable execution identity when supplied", asy
   );
 });
 
-test("buildSubscribeExecutionCommand resumes a Redis stream cursor", async () => {
-  const { buildSubscribeExecutionCommand } = await import("./execution-hub" + ".ts");
+test("buildSubscribeTurnCommand resumes a Redis stream cursor", async () => {
+  const { buildSubscribeTurnCommand } = await import("./execution-hub" + ".ts");
 
-  assert.deepEqual(buildSubscribeExecutionCommand("execution-1", "3-9"), {
-    type: "SubscribeExecutionCommand",
-    executionId: "execution-1",
+  assert.deepEqual(buildSubscribeTurnCommand("turn-1", "3-9"), {
+    type: "SubscribeTurnCommand",
+    turnId: "turn-1",
     cursor: "3-9",
   });
 });
@@ -346,13 +346,13 @@ test("checkpoint commands preserve the exact occurrence identity", async () => {
   assert.deepEqual(
     buildResumeCheckpointCommand({
       checkpointOccurrenceId: "occurrence-1",
-      resumeExecutionId: "execution-2",
+      resumeTurnId: "turn-2",
       agentflowId: "agentflow-1",
     }),
     {
       type: "ResumeCheckpointCommand",
       checkpointOccurrenceId: "occurrence-1",
-      resumeExecutionId: "execution-2",
+      resumeTurnId: "turn-2",
       agentflowId: "agentflow-1",
     },
   );
@@ -465,6 +465,7 @@ test("execution session keeps tool rendering scope across handler replacement an
       conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
+      turnId: "turn-1",
       input: { messageId: "user-1", author: "$agw", contents: [] },
     });
     emit(turnState("start-1", "agw-turn-start"));
@@ -478,7 +479,7 @@ test("execution session keeps tool rendering scope across handler replacement an
 
     assert.deepEqual(
       transportMessages.slice(0, 6).map((message) => message.streamingScopeId),
-      Array(6).fill("user-1"),
+      Array(6).fill("turn-1"),
     );
     assert.deepEqual(
       buildConversationRenderModel(transportMessages).map((item) =>
@@ -695,10 +696,10 @@ test("durable attachment detection connects only for a valid persisted execution
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
 
     const key = getDurableExecutionStorageKey(runtime, setting);
-    values.set(key, JSON.stringify({ executionId: "", cursor: "1" }));
+    values.set(key, JSON.stringify({ turnId: "", cursor: "1" }));
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
 
-    values.set(key, JSON.stringify({ executionId: "execution-1", cursor: "9" }));
+    values.set(key, JSON.stringify({ turnId: "turn-1", cursor: "9" }));
     assert.equal(hasPersistedDurableExecution(setting, runtime), true);
   } finally {
     if (originalDescriptor) {
@@ -731,24 +732,24 @@ test("durable attachment migration moves the context record to the conversation 
   ])}`;
   const conversationKey = getDurableExecutionStorageKey(runtime, conversation);
 
-  // A context record moves with its executionId and cursor, and the old record is removed.
-  values.set(contextKey, JSON.stringify({ executionId: "execution-1", cursor: "7" }));
+  // A context record moves with its turnId and cursor, and the old record is removed.
+  values.set(contextKey, JSON.stringify({ turnId: "turn-1", cursor: "7" }));
   migrateDurableExecutionAttachment(conversation, runtime);
   assert.deepEqual(JSON.parse(values.get(conversationKey) ?? "null"), {
-    executionId: "execution-1",
+    turnId: "turn-1",
     cursor: "7",
   });
   assert.equal(values.has(contextKey), false);
 
   // A newer record under the conversation key wins; the old record is still removed.
-  values.set(contextKey, JSON.stringify({ executionId: "execution-old", cursor: "1" }));
+  values.set(contextKey, JSON.stringify({ turnId: "turn-old", cursor: "1" }));
   migrateDurableExecutionAttachment(conversation, runtime);
-  assert.equal(JSON.parse(values.get(conversationKey) ?? "null").executionId, "execution-1");
+  assert.equal(JSON.parse(values.get(conversationKey) ?? "null").turnId, "turn-1");
   assert.equal(values.has(contextKey), false);
 
   // A failed write keeps the old record for the next attempt.
   values.delete(conversationKey);
-  values.set(contextKey, JSON.stringify({ executionId: "execution-2", cursor: null }));
+  values.set(contextKey, JSON.stringify({ turnId: "turn-2", cursor: null }));
   const failingRuntime = {
     ...runtime,
     attachmentStore: {
@@ -784,7 +785,7 @@ test("a durable start that the server confirms missing rejects as not executed",
     async invoke(method: string, command?: { type: string }) {
       if (method === "GetExecutionProvider") return "Distributed";
       if (command?.type === "ExecCommand") throw new Error("HubException: 4090021: busy");
-      if (command?.type === "SubscribeExecutionCommand") {
+      if (command?.type === "SubscribeTurnCommand") {
         if (missing) throw new Error("HubException: 4040011: Durable execution was not found.");
         throw new Error("temporary transport failure");
       }
@@ -799,20 +800,20 @@ test("a durable start that the server confirms missing rejects as not executed",
     conversationId: "conversation",
     agentId: "agent",
     agentType: 0,
-    executionId: "execution-1",
+    turnId: "turn-1",
     input: { messageId: "input", author: "$agw", contents: [] },
   };
   try {
     await session.configure({ projectId: "project", conversationId: "conversation" });
     await assert.rejects(session.execute(request), ExecutionStartRejectedError);
-    assert.equal(session.hasActiveExecution(), false);
+    assert.equal(session.hasRunningTurn(), false);
 
     missing = false;
-    await assert.rejects(session.execute({ ...request, executionId: "execution-2" }), (error) => {
+    await assert.rejects(session.execute({ ...request, turnId: "turn-2" }), (error) => {
       assert.ok(!(error instanceof ExecutionStartRejectedError));
       return true;
     });
-    assert.equal(session.hasActiveExecution(), true);
+    assert.equal(session.hasRunningTurn(), true);
   } finally {
     await session.dispose();
   }
@@ -839,11 +840,11 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
 
   const createConnection = (
     subscribe: (
-      command: { executionId: string; cursor?: string },
+      command: { turnId: string; cursor?: string },
       emitMessage: (message: unknown) => void,
     ) => Promise<void>,
   ) => {
-    const commands: Array<{ type: string; executionId?: string; cursor?: string }> = [];
+    const commands: Array<{ type: string; turnId?: string; cursor?: string }> = [];
     let receiveMessage: ((message: unknown) => void) | undefined;
     const connection = {
       state: HubConnectionState.Disconnected,
@@ -861,12 +862,12 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
       },
       invoke: async (
         methodName: string,
-        command?: { type: string; executionId?: string; cursor?: string },
+        command?: { type: string; turnId?: string; cursor?: string },
       ) => {
         if (methodName === "GetExecutionProvider") return "distributed";
         if (command) commands.push(command);
-        if (command?.type === "SubscribeExecutionCommand" && command.executionId) {
-          await subscribe({ executionId: command.executionId, cursor: command.cursor }, (message) =>
+        if (command?.type === "SubscribeTurnCommand" && command.turnId) {
+          await subscribe({ turnId: command.turnId, cursor: command.cursor }, (message) =>
             receiveMessage?.(message),
           );
         }
@@ -876,7 +877,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
   };
 
   try {
-    values.set(storageKey, JSON.stringify({ executionId: "execution-1", cursor: "9" }));
+    values.set(storageKey, JSON.stringify({ turnId: "turn-1", cursor: "9" }));
     const resumed = createConnection(async () => undefined);
     HubConnectionBuilder.prototype.build = () => resumed.connection as never;
     const resumedClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
@@ -885,13 +886,13 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
       restoredDurableExecution: true,
     });
     assert.deepEqual(resumed.commands.at(-1), {
-      type: "SubscribeExecutionCommand",
-      executionId: "execution-1",
+      type: "SubscribeTurnCommand",
+      turnId: "turn-1",
       cursor: "9",
     });
     await resumedClient.dispose();
 
-    values.set(storageKey, JSON.stringify({ executionId: "execution-progress", cursor: "3" }));
+    values.set(storageKey, JSON.stringify({ turnId: "turn-progress", cursor: "3" }));
     let progressed: string | undefined;
     const progress = createConnection(async (_command, emitMessage) => {
       emitMessage({
@@ -899,7 +900,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
         role: "assistant",
         author: "agent",
         contents: [{ type: "TextContent", content: "partial" }],
-        additionalProperties: { turnId: "execution-progress", turnSequence: 4 },
+        additionalProperties: { turnId: "turn-progress", turnSequence: 4 },
       });
       progressed = values.get(storageKey);
     });
@@ -910,12 +911,12 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
       restoredDurableExecution: true,
     });
     assert.deepEqual(JSON.parse(progressed ?? "null"), {
-      executionId: "execution-progress",
+      turnId: "turn-progress",
       cursor: "4",
     });
     await progressClient.dispose();
 
-    values.set(storageKey, JSON.stringify({ executionId: "execution-terminal", cursor: "10" }));
+    values.set(storageKey, JSON.stringify({ turnId: "turn-terminal", cursor: "10" }));
     const terminal = createConnection(async (_command, emitMessage) => {
       emitMessage({
         messageId: "terminal-1",
@@ -925,7 +926,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
         additionalProperties: {
           type: "agw-turn-finished",
           status: "completed",
-          turnId: "execution-terminal",
+          turnId: "turn-terminal",
           turnSequence: 11,
         },
       });
@@ -939,7 +940,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
     await terminalClient.dispose();
 
-    values.set(storageKey, JSON.stringify({ executionId: "execution-2", cursor: "4" }));
+    values.set(storageKey, JSON.stringify({ turnId: "turn-2", cursor: "4" }));
     const missing = createConnection(async () => {
       throw new Error(
         "An unexpected error occurred invoking 'DispatchCommand' on the server. HubException: 4040011: Durable execution was not found.",
@@ -954,7 +955,7 @@ test("durable configure resumes its cursor, clears 404, and preserves temporary 
     assert.equal(hasPersistedDurableExecution(setting, runtime), false);
     await missingClient.dispose();
 
-    values.set(storageKey, JSON.stringify({ executionId: "execution-3", cursor: "5" }));
+    values.set(storageKey, JSON.stringify({ turnId: "turn-3", cursor: "5" }));
     const temporary = createConnection(async () => {
       throw new Error("temporary transport failure");
     });
@@ -1087,7 +1088,7 @@ test("getMessageStreamingScopeId keeps a restored turn bound to its original use
       contents: [],
       additionalProperties: {
         type: "agw-turn-start",
-        turnId: "execution-1",
+        turnId: "turn-1",
         turnSequence: 1,
         streamingScopeId: "user-message-1",
       },
@@ -1196,7 +1197,7 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
   let dispatchError: Error | null = null;
   let recoveryError: Error | null = null;
   const recoveryCalls: unknown[][] = [];
-  const execCommands: Array<{ executionId: string }> = [];
+  const execCommands: Array<{ turnId: string }> = [];
   const connection = {
     connectionId: "old-connection",
     state: HubConnectionState.Disconnected,
@@ -1227,7 +1228,7 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
         return active;
       }
       if (method === "DispatchCommand" && (args[0] as { type: string }).type === "ExecCommand") {
-        execCommands.push(args[0] as { executionId: string });
+        execCommands.push(args[0] as { turnId: string });
         if (dispatchError) throw dispatchError;
       }
     },
@@ -1261,7 +1262,7 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
       additionalProperties: {
         type: "agw-turn-start",
         conversationId: "conversation",
-        turnId: execCommands[0]!.executionId,
+        turnId: execCommands[0]!.turnId,
         turnSequence: 1,
       },
     });
@@ -1320,7 +1321,7 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
     // The server is idle, but whether the send ran is unknown: the entry returns to the head locked, and the queue pauses.
     const uncertain = handle.getQueue().items[0]!;
     assert.equal(uncertain.uncertain, true);
-    assert.equal(uncertain.executionId, execCommands.at(-1)?.executionId);
+    assert.equal(uncertain.turnId, execCommands.at(-1)?.turnId);
     assert.equal(handle.getQueue().paused, true);
     assert.equal(returned.length, 1);
     assert.throws(() => handle.updateQueuedItem(uncertain.id, "edited"), /cannot be edited/);
@@ -1328,7 +1329,7 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
     dispatchError = new Error("HubException: 4000001: Invalid request");
     handle.resumeQueue();
     await settle();
-    assert.equal(execCommands.at(-1)?.executionId, uncertain.executionId);
+    assert.equal(execCommands.at(-1)?.turnId, uncertain.turnId);
     assert.equal(handle.getStatus(), "idle");
     const rejected = handle.getQueue().items[0]!;
     assert.equal(rejected.id, uncertain.id);
@@ -1483,7 +1484,7 @@ for (const disconnected of [false, true]) {
         /acknowledgement/,
       );
       assert.equal(serverActive, true);
-      assert.equal(session.hasActiveExecution(), true);
+      assert.equal(session.hasRunningTurn(), true);
       if (disconnected) {
         connection.state = HubConnectionState.Connected;
         reconnected();
@@ -1493,7 +1494,7 @@ for (const disconnected of [false, true]) {
       await session.interrupt();
       assert.deepEqual(recoveryCalls.at(-1), ["original-connection", true]);
       assert.equal(serverActive, false);
-      assert.equal(session.hasActiveExecution(), false);
+      assert.equal(session.hasRunningTurn(), false);
     } finally {
       await session.dispose();
     }

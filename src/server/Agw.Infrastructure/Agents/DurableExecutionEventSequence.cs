@@ -18,14 +18,14 @@ public sealed class DurableExecutionEventSequence : IDurableExecutionEventSequen
         _dbContext = dbContext;
     }
 
-    public async Task<long> ReserveAsync(Guid executionId, int count, CancellationToken cancellationToken)
+    public async Task<long> ReserveAsync(Guid turnId, int count, CancellationToken cancellationToken)
     {
         var values = await _dbContext
             .Database.SqlQuery<long>(
                 $"""
                 UPDATE durable_execution
                 SET last_event_sequence = last_event_sequence + {count}
-                WHERE id = {executionId}
+                WHERE id = {turnId}
                 RETURNING last_event_sequence AS "Value"
                 """
             )
@@ -35,7 +35,7 @@ public sealed class DurableExecutionEventSequence : IDurableExecutionEventSequen
             ? values[0]
             : throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                $"Durable execution '{executionId}' does not exist."
+                $"Durable execution '{turnId}' does not exist."
             );
     }
 }

@@ -10,7 +10,7 @@ public sealed class JobAgentExecutorTests
     public async Task ExecuteAsync_JobOwnerAndTarget_ArePassedThroughFacade()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
         var projectId = Guid.CreateVersion7();
         var agentExecutions = new RecordingAgentExecutionFacade();
@@ -27,13 +27,13 @@ public sealed class JobAgentExecutorTests
             CreateBy = "job-owner",
         };
 
-        await executor.ExecuteAsync(job, executionId, cancellationToken);
+        await executor.ExecuteAsync(job, turnId, cancellationToken);
 
         Assert.NotNull(agentExecutions.Request);
         Assert.Equal(AgentExecutionPermissionMode.FullAccess, agentExecutions.Request.PermissionMode);
         Assert.Equal(HumanInteractionPolicy.Reject, agentExecutions.Request.HumanInteractionPolicy);
         Assert.Equal("job-owner", agentExecutions.Request.OwnerUserId);
-        Assert.Equal(executionId, agentExecutions.Request.ExecutionId);
+        Assert.Equal(turnId, agentExecutions.Request.TurnId);
         Assert.Equal(agentId, agentExecutions.Request.Target.Id);
         Assert.Equal(AgentTargetKind.Agent, agentExecutions.Request.Target.Kind);
         Assert.Equal(projectId, projectTasks.Request?.ProjectId);
@@ -49,7 +49,7 @@ public sealed class JobAgentExecutorTests
         )
         {
             Request = request;
-            return Task.FromResult(new AgentExecutionResult(request.ExecutionId, AgentExecutionState.Completed, []));
+            return Task.FromResult(new AgentExecutionResult(request.TurnId, AgentExecutionState.Completed, []));
         }
 
         public async IAsyncEnumerable<AgentExecutionEvent> ExecuteStreamingAsync(

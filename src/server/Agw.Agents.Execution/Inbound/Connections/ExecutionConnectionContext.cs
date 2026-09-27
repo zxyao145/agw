@@ -37,7 +37,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private string? _workspace;
     private ExecutionTarget? _target;
     private PendingModeChange? _pendingModeChange;
-    private Guid? _lastResumeExecutionId;
+    private Guid? _lastResumeTurnId;
     private volatile bool _waitingForHuman;
     private readonly ExecutionPermissionService? _permissions;
     private ExecutionSettings? _turnSettings;
@@ -121,7 +121,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 return true;
             }
 
-            return _attachment?.HasActiveExecution == true;
+            return _attachment?.HasActiveTurn == true;
         }
     }
 
@@ -179,7 +179,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _resolvedTask = null;
         _workspace = null;
         _target = null;
-        _lastResumeExecutionId = null;
+        _lastResumeTurnId = null;
     }
 
     public async Task StartTurnAsync(ExecCommand command, CancellationToken cancellationToken)
@@ -209,11 +209,11 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         if (
             HasActiveTurn
             && _attachment != null
-            && command.ExecutionId.HasValue
-            && command.ExecutionId == _attachment.ActiveExecutionId
+            && command.TurnId.HasValue
+            && command.TurnId == _attachment.ActiveTurnId
         )
         {
-            await SubscribeExecutionAsync(command.ExecutionId.Value, cursor: null, cancellationToken);
+            await SubscribeTurnAsync(command.TurnId.Value, cursor: null, cancellationToken);
             return;
         }
 
@@ -238,7 +238,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         var accepted = await _acceptance.AcceptAsync(
             new TurnAcceptanceRequest(
                 _userId,
-                command.ExecutionId,
+                command.TurnId,
                 target,
                 conversationId,
                 command.Input,
@@ -255,7 +255,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         var request = accepted.Request;
         _resolvedTask = request.Task;
         _workspace = request.WorkspaceSnapshot.Workspace;
-        command.ExecutionId = request.TurnId;
+        command.TurnId = request.TurnId;
         if (!accepted.Created)
         {
             await ResumeAcceptedTurnAsync(accepted, cancellationToken);
@@ -385,20 +385,20 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     }
 
     /// <summary>
-    /// 中断当前连接内的活动执行；进程内模式无需显式 executionId。
+    /// 中断当前连接内的活动执行；进程内模式无需显式 turnId。
     /// </summary>
     public Task InterruptTurnAsync(string? reason, CancellationToken cancellationToken) =>
-        InterruptTurnAsync(executionId: null, reason, cancellationToken);
+        InterruptTurnAsync(turnId: null, reason, cancellationToken);
 
     /// <summary>
-    /// 中断指定 durable execution；进程内模式仍退化为中断当前 Turn。
+    /// 中断指定 durable Turn；进程内模式仍退化为中断当前 Turn。
     /// </summary>
-    public async Task InterruptTurnAsync(Guid? executionId, string? reason, CancellationToken cancellationToken)
+    public async Task InterruptTurnAsync(Guid? turnId, string? reason, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         if (_attachment != null)
         {
-            await _attachment.InterruptAsync(executionId, reason, ConversationId, cancellationToken);
+            await _attachment.InterruptAsync(turnId, reason, ConversationId, cancellationToken);
             return;
         }
 
@@ -483,13 +483,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(command);
         if (
             command.CheckpointOccurrenceId == Guid.Empty
-            || command.ResumeExecutionId == Guid.Empty
+            || command.ResumeTurnId == Guid.Empty
             || command.AgentflowId == Guid.Empty
         )
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "checkpointOccurrenceId, resumeExecutionId and agentflowId are required."
+                "checkpointOccurrenceId, resumeTurnId and agentflowId are required."
             );
         }
         if (
@@ -500,10 +500,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             await ReleaseRuntimeAsync();
             _resolvedTask = null;
-            _lastResumeExecutionId = null;
+            _lastResumeTurnId = null;
             throw new AgwException(ErrorCodes.ConversationSessionConflict);
         }
-        if (_lastResumeExecutionId == command.ResumeExecutionId)
+        if (_lastResumeTurnId == command.ResumeTurnId)
         {
             return;
         }
@@ -540,7 +540,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             await _attachment
                 .ResumeCheckpointAsync(
                     command.CheckpointOccurrenceId,
-                    command.ResumeExecutionId,
+                    command.ResumeTurnId,
                     projectId,
                     conversationId,
                     contextId,
@@ -552,7 +552,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             _turnSettings = settings;
             await SendPermissionStatusAsync(starting: true);
             _target = new ExecutionTarget(command.AgentflowId, AgentRuntimeType.Agentflow);
-            _lastResumeExecutionId = command.ResumeExecutionId;
+            _lastResumeTurnId = command.ResumeTurnId;
             return;
         }
 
@@ -591,7 +591,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 {
                     AgentId = command.AgentflowId,
                     ConversationId = resolvedTask.ProjectConversationId,
-                    ExecutionId = command.ResumeExecutionId,
+                    TurnId = command.ResumeTurnId,
                     Stream = true,
                     ResumeCheckpoint = snapshot,
                     ResumeGeneration = resolvedTask.Generation,
@@ -599,7 +599,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 cancellationToken
             )
             .ConfigureAwait(false);
-        _lastResumeExecutionId = command.ResumeExecutionId;
+        _lastResumeTurnId = command.ResumeTurnId;
     }
 
     public async ValueTask DisposeAsync()
@@ -639,10 +639,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     internal Task WhenIdleAsync() => Host?.WhenIdleAsync() ?? Task.CompletedTask;
 
     /// <summary>
-    /// 将当前连接附着到属于已配置对话的 durable execution，并从指定 cursor 继续回放消息。
-    /// Attaches this connection to a durable execution of the configured conversation and continues replaying messages from the cursor.
+    /// 将当前连接附着到属于已配置对话的 durable Turn，并从指定 cursor 继续回放消息。
+    /// Attaches this connection to a durable turn of the configured conversation and continues replaying messages from the cursor.
     /// </summary>
-    public async Task SubscribeExecutionAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
+    public async Task SubscribeTurnAsync(Guid turnId, string? cursor, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         var attachment =
@@ -655,9 +655,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             Settings
             ?? throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "Execution settings must be configured before subscribing to an execution."
+                "Execution settings must be configured before subscribing to a turn."
             );
-        await attachment.AttachAsync(executionId, cursor, RequireConversationId(settings), cancellationToken);
+        await attachment.AttachAsync(turnId, cursor, RequireConversationId(settings), cancellationToken);
         if (attachment.PermissionStatus is { } status)
         {
             _turnSettings = settings.WithPermissionSnapshot(
@@ -681,7 +681,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             await ReleaseRuntimeAsync();
             _resolvedTask = null;
             _workspace = null;
-            _lastResumeExecutionId = null;
+            _lastResumeTurnId = null;
             if (!generation.HasValue)
             {
                 throw new AgwException(ErrorCodes.ResourceNotFound);

@@ -338,13 +338,13 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             .SingleAsync(turn => turn.Id == turnId, TestContext.Current.CancellationToken);
     }
 
-    public async Task<DurableExecutionRecord> ReadExecutionAsync(Guid executionId)
+    public async Task<DurableExecutionRecord> ReadExecutionAsync(Guid turnId)
     {
         await using var context = CreateContext();
         return await context
             .DurableExecutions.IgnoreQueryFilters()
             .AsNoTracking()
-            .SingleAsync(execution => execution.Id == executionId, TestContext.Current.CancellationToken);
+            .SingleAsync(execution => execution.Id == turnId, TestContext.Current.CancellationToken);
     }
 
     public async Task<List<DurableExecutionEventRecord>> ReadEventsAsync(Guid turnId)
