@@ -1,11 +1,10 @@
 using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-using Microsoft.Agents.AI;
 
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
 
-public sealed class ProjectAgentFileStore : AgentFileStore
+public sealed class ProjectAgentFileStore : AgwAgentFileStore
 {
     private const int MaxListEntries = 1_000;
     private const long MaxReadableFileSizeBytes = 128 * 1024;
@@ -94,14 +93,14 @@ public sealed class ProjectAgentFileStore : AgentFileStore
         return true;
     }
 
-    public override async Task<IReadOnlyList<FileStoreEntry>> ListChildrenAsync(
+    public override async Task<IReadOnlyList<AgwFileStoreEntry>> ListChildrenAsync(
         string directory,
         CancellationToken cancellationToken = default
     )
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
         var scopedDirectory = ScopePath(directory);
-        var entries = new List<FileStoreEntry>();
+        var entries = new List<AgwFileStoreEntry>();
         await foreach (
             var entry in fileSystem
                 .EnumerateAsync(scopedDirectory, "*", recursive: false, cancellationToken)
@@ -118,15 +117,15 @@ public sealed class ProjectAgentFileStore : AgentFileStore
             }
 
             entries.Add(
-                new FileStoreEntry(
+                new AgwFileStoreEntry(
                     Path.GetFileName(entry.Path.TrimEnd('/', '\\')),
-                    entry.IsDirectory ? FileStoreEntry.Directory : FileStoreEntry.File
+                    entry.IsDirectory ? AgwFileStoreEntry.Directory : AgwFileStoreEntry.File
                 )
             );
         }
 
         return entries
-            .OrderByDescending(static entry => entry.Type == FileStoreEntry.Directory)
+            .OrderByDescending(static entry => entry.Type == AgwFileStoreEntry.Directory)
             .ThenBy(static entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -137,7 +136,7 @@ public sealed class ProjectAgentFileStore : AgentFileStore
         return await fileSystem.ExistsFileAsync(ScopePath(path), cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<FileSearchResult>> SearchAsync(
+    public override async Task<IReadOnlyList<AgwFileSearchResult>> SearchAsync(
         string directory,
         string regexPattern,
         string? globPattern = null,
@@ -147,7 +146,7 @@ public sealed class ProjectAgentFileStore : AgentFileStore
     {
         var fileSystem = await ResolveAsync(cancellationToken).ConfigureAwait(false);
         var scopedDirectory = ScopePath(directory);
-        var results = new Dictionary<string, FileSearchResult>(StringComparer.OrdinalIgnoreCase);
+        var results = new Dictionary<string, AgwFileSearchResult>(StringComparer.OrdinalIgnoreCase);
         var resultCharacters = 0;
         await foreach (
             var hit in fileSystem
@@ -192,7 +191,7 @@ public sealed class ProjectAgentFileStore : AgentFileStore
             var line = TruncateSearchLine(hit.Line, maxLineCharacters);
             if (result == null)
             {
-                result = new FileSearchResult
+                result = new AgwFileSearchResult
                 {
                     FileName = relativePath,
                     Snippet = line,
@@ -202,7 +201,7 @@ public sealed class ProjectAgentFileStore : AgentFileStore
                 resultCharacters += fixedCharacters + line.Length;
             }
 
-            result.MatchingLines.Add(new FileSearchMatch { LineNumber = hit.LineNumber, Line = line });
+            result.MatchingLines.Add(new AgwFileSearchMatch { LineNumber = hit.LineNumber, Line = line });
             resultCharacters += line.Length;
         }
 

@@ -5,12 +5,11 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Application.Persistence;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
 
-public sealed class ProjectMemoryStore : AgentFileStore
+public sealed class ProjectMemoryStore : AgwAgentFileStore
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly TimeProvider _timeProvider;
@@ -76,7 +75,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             .ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<FileStoreEntry>> ListChildrenAsync(
+    public override async Task<IReadOnlyList<AgwFileStoreEntry>> ListChildrenAsync(
         string directory,
         CancellationToken cancellationToken = default
     )
@@ -94,11 +93,11 @@ public sealed class ProjectMemoryStore : AgentFileStore
             {
                 var separatorIndex = path.IndexOf('/');
                 return separatorIndex < 0
-                    ? new FileStoreEntry(path, FileStoreEntry.File)
-                    : new FileStoreEntry(path[..separatorIndex], FileStoreEntry.Directory);
+                    ? new AgwFileStoreEntry(path, AgwFileStoreEntry.File)
+                    : new AgwFileStoreEntry(path[..separatorIndex], AgwFileStoreEntry.Directory);
             })
             .DistinctBy(static entry => (entry.Name, entry.Type))
-            .OrderByDescending(static entry => entry.Type == FileStoreEntry.Directory)
+            .OrderByDescending(static entry => entry.Type == AgwFileStoreEntry.Directory)
             .ThenBy(static entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static entry => entry.Name, StringComparer.Ordinal)
             .ToArray();
@@ -113,7 +112,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             .ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<FileSearchResult>> SearchAsync(
+    public override async Task<IReadOnlyList<AgwFileSearchResult>> SearchAsync(
         string directory,
         string regexPattern,
         string? globPattern = null,
@@ -131,7 +130,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             {
                 var entries = persistence.ListEntriesAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken);
 
-                var results = new List<FileSearchResult>();
+                var results = new List<AgwFileSearchResult>();
                 await foreach (var entry in entries.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
                     var relativePath = entry.Path[prefix.Length..];
@@ -154,7 +153,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
                     if (matches.Count > 0)
                     {
                         results.Add(
-                            new FileSearchResult
+                            new AgwFileSearchResult
                             {
                                 FileName = relativePath,
                                 Snippet = matches[0].Line,
@@ -179,9 +178,9 @@ public sealed class ProjectMemoryStore : AgentFileStore
     /// 按 '\n' 划分行并去掉行尾的 '\r'，用 ReadOnlySpan&lt;char&gt; 匹配，只为命中的行分配字符串。
     /// Splits lines on '\n' and trims trailing '\r', matching with ReadOnlySpan&lt;char&gt; so only matching lines allocate strings.
     /// </summary>
-    private static List<FileSearchMatch> FindMatchingLines(string content, Regex regex)
+    private static List<AgwFileSearchMatch> FindMatchingLines(string content, Regex regex)
     {
-        var matches = new List<FileSearchMatch>();
+        var matches = new List<AgwFileSearchMatch>();
         var remaining = content.AsSpan();
         var lineNumber = 0;
         while (true)
@@ -191,7 +190,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             var line = (lineEnd < 0 ? remaining : remaining[..lineEnd]).TrimEnd('\r');
             if (regex.IsMatch(line))
             {
-                matches.Add(new FileSearchMatch { LineNumber = lineNumber, Line = line.ToString() });
+                matches.Add(new AgwFileSearchMatch { LineNumber = lineNumber, Line = line.ToString() });
             }
 
             if (lineEnd < 0)

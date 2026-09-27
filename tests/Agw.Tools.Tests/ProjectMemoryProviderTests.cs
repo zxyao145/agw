@@ -1,14 +1,17 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Agw.Files.Abstracts;
+using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Impl.ToolBlocks.ProjectMemory;
+using Agw.Tools.Impl.ToolBlocks.Storage;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Tests;
 
-public sealed class ProjectMemoryProviderTests
+public sealed class ProjectMemoryProviderTests : IDisposable
 {
     private static readonly string[] ToolNames =
     [
@@ -21,10 +24,14 @@ public sealed class ProjectMemoryProviderTests
         ProjectMemoryProvider.WriteToolName,
     ];
 
+    private readonly DirectoryInfo _workspace = Directory.CreateTempSubdirectory("agw-project-memory-provider-");
+
+    public void Dispose() => _workspace.Delete(recursive: true);
+
     [Fact]
     public async Task InvokingAsync_ExposesProjectToolsWithoutSessionState()
     {
-        var provider = CreateProvider(new InMemoryAgentFileStore());
+        var provider = CreateProvider(CreateStore());
 
         var context = await InvokeProviderAsync(provider);
         var tools = context.Tools;
@@ -50,7 +57,7 @@ public sealed class ProjectMemoryProviderTests
     [Fact]
     public async Task WriteAsync_NewProviderInstanceReadsSharedMemoryAndIndex()
     {
-        var store = new InMemoryAgentFileStore();
+        var store = CreateStore();
         var firstProvider = CreateProvider(store);
         var firstContext = await InvokeProviderAsync(firstProvider);
         var write = GetFunction(firstContext, ProjectMemoryProvider.WriteToolName);
@@ -86,7 +93,7 @@ public sealed class ProjectMemoryProviderTests
     [Fact]
     public async Task Tools_ListSearchReplaceLinesAndDeleteFollowMafBehavior()
     {
-        var store = new InMemoryAgentFileStore();
+        var store = CreateStore();
         var context = await InvokeProviderAsync(CreateProvider(store));
         await GetFunction(context, ProjectMemoryProvider.WriteToolName)
             .InvokeAsync(
@@ -106,7 +113,7 @@ public sealed class ProjectMemoryProviderTests
         Assert.Equal("notes.md", listedFile.Name);
         Assert.Equal("Working notes", listedFile.Description);
 
-        var searchResult = ResultList<FileSearchResult>(
+        var searchResult = ResultList<AgwFileSearchResult>(
             await GetFunction(context, ProjectMemoryProvider.GrepToolName)
                 .InvokeAsync(Arguments(("regexPattern", "BETA")), TestContext.Current.CancellationToken)
         );
@@ -125,7 +132,7 @@ public sealed class ProjectMemoryProviderTests
                     ("fileName", "notes.md"),
                     (
                         "edits",
-                        new List<FileLineEdit>
+                        new List<AgwFileLineEdit>
                         {
                             new() { LineNumber = 1, NewLine = "first\n" },
                             new() { LineNumber = 3, NewLine = string.Empty },
@@ -147,7 +154,7 @@ public sealed class ProjectMemoryProviderTests
     [Fact]
     public async Task ConcurrentWrites_SeparateProvidersKeepCompleteSharedIndex()
     {
-        var store = new InMemoryAgentFileStore();
+        var store = CreateStore();
         var firstContext = await InvokeProviderAsync(CreateProvider(store));
         var secondContext = await InvokeProviderAsync(CreateProvider(store));
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -169,7 +176,7 @@ public sealed class ProjectMemoryProviderTests
     [Fact]
     public async Task WriteAsync_NestedOrInternalNameIsRejected()
     {
-        var context = await InvokeProviderAsync(CreateProvider(new InMemoryAgentFileStore()));
+        var context = await InvokeProviderAsync(CreateProvider(CreateStore()));
         var write = GetFunction(context, ProjectMemoryProvider.WriteToolName);
 
         var nested = await Assert.ThrowsAsync<AgwException>(async () =>
@@ -189,7 +196,14 @@ public sealed class ProjectMemoryProviderTests
         Assert.Contains("reserved", internalFile.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ProjectMemoryProvider CreateProvider(AgentFileStore store) =>
+    private ProjectAgentFileStore CreateStore() =>
+        new(
+            new LocalFileSystemResolver(new LocalFileSystem(_workspace.FullName)),
+            Guid.CreateVersion7(),
+            ProjectMemoryToolBlock.FileSystemRoot
+        );
+
+    private static ProjectMemoryProvider CreateProvider(AgwAgentFileStore store) =>
         new(store, InMemoryApplicationLock.Shared, "test-project-memory");
 
     private static async Task<AIContext> InvokeProviderAsync(ProjectMemoryProvider provider)
@@ -244,7 +258,20 @@ public sealed class ProjectMemoryProviderTests
         }
     }
 
-    private sealed class RecordingEmptyAgentFileStore : AgentFileStore
+    private sealed class LocalFileSystemResolver : IAgwFileSystemResolver
+    {
+        private readonly IAgwFileSystem _fileSystem;
+
+        public LocalFileSystemResolver(IAgwFileSystem fileSystem)
+        {
+            _fileSystem = fileSystem;
+        }
+
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
+            Task.FromResult<IAgwFileSystem?>(_fileSystem);
+    }
+
+    private sealed class RecordingEmptyAgentFileStore : AgwAgentFileStore
     {
         public int CreateDirectoryCallCount { get; private set; }
 
@@ -257,21 +284,21 @@ public sealed class ProjectMemoryProviderTests
         public override Task<bool> DeleteAsync(string path, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
 
-        public override Task<IReadOnlyList<FileStoreEntry>> ListChildrenAsync(
+        public override Task<IReadOnlyList<AgwFileStoreEntry>> ListChildrenAsync(
             string directory,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult<IReadOnlyList<FileStoreEntry>>([]);
+        ) => Task.FromResult<IReadOnlyList<AgwFileStoreEntry>>([]);
 
         public override Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
 
-        public override Task<IReadOnlyList<FileSearchResult>> SearchAsync(
+        public override Task<IReadOnlyList<AgwFileSearchResult>> SearchAsync(
             string directory,
             string regexPattern,
             string? globPattern = null,
             bool recursive = false,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult<IReadOnlyList<FileSearchResult>>([]);
+        ) => Task.FromResult<IReadOnlyList<AgwFileSearchResult>>([]);
 
         public override Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
         {

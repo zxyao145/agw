@@ -18,14 +18,14 @@ public sealed class FileAccessToolBlock : IToolBlock
             "Reads and modifies files in the project workspace.",
             ToolBlockScope.Agent | ToolBlockScope.Project,
             [
-                new("file_access_read", AgwToolPermission.ReadOnly, allowInPlanMode: true),
-                new("file_access_read_lines", AgwToolPermission.ReadOnly, allowInPlanMode: true),
-                new("file_access_ls", AgwToolPermission.ReadOnly, allowInPlanMode: true),
-                new("file_access_grep", AgwToolPermission.ReadOnly, allowInPlanMode: true),
-                new("file_access_write", AgwToolPermission.Write),
-                new("file_access_delete", AgwToolPermission.Write),
-                new("file_access_replace", AgwToolPermission.Write),
-                new("file_access_replace_lines", AgwToolPermission.Write),
+                new(AgwFileAccessProvider.ReadFileToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
+                new(AgwFileAccessProvider.ReadLinesToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
+                new(AgwFileAccessProvider.LsToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
+                new(AgwFileAccessProvider.GrepToolName, AgwToolPermission.ReadOnly, allowInPlanMode: true),
+                new(AgwFileAccessProvider.WriteToolName, AgwToolPermission.Write),
+                new(AgwFileAccessProvider.DeleteFileToolName, AgwToolPermission.Write),
+                new(AgwFileAccessProvider.ReplaceToolName, AgwToolPermission.Write),
+                new(AgwFileAccessProvider.ReplaceLinesToolName, AgwToolPermission.Write),
             ],
             requiresWorkspace: true
         );
@@ -49,7 +49,7 @@ public sealed class FileAccessToolBlock : IToolBlock
                     directory => new Agw.Shared.Runtime.ProjectWorkspaceDirectory(directory.Id, directory.Path)
                 )
             );
-        var provider = new DirectoryFileAccessProvider(_fileSystemResolver, context.ProjectId, snapshot);
+        var provider = new AgwFileAccessProvider(_fileSystemResolver, context.ProjectId, snapshot);
         contribution.ContextProviders.Add(provider);
         contribution.AddResource(provider);
         return ValueTask.FromResult(contribution);

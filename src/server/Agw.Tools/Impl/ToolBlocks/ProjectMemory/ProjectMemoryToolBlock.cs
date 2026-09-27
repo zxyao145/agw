@@ -3,7 +3,6 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Impl.ToolBlocks.Storage;
 using Agw.Tools.ToolBlocks;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Impl.ToolBlocks.ProjectMemory;
@@ -73,7 +72,7 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
             Descriptor.Members.Where(static member => member.AllowInPlanMode).Select(static member => member.Name)
         );
         var storage = projectMemoryDefinition.Options.Storage;
-        AgentFileStore store = storage switch
+        AgwAgentFileStore store = storage switch
         {
             ProjectMemoryStorage.Database => new ProjectMemoryStore(
                 _serviceScopeFactory,

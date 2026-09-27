@@ -1,6 +1,7 @@
 using System.Text;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Impl.ToolBlocks.Storage;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.FileSystemGlobbing;
@@ -37,13 +38,13 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         - Keep memories current by overwriting files or using project_memory_replace and project_memory_replace_lines.
         """;
 
-    private readonly AgentFileStore _fileStore;
+    private readonly AgwAgentFileStore _fileStore;
     private readonly IApplicationLock _applicationLock;
     private readonly string _mutationResourceName;
     private AITool[]? _tools;
 
     public ProjectMemoryProvider(
-        AgentFileStore fileStore,
+        AgwAgentFileStore fileStore,
         IApplicationLock applicationLock,
         string mutationResourceName
     )
@@ -141,7 +142,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     )
     {
         var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken).ConfigureAwait(false))
-            .Where(static entry => string.Equals(entry.Type, FileStoreEntry.File, StringComparison.Ordinal))
+            .Where(static entry => string.Equals(entry.Type, AgwFileStoreEntry.File, StringComparison.Ordinal))
             .Select(static entry => entry.Name)
             .ToList();
         var availableFiles = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
@@ -166,7 +167,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
                 new FileListEntry
                 {
                     Name = file,
-                    Type = FileStoreEntry.File,
+                    Type = AgwFileStoreEntry.File,
                     Description = description,
                 }
             );
@@ -178,7 +179,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     [Description(
         "Search project memory contents with a case-insensitive regular expression and an optional glob_pattern."
     )]
-    private async Task<List<FileSearchResult>> GrepAsync(
+    private async Task<List<AgwFileSearchResult>> GrepAsync(
         string regexPattern,
         string? globPattern = null,
         CancellationToken cancellationToken = default
@@ -226,7 +227,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     )]
     private async Task<string> ReplaceLinesAsync(
         string fileName,
-        List<FileLineEdit> edits,
+        List<AgwFileLineEdit> edits,
         CancellationToken cancellationToken = default
     )
     {
@@ -265,7 +266,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
                 new AIFunctionFactoryOptions { Name = LsToolName }
             ),
             AIFunctionFactory.Create(
-                (Func<string, string?, CancellationToken, Task<List<FileSearchResult>>>)GrepAsync,
+                (Func<string, string?, CancellationToken, Task<List<AgwFileSearchResult>>>)GrepAsync,
                 new AIFunctionFactoryOptions { Name = GrepToolName }
             ),
             AIFunctionFactory.Create(
@@ -273,7 +274,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
                 new AIFunctionFactoryOptions { Name = ReplaceToolName }
             ),
             AIFunctionFactory.Create(
-                (Func<string, List<FileLineEdit>, CancellationToken, Task<string>>)ReplaceLinesAsync,
+                (Func<string, List<AgwFileLineEdit>, CancellationToken, Task<string>>)ReplaceLinesAsync,
                 new AIFunctionFactoryOptions { Name = ReplaceLinesToolName }
             ),
         ];
@@ -282,7 +283,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     private async Task RebuildMemoryIndexAsync(CancellationToken cancellationToken)
     {
         var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken).ConfigureAwait(false))
-            .Where(static entry => string.Equals(entry.Type, FileStoreEntry.File, StringComparison.Ordinal))
+            .Where(static entry => string.Equals(entry.Type, AgwFileStoreEntry.File, StringComparison.Ordinal))
             .Select(static entry => entry.Name)
             .Where(static file => !IsInternalFile(file))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
@@ -401,7 +402,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         return (content.Replace(oldString, newString, StringComparison.Ordinal), count);
     }
 
-    private static string ApplyReplaceLines(string content, IReadOnlyList<FileLineEdit> edits)
+    private static string ApplyReplaceLines(string content, IReadOnlyList<AgwFileLineEdit> edits)
     {
         if (edits.Count == 0)
         {

@@ -99,7 +99,7 @@ public sealed class FileAccessPermissionTests
     [Theory]
     [InlineData("file_access_read")]
     [InlineData("file_access_write")]
-    public async Task RunAsync_AdditionalDirectory_RoutesSdkToolUsingCapturedSnapshot(string toolName)
+    public async Task RunAsync_AdditionalDirectory_RoutesToolUsingCapturedSnapshot(string toolName)
     {
         var token = TestContext.Current.CancellationToken;
         var root = Directory.CreateTempSubdirectory("agw-file-directories-");

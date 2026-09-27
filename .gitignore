@@ -384,3 +384,4 @@ appsettings.setup.json
 **/.next/**/*
 .agw/
 .wrangler
+.scratch/
