@@ -148,8 +148,7 @@ function PresentedMessageView({
         <div className={cn("flex items-center gap-2", isUser && "justify-end")}>
           <span
             className={cn(
-              "text-xs opacity-40",
-              isResult && "mb-4 border-b border-dashed pr-4 text-lg font-semibold opacity-80",
+              "text-xs opacity-40 agw-msg-title",
             )}
           >
             {title}
