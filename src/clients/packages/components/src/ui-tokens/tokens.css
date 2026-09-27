@@ -288,12 +288,12 @@ div[role="option"]:hover {
 
   .agw-project-tabs {
     @apply flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain;
-    -webkit-app-region: no-drag;
     scrollbar-width: none;
   }
 
   .agw-project-tab {
     @apply flex h-8 max-w-44 shrink-0 items-center rounded-[9px] border border-transparent text-muted-foreground transition-colors;
+    -webkit-app-region: no-drag;
   }
 
   .agw-project-tab:hover {
