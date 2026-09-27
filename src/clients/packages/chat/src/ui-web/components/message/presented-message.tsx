@@ -146,13 +146,7 @@ function PresentedMessageView({
     <>
       {title ? (
         <div className={cn("flex items-center gap-2", isUser && "justify-end")}>
-          <span
-            className={cn(
-              "text-xs opacity-40 agw-msg-title",
-            )}
-          >
-            {title}
-          </span>
+          <span className={cn("text-xs opacity-40 agw-msg-title")}>{title}</span>
         </div>
       ) : null}
       {message.source.contents.map((content, index) => (

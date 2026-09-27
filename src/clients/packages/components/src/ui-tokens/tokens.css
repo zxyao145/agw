@@ -597,7 +597,6 @@ div[role="option"]:hover {
   @apply relative mx-auto w-full max-w-225;
 }
 
-
 .agw-conversation-list h1 {
   @apply text-lg font-semibold;
 }
