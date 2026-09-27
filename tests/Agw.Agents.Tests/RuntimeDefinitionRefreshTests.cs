@@ -18,6 +18,7 @@ using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Shared.Tooling;
 using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
@@ -164,6 +165,47 @@ public sealed class RuntimeDefinitionRefreshTests
         Assert.Equal(first.SessionStateScope.ContextId, second.SessionStateScope.ContextId);
         Assert.Equal(first.SessionStateScope.Generation, second.SessionStateScope.Generation);
         Assert.True(await fixture.Service.IsRuntimeCurrentAsync(second, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task StartAsync_BackgroundAgentDefinitionUpdated_RebuildsRuntime()
+    {
+        // Arrange
+        await using var fixture = new Fixture();
+        var backgroundAgent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "background",
+            DisplayName = "Background",
+            CreateBy = "tester",
+            CreateTime = new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero),
+            Type = AgentType.System,
+            ModelProviderId = Guid.CreateVersion7(),
+        };
+        fixture.Definition.Tools =
+        [
+            new ToolBlockValue
+            {
+                Definition = new BackgroundAgentsToolBlockDefinition
+                {
+                    Options = new BackgroundAgentsToolBlockOptions { AllowedAgentIds = [backgroundAgent.Id] },
+                },
+            },
+        ];
+        fixture.Db.Agents.Add(backgroundAgent);
+        await fixture.InitializeAsync();
+        var first = await fixture.RunTurnAsync();
+
+        // Act
+        backgroundAgent.SystemPrompt = "updated";
+        backgroundAgent.UpdateTime = backgroundAgent.CreateTime.AddSeconds(1);
+        await fixture.Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var second = await fixture.RunTurnAsync();
+
+        // Assert
+        Assert.NotSame(first, second);
+        Assert.True(first.IsDisposed);
+        Assert.Same(second, await fixture.RunTurnAsync());
     }
 
     [Fact]
