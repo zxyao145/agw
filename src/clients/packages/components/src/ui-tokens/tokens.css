@@ -108,7 +108,7 @@
   --accent: #f0f1f3;
   --accent-foreground: #17191d;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: #e4e7ec;
+  --border: #ebebeb;
   --input: #d8dce3;
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
@@ -142,7 +142,7 @@
   --accent: #202329;
   --accent-foreground: #f3f4f6;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: #272a31;
+  --border: #5f6060;
   --input: #353941;
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
@@ -325,7 +325,11 @@ div[role="option"]:hover {
   }
 
   .agw-status-dot.is-running {
-    @apply bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_14%,transparent)];
+    @apply bg-[#5865f2] shadow-[0_0_0_3px_color-mix(in_srgb,#5865f2_14%,transparent)];
+  }
+
+  .dark .agw-status-dot.is-running {
+    @apply bg-[color-mix(in_srgb,#5865f2_80%,white)] shadow-[0_0_0_3px_color-mix(in_srgb,#5865f2_28%,transparent)];
   }
 
   .agw-status-dot.is-waiting-approval {
