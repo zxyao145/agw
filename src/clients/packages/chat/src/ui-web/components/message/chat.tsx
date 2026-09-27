@@ -67,6 +67,7 @@ import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
 import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
+import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 import { ToolDirectoriesContext } from "./tool-directory";
@@ -104,6 +105,11 @@ export interface ChatProps {
   className?: string;
   /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
   inputTopLeft?: React.ReactNode;
+  /**
+   * 按对话把输入草稿保存在本地，切换回该对话时恢复。
+   * Keeps the input draft locally per conversation and restores it when the conversation returns.
+   */
+  persistInputDraft?: boolean;
   onConversationIdChange?: (conversationId: string | null) => void;
   onConversationAccepted?: (conversationId: string) => void;
   onContextIdChange?: (contextId: string | null) => void;
@@ -192,6 +198,7 @@ export function Chat({
   placeholder = "Type your message...",
   className,
   inputTopLeft,
+  persistInputDraft = false,
   onConversationIdChange,
   onConversationAccepted,
   onContextIdChange,
@@ -291,6 +298,10 @@ export function Chat({
   });
   const targetKey = target ? `${target.type}:${target.id}` : "";
   const previousTargetKeyRef = React.useRef(targetKey);
+  const inputDraftScope = React.useMemo(
+    () => (persistInputDraft && projectId ? { serverId: executionServerId, projectId } : null),
+    [executionServerId, persistInputDraft, projectId],
+  );
 
   if (streamingMessageBatcherRef.current === null) {
     streamingMessageBatcherRef.current = createStreamingMessageBatcher(
@@ -522,9 +533,27 @@ export function Chat({
     const nextAgentMode = sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages);
     confirmedAgentModeRef.current = nextAgentMode;
     setAgentMode(nextAgentMode);
-    userInputRef.current?.setInput("");
     setHydratedSessionRevision(sessionSeed.revision);
   }, [detachExecution, sessionSeed.revision]);
+
+  // 会话或对话变化时载入该对话的本地草稿；不保存草稿时清空输入。
+  // Loads the conversation's local draft when the session or conversation changes; clears the input without drafts.
+  React.useEffect(() => {
+    userInputRef.current?.setInput(
+      inputDraftScope
+        ? (conversationComposerStorage.get(inputDraftScope, conversationId).input ?? "")
+        : "",
+    );
+  }, [conversationId, inputDraftScope, sessionSeed.revision]);
+
+  const handleInputDraftChange = React.useCallback(
+    (value: string) => {
+      if (inputDraftScope) {
+        conversationComposerStorage.set(inputDraftScope, conversationId, { input: value });
+      }
+    },
+    [conversationId, inputDraftScope],
+  );
 
   React.useEffect(() => {
     return () => {
@@ -1424,6 +1453,7 @@ export function Chat({
       hasOlderMessagesRef.current = false;
       isLoadingOlderMessagesRef.current = false;
       userInputRef.current?.setInput("");
+      handleInputDraftChange("");
     };
 
     clearInFlightRef.current = true;
@@ -1461,6 +1491,7 @@ export function Chat({
   }, [
     conversationId,
     executionServerId,
+    handleInputDraftChange,
     interruptAndDispose,
     notifyExecutionError,
     onConversationChange,
@@ -1838,6 +1869,7 @@ export function Chat({
                     placeholder={placeholder}
                     topLeft={inputTopLeft}
                     userInputRef={userInputRef}
+                    onInputDraftChange={handleInputDraftChange}
                   />
                 </div>
               </div>

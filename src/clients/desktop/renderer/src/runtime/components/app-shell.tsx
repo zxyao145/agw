@@ -13,6 +13,8 @@ import {
   Info,
   LoaderCircle,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Server,
   Settings,
   Sparkles,
@@ -37,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@agw/components";
 import { Popover, PopoverContent, PopoverTrigger } from "@agw/components";
-import { buildChatHref, useExecutionActivity } from "@agw/chat";
+import { buildChatHref, ChatSidebarVisibilityContext, useExecutionActivity } from "@agw/chat";
 import type { ExecutionStatus } from "@agw/chat-runtime";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
@@ -138,6 +140,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const desktop = useDesktopRuntime();
   const activity = useExecutionActivity();
   const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
+  const [sidebarVisible, setSidebarVisible] = React.useState(true);
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
   const chatReturnHref = buildChatHref("/desktop/chat", {
     projectId: activeProjectId,
@@ -271,6 +274,16 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="agw-app-shell">
       <header className={cn("agw-titlebar", `platform-${platform}`)}>
+        <button
+          type="button"
+          className="agw-titlebar-button agw-titlebar-control"
+          title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+          aria-label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+          aria-expanded={sidebarVisible}
+          onClick={() => setSidebarVisible((visible) => !visible)}
+        >
+          {sidebarVisible ? <PanelLeftClose /> : <PanelLeftOpen />}
+        </button>
         <nav className="agw-project-tabs" aria-label="Open projects">
           <div className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
             {tabs.map((projectId) => {
@@ -424,7 +437,11 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           <Settings />
         </Link>
       </header>
-      <main className="agw-chat-workspace">{children}</main>
+      <main className="agw-chat-workspace">
+        <ChatSidebarVisibilityContext value={sidebarVisible}>
+          {children}
+        </ChatSidebarVisibilityContext>
+      </main>
     </div>
   );
 }

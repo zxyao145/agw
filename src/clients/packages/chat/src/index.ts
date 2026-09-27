@@ -10,4 +10,8 @@ export * from "./ui-web/components/message/user-input";
 export * from "./ui-web/execution-activity";
 export * from "./ui-web/execution-platform";
 export { default as ChatPage } from "./ui-web/pages/chat/page";
-export { ChatWorkspace, type ChatWorkspaceProps } from "./ui-web/pages/chat/chat-workspace";
+export {
+  ChatSidebarVisibilityContext,
+  ChatWorkspace,
+  type ChatWorkspaceProps,
+} from "./ui-web/pages/chat/chat-workspace";

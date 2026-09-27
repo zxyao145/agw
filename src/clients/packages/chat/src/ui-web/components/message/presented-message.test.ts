@@ -9,7 +9,7 @@ import {
   type PresentedMessage,
 } from "@agw/chat-core";
 
-const { React, fireEvent, render, screen } = await setupDomEnvironment();
+const { React, fireEvent, observers, render, screen } = await setupDomEnvironment();
 const { PresentedMessageComponent } = await import("./presented-message.tsx");
 
 const IMAGE_DATA_URL =
@@ -31,8 +31,47 @@ function presented(
   };
 }
 
-function renderMessage(message: PresentedMessage) {
-  return render(React.createElement(PresentedMessageComponent, { message }));
+function renderMessage(message: PresentedMessage, streaming = false) {
+  return render(React.createElement(PresentedMessageComponent, { message, streaming }));
+}
+
+// jsdom 不做排版：给滚动区域设定 320px 可见高度和内容高度，按浏览器规则限制 scrollTop，并投递尺寸变化通知。
+// jsdom performs no layout: give the scroll area a 320px visible height and a content height, clamp
+// scrollTop the way a browser does, and deliver resize notifications.
+function scrollArea(container: HTMLElement) {
+  const element = container.querySelector<HTMLElement>(".max-h-80");
+  assert.ok(element);
+  const clientHeight = 320;
+  let contentHeight = 0;
+  let scrollTop = 0;
+  const scrollHeight = () => Math.max(contentHeight, clientHeight);
+  Object.defineProperties(element, {
+    clientHeight: { configurable: true, value: clientHeight },
+    scrollHeight: { configurable: true, get: scrollHeight },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = Math.min(Math.max(value, 0), scrollHeight() - clientHeight);
+      },
+    },
+  });
+
+  return {
+    element,
+    grow(height: number) {
+      contentHeight = height;
+      for (const entry of observers.resize.filter(
+        (observed) => observed.target === element.firstElementChild,
+      )) {
+        entry.callback([], null);
+      }
+    },
+    scroll(top: number) {
+      element.scrollTop = top;
+      fireEvent.scroll(element);
+    },
+  };
 }
 
 test("markdown content renders through the shared Markdown renderer", () => {
@@ -112,7 +151,7 @@ test("plan content renders the Plan Card", () => {
   assert.ok(screen.getByRole("heading", { name: "Rollout", level: 1 }));
 });
 
-test("a result message is titled and offers message actions", () => {
+test("a result message is titled", () => {
   renderMessage(
     presented(
       [{ type: "markdown", markdown: "Done", sourceType: "TextContent" }],
@@ -122,14 +161,12 @@ test("a result message is titled and offers message actions", () => {
   );
 
   assert.ok(screen.getByText("Result"));
-  assert.ok(screen.getByRole("button", { name: "Copy message" }));
 });
 
-test("an ordinary agent message carries no title and no message actions", () => {
+test("an ordinary agent message carries no title", () => {
   renderMessage(presented([{ type: "markdown", markdown: "Working", sourceType: "TextContent" }]));
 
   assert.equal(screen.queryByText("Result"), null);
-  assert.equal(screen.queryByRole("button", { name: "Copy message" }), null);
 });
 
 test("tool use and tool result messages are titled by their direction", () => {
@@ -160,6 +197,78 @@ test("several contents render in order inside one message", () => {
   const html = view.container.innerHTML;
 
   assert.ok(html.indexOf("first") < html.indexOf("second"));
+});
+
+test("a user message scrolls its content under the height cap", () => {
+  const view = renderMessage(
+    presented(
+      [{ type: "plain", text: "long question", sourceType: "TextContent" }],
+      { role: "user" },
+      { alignment: "right" },
+    ),
+  );
+  const area = view.container.querySelector(".max-h-80");
+
+  assert.ok(area);
+  assert.ok(area.contains(screen.getByText("long question")));
+});
+
+test("a result message renders without the height cap", () => {
+  const view = renderMessage(
+    presented(
+      [{ type: "markdown", markdown: "Done", sourceType: "TextContent" }],
+      { additionalProperties: { type: "result" } },
+      { width: "full" },
+    ),
+  );
+
+  assert.equal(view.container.querySelector(".max-h-80"), null);
+});
+
+test("a streaming message stays at the bottom as it grows until the user scrolls up, and resumes at the bottom", () => {
+  const view = renderMessage(
+    presented([{ type: "markdown", markdown: "Streaming", sourceType: "TextContent" }]),
+    true,
+  );
+  const area = scrollArea(view.container);
+
+  area.grow(800);
+  assert.equal(area.element.scrollTop, 480);
+
+  area.scroll(100);
+  area.grow(1200);
+  assert.equal(area.element.scrollTop, 100);
+
+  area.scroll(880);
+  area.grow(1500);
+  assert.equal(area.element.scrollTop, 1180);
+});
+
+test("a message outside the streaming turn keeps its scroll position as it grows", () => {
+  const view = renderMessage(
+    presented([{ type: "markdown", markdown: "History", sourceType: "TextContent" }]),
+  );
+  const area = scrollArea(view.container);
+
+  area.grow(800);
+
+  assert.equal(area.element.scrollTop, 0);
+});
+
+test("a user message in the streaming turn keeps its scroll position as it grows", () => {
+  const view = renderMessage(
+    presented(
+      [{ type: "plain", text: "question", sourceType: "TextContent" }],
+      { role: "user" },
+      { alignment: "right" },
+    ),
+    true,
+  );
+  const area = scrollArea(view.container);
+
+  area.grow(800);
+
+  assert.equal(area.element.scrollTop, 0);
 });
 
 function renderResult(message: AiMessage) {

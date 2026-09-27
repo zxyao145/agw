@@ -8,11 +8,11 @@ export default function DataContent({ node }: { node: MessageNode }) {
   }
 
   return (
-    <div className="mb-2 inline-block max-w-full align-top last:mb-0">
+    <div className="inline-block max-w-full align-top">
       <img
         src={node.content}
         alt={node.name ?? "Image attachment"}
-        className="max-h-[300px] max-w-full rounded-lg border bg-muted object-contain shadow-xs"
+        className="max-h-70 max-w-full rounded-lg border bg-muted object-contain shadow-xs"
         loading="lazy"
         decoding="async"
       />

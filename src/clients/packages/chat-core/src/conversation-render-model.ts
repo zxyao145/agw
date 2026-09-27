@@ -217,6 +217,7 @@ export type ConversationRenderItem =
   | ConversationMessageRenderItem
   | (BaseConversationRenderItem & {
       type: "work-summary";
+      name: string | null;
       durationMs: number | null;
       items: Exclude<ConversationMessageRenderItem, { type: "result" }>[];
     });

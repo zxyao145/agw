@@ -283,16 +283,22 @@ function NativeRenderItem({
 }) {
   if (item.type === "work-summary") {
     const Icon = workExpanded ? ChevronDown : ChevronRight;
+    const duration = formatWorkedDuration(item.durationMs);
     return (
       <View style={styles.workSummary}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={formatWorkedDuration(item.durationMs)}
+          accessibilityLabel={item.name ? `${item.name} ${duration}` : duration}
           accessibilityState={{ expanded: workExpanded }}
           onPress={onWorkToggle}
           style={styles.workSummaryButton}
         >
-          <Text style={styles.workSummaryText}>{formatWorkedDuration(item.durationMs)}</Text>
+          {item.name ? (
+            <Text numberOfLines={1} style={styles.workSummaryName}>
+              {item.name}
+            </Text>
+          ) : null}
+          <Text style={styles.workSummaryText}>{duration}</Text>
           <Icon color={theme.muted} size={16} />
         </Pressable>
       </View>
@@ -1179,6 +1185,12 @@ function createStyles(theme: NativeChatTheme) {
       alignItems: "center",
       alignSelf: "flex-start",
       gap: 6,
+    },
+    workSummaryName: {
+      flexShrink: 1,
+      color: theme.ink,
+      fontFamily: theme.fontMedium,
+      fontSize: 14,
     },
     workSummaryText: { color: theme.muted, fontFamily: theme.fontRegular, fontSize: 14 },
     workSummaryResult: { width: "100%" },
