@@ -15,7 +15,6 @@ Agw also provides Jobs and Agent Workflow (Agentflow) capabilities for creating 
 This project is primarily built on [MAF](https://github.com/microsoft/agent-framework).
 
 > [!NOTE]
-> Agw is still under active development before version 1.0. The database schema, APIs, and interfaces may change between different versions.
 > Agw currently has no sandbox isolation and is intended only for trusted small teams or deployments in trusted environments.
 
 ## Use Cases
@@ -35,9 +34,6 @@ Human Approval
         ↓
 Publishing/Archiving Agent
 ```
-
-> [!NOTE]
-> Agentflows support sequential execution, fan-out/fan-in, ordered conditional branches, handoff, human approval, and controlled loops. They remain less suitable for highly dynamic groups of agents that require deep autonomous planning.
 
 ### Human-Agent Collaboration Platform
 
