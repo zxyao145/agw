@@ -597,6 +597,14 @@ div[role="option"]:hover {
   @apply relative mx-auto w-full max-w-225;
 }
 
+.agw-conversation-list h1 {
+  @apply text-lg font-semibold;
+}
+
+.agw-conversation-list h2 {
+  @apply text-base font-semibold mt-2;
+}
+
 .agw-msg-item {
   @apply absolute top-0 left-0 w-full py-1.5;
 }
@@ -622,8 +630,24 @@ div[role="option"]:hover {
   @apply w-full rounded-md bg-card;
 }
 
+.agw-msg-result .agw-msg-title {
+  @apply mb-3 border-b border-dashed pr-4 text-lg font-semibold opacity-100;
+}
+
+.agw-msg-result .agw-msg-body,
+.agw-msg-result .agw-msg-body > p,
+.agw-msg-result .msg-content,
+.agw-msg-result .msg-content-md-ol,
+.agw-msg-result .msg-content-md-ul {
+  @apply text-sm leading-relaxed;
+}
+
+.agw-msg-result :not(pre) > code.msg-content-md-code {
+  @apply text-sm;
+}
+
 .msg-content {
-  @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-4;
+  @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-2;
 }
 
 .msg-content-md-code {
