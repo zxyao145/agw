@@ -62,7 +62,7 @@ export interface ChatSessionProps {
   isInitialLoading?: boolean;
   onLoadOlderMessages?: () => void;
   onAutoLoadOlderMessages?: () => void;
-  autoLoadBlockedSummaryKey?: string | null;
+  autoLoadBlockedSummaryKeys?: readonly string[];
   userInputNavigationHost?: HTMLDivElement | null;
   onUserInputNavigate?: () => void;
   userInputs?: readonly ConversationTurnInputSummary[];
@@ -88,7 +88,7 @@ export function Conversation({
   isInitialLoading = false,
   onLoadOlderMessages,
   onAutoLoadOlderMessages,
-  autoLoadBlockedSummaryKey,
+  autoLoadBlockedSummaryKeys,
   userInputNavigationHost = null,
   onUserInputNavigate,
   userInputs,
@@ -134,7 +134,8 @@ export function Conversation({
       !hasOlderMessages ||
       isLoadingOlderMessages ||
       !onAutoLoadOlderMessages ||
-      (autoLoadBlockedSummaryKey && !expandedKeys.has(autoLoadBlockedSummaryKey))
+      (autoLoadBlockedSummaryKeys?.length &&
+        !autoLoadBlockedSummaryKeys.some((key) => expandedKeys.has(key)))
     ) {
       return;
     }
@@ -145,7 +146,7 @@ export function Conversation({
     });
     return () => cancelAnimationFrame(frame);
   }, [
-    autoLoadBlockedSummaryKey,
+    autoLoadBlockedSummaryKeys,
     expandedKeys,
     hasOlderMessages,
     isLoadingOlderMessages,

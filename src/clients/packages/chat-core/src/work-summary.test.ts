@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import { buildConversationRenderModel } from "./conversation-render-model";
-import { formatWorkedDuration } from "./work-summary";
+import {
+  formatWorkedDuration,
+  getUnloadedWorkSummaryKeys,
+  includeHistoryTurnAnchors,
+} from "./work-summary";
 
 function message(id: string, role: string, createdAt?: string, result = false): AiMessage {
   return {
@@ -22,6 +26,48 @@ function turn(id = "1"): AiMessage[] {
   ];
 }
 
+test("commit-push folds each Agent at its Result while the flow continues", () => {
+  const messages = [
+    message("input", "user", "2026-09-28T01:00:00Z"),
+    message("commit-process", "assistant"),
+    {
+      ...message("commit-result", "assistant", "2026-09-28T01:00:20Z", true),
+      additionalProperties: { type: "result", nodeName: "commit" },
+    },
+    message("push-process", "assistant"),
+    {
+      ...message("push-result", "assistant", "2026-09-28T01:00:46Z", true),
+      additionalProperties: { type: "result", nodeName: "push" },
+    },
+    message("continuing", "assistant"),
+  ];
+  const original = structuredClone(messages);
+  const items = buildConversationRenderModel(messages, { isCurrentTurnActive: true });
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["message", "work-summary", "result", "work-summary", "result", "message"],
+  );
+  const summaries = items.filter((item) => item.type === "work-summary");
+  assert.deepEqual(
+    summaries.map((item) => item.name),
+    ["commit", "push"],
+  );
+  assert.deepEqual(
+    summaries.map((item) => item.durationMs),
+    [20_000, 26_000],
+  );
+  assert.deepEqual(
+    summaries.map((item) =>
+      item.items.map((process) =>
+        process.type === "message" ? process.message.source.messageId : process.type,
+      ),
+    ),
+    [["commit-process"], ["push-process"]],
+  );
+  assert.notEqual(summaries[0].key, summaries[1].key);
+  assert.deepEqual(messages, original);
+});
+
 test("completed work keeps inputs and every Result visible without mutating source data", () => {
   const messages = turn();
   messages.push(
@@ -32,20 +78,23 @@ test("completed work keeps inputs and every Result visible without mutating sour
   const items = buildConversationRenderModel(messages);
   assert.deepEqual(
     items.map((item) => item.type),
-    ["message", "work-summary", "result", "result"],
+    ["message", "work-summary", "result", "work-summary", "result"],
   );
   const summary = items[1];
   assert.equal(summary.type, "work-summary");
   if (summary.type !== "work-summary") return;
-  assert.equal(summary.durationMs, 1_200_000);
+  assert.equal(summary.durationMs, 1_059_000);
   assert.deepEqual(
     summary.items.map((item) =>
       item.type === "message" ? item.message.source.messageId : item.type,
     ),
-    ["process-1", "late-process"],
+    ["process-1"],
   );
   assert.deepEqual(messages, original);
   assert.ok(items[2].type === "result" && items[2].hasWorkSummary);
+  assert.ok(items[3].type === "work-summary");
+  assert.equal(items[3].durationMs, 141_000);
+  assert.ok(items[4].type === "result" && items[4].hasWorkSummary);
 });
 
 test("the summary names the Agent of the first Result while the Result keeps no header", () => {
@@ -80,7 +129,7 @@ test("a history page without process messages still names the summary from its R
   const result = {
     ...message("result", "assistant", "2026-09-20T01:00:20Z", true),
     author: "claude-code",
-    additionalProperties: { type: "result", turnId },
+    additionalProperties: { type: "result", turnId, hasPrecedingProcessMessages: true },
   };
   const items = buildConversationRenderModel([result], {
     historyTurns: [
@@ -96,13 +145,89 @@ test("a history page without process messages still names the summary from its R
   assert.equal(items[1].name, "claude-code");
 });
 
-test("active turns stay visible, including a Result received before completion", () => {
+test("work summaries prefer nodeName over server and Agent names for live and paged Results", () => {
+  const turnId = "named-flow";
+  const input = {
+    ...message("input", "user"),
+    additionalProperties: { turnId, conversationSequence: 0 },
+  };
+  const process = {
+    ...message("process", "assistant"),
+    author: "general-agent",
+    additionalProperties: { turnId, conversationSequence: 1, nodeName: "Process node" },
+  };
+  const result = {
+    ...message("result", "assistant", undefined, true),
+    author: "$agw-server",
+    additionalProperties: {
+      type: "result",
+      turnId,
+      conversationSequence: 2,
+      nodeName: " commit ",
+      displayName: "Server",
+      agentName: "general-agent",
+      hasPrecedingProcessMessages: true,
+    },
+  };
+  const historyTurns: ConversationHistoryTurn[] = [
+    { turnId, status: "completed", input, results: [result], hasProcessMessages: true },
+  ];
+  for (const page of [[input, process, result], [result]]) {
+    const summary = buildConversationRenderModel(page, { historyTurns }).find(
+      (item) => item.type === "work-summary",
+    );
+    assert.ok(summary?.type === "work-summary");
+    assert.equal(summary.name, "commit");
+  }
+});
+
+test("saved Results use the node name from their own process when it is unambiguous", () => {
+  const messages = turn();
+  messages[1].additionalProperties = { nodeName: "commit" };
+  messages[2].author = "$agw-server";
+  messages.push(
+    {
+      ...message("node-input", "user"),
+      additionalProperties: { agentflowInput: true, nodeName: "commit" },
+    },
+    { ...message("push-process", "assistant"), additionalProperties: { nodeName: "push" } },
+    { ...message("push-result", "assistant", undefined, true), author: "$agw-server" },
+  );
+  const summaries = buildConversationRenderModel(messages).filter(
+    (item) => item.type === "work-summary",
+  );
+  assert.deepEqual(
+    summaries.map((item) => item.name),
+    ["commit", "push"],
+  );
+  const unnamed = messages.map((item, index) =>
+    index === 1 ? { ...item, additionalProperties: { nodeName: " " } } : item,
+  );
+  assert.equal(
+    buildConversationRenderModel(unnamed).find((item) => item.type === "work-summary")?.name,
+    "$agw-server",
+  );
+  const mixed = [
+    messages[0],
+    {
+      ...message("other-process", "assistant"),
+      additionalProperties: { nodeName: "another-node" },
+    },
+    ...messages.slice(1),
+  ];
+  assert.equal(
+    buildConversationRenderModel(mixed).find((item) => item.type === "work-summary")?.name,
+    "$agw-server",
+  );
+});
+
+test("each Result folds its process before turn completion", () => {
   const items = buildConversationRenderModel([...turn("1"), ...turn("2")], {
     isCurrentTurnActive: true,
   });
   assert.deepEqual(
     items.map((item) => item.type),
-    ["message", "work-summary", "result", "message", "message", "result"],
+    ["message", "work-summary", "result", "message", "work-summary", "result"],
   );
 });
 
@@ -114,8 +239,8 @@ test("no Result, no process, or an incomplete history page produces no summary",
   assert.equal(buildConversationRenderModel(messages)[1].type, "work-summary");
 });
 
-test("pending interaction keeps the current process and request visible even after a Result", () => {
-  const items = buildConversationRenderModel(turn(), {
+test("pending interaction and work after a Result remain visible", () => {
+  const items = buildConversationRenderModel([...turn(), message("pending-work", "assistant")], {
     pendingInteraction: {
       kind: "tool-approval",
       interactionId: "approval",
@@ -123,7 +248,10 @@ test("pending interaction keeps the current process and request visible even aft
       source: {},
     },
   });
-  assert.ok(items.every((item) => item.type !== "work-summary"));
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["message", "work-summary", "result", "message", "human-interaction"],
+  );
   assert.equal(items.at(-1)?.type, "human-interaction");
 });
 
@@ -142,14 +270,25 @@ test("a completed turn folds from a later history page and keeps its identity as
   const turnId = "turn-1";
   const input = {
     ...message("input", "user", "2026-09-25T16:28:12.993Z"),
-    additionalProperties: { turnId },
+    additionalProperties: { turnId, conversationSequence: 0 },
   };
-  const early = { ...message("early", "assistant"), additionalProperties: { turnId } };
+  const early = {
+    ...message("early", "assistant"),
+    additionalProperties: { turnId, conversationSequence: 1 },
+  };
   const result = {
     ...message("result", "assistant", "2026-09-25T19:18:17.772Z", true),
-    additionalProperties: { type: "result", turnId },
+    additionalProperties: {
+      type: "result",
+      turnId,
+      conversationSequence: 2,
+      hasPrecedingProcessMessages: true,
+    },
   };
-  const late = { ...message("late", "assistant"), additionalProperties: { turnId } };
+  const late = {
+    ...message("late", "assistant"),
+    additionalProperties: { turnId, conversationSequence: 3 },
+  };
   const historyTurn: ConversationHistoryTurn = {
     turnId,
     status: "completed",
@@ -162,16 +301,15 @@ test("a completed turn folds from a later history page and keeps its identity as
   const latest = buildConversationRenderModel([late], options);
   assert.deepEqual(
     latest.map((item) => item.type),
-    ["message", "work-summary", "result"],
+    ["message", "work-summary", "result", "message"],
   );
   assert.equal(latest[1].type, "work-summary");
   if (latest[1].type !== "work-summary") return;
   assert.equal(latest[1].durationMs, 10_204_779);
   assert.equal(formatWorkedDuration(latest[1].durationMs), "Worked for 2h 50m 4s");
-  assert.equal(latest[1].key, `work-summary:${turnId}`);
   assert.deepEqual(
     latest[1].items.map((item) => item.type),
-    ["message"],
+    [],
   );
 
   const older = buildConversationRenderModel([early, result, late], options);
@@ -192,7 +330,7 @@ test("a completed turn folds from a later history page and keeps its identity as
     assert.equal(summary.durationMs, latest[1].durationMs);
     assert.deepEqual(
       summary.items.map((item) => item.type === "message" && item.message.source.messageId),
-      ["early", "late"],
+      ["early"],
     );
     assert.equal(items.filter((item) => item.type === "result").length, 1);
   }
@@ -201,7 +339,7 @@ test("a completed turn folds from a later history page and keeps its identity as
     ...options,
     isCurrentTurnActive: true,
   });
-  assert.ok(active.every((item) => item.type !== "work-summary"));
+  assert.deepEqual(active, latest);
 });
 
 test("paged turns keep ordered Results visible and do not fold empty work", () => {
@@ -236,7 +374,7 @@ test("paged turns keep ordered Results visible and do not fold empty work", () =
     items.map((item) => item.type),
     ["message", "work-summary", "result", "result"],
   );
-  assert.equal(items[1].type === "work-summary" && items[1].durationMs, 420_000);
+  assert.equal(items[1].type === "work-summary" && items[1].durationMs, 300_000);
   assert.deepEqual(
     items
       .filter((item) => item.type === "result")
@@ -305,7 +443,7 @@ test("cross-scope tool results still match their original call inside completed 
   assert.equal(tool.messages.length, 2);
 });
 
-test("timestamps use absolute instants, last Result order, and never substitute current time", () => {
+test("timestamps use each Result boundary and never substitute current time", () => {
   for (const [start, end, expected] of [
     ["2026-09-20T23:59:59Z", "2026-09-21T08:00:01+08:00", 2000],
     ["2026-09-20T00:00:00Z", "2026-09-20T00:00:00.999Z", 999],
@@ -321,10 +459,181 @@ test("timestamps use absolute instants, last Result order, and never substitute 
     assert.equal(summary.durationMs, expected);
   }
   const messages = turn();
-  messages.push(message("last", "assistant", undefined, true));
-  const summary = buildConversationRenderModel(messages)[1];
+  messages.push(
+    message("last-process", "assistant"),
+    message("last", "assistant", undefined, true),
+  );
+  const summary = buildConversationRenderModel(messages)[3];
   assert.ok(summary.type === "work-summary");
   assert.equal(summary.durationMs, null);
+});
+
+test("paged Agent results preserve sequence, boundaries, identities and unloaded work", () => {
+  const turnId = "flow-turn";
+  const messages = [
+    message("input", "user"),
+    message("commit-process", "assistant"),
+    message("commit-result", "assistant", undefined, true),
+    message("push-input", "user"),
+    message("push-process", "assistant"),
+    message("push-result", "assistant", undefined, true),
+    message("flow-result", "assistant", undefined, true),
+    message("tail", "assistant"),
+  ].map((item, conversationSequence): AiMessage => ({
+    ...item,
+    createdAt: "2026-09-28T00:00:00Z",
+    additionalProperties: {
+      ...item.additionalProperties,
+      turnId,
+      conversationSequence,
+      ...(conversationSequence === 3 ? { agentflowInput: true } : {}),
+      ...(conversationSequence === 2
+        ? { nodeName: "commit", hasPrecedingProcessMessages: true }
+        : {}),
+      ...(conversationSequence === 5
+        ? { nodeName: "push", hasPrecedingProcessMessages: true }
+        : {}),
+      ...(conversationSequence === 6 ? { hasPrecedingProcessMessages: false } : {}),
+    },
+  }));
+  const historyTurns: ConversationHistoryTurn[] = [
+    {
+      turnId,
+      status: "running",
+      input: messages[0],
+      results: [messages[2], messages[5], messages[6]],
+      hasProcessMessages: true,
+    },
+  ];
+  const options = { historyTurns, isCurrentTurnActive: true };
+  const latest = buildConversationRenderModel(messages.slice(4), options);
+  const summaries = latest.filter((item) => item.type === "work-summary");
+  assert.deepEqual(
+    latest.map((item) => item.type),
+    ["message", "work-summary", "result", "work-summary", "result", "result", "message"],
+  );
+  assert.deepEqual(
+    summaries.map((item) => item.name),
+    ["commit", "push"],
+  );
+  assert.deepEqual(
+    summaries.map((item) => item.items.length),
+    [0, 1],
+  );
+  assert.deepEqual(
+    summaries.map((item) => item.durationMs),
+    [0, 0],
+  );
+  assert.deepEqual(
+    getUnloadedWorkSummaryKeys(latest, messages.slice(4)),
+    summaries.map((item) => item.key),
+  );
+  assert.deepEqual(getUnloadedWorkSummaryKeys(latest, messages.slice(2)), [summaries[0].key]);
+  assert.deepEqual(getUnloadedWorkSummaryKeys(latest, messages), []);
+
+  for (const page of [messages.slice(2), messages]) {
+    const items = buildConversationRenderModel(page, options);
+    assert.deepEqual(
+      items.map((item) => item.type),
+      latest.map((item) => item.type),
+    );
+    assert.deepEqual(
+      items.filter((item) => item.type === "work-summary").map((item) => item.key),
+      summaries.map((item) => item.key),
+    );
+  }
+  const hydrated = buildConversationRenderModel(
+    messages.map((item) => ({
+      ...item,
+      streamingScopeId: turnId,
+    })),
+    options,
+  );
+  assert.deepEqual(
+    hydrated.filter((item) => item.type === "work-summary").map((item) => item.key),
+    summaries.map((item) => item.key),
+  );
+  const full = buildConversationRenderModel(messages, options).filter(
+    (item) => item.type === "work-summary",
+  );
+  assert.deepEqual(
+    full.map((item) => item.items.length),
+    [1, 2],
+  );
+  assert.deepEqual(includeHistoryTurnAnchors([...messages, messages[5]], historyTurns), messages);
+});
+
+test("missing history Results are inserted before live messages without moving existing Results", () => {
+  const turnId = "mixed-turn";
+  const input = {
+    ...message("input", "user"),
+    additionalProperties: { turnId, conversationSequence: 1 },
+  };
+  const first = {
+    ...message("first", "assistant", undefined, true),
+    additionalProperties: {
+      type: "result",
+      turnId,
+      conversationSequence: 3,
+      hasPrecedingProcessMessages: true,
+    },
+  };
+  const second = {
+    ...message("second", "assistant", undefined, true),
+    additionalProperties: { type: "result", turnId },
+  };
+  const live = { ...message("live", "assistant"), additionalProperties: { turnId } };
+  const turns: ConversationHistoryTurn[] = [
+    { turnId, status: "running", input, results: [first], hasProcessMessages: true },
+  ];
+  const messages = includeHistoryTurnAnchors([live, second], turns);
+  assert.deepEqual(
+    messages.map((item) => item.messageId),
+    ["input", "first", "live", "second"],
+  );
+  const items = buildConversationRenderModel(messages, { historyTurns: turns });
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["message", "work-summary", "result", "work-summary", "result"],
+  );
+});
+
+test("parallel producers with reused Result IDs keep independent work summaries", () => {
+  const messages = [
+    message("input", "user"),
+    message("first-work", "assistant"),
+    {
+      ...message("result", "assistant", undefined, true),
+      additionalProperties: { type: "result", producerScopeId: "first", nodeName: "First" },
+    },
+    message("second-work", "assistant"),
+    {
+      ...message("result", "assistant", undefined, true),
+      additionalProperties: { type: "result", producerScopeId: "second", nodeName: "Second" },
+    },
+  ];
+  const summaries = buildConversationRenderModel(messages).filter(
+    (item) => item.type === "work-summary",
+  );
+  assert.deepEqual(
+    summaries.map((item) => item.name),
+    ["First", "Second"],
+  );
+  assert.equal(new Set(summaries.map((item) => item.key)).size, 2);
+});
+
+test("reused Result IDs in different streaming turns retain distinct summary keys", () => {
+  const messages = ["first", "second"].flatMap((streamingScopeId) =>
+    turn().map((item) => ({
+      ...item,
+      streamingScopeId,
+    })),
+  );
+  const summaries = buildConversationRenderModel(messages).filter(
+    (item) => item.type === "work-summary",
+  );
+  assert.equal(summaries.length, 2);
+  assert.notEqual(summaries[0].key, summaries[1].key);
 });
 
 test("Worked duration formats seconds, minutes, hours and unknown durations", () => {

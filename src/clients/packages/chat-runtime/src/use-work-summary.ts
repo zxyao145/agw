@@ -21,8 +21,8 @@ export function useWorkSummary(items: readonly ConversationRenderItem[], convers
     [state, conversationKey, summaryKeys],
   );
 
-  // An active/resumed turn loses its summary. Forget its previous expansion so the
-  // next completion starts collapsed, while keeping other completed turns unchanged.
+  // 保留现有 Result 的展开状态，清理已移除区域和其他会话的状态。
+  // Preserve expansion for existing Results and discard removed or other-conversation keys.
   React.useEffect(() => {
     setState((current) =>
       current.conversationKey === conversationKey && current.expandedKeys.size === expandedKeys.size

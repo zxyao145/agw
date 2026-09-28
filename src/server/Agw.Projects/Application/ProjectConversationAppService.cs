@@ -9,6 +9,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Application;
 
@@ -250,12 +251,37 @@ public class ProjectConversationAppService
             .Where(turn => turn.ProjectConversationId == conversationId && turnIds.Contains(turn.Id))
             .ToDictionaryAsync(turn => turn.Id, cancellationToken);
         var inputIds = turns.Values.Select(turn => turn.InputMessageId).ToArray();
-        var anchors = await GetMessageTurnAnchorsAsync(conversationId, turnIds, inputIds, cancellationToken);
+        var (anchors, resultsWithProcess) = await GetMessageTurnAnchorsAsync(
+            conversationId,
+            turnIds,
+            inputIds,
+            cancellationToken
+        );
         var inputs = anchors.Where(record => inputIds.Contains(record.Id)).ToDictionary(record => record.Id);
         var results = anchors
             .Where(record => record.TurnId.HasValue && record.Purpose == ConversationMessagePurpose.Result)
             .GroupBy(record => record.TurnId!.Value)
-            .ToDictionary(group => group.Key, group => group.SelectMany(TaskExecutionMapper.ToAiMessages).ToList());
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                    group
+                        .SelectMany(record =>
+                            TaskExecutionMapper
+                                .ToAiMessages(record)
+                                .Select(message =>
+                                    message with
+                                    {
+                                        AdditionalProperties = new AdditionalPropertiesDictionary(
+                                            message.AdditionalProperties ?? []
+                                        )
+                                        {
+                                            ["hasPrecedingProcessMessages"] = resultsWithProcess.Contains(record.Id),
+                                        },
+                                    }
+                                )
+                        )
+                        .ToList()
+            );
         var hasProcess = await GetProcessTurnIdsAsync(conversationId, turnIds, cancellationToken);
 
         return turnIds
@@ -277,28 +303,61 @@ public class ProjectConversationAppService
             .ToList();
     }
 
-    private Task<List<ProjectConversationChatHistory>> GetMessageTurnAnchorsAsync(
+    private async Task<(
+        List<ProjectConversationChatHistory> Records,
+        HashSet<Guid> ResultsWithProcess
+    )> GetMessageTurnAnchorsAsync(
         Guid conversationId,
         Guid[] turnIds,
         Guid[] inputIds,
         CancellationToken cancellationToken
-    ) =>
-        _dbContext
+    )
+    {
+        var history = _dbContext
             .ProjectConversationChatHistories.AsNoTracking()
             .Where(record =>
                 record.ConversationId == conversationId
                 && record.ConversationPayload != null
-                && (
-                    inputIds.Contains(record.Id)
-                    || (
-                        record.TurnId.HasValue
-                        && turnIds.Contains(record.TurnId.Value)
-                        && record.Purpose == ConversationMessagePurpose.Result
-                    )
+                && record.ConversationSequence != null
+            );
+        var anchors = await history
+            .Where(record =>
+                inputIds.Contains(record.Id)
+                || (
+                    record.TurnId.HasValue
+                    && turnIds.Contains(record.TurnId.Value)
+                    && record.Purpose == ConversationMessagePurpose.Result
                 )
             )
-            .OrderBy(record => record.ConversationSequence)
+            .Select(record => new
+            {
+                Record = record,
+                PreviousBoundarySequence = history
+                    .Where(boundary =>
+                        boundary.TurnId == record.TurnId
+                        && boundary.ConversationSequence < record.ConversationSequence
+                        && (inputIds.Contains(boundary.Id) || boundary.Purpose == ConversationMessagePurpose.Result)
+                    )
+                    .Max(boundary => boundary.ConversationSequence),
+            })
+            .Select(anchor => new
+            {
+                anchor.Record,
+                HasPrecedingProcessMessages = anchor.Record.Purpose == ConversationMessagePurpose.Result
+                    && history.Any(process =>
+                        process.TurnId == anchor.Record.TurnId
+                        && process.Purpose == ConversationMessagePurpose.Message
+                        && process.ConversationSequence > anchor.PreviousBoundarySequence
+                        && process.ConversationSequence < anchor.Record.ConversationSequence
+                    ),
+            })
+            .OrderBy(anchor => anchor.Record.ConversationSequence)
             .ToListAsync(cancellationToken);
+        return (
+            anchors.Select(anchor => anchor.Record).ToList(),
+            anchors.Where(anchor => anchor.HasPrecedingProcessMessages).Select(anchor => anchor.Record.Id).ToHashSet()
+        );
+    }
 
     private async Task<HashSet<Guid>> GetProcessTurnIdsAsync(
         Guid conversationId,

@@ -14,6 +14,7 @@ import { apiGet } from "@agw/api";
 import {
   buildConversationRenderModel,
   getCurrentTurnTodoItems,
+  getUnloadedWorkSummaryKeys,
   prepareConversationHistory,
   updateAutoScrollState,
   type AutoScrollState,
@@ -459,16 +460,13 @@ export function Chat({
       target?.type,
     ],
   );
-  const leadingTurnId = messages[0]?.additionalProperties?.turnId;
-  const leadingTurn =
-    typeof leadingTurnId === "string"
-      ? historyTurns.find((turn) => turn.turnId === leadingTurnId)
-      : undefined;
-  const leadingInputLoaded =
-    leadingTurn?.input == null ||
-    messages.some((message) => message.messageId === leadingTurn.input?.messageId);
+  const unloadedWorkSummaryKeys = React.useMemo(
+    () => getUnloadedWorkSummaryKeys(renderItems, messages),
+    [renderItems, messages],
+  );
   const shouldAutoLoadOlderMessages =
-    leadingInputLoaded || expandedWorkSummaryKeys.has(`work-summary:${leadingTurnId}`);
+    unloadedWorkSummaryKeys.length === 0 ||
+    unloadedWorkSummaryKeys.some((key) => expandedWorkSummaryKeys.has(key));
   const currentTurnTodos = React.useMemo(() => getCurrentTurnTodoItems(messages), [messages]);
   const latestAvailableCheckpoint = React.useMemo(
     () =>
@@ -1875,9 +1873,7 @@ export function Chat({
                   isInitialLoading={isLoadingConversation}
                   onLoadOlderMessages={() => void loadOlderMessages(true)}
                   onAutoLoadOlderMessages={() => void loadOlderMessages()}
-                  autoLoadBlockedSummaryKey={
-                    leadingInputLoaded ? null : `work-summary:${leadingTurnId}`
-                  }
+                  autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
                   permissionMode={activePermissionMode ?? undefined}
                   onHumanResponse={submitInteractionResponse}
                   showCheckpointResume={target?.type === "agentflow"}

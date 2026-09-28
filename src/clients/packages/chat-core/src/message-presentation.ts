@@ -58,6 +58,10 @@ export function getMessageMeta(message: AiMessage): MessageMeta | null {
   return isResultMessage(message) ? null : readMessageMeta(message);
 }
 
+export function readMessageNodeName(message: AiMessage): string | null {
+  return readStringProperty(message, ["nodeName"]);
+}
+
 /**
  * 读取消息的展示信息，Result 也适用。
  * Reads display metadata from any message, including a Result.
@@ -68,7 +72,7 @@ export function readMessageMeta(message: AiMessage): MessageMeta | null {
     return agentAuthor ? { name: null, author: agentAuthor, model: null } : null;
   }
 
-  const nodeName = readStringProperty(message, ["nodeName"]);
+  const nodeName = readMessageNodeName(message);
   const explicitDisplayName = readStringProperty(message, DISPLAY_NAME_KEYS);
   const legacyAgentName = readStringProperty(message, ["agentName"]);
   const modelName = readStringProperty(message, ["modelName"]);

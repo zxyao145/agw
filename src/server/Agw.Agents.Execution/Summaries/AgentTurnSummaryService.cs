@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Agents.Execution.Context;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -126,6 +127,12 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
             [MessageTimestampMetadata.CreatedAtKey] = createdAt ?? TimeProvider.System.GetUtcNow(),
             [AgwMessageClassifier.ResultFormatKey] = JsonSerializer.SerializeToElement(resultFormat).GetString()!,
         };
+        if (ExecutionScope.Current?.Context.Node is { } node)
+        {
+            if (!string.IsNullOrWhiteSpace(node.NodeName))
+                additionalProperties["nodeName"] = node.NodeName.Trim();
+            additionalProperties["interactionNodeId"] = node.NodeId;
+        }
 
         return new ChatMessage(ChatRole.Assistant, [new TextContent(text)])
         {

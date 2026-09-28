@@ -671,9 +671,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
         const summaryCount = () =>
           observed.items!.filter((item) => item.type === "work-summary").length;
         assert.ok(observed.items!.some((item) => item.type === "result"));
-        assert.equal(summaryCount(), 0);
+        assert.equal(summaryCount(), 1);
         await React.act(async () => transport().handlers.onClose?.(new Error("Connection lost")));
-        assert.equal(summaryCount(), 0, "disconnect alone must not hide the process");
+        assert.equal(summaryCount(), 1, "disconnect preserves completed work");
 
         await React.act(async () =>
           observed.selectAgent!({
@@ -682,7 +682,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
           }),
         );
         assert.notEqual(reconnectHandlers, handlers, "reattach before accepting further callbacks");
-        assert.equal(summaryCount(), 0);
+        assert.equal(summaryCount(), 1);
         await React.act(async () => {
           transport().setActive(false);
           if (kind === "work-close-cached") {
@@ -694,7 +694,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.equal(
           summaryCount(),
           1,
-          "fold only after terminal output or confirmed idle recovery",
+          "terminal output and idle recovery preserve completed work",
         );
         return;
       }
