@@ -6,14 +6,15 @@ namespace Agw.Files.Infrastructure.Storage.Confined;
 
 /// <summary>
 /// 受限文件系统用到的 Unix 系统调用：以目录句柄为基准、且不跟随符号链接的 *at 系列调用，加上 .NET 运行时自带的
-/// libSystem.Native 中布局稳定的 fstat 与 readdir。所有符号都从当前进程已加载的镜像中解析。
+/// libSystem.Native 中布局稳定的 fstat 与 readdir。POSIX 符号从当前进程解析，SystemNative 符号从 libSystem.Native 加载。
 /// Unix system calls used by the confined file system: the directory-handle-relative *at calls that do not follow
-/// symbolic links, plus fstat and readdir from the .NET runtime's own libSystem.Native, whose layouts are stable. Every
-/// symbol is resolved from the images already loaded in the current process.
+/// symbolic links, plus fstat and readdir from the .NET runtime's own libSystem.Native, whose layouts are stable. POSIX
+/// symbols resolve from the current process; SystemNative symbols load from libSystem.Native.
 /// </summary>
 internal static partial class UnixNative
 {
     private const string Library = "agw-native";
+    private const string SystemNativeLibrary = "libSystem.Native";
 
     public const int O_RDONLY = 0;
     public const int O_RDWR = 2;
@@ -192,13 +193,13 @@ internal static partial class UnixNative
 
     public static IntPtr FdOpenDir(int fd) => UseInode64Symbols ? FdOpenDirInode64(fd) : FdOpenDirDefault(fd);
 
-    [LibraryImport(Library, EntryPoint = "SystemNative_FStat", SetLastError = true)]
+    [LibraryImport(SystemNativeLibrary, EntryPoint = "SystemNative_FStat", SetLastError = true)]
     public static partial int FStat(nint fd, out FileStatus status);
 
-    [LibraryImport(Library, EntryPoint = "SystemNative_ReadDir")]
+    [LibraryImport(SystemNativeLibrary, EntryPoint = "SystemNative_ReadDir")]
     public static partial int ReadDir(IntPtr directory, out DirectoryEntry entry);
 
-    [LibraryImport(Library, EntryPoint = "SystemNative_CloseDir")]
+    [LibraryImport(SystemNativeLibrary, EntryPoint = "SystemNative_CloseDir")]
     public static partial int CloseDir(IntPtr directory);
 
     public static int Fd(SafeFileHandle handle) => (int)handle.DangerousGetHandle();
