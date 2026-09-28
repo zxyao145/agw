@@ -51,6 +51,14 @@ fallback, and result parsing without implementing a tool registration interface.
 Request and response types live in `Contracts/WebSearch`.
 
 Shell execution uses `run_shell`; the obsolete `bash` and `powershell` implementations have been removed.
+`run_shell` rejects commands that duplicate the `file_access_*` tools before they run: programs that read, list,
+search, create, write, edit or delete files (`cat`, `ls`, `find`, `grep`, `touch`, `tee`, `cp`, `mv`, `rm`,
+`mkdir`, `sed -i`, their PowerShell and cmd counterparts, and so on), redirections to or from files,
+here-documents, process substitution, and inline interpreter code such as `sh -c` or `python -c`. The check is
+implemented by `ShellFileAccessPolicy`, applied both as the executor `ShellPolicy` and as a guard around the AI
+function that reports `ShellFileAccessNotAllowed` to the model. The function description and the
+`ShellFileAccessInstructionsProvider` instructions also tell the model that the shell is the lowest-priority tool:
+any other available tool that can do the job must be used instead.
 
 ## Data and selection
 

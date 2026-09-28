@@ -370,6 +370,11 @@ public static class ErrorCodes
         "Path is outside the allowed root directory.",
         HttpStatusCode.Forbidden
     );
+    public static readonly ErrorCode ShellFileAccessNotAllowed = new(
+        403_0006,
+        "Shell commands must not read, list, search, write, edit or delete files; use the file access tools.",
+        HttpStatusCode.Forbidden
+    );
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(
