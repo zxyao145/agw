@@ -82,7 +82,7 @@ Closing the window minimizes to the tray by default; users can change it to quit
 
 ## Third-party Server login
 
-In Connections and app, each saved Server profile loads the providers enabled by that Server. Choose a provider to complete sign-in in the system browser. The main process keeps the pending state and Desktop PKCE verifier, validates the fixed `agw-desktop://auth/complete` callback, and receives the Agw Token directly over HTTPS. The IdP client secret and upstream Tokens stay on Server.
+In Servers, each saved Server profile loads the providers enabled by that Server. Choose a provider to complete sign-in in the system browser. The main process keeps the pending state and Desktop PKCE verifier, validates the fixed `agw-desktop://auth/complete` callback, and receives the Agw Token directly over HTTPS. The IdP client secret and upstream Tokens stay on Server.
 
 A login expires after ten minutes; the Server handoff code lasts two minutes. Cancelled, stale, duplicate, or changed-profile callbacks do not overwrite stored credentials. The OS-encrypted token and its OIDC credential-source marker are saved together. A failed local save attempts to revoke the newly issued Token.
 
