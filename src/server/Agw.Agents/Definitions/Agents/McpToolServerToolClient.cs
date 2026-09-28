@@ -1,5 +1,6 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 using ModelContextProtocol.Client;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -33,7 +34,7 @@ public static class McpToolServerToolClient
     {
         return server.TransportType.ToLowerInvariant() switch
         {
-            "stdio" => CreateStdioTransport(server, environmentVariables),
+            "stdio" => new StdioClientTransport(CreateStdioTransportOptions(server, environmentVariables)),
             "http" or "sse" => CreateHttpTransport(server),
             _ => throw new AgwException(
                 ErrorCodes.UnsupportedTransportType,
@@ -42,9 +43,9 @@ public static class McpToolServerToolClient
         };
     }
 
-    private static StdioClientTransport CreateStdioTransport(
+    internal static StdioClientTransportOptions CreateStdioTransportOptions(
         McpServer server,
-        IReadOnlyDictionary<string, string>? environmentVariables
+        IReadOnlyDictionary<string, string>? environmentVariables = null
     )
     {
         if (string.IsNullOrWhiteSpace(server.Command))
@@ -58,7 +59,7 @@ public static class McpToolServerToolClient
         var options = new StdioClientTransportOptions
         {
             Name = server.Name,
-            Command = server.Command,
+            Command = PathUtil.ExpandTilde(server.Command),
             Arguments = [.. server.Arguments],
         };
 
@@ -70,10 +71,10 @@ public static class McpToolServerToolClient
 
         if (!string.IsNullOrWhiteSpace(server.WorkingDirectory))
         {
-            options.WorkingDirectory = server.WorkingDirectory;
+            options.WorkingDirectory = PathUtil.ExpandTilde(server.WorkingDirectory);
         }
 
-        return new StdioClientTransport(options);
+        return options;
     }
 
     internal static Dictionary<string, string?>? MergeEnvironmentVariables(
