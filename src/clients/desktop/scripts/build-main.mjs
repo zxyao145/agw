@@ -3,8 +3,9 @@
 // 把 Electron 主进程与 preload 入口打包成单文件，使打包后的应用不依赖运行时 node_modules；
 // 工作区依赖已提升到 monorepo 根目录。
 import { build } from "esbuild";
+import { pathToFileURL } from "node:url";
 
-await build({
+export const mainBuildOptions = {
   entryPoints: {
     "main/index": "src/main/index.ts",
     "preload/index": "src/preload/index.ts",
@@ -16,4 +17,8 @@ await build({
   target: "node24",
   external: ["electron"],
   logLevel: "info",
-});
+};
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await build(mainBuildOptions);
+}

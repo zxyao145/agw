@@ -6,6 +6,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import electronPath from "electron";
 
+import { watchMain } from "./watch-main.mjs";
+
 const appName = "Agw Desktop";
 const oauthProtocol = "agw-desktop";
 const launchServicesRegister =
@@ -13,6 +15,7 @@ const launchServicesRegister =
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const rendererUrl = process.env.AGW_RENDERER_URL ?? "http://localhost:3000";
 const children = new Set();
+const stopped = Promise.withResolvers();
 let stopping = false;
 
 function run(args, options = {}) {
@@ -27,7 +30,7 @@ function runRequired(command, args) {
 
 async function prepareElectronLaunch() {
   if (process.platform !== "darwin") {
-    return { command: pnpmCommand, args: ["exec", "electron", "."] };
+    return { command: electronPath, args: ["."] };
   }
 
   const electronApp = dirname(dirname(dirname(electronPath)));
@@ -77,16 +80,6 @@ async function prepareElectronLaunch() {
   }
 }
 
-function waitForExit(child) {
-  return new Promise((resolvePromise, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (code === 0 || stopping) resolvePromise();
-      else reject(new Error(`${pnpmCommand} exited with ${signal ?? `code ${code}`}`));
-    });
-  });
-}
-
 async function waitForRenderer() {
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
@@ -103,29 +96,34 @@ async function waitForRenderer() {
 
 function stopChildren() {
   stopping = true;
+  stopped.resolve();
   for (const child of children) child.kill();
 }
 
 process.once("SIGINT", stopChildren);
 process.once("SIGTERM", stopChildren);
 
-await waitForExit(run(["build:main"]));
-
 const renderer = run(["dev:renderer"]);
 children.add(renderer);
 let electronLaunch;
+let mainWatcher;
 
 try {
   await waitForRenderer();
   electronLaunch = await prepareElectronLaunch();
-  const electron = spawn(electronLaunch.command, electronLaunch.args, {
-    stdio: "inherit",
-    env: { ...process.env, AGW_RENDERER_URL: rendererUrl },
-  });
-  children.add(electron);
-  await waitForExit(electron);
+  if (!stopping) {
+    mainWatcher = await watchMain({
+      ...electronLaunch,
+      options: {
+        stdio: "inherit",
+        env: { ...process.env, AGW_RENDERER_URL: rendererUrl },
+      },
+    });
+    await Promise.race([mainWatcher.closed, stopped.promise]);
+  }
 } finally {
   stopChildren();
+  await mainWatcher?.dispose();
   if (electronLaunch?.applicationPath) {
     spawnSync(launchServicesRegister, ["-u", electronLaunch.applicationPath], {
       stdio: "ignore",
