@@ -140,10 +140,12 @@ internal sealed class AgentflowAgentSessionScope
 
 internal sealed record AgentflowSummaryContext(
     IAgentTurnSummaryService SummaryService,
-    Guid ModelProviderId,
+    Guid? ModelProviderId,
     Guid ProjectId,
     string ContextId
 );
+
+internal sealed record AgentflowNodeResultOptions(Guid ModelProviderId, bool UseStructuredResult);
 
 public sealed class AgentflowWorkflowCompiler
 {
@@ -200,7 +202,8 @@ public sealed class AgentflowWorkflowCompiler
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext = null,
         AgentflowSummaryContext? summaryContext = null,
-        IReadOnlyDictionary<string, EngineKind>? nodeEngineKinds = null
+        IReadOnlyDictionary<string, EngineKind>? nodeEngineKinds = null,
+        IReadOnlyDictionary<string, AgentflowNodeResultOptions>? nodeResultOptions = null
     )
     {
         if (orderedNodes.Count == 0)
@@ -208,6 +211,7 @@ public sealed class AgentflowWorkflowCompiler
             return null;
         }
         nodeEngineKinds ??= new Dictionary<string, EngineKind>();
+        nodeResultOptions ??= new Dictionary<string, AgentflowNodeResultOptions>();
 
         var nodeMap = orderedNodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
         var blockParticipantNodeIds = GetBlockParticipantNodeIds(orderedNodes);
@@ -231,6 +235,7 @@ public sealed class AgentflowWorkflowCompiler
                 nodeMap,
                 nodeIdToAgent,
                 nodeEngineKinds,
+                nodeResultOptions,
                 sessionScope,
                 executionTraceContext,
                 summaryContext
@@ -329,6 +334,7 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
         IReadOnlyDictionary<string, EngineKind> nodeEngineKinds,
+        IReadOnlyDictionary<string, AgentflowNodeResultOptions> nodeResultOptions,
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext,
         AgentflowSummaryContext? summaryContext
@@ -341,8 +347,10 @@ public sealed class AgentflowWorkflowCompiler
                 nodeMap,
                 nodeIdToAgent,
                 nodeEngineKinds,
+                nodeResultOptions,
                 sessionScope,
                 executionTraceContext,
+                summaryContext,
                 AgentHostOptions
             )
             : null;
@@ -360,7 +368,9 @@ public sealed class AgentflowWorkflowCompiler
                     agentflowId,
                     node.NodeId,
                     node.RelateId,
-                    engineKind: nodeEngineKinds.TryGetValue(node.NodeId, out var engineKind) ? engineKind : null
+                    engineKind: nodeEngineKinds.TryGetValue(node.NodeId, out var engineKind) ? engineKind : null,
+                    resultOptions: nodeResultOptions.GetValueOrDefault(node.NodeId),
+                    summaryContext: summaryContext
                 ).BindAsExecutor(AgentHostOptions)
                 : null,
             AgentflowNodeKind.WorkflowAsAgent => nodeIdToAgent.TryGetValue(node.NodeId, out var workflowAgent)
@@ -398,7 +408,7 @@ public sealed class AgentflowWorkflowCompiler
     private static ExecutorBinding CreateOutputBinding(AgentflowNode node, AgentflowSummaryContext? summaryContext)
     {
         if (
-            summaryContext == null
+            summaryContext?.ModelProviderId is not { } modelProviderId
             || !AgentflowConfigurationParser.TryReadOutputSummaryEnabled(node.ConfigJson, out var summaryEnabled)
             || !summaryEnabled
         )
@@ -413,7 +423,7 @@ public sealed class AgentflowWorkflowCompiler
         {
             var result = await summaryContext
                 .SummaryService.CreateResultAsync(
-                    summaryContext.ModelProviderId,
+                    modelProviderId,
                     messages,
                     summaryContext.ProjectId,
                     summaryContext.ContextId,

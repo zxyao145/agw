@@ -100,7 +100,9 @@ internal static class AgentflowBlockBuildSupport
             shouldTrace ? participantNode.RelateId : null,
             historyNodeId: participantNode.NodeId,
             isWorkflow: participantNode.Kind == AgentflowNodeKind.WorkflowAsAgent,
-            engineKind: context.NodeEngineKinds.TryGetValue(participantNodeId, out var engineKind) ? engineKind : null
+            engineKind: context.NodeEngineKinds.TryGetValue(participantNodeId, out var engineKind) ? engineKind : null,
+            resultOptions: context.NodeResultOptions.GetValueOrDefault(participantNodeId),
+            summaryContext: context.SummaryContext
         );
     }
 

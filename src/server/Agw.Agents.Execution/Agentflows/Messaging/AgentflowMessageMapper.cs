@@ -236,10 +236,13 @@ internal static class AgentflowMessageMapper
         };
         foreach (var message in MapEvent(evt))
         {
+            var isResult = AgwMessageClassifier.IsResult(message);
             var firstDelivery =
                 string.IsNullOrWhiteSpace(message.MessageId)
                 || message.Contents.Count == 0
-                || deliveredMessages.Add((executorId, message.MessageId, message.Role, message.Author));
+                || deliveredMessages.Add(
+                    (isResult ? string.Empty : executorId, message.MessageId, message.Role, message.Author)
+                );
             if (evt is AgentResponseUpdateEvent || firstDelivery)
                 yield return message;
         }
