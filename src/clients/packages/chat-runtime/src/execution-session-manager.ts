@@ -515,8 +515,7 @@ export class ExecutionSessionManager {
       this.clearPendingInteraction(entry);
       this.activity.turnStarted(entry.key);
       if (turn) this.conversationStatuses.turnStarted(entry.key, turn.conversationId, turn.turnId);
-      if (entry.inFlight && turnId === entry.inFlight.item.turnId)
-        entry.inFlight.started = true;
+      if (entry.inFlight && turnId === entry.inFlight.item.turnId) entry.inFlight.started = true;
     } else if (interaction) {
       entry.pendingInteractions.set(interaction.interactionId, message);
       this.activity.waitingForApproval(entry.key);

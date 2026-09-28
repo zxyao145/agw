@@ -990,20 +990,11 @@ export class ExecutionSession {
         interrupt,
       );
     } catch (error) {
-      if (
-        this.disposed ||
-        revision !== this.recoveryRevision ||
-        this.activeTurnId !== turnId
-      )
+      if (this.disposed || revision !== this.recoveryRevision || this.activeTurnId !== turnId)
         return;
       throw error;
     }
-    if (
-      this.disposed ||
-      revision !== this.recoveryRevision ||
-      this.activeTurnId !== turnId
-    )
-      return;
+    if (this.disposed || revision !== this.recoveryRevision || this.activeTurnId !== turnId) return;
     if (typeof active !== "boolean")
       throw new Error("Cannot confirm the previous execution's state.");
     if (!active) {
@@ -1037,10 +1028,7 @@ export class ExecutionSession {
     cursor: string | null,
   ): Promise<DurableRestoreResult> {
     try {
-      await this.connection.invoke(
-        "DispatchCommand",
-        buildSubscribeTurnCommand(turnId, cursor),
-      );
+      await this.connection.invoke("DispatchCommand", buildSubscribeTurnCommand(turnId, cursor));
       return this.hasRunningTurn() ? "active" : "finished";
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
