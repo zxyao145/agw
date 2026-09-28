@@ -5,10 +5,13 @@ using Agw.Shared.Runtime;
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
 
 /// <summary>
-/// 基于 Project 目录 <see cref="IAgwFileSystem"/> 的文件工具存储；文件操作与路径校验都由 <see cref="IAgwFileSystem"/> 完成，
-/// 这里只负责选择目录以及限制返回给模型的内容规模。
-/// File-tool storage over a Project directory's <see cref="IAgwFileSystem"/>. File operations and path validation are
-/// done by <see cref="IAgwFileSystem"/>; this class only selects the directory and bounds what reaches the model.
+/// 基于 Project 目录 <see cref="IAgwFileSystem"/> 的文件工具存储。文件操作通过 <see cref="ILocalFileSystem.Confine"/>
+/// 得到的受限文件系统执行，因此每次操作都绑定到经过校验的目录或文件句柄，路径经过符号链接后的物理位置只能位于 Project 的
+/// workspace 或 additional directories 之内；这里负责选择目录以及限制返回给模型的内容规模。
+/// File-tool storage over a Project directory's <see cref="IAgwFileSystem"/>. File operations run through the confined
+/// file system from <see cref="ILocalFileSystem.Confine"/>, so every operation is bound to verified directory or file
+/// handles and the physical location of a path after symbolic links can only be inside the Project's workspace or
+/// additional directories; this class selects the directory and bounds what reaches the model.
 /// </summary>
 public sealed class ProjectAgentFileStore : AgwAgentFileStore
 {
@@ -39,6 +42,8 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
     private readonly string? _rootPath;
     private readonly ProjectWorkspaceSnapshot? _workspaceSnapshot;
     private readonly Guid? _directoryId;
+    private IAgwFileSystem? _confinedSource;
+    private IAgwFileSystem? _confined;
 
     public ProjectAgentFileStore(IAgwFileSystemResolver resolver, Guid projectId)
         : this(resolver, projectId, null) { }
@@ -270,9 +275,16 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
         await fileSystem.CreateDirectoryAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// 解析 Project 目录的文件系统，并把它限制在 workspace 与 additional directories 之内；没有 workspace 快照时只允许
+    /// 该 Project 目录本身。受限文件系统按解析得到的实例缓存，resolver 返回新实例时重新创建。
+    /// Resolves the Project directory's file system and confines it to the workspace and additional directories; without
+    /// a workspace snapshot only that Project directory itself is allowed. The confined file system is cached per
+    /// resolved instance and recreated when the resolver returns a new one.
+    /// </summary>
     private async Task<IAgwFileSystem> ResolveAsync(CancellationToken cancellationToken)
     {
-        var fileSystem =
+        var projectFileSystem =
             (
                 _workspaceSnapshot == null
                     ? await _resolver.ResolveAsync(_projectId, _directoryId, cancellationToken).ConfigureAwait(false)
@@ -280,7 +292,27 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
                         .ResolveSnapshotAsync(_projectId, _workspaceSnapshot, _directoryId, cancellationToken)
                         .ConfigureAwait(false)
             ) ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
-        return _rootPath == null ? fileSystem : fileSystem.GetSubFileSystem(_rootPath);
+        if (!ReferenceEquals(_confinedSource, projectFileSystem) || _confined == null)
+        {
+            var localFileSystem =
+                projectFileSystem as ILocalFileSystem
+                ?? throw new AgwException(
+                    ErrorCodes.FilePathOutsideRoot,
+                    "Project directory access can only be confined on a local file system."
+                );
+            IReadOnlyList<string> allowedRoots =
+                _workspaceSnapshot == null
+                    ? [localFileSystem.ResolvePhysicalPath(string.Empty)]
+                    :
+                    [
+                        _workspaceSnapshot.Workspace,
+                        .. _workspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
+                    ];
+            _confined = localFileSystem.Confine(allowedRoots);
+            _confinedSource = projectFileSystem;
+        }
+
+        return _rootPath == null ? _confined : _confined.GetSubFileSystem(_rootPath);
     }
 
     /// <summary>
