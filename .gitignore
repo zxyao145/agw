@@ -374,7 +374,7 @@ tmpclaude-*
 
 code-work/
 **/wwwroot/skills/**/*
-agw - 副本.db
+*.db
 appsettings.setup.json
 .idea/
 .worktrees/
