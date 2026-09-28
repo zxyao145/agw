@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
+using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows;
@@ -1837,8 +1838,10 @@ public class AgentflowWorkflowCompilerTests : IDisposable
             new Dictionary<string, AgentflowNode> { [participantNode.NodeId] = participantNode },
             new Dictionary<string, AIAgent> { [participantNode.NodeId] = CreateAgent("participant", "Participant") },
             new Dictionary<string, EngineKind> { [participantNode.NodeId] = EngineKind.Maf },
+            new Dictionary<string, AgentflowNodeResultOptions>(),
             new AgentflowAgentSessionScope(providerSessionState, projectId, "context-1", null),
             executionTraceContext: null,
+            summaryContext: null,
             new AIAgentHostOptions()
         );
         var participant = AgentflowBlockBuildSupport.CreateParticipant(
@@ -1858,6 +1861,94 @@ public class AgentflowWorkflowCompilerTests : IDisposable
             providerSessionState.Calls,
             call => call.HistoryScope == $"agentflow:{agentflowId:N}:node:participant"
         );
+    }
+
+    [Fact]
+    public async Task CreateParticipant_SummaryEnabled_AppendsResult()
+    {
+        var projectId = Guid.CreateVersion7();
+        var modelProviderId = Guid.CreateVersion7();
+        var summaryService = new RecordingSummaryService();
+        var participantNode = new AgentflowNode { NodeId = "participant", Kind = AgentflowNodeKind.Agent };
+        var context = new AgentflowBlockBuildContext(
+            Guid.CreateVersion7(),
+            new AgentflowNode { NodeId = "group", Kind = AgentflowNodeKind.GroupChatBlock },
+            new Dictionary<string, AgentflowNode> { [participantNode.NodeId] = participantNode },
+            new Dictionary<string, AIAgent> { [participantNode.NodeId] = CreateAgent("participant", "Participant") },
+            new Dictionary<string, EngineKind> { [participantNode.NodeId] = EngineKind.Maf },
+            new Dictionary<string, AgentflowNodeResultOptions>
+            {
+                [participantNode.NodeId] = new(modelProviderId, UseStructuredResult: false),
+            },
+            sessionScope: null,
+            executionTraceContext: null,
+            new AgentflowSummaryContext(summaryService, null, projectId, "context-1"),
+            new AIAgentHostOptions()
+        );
+        var participant = AgentflowBlockBuildSupport.CreateParticipant(
+            context,
+            participantNode.NodeId,
+            "group.participant"
+        );
+
+        Assert.NotNull(participant);
+        var response = await participant!.RunAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(["ok", "summary"], response.Messages.Select(message => message.Text));
+        Assert.Equal("result", response.Messages[1].AdditionalProperties!["type"]);
+        var call = Assert.Single(summaryService.Calls);
+        Assert.Equal(modelProviderId, call.ModelProviderId);
+        Assert.Equal(["hello", "ok"], call.Messages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_AgentNodeWithExternalFunctionCall_SummarizesCompletedTurn()
+    {
+        var summaryService = new RecordingSummaryService();
+        var agent = new AgentflowNodeScopedAgent(
+            new ExternalFunctionCallAgent(),
+            "agent",
+            "Agent",
+            instructions: null,
+            sessionScope: null,
+            resultOptions: new AgentflowNodeResultOptions(Guid.CreateVersion7(), UseStructuredResult: false),
+            summaryContext: new AgentflowSummaryContext(summaryService, null, Guid.CreateVersion7(), "context-1")
+        );
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        var firstUpdates = new List<AgentResponseUpdate>();
+        await foreach (
+            var update in agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "check repository")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
+        {
+            firstUpdates.Add(update);
+        }
+        Assert.Empty(summaryService.Calls);
+
+        var finalUpdates = new List<AgentResponseUpdate>();
+        await foreach (
+            var update in agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.Tool, [new FunctionResultContent("external-call", "tool result")])],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
+        {
+            finalUpdates.Add(update);
+        }
+
+        Assert.DoesNotContain(firstUpdates, update => AgwMessageClassifier.IsResult(update.ToAiMessage()!));
+        var result = Assert.Single(finalUpdates, update => AgwMessageClassifier.IsResult(update.ToAiMessage()!));
+        Assert.Equal("summary", result.Text);
+        var call = Assert.Single(summaryService.Calls);
+        Assert.Equal(["completed"], call.Messages.Select(message => message.Text));
     }
 
     [Fact]

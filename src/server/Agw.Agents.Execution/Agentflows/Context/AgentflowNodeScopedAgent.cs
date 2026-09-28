@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Agents.Execution.Summaries;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -38,6 +39,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     private readonly Guid? _agentId;
     private readonly EngineKind? _engineKind;
     private readonly bool _isWorkflow;
+    private readonly AgentflowNodeResultOptions? _resultOptions;
+    private readonly AgentflowSummaryContext? _summaryContext;
 
     /// <summary>
     /// <para>创建 AgentflowNodeScopedAgent 实例并保存本包装层使用的依赖和配置。</para>
@@ -91,6 +94,14 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     /// <para>节点引用的 Agent 的 Engine 种类；嵌套 Workflow 为空。</para>
     /// <para>Engine kind of the Agent referenced by the node; null for nested workflows.</para>
     /// </param>
+    /// <param name="resultOptions">
+    /// <para>当前 Agent 的 Result 配置。</para>
+    /// <para>Result settings of the current Agent.</para>
+    /// </param>
+    /// <param name="summaryContext">
+    /// <para>生成 Result 所需的服务和执行信息。</para>
+    /// <para>Service and execution context used to create a Result.</para>
+    /// </param>
     public AgentflowNodeScopedAgent(
         AIAgent innerAgent,
         string nodeId,
@@ -103,7 +114,9 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         Guid? agentId = null,
         string? historyNodeId = null,
         bool isWorkflow = false,
-        EngineKind? engineKind = null
+        EngineKind? engineKind = null,
+        AgentflowNodeResultOptions? resultOptions = null,
+        AgentflowSummaryContext? summaryContext = null
     )
         : base(innerAgent)
     {
@@ -119,6 +132,62 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         _traceNodeId = traceNodeId;
         _agentId = agentId;
         _isWorkflow = isWorkflow;
+        _resultOptions = resultOptions;
+        _summaryContext = summaryContext;
+    }
+
+    private async Task<ChatMessage?> CreateResultAsync(
+        IReadOnlyList<ChatMessage> input,
+        IReadOnlyList<ChatMessage> responseMessages,
+        IReadOnlySet<string> pendingFunctionCallIds,
+        bool awaitingExternalInput,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            _resultOptions == null
+            || _summaryContext == null
+            || pendingFunctionCallIds.Count != 0
+            || awaitingExternalInput
+        )
+        {
+            return null;
+        }
+
+        var assistantText = AgentTurnResultText.ExtractLastAssistantText(responseMessages);
+        if (assistantText == null)
+        {
+            return null;
+        }
+
+        if (_resultOptions.UseStructuredResult)
+        {
+            return _summaryContext.SummaryService is IAgentStructuredResultService structuredResultService
+                ? await structuredResultService
+                    .CreateStructuredResultAsync(
+                        assistantText,
+                        _summaryContext.ProjectId,
+                        _summaryContext.ContextId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false)
+                : null;
+        }
+
+        var sourceMessages = input
+            .Where(message => message.Role == ChatRole.User && message.Contents.OfType<TextContent>().Any())
+            .ToList();
+        sourceMessages.Add(new ChatMessage(ChatRole.Assistant, assistantText.Trim()));
+        return await _summaryContext
+            .SummaryService.CreateResultAsync(
+                _resultOptions.ModelProviderId,
+                sourceMessages,
+                _summaryContext.ProjectId,
+                _summaryContext.ContextId,
+                customInstructions: null,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -211,6 +280,21 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 AddNodeAttribution(snapshot, turn.InteractionNodeId);
                 response.Messages.Add(snapshot);
             }
+            var result = await CreateResultAsync(
+                    turn.Input,
+                    response.Messages.ToList(),
+                    turn.PendingFunctionCallIds,
+                    response.Messages.Any(message =>
+                        message.Contents.Any(content => content is ToolApprovalRequestContent)
+                    ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (result != null)
+            {
+                AddNodeAttribution(result, turn.InteractionNodeId);
+                response.Messages.Add(result);
+            }
             activity?.Complete();
             return response;
         }
@@ -268,6 +352,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         var turnPersistence = turn.TurnPersistence;
         Exception? executionFailure = null;
         var observedCalls = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
+        List<AgentResponseUpdate>? resultUpdates = _resultOptions == null ? null : [];
+        var awaitingExternalInput = false;
         try
         {
             await ObserveInputsAsync(turn.Input, cancellationToken).ConfigureAwait(false);
@@ -292,6 +378,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     AddNodeAttribution(update, turn.InteractionNodeId);
                     var responseMessage = ToolStateSnapshots.ToMessage(update);
                     turnPersistence.Record(responseMessage);
+                    resultUpdates?.Add(update);
+                    awaitingExternalInput |=
+                        update.RawRepresentation is RequestInfoEvent
+                        || update.Contents.Any(content => content is ToolApprovalRequestContent);
 
                     UpdatePendingFunctionCallIds(update.Contents, turn.PendingFunctionCallIds);
                     SavePendingFunctionCallIds(turn.Session, turn.PendingFunctionCallIds);
@@ -318,6 +408,23 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 var stateSnapshotUpdate = ToolStateSnapshots.ToUpdate(stateSnapshot);
                 AddNodeAttribution(stateSnapshotUpdate, turn.InteractionNodeId);
                 yield return stateSnapshotUpdate;
+            }
+
+            if (resultUpdates is { Count: > 0 })
+            {
+                var result = await CreateResultAsync(
+                        turn.Input,
+                        resultUpdates.ToAgentResponse().Messages.ToList(),
+                        turn.PendingFunctionCallIds,
+                        awaitingExternalInput,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (result != null)
+                {
+                    AddNodeAttribution(result, turn.InteractionNodeId);
+                    yield return ToolStateSnapshots.ToUpdate(result);
+                }
             }
 
             activity?.Complete();

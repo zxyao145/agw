@@ -226,6 +226,7 @@ public sealed class AgentflowRuntimeFactory
         var orderedNodes = AgentflowTopology.OrderNodesByEdges(agentflowNodes, agentflowEdges);
         var nodeIdToAgent = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
         var nodeEngineKinds = new Dictionary<string, EngineKind>(StringComparer.Ordinal);
+        var nodeResultOptions = new Dictionary<string, AgentflowNodeResultOptions>(StringComparer.Ordinal);
         var resources = new AgentResourceLease();
 
         try
@@ -249,6 +250,13 @@ public sealed class AgentflowRuntimeFactory
                     {
                         resources.Add(new AgentflowAgentLifetime(nodeAgent.Agent));
                         nodeEngineKinds[node.NodeId] = nodeAgent.EngineKind;
+                        if (nodeAgent.SummaryModelProviderId is { } modelProviderId)
+                        {
+                            nodeResultOptions[node.NodeId] = new AgentflowNodeResultOptions(
+                                modelProviderId,
+                                nodeAgent.UseStructuredResult
+                            );
+                        }
                     }
                 }
                 else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
@@ -300,10 +308,10 @@ public sealed class AgentflowRuntimeFactory
             }
 
             var summaryContext =
-                sessionScope != null && agentflow.SummaryModelProviderId.HasValue
+                sessionScope != null
                     ? new AgentflowSummaryContext(
                         _summaryService,
-                        agentflow.SummaryModelProviderId.Value,
+                        agentflow.SummaryModelProviderId,
                         sessionScope.ProjectId,
                         sessionScope.ContextId
                     )
@@ -316,7 +324,8 @@ public sealed class AgentflowRuntimeFactory
                 sessionScope,
                 executionTraceContext,
                 summaryContext,
-                nodeEngineKinds
+                nodeEngineKinds,
+                nodeResultOptions
             );
             if (workflow == null)
             {

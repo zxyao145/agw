@@ -922,6 +922,90 @@ public partial class AgentflowTurnExecutorTests : IDisposable
         Assert.Equal(["done"], call.Messages.Select(message => message.Text));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExecuteStreamingAsync_AgentNodeSummarySetting_ControlsResult(bool enableSummary)
+    {
+        var agentId = Guid.CreateVersion7();
+        var modelProviderId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "agent-summary-flow",
+        };
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-output",
+                SourceNodeId = "agent",
+                TargetNodeId = "output",
+            },
+        };
+        var summaryService = new RecordingSummaryService();
+        var service = CreateTestHost(
+            NullLogger<AgentflowCheckpointSupport>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new StubAgentRuntimeFactory(agentId, enableSummary ? modelProviderId : null),
+            new StubProviderSessionState(),
+            summaryService
+        );
+
+        var messages = new List<AgwMessage>();
+        await foreach (
+            var message in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "workflow input",
+                TestContext.Current.CancellationToken,
+                projectId,
+                "context-1",
+                Guid.CreateVersion7()
+            )
+        )
+        {
+            messages.Add(message);
+        }
+
+        Assert.Equal(
+            enableSummary ? 1 : 0,
+            messages.Count(message => IsMessageType(message.AdditionalProperties, "result"))
+        );
+        if (enableSummary)
+        {
+            var call = Assert.Single(summaryService.Calls);
+            Assert.Equal(modelProviderId, call.ModelProviderId);
+            Assert.Equal(projectId, call.ProjectId);
+            Assert.Equal("context-1", call.ContextId);
+            Assert.Equal(["workflow input", "done"], call.Messages.Select(message => message.Text));
+        }
+        else
+        {
+            Assert.Empty(summaryService.Calls);
+        }
+    }
+
     [Fact]
     public async Task ExecuteStreamingAsync_TodoToolBlock_WithoutToolInvocation_DoesNotPersistStateSnapshot()
     {
@@ -1314,6 +1398,7 @@ public partial class AgentflowTurnExecutorTests : IDisposable
     {
         private readonly Guid _agentId;
         private readonly Func<Guid, AIAgent?>? _agentFactory;
+        private readonly Guid? _summaryModelProviderId;
 
         public IReadOnlyDictionary<string, string>? LastEnvironmentVariables { get; private set; }
 
@@ -1321,9 +1406,10 @@ public partial class AgentflowTurnExecutorTests : IDisposable
 
         public List<TrackingAIAgent> CreatedAgents { get; } = [];
 
-        public StubAgentRuntimeFactory(Guid agentId)
+        public StubAgentRuntimeFactory(Guid agentId, Guid? summaryModelProviderId = null)
         {
             _agentId = agentId;
+            _summaryModelProviderId = summaryModelProviderId;
         }
 
         public StubAgentRuntimeFactory(Func<Guid, AIAgent?> agentFactory)
@@ -1355,7 +1441,11 @@ public partial class AgentflowTurnExecutorTests : IDisposable
                 CreatedAgents.Add(trackingAgent);
             }
 
-            return Task.FromResult(agent == null ? null : new AgentflowNodeAgent(agent, EngineKind.Maf));
+            return Task.FromResult(
+                agent == null
+                    ? null
+                    : new AgentflowNodeAgent(agent, EngineKind.Maf) { SummaryModelProviderId = _summaryModelProviderId }
+            );
         }
 
         public Task<AgentRuntime?> CreateRuntimeAsync(

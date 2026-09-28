@@ -47,7 +47,12 @@ public partial class AgentRuntimeFactory
         );
         return aiAgent == null
             ? null
-            : new AgentflowNodeAgent(aiAgent, EngineKinds.Resolve(agent.Type, agent.ExternalAgentKind));
+            : new AgentflowNodeAgent(aiAgent, EngineKinds.Resolve(agent.Type, agent.ExternalAgentKind))
+            {
+                SummaryModelProviderId =
+                    agent.Type == AgentType.System && agent.EnableSummary ? ResolveSummaryModelProviderId(agent) : null,
+                UseStructuredResult = !string.IsNullOrWhiteSpace(agent.ResponseSchema),
+            };
     }
 
     private async Task<AIAgent?> CreateAiAgentAsync(

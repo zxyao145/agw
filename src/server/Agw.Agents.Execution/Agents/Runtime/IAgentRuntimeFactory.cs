@@ -7,7 +7,11 @@ namespace Agw.Agents.Execution.Agents.Runtime;
 /// Agentflow 节点使用的 Agent 及执行它的 Engine 种类。
 /// The Agent used by an Agentflow node and the Engine kind that executes it.
 /// </summary>
-public sealed record AgentflowNodeAgent(AIAgent Agent, EngineKind EngineKind);
+public sealed record AgentflowNodeAgent(AIAgent Agent, EngineKind EngineKind)
+{
+    public Guid? SummaryModelProviderId { get; init; }
+    public bool UseStructuredResult { get; init; }
+}
 
 /// <summary>
 /// 从 Agent Definition 构造 Runtime 与节点 Agent。
