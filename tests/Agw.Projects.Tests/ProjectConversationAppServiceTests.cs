@@ -1169,6 +1169,105 @@ public class ProjectConversationAppServiceTests
         Assert.Equal("result-6", GetMessageText(Assert.Single(page.Turns[1].Results)));
     }
 
+    [Fact]
+    public async Task GetMessagePageAsync_AgentResults_ReturnsOrderedBoundariesAndProcessFlags()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
+        var startedAt = new DateTimeOffset(2026, 9, 28, 0, 0, 0, TimeSpan.Zero);
+        var records = Enumerable
+            .Range(0, 7)
+            .Select(index =>
+            {
+                var isResult = index is 2 or 3 or 5;
+                var record = CreateRecord(
+                    conversationId,
+                    turnId,
+                    index,
+                    $"message-{index}",
+                    TaskExecutionStatus.Running,
+                    startedAt
+                );
+                record.TurnId = turnId;
+                record.Purpose =
+                    index == 0 ? ConversationMessagePurpose.Input
+                    : isResult ? ConversationMessagePurpose.Result
+                    : ConversationMessagePurpose.Message;
+                record.ConversationPayload = JsonUtil.Serialize(
+                    new ChatMessage(index == 0 ? ChatRole.User : ChatRole.Assistant, $"message-{index}")
+                    {
+                        MessageId = record.Id.ToString("D"),
+                        AdditionalProperties = isResult
+                            ? new AdditionalPropertiesDictionary
+                            {
+                                ["type"] = "result",
+                                ["nodeName"] = index == 2 ? "commit" : "push",
+                            }
+                            : null,
+                    }
+                );
+                return record;
+            })
+            .ToArray();
+        await using var dbContext = new AgwDbContext(options);
+        dbContext.Projects.Add(CreateProject(projectId, "Project"));
+        dbContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "context", "History"));
+        dbContext.ProjectConversationTurns.Add(
+            new ProjectConversationTurn
+            {
+                Id = turnId,
+                ProjectConversationId = conversationId,
+                TargetId = Guid.CreateVersion7(),
+                RuntimeType = AgentRuntimeType.Agentflow,
+                Status = ProjectConversationTurnStatus.Running,
+                InputMessageId = records[0].Id,
+                FirstSequence = 0,
+                LastSequence = 6,
+                StartedAt = startedAt,
+            }
+        );
+        dbContext.ProjectConversationChatHistories.AddRange(records);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        var service = CreateService(dbContext);
+
+        var page = await service.GetMessagePageAsync(
+            projectId,
+            conversationId,
+            new ProjectConversationMessagesQuery
+            {
+                Direction = ProjectConversationMessageDirection.Older,
+                PageSize = 1,
+            },
+            cancellationToken
+        );
+
+        Assert.NotNull(page);
+        Assert.Equal(6L, Assert.Single(page.Items).AdditionalProperties!["conversationSequence"]);
+        var turn = Assert.Single(page.Turns);
+        Assert.Equal("running", turn.Status);
+        Assert.Equal(0L, turn.Input!.AdditionalProperties!["conversationSequence"]);
+        Assert.Equal(
+            [2L, 3L, 5L],
+            turn.Results.Select(message => (long)message.AdditionalProperties!["conversationSequence"]!)
+        );
+        Assert.Equal(
+            [true, false, true],
+            turn.Results.Select(message => (bool)message.AdditionalProperties!["hasPrecedingProcessMessages"]!)
+        );
+        Assert.Equal(
+            ["commit", "push", "push"],
+            turn.Results.Select(message => ((JsonElement)message.AdditionalProperties!["nodeName"]!).GetString())
+        );
+        Assert.All(turn.Results, message => Assert.Equal(startedAt, message.CreatedAt));
+        Assert.True(page.HasMore);
+    }
+
     [Theory]
     [InlineData("not-a-cursor", 50)]
     [InlineData(null, 0)]

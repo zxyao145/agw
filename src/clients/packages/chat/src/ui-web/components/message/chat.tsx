@@ -14,6 +14,7 @@ import { apiGet } from "@agw/api";
 import {
   buildConversationRenderModel,
   getCurrentTurnTodoItems,
+  getUnloadedWorkSummaryKeys,
   prepareConversationHistory,
   updateAutoScrollState,
   type AutoScrollState,
@@ -277,6 +278,10 @@ export function Chat({
   const conversationIdRef = React.useRef<string | null>(conversationId);
   const announcedConversationIdRef = React.useRef<string | null>(conversationId);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
+  const imagePreviewOpenRef = React.useRef(false);
+  const handleImagePreviewOpenChange = React.useCallback((open: boolean) => {
+    imagePreviewOpenRef.current = open;
+  }, []);
   const conversationContentRef = React.useRef<HTMLDivElement>(null);
   const [userInputNavigationHost, setUserInputNavigationHost] =
     React.useState<HTMLDivElement | null>(null);
@@ -455,16 +460,13 @@ export function Chat({
       target?.type,
     ],
   );
-  const leadingTurnId = messages[0]?.additionalProperties?.turnId;
-  const leadingTurn =
-    typeof leadingTurnId === "string"
-      ? historyTurns.find((turn) => turn.turnId === leadingTurnId)
-      : undefined;
-  const leadingInputLoaded =
-    leadingTurn?.input == null ||
-    messages.some((message) => message.messageId === leadingTurn.input?.messageId);
+  const unloadedWorkSummaryKeys = React.useMemo(
+    () => getUnloadedWorkSummaryKeys(renderItems, messages),
+    [renderItems, messages],
+  );
   const shouldAutoLoadOlderMessages =
-    leadingInputLoaded || expandedWorkSummaryKeys.has(`work-summary:${leadingTurnId}`);
+    unloadedWorkSummaryKeys.length === 0 ||
+    unloadedWorkSummaryKeys.some((key) => expandedWorkSummaryKeys.has(key));
   const currentTurnTodos = React.useMemo(() => getCurrentTurnTodoItems(messages), [messages]);
   const latestAvailableCheckpoint = React.useMemo(
     () =>
@@ -608,7 +610,7 @@ export function Chat({
 
   const syncConversationScrollPosition = React.useCallback(() => {
     const scrollContainer = conversationScrollRef.current;
-    if (!scrollContainer) {
+    if (!scrollContainer || imagePreviewOpenRef.current) {
       return;
     }
 
@@ -1789,6 +1791,7 @@ export function Chat({
 
   const handleConversationScroll = React.useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
+      if (imagePreviewOpenRef.current) return;
       autoScrollStateRef.current = updateAutoScrollState(
         autoScrollStateRef.current,
         event.currentTarget,
@@ -1829,6 +1832,7 @@ export function Chat({
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
         ref={conversationScrollRef}
+        tabIndex={-1}
         inert={showReconnect}
         aria-hidden={showReconnect}
         className="h-full w-full overflow-y-auto agw-scrollbar"
@@ -1856,6 +1860,7 @@ export function Chat({
                     executionConversationId,
                   ])}
                   onWorkSummaryToggle={handleUserInputNavigate}
+                  onImagePreviewOpenChange={handleImagePreviewOpenChange}
                   onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
                   scrollElementRef={conversationScrollRef}
                   userInputNavigationHost={userInputNavigationHost}
@@ -1868,9 +1873,7 @@ export function Chat({
                   isInitialLoading={isLoadingConversation}
                   onLoadOlderMessages={() => void loadOlderMessages(true)}
                   onAutoLoadOlderMessages={() => void loadOlderMessages()}
-                  autoLoadBlockedSummaryKey={
-                    leadingInputLoaded ? null : `work-summary:${leadingTurnId}`
-                  }
+                  autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
                   permissionMode={activePermissionMode ?? undefined}
                   onHumanResponse={submitInteractionResponse}
                   showCheckpointResume={target?.type === "agentflow"}

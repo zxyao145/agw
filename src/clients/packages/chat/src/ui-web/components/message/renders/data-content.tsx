@@ -1,4 +1,5 @@
 import { MessageNode } from "../types";
+import { ConversationImage } from "../conversation-image";
 
 const supportedImageDataUrl = /^data:image\/(?:jpeg|png|gif|webp);base64,/i;
 
@@ -9,12 +10,10 @@ export default function DataContent({ node }: { node: MessageNode }) {
 
   return (
     <div className="inline-block max-w-full align-top">
-      <img
+      <ConversationImage
         src={node.content}
         alt={node.name ?? "Image attachment"}
-        className="max-h-70 max-w-full rounded-lg border bg-muted object-contain shadow-xs"
-        loading="lazy"
-        decoding="async"
+        name={node.name}
       />
     </div>
   );

@@ -370,13 +370,13 @@ test("render model emits plan, full result, right user, image, and red error sem
     [
       ["message", "right", "normal"],
       ["plan", "left", "full"],
-      ["message", "left", "normal"],
       ["result", "left", "full"],
+      ["message", "left", "normal"],
     ],
   );
-  const result = items[3];
+  const result = items[2];
   assert.equal(result.type === "result" ? result.message.meta : "unexpected", null);
-  const media = items[2];
+  const media = items[3];
   assert.deepEqual(
     media.type === "message" ? media.message.contents.map((content) => content.type) : [],
     ["image", "error"],

@@ -217,13 +217,14 @@ export type ConversationRenderItem =
   | ConversationMessageRenderItem
   | (BaseConversationRenderItem & {
       type: "work-summary";
+      startMessageKey: string;
       name: string | null;
       durationMs: number | null;
       items: Exclude<ConversationMessageRenderItem, { type: "result" }>[];
     });
 
 export type BuildConversationRenderModelOptions = {
-  /** Keep the current turn visible while executing, awaiting input, or restoring a connection. */
+  /** 当前轮次的执行状态；Result 始终按消息边界折叠。 Current execution state; Results always fold at message boundaries. */
   isCurrentTurnActive?: boolean;
   pendingInteraction?: PendingInteraction | null;
   checkpointAvailability?: readonly AgentflowCheckpointAvailability[];
@@ -723,8 +724,6 @@ export function buildConversationRenderModel(
   }
   return collapseCompletedWork(
     options.collapseToolRuns ? collapseConsecutiveToolItems(items) : items,
-    options.isCurrentTurnActive === true || options.pendingInteraction != null,
-    options.historyTurns,
   );
 }
 

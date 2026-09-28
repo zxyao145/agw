@@ -905,9 +905,7 @@ function createQueueHarness(
       status: "completed" | "failed" | "interrupted" = "completed",
     ) {
       active = false;
-      handlers.onMessage(
-        createTurnLifecycleMessage("agw-turn-finished", request.turnId!, status),
-      );
+      handlers.onMessage(createTurnLifecycleMessage("agw-turn-finished", request.turnId!, status));
     },
   };
 }
@@ -1283,11 +1281,7 @@ test("a superseded finish of the in-flight entry ends its wait and pauses the re
   harness.setActive(false);
   harness.handlers.onMessage(
     markSuperseded(
-      createTurnLifecycleMessage(
-        "agw-turn-finished",
-        harness.executed[0]!.turnId!,
-        "completed",
-      ),
+      createTurnLifecycleMessage("agw-turn-finished", harness.executed[0]!.turnId!, "completed"),
     ),
   );
   await settle();
@@ -1318,11 +1312,7 @@ test("a superseded finish that arrives after reconnecting lets the next submissi
   harness.setActive(false);
   harness.handlers.onMessage(
     markSuperseded(
-      createTurnLifecycleMessage(
-        "agw-turn-finished",
-        harness.executed[0]!.turnId!,
-        "completed",
-      ),
+      createTurnLifecycleMessage("agw-turn-finished", harness.executed[0]!.turnId!, "completed"),
     ),
   );
   await settle();
@@ -1344,11 +1334,7 @@ test("a superseded finish after a stop ends the stop so new entries are accepted
   harness.setActive(false);
   harness.handlers.onMessage(
     markSuperseded(
-      createTurnLifecycleMessage(
-        "agw-turn-finished",
-        harness.executed[0]!.turnId!,
-        "interrupted",
-      ),
+      createTurnLifecycleMessage("agw-turn-finished", harness.executed[0]!.turnId!, "interrupted"),
     ),
   );
   await settle();

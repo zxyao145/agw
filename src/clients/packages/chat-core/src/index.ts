@@ -9,4 +9,4 @@ export * from "./message-copy-text";
 export * from "./message-presentation";
 export * from "./proposed-plan";
 export * from "./suggestions";
-export { formatWorkedDuration } from "./work-summary";
+export { formatWorkedDuration, getUnloadedWorkSummaryKeys } from "./work-summary";

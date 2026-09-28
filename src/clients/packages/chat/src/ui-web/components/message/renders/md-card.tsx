@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { toast } from "sonner";
 import { normalizeMathDelimiters } from "./math-markdown";
+import { ConversationImage } from "../conversation-image";
 
 type MdCardProps = {
   mdText: string;
@@ -148,6 +149,10 @@ const MdCard = React.memo(function MdCard({ mdText, enableMath = true }: MdCardP
       // 大概率是 code-inspector-plugin 在 dev 下改写了 JSX。
       children={normalizedText}
       components={{
+        img: ({ src, alt, title }) =>
+          typeof src === "string" && src ? (
+            <ConversationImage src={src} alt={alt || "Markdown image"} title={title} name={alt} />
+          ) : null,
         pre: ({ children, node }) => {
           const offset = node?.position?.start?.offset;
           const isFenced =

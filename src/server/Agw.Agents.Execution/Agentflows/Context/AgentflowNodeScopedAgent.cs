@@ -137,9 +137,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     }
 
     private async Task<ChatMessage?> CreateResultAsync(
-        IReadOnlyList<ChatMessage> input,
+        NodeTurn turn,
         IReadOnlyList<ChatMessage> responseMessages,
-        IReadOnlySet<string> pendingFunctionCallIds,
         bool awaitingExternalInput,
         CancellationToken cancellationToken
     )
@@ -147,13 +146,14 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         if (
             _resultOptions == null
             || _summaryContext == null
-            || pendingFunctionCallIds.Count != 0
+            || turn.PendingFunctionCallIds.Count != 0
             || awaitingExternalInput
         )
         {
             return null;
         }
 
+        using var scope = turn.Scope.Push();
         var assistantText = AgentTurnResultText.ExtractLastAssistantText(responseMessages);
         if (assistantText == null)
         {
@@ -174,8 +174,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 : null;
         }
 
-        var sourceMessages = input
-            .Where(message => message.Role == ChatRole.User && message.Contents.OfType<TextContent>().Any())
+        var sourceMessages = turn
+            .Input.Where(message => message.Role == ChatRole.User && message.Contents.OfType<TextContent>().Any())
             .ToList();
         sourceMessages.Add(new ChatMessage(ChatRole.Assistant, assistantText.Trim()));
         return await _summaryContext
@@ -281,9 +281,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 response.Messages.Add(snapshot);
             }
             var result = await CreateResultAsync(
-                    turn.Input,
+                    turn,
                     response.Messages.ToList(),
-                    turn.PendingFunctionCallIds,
                     response.Messages.Any(message =>
                         message.Contents.Any(content => content is ToolApprovalRequestContent)
                     ),
@@ -413,9 +412,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             if (resultUpdates is { Count: > 0 })
             {
                 var result = await CreateResultAsync(
-                        turn.Input,
+                        turn,
                         resultUpdates.ToAgentResponse().Messages.ToList(),
-                        turn.PendingFunctionCallIds,
                         awaitingExternalInput,
                         cancellationToken
                     )

@@ -5,6 +5,10 @@ export * from "./lib/chat/search-command";
 export * from "./lib/chat/search-file";
 export * from "./ui-web/components/agent-selector";
 export * from "./ui-web/components/message/chat";
+export {
+  ConversationImagePlatformProvider,
+  type ImageContextMenuRequest,
+} from "./ui-web/components/message/conversation-image";
 export * from "./ui-web/components/message/suggestion-trigger";
 export * from "./ui-web/components/message/user-input";
 export * from "./ui-web/execution-activity";

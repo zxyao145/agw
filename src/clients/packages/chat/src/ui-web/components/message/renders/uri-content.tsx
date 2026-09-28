@@ -1,10 +1,10 @@
 import { MessageNode } from "../types";
-import Image from "next/image";
+import { ConversationImage } from "../conversation-image";
 
 export default function UriContent({ node }: { node: MessageNode }) {
   return (
     <div className="msg-content">
-      <Image src={node.content} alt="Image content" />
+      <ConversationImage src={node.content} alt={node.name ?? "Image content"} name={node.name} />
     </div>
   );
 }

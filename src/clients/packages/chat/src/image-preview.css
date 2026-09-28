@@ -1,0 +1,56 @@
+@import "yet-another-react-lightbox/styles.css";
+
+.agw-image-preview {
+  --yarl__color_backdrop: rgb(9 11 15 / 96%);
+  --yarl__toolbar_padding: 16px;
+}
+
+.agw-image-preview .yarl__toolbar {
+  --yarl__icon_size: 18px;
+}
+
+.agw-image-zoom {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  transform: translateX(-50%);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 999px;
+  background: #202329;
+  color: #f5f6f7;
+  box-shadow: 0 4px 24px rgb(0 0 0 / 24%);
+}
+
+.agw-image-zoom button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.agw-image-zoom button:hover:enabled {
+  background: rgb(255 255 255 / 12%);
+}
+
+.agw-image-zoom button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+.agw-image-zoom button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.agw-image-zoom output {
+  min-width: 56px;
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}

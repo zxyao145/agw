@@ -45,12 +45,15 @@ import {
   layoutUserInputMarkers,
 } from "./user-input-navigation";
 import { UserInputNavigator } from "./user-input-navigator";
+import { ConversationImageContext, type ConversationImageSource } from "./conversation-image";
+import { ConversationImagePreview } from "./conversation-image-preview";
 
 export type HumanResponseInput = InteractionResponse;
 
 export interface ChatSessionProps {
   items: ConversationRenderItem[];
   conversationKey?: string;
+  onImagePreviewOpenChange?: (open: boolean) => void;
   onWorkSummaryToggle?: () => void;
   onWorkSummaryExpansionChange?: (keys: ReadonlySet<string>) => void;
   scrollElementRef: React.RefObject<HTMLDivElement | null>;
@@ -59,7 +62,7 @@ export interface ChatSessionProps {
   isInitialLoading?: boolean;
   onLoadOlderMessages?: () => void;
   onAutoLoadOlderMessages?: () => void;
-  autoLoadBlockedSummaryKey?: string | null;
+  autoLoadBlockedSummaryKeys?: readonly string[];
   userInputNavigationHost?: HTMLDivElement | null;
   onUserInputNavigate?: () => void;
   userInputs?: readonly ConversationTurnInputSummary[];
@@ -76,6 +79,7 @@ export interface ChatSessionProps {
 export function Conversation({
   items: renderItems,
   conversationKey,
+  onImagePreviewOpenChange,
   onWorkSummaryToggle,
   onWorkSummaryExpansionChange,
   scrollElementRef,
@@ -84,7 +88,7 @@ export function Conversation({
   isInitialLoading = false,
   onLoadOlderMessages,
   onAutoLoadOlderMessages,
-  autoLoadBlockedSummaryKey,
+  autoLoadBlockedSummaryKeys,
   userInputNavigationHost = null,
   onUserInputNavigate,
   userInputs,
@@ -96,6 +100,24 @@ export function Conversation({
   onCheckpointResume,
   onHumanResponse,
 }: ChatSessionProps) {
+  const [imagePreview, setImagePreview] = React.useState<{
+    image: ConversationImageSource;
+    trigger: HTMLImageElement;
+    conversationKey: string | undefined;
+  } | null>(null);
+  const preview = imagePreview?.conversationKey === conversationKey ? imagePreview : null;
+  const previewOpen = preview !== null;
+  const openImage = React.useCallback(
+    (image: ConversationImageSource, trigger: HTMLImageElement) => {
+      setImagePreview({ image, trigger, conversationKey });
+    },
+    [conversationKey],
+  );
+  React.useEffect(() => setImagePreview(null), [conversationKey]);
+  React.useLayoutEffect(() => {
+    onImagePreviewOpenChange?.(previewOpen);
+    return () => onImagePreviewOpenChange?.(false);
+  }, [onImagePreviewOpenChange, previewOpen]);
   const {
     rows: items,
     expandedKeys,
@@ -108,10 +130,12 @@ export function Conversation({
     const scrollContainer = scrollElementRef.current;
     if (
       !scrollContainer ||
+      previewOpen ||
       !hasOlderMessages ||
       isLoadingOlderMessages ||
       !onAutoLoadOlderMessages ||
-      (autoLoadBlockedSummaryKey && !expandedKeys.has(autoLoadBlockedSummaryKey))
+      (autoLoadBlockedSummaryKeys?.length &&
+        !autoLoadBlockedSummaryKeys.some((key) => expandedKeys.has(key)))
     ) {
       return;
     }
@@ -122,12 +146,13 @@ export function Conversation({
     });
     return () => cancelAnimationFrame(frame);
   }, [
-    autoLoadBlockedSummaryKey,
+    autoLoadBlockedSummaryKeys,
     expandedKeys,
     hasOlderMessages,
     isLoadingOlderMessages,
     items.length,
     onAutoLoadOlderMessages,
+    previewOpen,
     scrollElementRef,
   ]);
   const hasHistoryLoader = hasOlderMessages || isLoadingOlderMessages;
@@ -205,7 +230,7 @@ export function Conversation({
     [conversationKey, onLoadUserInput, onUserInputNavigate, userInputAnchors],
   );
 
-  if (items.length === 0 && isInitialLoading) {
+  if (items.length === 0 && isInitialLoading && !previewOpen) {
     return (
       <Empty>
         <EmptyHeader>
@@ -216,7 +241,7 @@ export function Conversation({
     );
   }
 
-  if (items.length === 0 && !hasHistoryLoader) {
+  if (items.length === 0 && !hasHistoryLoader && !previewOpen) {
     return (
       <Empty>
         <EmptyHeader>
@@ -229,76 +254,88 @@ export function Conversation({
   }
 
   return (
-    <div className="w-full flex-1">
-      {showNavigation && userInputNavigationHost
-        ? createPortal(
-            <div className="absolute top-6 left-0">
-              <UserInputNavigator
-                markers={userInputMarkers}
-                activeKey={activeUserInputKey}
-                height={navigationHeight}
-                onSelect={handleUserInputSelect}
-              />
-            </div>,
-            userInputNavigationHost,
-          )
-        : null}
-      <div
-        className="agw-conversation-list"
-        style={{ height: totalSize }}
-        role="list"
-        aria-label="Conversation messages"
-      >
-        {virtualRows.map((virtualRow) => {
-          const isLoader = hasHistoryLoader && virtualRow.index === 0;
-          const item = isLoader ? null : items[virtualRow.index - rowOffset];
-
-          return (
-            <div
-              key={virtualRow.key}
-              ref={virtualizer.measureElement}
-              data-index={virtualRow.index}
-              role="listitem"
-              className="agw-msg-item"
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
-            >
-              {isLoader ? (
-                <div className="flex justify-center px-4 py-2" aria-live="polite">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="rounded-full text-xs text-muted-foreground"
-                    disabled={isLoadingOlderMessages}
-                    onClick={onLoadOlderMessages}
-                  >
-                    {isLoadingOlderMessages ? (
-                      <LoaderCircle className="size-3.5 animate-spin" />
-                    ) : null}
-                    {isLoadingOlderMessages ? "Loading earlier messages…" : "Load earlier messages"}
-                  </Button>
-                </div>
-              ) : item ? (
-                <ConversationItem
-                  item={item}
-                  workExpanded={expandedKeys.has(item.key)}
-                  onWorkToggle={() => {
-                    onWorkSummaryToggle?.();
-                    toggleWorkSummary(item.key);
-                  }}
-                  activeStreamingScopeId={activeStreamingScopeId}
-                  permissionMode={permissionMode}
-                  showCheckpointResume={showCheckpointResume}
-                  checkpointResumeDisabled={checkpointResumeDisabled}
-                  onCheckpointResume={onCheckpointResume}
-                  onHumanResponse={onHumanResponse}
+    <ConversationImageContext.Provider value={openImage}>
+      <div className="w-full flex-1">
+        {showNavigation && userInputNavigationHost
+          ? createPortal(
+              <div className="absolute top-6 left-0">
+                <UserInputNavigator
+                  markers={userInputMarkers}
+                  activeKey={activeUserInputKey}
+                  height={navigationHeight}
+                  onSelect={handleUserInputSelect}
                 />
-              ) : null}
-            </div>
-          );
-        })}
+              </div>,
+              userInputNavigationHost,
+            )
+          : null}
+        <div
+          className="agw-conversation-list"
+          style={{ height: totalSize }}
+          role="list"
+          aria-label="Conversation messages"
+        >
+          {virtualRows.map((virtualRow) => {
+            const isLoader = hasHistoryLoader && virtualRow.index === 0;
+            const item = isLoader ? null : items[virtualRow.index - rowOffset];
+
+            return (
+              <div
+                key={virtualRow.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualRow.index}
+                role="listitem"
+                className="agw-msg-item"
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                {isLoader ? (
+                  <div className="flex justify-center px-4 py-2" aria-live="polite">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="rounded-full text-xs text-muted-foreground"
+                      disabled={isLoadingOlderMessages}
+                      onClick={onLoadOlderMessages}
+                    >
+                      {isLoadingOlderMessages ? (
+                        <LoaderCircle className="size-3.5 animate-spin" />
+                      ) : null}
+                      {isLoadingOlderMessages
+                        ? "Loading earlier messages…"
+                        : "Load earlier messages"}
+                    </Button>
+                  </div>
+                ) : item ? (
+                  <ConversationItem
+                    item={item}
+                    workExpanded={expandedKeys.has(item.key)}
+                    onWorkToggle={() => {
+                      onWorkSummaryToggle?.();
+                      toggleWorkSummary(item.key);
+                    }}
+                    activeStreamingScopeId={activeStreamingScopeId}
+                    permissionMode={permissionMode}
+                    showCheckpointResume={showCheckpointResume}
+                    checkpointResumeDisabled={checkpointResumeDisabled}
+                    onCheckpointResume={onCheckpointResume}
+                    onHumanResponse={onHumanResponse}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+      {preview ? (
+        <ConversationImagePreview
+          image={preview.image}
+          trigger={preview.trigger}
+          scrollElementRef={scrollElementRef}
+          onClose={() => setImagePreview(null)}
+        />
+      ) : null}
+    </ConversationImageContext.Provider>
   );
 }
 

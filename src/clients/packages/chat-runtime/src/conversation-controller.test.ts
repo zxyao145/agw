@@ -62,7 +62,7 @@ test("history hydration merges reasoning fragments without joining different tur
 });
 
 for (const status of ["completed", "failed", "interrupted", "recovered"]) {
-  test(`work stays visible until ${status}, then folds and survives history hydration`, async () => {
+  test(`a Result folds work before ${status} and survives history hydration`, async () => {
     let handlers!: ExecutionHubHandlers;
     let active = true;
     const controller = new ConversationController({
@@ -101,12 +101,12 @@ for (const status of ["completed", "failed", "interrupted", "recovered"]) {
       additionalProperties: { type: "result" },
       contents: [{ type: "TextContent", content: "Done" }],
     });
-    assert.equal(summaries().length, 0);
+    assert.equal(summaries().length, 1);
     handlers.onClose?.(new Error("Connection lost"));
-    assert.equal(summaries().length, 0, "disconnect alone must not hide the process");
+    assert.equal(summaries().length, 1, "disconnect preserves completed work");
     if (status === "recovered") {
       handlers.onReconnecting?.({ status: "reconnecting", retryAttempt: 1, retryDelayMs: 1000 });
-      assert.equal(summaries().length, 0);
+      assert.equal(summaries().length, 1);
       active = false;
       handlers.onReconnected?.();
     } else {

@@ -64,20 +64,65 @@ test("Mobile shows the Agent name before the work duration", async () => {
   expect(view.getByText("claude-code")).toBeTruthy();
 });
 
-test("Mobile keeps work visible through execution and silent reconnect, then folds on completion", async () => {
+test("Mobile preserves completed work through execution and reconnect", async () => {
   const view = await render(
     <NativeConversationHistoryHost messages={messages} isCurrentTurnActive />,
   );
-  expect(view.queryByRole("button", { name: "Worked for 17m 39s" })).toBeNull();
-  expect(view.getByText("Checking implementation")).toBeTruthy();
+  expect(view.getByRole("button", { name: "Worked for 17m 39s" })).toBeTruthy();
+  expect(view.queryByText("Checking implementation")).toBeNull();
+  await fireEvent.press(view.getByRole("button", { name: "Worked for 17m 39s" }));
   await view.rerender(
     <NativeConversationHistoryHost
       messages={messages}
       reconnectState={{ status: "reconnecting", retryAttempt: 1, retryDelayMs: 1000 }}
     />,
   );
-  expect(view.queryByRole("button", { name: "Worked for 17m 39s" })).toBeNull();
+  expect(
+    view.getByRole("button", { name: "Worked for 17m 39s" }).props.accessibilityState.expanded,
+  ).toBe(true);
   await view.rerender(<NativeConversationHistoryHost messages={messages} />);
   expect(view.getByRole("button", { name: "Worked for 17m 39s" })).toBeTruthy();
-  expect(view.queryByText("Checking implementation")).toBeNull();
+  expect(view.getByText("Checking implementation")).toBeTruthy();
+});
+
+test("Mobile gives commit and push independent work summaries while the flow continues", async () => {
+  const history: AiMessage[] = [
+    messages[0],
+    messages[1],
+    {
+      ...messages[2],
+      createdAt: "2026-09-20T01:00:20Z",
+      additionalProperties: { type: "result", nodeName: "commit" },
+    },
+    {
+      ...messages[1],
+      messageId: "push-process",
+      contents: [{ type: "TextContent", content: "Pushing changes" }],
+    },
+    {
+      ...messages[2],
+      messageId: "push-result",
+      createdAt: "2026-09-20T01:00:46Z",
+      additionalProperties: { type: "result", nodeName: "push" },
+      contents: [{ type: "TextContent", content: "Push complete" }],
+    },
+  ];
+  const view = await render(
+    <NativeConversationHistoryHost messages={history.slice(0, 4)} isCurrentTurnActive />,
+  );
+  await fireEvent.press(view.getByRole("button", { name: "commit Worked for 20s" }));
+  expect(view.getByText("Checking implementation")).toBeTruthy();
+  expect(view.getByText("Pushing changes")).toBeTruthy();
+
+  await view.rerender(<NativeConversationHistoryHost messages={history} isCurrentTurnActive />);
+  expect(
+    view.getByRole("button", { name: "commit Worked for 20s" }).props.accessibilityState.expanded,
+  ).toBe(true);
+  expect(
+    view.getByRole("button", { name: "push Worked for 26s" }).props.accessibilityState.expanded,
+  ).toBe(false);
+  expect(view.queryByText("Pushing changes")).toBeNull();
+  expect(view.getByText("Push complete")).toBeTruthy();
+  await fireEvent.press(view.getByRole("button", { name: "push Worked for 26s" }));
+  expect(view.getByText("Pushing changes")).toBeTruthy();
 });
