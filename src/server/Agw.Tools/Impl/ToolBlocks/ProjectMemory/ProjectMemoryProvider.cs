@@ -308,6 +308,11 @@ public sealed class ProjectMemoryProvider : AIContextProvider
             throw InvalidParameter("A project memory file name must not be empty.");
         }
 
+        if (fileName.Contains('\0'))
+        {
+            throw InvalidParameter("Project memory file names must not contain NUL characters.");
+        }
+
         var normalized = fileName.Replace('\\', '/').Trim('/');
         if (
             Path.IsPathRooted(fileName)

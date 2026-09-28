@@ -315,6 +315,7 @@ public sealed class ProjectMemoryStore : AgwAgentFileStore
         var normalized = path.Replace('\\', '/').Trim('/');
         if (
             (!allowEmpty && normalized.Length == 0)
+            || path.Contains('\0')
             || Path.IsPathRooted(path)
             || normalized.Split('/').Any(static part => part is "." or "..")
         )

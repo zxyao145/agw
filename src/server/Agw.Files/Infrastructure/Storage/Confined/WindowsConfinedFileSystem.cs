@@ -21,12 +21,23 @@ namespace Agw.Files.Infrastructure.Storage.Confined;
 [SupportedOSPlatform("windows")]
 internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
 {
+    private readonly LocalFileSystem _root;
+    private readonly string _prefix;
     private readonly LocalFileSystem _inner;
     private readonly string[] _allowedRoots;
 
-    private WindowsConfinedFileSystem(LocalFileSystem inner, string[] allowedRoots)
+    /// <param name="root">Project 根目录的词法文件系统。The lexical file system of the Project root.</param>
+    /// <param name="prefix">
+    /// 本实例相对 Project 根目录的子目录（子文件系统），空字符串表示根目录本身；目录创建从根目录开始，因此子目录本身也会被创建。
+    /// The subdirectory of this instance relative to the Project root (a sub file system), empty for the root itself;
+    /// directory creation starts from the root, so the subdirectory itself is created as well.
+    /// </param>
+    /// <param name="allowedRoots">允许的目录的最终物理路径。The final physical paths of the allowed directories.</param>
+    private WindowsConfinedFileSystem(LocalFileSystem root, string prefix, string[] allowedRoots)
     {
-        _inner = inner;
+        _root = root;
+        _prefix = prefix;
+        _inner = prefix.Length == 0 ? root : (LocalFileSystem)root.GetSubFileSystem(prefix);
         _allowedRoots = allowedRoots;
     }
 
@@ -58,7 +69,7 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
             roots.Add(WindowsNative.GetFinalPath(handle));
         }
 
-        return new WindowsConfinedFileSystem(new LocalFileSystem(rootFullPath), roots.ToArray());
+        return new WindowsConfinedFileSystem(new LocalFileSystem(rootFullPath), string.Empty, roots.ToArray());
     }
 
     public Task<bool> ExistsFileAsync(string path, CancellationToken ct)
@@ -187,15 +198,12 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
         await HandleTextIO.WriteAllTextAsync(opened.Handle, newContent, ct).ConfigureAwait(false);
     }
 
-    public IAgwFileSystem GetSubFileSystem(string path)
-    {
-        RejectNul(path);
-        return new WindowsConfinedFileSystem((LocalFileSystem)_inner.GetSubFileSystem(path), _allowedRoots);
-    }
+    public IAgwFileSystem GetSubFileSystem(string path) =>
+        new WindowsConfinedFileSystem(_root, RootRelativePath(path), _allowedRoots);
 
     public Task CreateDirectoryAsync(string path, CancellationToken ct)
     {
-        EnsureDirectories(RelativePath(path));
+        EnsureDirectories(RootRelativePath(path));
         return Task.CompletedTask;
     }
 
@@ -370,21 +378,20 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
     }
 
     /// <summary>
-    /// 逐段确保目录存在：每一段先按句柄校验，缺失时在已校验父目录的物理路径下创建，再重新按句柄校验。
-    /// Ensures the directories segment by segment: each segment is verified through a handle first, created under the
-    /// physical path of the verified parent when missing, and verified through a handle again afterwards.
+    /// 从 Project 根目录开始逐段确保目录存在（含子文件系统自身的目录）：每一段先按句柄校验，缺失时在已校验父目录的物理路径下
+    /// 创建，再重新按句柄校验。<paramref name="rootRelativeDirectory"/> 相对 Project 根目录。
+    /// Ensures the directories segment by segment starting from the Project root (including the sub file system's own
+    /// directory): each segment is verified through a handle first, created under the physical path of the verified
+    /// parent when missing, and verified through a handle again afterwards. <paramref name="rootRelativeDirectory"/>
+    /// is relative to the Project root.
     /// </summary>
-    private void EnsureDirectories(string relativeDirectory)
+    private void EnsureDirectories(string rootRelativeDirectory)
     {
         var current = string.Empty;
-        foreach (var segment in relativeDirectory.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var segment in rootRelativeDirectory.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             var next = Combine(current, segment);
-            using var existing = OpenExisting(
-                next,
-                WindowsNative.FILE_READ_ATTRIBUTES,
-                WindowsNative.FILE_FLAG_BACKUP_SEMANTICS
-            );
+            using var existing = OpenRootRelative(next);
             if (existing != null)
             {
                 if (!existing.IsDirectory)
@@ -396,13 +403,7 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
                 continue;
             }
 
-            using (
-                var parent = OpenExisting(
-                    current,
-                    WindowsNative.FILE_READ_ATTRIBUTES,
-                    WindowsNative.FILE_FLAG_BACKUP_SEMANTICS
-                )
-            )
+            using (var parent = OpenRootRelative(current))
             {
                 if (parent is not { IsDirectory: true })
                 {
@@ -415,11 +416,7 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
                 Directory.CreateDirectory(Path.Combine(parent.FinalPath, segment));
             }
 
-            using var created = OpenExisting(
-                next,
-                WindowsNative.FILE_READ_ATTRIBUTES,
-                WindowsNative.FILE_FLAG_BACKUP_SEMANTICS
-            );
+            using var created = OpenRootRelative(next);
             if (created is not { IsDirectory: true })
             {
                 throw new AgwException(ErrorCodes.DirectoryNotFound, $"Cannot create directory '{next}'.");
@@ -431,13 +428,44 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
 
     private void EnsureParentDirectories(string path)
     {
-        var relative = RelativePath(path);
-        var separator = relative.LastIndexOf('/');
+        var rootRelative = RootRelativePath(path);
+        var separator = rootRelative.LastIndexOf('/');
         if (separator > 0)
         {
-            EnsureDirectories(relative[..separator]);
+            EnsureDirectories(rootRelative[..separator]);
         }
     }
+
+    /// <summary>
+    /// 以 Project 根目录为基准打开目录或文件并校验句柄；不存在时返回 null。
+    /// Opens a directory or file relative to the Project root and verifies the handle; returns null when it is missing.
+    /// </summary>
+    private VerifiedHandle? OpenRootRelative(string rootRelativePath)
+    {
+        var opened = Open(
+            _root.ResolvePhysicalPath(rootRelativePath),
+            rootRelativePath,
+            WindowsNative.FILE_READ_ATTRIBUTES,
+            WindowsNative.OPEN_EXISTING,
+            WindowsNative.FILE_FLAG_BACKUP_SEMANTICS,
+            out var error
+        );
+        if (opened != null)
+        {
+            return opened;
+        }
+
+        return error is WindowsNative.ERROR_FILE_NOT_FOUND or WindowsNative.ERROR_PATH_NOT_FOUND
+            ? null
+            : throw WindowsNative.CreateException(error, $"Cannot open '{rootRelativePath}'");
+    }
+
+    /// <summary>
+    /// 把本实例的相对路径转换为相对 Project 根目录的路径（词法校验后带上子文件系统前缀）。
+    /// Converts a path relative to this instance into one relative to the Project root (the sub file system prefix is
+    /// prepended after lexical validation).
+    /// </summary>
+    private string RootRelativePath(string path) => Combine(_prefix, RelativePath(path));
 
     private VerifiedHandle OpenExistingFile(string path, uint access)
     {
@@ -549,6 +577,11 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
         {
             error = WindowsNative.LastError;
             handle.Dispose();
+            if (error is WindowsNative.ERROR_FILE_NOT_FOUND or WindowsNative.ERROR_PATH_NOT_FOUND)
+            {
+                EnsureNearestExistingAncestorInside(fullPath, path);
+            }
+
             return null;
         }
 
@@ -574,6 +607,66 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
             ErrorCodes.FilePathOutsideRoot,
             $"Path '{path}' resolves outside the Project directories."
         );
+    }
+
+    /// <summary>
+    /// 目标不存在时，沿词法路径向上找到最近的已存在祖先目录并校验其句柄的物理位置。这样即使最终文件不存在，路径经过指向外部的
+    /// 目录链接时仍然报告越界，而不是"不存在"，与 Unix 实现一致，也不会暴露外部文件是否存在。
+    /// When the target is missing, walks up the lexical path to the nearest existing ancestor directory and verifies
+    /// the physical location of its handle. A path passing through a directory link that points outside is then
+    /// reported as outside instead of "missing", matching the Unix implementation and never revealing whether an
+    /// outside file exists.
+    /// </summary>
+    private void EnsureNearestExistingAncestorInside(string fullPath, string path)
+    {
+        var rootFullPath = Path.TrimEndingDirectorySeparator(_root.ResolvePhysicalPath(string.Empty));
+        var current = Path.GetDirectoryName(fullPath);
+        while (current != null)
+        {
+            using var handle = WindowsNative.CreateFile(
+                current,
+                WindowsNative.FILE_READ_ATTRIBUTES,
+                WindowsNative.ShareAll,
+                IntPtr.Zero,
+                WindowsNative.OPEN_EXISTING,
+                WindowsNative.FILE_FLAG_BACKUP_SEMANTICS,
+                IntPtr.Zero
+            );
+            if (!handle.IsInvalid)
+            {
+                if (IsInside(WindowsNative.GetFinalPath(handle)))
+                {
+                    return;
+                }
+
+                throw new AgwException(
+                    ErrorCodes.FilePathOutsideRoot,
+                    $"Path '{path}' resolves outside the Project directories."
+                );
+            }
+
+            var error = WindowsNative.LastError;
+            if (error is not (WindowsNative.ERROR_FILE_NOT_FOUND or WindowsNative.ERROR_PATH_NOT_FOUND))
+            {
+                throw WindowsNative.CreateException(error, $"Cannot open '{path}'");
+            }
+
+            if (
+                string.Equals(
+                    Path.TrimEndingDirectorySeparator(current),
+                    rootFullPath,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                throw new AgwException(
+                    ErrorCodes.ResourceNotFound,
+                    $"Project directory is unavailable: '{rootFullPath}'."
+                );
+            }
+
+            current = Path.GetDirectoryName(current);
+        }
     }
 
     private bool IsInside(string finalPath)
@@ -621,7 +714,9 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
     }
 
     private static string Combine(string directory, string name) =>
-        directory.Length == 0 ? name : directory + "/" + name;
+        directory.Length == 0 ? name
+        : name.Length == 0 ? directory
+        : directory + "/" + name;
 
     private static string ToRelativePath(string root, string fullPath) =>
         Path.GetRelativePath(root, fullPath).Replace(Path.DirectorySeparatorChar, '/');

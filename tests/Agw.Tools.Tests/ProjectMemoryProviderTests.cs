@@ -236,6 +236,98 @@ public sealed class ProjectMemoryProviderTests : IDisposable
         Assert.Contains("reserved", internalFile.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task WriteAsync_MemoryDirectoryReplacedBySymlinkOutsideWorkspace_IsRejected()
+    {
+        var outside = Directory.CreateDirectory(_workspace + "-outside").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(_workspace, ".agw"));
+            Directory.CreateSymbolicLink(Path.Combine(_workspace, ".agw", "memory"), outside);
+            var store = CreateStore();
+
+            // 提供上下文时读取记忆索引就会被拒绝；直接写入同样被拒绝，外部目录保持为空。
+            // Reading the memory index while providing context is already rejected; a direct write is rejected as
+            // well, and the outside directory stays empty.
+            var indexRead = await Assert.ThrowsAsync<AgwException>(() => InvokeProviderAsync(CreateProvider(store)));
+            var write = await Assert.ThrowsAsync<AgwException>(() =>
+                store.WriteAsync("notes.md", "escaped", TestContext.Current.CancellationToken)
+            );
+
+            Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, indexRead.Code);
+            Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, write.Code);
+            Assert.Empty(Directory.GetFileSystemEntries(outside));
+        }
+        finally
+        {
+            Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReadAsync_MemoryFileSymlinkOutsideWorkspace_IsRejected()
+    {
+        var outside = Directory.CreateDirectory(_workspace + "-outside").FullName;
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(outside, "secret.txt"),
+                "secret",
+                TestContext.Current.CancellationToken
+            );
+            var memory = Directory.CreateDirectory(Path.Combine(_workspace, ".agw", "memory")).FullName;
+            File.CreateSymbolicLink(Path.Combine(memory, "notes.md"), Path.Combine(outside, "secret.txt"));
+            var context = await InvokeProviderAsync(CreateProvider(CreateStore()));
+            var read = GetFunction(context, ProjectMemoryProvider.ReadFileToolName);
+
+            var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+                await read.InvokeAsync(Arguments(("fileName", "notes.md")), TestContext.Current.CancellationToken)
+            );
+
+            Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(outside, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReadAsync_MemoryFileSymlinkInsideWorkspace_ReturnsContent()
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(_workspace, "shared.md"),
+            "shared",
+            TestContext.Current.CancellationToken
+        );
+        var memory = Directory.CreateDirectory(Path.Combine(_workspace, ".agw", "memory")).FullName;
+        File.CreateSymbolicLink(Path.Combine(memory, "link.md"), Path.Combine(_workspace, "shared.md"));
+        var context = await InvokeProviderAsync(CreateProvider(CreateStore()));
+
+        var result = await GetFunction(context, ProjectMemoryProvider.ReadFileToolName)
+            .InvokeAsync(Arguments(("fileName", "link.md")), TestContext.Current.CancellationToken);
+
+        Assert.Equal("shared", ResultText(result));
+    }
+
+    [Fact]
+    public async Task WriteAsync_FileNameWithNulCharacter_IsRejected()
+    {
+        var context = await InvokeProviderAsync(CreateProvider(CreateStore()));
+        var write = GetFunction(context, ProjectMemoryProvider.WriteToolName);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await write.InvokeAsync(
+                Arguments(("fileName", "notes\0.md"), ("content", "invalid")),
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Contains("NUL", exception.ToString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(_workspace, ".agw")));
+    }
+
     private ProjectAgentFileStore CreateStore() =>
         new(
             new LocalFileSystemResolver(new LocalFileSystem(_workspace)),
