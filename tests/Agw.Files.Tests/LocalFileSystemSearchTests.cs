@@ -138,9 +138,10 @@ public sealed class LocalFileSystemSearchTests : IDisposable
     {
         var fileSystem = new LocalFileSystem(_root);
         var hits = new List<(string, int, string)>();
-        await foreach (var hit in fileSystem.SearchAsync("", options, TestContext.Current.CancellationToken))
+        await foreach (var result in fileSystem.SearchAsync("", options, TestContext.Current.CancellationToken))
         {
-            hits.Add((hit.Path, hit.LineNumber, hit.Line));
+            Assert.Equal(result.MatchingLines[0].Line, result.Snippet);
+            hits.AddRange(result.MatchingLines.Select(match => (result.FileName, match.LineNumber, match.Line)));
         }
 
         return hits.OrderBy(hit => hit.Item1, StringComparer.Ordinal).ThenBy(hit => hit.Item2).ToList();

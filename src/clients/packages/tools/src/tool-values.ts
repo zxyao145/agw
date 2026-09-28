@@ -11,6 +11,7 @@ export type ToolBlockName =
   | "mode"
   | "project-memory"
   | "user-memory"
+  | "file-readonly-access"
   | "file-access"
   | "background-agents";
 

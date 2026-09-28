@@ -27,6 +27,22 @@ public sealed class PlanModeToolBlockMetadataTests
     }
 
     [Fact]
+    public async Task FileReadonlyAccess_MarksAllMembersAllowedInPlan()
+    {
+        var block = new FileReadonlyAccessToolBlock(new UnusedFileSystemResolver());
+        await using var contribution = await block.MaterializeAsync(
+            new FileReadonlyAccessToolBlockDefinition(),
+            CreateContext(),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(
+            block.Descriptor.MemberToolNames.Order(StringComparer.Ordinal),
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal)
+        );
+    }
+
+    [Fact]
     public async Task BackgroundAgents_AllMembersSkipApproval_OnlyResultReadsAllowedInPlan()
     {
         var childAgent = new ChatClientAgent(

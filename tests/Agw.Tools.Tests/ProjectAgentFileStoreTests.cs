@@ -1,12 +1,191 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Agw.Tools.Impl.ToolBlocks.Storage;
 
 namespace Agw.Tools.Tests;
 
 public sealed class ProjectAgentFileStoreTests
 {
+    [Fact]
+    public async Task ReadAsync_FileSymlinkOutsideWorkspace_IsRejected()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTestRoot();
+        try
+        {
+            var workspace = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+            var outside = Directory.CreateDirectory(Path.Combine(root, "outside")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(outside, "secret.txt"), "secret", cancellationToken);
+            File.CreateSymbolicLink(Path.Combine(workspace, "link.txt"), Path.Combine(outside, "secret.txt"));
+            var store = CreateStore(workspace);
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                store.ReadAsync("link.txt", cancellationToken)
+            );
+
+            Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_DirectorySymlinkOutsideProjectDirectories_IsRejected()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTestRoot();
+        try
+        {
+            var workspace = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+            var additional = Directory.CreateDirectory(Path.Combine(root, "additional")).FullName;
+            var outside = Directory.CreateDirectory(Path.Combine(root, "outside")).FullName;
+            Directory.CreateSymbolicLink(Path.Combine(workspace, "link"), outside);
+            var projectId = Guid.CreateVersion7();
+            var snapshot = ProjectWorkspacePaths.CreateSnapshot(
+                projectId,
+                workspace,
+                [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), additional)]
+            );
+            var store = new ProjectAgentFileStore(
+                new StubFileSystemResolver(new LocalFileSystem(workspace)),
+                projectId,
+                null,
+                snapshot
+            );
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                store.WriteAsync("link/escaped.txt", "escaped", cancellationToken)
+            );
+
+            Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
+            Assert.False(File.Exists(Path.Combine(outside, "escaped.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReadAsync_SymlinkIntoAdditionalDirectory_IsAllowed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTestRoot();
+        try
+        {
+            var workspace = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+            var additional = Directory.CreateDirectory(Path.Combine(root, "additional")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(additional, "shared.md"), "shared", cancellationToken);
+            Directory.CreateSymbolicLink(Path.Combine(workspace, "link"), additional);
+            var projectId = Guid.CreateVersion7();
+            var snapshot = ProjectWorkspacePaths.CreateSnapshot(
+                projectId,
+                workspace,
+                [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), additional)]
+            );
+            var store = new ProjectAgentFileStore(
+                new StubFileSystemResolver(new LocalFileSystem(workspace)),
+                projectId,
+                null,
+                snapshot
+            );
+
+            Assert.Equal("shared", await store.ReadAsync("link/shared.md", cancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReadAsync_WorkspaceReachedThroughSymlink_IsAllowed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTestRoot();
+        try
+        {
+            var physicalWorkspace = Directory.CreateDirectory(Path.Combine(root, "physical")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(physicalWorkspace, "notes.md"), "notes", cancellationToken);
+            var linkedWorkspace = Path.Combine(root, "linked");
+            Directory.CreateSymbolicLink(linkedWorkspace, physicalWorkspace);
+            var projectId = Guid.CreateVersion7();
+            var snapshot = ProjectWorkspacePaths.CreateSnapshot(projectId, linkedWorkspace);
+            var store = new ProjectAgentFileStore(
+                new StubFileSystemResolver(new LocalFileSystem(linkedWorkspace)),
+                projectId,
+                null,
+                snapshot
+            );
+
+            Assert.Equal("notes", await store.ReadAsync("notes.md", cancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ListChildrenAsync_DirectorySymlinkOutsideWorkspace_IsRejected()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTestRoot();
+        try
+        {
+            var workspace = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+            var outside = Directory.CreateDirectory(Path.Combine(root, "outside")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(outside, "secret.txt"), "secret", cancellationToken);
+            Directory.CreateSymbolicLink(Path.Combine(workspace, "link"), outside);
+            var store = CreateStore(workspace);
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                store.ListChildrenAsync("link", cancellationToken)
+            );
+
+            Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScopedStore_MemoryRootSymlinkOutsideWorkspace_IsRejected()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTestRoot();
+        try
+        {
+            var workspace = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+            var outside = Directory.CreateDirectory(Path.Combine(root, "outside")).FullName;
+            Directory.CreateDirectory(Path.Combine(workspace, ".agw"));
+            Directory.CreateSymbolicLink(Path.Combine(workspace, ".agw", "memory"), outside);
+            var store = new ProjectAgentFileStore(
+                new StubFileSystemResolver(new LocalFileSystem(workspace)),
+                Guid.CreateVersion7(),
+                ".agw/memory"
+            );
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                store.WriteAsync("notes.md", "memory", cancellationToken)
+            );
+
+            Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
+            Assert.False(File.Exists(Path.Combine(outside, "notes.md")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ScopedStore_WritesBelowSharedProjectMemoryDirectory()
     {
@@ -70,7 +249,7 @@ public sealed class ProjectAgentFileStoreTests
             store.WriteAsync("../outside.md", "invalid", TestContext.Current.CancellationToken)
         );
 
-        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
     }
 
     [Fact]
@@ -324,6 +503,17 @@ public sealed class ProjectAgentFileStoreTests
             Guid.CreateVersion7()
         );
     }
+
+    /// <summary>
+    /// 在测试输出目录下创建一个独立的根目录，符号链接测试的所有目录都放在其中。
+    /// Creates an isolated root under the test output directory that holds every directory of a symbolic-link test.
+    /// </summary>
+    private static string CreateTestRoot() =>
+        Directory
+            .CreateDirectory(
+                Path.Combine(AppContext.BaseDirectory, "project-directory-guard", Guid.CreateVersion7().ToString("N"))
+            )
+            .FullName;
 
     private sealed class StubFileSystemResolver : IAgwFileSystemResolver
     {

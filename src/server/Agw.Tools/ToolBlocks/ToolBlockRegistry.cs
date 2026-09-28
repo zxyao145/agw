@@ -12,6 +12,7 @@ public sealed class ToolBlockRegistry
     {
         var entries = new Dictionary<string, IToolBlock>(StringComparer.OrdinalIgnoreCase);
         var memberOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var sharedMemberOwners = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var obsoleteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var toolBlock in toolBlocks)
         {
@@ -34,10 +35,38 @@ public sealed class ToolBlockRegistry
             {
                 if (!memberOwners.TryAdd(memberToolName, toolBlock.Descriptor.Name))
                 {
-                    throw new AgwException(
-                        ErrorCodes.InvalidParam,
-                        $"Tool '{memberToolName}' belongs to more than one Tool Block."
-                    );
+                    if (!sharedMemberOwners.TryGetValue(memberToolName, out var owners))
+                    {
+                        owners = [memberOwners[memberToolName]];
+                        sharedMemberOwners.Add(memberToolName, owners);
+                    }
+
+                    owners.Add(toolBlock.Descriptor.Name);
+                }
+            }
+        }
+
+        ValidateIncludedToolBlocks(entries);
+
+        // 同名成员只允许出现在存在包含关系的 Block 之间，保证同时启用时只物化一个 Block、同一工具名只暴露一次。
+        // A member may be shared only between blocks where one includes the other, so enabling both materializes one
+        // block and exposes the tool name once.
+        foreach (var (memberToolName, owners) in sharedMemberOwners)
+        {
+            for (var first = 0; first < owners.Count; first++)
+            {
+                for (var second = first + 1; second < owners.Count; second++)
+                {
+                    if (
+                        !Includes(entries[owners[first]], owners[second])
+                        && !Includes(entries[owners[second]], owners[first])
+                    )
+                    {
+                        throw new AgwException(
+                            ErrorCodes.InvalidParam,
+                            $"Tool '{memberToolName}' belongs to more than one Tool Block."
+                        );
+                    }
                 }
             }
         }
@@ -149,8 +178,19 @@ public sealed class ToolBlockRegistry
 
             context.EnabledToolBlockNames = seen;
 
+            // 被另一个已启用 Block 包含的 Block 不再单独物化，它的成员由包含它的 Block 提供。
+            // A block included by another enabled block is not materialized; the including block provides its members.
+            var includedToolBlockNames = resolvedDefinitions
+                .SelectMany(static item => item.Item2.Descriptor.IncludedToolBlockNames)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             foreach (var (definition, toolBlock) in resolvedDefinitions)
             {
+                if (includedToolBlockNames.Contains(toolBlock.Descriptor.Name))
+                {
+                    continue;
+                }
+
                 var contribution = await toolBlock
                     .MaterializeAsync(definition, context, cancellationToken)
                     .ConfigureAwait(false);
@@ -258,6 +298,44 @@ public sealed class ToolBlockRegistry
     }
 
     private static bool IsObsolete(Type type) => type.IsDefined(typeof(ObsoleteAttribute), inherit: false);
+
+    private static bool Includes(IToolBlock toolBlock, string toolBlockName) =>
+        toolBlock.Descriptor.IncludedToolBlockNames.Contains(toolBlockName, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 被包含的 Block 必须已注册，且它的每个成员都以相同声明出现在包含它的 Block 中。
+    /// An included block must be registered, and each of its members must be declared identically by the including block.
+    /// </summary>
+    private static void ValidateIncludedToolBlocks(IReadOnlyDictionary<string, IToolBlock> toolBlocks)
+    {
+        foreach (var (name, toolBlock) in toolBlocks)
+        {
+            foreach (var includedName in toolBlock.Descriptor.IncludedToolBlockNames)
+            {
+                if (
+                    string.Equals(includedName, name, StringComparison.OrdinalIgnoreCase)
+                    || !toolBlocks.TryGetValue(includedName, out var included)
+                )
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        $"Tool Block '{name}' includes unknown Tool Block '{includedName}'."
+                    );
+                }
+
+                foreach (var member in included.Descriptor.Members)
+                {
+                    if (!toolBlock.Descriptor.Members.Contains(member))
+                    {
+                        throw new AgwException(
+                            ErrorCodes.InvalidParam,
+                            $"Tool Block '{name}' must declare member '{member.Name}' of included Tool Block '{includedName}' identically."
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     private static void ValidateDescriptor(ToolBlockDescriptor descriptor)
     {

@@ -9,7 +9,8 @@ public sealed record ToolBlockDescriptor
         ToolBlockScope scopes,
         IReadOnlyList<ToolBlockMemberDescriptor> members,
         bool requiresWorkspace = false,
-        bool excludeFromList = false
+        bool excludeFromList = false,
+        IReadOnlyList<string>? includedToolBlockNames = null
     )
     {
         Name = name;
@@ -19,6 +20,7 @@ public sealed record ToolBlockDescriptor
         Members = members.ToArray();
         RequiresWorkspace = requiresWorkspace;
         ExcludeFromList = excludeFromList;
+        IncludedToolBlockNames = (includedToolBlockNames ?? []).ToArray();
     }
 
     public string Name { get; }
@@ -36,6 +38,13 @@ public sealed record ToolBlockDescriptor
     public bool RequiresWorkspace { get; }
 
     public bool ExcludeFromList { get; }
+
+    /// <summary>
+    /// Gets the Tool Blocks whose members this block also declares identically. When both are enabled, only this block
+    /// is materialized, so each shared tool name is exposed once.
+    /// 本 Block 以相同声明包含其全部成员的其他 Tool Block；同时启用时只物化本 Block，同名工具只暴露一次。
+    /// </summary>
+    public IReadOnlyList<string> IncludedToolBlockNames { get; }
 
     public bool MayRequireApproval =>
         Members.Any(static member => AgwToolMetadataBinding.RequiresApproval(member.RequiredPermission));

@@ -1,0 +1,3 @@
+AgwAgentFileStore copied from https://github.com/microsoft/agent-framework/blob/6f1522a50b66f117da34cc25ea299ba24a528b15/dotnet/src/Microsoft.Agents.AI/Harness/FileStore
+
+AgwAgentFileStore 复制自上述 FileStore 目录，是文件工具与 Project Memory 共用的存储抽象；同一目录中的 AgwFileStoreEntry、AgwFileSearchResult、AgwFileSearchMatch 和 AgwFileLineEdit 位于 `Agw.Files.Abstracts.Dtos`。文件的创建、按行读取、文本替换、按行编辑、内容搜索和路径校验由 `Agw.Files` 的 `IAgwFileSystem` 与 `TextContentEditor` 提供；ProjectAgentFileStore 通过 `ILocalFileSystem.Confine` 得到的受限文件系统访问 Project 目录：Linux 与 macOS 上每个操作都从目录句柄出发、用不跟随符号链接的 `openat` 逐段解析，只有解析后的物理位置位于 Project 的 workspace 或 additional directories 之内才执行，且 IO 全部使用已打开的句柄；Windows 上按路径打开句柄后用 GetFinalPathNameByHandle 校验句柄的物理位置，IO 同样只使用已校验的句柄。ProjectMemoryStore 把记忆保存在数据库中，不进行任何文件操作。

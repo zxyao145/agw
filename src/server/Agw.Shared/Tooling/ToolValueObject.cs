@@ -36,11 +36,12 @@ public static class ToolBlockDefinitionNames
     public const string Mode = "mode";
     public const string ProjectMemory = "project-memory";
     public const string UserMemory = "user-memory";
+    public const string FileReadonlyAccess = "file-readonly-access";
     public const string FileAccess = "file-access";
     public const string BackgroundAgents = "background-agents";
 
     public static IReadOnlyList<string> All { get; } =
-    [Todo, Mode, ProjectMemory, UserMemory, FileAccess, BackgroundAgents];
+    [Todo, Mode, ProjectMemory, UserMemory, FileReadonlyAccess, FileAccess, BackgroundAgents];
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
@@ -127,6 +128,7 @@ public sealed record WebSearchToolDefinition : ToolDefinition<EmptyToolOptions>
 [JsonDerivedType(typeof(ModeToolBlockDefinition), ToolBlockDefinitionNames.Mode)]
 [JsonDerivedType(typeof(ProjectMemoryToolBlockDefinition), ToolBlockDefinitionNames.ProjectMemory)]
 [JsonDerivedType(typeof(UserMemoryToolBlockDefinition), ToolBlockDefinitionNames.UserMemory)]
+[JsonDerivedType(typeof(FileReadonlyAccessToolBlockDefinition), ToolBlockDefinitionNames.FileReadonlyAccess)]
 [JsonDerivedType(typeof(FileAccessToolBlockDefinition), ToolBlockDefinitionNames.FileAccess)]
 [JsonDerivedType(typeof(BackgroundAgentsToolBlockDefinition), ToolBlockDefinitionNames.BackgroundAgents)]
 public abstract record ToolBlockDefinition
@@ -178,6 +180,11 @@ public enum ProjectMemoryStorage
 
     [JsonStringEnumMemberName("filesystem")]
     FileSystem,
+}
+
+public sealed record FileReadonlyAccessToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>
+{
+    public override string GetDefinitionName() => ToolBlockDefinitionNames.FileReadonlyAccess;
 }
 
 public sealed record FileAccessToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>

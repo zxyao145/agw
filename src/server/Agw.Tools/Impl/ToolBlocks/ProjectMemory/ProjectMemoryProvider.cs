@@ -1,6 +1,8 @@
 using System.Text;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Impl.ToolBlocks.Storage;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.FileSystemGlobbing;
@@ -37,13 +39,13 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         - Keep memories current by overwriting files or using project_memory_replace and project_memory_replace_lines.
         """;
 
-    private readonly AgentFileStore _fileStore;
+    private readonly AgwAgentFileStore _fileStore;
     private readonly IApplicationLock _applicationLock;
     private readonly string _mutationResourceName;
     private AITool[]? _tools;
 
     public ProjectMemoryProvider(
-        AgentFileStore fileStore,
+        AgwAgentFileStore fileStore,
         IApplicationLock applicationLock,
         string mutationResourceName
     )
@@ -141,7 +143,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     )
     {
         var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken).ConfigureAwait(false))
-            .Where(static entry => string.Equals(entry.Type, FileStoreEntry.File, StringComparison.Ordinal))
+            .Where(static entry => string.Equals(entry.Type, AgwFileStoreEntry.File, StringComparison.Ordinal))
             .Select(static entry => entry.Name)
             .ToList();
         var availableFiles = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
@@ -166,7 +168,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
                 new FileListEntry
                 {
                     Name = file,
-                    Type = FileStoreEntry.File,
+                    Type = AgwFileStoreEntry.File,
                     Description = description,
                 }
             );
@@ -178,7 +180,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     [Description(
         "Search project memory contents with a case-insensitive regular expression and an optional glob_pattern."
     )]
-    private async Task<List<FileSearchResult>> GrepAsync(
+    private async Task<List<AgwFileSearchResult>> GrepAsync(
         string regexPattern,
         string? globPattern = null,
         CancellationToken cancellationToken = default
@@ -210,15 +212,10 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         var normalized = NormalizeMemoryFileName(fileName);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
 
-        var content = await _fileStore.ReadAsync(normalized, cancellationToken).ConfigureAwait(false);
-        if (content == null)
-        {
-            return $"File '{fileName}' not found.";
-        }
-
-        var replacement = ApplyReplace(content, oldString, newString, replaceAll);
-        await _fileStore.WriteAsync(normalized, replacement.Content, cancellationToken).ConfigureAwait(false);
-        return $"Replaced {replacement.Count} occurrence(s) in '{fileName}'.";
+        var count = await _fileStore
+            .ReplaceTextAsync(normalized, oldString, newString, replaceAll, cancellationToken)
+            .ConfigureAwait(false);
+        return count == null ? $"File '{fileName}' not found." : $"Replaced {count} occurrence(s) in '{fileName}'.";
     }
 
     [Description(
@@ -226,22 +223,15 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     )]
     private async Task<string> ReplaceLinesAsync(
         string fileName,
-        List<FileLineEdit> edits,
+        List<AgwFileLineEdit> edits,
         CancellationToken cancellationToken = default
     )
     {
         var normalized = NormalizeMemoryFileName(fileName);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
 
-        var content = await _fileStore.ReadAsync(normalized, cancellationToken).ConfigureAwait(false);
-        if (content == null)
-        {
-            return $"File '{fileName}' not found.";
-        }
-
-        var updated = ApplyReplaceLines(content, edits);
-        await _fileStore.WriteAsync(normalized, updated, cancellationToken).ConfigureAwait(false);
-        return $"Replaced {edits.Count} line(s) in '{fileName}'.";
+        var replaced = await _fileStore.ReplaceLinesAsync(normalized, edits, cancellationToken).ConfigureAwait(false);
+        return replaced ? $"Replaced {edits.Count} line(s) in '{fileName}'." : $"File '{fileName}' not found.";
     }
 
     private AITool[] CreateTools()
@@ -265,7 +255,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
                 new AIFunctionFactoryOptions { Name = LsToolName }
             ),
             AIFunctionFactory.Create(
-                (Func<string, string?, CancellationToken, Task<List<FileSearchResult>>>)GrepAsync,
+                (Func<string, string?, CancellationToken, Task<List<AgwFileSearchResult>>>)GrepAsync,
                 new AIFunctionFactoryOptions { Name = GrepToolName }
             ),
             AIFunctionFactory.Create(
@@ -273,7 +263,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
                 new AIFunctionFactoryOptions { Name = ReplaceToolName }
             ),
             AIFunctionFactory.Create(
-                (Func<string, List<FileLineEdit>, CancellationToken, Task<string>>)ReplaceLinesAsync,
+                (Func<string, List<AgwFileLineEdit>, CancellationToken, Task<string>>)ReplaceLinesAsync,
                 new AIFunctionFactoryOptions { Name = ReplaceLinesToolName }
             ),
         ];
@@ -282,7 +272,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     private async Task RebuildMemoryIndexAsync(CancellationToken cancellationToken)
     {
         var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken).ConfigureAwait(false))
-            .Where(static entry => string.Equals(entry.Type, FileStoreEntry.File, StringComparison.Ordinal))
+            .Where(static entry => string.Equals(entry.Type, AgwFileStoreEntry.File, StringComparison.Ordinal))
             .Select(static entry => entry.Name)
             .Where(static file => !IsInternalFile(file))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
@@ -316,6 +306,11 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         if (string.IsNullOrWhiteSpace(fileName))
         {
             throw InvalidParameter("A project memory file name must not be empty.");
+        }
+
+        if (fileName.Contains('\0'))
+        {
+            throw InvalidParameter("Project memory file names must not contain NUL characters.");
         }
 
         var normalized = fileName.Replace('\\', '/').Trim('/');
@@ -364,102 +359,6 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
         matcher.AddInclude(globPattern);
         return matcher;
-    }
-
-    private static (string Content, int Count) ApplyReplace(
-        string content,
-        string oldString,
-        string newString,
-        bool replaceAll
-    )
-    {
-        if (string.IsNullOrEmpty(oldString))
-        {
-            throw InvalidParameter("old_string must not be empty.");
-        }
-
-        var count = 0;
-        var startIndex = 0;
-        while ((startIndex = content.IndexOf(oldString, startIndex, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            startIndex += oldString.Length;
-        }
-
-        if (count == 0)
-        {
-            throw InvalidParameter($"old_string not found: '{oldString}'.");
-        }
-
-        if (count > 1 && !replaceAll)
-        {
-            throw InvalidParameter(
-                $"old_string occurs {count} times; pass replace_all=true or provide a more specific value."
-            );
-        }
-
-        return (content.Replace(oldString, newString, StringComparison.Ordinal), count);
-    }
-
-    private static string ApplyReplaceLines(string content, IReadOnlyList<FileLineEdit> edits)
-    {
-        if (edits.Count == 0)
-        {
-            throw InvalidParameter("At least one line edit must be provided.");
-        }
-
-        var lines = SplitLinesKeepEnds(content);
-        var lineNumbers = new HashSet<int>();
-        foreach (var edit in edits)
-        {
-            if (!lineNumbers.Add(edit.LineNumber))
-            {
-                throw InvalidParameter($"Duplicate line_number {edit.LineNumber} in edits.");
-            }
-
-            if (edit.LineNumber < 1 || edit.LineNumber > lines.Count)
-            {
-                throw InvalidParameter(
-                    $"line_number {edit.LineNumber} is out of range (file has {lines.Count} lines)."
-                );
-            }
-        }
-
-        foreach (var edit in edits)
-        {
-            lines[edit.LineNumber - 1] = edit.NewLine;
-        }
-
-        return string.Concat(lines);
-    }
-
-    private static List<string> SplitLinesKeepEnds(string content)
-    {
-        var lines = new List<string>();
-        var start = 0;
-        for (var index = 0; index < content.Length; index++)
-        {
-            switch (content[index])
-            {
-                case '\n':
-                    lines.Add(content[start..(index + 1)]);
-                    start = index + 1;
-                    break;
-                case '\r':
-                    var end = index + 1 < content.Length && content[index + 1] == '\n' ? index + 2 : index + 1;
-                    lines.Add(content[start..end]);
-                    index = end - 1;
-                    start = end;
-                    break;
-            }
-        }
-
-        if (start < content.Length)
-        {
-            lines.Add(content[start..]);
-        }
-
-        return lines;
     }
 
     private static string GetDescriptionFileName(string fileName)

@@ -1,16 +1,16 @@
 using System.IO.Enumeration;
 using System.Text.RegularExpressions;
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Application.Persistence;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
 
-public sealed class ProjectMemoryStore : AgentFileStore
+public sealed class ProjectMemoryStore : AgwAgentFileStore
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly TimeProvider _timeProvider;
@@ -76,7 +76,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             .ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<FileStoreEntry>> ListChildrenAsync(
+    public override async Task<IReadOnlyList<AgwFileStoreEntry>> ListChildrenAsync(
         string directory,
         CancellationToken cancellationToken = default
     )
@@ -94,11 +94,11 @@ public sealed class ProjectMemoryStore : AgentFileStore
             {
                 var separatorIndex = path.IndexOf('/');
                 return separatorIndex < 0
-                    ? new FileStoreEntry(path, FileStoreEntry.File)
-                    : new FileStoreEntry(path[..separatorIndex], FileStoreEntry.Directory);
+                    ? new AgwFileStoreEntry(path, AgwFileStoreEntry.File)
+                    : new AgwFileStoreEntry(path[..separatorIndex], AgwFileStoreEntry.Directory);
             })
             .DistinctBy(static entry => (entry.Name, entry.Type))
-            .OrderByDescending(static entry => entry.Type == FileStoreEntry.Directory)
+            .OrderByDescending(static entry => entry.Type == AgwFileStoreEntry.Directory)
             .ThenBy(static entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static entry => entry.Name, StringComparer.Ordinal)
             .ToArray();
@@ -113,7 +113,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             .ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<FileSearchResult>> SearchAsync(
+    public override async Task<IReadOnlyList<AgwFileSearchResult>> SearchAsync(
         string directory,
         string regexPattern,
         string? globPattern = null,
@@ -131,7 +131,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             {
                 var entries = persistence.ListEntriesAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken);
 
-                var results = new List<FileSearchResult>();
+                var results = new List<AgwFileSearchResult>();
                 await foreach (var entry in entries.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
                     var relativePath = entry.Path[prefix.Length..];
@@ -154,9 +154,9 @@ public sealed class ProjectMemoryStore : AgentFileStore
                     if (matches.Count > 0)
                     {
                         results.Add(
-                            new FileSearchResult
+                            new AgwFileSearchResult
                             {
-                                FileName = relativePath,
+                                FileName = entry.Path,
                                 Snippet = matches[0].Line,
                                 MatchingLines = matches,
                             }
@@ -169,6 +169,35 @@ public sealed class ProjectMemoryStore : AgentFileStore
             .ConfigureAwait(false);
     }
 
+    public override async Task<int?> ReplaceTextAsync(
+        string path,
+        string oldString,
+        string newString,
+        bool replaceAll,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var count = 0;
+        var edited = await EditContentAsync(
+                path,
+                content =>
+                {
+                    var replacement = TextContentEditor.ApplyReplace(content, oldString, newString, replaceAll);
+                    count = replacement.Count;
+                    return replacement.Content;
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return edited ? count : null;
+    }
+
+    public override Task<bool> ReplaceLinesAsync(
+        string path,
+        IReadOnlyList<AgwFileLineEdit> edits,
+        CancellationToken cancellationToken = default
+    ) => EditContentAsync(path, content => TextContentEditor.ApplyReplaceLines(content, edits), cancellationToken);
+
     public override Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
     {
         _ = NormalizePath(path, allowEmpty: true);
@@ -176,12 +205,53 @@ public sealed class ProjectMemoryStore : AgentFileStore
     }
 
     /// <summary>
+    /// 在写入锁内读取、修改并写回一条记忆内容；记录不存在时返回 false。
+    /// Reads, edits, and writes back one memory entry under the write locks; returns false when the entry does not exist.
+    /// </summary>
+    private async Task<bool> EditContentAsync(
+        string path,
+        Func<string, string> edit,
+        CancellationToken cancellationToken
+    )
+    {
+        var normalizedPath = NormalizePath(path);
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(_projectId), cancellationToken)
+            .ConfigureAwait(false);
+        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
+        return await UsePersistenceAsync(async persistence =>
+            {
+                var ownerUserId = ResolveOwnerUserId();
+                var content = await persistence
+                    .ReadAsync(_projectId, ownerUserId, normalizedPath, cancellationToken)
+                    .ConfigureAwait(false);
+                if (content == null)
+                {
+                    return false;
+                }
+
+                await persistence
+                    .WriteAsync(
+                        _projectId,
+                        ownerUserId,
+                        normalizedPath,
+                        edit(content),
+                        _timeProvider.GetUtcNow(),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            })
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// 按 '\n' 划分行并去掉行尾的 '\r'，用 ReadOnlySpan&lt;char&gt; 匹配，只为命中的行分配字符串。
     /// Splits lines on '\n' and trims trailing '\r', matching with ReadOnlySpan&lt;char&gt; so only matching lines allocate strings.
     /// </summary>
-    private static List<FileSearchMatch> FindMatchingLines(string content, Regex regex)
+    private static List<AgwFileSearchMatch> FindMatchingLines(string content, Regex regex)
     {
-        var matches = new List<FileSearchMatch>();
+        var matches = new List<AgwFileSearchMatch>();
         var remaining = content.AsSpan();
         var lineNumber = 0;
         while (true)
@@ -191,7 +261,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
             var line = (lineEnd < 0 ? remaining : remaining[..lineEnd]).TrimEnd('\r');
             if (regex.IsMatch(line))
             {
-                matches.Add(new FileSearchMatch { LineNumber = lineNumber, Line = line.ToString() });
+                matches.Add(new AgwFileSearchMatch { LineNumber = lineNumber, Line = line.ToString() });
             }
 
             if (lineEnd < 0)
@@ -245,6 +315,7 @@ public sealed class ProjectMemoryStore : AgentFileStore
         var normalized = path.Replace('\\', '/').Trim('/');
         if (
             (!allowEmpty && normalized.Length == 0)
+            || path.Contains('\0')
             || Path.IsPathRooted(path)
             || normalized.Split('/').Any(static part => part is "." or "..")
         )

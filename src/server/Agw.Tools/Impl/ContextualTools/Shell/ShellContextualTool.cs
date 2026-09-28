@@ -17,6 +17,16 @@ public sealed class ShellContextualTool : IContextualTool
         _configuration = configuration;
     }
 
+    /// <summary>
+    /// 交给模型的函数说明：shell 是优先级最低的工具，且不能用于文件操作。
+    /// The function description shown to the model: the shell is the lowest-priority tool and cannot be used for file
+    /// operations.
+    /// </summary>
+    internal const string ShellFunctionDescription =
+        "Runs a shell command in the project workspace. This is the lowest-priority tool: use it only when no other "
+        + "available tool can do the job, such as builds, tests, package managers and git. It cannot read, list, search, "
+        + "write, edit or delete files; use the file_access_* tools for those.";
+
     public string Name => "run_shell";
 
     public string Category => "Shell";
@@ -50,7 +60,15 @@ public sealed class ShellContextualTool : IContextualTool
         };
 
         var contribution = new ToolContribution();
-        contribution.Tools.Add(executor.AsAIFunction(requireApproval: false));
+        // 文件访问约束在函数层与执行器策略两处生效：函数层给模型带错误码的说明，执行器策略拦住其他任何调用路径。
+        // The file access restriction applies at both the function and the executor policy: the function gives the
+        // model an explanation with an error code, and the executor policy stops every other invocation path.
+        contribution.Tools.Add(
+            new ShellFileAccessGuardAIFunction(
+                executor.AsAIFunction(description: ShellFunctionDescription, requireApproval: false)
+            )
+        );
+        contribution.ContextProviders.Add(new ShellFileAccessInstructionsProvider());
         contribution.ContextProviders.Add(new ShellEnvironmentProvider(executor));
         if (backend == "docker" && context.WorkspaceSnapshot?.AdditionalDirectories.Count > 0)
         {
@@ -75,6 +93,7 @@ public sealed class ShellContextualTool : IContextualTool
                 ConfineWorkingDirectory = true,
                 CleanEnvironment = true,
                 Environment = environment,
+                Policy = ShellFileAccessPolicy.CreateShellPolicy(),
                 Timeout = LocalShellExecutor.DefaultTimeout,
                 // AgwToolMetadataBinding adds the approval wrapper from RequiredPermission.
                 AcknowledgeUnsafe = true,
@@ -131,6 +150,7 @@ public sealed class ShellContextualTool : IContextualTool
                 ExtraRunArgs = CreateAdditionalDirectoryMounts(context),
                 Network = DockerNetworkMode.None,
                 Environment = context.EnvironmentVariables,
+                Policy = ShellFileAccessPolicy.CreateShellPolicy(),
                 Timeout = TimeSpan.FromSeconds(30),
             }
         );

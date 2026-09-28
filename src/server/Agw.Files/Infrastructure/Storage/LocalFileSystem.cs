@@ -1,23 +1,13 @@
-using System.Buffers;
 using System.IO.Enumeration;
-using System.Text.RegularExpressions;
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
+using Agw.Files.Infrastructure.Storage.Confined;
 using Agw.Shared.Exceptions;
-using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Agw.Files.Infrastructure.Storage;
 
 public sealed class LocalFileSystem : ILocalFileSystem
 {
-    private static readonly TimeSpan SearchRegexTimeout = TimeSpan.FromSeconds(1);
-
-    /// <summary>
-    /// 内容搜索整体读入内存的文件大小上限；更大的文件逐行读取。
-    /// The size limit for reading a file into memory during content search; larger files are read line by line.
-    /// </summary>
-    private const long MaxBufferedSearchFileBytes = 16 * 1024 * 1024;
-
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -67,6 +57,19 @@ public sealed class LocalFileSystem : ILocalFileSystem
         return fullPath;
     }
 
+    private string ResolveFilePath(string path)
+    {
+        var fullPath = ResolvePath(path);
+        // ResolvePath 保证结果位于根目录下，长度不超过根目录前缀的只能是根目录本身。
+        // ResolvePath keeps the result under the root, so only the root itself is no longer than the root prefix.
+        if (fullPath.Length <= _normalizedRoot.Length)
+        {
+            throw new AgwException(ErrorCodes.FilePathRequired, "A file path must not be empty.");
+        }
+
+        return fullPath;
+    }
+
     public string ResolvePhysicalPath(string path)
     {
         return ResolvePath(path);
@@ -76,6 +79,9 @@ public sealed class LocalFileSystem : ILocalFileSystem
     {
         return ToRelativePath(fullPath);
     }
+
+    public IAgwFileSystem Confine(IReadOnlyList<string> allowedRoots) =>
+        ConfinedFileSystem.Create(_rootFullPath, allowedRoots);
 
     private string ToRelativePath(string fullPath)
     {
@@ -145,14 +151,62 @@ public sealed class LocalFileSystem : ILocalFileSystem
 
     public async Task WriteAllTextAsync(string path, string content, CancellationToken ct)
     {
-        var fullPath = ResolvePath(path);
-        var dir = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-        {
-            Directory.CreateDirectory(dir);
-        }
-        await File.WriteAllTextAsync(fullPath, content, ct);
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
+        await WriteFileAsync(fullPath, content, ct).ConfigureAwait(false);
     }
+
+    public async Task<bool> CreateTextFileAsync(string path, string content, CancellationToken ct)
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
+        if (File.Exists(fullPath))
+        {
+            return false;
+        }
+
+        await WriteFileAsync(fullPath, content, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<string>> ReadLinesAsync(
+        string path,
+        int startLine,
+        int? endLine,
+        CancellationToken ct
+    )
+    {
+        var fullPath = ResolveFilePath(path);
+        var content = await ReadExistingFileAsync(path, fullPath, ct).ConfigureAwait(false);
+        return TextContentEditor.SliceLines(content, startLine, endLine);
+    }
+
+    public async Task<int> ReplaceTextAsync(
+        string path,
+        string oldString,
+        string newString,
+        bool replaceAll,
+        CancellationToken ct
+    )
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
+        var content = await ReadExistingFileAsync(path, fullPath, ct).ConfigureAwait(false);
+        var (newContent, count) = TextContentEditor.ApplyReplace(content, oldString, newString, replaceAll);
+        await WriteFileAsync(fullPath, newContent, ct).ConfigureAwait(false);
+        return count;
+    }
+
+    public async Task ReplaceLinesAsync(string path, IReadOnlyList<AgwFileLineEdit> edits, CancellationToken ct)
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
+        var content = await ReadExistingFileAsync(path, fullPath, ct).ConfigureAwait(false);
+        var newContent = TextContentEditor.ApplyReplaceLines(content, edits);
+        await WriteFileAsync(fullPath, newContent, ct).ConfigureAwait(false);
+    }
+
+    public IAgwFileSystem GetSubFileSystem(string path) => new LocalFileSystem(ResolvePath(path));
 
     public Task CreateDirectoryAsync(string path, CancellationToken ct)
     {
@@ -161,9 +215,10 @@ public sealed class LocalFileSystem : ILocalFileSystem
         return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(string path, CancellationToken ct)
+    public async Task DeleteAsync(string path, CancellationToken ct)
     {
         var fullPath = ResolvePath(path);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
 
         if (File.Exists(fullPath))
         {
@@ -173,8 +228,6 @@ public sealed class LocalFileSystem : ILocalFileSystem
         {
             Directory.Delete(fullPath, recursive: true);
         }
-
-        return Task.CompletedTask;
     }
 
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(
@@ -222,7 +275,7 @@ public sealed class LocalFileSystem : ILocalFileSystem
         }
     }
 
-    public async IAsyncEnumerable<SearchHit> SearchAsync(
+    public async IAsyncEnumerable<AgwFileSearchResult> SearchAsync(
         string rootPath,
         SearchOptions options,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct
@@ -234,45 +287,8 @@ public sealed class LocalFileSystem : ILocalFileSystem
             yield break;
         }
 
-        var regexOptions = RegexOptions.Compiled;
-        if (options.CaseInsensitive)
-        {
-            regexOptions |= RegexOptions.IgnoreCase;
-        }
-        if (options.Multiline)
-        {
-            regexOptions |= RegexOptions.Singleline;
-        }
-
-        Regex regex;
-        try
-        {
-            regex = new Regex(options.Pattern, regexOptions, SearchRegexTimeout);
-        }
-        catch (ArgumentException)
-        {
-            yield break;
-        }
-
-        if (
-            options.MaxHits is <= 0
-            || options.MaxFiles is <= 0
-            || options.MaxFileSizeBytes is <= 0
-            || options.MaxTotalBytes is <= 0
-        )
-        {
-            yield break;
-        }
-
-        Matcher? matcher = null;
-        if (!string.IsNullOrWhiteSpace(options.FilenameGlob))
-        {
-            matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
-            matcher.AddInclude(options.FilenameGlob);
-        }
-
-        // 目录名与扩展名直接用 ReadOnlySpan<char> 查找，每个条目不再分配字符串。
-        // Directory names and extensions are looked up with ReadOnlySpan<char>, allocating no string per entry.
+        // 目录名直接用 ReadOnlySpan<char> 查找，每个条目不再分配字符串。
+        // Directory names are looked up with ReadOnlySpan<char>, allocating no string per entry.
         HashSet<string>.AlternateLookup<ReadOnlySpan<char>>? excludedDirectoryNames = null;
         if (options.ExcludedDirectoryNames is { Count: > 0 })
         {
@@ -282,275 +298,17 @@ public sealed class LocalFileSystem : ILocalFileSystem
             ).GetAlternateLookup<ReadOnlySpan<char>>();
         }
 
-        HashSet<string>.AlternateLookup<ReadOnlySpan<char>>? includeExtensions = null;
-        if (options.IncludeExtensions is { Count: > 0 })
+        var candidates = EnumerateSearchFiles(fullPath, options.Recursive, excludedDirectoryNames, ct)
+            .Select(file => new SearchCandidate(
+                ToRelativePath(file.FullPath),
+                Path.GetRelativePath(fullPath, file.FullPath).Replace(Path.DirectorySeparatorChar, '/'),
+                file.Length,
+                () => new FileStream(file.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read)
+            ));
+        await foreach (var result in FileContentSearch.SearchAsync(candidates, options, ct).ConfigureAwait(false))
         {
-            includeExtensions = new HashSet<string>(
-                options.IncludeExtensions,
-                StringComparer.Ordinal
-            ).GetAlternateLookup<ReadOnlySpan<char>>();
+            yield return result;
         }
-
-        var hitCount = 0;
-        var fileCount = 0;
-        long totalBytes = 0;
-        var hits = new List<SearchHit>();
-        char[]? buffer = null;
-
-        try
-        {
-            foreach (var file in EnumerateSearchFiles(fullPath, options.Recursive, excludedDirectoryNames, ct))
-            {
-                ct.ThrowIfCancellationRequested();
-
-                if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
-                {
-                    yield break;
-                }
-
-                if (options.MaxFiles.HasValue && fileCount >= options.MaxFiles.Value)
-                {
-                    yield break;
-                }
-
-                if (includeExtensions is { } extensions && !HasIncludedExtension(file.FullPath, extensions))
-                {
-                    continue;
-                }
-
-                var searchRelativePath = Path.GetRelativePath(fullPath, file.FullPath)
-                    .Replace(Path.DirectorySeparatorChar, '/');
-                if (matcher?.Match(searchRelativePath).HasMatches == false)
-                {
-                    continue;
-                }
-
-                if (options.MaxFileSizeBytes.HasValue && file.Length > options.MaxFileSizeBytes.Value)
-                {
-                    continue;
-                }
-
-                if (options.MaxTotalBytes.HasValue && (file.Length > options.MaxTotalBytes.Value - totalBytes))
-                {
-                    yield break;
-                }
-
-                fileCount++;
-                totalBytes += file.Length;
-
-                var relativePath = ToRelativePath(file.FullPath);
-                if (file.Length > MaxBufferedSearchFileBytes)
-                {
-                    // 超出缓冲上限的文件逐行读取，内存占用与行长度相关。
-                    // Files beyond the buffer limit are read line by line, so memory follows the line length.
-                    StreamReader reader;
-                    try
-                    {
-                        reader = new StreamReader(file.FullPath, detectEncodingFromByteOrderMarks: true);
-                    }
-                    catch (IOException)
-                    {
-                        continue;
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                        continue;
-                    }
-
-                    using (reader)
-                    {
-                        var lineNumber = 0;
-                        while (true)
-                        {
-                            ct.ThrowIfCancellationRequested();
-
-                            string? line;
-                            try
-                            {
-                                line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
-                            }
-                            catch (IOException)
-                            {
-                                break;
-                            }
-
-                            if (line == null || line.Contains('\0'))
-                            {
-                                break;
-                            }
-
-                            lineNumber++;
-                            bool isMatch;
-                            var regexTimedOut = false;
-                            try
-                            {
-                                isMatch = regex.IsMatch(line);
-                            }
-                            catch (RegexMatchTimeoutException)
-                            {
-                                isMatch = false;
-                                regexTimedOut = true;
-                            }
-
-                            if (regexTimedOut)
-                            {
-                                yield break;
-                            }
-
-                            if (!isMatch)
-                            {
-                                continue;
-                            }
-
-                            if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
-                            {
-                                yield break;
-                            }
-
-                            hitCount++;
-                            yield return new SearchHit(relativePath, lineNumber, line);
-                        }
-                    }
-                }
-                else
-                {
-                    // UTF-8 解码后的字符数不超过字节数，文件整体读入 ArrayPool 缓冲区，逐行匹配时只为命中的行分配字符串。
-                    // Decoded UTF-8 never has more chars than bytes, so the file is read into an ArrayPool buffer and only matching lines allocate strings.
-                    var capacity = (int)Math.Max(file.Length, 1);
-                    if (buffer == null || buffer.Length < capacity)
-                    {
-                        if (buffer != null)
-                        {
-                            ArrayPool<char>.Shared.Return(buffer);
-                        }
-                        buffer = ArrayPool<char>.Shared.Rent(capacity);
-                    }
-
-                    int length;
-                    try
-                    {
-                        using var reader = new StreamReader(file.FullPath, detectEncodingFromByteOrderMarks: true);
-                        length = await reader.ReadBlockAsync(buffer.AsMemory(0, capacity), ct).ConfigureAwait(false);
-                    }
-                    catch (IOException)
-                    {
-                        continue;
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                        continue;
-                    }
-
-                    hits.Clear();
-                    var timedOut = CollectHits(
-                        buffer.AsSpan(0, length),
-                        regex,
-                        relativePath,
-                        options.MaxHits - hitCount,
-                        hits,
-                        ct
-                    );
-                    foreach (var hit in hits)
-                    {
-                        hitCount++;
-                        yield return hit;
-                    }
-
-                    if (timedOut)
-                    {
-                        yield break;
-                    }
-                }
-            }
-        }
-        finally
-        {
-            if (buffer != null)
-            {
-                ArrayPool<char>.Shared.Return(buffer);
-            }
-        }
-    }
-
-    /// <summary>
-    /// 在内存中的文件内容里按 StreamReader.ReadLine 的换行规则逐行匹配；遇到含 '\0' 的行按二进制文件停止。返回是否发生了正则超时。
-    /// Matches in-memory file content line by line with StreamReader.ReadLine's line breaks; a line containing '\0' stops the file as binary. Returns whether the regex timed out.
-    /// </summary>
-    private static bool CollectHits(
-        ReadOnlySpan<char> content,
-        Regex regex,
-        string relativePath,
-        int? remainingHits,
-        List<SearchHit> hits,
-        CancellationToken cancellationToken
-    )
-    {
-        var lineNumber = 0;
-        while (!content.IsEmpty)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var lineEnd = content.IndexOfAny('\r', '\n');
-            ReadOnlySpan<char> line;
-            if (lineEnd < 0)
-            {
-                line = content;
-                content = [];
-            }
-            else
-            {
-                line = content[..lineEnd];
-                var separatorLength =
-                    content[lineEnd] == '\r' && lineEnd + 1 < content.Length && content[lineEnd + 1] == '\n' ? 2 : 1;
-                content = content[(lineEnd + separatorLength)..];
-            }
-
-            if (line.Contains('\0'))
-            {
-                return false;
-            }
-
-            lineNumber++;
-            bool isMatch;
-            try
-            {
-                isMatch = regex.IsMatch(line);
-            }
-            catch (RegexMatchTimeoutException)
-            {
-                return true;
-            }
-
-            if (!isMatch)
-            {
-                continue;
-            }
-
-            if (remainingHits.HasValue && hits.Count >= remainingHits.Value)
-            {
-                return false;
-            }
-
-            hits.Add(new SearchHit(relativePath, lineNumber, line.ToString()));
-        }
-
-        return false;
-    }
-
-    private static bool HasIncludedExtension(
-        string path,
-        HashSet<string>.AlternateLookup<ReadOnlySpan<char>> extensions
-    )
-    {
-        const int StackLimit = 256;
-        var extension = Path.GetExtension(path.AsSpan()).TrimStart('.');
-        if (extension.Length > StackLimit)
-        {
-            return extensions.Contains(extension.ToString().ToLowerInvariant());
-        }
-
-        Span<char> lowered = stackalloc char[StackLimit];
-        var written = extension.ToLowerInvariant(lowered);
-        return extensions.Contains(lowered[..written]);
     }
 
     private static IEnumerable<SearchFile> EnumerateSearchFiles(
@@ -585,6 +343,27 @@ public sealed class LocalFileSystem : ILocalFileSystem
             cancellationToken.ThrowIfCancellationRequested();
             yield return file;
         }
+    }
+
+    private static async Task WriteFileAsync(string fullPath, string content, CancellationToken ct)
+    {
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await File.WriteAllTextAsync(fullPath, content, ct).ConfigureAwait(false);
+    }
+
+    private static Task<string> ReadExistingFileAsync(string path, string fullPath, CancellationToken ct)
+    {
+        if (!File.Exists(fullPath))
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"File '{path}' was not found.");
+        }
+
+        return File.ReadAllTextAsync(fullPath, ct);
     }
 
     /// <summary>

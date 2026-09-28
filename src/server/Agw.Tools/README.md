@@ -16,6 +16,11 @@ independently. A ToolBlock represents a coherent group of Tools whose behavior
 and state must stay consistent. Its member Tools are therefore selected,
 materialized, and removed as one unit.
 
+A ToolBlock may include another ToolBlock by declaring all of its members
+identically. Member names may be shared only between blocks related this way;
+when both are enabled, only the including block is materialized, so each tool
+name is exposed once.
+
 Current Tool Blocks:
 
 - `todo`: `todos_add`, `todos_list`, `todos_complete`, and related Todo tools.
@@ -27,7 +32,8 @@ Current Tool Blocks:
 - `user-memory`: database-only Markdown memory bound to the authenticated user.
   It follows that user across Agents, Projects, and conversations without being
   visible to other users.
-- `file-access`: Harness file-access tools bound to the turn's directory snapshot. Optional `directoryId` selects an additional Project directory; omission uses the primary `Project.Workspace`. Project Memory remains in the primary directory. Docker Shell mounts additional roots at `/project-directories/{id}` and reports these paths in its context.
+- `file-access`: file read and write tools bound to the turn's directory snapshot. Optional `directoryId` selects an additional Project directory; omission uses the primary `Project.Workspace`. Project Memory remains in the primary directory. Docker Shell mounts additional roots at `/project-directories/{id}` and reports these paths in its context. It includes `file-readonly-access`.
+- `file-readonly-access`: only the `file_access_read`, `file_access_read_lines`, `file_access_ls`, and `file_access_grep` tools of `file-access`, with the same tool instances and member declarations.
 - `background-agents`: one-level background delegation tools.
 - All `background-agents` members declare `ReadOnly` and require no parent-tool approval, including starting, continuing, and clearing tasks. Plan-mode availability remains independently declared.
 
@@ -45,6 +51,14 @@ fallback, and result parsing without implementing a tool registration interface.
 Request and response types live in `Contracts/WebSearch`.
 
 Shell execution uses `run_shell`; the obsolete `bash` and `powershell` implementations have been removed.
+`run_shell` rejects commands that duplicate the `file_access_*` tools before they run: programs that read, list,
+search, create, write, edit or delete files (`cat`, `ls`, `find`, `grep`, `touch`, `tee`, `cp`, `mv`, `rm`,
+`mkdir`, `sed -i`, their PowerShell and cmd counterparts, and so on), redirections to or from files,
+here-documents, process substitution, and inline interpreter code such as `sh -c` or `python -c`. The check is
+implemented by `ShellFileAccessPolicy`, applied both as the executor `ShellPolicy` and as a guard around the AI
+function that reports `ShellFileAccessNotAllowed` to the model. The function description and the
+`ShellFileAccessInstructionsProvider` instructions also tell the model that the shell is the lowest-priority tool:
+any other available tool that can do the job must be used instead.
 
 ## Data and selection
 
