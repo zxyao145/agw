@@ -8,9 +8,9 @@ internal sealed record InteractionPermissionSnapshot(AgwPermissionMode? Mode, lo
 /// </summary>
 internal sealed class InteractionPermissionState
 {
-    public InteractionPermissionState(AgwPermissionMode? mode, Guid? executionId = null, long version = 0)
+    public InteractionPermissionState(AgwPermissionMode? mode, Guid? turnId = null, long version = 0)
     {
-        ScopeId = executionId ?? Guid.CreateVersion7();
+        ScopeId = turnId ?? Guid.CreateVersion7();
         Snapshot = new(mode, version);
     }
 

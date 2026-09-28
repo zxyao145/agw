@@ -32,8 +32,8 @@ public class JobAttemptRunnerTests
         var reschedule = Assert.IsType<JobAttemptResult.Reschedule>(result);
         Assert.Equal(UtcNow.AddMinutes(15), reschedule.Job.NextRunTime);
         Assert.Equal(0, reschedule.Job.RetryCount);
-        Assert.Equal(store.ExecutionId, executor.ExecutionId);
-        Assert.Equal((scheduledJob.JobId, store.ExecutionId, true, null), recorder.LastCall);
+        Assert.Equal(store.TurnId, executor.TurnId);
+        Assert.Equal((scheduledJob.JobId, store.TurnId, true, null), recorder.LastCall);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class JobAttemptRunnerTests
         var reschedule = Assert.IsType<JobAttemptResult.Reschedule>(result);
         Assert.Equal(UtcNow.AddSeconds(30), reschedule.Job.NextRunTime);
         Assert.Equal(1, reschedule.Job.RetryCount);
-        Assert.Equal((scheduledJob.JobId, store.ExecutionId, false, "boom"), recorder.LastCall);
+        Assert.Equal((scheduledJob.JobId, store.TurnId, false, "boom"), recorder.LastCall);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class JobAttemptRunnerTests
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
 
         Assert.IsType<JobAttemptResult.Drop>(result);
-        Assert.Equal((scheduledJob.JobId, store.ExecutionId, false, "boom"), recorder.LastCall);
+        Assert.Equal((scheduledJob.JobId, store.TurnId, false, "boom"), recorder.LastCall);
     }
 
     [Fact]
@@ -168,12 +168,12 @@ public class JobAttemptRunnerTests
         }
 
         public int ExecuteCount { get; private set; }
-        public Guid? ExecutionId { get; private set; }
+        public Guid? TurnId { get; private set; }
 
-        public Task ExecuteAsync(Job job, Guid executionId, CancellationToken cancellationToken)
+        public Task ExecuteAsync(Job job, Guid turnId, CancellationToken cancellationToken)
         {
             ExecuteCount++;
-            ExecutionId = executionId;
+            TurnId = turnId;
             if (_exception != null)
             {
                 throw _exception;
@@ -187,7 +187,7 @@ public class JobAttemptRunnerTests
     {
         public bool CanClaim { get; init; }
         public Exception? StartException { get; init; }
-        public Guid ExecutionId { get; } = Guid.CreateVersion7();
+        public Guid TurnId { get; } = Guid.CreateVersion7();
 
         public Task<IReadOnlyList<Job>> PrefetchAsync(
             DateTimeOffset now,
@@ -206,7 +206,7 @@ public class JobAttemptRunnerTests
             }
 
             JobAttemptClaim? claim = CanClaim
-                ? new JobAttemptClaim(new Job { Id = jobId, Status = JobStatus.Running }, ExecutionId, UtcNow, 1)
+                ? new JobAttemptClaim(new Job { Id = jobId, Status = JobStatus.Running }, TurnId, UtcNow, 1)
                 : null;
             return Task.FromResult(claim);
         }
@@ -221,17 +221,17 @@ public class JobAttemptRunnerTests
             _result = result;
         }
 
-        public (Guid JobId, Guid ExecutionId, bool Success, string? Error)? LastCall { get; private set; }
+        public (Guid JobId, Guid TurnId, bool Success, string? Error)? LastCall { get; private set; }
 
         public Task<JobAttemptResult> RecordAsync(
             Guid jobId,
-            Guid executionId,
+            Guid turnId,
             bool success,
             string? errorMessage,
             CancellationToken cancellationToken
         )
         {
-            LastCall = (jobId, executionId, success, errorMessage);
+            LastCall = (jobId, turnId, success, errorMessage);
             return Task.FromResult(_result);
         }
     }

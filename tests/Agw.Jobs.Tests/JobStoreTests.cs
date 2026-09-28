@@ -68,7 +68,7 @@ public class JobStoreTests : IDisposable
             var claim = await store.TryStartAttemptAsync(jobId, cancellationToken);
 
             Assert.NotNull(claim);
-            Assert.NotEqual(Guid.Empty, claim.ExecutionId);
+            Assert.NotEqual(Guid.Empty, claim.TurnId);
             Assert.Equal(utcNow, claim.StartedAt);
             Assert.Equal(1, claim.Attempt);
         }
@@ -76,10 +76,10 @@ public class JobStoreTests : IDisposable
         await using var verifyContext = new AgwDbContext(options);
         var job = await verifyContext.Jobs.SingleAsync(cancellationToken);
         Assert.Equal(JobStatus.Running, job.Status);
-        Assert.NotNull(job.ActiveExecutionId);
+        Assert.NotNull(job.ActiveTurnId);
         Assert.Equal(utcNow, job.ActiveAttemptStartedAt);
         var json = JsonSerializer.Serialize(job);
-        Assert.DoesNotContain("activeExecutionId", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("activeTurnId", json, StringComparison.Ordinal);
         Assert.DoesNotContain("activeAttemptStartedAt", json, StringComparison.Ordinal);
     }
 }

@@ -10,5 +10,5 @@ public interface IDurableExecutionEventSequence
     /// 把执行的 last_event_sequence 增加 count 并返回增加后的值；预留的序号是返回值之前的 count 个连续值（包含返回值）。
     /// Increments the execution's last_event_sequence by count and returns the new value; the reserved sequences are the count contiguous values ending at the returned value.
     /// </summary>
-    Task<long> ReserveAsync(Guid executionId, int count, CancellationToken cancellationToken);
+    Task<long> ReserveAsync(Guid turnId, int count, CancellationToken cancellationToken);
 }

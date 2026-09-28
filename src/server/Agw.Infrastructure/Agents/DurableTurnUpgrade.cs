@@ -163,7 +163,7 @@ public sealed class DurableTurnUpgrade
             input.ConversationPayload = JsonSerializer.Serialize(message, WebJsonOptions.Default);
             manifest = manifest with
             {
-                StreamingScopeId = manifest.StreamingScopeId ?? manifest.Input.MessageId,
+                StreamingScopeId = manifest.StreamingScopeId ?? id.ToString("D"),
                 Input = new AgwUserInput
                 {
                     MessageId = input.Id.ToString("D"),
@@ -257,7 +257,7 @@ public sealed class DurableTurnUpgrade
                         ["conversationId"] = manifest.Task.ProjectConversationId.ToString("D"),
                         ["agentId"] = manifest.AgentId.ToString("D"),
                         ["agentType"] = manifest.AgentType == AgentRuntimeType.Agentflow ? "agentflow" : "agent",
-                        ["streamingScopeId"] = manifest.StreamingScopeId ?? manifest.Input.MessageId,
+                        ["streamingScopeId"] = manifest.StreamingScopeId ?? execution.Id.ToString("D"),
                     }
                 )
             );
@@ -284,7 +284,7 @@ public sealed class DurableTurnUpgrade
                         request,
                         Guid.CreateVersion7().ToString("D"),
                         execution.Id,
-                        manifest.StreamingScopeId ?? manifest.Input.MessageId
+                        manifest.StreamingScopeId ?? execution.Id.ToString("D")
                     )
                 );
         }

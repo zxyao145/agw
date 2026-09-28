@@ -41,7 +41,7 @@ public partial class AgentflowTurnExecutorTests
             var sink = new RecordingSegmentSink();
             var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
-                new(manifest.ExecutionId, 0, [], null),
+                new(manifest.TurnId, 0, [], null),
                 sink,
                 timeout.Token
             );

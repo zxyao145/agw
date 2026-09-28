@@ -104,7 +104,7 @@ public sealed class DurableTurnUpgradeTests
             var interactionState = JsonUtil.Serialize(new DurableInteractionState { Pending = pending });
             var manifest = new DurableExecutionManifest
             {
-                ExecutionId = id,
+                TurnId = id,
                 UserId = TurnPersistenceTestKit.UserId,
                 AgentId = Guid.CreateVersion7(),
                 AgentType = AgentRuntimeType.Agent,

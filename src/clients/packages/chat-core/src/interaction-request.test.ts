@@ -14,7 +14,7 @@ function message(interaction: unknown, type = "interaction-request"): AiMessage 
     additionalProperties: {
       type,
       interaction,
-      executionId: "execution-1",
+      turnId: "turn-1",
       streamingScopeId: "turn-1",
     },
   };
@@ -51,7 +51,7 @@ for (const request of requests) {
     const pending = getPendingInteraction(message(request));
     assert.deepEqual(pending, {
       ...request,
-      executionId: "execution-1",
+      turnId: "turn-1",
       streamingScopeId: "turn-1",
       ...(request.kind === "user-input" ? { modeChange: { mode: "plan" } } : {}),
     });

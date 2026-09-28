@@ -14,18 +14,18 @@ public sealed partial class DurableExecutionStoreTests
         // Arrange
         var token = TestContext.Current.CancellationToken;
         var task = await _kit.SeedConversationAsync();
-        var executionId = (await AcceptAsync(task)).Request.TurnId;
+        var turnId = (await AcceptAsync(task)).Request.TurnId;
         var sink = new FinishObservingSink();
         await using var attachment = new DurableExecutionAttachment(UserId, sink, token, _kit.Coordinator);
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            attachment.AttachAsync(executionId, cursor: null, Guid.CreateVersion7(), token)
+            attachment.AttachAsync(turnId, cursor: null, Guid.CreateVersion7(), token)
         );
 
         // Assert
         Assert.Equal(ErrorCodes.DurableExecutionNotFound.Code, exception.Code);
-        Assert.False(attachment.HasActiveExecution);
+        Assert.False(attachment.HasActiveTurn);
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed partial class DurableExecutionStoreTests
         // Arrange
         var token = TestContext.Current.CancellationToken;
         var task = await _kit.SeedConversationAsync();
-        var executionId = (await AcceptAsync(task)).Request.TurnId;
+        var turnId = (await AcceptAsync(task)).Request.TurnId;
         await using var attachment = new DurableExecutionAttachment(
             UserId,
             new FinishObservingSink(),
@@ -44,12 +44,12 @@ public sealed partial class DurableExecutionStoreTests
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            attachment.InterruptAsync(executionId, reason: null, Guid.CreateVersion7(), token)
+            attachment.InterruptAsync(turnId, reason: null, Guid.CreateVersion7(), token)
         );
 
         // Assert
         Assert.Equal(ErrorCodes.DurableExecutionNotFound.Code, exception.Code);
-        var status = await _kit.Coordinator.GetStatusAsync(executionId, UserId, token);
+        var status = await _kit.Coordinator.GetStatusAsync(turnId, UserId, token);
         Assert.False(DurableExecutionQueries.IsTerminal(status.Status));
     }
 
@@ -60,15 +60,15 @@ public sealed partial class DurableExecutionStoreTests
         // 准备：附着到一个还没有结束的执行。
         var token = TestContext.Current.CancellationToken;
         var task = await _kit.SeedConversationAsync();
-        var executionId = (await AcceptAsync(task)).Request.TurnId;
+        var turnId = (await AcceptAsync(task)).Request.TurnId;
         var sink = new FinishObservingSink();
         await using var attachment = new DurableExecutionAttachment(UserId, sink, token, _kit.Coordinator);
         sink.Attachment = attachment;
-        await attachment.AttachAsync(executionId, cursor: null, task.ProjectConversationId, token);
-        Assert.True(attachment.HasActiveExecution);
+        await attachment.AttachAsync(turnId, cursor: null, task.ProjectConversationId, token);
+        Assert.True(attachment.HasActiveTurn);
 
         // Act
-        Assert.True(await _kit.Coordinator.InterruptAsync(executionId, UserId, reason: null, token));
+        Assert.True(await _kit.Coordinator.InterruptAsync(turnId, UserId, reason: null, token));
         var activeWhenFinishArrived = await sink.ActiveWhenFinished.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
 
         // Assert
@@ -92,7 +92,7 @@ public sealed partial class DurableExecutionStoreTests
         {
             if (AgwMessageClassifier.IsTurnFinished(message) && Attachment != null)
             {
-                ActiveWhenFinished.TrySetResult(Attachment.HasActiveExecution);
+                ActiveWhenFinished.TrySetResult(Attachment.HasActiveTurn);
             }
             return _messages.Writer.WriteAsync(message, cancellationToken);
         }

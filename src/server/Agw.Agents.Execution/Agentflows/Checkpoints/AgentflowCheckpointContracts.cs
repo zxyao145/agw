@@ -6,7 +6,7 @@ internal sealed record AgentflowCheckpointMarker(string NodeId, string Name, str
 
 internal sealed record AgentflowCheckpointSnapshot(
     Guid OccurrenceId,
-    Guid? SourceExecutionId,
+    Guid? SourceTurnId,
     Guid AgentflowId,
     long BoundarySequence,
     string DefinitionFingerprint,

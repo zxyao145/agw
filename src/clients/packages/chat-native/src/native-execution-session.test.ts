@@ -16,7 +16,7 @@ const request = {
   conversationId: "conversation",
   agentId: "agent",
   agentType: 0 as const,
-  executionId: "execution",
+  turnId: "turn",
   input: { messageId: "message", author: "$agw", contents: [] },
 };
 
@@ -25,7 +25,7 @@ test("native execution settles with an unknown-outcome error when reconnect conf
   t.mock.method(ExecutionSession.prototype, "execute", async () => {
     active = true;
   });
-  t.mock.method(ExecutionSession.prototype, "hasActiveExecution", () => active);
+  t.mock.method(ExecutionSession.prototype, "hasRunningTurn", () => active);
   t.mock.method(ExecutionSession.prototype, "dispose", async () => {});
   const reconnectStates: unknown[] = [];
   const native = new NativeExecutionSession({
@@ -89,7 +89,7 @@ test("native execution keeps waiting after an unacknowledged start while the cor
     active = true;
     throw new Error("Execution acknowledgement lost");
   });
-  t.mock.method(ExecutionSession.prototype, "hasActiveExecution", () => active);
+  t.mock.method(ExecutionSession.prototype, "hasRunningTurn", () => active);
   t.mock.method(ExecutionSession.prototype, "dispose", async () => {});
   const native = new NativeExecutionSession({
     serverUrl: "https://agw.test",
@@ -130,7 +130,7 @@ test("native execution keeps waiting after an unacknowledged start while the cor
 });
 
 test("native rejects a pre-existing active execution instead of adopting it as an unacknowledged start", async (t) => {
-  t.mock.method(ExecutionSession.prototype, "hasActiveExecution", () => true);
+  t.mock.method(ExecutionSession.prototype, "hasRunningTurn", () => true);
   const execute = t.mock.method(ExecutionSession.prototype, "execute", async () => {
     throw new Error("This conversation already has a running task.");
   });

@@ -44,13 +44,13 @@ async function renderQueue() {
     handlers = value;
     return {
       configure: async () => ({ restoredDurableExecution: false }),
-      hasActiveExecution: () => active,
+      hasRunningTurn: () => active,
       execute: async (request: ExecutionRequest) => {
         executed.push(request);
         active = true;
       },
       listAgentflowCheckpoints: async () => [],
-      resumeCheckpoint: async () => "execution-resumed",
+      resumeCheckpoint: async () => "turn-resumed",
       setMode: async () => undefined,
       setPermissionMode: async () => undefined,
       interrupt: async () => undefined,
@@ -90,14 +90,14 @@ async function renderQueue() {
       const request = executed.at(-1)!;
       active = false;
       handlers.onMessage({
-        messageId: `finished-${request.executionId}`,
+        messageId: `finished-${request.turnId}`,
         role: "system",
         contents: [],
         additionalProperties: {
           type: "agw-turn-finished",
           status,
           conversationId: key.conversationId,
-          turnId: request.executionId,
+          turnId: request.turnId,
         },
       });
     });

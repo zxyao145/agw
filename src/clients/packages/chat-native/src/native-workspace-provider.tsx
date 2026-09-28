@@ -33,6 +33,7 @@ import {
   isModeControlMessage,
   isTurnStartMessage,
   isUserTurnMessage,
+  markTurnMessage,
   mergeStreamingMessages,
   scopeMessagesByUserTurn,
   scopeStreamingMessage,
@@ -984,14 +985,16 @@ function NativeWorkspaceSession({
         return;
       }
       const conversationId = ensureConversationId();
-      const executionId = createUuidV7();
-      const userMessage = createUserMessage(text, attachments);
-      const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
+      // turnId 就是服务端的 turnId，也是本轮所有消息与历史记录共用的 scope。
+      // The turnId is the server's turnId and the scope shared by this turn's messages and history.
+      const turnId = createUuidV7();
+      const userMessage = markTurnMessage(createUserMessage(text, attachments), turnId);
+      const scopedUserMessage = scopeStreamingMessage(userMessage, turnId);
       const generation = executionGenerationRef.current + 1;
       let accepted = false;
       executionGenerationRef.current = generation;
       hydratedConversationRef.current = null;
-      activeStreamingScopeRef.current = userMessage.messageId;
+      activeStreamingScopeRef.current = turnId;
       setMessages((current) => [...current, scopedUserMessage]);
       setIsExecuting(true);
       setOperationError(null);
@@ -1003,7 +1006,7 @@ function NativeWorkspaceSession({
           conversationId,
           agentId: selectedTarget.id,
           agentType: selectedTarget.type === "agentflow" ? 1 : 0,
-          executionId,
+          turnId,
           input: toExecutionUserInput(userMessage),
         });
         if (generation !== executionGenerationRef.current) return;
@@ -1074,7 +1077,7 @@ function NativeWorkspaceSession({
       return;
     const generation = executionGenerationRef.current;
     try {
-      await session.submitHumanResponse({ executionId: request.executionId, response });
+      await session.submitHumanResponse({ turnId: request.turnId, response });
       if (generation !== executionGenerationRef.current || session !== executionSessionRef.current)
         return;
       pendingInteractionsRef.current.delete(response.interactionId);
@@ -1098,7 +1101,7 @@ function NativeWorkspaceSession({
 
       const generation = executionGenerationRef.current + 1;
       executionGenerationRef.current = generation;
-      const resumeExecutionId = createUuidV7();
+      const resumeTurnId = createUuidV7();
       resumeBufferRef.current = [];
       activeStreamingScopeRef.current = null;
       setPendingInteraction(null);
@@ -1111,7 +1114,7 @@ function NativeWorkspaceSession({
         await configured.session.resumeCheckpoint({
           checkpointOccurrenceId: occurrenceId,
           agentflowId: selectedTarget.id,
-          resumeExecutionId,
+          resumeTurnId,
         });
         if (generation !== executionGenerationRef.current) return;
         batcherRef.current?.flush(generation);

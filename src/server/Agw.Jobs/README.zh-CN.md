@@ -105,11 +105,11 @@ flowchart LR
 
 #### `JobAttemptRunner`
 
-负责认领 `Pending` Job 并调用执行适配器。认领会同时生成并持久化本次 `ActiveExecutionId` 和开始时间；成功或异常随后统一交给 `JobAttemptOutcomeRecorder`。后者标记项目 Task、计算下一次运行或重试，并在一次数据库保存中更新 Job、清除 active attempt 和写入 JobLog。正常执行与重启恢复因此使用同一套结算语义。
+负责认领 `Pending` Job 并调用执行适配器。认领会同时生成并持久化本次 `ActiveTurnId` 和开始时间；成功或异常随后统一交给 `JobAttemptOutcomeRecorder`。后者标记项目 Task、计算下一次运行或重试，并在一次数据库保存中更新 Job、清除 active attempt 和写入 JobLog。正常执行与重启恢复因此使用同一套结算语义。
 
 #### `JobAgentExecutor`
 
-每次运行都会生成新的 `contextId`，并通过 `IProjectTaskFacade` 使用认领阶段生成的 executionId 创建项目 Task。随后把目标类型和 ID 交给 `IAgentExecutionFacade`：
+每次运行都会生成新的 `contextId`，并通过 `IProjectTaskFacade` 使用认领阶段生成的 turnId 创建项目 Task。随后把目标类型和 ID 交给 `IAgentExecutionFacade`：
 
 - Agents 模块内部根据目标类型选择 Agent 或 Agentflow runtime；
 - Agents 模块内部根据 `Execution:Provider` 选择 InProcess 或 Distributed；
@@ -135,7 +135,7 @@ flowchart LR
 | `Status` / `IsEnabled` | 调度状态和总开关 |
 | `RetryCount` / `MaxRetryCount` | 当前失败重试次数和允许的最大重试次数 |
 | `LastError` | 上一次执行错误 |
-| `ActiveExecutionId` / `ActiveAttemptStartedAt` | 当前 Running attempt 的内部身份与起点；不进入 REST/OpenAPI |
+| `ActiveTurnId` / `ActiveAttemptStartedAt` | 当前 Running attempt 的内部身份与起点；不进入 REST/OpenAPI |
 
 `JobStatus` 包含三个值：`Pending = 1`、`Running = 2`、`Paused = 3`。
 
@@ -179,17 +179,17 @@ stateDiagram-v2
 3. 执行循环等待最早的 Job 到期；
 4. 同一项目已有 Job 运行时，新 Job 进入该项目的 backlog；
 5. 获得 `IProjectExecutionLock` 后，调度器调用 `JobAttemptRunner`；
-6. `JobAttemptRunner` 通过 `TryStartAttemptAsync` 再次确认持久化状态，同时保存 executionId 和 attempt 起点后进入执行流程。
+6. `JobAttemptRunner` 通过 `TryStartAttemptAsync` 再次确认持久化状态，同时保存 turnId 和 attempt 起点后进入执行流程。
 
 项目锁只保证同一项目的定时任务不会并发运行，不等同于持久化消息队列的 exactly-once 投递保证。需要严格一次性语义时，还需要基于数据库租约、幂等键或原子认领设计额外机制。
 
 ### 3. Agent 执行
 
 1. `JobAgentExecutor` 为本次运行生成独立 `contextId`；
-2. 使用本次 active executionId 在目标项目中创建状态为 Running 的逻辑 Task，执行 owner 继承 Job 创建者；
+2. 使用本次 active turnId 在目标项目中创建状态为 Running 的逻辑 Task，执行 owner 继承 Job 创建者；
 3. 根据 `AgentType` 调用 Agent 或 Agentflow runtime；
 4. runtime 返回成功或抛出异常后，由共享 outcome recorder 标记项目 Task 并结算 Job；
-5. Control Plane 重启后，恢复服务直接使用 Job 上的 active executionId 查询 durable outcome，不从聊天历史猜测本次执行。
+5. Control Plane 重启后，恢复服务直接使用 Job 上的 active turnId 查询 durable outcome，不从聊天历史猜测本次执行。
 
 所以 Job 执行历史既存在于 `JobLog` 中，也会以普通项目 Task 和 Context 的形式进入项目历史。`JobLog` 负责描述“第几次调度尝试”，项目记录负责保存实际对话和执行内容。
 

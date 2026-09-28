@@ -31,7 +31,7 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         var agentId = await AddAgentAsync("owner", cancellationToken);
         var facade = CreateInProcessFacade();
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var previousUser = new ClaimsPrincipal(
             new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "owner")], "Test")
         );
@@ -39,7 +39,7 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
         try
         {
             var result = await facade.ExecuteAsync(
-                await SeedAsync(CreateRequest(executionId, agentId, permissionMode: permissionMode)),
+                await SeedAsync(CreateRequest(turnId, agentId, permissionMode: permissionMode)),
                 cancellationToken
             );
 
@@ -51,11 +51,11 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
             Assert.DoesNotContain(result.Messages, AgwMessageClassifier.IsTurnFinished);
             Assert.Equal(
                 Agw.Shared.Data.Entities.Projects.ProjectConversationTurnStatus.Completed,
-                (await _persistence.ReadTurnAsync(executionId)).Status
+                (await _persistence.ReadTurnAsync(turnId)).Status
             );
             var execution = Assert.Single(_kit.Runtimes.TurnContexts);
             Assert.Equal("owner", execution.UserId);
-            Assert.Equal(executionId, execution.TurnId);
+            Assert.Equal(turnId, execution.TurnId);
             Assert.Equal(permissionMode == null ? null : AgwPermissionMode.FullAccess, execution.PermissionMode);
             Assert.Same(previousUser, UserInfoUtil.Current);
             Assert.True(Assert.Single(_kit.Runtimes.Created).IsDisposed);
@@ -168,17 +168,17 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
     }
 
     private static AgentExecutionRequest CreateRequest(
-        Guid executionId,
+        Guid turnId,
         Guid agentId,
         HumanInteractionPolicy policy = HumanInteractionPolicy.Allow,
         AgentExecutionPermissionMode? permissionMode = null
     ) =>
         new(
-            executionId,
+            turnId,
             "owner",
             new AgentTarget(AgentTargetKind.Agent, agentId),
             new ProjectTaskSnapshot(
-                executionId,
+                turnId,
                 Guid.CreateVersion7(),
                 Guid.CreateVersion7(),
                 "context",
@@ -192,7 +192,7 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
             ),
             new AgwUserInput
             {
-                MessageId = executionId.ToString("D"),
+                MessageId = turnId.ToString("D"),
                 Author = "user",
                 Contents = [new AgwTextContent { Content = "run" }],
             },

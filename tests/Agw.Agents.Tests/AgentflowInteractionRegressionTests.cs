@@ -151,7 +151,7 @@ public partial class AgentflowTurnExecutorTests
         var token = TestContext.Current.CancellationToken;
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             token
         );
@@ -160,7 +160,7 @@ public partial class AgentflowTurnExecutorTests
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 1, [response], waiting.Checkpoint),
+            new(manifest.TurnId, 1, [response], waiting.Checkpoint),
             sink,
             token
         );

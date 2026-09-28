@@ -24,7 +24,7 @@ export type NativeExecutionRequest = {
   conversationId: string;
   agentId: string;
   agentType: 0 | 1;
-  executionId: string;
+  turnId: string;
   input: ExecutionUserInput<AiMessage>;
 };
 
@@ -41,7 +41,7 @@ export function buildMobileSettingCommand(setting: NativeExecutionSetting) {
 }
 
 type TerminalWaiter = {
-  executionId: string;
+  turnId: string;
   promise: Promise<void>;
   resolve(): void;
   reject(error: Error): void;
@@ -65,7 +65,7 @@ export class NativeExecutionSession {
         onReconnecting: (state) => this.options.onReconnecting?.(state),
         onReconnectFailed: (state) => this.options.onReconnecting?.(state),
         onReconnected: () => {
-          if (!this.session.hasActiveExecution()) {
+          if (!this.session.hasRunningTurn()) {
             this.finishTerminal(
               null,
               new Error(
@@ -91,20 +91,20 @@ export class NativeExecutionSession {
   }
 
   public async execute(request: NativeExecutionRequest): Promise<void> {
-    if (this.session.hasActiveExecution()) {
+    if (this.session.hasRunningTurn()) {
       throw new Error("This conversation already has a running task.");
     }
-    const terminal = this.beginTerminal(request.executionId);
+    const terminal = this.beginTerminal(request.turnId);
     try {
       await Promise.all([
         this.session.execute({ ...request, stream: true }).catch((error: unknown) => {
           // ACK 丢失时核心会保留本轮执行；继续等终态或恢复查询确认结束。
-          if (!this.session.hasActiveExecution()) throw error;
+          if (!this.session.hasRunningTurn()) throw error;
         }),
         terminal.promise,
       ]);
     } catch (error) {
-      this.finishTerminal(request.executionId, toError(error));
+      this.finishTerminal(request.turnId, toError(error));
       throw error;
     }
   }
@@ -134,7 +134,7 @@ export class NativeExecutionSession {
   public async resumeCheckpoint(args: {
     checkpointOccurrenceId: string;
     agentflowId: string;
-    resumeExecutionId: string;
+    resumeTurnId: string;
   }): Promise<void> {
     await this.session.resumeCheckpoint(args);
   }
@@ -150,7 +150,7 @@ export class NativeExecutionSession {
     this.options.onMessage(message);
   }
 
-  private beginTerminal(executionId: string): TerminalWaiter {
+  private beginTerminal(turnId: string): TerminalWaiter {
     if (this.terminal) throw new Error("This conversation already has a running task.");
     let resolve!: () => void;
     let reject!: (error: Error) => void;
@@ -158,21 +158,21 @@ export class NativeExecutionSession {
       resolve = complete;
       reject = fail;
     });
-    const terminal = { executionId, promise, resolve, reject };
+    const terminal = { turnId, promise, resolve, reject };
     this.terminal = terminal;
     return terminal;
   }
 
-  private finishTerminal(executionId: string | null, error?: Error): void {
+  private finishTerminal(turnId: string | null, error?: Error): void {
     const terminal = this.terminal;
-    if (!terminal || (executionId && terminal.executionId !== executionId)) return;
+    if (!terminal || (turnId && terminal.turnId !== turnId)) return;
     this.terminal = null;
     if (error) terminal.reject(error);
     else terminal.resolve();
   }
 }
 
-/** 结束消息的 turnId 即发起执行时的 executionId；连接层的结束消息没有 turnId。 */
+/** 结束消息的 turnId 即发起执行时的 turnId；连接层的结束消息没有 turnId。 */
 function readTurnId(message: AiMessage): string | null {
   const value = message.additionalProperties?.turnId;
   return typeof value === "string" && value.trim() ? value : null;

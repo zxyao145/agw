@@ -74,7 +74,7 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        var executionId = ParseRequiredTaskId(context.TaskId);
+        var turnId = ParseRequiredTaskId(context.TaskId);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
@@ -90,7 +90,7 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
             .GetOrCreateAsync(
                 new StartProjectTaskRequest(
                     projectId.Value,
-                    executionId,
+                    turnId,
                     JobId: null,
                     GetInputText(input),
                     agentName,
@@ -106,7 +106,7 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
             var executionEvent in executions
                 .ExecuteStreamingAsync(
                     new Agw.Agents.Contracts.Execution.AgentExecutionRequest(
-                        executionId,
+                        turnId,
                         ownerUserId,
                         new AgentTarget(AgentTargetKind.Agent, Name: agentName),
                         task,
@@ -129,14 +129,14 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        var executionId = ParseRequiredTaskId(taskId);
+        var turnId = ParseRequiredTaskId(taskId);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
         await foreach (
             var executionEvent in services
                 .GetRequiredService<IDurableAgentExecutionFacade>()
-                .SubscribeAsync(executionId, ownerUserId, cursor, cancellationToken)
+                .SubscribeAsync(turnId, ownerUserId, cursor, cancellationToken)
                 .ConfigureAwait(false)
         )
         {
@@ -146,13 +146,13 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
 
     public async Task<bool> CancelAsync(string taskId, CancellationToken cancellationToken)
     {
-        var executionId = ParseRequiredTaskId(taskId);
+        var turnId = ParseRequiredTaskId(taskId);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
         return await services
             .GetRequiredService<IDurableAgentExecutionFacade>()
-            .InterruptAsync(executionId, ownerUserId, "Canceled through A2A.", cancellationToken)
+            .InterruptAsync(turnId, ownerUserId, "Canceled through A2A.", cancellationToken)
             .ConfigureAwait(false);
     }
 

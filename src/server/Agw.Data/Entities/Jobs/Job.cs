@@ -31,7 +31,7 @@ public class Job : BaseEntity, IAggregateRoot
     public string? LastError { get; set; }
 
     [JsonIgnore]
-    public Guid? ActiveExecutionId { get; set; }
+    public Guid? ActiveTurnId { get; set; }
 
     [JsonIgnore]
     public DateTimeOffset? ActiveAttemptStartedAt { get; set; }

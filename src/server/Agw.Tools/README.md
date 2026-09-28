@@ -551,7 +551,7 @@ submit its ID in a typed response:
 ```json
 {
   "type": "HumanResponseCommand",
-  "executionId": "22222222-2222-4222-8222-222222222222",
+  "turnId": "22222222-2222-4222-8222-222222222222",
   "response": {
     "kind": "tool-approval",
     "interactionId": "interaction-id-from-request",

@@ -32,7 +32,7 @@ export type HumanInteractionQuestionResult = {
 };
 
 export type PendingInteraction = InteractionRequest & {
-  executionId?: string;
+  turnId?: string;
   streamingScopeId?: string;
   questions?: HumanInteractionQuestion[];
   modeChange?: HumanInteractionModeChange;
@@ -141,13 +141,13 @@ export function getPendingInteraction(message: AiMessage): PendingInteraction | 
     const value = readOptionalString(interaction.source[key]);
     if (value !== undefined) source[key] = value;
   }
-  const executionId = readOptionalString(properties.executionId);
+  const turnId = readOptionalString(properties.turnId);
   const streamingScopeId = getMessageStreamingScopeId(message);
   const common = {
     interactionId,
     prompt: interaction.prompt,
     source,
-    ...(executionId ? { executionId } : {}),
+    ...(turnId ? { turnId } : {}),
     ...(streamingScopeId ? { streamingScopeId } : {}),
   };
   switch (interaction.kind) {

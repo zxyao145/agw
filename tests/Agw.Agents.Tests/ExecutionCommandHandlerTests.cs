@@ -162,7 +162,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         );
 
         await attachment.InterruptAsync(
-            executionId: null,
+            turnId: null,
             "nothing running",
             conversationId: null,
             TestContext.Current.CancellationToken
@@ -438,7 +438,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         Assert.Equal(task.ProjectId, execution.ProjectId);
         Assert.Equal(command.AgentId, execution.AgentId);
         Assert.Equal(command.AgentId, execution.TurnTargetId);
-        Assert.Equal(command.ExecutionId, execution.TurnId);
+        Assert.Equal(command.TurnId, execution.TurnId);
         Assert.Equal(EngineKind.Maf, execution.EngineKind);
         Assert.Equal(ExecutionProvider.InProcess, execution.Provider);
         Assert.Equal(execution.ProjectId, context.ProjectId);

@@ -24,7 +24,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     private readonly CancellationToken _hostToken;
     private readonly DurableExecutionCoordinator _coordinator;
     private readonly Lock _stateLock = new();
-    private Guid? _activeExecutionId;
+    private Guid? _activeTurnId;
     private CancellationTokenSource? _subscriptionCts;
     private Task _subscriptionTask = Task.CompletedTask;
 
@@ -43,15 +43,15 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         _coordinator = coordinator;
     }
 
-    public bool HasActiveExecution => ActiveExecutionId.HasValue;
+    public bool HasActiveTurn => ActiveTurnId.HasValue;
 
-    public Guid? ActiveExecutionId
+    public Guid? ActiveTurnId
     {
         get
         {
             lock (_stateLock)
             {
-                return _activeExecutionId;
+                return _activeTurnId;
             }
         }
     }
@@ -62,27 +62,21 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     /// 鉴权并确认 execution 属于该对话后附着，从游标之后继续读取事件；游标是客户端已经收到的 turnSequence，为空时从头回放。
     /// Attaches the execution after authorization and after confirming it belongs to the conversation, then continues reading events after the cursor; the cursor is the turnSequence the client already received, and an empty one replays from the start.
     /// </summary>
-    public async Task AttachAsync(
-        Guid executionId,
-        string? cursor,
-        Guid conversationId,
-        CancellationToken cancellationToken
-    )
+    public async Task AttachAsync(Guid turnId, string? cursor, Guid conversationId, CancellationToken cancellationToken)
     {
-        if (executionId == Guid.Empty)
+        if (turnId == Guid.Empty)
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "executionId is required.");
+            throw new AgwException(ErrorCodes.InvalidParam, "turnId is required.");
         }
 
         var afterSequence = ParseCursor(cursor);
-        var status = await GetConversationStatusAsync(executionId, conversationId, cancellationToken)
-            .ConfigureAwait(false);
+        var status = await GetConversationStatusAsync(turnId, conversationId, cancellationToken).ConfigureAwait(false);
         await StopSubscriptionAsync().ConfigureAwait(false);
         PermissionStatus = status;
-        SetActiveExecution(IsTerminal(status.Status) ? null : executionId);
+        SetActiveTurn(IsTerminal(status.Status) ? null : turnId);
         var subscriptionCts = CancellationTokenSource.CreateLinkedTokenSource(_hostToken);
         _subscriptionCts = subscriptionCts;
-        _subscriptionTask = PumpAsync(executionId, afterSequence, subscriptionCts.Token);
+        _subscriptionTask = PumpAsync(turnId, afterSequence, subscriptionCts.Token);
     }
 
     /// <summary>
@@ -90,14 +84,14 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     /// Interrupts the explicit or attached execution; an explicit execution that is not attached must belong to the conversation. The finish event commits with Interrupted and the subscription delivers it.
     /// </summary>
     public async Task InterruptAsync(
-        Guid? executionId,
+        Guid? turnId,
         string? reason,
         Guid? conversationId,
         CancellationToken cancellationToken
     )
     {
-        var targetExecutionId = executionId ?? ActiveExecutionId;
-        if (!targetExecutionId.HasValue)
+        var targetTurnId = turnId ?? ActiveTurnId;
+        if (!targetTurnId.HasValue)
         {
             await SendSystemMessageAsync(reason ?? "No active request is currently running.").ConfigureAwait(false);
             await _messageSink
@@ -106,19 +100,19 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
             return;
         }
 
-        var subscribed = ActiveExecutionId == targetExecutionId;
+        var subscribed = ActiveTurnId == targetTurnId;
         if (!subscribed)
         {
-            await GetConversationStatusAsync(targetExecutionId.Value, conversationId, cancellationToken)
+            await GetConversationStatusAsync(targetTurnId.Value, conversationId, cancellationToken)
                 .ConfigureAwait(false);
         }
         var interrupted = await _coordinator
-            .InterruptAsync(targetExecutionId.Value, _userId, reason, cancellationToken)
+            .InterruptAsync(targetTurnId.Value, _userId, reason, cancellationToken)
             .ConfigureAwait(false);
         if (interrupted && subscribed)
             return;
         var status = await _coordinator
-            .GetStatusAsync(targetExecutionId.Value, _userId, cancellationToken)
+            .GetStatusAsync(targetTurnId.Value, _userId, cancellationToken)
             .ConfigureAwait(false);
         PermissionStatus = status;
         if (subscribed)
@@ -141,8 +135,8 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     }
 
     public Task SetPermissionModeAsync(AgwPermissionMode mode, CancellationToken cancellationToken) =>
-        ActiveExecutionId is { } executionId
-            ? _coordinator.SetPermissionModeAsync(executionId, _userId, mode, cancellationToken)
+        ActiveTurnId is { } turnId
+            ? _coordinator.SetPermissionModeAsync(turnId, _userId, mode, cancellationToken)
             : Task.CompletedTask;
 
     /// <summary>
@@ -155,22 +149,21 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
-        var executionId = command.ExecutionId ?? ActiveExecutionId;
-        if (!executionId.HasValue)
+        var turnId = command.TurnId ?? ActiveTurnId;
+        if (!turnId.HasValue)
         {
             await SendSystemMessageAsync("No matching durable human interaction is waiting for this response.")
                 .ConfigureAwait(false);
             return;
         }
-        if (executionId != ActiveExecutionId)
+        if (turnId != ActiveTurnId)
         {
-            await GetConversationStatusAsync(executionId.Value, conversationId, cancellationToken)
-                .ConfigureAwait(false);
+            await GetConversationStatusAsync(turnId.Value, conversationId, cancellationToken).ConfigureAwait(false);
         }
 
         await _coordinator
             .SubmitHumanResponseAsync(
-                new SubmitDurableHumanResponseRequest(executionId.Value, command.Response),
+                new SubmitDurableHumanResponseRequest(turnId.Value, command.Response),
                 _userId,
                 cancellationToken
             )
@@ -183,7 +176,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     /// </summary>
     public async Task ResumeCheckpointAsync(
         Guid occurrenceId,
-        Guid resumeExecutionId,
+        Guid resumeTurnId,
         Guid projectId,
         Guid conversationId,
         string contextId,
@@ -195,7 +188,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
         await _coordinator
             .ResumeCheckpointAsync(
                 occurrenceId,
-                resumeExecutionId,
+                resumeTurnId,
                 projectId,
                 contextId,
                 agentflowId,
@@ -204,7 +197,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                 permissionSettings
             )
             .ConfigureAwait(false);
-        await AttachAsync(resumeExecutionId, cursor: null, conversationId, cancellationToken).ConfigureAwait(false);
+        await AttachAsync(resumeTurnId, cursor: null, conversationId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -216,16 +209,16 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await StopSubscriptionAsync().ConfigureAwait(false);
-        SetActiveExecution(null);
+        SetActiveTurn(null);
     }
 
-    private async Task PumpAsync(Guid executionId, long afterSequence, CancellationToken cancellationToken)
+    private async Task PumpAsync(Guid turnId, long afterSequence, CancellationToken cancellationToken)
     {
         try
         {
             await foreach (
                 var entry in _coordinator
-                    .ReadAsync(executionId, _userId, afterSequence, cancellationToken)
+                    .ReadAsync(turnId, _userId, afterSequence, cancellationToken)
                     .ConfigureAwait(false)
             )
             {
@@ -234,9 +227,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                 // A replay can happen after the conversation has a newer turn; the mark stops clients from updating conversation status with it.
                 if (
                     (AgwMessageClassifier.IsTurnStart(message) || AgwMessageClassifier.IsTurnFinished(message))
-                    && await _coordinator
-                        .IsSupersededAsync(executionId, _userId, cancellationToken)
-                        .ConfigureAwait(false)
+                    && await _coordinator.IsSupersededAsync(turnId, _userId, cancellationToken).ConfigureAwait(false)
                 )
                 {
                     message = TurnMessageFactory.MarkSuperseded(message);
@@ -244,9 +235,9 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                 // 先清除活动执行再写出结束消息：客户端收到结束消息后立即发来的下一轮不会被判为 busy。
                 // The active execution clears before the finish message goes out, so the next turn sent right after the client receives it is not treated as busy.
                 var finished = AgwMessageClassifier.IsTurnFinished(entry.Message);
-                if (finished && ActiveExecutionId == executionId)
+                if (finished && ActiveTurnId == turnId)
                 {
-                    SetActiveExecution(null);
+                    SetActiveTurn(null);
                 }
                 await _messageSink.WriteAsync(message, cancellationToken).ConfigureAwait(false);
                 if (finished)
@@ -293,7 +284,7 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     /// Reads the execution status and confirms it belongs to the connection's configured conversation; an execution of another conversation looks like a missing one.
     /// </summary>
     private async Task<DurableExecutionStatusResponse> GetConversationStatusAsync(
-        Guid executionId,
+        Guid turnId,
         Guid? conversationId,
         CancellationToken cancellationToken
     )
@@ -304,17 +295,17 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
                 ErrorCodes.InvalidParam,
                 "Execution settings must be configured before accessing an execution."
             );
-        var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
+        var status = await _coordinator.GetStatusAsync(turnId, _userId, cancellationToken).ConfigureAwait(false);
         return status.ConversationId == expectedConversationId
             ? status
             : throw new AgwException(ErrorCodes.DurableExecutionNotFound);
     }
 
-    private void SetActiveExecution(Guid? executionId)
+    private void SetActiveTurn(Guid? turnId)
     {
         lock (_stateLock)
         {
-            _activeExecutionId = executionId;
+            _activeTurnId = turnId;
         }
     }
 

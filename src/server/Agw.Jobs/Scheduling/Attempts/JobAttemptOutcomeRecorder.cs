@@ -13,7 +13,7 @@ public interface IJobAttemptOutcomeRecorder
 {
     Task<JobAttemptResult> RecordAsync(
         Guid jobId,
-        Guid executionId,
+        Guid turnId,
         bool success,
         string? errorMessage,
         CancellationToken cancellationToken
@@ -47,20 +47,20 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
 
     public Task<JobAttemptResult> RecordAsync(
         Guid jobId,
-        Guid executionId,
+        Guid turnId,
         bool success,
         string? errorMessage,
         CancellationToken cancellationToken
     ) =>
         _transaction.ExecuteAsync(
             jobId,
-            token => RecordCoreAsync(jobId, executionId, success, errorMessage, token),
+            token => RecordCoreAsync(jobId, turnId, success, errorMessage, token),
             cancellationToken
         );
 
     private async Task<JobAttemptResult> RecordCoreAsync(
         Guid jobId,
-        Guid executionId,
+        Guid turnId,
         bool success,
         string? errorMessage,
         CancellationToken cancellationToken
@@ -77,7 +77,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
                 .Jobs.SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
                 .ConfigureAwait(false);
         }
-        if (job == null || !new JobBehavior(job).IsActiveAttempt(executionId))
+        if (job == null || !new JobBehavior(job).IsActiveAttempt(turnId))
         {
             return new JobAttemptResult.Drop();
         }
@@ -86,7 +86,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         var startedAt = job.ActiveAttemptStartedAt.GetValueOrDefault();
         if (!JobAgentExecutor.TryResolveOwnerUserId(job, out var ownerUserId))
         {
-            return await RecordMissingOwnerAsync(job, executionId, startedAt, cancellationToken).ConfigureAwait(false);
+            return await RecordMissingOwnerAsync(job, turnId, startedAt, cancellationToken).ConfigureAwait(false);
         }
 
         using var userScope = UserInfoUtil.Push(
@@ -96,7 +96,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         {
             _ = await _projectTasks
                 .FinishAsync(
-                    new FinishProjectTaskRequest(executionId, ProjectTaskStatus.Succeeded, null, ownerUserId),
+                    new FinishProjectTaskRequest(turnId, ProjectTaskStatus.Succeeded, null, ownerUserId),
                     cancellationToken
                 )
                 .ConfigureAwait(false);
@@ -105,7 +105,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         {
             _ = await _projectTasks
                 .FinishAsync(
-                    new FinishProjectTaskRequest(executionId, ProjectTaskStatus.Failed, normalizedError, ownerUserId),
+                    new FinishProjectTaskRequest(turnId, ProjectTaskStatus.Failed, normalizedError, ownerUserId),
                     cancellationToken
                 )
                 .ConfigureAwait(false);
@@ -124,7 +124,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
             {
                 Id = Guid.CreateVersion7(),
                 JobId = job.Id,
-                TaskId = executionId,
+                TaskId = turnId,
                 StartTime = startedAt,
                 EndTime = now,
                 Success = success,
@@ -144,7 +144,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
 
     private async Task<JobAttemptResult> RecordMissingOwnerAsync(
         Job job,
-        Guid executionId,
+        Guid turnId,
         DateTimeOffset startedAt,
         CancellationToken cancellationToken
     )
@@ -162,7 +162,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
             {
                 Id = Guid.CreateVersion7(),
                 JobId = job.Id,
-                TaskId = executionId,
+                TaskId = turnId,
                 StartTime = startedAt,
                 EndTime = now,
                 Success = false,

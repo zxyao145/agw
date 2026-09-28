@@ -52,7 +52,7 @@ public sealed class JobBehavior
 
     public void EnsureMutable()
     {
-        if (_job.Status == JobStatus.Running || _job.ActiveExecutionId.HasValue)
+        if (_job.Status == JobStatus.Running || _job.ActiveTurnId.HasValue)
         {
             throw new AgwException(ErrorCodes.JobActiveAttemptConflict);
         }
@@ -74,10 +74,8 @@ public sealed class JobBehavior
             ),
         };
 
-    public bool IsActiveAttempt(Guid executionId) =>
-        _job.Status == JobStatus.Running
-        && _job.ActiveExecutionId == executionId
-        && _job.ActiveAttemptStartedAt.HasValue;
+    public bool IsActiveAttempt(Guid turnId) =>
+        _job.Status == JobStatus.Running && _job.ActiveTurnId == turnId && _job.ActiveAttemptStartedAt.HasValue;
 
     public int GetCurrentAttempt() => _job.RetryCount + 1;
 
@@ -175,7 +173,7 @@ public sealed class JobBehavior
 
     private bool TryScheduleNextAttempt(DateTimeOffset? nextRunTime)
     {
-        _job.ActiveExecutionId = null;
+        _job.ActiveTurnId = null;
         _job.ActiveAttemptStartedAt = null;
         if (nextRunTime is { } runAt)
         {

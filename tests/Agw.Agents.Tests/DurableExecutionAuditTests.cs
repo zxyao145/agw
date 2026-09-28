@@ -26,7 +26,7 @@ public sealed class DurableExecutionAuditTests
                 new EntitySoftDeleteInterceptor(auditProvider, TimeProvider.System),
             ]
         );
-        Guid executionId;
+        Guid turnId;
         using (TurnPersistenceTestKit.EnterUser("owner"))
         {
             var task = await kit.SeedConversationAsync("owner");
@@ -50,18 +50,13 @@ public sealed class DurableExecutionAuditTests
                     },
                     cancellationToken
                 );
-            executionId = accepted.Request.TurnId;
+            turnId = accepted.Request.TurnId;
         }
 
         // Act
         using (UserInfoUtil.PushSystemScope())
         {
-            var lease = await kit.Leases.TryClaimAsync(
-                executionId,
-                "worker-a",
-                TimeSpan.FromSeconds(30),
-                cancellationToken
-            );
+            var lease = await kit.Leases.TryClaimAsync(turnId, "worker-a", TimeSpan.FromSeconds(30), cancellationToken);
             using var ownership = new CancellationTokenSource();
             await kit
                 .Leases.CreateGuard(Assert.IsType<DurableLease>(lease), ownership)
@@ -72,7 +67,7 @@ public sealed class DurableExecutionAuditTests
                             .ApplySegmentResultAsync(
                                 new DurableExecutionSegmentResult
                                 {
-                                    ExecutionId = executionId,
+                                    TurnId = turnId,
                                     SegmentIndex = 0,
                                     Status = DurableExecutionSegmentStatus.WaitingForHuman,
                                     PendingInteractions = [InteractionTestData.Input("request-1")],
@@ -84,7 +79,7 @@ public sealed class DurableExecutionAuditTests
         }
 
         // Assert
-        var persisted = await kit.ReadExecutionAsync(executionId);
+        var persisted = await kit.ReadExecutionAsync(turnId);
         Assert.Equal("owner", persisted.CreateBy);
         Assert.Equal("owner", persisted.UpdateBy);
     }

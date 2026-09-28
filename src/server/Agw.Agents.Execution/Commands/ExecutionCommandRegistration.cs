@@ -30,9 +30,7 @@ public static class ExecutionCommandRegistrationExtensions
             .AddExecutionCommand<SetPermissionModeCommand, SetPermissionModeCommandHandler>(
                 nameof(SetPermissionModeCommand)
             )
-            .AddExecutionCommand<SubscribeExecutionCommand, SubscribeExecutionCommandHandler>(
-                nameof(SubscribeExecutionCommand)
-            )
+            .AddExecutionCommand<SubscribeTurnCommand, SubscribeTurnCommandHandler>(nameof(SubscribeTurnCommand))
             .AddExecutionCommand<ResumeCheckpointCommand, ResumeCheckpointCommandHandler>(
                 nameof(ResumeCheckpointCommand)
             )

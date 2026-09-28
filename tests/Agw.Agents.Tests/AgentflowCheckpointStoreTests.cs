@@ -403,11 +403,11 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         var fixture = await database.SeedAsync();
         var store = database.CreateStore();
         var cancellationToken = TestContext.Current.CancellationToken;
-        var sourceExecutionId = Guid.CreateVersion7();
-        await database.AddDurableExecutionAsync(fixture, sourceExecutionId, DurableExecutionStatus.Completed);
+        var sourceTurnId = Guid.CreateVersion7();
+        await database.AddDurableExecutionAsync(fixture, sourceTurnId, DurableExecutionStatus.Completed);
         var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
         var recorded = await store.RecordAsync(
-            sourceExecutionId,
+            sourceTurnId,
             fixture.ProjectId,
             fixture.ConversationId,
             fixture.ContextId,
@@ -422,11 +422,11 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         );
         Assert.NotNull(recorded);
         await database.AppendHistoryAsync(fixture, sequence: 2, "old branch");
-        var resumeExecutionId = Guid.CreateVersion7();
+        var resumeTurnId = Guid.CreateVersion7();
 
         await store.PrepareDistributedResumeAsync(
             recorded.Snapshot.OccurrenceId,
-            resumeExecutionId,
+            resumeTurnId,
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
@@ -443,7 +443,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         database.ResetTransactionCount();
         await store.PrepareDistributedResumeAsync(
             recorded.Snapshot.OccurrenceId,
-            resumeExecutionId,
+            resumeTurnId,
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
@@ -455,7 +455,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         await using (var context = database.CreateContext())
         {
             var branch = await context.DurableExecutions.SingleAsync(
-                item => item.Id == resumeExecutionId,
+                item => item.Id == resumeTurnId,
                 cancellationToken
             );
             var branchManifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
@@ -482,10 +482,10 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         }
 
         await database.AppendHistoryAsync(fixture, sequence: 2, "second old branch");
-        var laterExecutionId = Guid.CreateVersion7();
+        var laterTurnId = Guid.CreateVersion7();
         await store.PrepareDistributedResumeAsync(
             recorded.Snapshot.OccurrenceId,
-            laterExecutionId,
+            laterTurnId,
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
@@ -505,11 +505,11 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         var fixture = await database.SeedAsync();
         var store = database.CreateStore();
         var cancellationToken = TestContext.Current.CancellationToken;
-        var sourceExecutionId = Guid.CreateVersion7();
-        await database.AddDurableExecutionAsync(fixture, sourceExecutionId, DurableExecutionStatus.Running);
+        var sourceTurnId = Guid.CreateVersion7();
+        await database.AddDurableExecutionAsync(fixture, sourceTurnId, DurableExecutionStatus.Running);
         var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
         var recorded = await store.RecordAsync(
-            sourceExecutionId,
+            sourceTurnId,
             fixture.ProjectId,
             fixture.ConversationId,
             fixture.ContextId,
@@ -831,11 +831,11 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             );
         }
 
-        public async Task AddDurableExecutionAsync(Fixture fixture, Guid executionId, DurableExecutionStatus status)
+        public async Task AddDurableExecutionAsync(Fixture fixture, Guid turnId, DurableExecutionStatus status)
         {
             var manifest = new DurableExecutionManifest
             {
-                ExecutionId = executionId,
+                TurnId = turnId,
                 UserId = "user-id",
                 WorkspaceSnapshot = Agw.Shared.Utils.ProjectWorkspacePaths.CreateSnapshot(fixture.ProjectId, null),
                 AgentId = fixture.AgentflowId,
@@ -856,7 +856,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             context.DurableExecutions.Add(
                 new DurableExecutionRecord
                 {
-                    Id = executionId,
+                    Id = turnId,
                     UserId = "user-id",
                     ProjectId = fixture.ProjectId,
                     ProjectConversationId = fixture.ConversationId,

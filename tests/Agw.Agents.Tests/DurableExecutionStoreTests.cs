@@ -62,7 +62,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         using var oldOwnership = new CancellationTokenSource();
         var result = new DurableExecutionSegmentResult
         {
-            ExecutionId = id,
+            TurnId = id,
             SegmentIndex = 0,
             Status = Enum.Parse<DurableExecutionSegmentStatus>(outcome),
             PendingInteractions = [InteractionTestData.Input("request-1")],
@@ -176,7 +176,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         var outcome = await Store.GetAuthorizedOutcomeAsync(id, UserId, token);
 
         // Assert
-        Assert.Equal(id, outcome.ExecutionId);
+        Assert.Equal(id, outcome.TurnId);
         Assert.Equal(DurableExecutionStatus.Queued, outcome.Status);
         Assert.Null(outcome.ErrorMessage);
     }
@@ -191,7 +191,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
             lease,
             new DurableExecutionSegmentResult
             {
-                ExecutionId = id,
+                TurnId = id,
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.Failed,
                 ErrorMessage = "boom",
@@ -225,7 +225,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
             lease,
             new DurableExecutionSegmentResult
             {
-                ExecutionId = id,
+                TurnId = id,
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [InteractionTestData.Input("request-1")],
@@ -307,7 +307,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
                 lease,
                 new DurableExecutionSegmentResult
                 {
-                    ExecutionId = id,
+                    TurnId = id,
                     SegmentIndex = 0,
                     Status = DurableExecutionSegmentStatus.Completed,
                 },
@@ -416,7 +416,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
             lease,
             new DurableExecutionSegmentResult
             {
-                ExecutionId = id,
+                TurnId = id,
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.Completed,
             }
@@ -682,9 +682,9 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         return accepted.Request.TurnId;
     }
 
-    private async Task<DurableLease> ClaimAsync(Guid executionId, string workerId = "worker-a") =>
+    private async Task<DurableLease> ClaimAsync(Guid turnId, string workerId = "worker-a") =>
         Assert.IsType<DurableLease>(
-            await _kit.Leases.TryClaimAsync(executionId, workerId, LeaseDuration, TestContext.Current.CancellationToken)
+            await _kit.Leases.TryClaimAsync(turnId, workerId, LeaseDuration, TestContext.Current.CancellationToken)
         );
 
     /// <summary>
@@ -721,7 +721,7 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         };
         return new DurableExecutionManifest
         {
-            ExecutionId = Guid.CreateVersion7(),
+            TurnId = Guid.CreateVersion7(),
             AgentId = Guid.CreateVersion7(),
             AgentType = AgentRuntimeType.Agent,
             Input = TurnPersistenceTestKit.CreateInput("hello"),

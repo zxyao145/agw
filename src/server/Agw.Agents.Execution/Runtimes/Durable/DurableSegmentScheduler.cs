@@ -52,20 +52,20 @@ internal sealed class DurableSegmentScheduler
 
     public int RunningCount => _running.Count;
 
-    public bool IsRunning(Guid executionId) => _running.ContainsKey(executionId);
+    public bool IsRunning(Guid turnId) => _running.ContainsKey(turnId);
 
     /// <summary>
     /// 本地受理与 Worker 共用名额：预留名额后领取租约，再开始后台执行。
     /// Local acceptance and workers share capacity: reserve a slot, claim the lease, then start background execution.
     /// </summary>
-    public async Task<bool> TryStartAsync(Guid executionId, CancellationToken cancellationToken)
+    public async Task<bool> TryStartAsync(Guid turnId, CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping);
         linked.Token.ThrowIfCancellationRequested();
         if (!_slots.Wait(0))
             return false;
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_running.TryAdd(executionId, completion))
+        if (!_running.TryAdd(turnId, completion))
         {
             _slots.Release();
             return false;
@@ -74,7 +74,7 @@ internal sealed class DurableSegmentScheduler
         try
         {
             var lease = await _leases
-                .TryClaimAsync(executionId, _identity.Id, _leaseDuration, linked.Token)
+                .TryClaimAsync(turnId, _identity.Id, _leaseDuration, linked.Token)
                 .ConfigureAwait(false);
             if (lease == null)
                 return false;
@@ -88,7 +88,7 @@ internal sealed class DurableSegmentScheduler
         finally
         {
             if (!started)
-                Complete(executionId, completion);
+                Complete(turnId, completion);
         }
     }
 
@@ -115,17 +115,17 @@ internal sealed class DurableSegmentScheduler
         catch (OperationCanceledException) when (_stopping.IsCancellationRequested) { }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Durable execution {ExecutionId} failed on this instance.", lease.ExecutionId);
+            _logger.LogError(exception, "Durable execution {TurnId} failed on this instance.", lease.TurnId);
         }
         finally
         {
-            Complete(lease.ExecutionId, completion);
+            Complete(lease.TurnId, completion);
         }
     }
 
-    private void Complete(Guid executionId, TaskCompletionSource completion)
+    private void Complete(Guid turnId, TaskCompletionSource completion)
     {
-        _running.TryRemove(new KeyValuePair<Guid, TaskCompletionSource>(executionId, completion));
+        _running.TryRemove(new KeyValuePair<Guid, TaskCompletionSource>(turnId, completion));
         _slots.Release();
         completion.TrySetResult();
     }

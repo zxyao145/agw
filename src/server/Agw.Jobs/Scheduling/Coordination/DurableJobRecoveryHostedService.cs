@@ -96,19 +96,19 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
             return;
         }
 
-        if (!currentJob.ActiveExecutionId.HasValue || !currentJob.ActiveAttemptStartedAt.HasValue)
+        if (!currentJob.ActiveTurnId.HasValue || !currentJob.ActiveAttemptStartedAt.HasValue)
         {
             _logger.LogError("Running Job {JobId} does not have a persisted active attempt.", currentJob.Id);
             return;
         }
 
-        var executionId = currentJob.ActiveExecutionId.Value;
+        var turnId = currentJob.ActiveTurnId.Value;
         if (!JobAgentExecutor.TryResolveOwnerUserId(currentJob, out var ownerUserId))
         {
             await RecordOutcomeAsync(
                 scope.ServiceProvider,
                 currentJob.Id,
-                executionId,
+                turnId,
                 success: false,
                 "The Job owner is missing.",
                 cancellationToken
@@ -120,14 +120,14 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
         AgentExecutionResult outcome;
         try
         {
-            outcome = await executionClient.GetOutcomeAsync(executionId, ownerUserId, cancellationToken);
+            outcome = await executionClient.GetOutcomeAsync(turnId, ownerUserId, cancellationToken);
         }
         catch (AgwException exception) when (exception.Code == ErrorCodes.DurableExecutionNotFound.Code)
         {
             await RecordOutcomeAsync(
                 scope.ServiceProvider,
                 currentJob.Id,
-                executionId,
+                turnId,
                 success: false,
                 "The durable Job execution was not registered before the scheduler stopped.",
                 cancellationToken
@@ -143,7 +143,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
         if (outcome.State == AgentExecutionState.WaitingForHuman)
         {
             await executionClient.InterruptAsync(
-                executionId,
+                turnId,
                 ownerUserId,
                 "Scheduled Jobs do not support human interaction.",
                 cancellationToken
@@ -151,7 +151,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
             await RecordOutcomeAsync(
                 scope.ServiceProvider,
                 currentJob.Id,
-                executionId,
+                turnId,
                 success: false,
                 "Scheduled Jobs do not support human interaction.",
                 cancellationToken
@@ -164,7 +164,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
             await RecordOutcomeAsync(
                 scope.ServiceProvider,
                 currentJob.Id,
-                executionId,
+                turnId,
                 success: true,
                 errorMessage: null,
                 cancellationToken
@@ -175,7 +175,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
         await RecordOutcomeAsync(
             scope.ServiceProvider,
             currentJob.Id,
-            executionId,
+            turnId,
             success: false,
             outcome.ErrorMessage ?? "The distributed Job execution did not complete.",
             cancellationToken
@@ -185,7 +185,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     private async Task RecordOutcomeAsync(
         IServiceProvider services,
         Guid jobId,
-        Guid executionId,
+        Guid turnId,
         bool success,
         string? errorMessage,
         CancellationToken cancellationToken
@@ -193,7 +193,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     {
         var recorder = services.GetRequiredService<IJobAttemptOutcomeRecorder>();
         var result = await recorder
-            .RecordAsync(jobId, executionId, success, errorMessage, cancellationToken)
+            .RecordAsync(jobId, turnId, success, errorMessage, cancellationToken)
             .ConfigureAwait(false);
         if (result is JobAttemptResult.Reschedule)
         {

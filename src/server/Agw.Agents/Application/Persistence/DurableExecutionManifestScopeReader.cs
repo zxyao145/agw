@@ -7,7 +7,7 @@ public sealed record DurableExecutionScope(Guid ProjectId, Guid ProjectConversat
 
 public static class DurableExecutionManifestScopeReader
 {
-    public static DurableExecutionScope? Read(string json, Guid executionId, string ownerUserId)
+    public static DurableExecutionScope? Read(string json, Guid turnId, string ownerUserId)
     {
         try
         {
@@ -15,7 +15,7 @@ public static class DurableExecutionManifestScopeReader
             if (
                 manifest == null
                 || manifest.SchemaVersion != DurableExecutionManifest.CurrentSchemaVersion
-                || manifest.ExecutionId != executionId
+                || manifest.TurnId != turnId
                 || string.IsNullOrWhiteSpace(manifest.UserId)
                 || !string.Equals(manifest.UserId, ownerUserId, StringComparison.Ordinal)
                 || manifest.WorkspaceSnapshot == null

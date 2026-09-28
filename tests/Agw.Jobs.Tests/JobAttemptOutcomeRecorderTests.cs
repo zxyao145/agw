@@ -41,7 +41,7 @@ public sealed class JobAttemptOutcomeRecorderTests
         await db.Database.EnsureCreatedAsync(token);
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var job = new Job
         {
             Id = Guid.CreateVersion7(),
@@ -51,7 +51,7 @@ public sealed class JobAttemptOutcomeRecorderTests
             IsEnabled = true,
             TriggerType = TriggerType.Interval,
             TriggerValue = "00:15:00",
-            ActiveExecutionId = executionId,
+            ActiveTurnId = turnId,
             ActiveAttemptStartedAt = StartedAt,
             CreateBy = "owner",
         };
@@ -77,7 +77,7 @@ public sealed class JobAttemptOutcomeRecorderTests
             {
                 Id = Guid.CreateVersion7(),
                 ConversationId = conversationId,
-                TaskId = executionId,
+                TaskId = turnId,
                 Status = TaskExecutionStatus.Running,
             }
         );
@@ -100,7 +100,7 @@ public sealed class JobAttemptOutcomeRecorderTests
             new TestTimeProvider(FinishedAt)
         );
 
-        await Assert.ThrowsAsync<IOException>(() => recorder.RecordAsync(job.Id, executionId, true, null, token));
+        await Assert.ThrowsAsync<IOException>(() => recorder.RecordAsync(job.Id, turnId, true, null, token));
         Assert.Empty(db.ChangeTracker.Entries());
         Assert.Equal(
             TaskExecutionStatus.Running,
@@ -110,14 +110,14 @@ public sealed class JobAttemptOutcomeRecorderTests
         Assert.Empty(await db.JobLogs.ToListAsync(token));
 
         failure.Enabled = false;
-        await recorder.RecordAsync(job.Id, executionId, true, null, token);
-        await recorder.RecordAsync(job.Id, executionId, true, null, token);
+        await recorder.RecordAsync(job.Id, turnId, true, null, token);
+        await recorder.RecordAsync(job.Id, turnId, true, null, token);
         db.ChangeTracker.Clear();
         Assert.Equal(
             TaskExecutionStatus.Succeeded,
             (await db.ProjectConversationChatHistories.SingleAsync(token)).Status
         );
-        Assert.Null((await db.Jobs.SingleAsync(token)).ActiveExecutionId);
+        Assert.Null((await db.Jobs.SingleAsync(token)).ActiveTurnId);
         Assert.Single(await db.JobLogs.ToListAsync(token));
     }
 
@@ -150,7 +150,7 @@ public sealed class JobAttemptOutcomeRecorderTests
         await using var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var job = new Job
         {
             Id = Guid.CreateVersion7(),
@@ -164,7 +164,7 @@ public sealed class JobAttemptOutcomeRecorderTests
             Status = JobStatus.Running,
             IsEnabled = true,
             MaxRetryCount = 3,
-            ActiveExecutionId = executionId,
+            ActiveTurnId = turnId,
             ActiveAttemptStartedAt = StartedAt,
             CreateBy = "owner",
             CreateTime = StartedAt,
@@ -193,14 +193,14 @@ public sealed class JobAttemptOutcomeRecorderTests
 
         var first = await recorder.RecordAsync(
             job.Id,
-            executionId,
+            turnId,
             success: false,
             errorMessage: "boom",
             cancellationToken: cancellationToken
         );
         var second = await recorder.RecordAsync(
             job.Id,
-            executionId,
+            turnId,
             success: false,
             errorMessage: "boom",
             cancellationToken: cancellationToken
@@ -214,9 +214,9 @@ public sealed class JobAttemptOutcomeRecorderTests
         Assert.Equal(JobStatus.Pending, persistedJob.Status);
         Assert.Equal(1, persistedJob.RetryCount);
         Assert.Equal(FinishedAt.Add(JobSchedulingDefaults.RetryDelay), persistedJob.NextRunTime);
-        Assert.Null(persistedJob.ActiveExecutionId);
+        Assert.Null(persistedJob.ActiveTurnId);
         Assert.Null(persistedJob.ActiveAttemptStartedAt);
-        Assert.Equal(executionId, log.TaskId);
+        Assert.Equal(turnId, log.TaskId);
         Assert.Equal(StartedAt, log.StartTime);
         Assert.Equal(FinishedAt, log.EndTime);
         Assert.False(log.Success);
@@ -237,7 +237,7 @@ public sealed class JobAttemptOutcomeRecorderTests
         await using var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
-        var executionId = Guid.CreateVersion7();
+        var turnId = Guid.CreateVersion7();
         var job = new Job
         {
             Id = Guid.CreateVersion7(),
@@ -250,7 +250,7 @@ public sealed class JobAttemptOutcomeRecorderTests
             NextRunTime = StartedAt,
             Status = JobStatus.Running,
             IsEnabled = true,
-            ActiveExecutionId = executionId,
+            ActiveTurnId = turnId,
             ActiveAttemptStartedAt = StartedAt,
             CreateBy = string.Empty,
             CreateTime = StartedAt,
@@ -265,7 +265,7 @@ public sealed class JobAttemptOutcomeRecorderTests
             new TestTimeProvider(FinishedAt)
         );
 
-        var result = await recorder.RecordAsync(job.Id, executionId, false, "owner missing", cancellationToken);
+        var result = await recorder.RecordAsync(job.Id, turnId, false, "owner missing", cancellationToken);
 
         Assert.IsType<JobAttemptResult.Drop>(result);
         dbContext.ChangeTracker.Clear();
@@ -274,7 +274,7 @@ public sealed class JobAttemptOutcomeRecorderTests
         var log = await dbContext.JobLogs.SingleAsync(cancellationToken);
         Assert.Equal(JobStatus.Paused, persistedJob.Status);
         Assert.False(persistedJob.IsEnabled);
-        Assert.Null(persistedJob.ActiveExecutionId);
+        Assert.Null(persistedJob.ActiveTurnId);
         Assert.Null(persistedJob.ActiveAttemptStartedAt);
         Assert.Equal("The Job owner is missing.", persistedJob.LastError);
         Assert.Equal("scheduler", log.CreateBy);

@@ -220,13 +220,13 @@ public partial class AgentflowTurnExecutorTests
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             TestContext.Current.CancellationToken
         );
 
         Assert.Equal(DurableExecutionSegmentStatus.Completed, result.Status);
-        Assert.Equal(manifest.ExecutionId, result.ExecutionId);
+        Assert.Equal(manifest.TurnId, result.TurnId);
         Assert.Equal(0, result.SegmentIndex);
         Assert.Equal(["input", "first", "second", "firstsecond"], sink.Messages.Select(MessageShape));
         Assert.Empty(result.PendingInteractions);
@@ -246,7 +246,7 @@ public partial class AgentflowTurnExecutorTests
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -262,7 +262,7 @@ public partial class AgentflowTurnExecutorTests
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 1, [response], checkpoint),
+            new(manifest.TurnId, 1, [response], checkpoint),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -296,7 +296,7 @@ public partial class AgentflowTurnExecutorTests
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -306,7 +306,7 @@ public partial class AgentflowTurnExecutorTests
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 1, [response], waiting.Checkpoint),
+            new(manifest.TurnId, 1, [response], waiting.Checkpoint),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -340,7 +340,7 @@ public partial class AgentflowTurnExecutorTests
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [CreateResponse(manifest, request, true)], null),
+            new(manifest.TurnId, 0, [CreateResponse(manifest, request, true)], null),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -360,7 +360,7 @@ public partial class AgentflowTurnExecutorTests
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 1, [], null),
+            new(manifest.TurnId, 1, [], null),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -381,7 +381,7 @@ public partial class AgentflowTurnExecutorTests
 
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -406,7 +406,7 @@ public partial class AgentflowTurnExecutorTests
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
-            new(manifest.ExecutionId, 0, [], null),
+            new(manifest.TurnId, 0, [], null),
             sink,
             TestContext.Current.CancellationToken
         );
@@ -417,7 +417,7 @@ public partial class AgentflowTurnExecutorTests
         var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
             manifest,
             new(
-                manifest.ExecutionId,
+                manifest.TurnId,
                 1,
                 waiting
                     .PendingInteractions.Select(
@@ -455,7 +455,7 @@ public partial class AgentflowTurnExecutorTests
             var manifest = CreateManifest(fixture.Flow.Id);
             var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
-                new(manifest.ExecutionId, 0, [], null),
+                new(manifest.TurnId, 0, [], null),
                 new RecordingSegmentSink(),
                 TestContext.Current.CancellationToken
             );
@@ -509,7 +509,7 @@ public partial class AgentflowTurnExecutorTests
 
             var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
-                new(manifest.ExecutionId, 0, [], null),
+                new(manifest.TurnId, 0, [], null),
                 sink,
                 TestContext.Current.CancellationToken
             );
@@ -558,7 +558,7 @@ public partial class AgentflowTurnExecutorTests
 
             var result = await fixture.Service.ExecuteDurableSegmentInScopeAsync(
                 manifest,
-                new(manifest.ExecutionId, 0, [], null),
+                new(manifest.TurnId, 0, [], null),
                 new RecordingSegmentSink(),
                 TestContext.Current.CancellationToken
             );
@@ -683,7 +683,7 @@ public partial class AgentflowTurnExecutorTests
     private static DurableExecutionManifest CreateManifest(Guid flowId) =>
         new()
         {
-            ExecutionId = Guid.CreateVersion7(),
+            TurnId = Guid.CreateVersion7(),
             UserId = "tester",
             AgentId = flowId,
             AgentType = AgentRuntimeType.Agentflow,

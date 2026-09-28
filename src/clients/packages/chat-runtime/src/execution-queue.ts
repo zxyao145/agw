@@ -24,10 +24,10 @@ export type QueuedExecution = ExecutionSubmission & {
   /** 条目标识，也是发送时用户消息的 messageId。The entry ID, also the user message's messageId when sent. */
   id: string;
   /** 发送使用的执行标识；重发沿用，服务端据此只受理一次。The execution ID used to send; a resend reuses it so the server accepts it once. */
-  executionId: string;
+  turnId: string;
   /**
-   * 上一次发送的结果无法确认：重发沿用同一 executionId，文字不能再编辑。
-   * The previous send's outcome is unknown: a resend reuses the same executionId, and the text can no longer be edited.
+   * 上一次发送的结果无法确认：重发沿用同一 turnId，文字不能再编辑。
+   * The previous send's outcome is unknown: a resend reuses the same turnId, and the text can no longer be edited.
    */
   uncertain: boolean;
 };

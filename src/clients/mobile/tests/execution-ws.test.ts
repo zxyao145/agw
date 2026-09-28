@@ -129,7 +129,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
     conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
-    executionId: "execution-1",
+    turnId: "turn-1",
     input: createInput("message-1"),
   });
   await flushPromises();
@@ -143,7 +143,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
     createMessage("finished-1", {
       type: "agw-turn-finished",
       status: "completed",
-      turnId: "execution-1",
+      turnId: "turn-1",
     }),
   );
   await firstTurn;
@@ -152,7 +152,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
     conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
-    executionId: "execution-2",
+    turnId: "turn-2",
     input: createInput("message-2"),
   });
   await flushPromises();
@@ -160,7 +160,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
     createMessage("finished-2", {
       type: "agw-turn-finished",
       status: "completed",
-      turnId: "execution-2",
+      turnId: "turn-2",
     }),
   );
   await secondTurn;
@@ -195,7 +195,7 @@ test("reconnect restores settings and the active turn without resending mode", a
     conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
-    executionId: "execution-1",
+    turnId: "turn-1",
     input: createInput("message-1"),
   });
   await flushPromises();
@@ -218,8 +218,8 @@ test("reconnect restores settings and the active turn without resending mode", a
       permissionMode: "alwaysAsk",
     },
   ]);
-  expect(fake.commands.filter((command) => command.type === "SubscribeExecutionCommand")).toEqual([
-    { type: "SubscribeExecutionCommand", executionId: "execution-1" },
+  expect(fake.commands.filter((command) => command.type === "SubscribeTurnCommand")).toEqual([
+    { type: "SubscribeTurnCommand", turnId: "turn-1" },
   ]);
   expect(fake.commands.filter((command) => command.type === "SetModeCommand")).toHaveLength(1);
   expect(reconnectStates.at(-1)).toBeNull();
@@ -228,7 +228,7 @@ test("reconnect restores settings and the active turn without resending mode", a
     createMessage("finished-1", {
       type: "agw-turn-finished",
       status: "completed",
-      turnId: "execution-1",
+      turnId: "turn-1",
     }),
   );
   await turn;
@@ -247,7 +247,7 @@ test("interrupt targets the active execution", async () => {
     conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
-    executionId: "execution-1",
+    turnId: "turn-1",
     input: createInput("message-1"),
   });
   await flushPromises();
@@ -255,7 +255,7 @@ test("interrupt targets the active execution", async () => {
 
   expect(fake.commands.at(-1)).toEqual({
     type: "InterruptCommand",
-    executionId: "execution-1",
+    turnId: "turn-1",
     reason: "Stop requested by user.",
   });
 
@@ -263,7 +263,7 @@ test("interrupt targets the active execution", async () => {
     createMessage("finished-1", {
       type: "agw-turn-finished",
       status: "interrupted",
-      turnId: "execution-1",
+      turnId: "turn-1",
     }),
   );
   await turn;

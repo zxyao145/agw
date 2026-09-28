@@ -101,16 +101,13 @@ internal sealed class TurnAcceptanceService
             );
         }
 
-        var streamingScopeId = string.IsNullOrWhiteSpace(request.Input.MessageId)
-            ? turnId.ToString("D")
-            : request.Input.MessageId;
         var input = NormalizeInput(request.Input);
         var envelope = new TurnEnvelope(
             turnId,
             request.ConversationId,
             request.Target.AgentId,
             request.Target.AgentType,
-            streamingScopeId
+            turnId.ToString("D")
         );
         var hasInput = input.Contents.Count > 0;
         var executionRequest = new ExecutionRequest(

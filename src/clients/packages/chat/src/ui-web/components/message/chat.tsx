@@ -45,6 +45,7 @@ import {
   isSubmittableInput,
   type ManagedExecutionHandle,
   type ManagedExecutionHandlers,
+  type QueuedExecution,
 } from "@agw/chat-runtime";
 import {
   clearProjectConversationRecords,
@@ -799,31 +800,38 @@ export function Chat({
    * 队列条目开始发送时，它的用户消息进入消息区域。
    * When a queue entry starts sending, its user message enters the message area.
    */
-  const applySubmissionStarted = React.useCallback((message: AiMessage, generation: number) => {
-    if (generation !== executionGenerationRef.current) return;
-    streamingMessageBatcherRef.current?.flush(generation);
-    activeStreamingScopeRef.current = message.messageId;
-    const scopedUserMessage = scopeStreamingMessage(message, message.messageId);
-    setMessages((current) => {
-      const nextMessages = mergeStreamingMessages(current, [scopedUserMessage]);
-      messagesRef.current = nextMessages;
-      return nextMessages;
-    });
-    setPendingInteraction(null);
-    setIsExecuting(true);
-  }, []);
+  const applySubmissionStarted = React.useCallback(
+    (item: QueuedExecution, message: AiMessage, generation: number) => {
+      if (generation !== executionGenerationRef.current) return;
+      streamingMessageBatcherRef.current?.flush(generation);
+      // 条目的 turnId 就是服务端的 turnId，与按 turnId 划分 scope 的历史记录一致。
+      // The entry's turnId is the server's turnId, matching history scoped by turnId.
+      activeStreamingScopeRef.current = item.turnId;
+      const scopedUserMessage = scopeStreamingMessage(message, item.turnId);
+      setMessages((current) => {
+        const nextMessages = mergeStreamingMessages(current, [scopedUserMessage]);
+        messagesRef.current = nextMessages;
+        return nextMessages;
+      });
+      setPendingInteraction(null);
+      setIsExecuting(true);
+    },
+    [],
+  );
 
   /**
    * 发送的条目回到队首：从消息区域移除它的用户消息，并显示原因。
    * A sent entry returned to the queue head: its user message leaves the message area and the reason is shown.
    */
   const applySubmissionReturned = React.useCallback(
-    (itemId: string, error: Error, generation: number) => {
+    (item: QueuedExecution, error: Error, generation: number) => {
       if (generation !== executionGenerationRef.current) return;
       streamingMessageBatcherRef.current?.flush(generation);
-      if (activeStreamingScopeRef.current === itemId) activeStreamingScopeRef.current = null;
+      if (activeStreamingScopeRef.current === item.turnId) {
+        activeStreamingScopeRef.current = null;
+      }
       setMessages((current) => {
-        const nextMessages = current.filter((message) => message.messageId !== itemId);
+        const nextMessages = current.filter((message) => message.messageId !== item.id);
         messagesRef.current = nextMessages;
         return nextMessages;
       });
@@ -839,9 +847,9 @@ export function Chat({
         generation === executionGenerationRef.current && executionClientRef.current === getClient();
       return {
         onMessage: (message) => applyExecutionMessage(message, generation),
-        onSubmissionStarted: ({ message }) => applySubmissionStarted(message, generation),
-        onSubmissionReturned: ({ item, error }) =>
-          applySubmissionReturned(item.id, error, generation),
+        onSubmissionStarted: ({ item, message }) =>
+          applySubmissionStarted(item, message, generation),
+        onSubmissionReturned: ({ item, error }) => applySubmissionReturned(item, error, generation),
         onClose: (error) => {
           if (!isCurrent()) return;
           executionClientRef.current = null;
@@ -1367,7 +1375,7 @@ export function Chat({
       }
 
       const generation = executionGenerationRef.current;
-      const resumeExecutionId = globalThis.crypto.randomUUID();
+      const resumeTurnId = globalThis.crypto.randomUUID();
       streamingMessageBatcherRef.current?.flush(generation);
       checkpointResumeBufferRef.current = [];
       activeStreamingScopeRef.current = null;
@@ -1382,7 +1390,7 @@ export function Chat({
           await client.resumeCheckpoint({
             checkpointOccurrenceId: selectedCheckpoint.occurrenceId,
             agentflowId: target.id,
-            resumeExecutionId,
+            resumeTurnId,
           });
           if (
             generation !== executionGenerationRef.current ||
@@ -1457,7 +1465,7 @@ export function Chat({
       const interactionId = pendingInteraction.interactionId;
       void client
         .submitHumanResponse({
-          executionId: pendingInteraction.executionId,
+          turnId: pendingInteraction.turnId,
           response,
         })
         .then(() => {

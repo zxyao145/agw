@@ -143,7 +143,7 @@ public sealed partial class DurableExecutionStoreTests
                             .ApplySegmentResultAsync(
                                 new DurableExecutionSegmentResult
                                 {
-                                    ExecutionId = id,
+                                    TurnId = id,
                                     SegmentIndex = 0,
                                     Status = DurableExecutionSegmentStatus.Completed,
                                 },

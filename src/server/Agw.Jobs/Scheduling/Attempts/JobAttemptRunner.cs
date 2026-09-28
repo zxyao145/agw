@@ -57,14 +57,14 @@ public sealed class JobAttemptRunner
 
         try
         {
-            await _jobAgentExecutor.ExecuteAsync(claim.Job, claim.ExecutionId, cancellationToken);
+            await _jobAgentExecutor.ExecuteAsync(claim.Job, claim.TurnId, cancellationToken);
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Job {JobId} execution failed.", scheduledJob.JobId);
             return await _outcomeRecorder.RecordAsync(
                 scheduledJob.JobId,
-                claim.ExecutionId,
+                claim.TurnId,
                 success: false,
                 errorMessage: exception.Message,
                 cancellationToken: cancellationToken
@@ -73,7 +73,7 @@ public sealed class JobAttemptRunner
 
         return await _outcomeRecorder.RecordAsync(
             scheduledJob.JobId,
-            claim.ExecutionId,
+            claim.TurnId,
             success: true,
             errorMessage: null,
             cancellationToken

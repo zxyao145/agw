@@ -14,7 +14,7 @@ public static class InteractionMessageMapper
     public static AgwMessage Create(
         InteractionRequest request,
         string messageId,
-        Guid? executionId = null,
+        Guid? turnId = null,
         string? streamingScopeId = null
     )
     {
@@ -26,8 +26,8 @@ public static class InteractionMessageMapper
                 JsonOptions
             ),
         };
-        if (executionId.HasValue)
-            properties["executionId"] = executionId.Value.ToString("D");
+        if (turnId.HasValue)
+            properties["turnId"] = turnId.Value.ToString("D");
         if (!string.IsNullOrWhiteSpace(streamingScopeId))
             properties["streamingScopeId"] = streamingScopeId;
         return new AgwMessage(

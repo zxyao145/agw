@@ -50,4 +50,4 @@ public sealed record DurableTurnAcceptance(DurableExecutionStatus Status, Durabl
 /// 租约持有者：WorkerId 与 LeaseEpoch 共同确定，每次领取 LeaseEpoch 加一。
 /// The lease holder, identified by WorkerId and LeaseEpoch together; every claim increments LeaseEpoch.
 /// </summary>
-public sealed record DurableLease(Guid ExecutionId, string WorkerId, long Epoch);
+public sealed record DurableLease(Guid TurnId, string WorkerId, long Epoch);

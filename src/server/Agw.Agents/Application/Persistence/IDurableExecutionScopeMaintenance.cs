@@ -21,11 +21,11 @@ public interface IDurableExecutionScopeMaintenance
     );
 
     // Quarantines a record whose manifest or scope is invalid; a concurrent state change wins through StateVersion.
-    Task<bool> ValidateExecutionAsync(Guid executionId, CancellationToken cancellationToken = default);
+    Task<bool> ValidateExecutionAsync(Guid turnId, CancellationToken cancellationToken = default);
 
     // Returns an untracked, decrypted record for a segment whose lease the caller has just claimed.
     Task<DurableExecutionRecord?> LoadValidatedExecutionAsync(
-        Guid executionId,
+        Guid turnId,
         CancellationToken cancellationToken = default
     );
 }

@@ -52,7 +52,7 @@ public sealed partial class DurableExecutionStoreTests
     /// Replays an execution after a cursor: up to its finish message, or only the first message.
     /// </summary>
     private async Task<List<AgwMessage>> ReplayAsync(
-        Guid executionId,
+        Guid turnId,
         Guid conversationId,
         string? cursor,
         bool untilFinished
@@ -63,7 +63,7 @@ public sealed partial class DurableExecutionStoreTests
         var token = timeout.Token;
         var sink = new ReplaySink();
         await using var attachment = new DurableExecutionAttachment(UserId, sink, token, _kit.Coordinator);
-        await attachment.AttachAsync(executionId, cursor, conversationId, token);
+        await attachment.AttachAsync(turnId, cursor, conversationId, token);
         var messages = new List<AgwMessage>();
         await foreach (var message in sink.ReadAllAsync(token))
         {

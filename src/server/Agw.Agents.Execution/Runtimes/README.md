@@ -57,7 +57,7 @@ flowchart TB
     Starter --> Durable["DurableExecutionStarter"]
     Local --> Factory["RuntimeFactory"]
     Factory --> Engines["Agents / Agentflows 引擎"]
-    Durable --> Session["DurableExecutionSession"]
+    Durable --> Session["DurableExecutionAttachment"]
     Session --> Coordinator["DurableExecutionCoordinator"]
     Facades["A2A / Jobs Facades"] -->|InProcess| Engines
     Facades -->|Distributed| Client["IDurableExecutionClient"]
@@ -88,7 +88,7 @@ Runtimes/
 │   └── RuntimeFactory.cs
 └── Durable/
     ├── DurableExecutionStarter.cs
-    ├── DurableExecutionSession.cs
+    ├── DurableExecutionAttachment.cs
     ├── DurableExecutionClient.cs
     ├── DurableExecutionCoordinator.cs
     ├── DistributedExecutionWorker.cs
@@ -126,7 +126,7 @@ Task<ExecutionReceipt> StartAsync(
 
 | 字段 | 来源和用途 |
 | --- | --- |
-| `ExecutionId` | 当前执行标识；Durable 用它登记、订阅和重试 |
+| `TurnId` | 当前 Turn 标识；Durable 用它登记、订阅和重试 |
 | `Target` | `AgentId` 与 `AgentRuntimeType`，保留 Agent / Agentflow 区分 |
 | `Task` | 已解析的 Project、Conversation、Context、Task 和 Generation 快照 |
 | `Settings` | 本次执行的配置快照，包括权限与环境变量等 |
@@ -142,7 +142,7 @@ Task<ExecutionReceipt> StartAsync(
 [ExecutionReceipt](Contracts/ExecutionReceipt.cs) 只有两个字段：
 
 ```csharp
-internal readonly record struct ExecutionReceipt(Guid ExecutionId, bool Accepted);
+internal readonly record struct ExecutionReceipt(Guid TurnId, bool Accepted);
 ```
 
 | 实现 | `Accepted = true` 的含义 | 不能从回执推断的事情 |
@@ -170,7 +170,7 @@ Starter 因此不重复承担连接鉴权、任务解析和命令并发控制。
 
 ### 3.3 实现如何选择
 
-[ExecutionConnectionContextFactory](../Inbound/Connections/ExecutionConnectionContextFactory.cs) 读取全局 `Execution:Provider`。使用 Distributed 时，为当前连接构造 `DurableExecutionSession`；InProcess 时不创建该 Session。
+[ExecutionConnectionContextFactory](../Inbound/Connections/ExecutionConnectionContextFactory.cs) 读取全局 `Execution:Provider`。使用 Distributed 时，为当前连接构造 `DurableExecutionAttachment`；InProcess 时不创建该 Session。
 
 Context 在构造时据此创建一个 `InProcessExecutionStarter` 或 `DurableExecutionStarter`。Starter 与连接一一绑定，不是 singleton，也不是每次启动都重新选择 Provider。InProcess 实现保存用户、sink、Host token 和 HumanGate 状态回调；Durable 实现保存当前连接的 Session。
 
@@ -316,7 +316,7 @@ Agent 路径调用 AgentRuntimeService 的流式或非流式方法；Agentflow �
 | 组件 | 负责什么 | 不由它持有的状态 |
 | --- | --- | --- |
 | [DurableExecutionStarter](Durable/DurableExecutionStarter.cs) | 映射启动请求，委托 Session，再返回启动回执 | Worker 的运行任务和分段领取权 |
-| [DurableExecutionSession](Durable/DurableExecutionSession.cs) | 当前连接的 execution ID、订阅 pump、状态回送、回答、中断和重新附着 | 持久 execution 的生命周期 |
+| [DurableExecutionAttachment](Durable/DurableExecutionAttachment.cs) | 当前连接的 turnId、订阅 pump、状态回送、回答、中断和重新附着 | 持久 execution 的生命周期 |
 | [DurableExecutionClient](Durable/DurableExecutionClient.cs) | 为 Facade 提供登记、查询、等待、事件读取和中断入口 | SignalR attachment 和可复用 Runtime |
 | [DurableExecutionCoordinator](Durable/DurableExecutionCoordinator.cs) | 编排状态存储、人工回答锁、checkpoint 分支和事件回放 | 长期存活的 DbContext、引擎实例 |
 | [DistributedExecutionWorker](Durable/DistributedExecutionWorker.cs) | 轮询候选、限制本机并发、竞争锁、领取分段、监测中断、提交结果 | SignalR 连接状态 |
@@ -330,7 +330,7 @@ PostgreSQL 中的执行状态决定是否可以继续、等待或结束；event 
 sequenceDiagram
     participant Context as ExecutionConnectionContext
     participant Starter as DurableExecutionStarter
-    participant Session as DurableExecutionSession
+    participant Session as DurableExecutionAttachment
     participant Coordinator as DurableExecutionCoordinator
     participant Store as DurableExecutionStore
     participant Worker as DistributedExecutionWorker
@@ -532,7 +532,7 @@ Coordinator 的状态操作创建短 DI scope，Worker 的每次领取和执行�
 | 领取权丢失 | conversation lease 的丢失信号进入执行取消链 | execution lock 丢失信号取消分段；原版本阻止迟到结果提交 |
 | 最终完成 | 清理 ActiveTurn，兼容 Runtime 可继续复用 | 保存终态并释放本段 Runtime / Workflow；订阅收到终态后结束 |
 
-三个“Session”名称也需要分清：SDK `AgentSession` 是模型会话状态；`ConversationSessionContext` 是当前异步执行的会话代次上下文；`DurableExecutionSession` 是一个连接对持久 execution 的临时 attachment。
+两个“Session”名称也需要分清：SDK `AgentSession` 是模型会话状态；`ConversationSessionContext` 是当前异步执行的会话代次上下文。`DurableExecutionAttachment` 则是一个连接对持久 Turn 的临时订阅。
 
 <a id="configuration"></a>
 
@@ -565,7 +565,7 @@ Worker 的中断监测间隔固定为 250 ms，Coordinator 的状态检查间隔
 
 1. `ExecutionConnectionContext.StartTurnAsync` 与 `Contracts/IExecutionStarter.cs`：明确输入准备和受理边界。
 2. `InProcessExecutionStarter` → `RuntimeFactory` → `RuntimeBase` / `ActiveTurn`：理解本地 turn 的注册、复用与收尾。
-3. `DurableExecutionStarter` → `DurableExecutionSession` → `DurableExecutionCoordinator`：理解登记、attachment 和控制路径。
+3. `DurableExecutionStarter` → `DurableExecutionAttachment` → `DurableExecutionCoordinator`：理解登记、attachment 和控制路径。
 4. `DistributedExecutionWorker` → `DurableExecutionSegmentExecutor` → 两类 Runner：理解领取、分段与恢复。
 5. `DurableExecutionStore` 与 `ExecutionStreamMessageSink`：理解状态正确性、消息顺序和输出降级的边界。
 

@@ -11,16 +11,16 @@ public sealed class ResumeCheckpointCommand : AgentRunCommand
 {
     [JsonConstructor]
     [SetsRequiredMembers]
-    public ResumeCheckpointCommand(Guid checkpointOccurrenceId, Guid resumeExecutionId, Guid agentflowId)
+    public ResumeCheckpointCommand(Guid checkpointOccurrenceId, Guid resumeTurnId, Guid agentflowId)
     {
         CheckpointOccurrenceId = checkpointOccurrenceId;
-        ResumeExecutionId = resumeExecutionId;
+        ResumeTurnId = resumeTurnId;
         AgentflowId = agentflowId;
     }
 
     public Guid CheckpointOccurrenceId { get; set; }
 
-    public Guid ResumeExecutionId { get; set; }
+    public Guid ResumeTurnId { get; set; }
 
     public Guid AgentflowId { get; set; }
 }

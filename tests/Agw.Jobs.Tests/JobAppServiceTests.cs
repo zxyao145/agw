@@ -335,7 +335,7 @@ public class JobAppServiceTests : IDisposable
         {
             var job = await _dbContext.Jobs.SingleAsync(item => item.Id == id, cancellationToken);
             job.Status = JobStatus.Running;
-            job.ActiveExecutionId = Guid.CreateVersion7();
+            job.ActiveTurnId = Guid.CreateVersion7();
             job.ActiveAttemptStartedAt = UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }

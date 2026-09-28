@@ -6,12 +6,12 @@ namespace Agw.Agents.Execution.Commands.Hitl;
 public class HumanResponseCommand : AgentRunCommand
 {
     [JsonConstructor]
-    public HumanResponseCommand(InteractionResponse response, Guid? executionId = null)
+    public HumanResponseCommand(InteractionResponse response, Guid? turnId = null)
     {
         Response = response;
-        ExecutionId = executionId;
+        TurnId = turnId;
     }
 
     public InteractionResponse Response { get; set; }
-    public Guid? ExecutionId { get; set; }
+    public Guid? TurnId { get; set; }
 }

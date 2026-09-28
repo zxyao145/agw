@@ -69,9 +69,9 @@ public sealed class InitialMigrationTests
                 "max_context_window_tokens",
                 "max_output_tokens",
                 "ck_model_token_limits",
-                "active_execution_id",
+                "active_turn_id",
                 "active_attempt_started_at",
-                "ix_job_active_execution_id",
+                "ix_job_active_turn_id",
                 "ix_integration_connection_create_by_alias",
                 "ck_job_active_attempt",
                 "setting",
@@ -181,9 +181,9 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "api_token", "secret_hash", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "user_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_id", cancellationToken));
-        Assert.True(await ColumnExistsAsync(connection, "job", "active_execution_id", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "job", "active_turn_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "job", "active_attempt_started_at", cancellationToken));
-        Assert.True(await IndexIsUniqueAsync(connection, "job", "ix_job_active_execution_id", cancellationToken));
+        Assert.True(await IndexIsUniqueAsync(connection, "job", "ix_job_active_turn_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "enable", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agentflow", "enable", cancellationToken));

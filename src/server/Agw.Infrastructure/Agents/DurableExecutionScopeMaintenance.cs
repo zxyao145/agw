@@ -79,9 +79,9 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
             .ConfigureAwait(false);
     }
 
-    public async Task<bool> ValidateExecutionAsync(Guid executionId, CancellationToken cancellationToken = default)
+    public async Task<bool> ValidateExecutionAsync(Guid turnId, CancellationToken cancellationToken = default)
     {
-        var row = await ReadAsync(executionId, cancellationToken).ConfigureAwait(false);
+        var row = await ReadAsync(turnId, cancellationToken).ConfigureAwait(false);
         if (row == null)
         {
             return false;
@@ -91,7 +91,7 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
     }
 
     public async Task<DurableExecutionRecord?> LoadValidatedExecutionAsync(
-        Guid executionId,
+        Guid turnId,
         CancellationToken cancellationToken = default
     )
     {
@@ -101,13 +101,13 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
             // Healthy segment starts load and decrypt exactly once; the store reuses this record.
             record = await _dbContext
                 .DurableExecutions.AsNoTracking()
-                .SingleOrDefaultAsync(item => item.Id == executionId, cancellationToken)
+                .SingleOrDefaultAsync(item => item.Id == turnId, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (AgwException exception) when (exception.Code == ErrorCodes.EncryptedDataInvalid.Code)
         {
             // Materialization can fail before an entity exists. Read scalar metadata for safe CAS quarantine.
-            var damaged = await ReadAsync(executionId, cancellationToken).ConfigureAwait(false);
+            var damaged = await ReadAsync(turnId, cancellationToken).ConfigureAwait(false);
             if (damaged != null)
             {
                 var scope = ReadScope(damaged);
@@ -192,7 +192,7 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
             return; // In particular, a concurrent Interrupt must win without an error or state overwrite.
         }
         _logger.LogWarning(
-            "Quarantined durable execution {ExecutionId}: invalid manifest or inconsistent scope. Payload retained for recovery.",
+            "Quarantined durable execution {TurnId}: invalid manifest or inconsistent scope. Payload retained for recovery.",
             row.Id
         );
     }
@@ -207,8 +207,8 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
             .InConversation(projectId, conversationId, ownerUserId)
             .Where(DurableExecutionQueries.Active);
 
-    private Task<StoredManifest?> ReadAsync(Guid executionId, CancellationToken cancellationToken) =>
-        ProjectManifests(_dbContext.DurableExecutions.AsNoTracking().Where(item => item.Id == executionId))
+    private Task<StoredManifest?> ReadAsync(Guid turnId, CancellationToken cancellationToken) =>
+        ProjectManifests(_dbContext.DurableExecutions.AsNoTracking().Where(item => item.Id == turnId))
             .SingleOrDefaultAsync(cancellationToken);
 
     private static IQueryable<StoredManifest> ProjectManifests(IQueryable<DurableExecutionRecord> query) =>
