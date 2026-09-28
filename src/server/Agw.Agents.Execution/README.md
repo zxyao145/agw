@@ -420,7 +420,7 @@ sequenceDiagram
 2. Context 用 `ExecutionBusy` 拒绝同一条 connection 上的并发 turn；进程内 turn 已经通过广播写出结束消息时视为正在收尾，Context 等待它空闲后受理新命令，因此客户端收到 `turn-finished` 后立即发出的下一轮不会被拒绝。没有 settings 时创建内置 project 的默认快照，并绑定本命令的对话。
 3. `conversationId` 必须与连接配置的对话一致。`IProjectTaskFacade` 按当前用户和 Project 创建或读取该 conversation：已有对话沿用保存的 `ContextId`，新对话在首次受理时生成 UUIDv7 `ContextId`；同一次提交中写入初始 task record，提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。
 4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint。客户端不再发送它；Facade 与 A2A、Job 等内部入口仍可以按已知的 `contextId` 创建或定位对话，并校验它与对话一致。
-5. target 改变时释放旧 runtime；同一 Agent target 在每个新 turn 开始前查询当前用户的 definition 更新时间，只有项目、context、generation 和 definition 版本均匹配才复用。definition 修改后整体重建 runtime，使模型、provider、凭证、环境变量及 Extra 同步更新；保留 conversation 和外部 provider session 绑定，沿用恢复流程。当前运行或等待人工响应的 turn 不受影响，SignalR 连接无需断开。重建失败时清除已释放的 runtime 引用，后续请求可重试。
+5. target 改变时释放旧 runtime；同一 Agent target 在每个新 turn 开始前查询当前用户的 definition 更新时间，只有项目、context、generation 和 definition 版本均匹配才复用。definition 版本包含 `background-agents` Tool Block 所允许的子 Agent definition，子 Agent 修改后父 runtime 同样重建。definition 修改后整体重建 runtime，使模型、provider、凭证、环境变量及 Extra 同步更新；保留 conversation 和外部 provider session 绑定，沿用恢复流程。当前运行或等待人工响应的 turn 不受影响，SignalR 连接无需断开。重建失败时清除已释放的 runtime 引用，后续请求可重试。
 6. Context 从当前 connection 状态创建 `ExecutionStartRequest`；`InProcessExecutionStarter` 结合绑定的用户、message sink 和回调生成 `RuntimeTurnContext`，再调用 RuntimeFactory。
 7. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
 8. `RuntimeBase.StartTurn` 先注册 `ActiveTurn`，再启动实际执行，避免 turn 已运行但尚未对 interrupt 可见的竞态。
