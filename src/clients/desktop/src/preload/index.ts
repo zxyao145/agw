@@ -5,6 +5,7 @@ import type {
   DesktopRuntimeState,
   DesktopSettingsUpdate,
   DesktopUpdateCheckResult,
+  ImageContextMenuRequest,
   TurnNotificationRequest,
   UninstallRequest,
   UninstallResult,
@@ -28,6 +29,8 @@ const bridge: AgwDesktopBridge = {
   cancelOidcLogin: (profileId: string) => ipcRenderer.invoke("agw:oidc-cancel", profileId),
   logoutOidc: (profileId: string) => ipcRenderer.invoke("agw:oidc-logout", profileId),
   openExternal: (url: string) => ipcRenderer.invoke("agw:open-external", url) as Promise<void>,
+  showImageContextMenu: (request: ImageContextMenuRequest) =>
+    ipcRenderer.invoke("agw:image-context-menu", request) as Promise<void>,
   openSetup: (baseUrl: string) => ipcRenderer.invoke("agw:open-setup", baseUrl) as Promise<void>,
   setActiveTaskCount: (count: number) =>
     ipcRenderer.invoke("agw:set-active-task-count", count) as Promise<void>,

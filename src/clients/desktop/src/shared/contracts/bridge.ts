@@ -1,6 +1,7 @@
 import type { DesktopRuntimeState } from "./runtime";
 import type { DesktopSettingsUpdate } from "./settings";
 import type { DesktopUpdateCheckResult } from "./update";
+import type { ImageContextMenuRequest } from "./image";
 
 export type UninstallRequest = {
   deleteServerData: boolean;
@@ -32,6 +33,7 @@ export type AgwDesktopBridge = {
   cancelOidcLogin(profileId: string): Promise<void>;
   logoutOidc(profileId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
+  showImageContextMenu(request: ImageContextMenuRequest): Promise<void>;
   openSetup(baseUrl: string): Promise<void>;
   setActiveTaskCount(count: number): Promise<void>;
   prepareUninstall(request: UninstallRequest): Promise<UninstallResult>;

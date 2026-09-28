@@ -16,6 +16,7 @@
     "format": "oxfmt -c ../.oxfmtrc.json ./src ./scripts ./renderer/src ./renderer/*.ts ./renderer/*.mjs *.json *.cjs",
     "format:check": "oxfmt -c ../.oxfmtrc.json --check ./src ./scripts ./renderer/src ./renderer/*.ts ./renderer/*.mjs *.json *.cjs",
     "test": "tsx --test \"src/**/*.test.ts\" \"renderer/src/**/*.test.ts\"",
+    "test:images": "node scripts/test-images.mjs",
     "package": "pnpm build && pnpm prepare:resources && electron-forge package",
     "make": "pnpm build && pnpm prepare:resources && electron-forge make",
     "release:build": "node scripts/build-release.mjs",

@@ -28,11 +28,13 @@ import type {
   DesktopRuntimeState,
   DesktopSettings,
   DesktopSettingsUpdate,
+  ImageContextMenuRequest,
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
 import { DaemonManager } from "./daemon/daemon-manager";
 import { getExternalHttpUrl } from "./external-navigation";
+import { showImageContextMenu } from "./image-context-menu";
 import { DESKTOP_OAUTH_PROTOCOL, findOAuthDeepLink, parseOAuthDeepLink } from "./oauth-deep-link";
 import { parseDesktopPackageMetadata, type DesktopPackageMetadata } from "./package-metadata";
 import { resolveRendererFile } from "./renderer-path";
@@ -578,6 +580,10 @@ function windowsDistribution(): "squirrel" | "portable" {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("agw:image-context-menu", (event, request: ImageContextMenuRequest) => {
+    assertTrustedSender(senderUrl(event));
+    showImageContextMenu(event.sender, request, reportMainProcessError);
+  });
   ipcMain.handle("agw:oidc-providers", async (event, profileId: string) => {
     assertTrustedSender(senderUrl(event));
     return oidcLogin!.providers(profileId);

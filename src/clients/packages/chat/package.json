@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./math.css": "./src/math.css"
+    "./math.css": "./src/math.css",
+    "./image-preview.css": "./src/image-preview.css"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -26,7 +27,8 @@
     "react-markdown": "catalog:",
     "rehype-katex": "7.0.1",
     "remark-gfm": "catalog:",
-    "remark-math": "6.0.0"
+    "remark-math": "6.0.0",
+    "yet-another-react-lightbox": "catalog:"
   },
   "devDependencies": {
     "@agw/test-harness": "workspace:*",

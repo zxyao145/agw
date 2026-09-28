@@ -9,7 +9,11 @@ import type {
   ServerProfile,
 } from "@desktop/shared/contracts";
 import { configureApiRuntime, resetApiRuntime } from "@agw/api";
-import { ExecutionPlatformProvider } from "@agw/chat";
+import {
+  ConversationImagePlatformProvider,
+  ExecutionPlatformProvider,
+  type ImageContextMenuRequest,
+} from "@agw/chat";
 import { configureExecutionRuntime, executionSessionManager } from "@agw/chat-runtime";
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type InfiniteData, type QueryClient } from "@agw/components/query";
@@ -47,6 +51,10 @@ const DesktopRuntimeContext = React.createContext<DesktopRuntimeContextValue | n
 type AuthSession = {
   accessMode?: string;
 };
+
+function showImageContextMenu(request: ImageContextMenuRequest): Promise<void> {
+  return window.agwDesktop!.showImageContextMenu(request);
+}
 
 async function probeServer(
   profile: ServerProfile,
@@ -364,7 +372,11 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
           serverId={activeProfile?.id ?? "browser"}
           onActiveCountChange={handleActiveCountChange}
         >
-          {children}
+          <ConversationImagePlatformProvider
+            onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+          >
+            {children}
+          </ConversationImagePlatformProvider>
         </ExecutionPlatformProvider>
       </QueryClientProvider>
     </DesktopRuntimeContext.Provider>

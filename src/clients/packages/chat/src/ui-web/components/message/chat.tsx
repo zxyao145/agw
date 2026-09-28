@@ -277,6 +277,10 @@ export function Chat({
   const conversationIdRef = React.useRef<string | null>(conversationId);
   const announcedConversationIdRef = React.useRef<string | null>(conversationId);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
+  const imagePreviewOpenRef = React.useRef(false);
+  const handleImagePreviewOpenChange = React.useCallback((open: boolean) => {
+    imagePreviewOpenRef.current = open;
+  }, []);
   const conversationContentRef = React.useRef<HTMLDivElement>(null);
   const [userInputNavigationHost, setUserInputNavigationHost] =
     React.useState<HTMLDivElement | null>(null);
@@ -608,7 +612,7 @@ export function Chat({
 
   const syncConversationScrollPosition = React.useCallback(() => {
     const scrollContainer = conversationScrollRef.current;
-    if (!scrollContainer) {
+    if (!scrollContainer || imagePreviewOpenRef.current) {
       return;
     }
 
@@ -1789,6 +1793,7 @@ export function Chat({
 
   const handleConversationScroll = React.useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
+      if (imagePreviewOpenRef.current) return;
       autoScrollStateRef.current = updateAutoScrollState(
         autoScrollStateRef.current,
         event.currentTarget,
@@ -1829,6 +1834,7 @@ export function Chat({
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
         ref={conversationScrollRef}
+        tabIndex={-1}
         inert={showReconnect}
         aria-hidden={showReconnect}
         className="h-full w-full overflow-y-auto agw-scrollbar"
@@ -1856,6 +1862,7 @@ export function Chat({
                     executionConversationId,
                   ])}
                   onWorkSummaryToggle={handleUserInputNavigate}
+                  onImagePreviewOpenChange={handleImagePreviewOpenChange}
                   onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
                   scrollElementRef={conversationScrollRef}
                   userInputNavigationHost={userInputNavigationHost}
