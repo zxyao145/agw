@@ -1287,7 +1287,7 @@ export function ChatWorkspace({
 
   /** 项目选择器与 Chat/Files 工具条，桌面端位于左列顶部，移动端位于主区域顶部。 */
   const workspaceToolbar = (
-    <div className="flex shrink-0 flex-wrap items-center pt-2 bg-muted/30 border-b ">
+    <div className="flex shrink-0 flex-wrap items-center pt-2">
       {showToolbarProjectSelect ? (
         <div className="w-50 mr-2 mb-2">
           <SearchableSelect
