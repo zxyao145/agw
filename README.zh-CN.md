@@ -12,7 +12,7 @@ Agw 是一个面向个人用户和小型研发团队的、自托管的后台工�
 
 除此之外，Agw 还具备 Job 和 Agent Workflow（Agentflow）能力，可以用于创建定时任务、周期任务，以及对 Agent 进行编排。
 
-本项目主要基于 [MAF](https://github.com/microsoft/agent-framework) 开发。用户文档站点：[zxyao145.github.io/agw/zh](https://zxyao145.github.io/agw/zh/)。
+本项目主要基于 [MAF](https://github.com/microsoft/agent-framework) 开发。访问[首页](https://agw-ai.dev/zh/)和[用户文档](https://docs.agw-ai.dev/zh/)。
 
 > [!NOTE]
 > Agw 目前不具备 sandbox（沙箱）隔离能力，仅适用于可信的小团队或可信环境中的部署。
@@ -461,7 +461,7 @@ flowchart TB
 
 ## 文档
 
-- [文档站点](https://zxyao145.github.io/agw/zh/)：安装、第一次对话、功能指南、运维和开发，提供中文和英文版本。
+- [文档站点](https://docs.agw-ai.dev/zh/)：安装、第一次对话、功能指南、运维和开发，提供中文和英文版本。
 - [部署指南](docs/4.Deployment.md)：数据目录、Standalone 与分离部署、Docker、反向代理、分布式执行、OIDC 登录和升级。
 - [开发指南](docs/1.Development.md)：构建、测试、代码检查和格式化命令，EF Core migration 以及错误码规则。
 - [架构](docs/2.Architecture.md)：后端项目依赖图、Host 角色、实体关系和客户端包。

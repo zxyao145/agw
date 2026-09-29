@@ -1,5 +1,7 @@
-title: AGW
-baseURL: http://localhost:1313/
+title: AGW Docs
+baseURL: https://docs.agw-ai.dev/
+publishDir: public/docs
+resourceDir: .cache/docs-resources
 defaultContentLanguage: en
 defaultContentLanguageInSubdir: false
 enableRobotsTXT: true
@@ -13,21 +15,23 @@ languages:
     weight: 2
     hasCJKLanguage: true
     params:
-      description: 自托管的 Agent 工作平台。连接模型、工具与项目，让对话、工作流和定时任务在同一处运行。
+      description: AGW 文档：快速开始、功能指南、部署运维和开发。
     menus:
       main:
         - {name: 快速开始, pageRef: /docs/start/first-chat, weight: 10}
         - {name: 下载, url: 'https://github.com/zxyao145/agw/releases', weight: 30}
+        - {name: 首页, url: 'https://agw-ai.dev/zh/', weight: 40}
   en:
     label: English
     locale: en-US
     weight: 1
     params:
-      description: A self-hosted workspace for agents. Connect models, tools, and projects to run conversations, workflows, and scheduled jobs in one place.
+      description: AGW documentation for getting started, features, operations, and development.
     menus:
       main:
         - {name: Quick start, pageRef: /docs/start/first-chat, weight: 10}
         - {name: Downloads, url: 'https://github.com/zxyao145/agw/releases', weight: 30}
+        - {name: Home, url: 'https://agw-ai.dev/', weight: 40}
 markup:
   goldmark:
     renderer:
@@ -62,6 +66,7 @@ params:
     backlinks: true
     footer_style: slim
 module:
+  workspace: 'off'
   imports:
     - path: github.com/pgsty/oink
   hugoVersion:

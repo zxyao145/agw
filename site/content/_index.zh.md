@@ -1,8 +1,9 @@
 ---
-title: "AGW · 让 Agent 在你的工作空间里协作"
-description: "自托管的 Agent 工作平台，连接对话、项目、工作流和定时任务。"
+title: "AGW 文档"
+description: "快速开始、功能指南、部署运维和开发。"
 weight: 1
 translationKey: _index
+layout: redirect
+sitemap:
+  disable: true
 ---
-
-

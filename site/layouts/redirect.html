@@ -1,0 +1,17 @@
+{{- $docs := .GetPage "/docs" -}}
+<!doctype html>
+<html lang="{{ .Language.Locale }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ .Title }}</title>
+    <link rel="canonical" href="{{ $docs.Permalink }}">
+    {{ range $docs.AllTranslations -}}
+    <link rel="alternate" hreflang="{{ .Language.Locale }}" href="{{ .Permalink }}">
+    {{ end -}}
+    <meta http-equiv="refresh" content="0; url={{ $docs.RelPermalink }}">
+  </head>
+  <body>
+    <a href="{{ $docs.RelPermalink }}">{{ $docs.Title }}</a>
+  </body>
+</html>

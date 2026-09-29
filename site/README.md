@@ -1,8 +1,11 @@
-# AGW website / 首页与文档站
+# AGW sites / 首页与文档站
 
-独立的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点。英文首页在 `/`、文档在 `/docs/`；中文对应 `/zh/` 和 `/zh/docs/`。内容依据当前代码整理，中英文各 36 篇正文，覆盖快速开始、AGW 特点、产品使用、部署运维和开发指南。
+两个独立构建的 Hugo + [Oink v1.0.0](https://github.com/pgsty/oink/tree/v1.0.0) 站点，共用主题、静态资源和工具链：
 
-An independent bilingual Hugo site. English is the default language; Chinese lives under `/zh/`. Each language has 36 articles covering getting started, AGW features, product usage, operations, and development. The site has no dependency on the application client workspace.
+- `https://agw-ai.dev/`：首页，中文入口为 `/zh/`。内容位于 `home/content/`，后续其他介绍页面也在这个目录维护。
+- `https://docs.agw-ai.dev/`：文档站，根路径进入 `/docs/`，中文入口 `/zh/` 进入 `/zh/docs/`。文章继续使用 `/docs/...` 和 `/zh/docs/...` 路径。
+
+Two independently built bilingual sites share the theme and toolchain. The home site supports future introduction pages in `home/content/`; the documentation site owns `content/` and its search indexes. English is the default language and Chinese lives under `/zh/`. Neither build depends on the application client workspace.
 
 ## 工具链 / Toolchain
 
@@ -10,7 +13,7 @@ An independent bilingual Hugo site. English is the default language; Chinese liv
 - Go **1.27.0**
 - Python 3 for the optional build/link verifier
 
-Install Hugo Extended and Go using their official distributions. Theme versions and checksums are pinned in `go.mod` and `go.sum`. `scripts/hugo.sh` uses system Go when available, or the ignored local installation at `.cache/go`. It sets a site-local Hugo cache and does not download or install tools automatically. Preview uses separate module and resource caches so production garbage collection cannot invalidate a running preview.
+Install Hugo Extended and Go using their official distributions. Theme versions and checksums are pinned in `go.mod` and `go.sum`. `scripts/hugo.sh <home|docs>` uses system Go when available, or the ignored local installation at `.cache/go`. It selects the site's configuration and a site-local Hugo cache. Preview uses separate module and resource caches.
 
 当前工作环境已在 `.cache/go` 放置 Go 1.27.0（macOS arm64）。它不进入 Git，新 checkout 需要安装 Go；站点源码与平台无关。首次模块解析需要网络，下载后可复用缓存。
 
@@ -20,45 +23,65 @@ From the repository root:
 
 ```bash
 cd site
-./scripts/hugo.sh server --bind 127.0.0.1 --port 1313 \
-  --disableFastRender --destination .cache/preview
+./scripts/hugo.sh home server --bind 127.0.0.1 --port 1313 \
+  --baseURL http://localhost:1313/ --disableFastRender --destination .cache/preview/home
 ```
 
-打开 <http://localhost:1313/> 或 <http://localhost:1313/zh/>。预览产物放到缓存目录，避免覆盖生产 `public/`。已配置好系统 Go 时，也可直接运行 `hugo server --destination .cache/preview`。
+首页预览地址为 <http://localhost:1313/> 或 <http://localhost:1313/zh/>。在另一个终端从 `site/` 启动文档预览：
+
+```bash
+./scripts/hugo.sh docs server --bind 127.0.0.1 --port 1314 \
+  --baseURL http://localhost:1314/ --disableFastRender --destination .cache/preview/docs
+```
+
+文档预览地址为 <http://localhost:1314/> 或 <http://localhost:1314/zh/>。跨站导航使用正式域名。预览产物位于 `.cache/preview/`。
 
 Preview files are isolated from the production output. Stop the server with Ctrl+C. No application Server, model credentials, npm, or database initialization is needed.
 
 ## 构建与验证 / Build and verify
 
-From `site/`, build with the local default URL:
+From `site/`, build both sites with their configured production URLs:
 
 ```bash
-./scripts/hugo.sh --cleanDestinationDir --gc --minify \
+./scripts/hugo.sh home --cleanDestinationDir --gc --minify \
   --environment production --printPathWarnings --panicOnWarning
-python3 scripts/check-site.py public
+./scripts/hugo.sh docs --cleanDestinationDir --gc --minify \
+  --environment production --printPathWarnings --panicOnWarning
+python3 scripts/check-site.py public/home --site home
+python3 scripts/check-site.py public/docs --site docs
 ```
 
-The static output is `public/`. Build for the production canonical URL with:
+The home output is `public/home/`; documentation output is `public/docs/`. Each directory is deployed separately. Canonical URLs, language alternates, and sitemaps use the corresponding domain. For a documentation mirror under a URL prefix:
 
 ```bash
-./scripts/hugo.sh --cleanDestinationDir --gc --minify \
+./scripts/hugo.sh docs --cleanDestinationDir --gc --minify \
   --environment production --printPathWarnings --panicOnWarning \
-  --baseURL "${AGW_SITE_URL:?Set the canonical URL, including any subpath}"
-python3 scripts/check-site.py public --base-url "$AGW_SITE_URL"
+  --destination .cache/github-pages --baseURL https://zxyao145.github.io/agw/
+python3 scripts/check-site.py .cache/github-pages --site docs \
+  --base-url https://zxyao145.github.io/agw/ --peer-directory public/home
 ```
 
-This is a build only, not publication. The host must serve directory `index.html` files and use the appropriate generated 404 page. Never deploy a preview build containing live-reload scripts.
+The host must serve directory `index.html` files and use the appropriate generated 404 page. Publish production output with its configured domain.
 
-检查脚本只读产物，检查 HTML 本地链接、资源和锚点、译文对应页面、Markdown 元数据配对、仓库源码引用、标题下的修订日期以及两个搜索索引。它不会请求真实模型或外部网站，也不能代替浏览器交互检查。
+检查脚本读取两个站点的产物，检查站内和跨站链接、资源与锚点、canonical URL、译文对应页面、Markdown 元数据配对、仓库源码引用、文档修订日期与搜索索引。首页产物会检查内容隔离，文档入口会检查跳转目标。
 
-The verifier checks local links/assets/anchors, translation alternates, paired metadata, repository references, revision dates below headings, and both search indexes. It does not request external websites or replace browser QA. For subpath verification, build into `.cache/subpath` with a base URL containing a prefix, then pass that same URL to the verifier.
+Build both sites before running the verifier. It resolves cross-domain links against the other site's local output and checks the target file and anchor. Use `--peer-directory` when that output is outside the default sibling directory. Browser interaction checks cover navigation, language switching, and documentation search.
+
+## 发布 / Deployment
+
+Cloudflare Pages 使用两个项目：`agw-home` 发布 `public/home/` 并绑定 `agw-ai.dev`；`agw-docs` 发布 `public/docs/` 并绑定 `docs.agw-ai.dev`。首次发布前，在 Cloudflare 创建对应项目，并通过每个项目的 **Custom domains** 添加域名、完成 DNS 配置。具体步骤见 [Cloudflare custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
+
+`.github/workflows/site.yml` validates both production builds on pull requests, pushes, and manual runs. A manual run on `main` deploys both directories to their respective Cloudflare Pages projects using the existing `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. Pushes to `main` also publish the documentation mirror to GitHub Pages. Domain names and output directories are defined in the checked-in Hugo configuration.
 
 ## 内容维护 / Content maintenance
 
 - `content/docs/{start,features,guides,operations,development}`: task-oriented Markdown, independent of internal repository docs.
 - `page.zh.md` and `page.en.md`: adjacent translations with the same `translationKey`, `weight`, and relative route. `_index` files define section roots.
-- `data/home/zh.yaml` and `data/home/en.yaml`: translated homepage data using Oink sections. Keep the same capabilities and links in both languages.
-- `hugo.yaml`: navigation, locales, outputs, theme module, and repository actions. `github_subdir: site` accounts for the monorepo source location.
+- `home/content/`: homepage metadata and future introduction pages, built only for `agw-ai.dev`.
+- `home/data/home/zh.yaml` and `home/data/home/en.yaml`: translated homepage data using Oink sections. Keep the same capabilities and links in both languages.
+- `hugo.yaml`: documentation domain, navigation, locales, outputs, theme module, and shared branding. `github_subdir: site` accounts for the monorepo source location.
+- `home/hugo.yaml`: home domain, content/data directories, navigation, output directory, and `github_subdir: site/home`. The script loads it together with `hugo.yaml`.
+- `content/_index.*.md` and `layouts/redirect.html`: language-specific documentation entry redirects.
 - `assets/icons/logo.svg` and `static/favicon.svg`: AGW branding copied from the existing Web icon, without importing its build.
 
 新增文章时创建一对 Markdown，包含 `title`、`description`、`weight`、`translationKey`、`lastmod`，并提供前提、步骤、预期结果及限制。站内链接使用 `relref`，例如：
@@ -67,7 +90,7 @@ The verifier checks local links/assets/anchors, translation alternates, paired m
 [Projects]({{< relref "/docs/guides/projects" >}})
 ```
 
-Each translation uses the same reference, which Hugo resolves in the current language. Homepage data links use language-neutral relative routes such as `docs/guides/projects/`, allowing Oink to add the language and deployment prefix. Avoid hard-coded root URLs in new content.
+Each documentation translation uses the same reference, which Hugo resolves in the current language. Homepage links to documentation use absolute URLs: `https://docs.agw-ai.dev/docs/...` for English and `https://docs.agw-ai.dev/zh/docs/...` for Chinese. New introduction pages use links within `home/content/` and remain part of the home build.
 
 每篇文档（包括 `_index` 栏目页）使用 `lastmod: YYYY-MM-DD` 记录最近一次内容修订日期，标题下显示“最近更新”或“Last updated”。修改正文时更新对应语言的日期；仅重建站点或调整样式时不改日期。日期由作者明确维护，不使用构建时间、文件修改时间或 Git 检出时间；漏填会导致构建或检查失败。打印版也显示日期。
 
@@ -92,7 +115,7 @@ Describe currently supported features, behavior, and procedures only. Omit retir
 
 ## 主题更新与视觉检查 / Theme updates and visual QA
 
-Keep `go.mod` and `go.sum` together. To intentionally update Oink, run `./scripts/hugo.sh mod get github.com/pgsty/oink@VERSION` with the chosen explicit version. Review upstream changes, notices, and checksums, then rerun strict root and subpath builds and browser QA. Do not replace the pin with `latest`, commit local module replacements, or copy the whole theme into the repository.
+Keep `go.mod` and `go.sum` together. To intentionally update Oink, run `./scripts/hugo.sh docs mod get github.com/pgsty/oink@VERSION` with the chosen explicit version. Review upstream changes, notices, and checksums, then rerun both strict production builds, the subpath build, and browser QA. Do not replace the pin with `latest`, commit local module replacements, or copy the whole theme into the repository.
 
 Desktop/mobile QA should cover both homepages and representative docs: language switching stays on the matching article; Chinese/English search returns relevant results; dark mode persists; mobile navigation and section trees work; code copies correctly; tables and Mermaid diagrams render; keyboard focus is visible; no horizontal page overflow. Check generated Markdown, print views, 404, canonical URLs, and repository actions as well.
 

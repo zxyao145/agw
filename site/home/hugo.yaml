@@ -1,0 +1,27 @@
+title: AGW
+baseURL: https://agw-ai.dev/
+contentDir: home/content
+dataDir: home/data
+publishDir: public/home
+resourceDir: .cache/home-resources
+params:
+  offline_search: false
+  offline_search_on_serve: false
+  github_subdir: site/home
+languages:
+  zh:
+    params:
+      description: 自托管的 Agent 工作平台。连接模型、工具与项目，让对话、工作流和定时任务在同一处运行。
+    menus:
+      main:
+        - {name: 快速开始, url: 'https://docs.agw-ai.dev/zh/docs/start/first-chat/', weight: 10}
+        - {name: 文档, url: 'https://docs.agw-ai.dev/zh/docs/', weight: 20}
+        - {name: 下载, url: 'https://github.com/zxyao145/agw/releases', weight: 30}
+  en:
+    params:
+      description: A self-hosted workspace for agents. Connect models, tools, and projects to run conversations, workflows, and scheduled jobs in one place.
+    menus:
+      main:
+        - {name: Quick start, url: 'https://docs.agw-ai.dev/docs/start/first-chat/', weight: 10}
+        - {name: Documentation, url: 'https://docs.agw-ai.dev/docs/', weight: 20}
+        - {name: Downloads, url: 'https://github.com/zxyao145/agw/releases', weight: 30}
