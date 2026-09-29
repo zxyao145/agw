@@ -15,8 +15,8 @@ hero:
   lead: 接入模型或已有的 Claude Code、Codex、Pi，在项目中管理对话和文件。让不同 Agent 分工，按步骤完成任务，再把验证过的工作设为定时执行。
   note: 自定义 Agent · Claude Code · Codex · Pi
   actions:
-    - {label: 快速开始, url: docs/start/first-chat/, icon: fa-solid fa-arrow-right, style: primary}
-    - {label: 阅读文档, url: docs/, icon: fa-solid fa-book-open, style: ghost}
+    - {label: 快速开始, url: 'https://docs.agw-ai.dev/zh/docs/start/first-chat/', icon: fa-solid fa-arrow-right, style: primary}
+    - {label: 阅读文档, url: 'https://docs.agw-ai.dev/zh/docs/', icon: fa-solid fa-book-open, style: ghost}
     - {label: GitHub, url: 'https://github.com/zxyao145/agw', icon: fa-brands fa-github, style: ghost, external: true}
 cards:
   eyebrow: 从对话到持续运行的任务
@@ -29,32 +29,32 @@ cards:
       meta: 01 / 执行能力
       icon: fa-solid fa-robot
       desc: 用指令、模型与工具定义自己的 Agent，也可以接入已有的外部 Agent CLI。
-      url: docs/guides/agents/
+      url: https://docs.agw-ai.dev/zh/docs/guides/agents/
     - title: Chat & Projects
       meta: 02 / 工作上下文
       icon: fa-solid fa-comments
       desc: 围绕项目组织对话、文件和 Git 工作目录，在执行中处理审批与用户输入。
-      url: docs/guides/projects/
+      url: https://docs.agw-ai.dev/zh/docs/guides/projects/
     - title: Agentflows
       meta: 03 / 多步协作
       icon: fa-solid fa-diagram-project
       desc: 把收集资料、整理结果和人工确认等步骤连起来，按需要顺序执行、选择分支或同时处理。
-      url: docs/guides/agentflows/
+      url: https://docs.agw-ai.dev/zh/docs/guides/agentflows/
     - title: Jobs
       meta: 04 / 定时任务
       icon: fa-solid fa-clock
       desc: 按一次性、固定间隔或 Cron 执行 Agent 和工作流，并查看每次尝试的运行记录。
-      url: docs/guides/jobs/
+      url: https://docs.agw-ai.dev/zh/docs/guides/jobs/
     - title: Tools & Integrations
       meta: 05 / 外部能力
       icon: fa-solid fa-plug
       desc: 通过工具、Skills、MCP 和配置好的集成连接，让 Agent 使用任务需要的能力。
-      url: docs/guides/integrations/
+      url: https://docs.agw-ai.dev/zh/docs/guides/integrations/
     - title: Web · Desktop · Mobile
       meta: 06 / 访问方式
       icon: fa-solid fa-laptop
       desc: 从浏览器、独立桌面客户端或移动端连接自己的 Server，按场景选择使用入口。
-      url: docs/guides/clients/
+      url: https://docs.agw-ai.dev/zh/docs/guides/clients/
 capabilities:
   eyebrow: 使用方式
   title: 先完成一次任务，再设置自动化
@@ -67,7 +67,7 @@ capabilities:
         - 在 Chat 运行 Agent，查看工具活动并处理人工输入。
         - 步骤稳定后用 Agentflow 编排，用 Job 安排下一次执行。
       value: Server、数据和工作目录由你部署；模型请求发送到你配置的提供商。
-      url: docs/start/overview/
+      url: https://docs.agw-ai.dev/zh/docs/start/overview/
       visual:
         type: code
         title: 一个任务的路径 / TASK PATH
@@ -86,9 +86,9 @@ paths:
   columns: 3
   link_label: 打开文档
   items:
-    - {title: 第一次使用, icon: fa-solid fa-rocket, desc: '选择安装方式，初始化服务，完成第一次模型对话。', url: docs/start/}
-    - {title: 部署自己的服务, icon: fa-solid fa-server, desc: '从单机到 Control/Data Plane，了解配置、认证和备份。', url: docs/operations/}
-    - {title: 参与开发, icon: fa-solid fa-code, desc: '运行源码，理解模块边界，扩展工具与集成。', url: docs/development/}
+    - {title: 第一次使用, icon: fa-solid fa-rocket, desc: '选择安装方式，初始化服务，完成第一次模型对话。', url: 'https://docs.agw-ai.dev/zh/docs/start/'}
+    - {title: 部署自己的服务, icon: fa-solid fa-server, desc: '从单机到 Control/Data Plane，了解配置、认证和备份。', url: 'https://docs.agw-ai.dev/zh/docs/operations/'}
+    - {title: 参与开发, icon: fa-solid fa-code, desc: '运行源码，理解模块边界，扩展工具与集成。', url: 'https://docs.agw-ai.dev/zh/docs/development/'}
 faq:
   eyebrow: 开始之前
   title: 常见问题
@@ -105,5 +105,5 @@ cta:
   title: 开始使用 AGW
   text: 选择适合你的安装方式，配置模型，开始第一次对话。
   label: 选择安装方式
-  url: docs/start/install/
+  url: https://docs.agw-ai.dev/zh/docs/start/install/
   style: primary

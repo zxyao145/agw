@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and validate site
+    name: Build and validate home and docs
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -65,40 +65,59 @@ jobs:
 
       - name: Build and check
         run: |
-          site_url="${{ github.event_name == 'workflow_dispatch' && 'https://agw-docs.pages.dev/' || 'https://zxyao145.github.io/agw/' }}"
-          ./scripts/hugo.sh --cleanDestinationDir --gc --minify \
+          ./scripts/hugo.sh home --cleanDestinationDir --gc --minify \
+            --environment production --printPathWarnings --panicOnWarning
+          ./scripts/hugo.sh docs --cleanDestinationDir --gc --minify \
+            --environment production --printPathWarnings --panicOnWarning
+          python3 scripts/check-site.py public/home --site home
+          python3 scripts/check-site.py public/docs --site docs
+
+      - name: Build and check GitHub Pages documentation mirror
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          ./scripts/hugo.sh docs --cleanDestinationDir --gc --minify \
             --environment production --printPathWarnings --panicOnWarning \
-            --baseURL "$site_url"
-          python3 scripts/check-site.py public --base-url "$site_url"
+            --destination .cache/github-pages --baseURL https://zxyao145.github.io/agw/
+          python3 scripts/check-site.py .cache/github-pages --site docs \
+            --base-url https://zxyao145.github.io/agw/ --peer-directory public/home
 
       - name: Upload verified GitHub Pages site
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v5
         with:
-          path: site/public
+          path: site/.cache/github-pages
 
-      - name: Upload verified Cloudflare Pages site
+      - name: Upload verified Cloudflare Pages sites
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7
         with:
-          name: cloudflare-site
+          name: cloudflare-sites
           path: site/public
           if-no-files-found: error
 
   deploy-cloudflare:
-    name: Deploy to Cloudflare Pages
+    name: Deploy ${{ matrix.site }} to Cloudflare Pages
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - site: home
+            project: agw-home
+            url: https://agw-ai.dev/
+          - site: docs
+            project: agw-docs
+            url: https://docs.agw-ai.dev/
     environment:
       name: github-pages
-      url: https://agw-docs.pages.dev/
+      url: ${{ matrix.url }}
     steps:
-      - name: Download verified site
+      - name: Download verified sites
         uses: actions/download-artifact@v7
         with:
-          name: cloudflare-site
+          name: cloudflare-sites
           path: site/public
 
       - name: Deploy to Cloudflare Pages
@@ -106,7 +125,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site/public --project-name=agw-docs --branch=main
+          command: pages deploy site/public/${{ matrix.site }} --project-name=${{ matrix.project }} --branch=main
 
   deploy:
     name: Deploy to GitHub Pages

@@ -12,7 +12,7 @@ Agw is a self-hosted backend engineering agent hub for individuals and small R&D
 
 Agw also provides Jobs and Agent Workflow (Agentflow) capabilities for creating scheduled and recurring tasks and orchestrating agents.
 
-This project is primarily built on [MAF](https://github.com/microsoft/agent-framework). The user documentation site is [zxyao145.github.io/agw](https://zxyao145.github.io/agw/).
+This project is primarily built on [MAF](https://github.com/microsoft/agent-framework). Visit the [website](https://agw-ai.dev/) and [documentation](https://docs.agw-ai.dev/).
 
 > [!NOTE]
 > Agw currently has no sandbox isolation and is intended only for trusted small teams or deployments in trusted environments.
@@ -461,7 +461,7 @@ The pnpm Workspace at `src/clients` contains the `@agw/web`, `@agw/desktop`, and
 
 ## Documentation
 
-- [Documentation site](https://zxyao145.github.io/agw/): Installation, first conversation, feature guides, operations, and development, in English and Chinese.
+- [Documentation site](https://docs.agw-ai.dev/): Installation, first conversation, feature guides, operations, and development, in English and Chinese.
 - [Deployment Guide](docs/4.Deployment.md): Data directories, Standalone and split deployments, Docker, reverse proxies, distributed execution, OIDC login, and upgrades.
 - [Development Guide](docs/1.Development.md): Build, test, lint, and format commands, EF Core migrations, and error-code rules.
 - [Architecture](docs/2.Architecture.md): Backend project graph, Host roles, entity relationships, and client packages.
