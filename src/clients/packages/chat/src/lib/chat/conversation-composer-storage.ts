@@ -18,13 +18,13 @@ export interface ConversationComposerScope {
 
 const STORAGE_KEY_PREFIX = "agw:chat-conversation-composer:";
 
-function getScopePrefix(scope: ConversationComposerScope) {
+export function getScopePrefix(scope: ConversationComposerScope) {
   return `${STORAGE_KEY_PREFIX}${encodeURIComponent(scope.serverId)}:${encodeURIComponent(scope.projectId)}:`;
 }
 
 // conversationId 为 null 表示尚未发送的新对话。
 // A null conversationId stands for the new conversation that has not been sent yet.
-function getStorageKey(scope: ConversationComposerScope, conversationId: string | null) {
+export function getStorageKey(scope: ConversationComposerScope, conversationId: string | null) {
   return conversationId === null
     ? `${getScopePrefix(scope)}new`
     : `${getScopePrefix(scope)}conversation:${encodeURIComponent(conversationId)}`;

@@ -59,6 +59,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import { buildChatHref } from "../../../lib/chat-route";
 import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
+import { conversationImageDrafts } from "../../../lib/chat/conversation-image-drafts";
+import { notifyImageDraftError } from "../../components/message/use-conversation-image-draft";
 import { cn } from "@agw/components";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -1022,6 +1024,9 @@ export function ChatWorkspace({
         const values = conversationComposerStorage.get(scope, null);
         conversationComposerStorage.remove(scope, null);
         conversationComposerStorage.set(scope, acceptedConversationId, values);
+        void conversationImageDrafts
+          .accept(scope, acceptedConversationId)
+          .catch(notifyImageDraftError);
       }
       hydratedConversationKeyRef.current = getConversationHydrationKey(
         selectedProjectId,
@@ -1140,6 +1145,9 @@ export function ChatWorkspace({
       const scope = { serverId: executionServerId, projectId: selectedProjectId };
       executionSessionManager.conversationStatuses.remove(scope, deletedConversationId);
       conversationComposerStorage.remove(scope, deletedConversationId);
+      void conversationImageDrafts
+        .remove(scope, deletedConversationId)
+        .catch(notifyImageDraftError);
       // 删除对话时释放它的执行连接与队列。Deleting a conversation releases its execution connection and queue.
       void executionSessionManager.discard({ ...scope, conversationId: deletedConversationId });
     },
@@ -1151,6 +1159,7 @@ export function ChatWorkspace({
     const scope = { serverId: executionServerId, projectId: selectedProjectId };
     executionSessionManager.conversationStatuses.removeScope(scope);
     conversationComposerStorage.removeConversations(scope);
+    void conversationImageDrafts.removeConversations(scope).catch(notifyImageDraftError);
     void executionSessionManager.discardProject(scope);
   }, [executionServerId, selectedProjectId]);
 

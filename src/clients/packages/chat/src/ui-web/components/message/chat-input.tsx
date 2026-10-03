@@ -11,18 +11,13 @@ import {
   Square,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import { QuickTextDialog } from "@agw/projects";
 import { Button } from "@agw/components";
 import { Separator } from "@agw/components";
 import { resolveInputSuggestions, type CommandSource } from "@agw/chat-core";
 import { searchFile } from "../../../lib/chat/search-file";
-import {
-  createImageAttachments,
-  type ChatImageAttachment,
-  validateImageFiles,
-} from "../../../lib/chat/image-attachments";
+import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 import type { AgentMode, ExecutionQueueSnapshot, PermissionMode } from "@agw/chat-runtime";
 import { ChatInputQueue } from "./chat-input-queue";
 import { ChatInputToolbar } from "./chat-input-toolbar";
@@ -35,6 +30,10 @@ interface ChatInputProps {
   isTransitioning: boolean;
   isLoadingHistory: boolean;
   hasMessages: boolean;
+  imageAttachments: readonly ChatImageAttachment[];
+  isImageDraftBusy: boolean;
+  onAddImages: (files: readonly File[]) => void;
+  onRemoveImage: (attachmentId: string) => void;
   /** 返回 true 表示已受理，清空本次文字、图片和代码评论；false 时保留草稿。True means accepted, clearing this text, images and code comments; false keeps the draft. */
   onExecute: (value: string, imageAttachments: readonly ChatImageAttachment[]) => boolean;
   onInterrupt: () => void;
@@ -77,6 +76,10 @@ export function ChatInput({
   isTransitioning,
   isLoadingHistory,
   hasMessages,
+  imageAttachments,
+  isImageDraftBusy,
+  onAddImages,
+  onRemoveImage,
   onExecute,
   onInterrupt,
   queue,
@@ -112,8 +115,6 @@ export function ChatInput({
 }: ChatInputProps) {
   const internalUserInputRef = React.useRef<UserInputRef | null>(null);
   const userInputRef = externalUserInputRef ?? internalUserInputRef;
-  const [imageAttachments, setImageAttachments] = React.useState<ChatImageAttachment[]>([]);
-  const [isReadingImages, setIsReadingImages] = React.useState(false);
   const isBusy = isExecuting || isTransitioning;
 
   const handleQuickCommand = (text: string) => {
@@ -121,7 +122,7 @@ export function ChatInput({
   };
 
   const handlePaste = React.useCallback(
-    async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const clipboardFiles = Array.from(event.clipboardData.items)
         .filter((item) => item.kind === "file")
         .map((item) => item.getAsFile())
@@ -132,43 +133,15 @@ export function ChatInput({
       }
 
       event.preventDefault();
-      if (isReadingImages) {
-        toast.error("Please wait for the pasted images to finish loading.");
-        return;
-      }
-
-      const validationError = validateImageFiles(imageFiles, imageAttachments);
-      if (validationError) {
-        toast.error(validationError);
-        return;
-      }
-
-      setIsReadingImages(true);
-      try {
-        const attachments = await createImageAttachments(imageFiles);
-        setImageAttachments((current) => [...current, ...attachments]);
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "The pasted images could not be read.",
-        );
-      } finally {
-        setIsReadingImages(false);
-      }
+      if (isTransitioning) return;
+      onAddImages(imageFiles);
     },
-    [imageAttachments, isReadingImages],
+    [isTransitioning, onAddImages],
   );
-
-  const handleRemoveImage = React.useCallback((attachmentId: string) => {
-    setImageAttachments((current) =>
-      current.filter((attachment) => attachment.id !== attachmentId),
-    );
-  }, []);
 
   const handleExecute = React.useCallback(
     (value: string) => {
-      const accepted = onExecute(value, imageAttachments);
-      if (accepted) setImageAttachments([]);
-      return accepted;
+      return onExecute(value, imageAttachments);
     },
     [imageAttachments, onExecute],
   );
@@ -186,7 +159,7 @@ export function ChatInput({
       ref={userInputRef}
       isExecuting={isExecuting}
       isDisabled={isTransitioning}
-      isSubmitDisabled={isReadingImages || Boolean(permissionUnavailable)}
+      isSubmitDisabled={isImageDraftBusy || Boolean(permissionUnavailable)}
       canSubmitWithoutText={pendingFileCommentCount > 0}
       onExecute={handleExecute}
       onStop={onInterrupt}
@@ -229,8 +202,8 @@ export function ChatInput({
                       variant="secondary"
                       size="icon-sm"
                       className="absolute right-1 top-1 size-6 rounded-full border border-white/20 bg-black/75 text-white shadow-sm hover:bg-black"
-                      onClick={() => handleRemoveImage(attachment.id)}
-                      disabled={isTransitioning || isReadingImages}
+                      onClick={() => onRemoveImage(attachment.id)}
+                      disabled={isTransitioning || isImageDraftBusy}
                       aria-label={`Remove ${attachment.name}`}
                       title={`Remove ${attachment.name}`}
                     >
