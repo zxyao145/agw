@@ -72,6 +72,7 @@ import { useExecutionPlatform } from "../../execution-platform";
 import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
+import { notifyImageDraftError, useConversationImageDraft } from "./use-conversation-image-draft";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 import { ToolDirectoriesContext } from "./tool-directory";
@@ -314,6 +315,12 @@ export function Chat({
     () => (persistInputDraft && projectId ? { serverId: executionServerId, projectId } : null),
     [executionServerId, persistInputDraft, projectId],
   );
+  const imageDraft = useConversationImageDraft(
+    inputDraftScope,
+    conversationId,
+    sessionSeed.revision,
+  );
+  const { draft: currentImageDraft } = imageDraft;
 
   if (streamingMessageBatcherRef.current === null) {
     streamingMessageBatcherRef.current = createStreamingMessageBatcher(
@@ -1531,6 +1538,7 @@ export function Chat({
         if (projectId && conversationToClear) {
           const cleared = await clearProjectConversationRecords(projectId, conversationToClear);
           if (!cleared) throw new Error("Conversation not found.");
+          const imagesCleared = currentImageDraft.clear();
           executionSessionManager.conversationStatuses.reset(
             { serverId: executionServerId, projectId },
             conversationToClear,
@@ -1547,8 +1555,11 @@ export function Chat({
           ) {
             await clearLocalState();
           }
+          await imagesCleared;
         } else {
+          const imagesCleared = currentImageDraft.clear();
           await clearLocalState();
+          await imagesCleared;
           await onConversationChange?.();
         }
       } catch (error) {
@@ -1559,6 +1570,7 @@ export function Chat({
     })();
   }, [
     conversationId,
+    currentImageDraft,
     executionServerId,
     handleInputDraftChange,
     interruptAndDispose,
@@ -1899,7 +1911,15 @@ export function Chat({
                     }
                     isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
                     hasMessages={renderItems.length > 0}
-                    onExecute={handleExecute}
+                    imageAttachments={imageDraft.attachments}
+                    isImageDraftBusy={imageDraft.isBusy}
+                    onAddImages={(files) =>
+                      void currentImageDraft.add(files).catch(notifyImageDraftError)
+                    }
+                    onRemoveImage={(id) =>
+                      void currentImageDraft.removeImages([id]).catch(notifyImageDraftError)
+                    }
+                    onExecute={(value) => imageDraft.submit(value, handleExecute)}
                     onInterrupt={handleInterrupt}
                     queue={executionQueue}
                     onQueueEditStart={handleQueueEditStart}

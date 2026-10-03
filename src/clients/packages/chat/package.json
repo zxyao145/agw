@@ -10,10 +10,11 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint -c ../../.oxlintrc.json ./src",
+    "lint": "oxlint -c ../../.oxlintrc.json ./src ./browser-tests",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "format": "oxfmt -c ../../.oxfmtrc.json ./src *.json",
-    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src *.json"
+    "test:browser": "tsx --test browser-tests/*.test.ts",
+    "format": "oxfmt -c ../../.oxfmtrc.json ./src ./browser-tests *.json",
+    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src ./browser-tests *.json"
   },
   "dependencies": {
     "@agw/api": "workspace:*",
@@ -23,6 +24,7 @@
     "@agw/execution-core": "workspace:*",
     "@agw/projects": "workspace:*",
     "@tanstack/react-virtual": "catalog:",
+    "idb": "catalog:",
     "katex": "0.18.7",
     "react-markdown": "catalog:",
     "rehype-katex": "7.0.1",
@@ -34,7 +36,8 @@
     "@agw/test-harness": "workspace:*",
     "@types/jsdom": "catalog:",
     "esbuild": "catalog:",
-    "jsdom": "catalog:"
+    "jsdom": "catalog:",
+    "playwright": "catalog:"
   },
   "peerDependencies": {
     "lucide-react": "catalog:",
