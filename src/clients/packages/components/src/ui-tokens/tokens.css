@@ -325,11 +325,11 @@ div[role="option"]:hover {
   }
 
   .agw-status-dot.is-running {
-    @apply bg-[#5865f2] shadow-[0_0_0_3px_color-mix(in_srgb,#5865f2_14%,transparent)];
+    @apply bg-sidebar-ring shadow-[0_0_0_3px_color-mix(in_srgb,var(--sidebar-ring)_14%,transparent)];
   }
 
   .dark .agw-status-dot.is-running {
-    @apply bg-[color-mix(in_srgb,#5865f2_80%,white)] shadow-[0_0_0_3px_color-mix(in_srgb,#5865f2_28%,transparent)];
+    @apply shadow-[0_0_0_3px_color-mix(in_srgb,var(--sidebar-ring)_28%,transparent)];
   }
 
   .agw-status-dot.is-waiting-approval {
