@@ -352,7 +352,9 @@ function ChatShell({ children }: { children: React.ReactNode }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button type="button" className="agw-task-button agw-titlebar-control">
-              <LoaderCircle className={cn(hasBackgroundConversations && "animate-spin")} />
+              <LoaderCircle
+                className={cn(hasBackgroundConversations && "animate-spin text-sidebar-ring")}
+              />
               <span>Conversations</span>
               {activity.activeCount > 0 ? <span>{activity.activeCount}</span> : null}
             </button>

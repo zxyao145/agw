@@ -76,7 +76,7 @@ const CONVERSATION_STATUS_DISPLAY: Record<
   running: {
     icon: LoaderCircle,
     label: "Running",
-    className: "animate-spin text-muted-foreground",
+    className: "animate-spin text-sidebar-ring",
   },
   failed: { icon: CircleAlert, label: "Last turn failed", className: "text-destructive" },
   interrupted: {
