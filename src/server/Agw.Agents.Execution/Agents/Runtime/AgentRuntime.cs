@@ -37,6 +37,12 @@ public sealed class AgentRuntime : IAsyncDisposable
         AgentType == AgentType.External || (AgentType == AgentType.System && EnableSummary);
 
     internal string? ConfigurationVersion { get; init; }
+
+    /// <summary>
+    /// External Agent 的 provider session 绑定状态；不使用 provider session 绑定的 Runtime 为空。
+    /// The External Agent's provider session binding state; null for a Runtime without provider session bindings.
+    /// </summary>
+    internal ExternalProviderSessionState? ProviderSession { get; init; }
     internal bool IsDisposed => _disposed;
     public readonly Guid _projectId;
     public readonly string _contextId;

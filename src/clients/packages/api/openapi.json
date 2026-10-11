@@ -3987,6 +3987,102 @@
         }
       }
     },
+    "/api/projects/conversations/provider-sessions": {
+      "get": {
+        "tags": [
+          "ProjectProviderSessions"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfProviderSessionResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfProviderSessionResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfProviderSessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/conversations/provider-sessions/archive": {
+      "post": {
+        "tags": [
+          "ProjectProviderSessions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderSessionArchiveRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderSessionArchiveRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderSessionArchiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -8069,6 +8165,37 @@
                 "$ref": "#/components/schemas/FileSearchResponse"
               }
             ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfIReadOnlyListOfProviderSessionResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProviderSessionResponse"
+            }
           },
           "code": {
             "type": "integer",
@@ -12676,6 +12803,71 @@
           }
         }
       },
+      "ProviderSessionArchiveRequest": {
+        "required": [
+          "projectId",
+          "conversationId",
+          "bindingId"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "conversationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bindingId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ProviderSessionResponse": {
+        "required": [
+          "id",
+          "agentId",
+          "externalAgentName",
+          "providerSessionId",
+          "isActive",
+          "createTime",
+          "updateTime"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalAgentName": {
+            "type": "string"
+          },
+          "providerSessionId": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updateTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "一条 provider session 绑定记录；客户端按 (AgentId, ExternalAgentName) 分组，IsActive 为 true 的记录是该组当前生效的 session。\nOne provider session binding record; clients group by (AgentId, ExternalAgentName), and the record with IsActive true is the group's active session."
+      },
       "ProviderType": {
         "enum": [
           "OpenAIChatCompletions",
@@ -13694,6 +13886,9 @@
     },
     {
       "name": "ProjectConversations"
+    },
+    {
+      "name": "ProjectProviderSessions"
     },
     {
       "name": "Projects"

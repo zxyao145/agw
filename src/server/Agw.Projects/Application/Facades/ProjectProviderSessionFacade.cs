@@ -29,14 +29,14 @@ public sealed class ProjectProviderSessionFacade : IProjectProviderSessionFacade
         return binding?.ProviderSessionId;
     }
 
-    public async Task SaveProviderSessionIdAsync(
+    public async Task<string> SaveProviderSessionIdAsync(
         ProjectProviderSessionReference reference,
         string providerSessionId,
         string ownerUserId,
         CancellationToken cancellationToken = default
     )
     {
-        await _bindings
+        var binding = await _bindings
             .UpsertAsync(
                 reference.ProjectId,
                 reference.ContextId,
@@ -48,5 +48,6 @@ public sealed class ProjectProviderSessionFacade : IProjectProviderSessionFacade
                 reference.Generation
             )
             .ConfigureAwait(false);
+        return binding.ProviderSessionId;
     }
 }

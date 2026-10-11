@@ -27,4 +27,8 @@ public class ProjectConversation : BaseEntity
     [JsonIgnore]
     public virtual ICollection<ProjectConversationChatHistory> ChatHistories { get; set; } =
         new List<ProjectConversationChatHistory>();
+
+    [JsonIgnore]
+    public virtual ICollection<ProjectConversationBinding> Bindings { get; set; } =
+        new List<ProjectConversationBinding>();
 }

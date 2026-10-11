@@ -22,7 +22,13 @@ public partial class AgentRuntimeFactory
             runtime._projectId,
             cancellationToken
         );
-        return version != null && version == runtime.ConfigurationVersion;
+        if (version == null || version != runtime.ConfigurationVersion)
+        {
+            return false;
+        }
+
+        return runtime.ProviderSession is not { } providerSession
+            || await _providerBindings.IsSessionCurrentAsync(providerSession, cancellationToken);
     }
 
     /// <summary>
@@ -53,15 +59,10 @@ public partial class AgentRuntimeFactory
                     .ConfigureAwait(false)
                     ?? Guid.Empty;
         var sessionScope = new AgentSessionStateScope(conversationId, projectId, resolvedContextId, agent.Id);
-        var persistedProviderSessionId = await _providerBindings.GetExternalProviderSessionIdAsync(
-            agent,
-            projectId,
-            resolvedContextId,
-            cancellationToken
-        );
+        var providerSession = await _providerBindings.ReadStateAsync(agent, task, resolvedContextId, cancellationToken);
         var (providerSessionId, isResume) = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
-            persistedProviderSessionId,
+            _providerBindings.ParseProviderSessionId(agent, providerSession),
             settings.Resume
         );
 
@@ -92,9 +93,7 @@ public partial class AgentRuntimeFactory
                 IsResume = isResume,
                 DeferHumanInteractions = true,
                 OnExternalSessionStartedAsync = _providerBindings.CreateExternalSessionStartedCallback(
-                    agent,
-                    task,
-                    resolvedContextId,
+                    providerSession,
                     UserInfoUtil.RequiredUserId
                 ),
             },
@@ -136,6 +135,7 @@ public partial class AgentRuntimeFactory
                     configurationVersion == await _configuration.ReadAsync(agentId, task.ProjectId, cancellationToken)
                         ? configurationVersion
                         : null,
+                ProviderSession = providerSession,
             };
         }
         catch

@@ -64,6 +64,7 @@ import { notifyImageDraftError } from "../../components/message/use-conversation
 import { cn } from "@agw/components";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
+import { ProviderSessionsSection } from "./components/provider-sessions-section";
 import {
   CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME,
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
@@ -156,17 +157,21 @@ function areEnvVarsEqual(left: EnvVar[], right: EnvVar[]): boolean {
 }
 
 type ChatSettingsDialogProps = {
+  serverId: string;
   selectedProjectId: string | null;
   conversationId: string | null;
   currentConversation: ConversationSummary | null;
+  conversationRunning: boolean;
   getDraft: (projectId: string | null) => ChatSettingsDraft;
   onSave: (draft: ChatSettingsDraft) => boolean;
 };
 
 function ChatSettingsDialog({
+  serverId,
   selectedProjectId,
   conversationId,
   currentConversation,
+  conversationRunning,
   getDraft,
   onSave,
 }: ChatSettingsDialogProps) {
@@ -224,7 +229,7 @@ function ChatSettingsDialog({
           <Info className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent size="md" className={CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME}>
+      <DialogContent size="lg" className={CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME}>
         <DialogHeader>
           <DialogTitle>Conversation Settings</DialogTitle>
         </DialogHeader>
@@ -266,6 +271,15 @@ function ChatSettingsDialog({
                 </div>
               )}
             </div>
+
+            {selectedProjectId && conversationId && (
+              <ProviderSessionsSection
+                serverId={serverId}
+                projectId={selectedProjectId}
+                conversationId={conversationId}
+                conversationRunning={conversationRunning}
+              />
+            )}
 
             <div className="flex items-start justify-between gap-4 rounded-lg bg-muted/50 px-4 py-3">
               <div className="space-y-1">
@@ -1180,9 +1194,13 @@ export function ChatWorkspace({
         onProjectConversationsCleared={handleProjectConversationsCleared}
         headerActions={(currentConversation) => (
           <ChatSettingsDialog
+            serverId={executionServerId}
             selectedProjectId={selectedProjectId}
             conversationId={conversationId}
             currentConversation={currentConversation}
+            conversationRunning={
+              conversationId !== null && conversationStatuses.get(conversationId) === "running"
+            }
             getDraft={getActiveSettingsDraft}
             onSave={handleSaveChatSettings}
           />
@@ -1195,6 +1213,7 @@ export function ChatWorkspace({
       conversationListRefreshSignal,
       conversationStatuses,
       currentConversationTurnId,
+      executionServerId,
       handleAllConversationsDeleted,
       handleConversationDeleted,
       handleConversationSelect,
