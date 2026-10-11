@@ -1830,6 +1830,11 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("external_agent_name");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
                     b.Property<Guid>("ProjectConversationId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_conversation_id");
@@ -1860,7 +1865,12 @@ namespace Agw.Migrations.Postgres.Migrations
 
                     b.HasIndex("ProjectConversationId", "AgentId", "ExternalAgentName")
                         .IsUnique()
-                        .HasDatabaseName("ix_project_conversation_binding_project_conversation_id_agent_");
+                        .HasDatabaseName("ux_project_conversation_binding_active")
+                        .HasFilter("is_active = TRUE");
+
+                    b.HasIndex("ProjectConversationId", "AgentId", "ExternalAgentName", "ProviderSessionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_project_conversation_binding_session");
 
                     b.ToTable("project_conversation_binding", (string)null);
                 });
@@ -2780,7 +2790,7 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationBinding", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
-                        .WithMany()
+                        .WithMany("Bindings")
                         .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
@@ -2954,6 +2964,8 @@ namespace Agw.Migrations.Postgres.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversation", b =>
                 {
+                    b.Navigation("Bindings");
+
                     b.Navigation("ChatHistories");
                 });
 

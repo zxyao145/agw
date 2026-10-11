@@ -101,11 +101,8 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         );
         using var executionScope = scope.Push();
         ProjectWorkspacePaths.EnsureAvailable(request.Task.ProjectId, request.WorkspaceSnapshot);
-        if (Host != null && !await CanReuseAsync(Host, request, _hostToken))
-        {
-            await ReleaseAsync();
-        }
-
+        // 先取得对话执行锁再判断复用：归档 provider session 与复用检查按执行锁排序，归档后的 Turn 一定重建 Runtime。
+        // The conversation execution lock is taken before the reuse check: archiving a provider session and the reuse check are ordered by it, so a turn after an archive always rebuilds the Runtime.
         var lease =
             _conversationGate == null
                 ? null
@@ -120,6 +117,11 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         );
         try
         {
+            if (Host != null && !await CanReuseAsync(Host, request, ownership.Token))
+            {
+                await ReleaseAsync();
+            }
+
             var activeTurn = await StartTurnAsync(scope, request, ownership.Token);
             if (activeTurn == null)
             {
@@ -362,8 +364,8 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             };
 
     /// <summary>
-    /// 判断保留的 Runtime 能否执行本 Turn：目标、工作目录与定义版本都不变，Agent 还要求项目、归一化 context 与 Generation 相同。
-    /// Decides whether the retained Runtime can run this turn: the target, workspace and definition version are unchanged, and an Agent also needs the same project, normalized context and generation.
+    /// 判断保留的 Runtime 能否执行本 Turn：目标、工作目录与定义版本都不变，Agent 还要求项目、归一化 context 与 Generation 相同，External Agent 的 provider session 快照仍是生效记录。
+    /// Decides whether the retained Runtime can run this turn: the target, workspace and definition version are unchanged, an Agent also needs the same project, normalized context and generation, and an External Agent's provider session snapshot must still be the active record.
     /// </summary>
     private async Task<bool> CanReuseAsync(
         InProcessTurnHost host,

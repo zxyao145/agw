@@ -155,10 +155,10 @@ public sealed partial class ProjectDeletionCoordinatorTests
             await lateSessions.ReadAsync(projectId, conversationId, agent.Id, "", "tester", token, 1)
         );
 
-        var bindings = new TaskSessionBindingService(
+        await using var providerSessions = TestProjectPersistence.CreateProviderSessionServices(options);
+        var bindings = TestProjectPersistence.CreateBindingService(
             lateContext,
-            TimeProvider.System,
-            new TestUserInfoService(),
+            providerSessions,
             new AgentCatalogFacade(lateContext, new TestUserInfoService())
         );
         await Assert.ThrowsAsync<AgwException>(() =>

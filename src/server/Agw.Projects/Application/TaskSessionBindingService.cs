@@ -1,6 +1,7 @@
 using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
+using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
@@ -12,6 +13,7 @@ namespace Agw.Projects.Application;
 public class TaskSessionBindingService : ITaskSessionBindingService
 {
     private readonly IProjectsDbContext _dbContext;
+    private readonly IProjectProviderSessionCoordinator _coordinator;
     private readonly IAgentCatalogFacade _agentCatalog;
     private readonly IApplicationLock _applicationLock;
     private readonly TimeProvider _timeProvider;
@@ -19,6 +21,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
 
     public TaskSessionBindingService(
         IProjectsDbContext dbContext,
+        IProjectProviderSessionCoordinator coordinator,
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
         IAgentCatalogFacade agentCatalog,
@@ -26,6 +29,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
     )
     {
         _dbContext = dbContext;
+        _coordinator = coordinator;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
         _agentCatalog = agentCatalog;
@@ -74,7 +78,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
                 binding =>
                     binding.ProjectConversationId == projectConversation.Id
                     && binding.AgentId == agentId
-                    && binding.ExternalAgentName == normalizedAgentName,
+                    && binding.ExternalAgentName == normalizedAgentName
+                    && binding.IsActive,
                 cancellationToken
             );
     }
@@ -129,79 +134,135 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             throw new AgwException(ErrorCodes.InvalidParam, "Context id is required.");
         }
 
-        var projectConversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(
-            context =>
-                context.ProjectId == projectId
-                && context.ContextId == normalizedContextId
-                && context.Generation == expectedGeneration
-                && context.CreateBy == ownerUserId
-                && _dbContext.Projects.Any(project =>
-                    project.Id == context.ProjectId && project.CreateBy == ownerUserId
-                ),
-            cancellationToken
-        );
+        var projectConversationId =
+            await _dbContext
+                .ProjectConversations.AsNoTracking()
+                .Where(context =>
+                    context.ProjectId == projectId
+                    && context.ContextId == normalizedContextId
+                    && context.Generation == expectedGeneration
+                    && context.CreateBy == ownerUserId
+                    && _dbContext.Projects.Any(project =>
+                        project.Id == context.ProjectId && project.CreateBy == ownerUserId
+                    )
+                )
+                .Select(context => (Guid?)context.Id)
+                .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project context not found.");
 
-        if (projectConversation == null)
-        {
-            throw new AgwException(ErrorCodes.ResourceNotFound, "Project context not found.");
-        }
-
-        var binding = await _dbContext.ProjectConversationBindings.SingleOrDefaultAsync(
-            existing =>
-                existing.ProjectConversationId == projectConversation.Id
-                && existing.AgentId == agentId
-                && existing.ExternalAgentName == normalizedAgentName,
-            cancellationToken
-        );
-
-        if (binding == null)
-        {
-            binding = new ProjectConversationBinding
+        return await _coordinator.SaveAsync(
+            new ProviderSessionSaveTarget(
+                projectId,
+                projectConversationId,
+                expectedGeneration,
+                agentId,
+                normalizedAgentName
+            ),
+            async operation =>
             {
-                Id = Guid.CreateVersion7(),
-                ProjectConversationId = projectConversation.Id,
-                AgentId = agentId,
-                ExternalAgentName = normalizedAgentName,
-                ProviderSessionId = normalizedProviderSessionId,
-                CreateBy = projectConversation.CreateBy ?? normalizedUser,
-                CreateTime = now,
-            };
-            await _dbContext.ProjectConversationBindings.AddAsync(binding, cancellationToken);
-            try
-            {
-                await _dbContext.SaveConversationChangesAsync(
-                    projectConversation.Id,
-                    expectedGeneration,
-                    cancellationToken
+                var behavior = new ProjectConversationBehavior(operation.Conversation);
+                var current = behavior.PrepareProviderSessionActivation(
+                    agentId,
+                    normalizedAgentName,
+                    normalizedProviderSessionId,
+                    normalizedUser,
+                    now
                 );
-                return binding;
-            }
-            catch (DbUpdateException)
-            {
-                _dbContext.ProjectConversationBindings.Remove(binding);
-                binding = await _dbContext.ProjectConversationBindings.SingleOrDefaultAsync(
-                    existing =>
-                        existing.ProjectConversationId == projectConversation.Id
-                        && existing.AgentId == agentId
-                        && existing.ExternalAgentName == normalizedAgentName,
-                    cancellationToken
-                );
-                if (binding == null)
+                if (current != null)
                 {
-                    throw;
+                    return current;
                 }
-            }
-        }
 
-        if (binding.ProviderSessionId != normalizedProviderSessionId)
+                // 先保存原记录的停用，新记录在第二次保存时加入，同一事务内两次保存都满足唯一生效约束。
+                // The previous record's archive is saved first and the new record joins in the second save, so both saves in one transaction satisfy the single-active constraint.
+                await operation.SaveChangesAsync(operation.CancellationToken);
+                var binding = behavior.ActivateProviderSession(
+                    agentId,
+                    normalizedAgentName,
+                    normalizedProviderSessionId,
+                    normalizedUser,
+                    now
+                );
+                await operation.SaveChangesAsync(operation.CancellationToken);
+                return binding;
+            },
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyList<ProjectConversationBinding>> ListAsync(
+        Guid projectId,
+        Guid conversationId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        EnsureConversationIdentity(projectId, conversationId);
+        var ownerUserId = ResolveOwnerUserId();
+        var exists = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .AnyAsync(
+                conversation =>
+                    conversation.Id == conversationId
+                    && conversation.ProjectId == projectId
+                    && conversation.CreateBy == ownerUserId
+                    && _dbContext.Projects.Any(project =>
+                        project.Id == conversation.ProjectId && project.CreateBy == ownerUserId
+                    ),
+                cancellationToken
+            );
+        if (!exists)
         {
-            binding.ProviderSessionId = normalizedProviderSessionId;
-            binding.UpdateBy = normalizedUser;
-            binding.UpdateTime = now;
+            throw new AgwException(ErrorCodes.ResourceNotFound, "Project conversation not found.");
         }
 
-        await _dbContext.SaveConversationChangesAsync(projectConversation.Id, expectedGeneration, cancellationToken);
-        return binding;
+        var bindings = await _dbContext
+            .ProjectConversationBindings.AsNoTracking()
+            .Where(binding => binding.ProjectConversationId == conversationId)
+            .ToListAsync(cancellationToken);
+        // 单个对话的记录数量有限，在内存中排序以兼容 SQLite 的 DateTimeOffset。
+        // A single conversation has few records, so they are ordered in memory to stay compatible with SQLite's DateTimeOffset.
+        return bindings
+            .OrderByDescending(binding => binding.CreateTime)
+            .ThenByDescending(binding => binding.Id)
+            .ToList();
+    }
+
+    public Task ArchiveAsync(
+        Guid projectId,
+        Guid conversationId,
+        Guid bindingId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        EnsureConversationIdentity(projectId, conversationId);
+        if (bindingId == Guid.Empty)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Binding id is required.");
+        }
+
+        var user = ResolveOwnerUserId();
+        var now = _timeProvider.GetUtcNow();
+        return _coordinator.ArchiveAsync(
+            new ProviderSessionArchiveTarget(projectId, conversationId, bindingId),
+            async operation =>
+            {
+                if (
+                    new ProjectConversationBehavior(operation.Conversation).ArchiveProviderSession(bindingId, user, now)
+                )
+                {
+                    await operation.SaveChangesAsync(operation.CancellationToken);
+                }
+            },
+            cancellationToken
+        );
+    }
+
+    private static void EnsureConversationIdentity(Guid projectId, Guid conversationId)
+    {
+        if (projectId == Guid.Empty || conversationId == Guid.Empty)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Project id and conversation id are required.");
+        }
     }
 
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;

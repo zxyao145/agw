@@ -169,4 +169,214 @@ public class ProjectConversationBehaviorTests
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
+
+    private static readonly Guid SessionAgentId = Guid.CreateVersion7();
+    private static readonly DateTimeOffset SessionTime = new(2026, 10, 9, 2, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void ActivateProviderSession_EmptyBindings_CreatesActiveBinding()
+    {
+        var conversation = new ProjectConversation { Id = Guid.CreateVersion7(), CreateBy = "owner" };
+        var behavior = new ProjectConversationBehavior(conversation);
+
+        Assert.Null(behavior.PrepareProviderSessionActivation(SessionAgentId, "codex", "A", "owner", SessionTime));
+        var binding = behavior.ActivateProviderSession(SessionAgentId, "codex", "A", "owner", SessionTime);
+
+        Assert.Same(binding, Assert.Single(conversation.Bindings));
+        Assert.True(binding.IsActive);
+        Assert.Equal(conversation.Id, binding.ProjectConversationId);
+        Assert.Equal(SessionAgentId, binding.AgentId);
+        Assert.Equal("codex", binding.ExternalAgentName);
+        Assert.Equal("A", binding.ProviderSessionId);
+        Assert.Equal("owner", binding.CreateBy);
+        Assert.Equal(SessionTime, binding.CreateTime);
+        Assert.Null(binding.UpdateTime);
+    }
+
+    [Fact]
+    public void ActivateProviderSession_NewSession_PreservesHistory()
+    {
+        var active = CreateBinding("A", isActive: true);
+        var conversation = CreateConversation(active);
+        var behavior = new ProjectConversationBehavior(conversation);
+        var now = SessionTime.AddHours(1);
+
+        Assert.Null(behavior.PrepareProviderSessionActivation(SessionAgentId, "codex", "B", "owner", now));
+        var created = behavior.ActivateProviderSession(SessionAgentId, "codex", "B", "owner", now);
+
+        Assert.Equal(2, conversation.Bindings.Count);
+        Assert.False(active.IsActive);
+        Assert.Equal("owner", active.UpdateBy);
+        Assert.Equal(now, active.UpdateTime);
+        Assert.True(created.IsActive);
+        Assert.Equal("B", created.ProviderSessionId);
+    }
+
+    [Fact]
+    public void ActivateProviderSession_CurrentSession_IsIdempotent()
+    {
+        var active = CreateBinding("A", isActive: true);
+        var conversation = CreateConversation(active);
+
+        var current = new ProjectConversationBehavior(conversation).PrepareProviderSessionActivation(
+            SessionAgentId,
+            "codex",
+            "A",
+            "owner",
+            SessionTime.AddHours(1)
+        );
+
+        Assert.Same(active, current);
+        Assert.Same(active, Assert.Single(conversation.Bindings));
+        Assert.True(active.IsActive);
+        Assert.Null(active.UpdateBy);
+        Assert.Null(active.UpdateTime);
+    }
+
+    [Fact]
+    public void ActivateProviderSession_ArchivedSession_RejectsWrite()
+    {
+        var archived = CreateBinding("A", isActive: false);
+        var active = CreateBinding("B", isActive: true);
+        var conversation = CreateConversation(archived, active);
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectConversationBehavior(conversation).PrepareProviderSessionActivation(
+                SessionAgentId,
+                "codex",
+                "A",
+                "owner",
+                SessionTime.AddHours(1)
+            )
+        );
+
+        Assert.Equal(ErrorCodes.ConversationSessionConflict.Code, exception.Code);
+        Assert.False(archived.IsActive);
+        Assert.True(active.IsActive);
+        Assert.Null(active.UpdateTime);
+    }
+
+    [Fact]
+    public void ActivateProviderSession_GroupStillActive_RejectsSecondActiveRecord()
+    {
+        var active = CreateBinding("A", isActive: true);
+        var conversation = CreateConversation(active);
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectConversationBehavior(conversation).ActivateProviderSession(
+                SessionAgentId,
+                "codex",
+                "B",
+                "owner",
+                SessionTime
+            )
+        );
+
+        Assert.Equal(ErrorCodes.ConversationSessionConflict.Code, exception.Code);
+        Assert.Same(active, Assert.Single(conversation.Bindings));
+    }
+
+    [Fact]
+    public void PrepareProviderSessionActivation_OtherGroups_AreUnchanged()
+    {
+        var otherAgent = CreateBinding("A", isActive: true, agentId: Guid.CreateVersion7());
+        var otherName = CreateBinding("A", isActive: true, externalAgentName: "pi");
+        var conversation = CreateConversation(otherAgent, otherName);
+
+        Assert.Null(
+            new ProjectConversationBehavior(conversation).PrepareProviderSessionActivation(
+                SessionAgentId,
+                "codex",
+                "A",
+                "owner",
+                SessionTime
+            )
+        );
+
+        Assert.True(otherAgent.IsActive);
+        Assert.True(otherName.IsActive);
+    }
+
+    [Fact]
+    public void ArchiveProviderSession_ActiveBinding_ArchivesOnlyTarget()
+    {
+        var target = CreateBinding("A", isActive: true);
+        var other = CreateBinding("B", isActive: true, externalAgentName: "pi");
+        var conversation = CreateConversation(target, other);
+        var now = SessionTime.AddHours(1);
+
+        Assert.True(new ProjectConversationBehavior(conversation).ArchiveProviderSession(target.Id, "owner", now));
+
+        Assert.False(target.IsActive);
+        Assert.Equal("owner", target.UpdateBy);
+        Assert.Equal(now, target.UpdateTime);
+        Assert.True(other.IsActive);
+        Assert.Null(other.UpdateTime);
+    }
+
+    [Fact]
+    public void ArchiveProviderSession_ArchivedBinding_IsIdempotent()
+    {
+        var target = CreateBinding("A", isActive: false);
+        target.UpdateBy = "owner";
+        target.UpdateTime = SessionTime;
+        var conversation = CreateConversation(target);
+
+        Assert.False(
+            new ProjectConversationBehavior(conversation).ArchiveProviderSession(
+                target.Id,
+                "someone-else",
+                SessionTime.AddHours(1)
+            )
+        );
+
+        Assert.False(target.IsActive);
+        Assert.Equal("owner", target.UpdateBy);
+        Assert.Equal(SessionTime, target.UpdateTime);
+    }
+
+    [Fact]
+    public void ArchiveProviderSession_MissingBinding_ThrowsResourceNotFound()
+    {
+        var conversation = CreateConversation(CreateBinding("A", isActive: true));
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectConversationBehavior(conversation).ArchiveProviderSession(
+                Guid.CreateVersion7(),
+                "owner",
+                SessionTime
+            )
+        );
+
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, exception.Code);
+    }
+
+    private static ProjectConversation CreateConversation(params ProjectConversationBinding[] bindings)
+    {
+        var conversation = new ProjectConversation { Id = Guid.CreateVersion7(), CreateBy = "owner" };
+        foreach (var binding in bindings)
+        {
+            binding.ProjectConversationId = conversation.Id;
+            conversation.Bindings.Add(binding);
+        }
+
+        return conversation;
+    }
+
+    private static ProjectConversationBinding CreateBinding(
+        string providerSessionId,
+        bool isActive,
+        Guid? agentId = null,
+        string externalAgentName = "codex"
+    ) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            AgentId = agentId ?? SessionAgentId,
+            ExternalAgentName = externalAgentName,
+            ProviderSessionId = providerSessionId,
+            IsActive = isActive,
+            CreateBy = "owner",
+            CreateTime = SessionTime,
+        };
 }

@@ -3346,6 +3346,89 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/conversations/provider-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          projectId?: string;
+          conversationId?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfIReadOnlyListOfProviderSessionResponse"];
+            "application/json": components["schemas"]["ApiResultOfIReadOnlyListOfProviderSessionResponse"];
+            "text/json": components["schemas"]["ApiResultOfIReadOnlyListOfProviderSessionResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/conversations/provider-sessions/archive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ProviderSessionArchiveRequest"];
+          "text/json": components["schemas"]["ProviderSessionArchiveRequest"];
+          "application/*+json": components["schemas"]["ProviderSessionArchiveRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects": {
     parameters: {
       query?: never;
@@ -5210,6 +5293,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfIReadOnlyListOfProviderSessionResponse: {
+      data?: null | components["schemas"]["ProviderSessionResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfIReadOnlyListOfQuickPromptResponse: {
       data?: null | components["schemas"]["QuickPromptResponse"][];
       /** Format: int32 */
@@ -6393,6 +6483,31 @@ export interface components {
     };
     ProviderModelDiscoveryResponse: {
       modelNames: string[];
+    };
+    ProviderSessionArchiveRequest: {
+      /** Format: uuid */
+      projectId: string;
+      /** Format: uuid */
+      conversationId: string;
+      /** Format: uuid */
+      bindingId: string;
+    };
+    /**
+     * @description 一条 provider session 绑定记录；客户端按 (AgentId, ExternalAgentName) 分组，IsActive 为 true 的记录是该组当前生效的 session。
+     *     One provider session binding record; clients group by (AgentId, ExternalAgentName), and the record with IsActive true is the group's active session.
+     */
+    ProviderSessionResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      agentId: string;
+      externalAgentName: string;
+      providerSessionId: string;
+      isActive: boolean;
+      /** Format: date-time */
+      createTime: string;
+      /** Format: date-time */
+      updateTime: null | string;
     };
     /** @enum {unknown} */
     ProviderType: "OpenAIChatCompletions" | "OpenAIResponses" | "Anthropic";

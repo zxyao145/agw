@@ -24,8 +24,9 @@ public sealed class InitialMigrationTests
 
         Assert.False(dbContext.Database.HasPendingModelChanges());
 
-        var migration = Assert.Single(dbContext.Database.GetMigrations());
-        Assert.EndsWith("_ReInit", migration, StringComparison.Ordinal);
+        var migrations = dbContext.Database.GetMigrations().ToArray();
+        Assert.EndsWith("_ReInit", migrations[0], StringComparison.Ordinal);
+        var migration = migrations[^1];
         var migrator = dbContext.GetService<IMigrator>();
         var script = migrator.GenerateScript(
             Migration.InitialDatabase,
@@ -43,6 +44,9 @@ public sealed class InitialMigrationTests
                 "project_conversation",
                 "project_conversation_chat_history",
                 "project_conversation_binding",
+                "ux_project_conversation_binding_active",
+                "ux_project_conversation_binding_session",
+                "is_active = TRUE",
                 "project_conversation_turn",
                 "durable_execution",
                 "scope_backfilled",
@@ -126,8 +130,34 @@ public sealed class InitialMigrationTests
 
         await dbContext.Database.MigrateAsync(cancellationToken);
 
-        var appliedMigration = Assert.Single(await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken));
-        Assert.EndsWith("_ReInit", appliedMigration, StringComparison.Ordinal);
+        var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
+        Assert.Equal(dbContext.Database.GetMigrations(), appliedMigrations);
+        Assert.EndsWith("_ReInit", appliedMigrations[0], StringComparison.Ordinal);
+        Assert.True(
+            await ColumnIsNotNullAsync(connection, "project_conversation_binding", "is_active", cancellationToken)
+        );
+        Assert.Equal(
+            "1",
+            await ColumnDefaultAsync(connection, "project_conversation_binding", "is_active", cancellationToken)
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "project_conversation_binding",
+                "ux_project_conversation_binding_session",
+                ["project_conversation_id", "agent_id", "external_agent_name", "provider_session_id"],
+                cancellationToken
+            )
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "project_conversation_binding",
+                "ux_project_conversation_binding_active",
+                ["project_conversation_id", "agent_id", "external_agent_name"],
+                cancellationToken
+            )
+        );
         Assert.True(await ColumnIsNotNullAsync(connection, "project", "additional_directories", cancellationToken));
         Assert.Equal(
             "'[]'",

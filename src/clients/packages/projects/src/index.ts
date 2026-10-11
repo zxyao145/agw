@@ -1,5 +1,6 @@
 export * from "./lib/project-tabs";
 export * from "./services/files";
+export * from "./services/provider-sessions";
 export * from "./services/task-client";
 export {
   formatProjectFolderName,

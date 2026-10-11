@@ -23,7 +23,7 @@ public sealed class SettingsMigrationTests
         );
         using var context = new AgwDbContext(builder.Options);
         Assert.False(context.Database.HasPendingModelChanges());
-        var migration = Assert.Single(context.Database.GetMigrations());
+        var migration = context.Database.GetMigrations().First();
         Assert.EndsWith("_ReInit", migration, StringComparison.Ordinal);
 
         var migrator = context.GetService<IMigrator>();
@@ -58,7 +58,7 @@ public sealed class SettingsMigrationTests
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var context = new AgwDbContext(options);
-        var migration = Assert.Single(context.Database.GetMigrations());
+        var migration = context.Database.GetMigrations().First();
         var migrator = context.GetService<IMigrator>();
 
         await migrator.MigrateAsync(null, cancellationToken);
