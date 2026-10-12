@@ -121,6 +121,19 @@ const packagedApplicationDirectory = resolve(
   "out",
   `Agw Desktop-${hostPlatform()}-${options.arch}`,
 );
+if (hostPlatform() === "darwin") {
+  await run(
+    "codesign",
+    [
+      "--verify",
+      "--deep",
+      "--strict",
+      "--verbose=2",
+      resolve(packagedApplicationDirectory, "Agw Desktop.app"),
+    ],
+    environment,
+  );
+}
 const packagedResourcesDirectory =
   hostPlatform() === "darwin"
     ? resolve(packagedApplicationDirectory, "Agw Desktop.app", "Contents", "Resources")

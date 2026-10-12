@@ -36,7 +36,11 @@ import { DaemonManager } from "./daemon/daemon-manager";
 import { getExternalHttpUrl } from "./external-navigation";
 import { showImageContextMenu } from "./image-context-menu";
 import { DESKTOP_OAUTH_PROTOCOL, findOAuthDeepLink, parseOAuthDeepLink } from "./oauth-deep-link";
-import { parseDesktopPackageMetadata, type DesktopPackageMetadata } from "./package-metadata";
+import {
+  parseDesktopPackageMetadata,
+  readDevelopmentPackageMetadata,
+  type DesktopPackageMetadata,
+} from "./package-metadata";
 import { resolveRendererFile } from "./renderer-path";
 import {
   appendRendererEvent,
@@ -87,10 +91,10 @@ function reportMainProcessError(title: string, error: unknown): void {
 
 function readPackageMetadata(): DesktopPackageMetadata {
   if (!app.isPackaged) {
-    return parseDesktopPackageMetadata({
-      packageFlavor: process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full",
-      appVersion: process.env.AGW_RELEASE_VERSION || app.getVersion(),
-    });
+    return readDevelopmentPackageMetadata(
+      app.getAppPath(),
+      process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full",
+    );
   }
   try {
     return parseDesktopPackageMetadata(

@@ -13,6 +13,14 @@ module.exports = {
     appVersion: releaseVersion,
     buildVersion: releaseVersion,
     asar: true,
+    // 2026-10-12: Seal assembled macOS bundles with ad-hoc signing for certificate-free builds.
+    // 2026-10-12：使用 ad-hoc signing 完成 macOS 应用资源签名，构建无需证书。
+    osxSign: {
+      identity: "-",
+      identityValidation: false,
+      continueOnError: false,
+      optionsForFile: () => ({ hardenedRuntime: false, timestamp: "none" }),
+    },
     icon: path.resolve(__dirname, "assets", "agw-logo"),
     protocols: [
       {
