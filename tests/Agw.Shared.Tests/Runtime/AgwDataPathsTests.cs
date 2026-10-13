@@ -6,18 +6,19 @@ namespace Agw.Shared.Tests.Runtime;
 
 public class AgwDataPathsTests
 {
-    [Theory]
-    [InlineData("/Users/tester")]
-    [InlineData("/home/tester")]
-    [InlineData("C:\\Users\\tester")]
-    public void Resolve_WhenOverrideIsMissing_UsesLowercaseAgwUnderUserHome(string userHome)
+    [Fact]
+    public void Resolve_WhenOverrideIsMissing_UsesSystemApplicationDataDirectory()
     {
-        var paths = AgwDataPaths.Resolve(null, userHome);
+        var applicationData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData,
+            Environment.SpecialFolderOption.DoNotVerify
+        );
+        var paths = AgwDataPaths.Resolve(null, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
-        Assert.Equal(Path.GetFullPath(Path.Combine(userHome, "agw")), paths.Root);
+        Assert.Equal(Path.Combine(applicationData, OperatingSystem.IsLinux() ? "agw" : "Agw"), paths.Root);
         Assert.Equal(Path.Combine(paths.Root, "database", "agw.db"), paths.DatabaseFile);
         Assert.Equal(Path.Combine(paths.Root, "skills"), paths.SkillsDirectory);
-        Assert.Equal(Path.GetFullPath("./logs"), paths.LogsDirectory);
+        Assert.Equal(Path.Combine(paths.Root, "logs"), paths.LogsDirectory);
         Assert.Equal(Path.Combine(paths.Root, "temp"), paths.TempDirectory);
         Assert.Equal(Path.Combine(paths.Root, "keys"), paths.KeysDirectory);
         Assert.Equal(Path.Combine(paths.Root, "runtime"), paths.RuntimeDirectory);
@@ -28,7 +29,7 @@ public class AgwDataPathsTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData(" ")]
-    public void ResolveFromConfiguration_EmptyRoot_UsesHomeDirectory(string? root)
+    public void ResolveFromConfiguration_EmptyRoot_UsesSystemApplicationDataDirectory(string? root)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["AgwDataDir"] = root })
@@ -101,11 +102,11 @@ public class AgwDataPathsTests
     }
 
     [Theory]
-    [InlineData(null, "./logs")]
-    [InlineData("", "./logs")]
-    [InlineData(" ", "./logs")]
+    [InlineData(null, "./separate-data/logs")]
+    [InlineData("", "./separate-data/logs")]
+    [InlineData(" ", "./separate-data/logs")]
     [InlineData("./custom-logs", "./custom-logs")]
-    public void ResolveFromConfiguration_LogDirectory_IsIndependentOfDataRoot(string? logs, string expected)
+    public void ResolveFromConfiguration_LogDirectory_UsesConfiguredOrDataRootDirectory(string? logs, string expected)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -158,7 +159,9 @@ public class AgwDataPathsTests
     [Fact]
     public void EnsureCreated_WhenCalledRepeatedly_PreservesExistingFiles()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"agw-paths-{Guid.CreateVersion7():N}");
+        var root = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".scratch", $"agw-paths-{Guid.CreateVersion7():N}")
+        );
         var paths = AgwDataPaths.Resolve(root, "/unused", Path.Combine(root, "separate-logs"));
 
         try

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
+import { getServerDataDirectory } from "../runtime/server-data-directory";
 import {
   buildLaunchAgentPlist,
   buildSystemdUserUnit,
@@ -75,13 +76,15 @@ export class DaemonManager {
 
   private async installLaunchAgent(): Promise<void> {
     const plist = this.launchAgentPath();
+    const workingDirectory = dirname(getServerDataDirectory());
     await mkdir(dirname(plist), { recursive: true });
+    await mkdir(workingDirectory, { recursive: true, mode: 0o700 });
     await this.runIgnoringFailure("launchctl", [
       "bootout",
       `gui/${process.getuid?.() ?? 0}`,
       plist,
     ]);
-    await writeFile(plist, buildLaunchAgentPlist(this.serverPath), {
+    await writeFile(plist, buildLaunchAgentPlist(this.serverPath, workingDirectory), {
       encoding: "utf8",
       mode: 0o600,
     });

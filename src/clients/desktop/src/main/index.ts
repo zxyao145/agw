@@ -2,8 +2,8 @@ import { DesktopOidcLogin } from "./oidc-login";
 
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { homedir, release } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { release } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -49,6 +49,7 @@ import {
 } from "./renderer-recovery";
 import { createLocalDesktopToken } from "./runtime/local-token";
 import { readLocalServerRuntime } from "./runtime/local-server-runtime";
+import { getServerDataDirectory } from "./runtime/server-data-directory";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
 import { getTurnNotificationText, normalizeTurnNotificationRequest } from "./turn-notification";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
@@ -534,10 +535,7 @@ async function openSetup(baseUrl: string): Promise<void> {
 async function prepareUninstall(request: UninstallRequest): Promise<UninstallResult> {
   await daemonManager.uninstall();
   if (request.deleteServerData) {
-    const dataRoot = resolve(homedir(), "agw");
-    if (basename(dataRoot) !== "agw" || dirname(dataRoot) !== resolve(homedir())) {
-      throw new Error("Refusing to remove an unexpected data directory.");
-    }
+    const dataRoot = getServerDataDirectory();
     if (existsSync(dataRoot) && lstatSync(dataRoot).isSymbolicLink()) {
       throw new Error("Refusing to remove a symbolic-link data directory.");
     }

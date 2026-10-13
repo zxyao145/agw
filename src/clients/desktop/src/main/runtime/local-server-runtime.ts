@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { LocalServerRuntime } from "../../shared/contracts";
+import { getServerDataDirectory } from "./server-data-directory";
 
 export function parseLocalServerRuntime(value: string): LocalServerRuntime | null {
   try {
@@ -41,7 +41,7 @@ function isProcessAlive(pid: number): boolean {
 export async function readLocalServerRuntime(): Promise<LocalServerRuntime | null> {
   try {
     const runtime = parseLocalServerRuntime(
-      await readFile(join(homedir(), "agw", "runtime", "server.json"), "utf8"),
+      await readFile(join(getServerDataDirectory(), "runtime", "server.json"), "utf8"),
     );
     return runtime && isProcessAlive(runtime.pid) ? runtime : null;
   } catch (error) {

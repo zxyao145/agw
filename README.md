@@ -129,8 +129,8 @@ Backend settings follow the standard ASP.NET Core configuration chain, from lowe
 
 ```json
 {
-  "AgwDataDir": "~/agw",
-  "AgwLogDir": "./logs",
+  "AgwDataDir": null,
+  "AgwLogDir": null,
   "Database": {
     "Provider": "sqlite",
     "ConnectionString": "Data Source=agw.db"
@@ -148,8 +148,8 @@ Backend settings follow the standard ASP.NET Core configuration chain, from lowe
 }
 ```
 
-- `AgwDataDir` holds the database, `skills/`, and Data Protection `keys/`. It defaults to `~/agw` (`%USERPROFILE%\agw` on Windows) and to `/data` in containers. A relative SQLite path resolves under its `database/` folder.
-- `AgwLogDir` defaults to `./logs` relative to the process working directory and is independent of `AgwDataDir`.
+- `AgwDataDir` holds the database, `skills/`, and Data Protection `keys/`. Its default is `~/Library/Application Support/Agw` on macOS, `~/.local/share/agw` on Linux, `%LOCALAPPDATA%\Agw` on Windows, and `/data` in containers. Default-path startup migrates existing `~/agw` data when that Server is stopped and the destination directory is available. A relative SQLite path resolves under its `database/` folder.
+- `AgwLogDir` defaults to `<AgwDataDir>/logs` and can be configured separately. Explicit relative paths resolve against the process working directory.
 - Supported database providers are `sqlite` and `postgres`. Overrides apply per key, so a database change needs both `Database:Provider` and `Database:ConnectionString`.
 - `Execution:Provider` supports `InProcess` and `Distributed`. Distributed execution requires PostgreSQL for the database and lock. Its event stream uses PostgreSQL by default and can use Redis through `Execution:Distributed:EventStream:Provider`.
 - Supported lock providers are `inmemory` and `postgres`. When `DistributedLock:Provider` is `null` or absent, SQLite uses an in-process lock and PostgreSQL uses an advisory lock. An empty PostgreSQL lock connection string reuses `Database:ConnectionString`.

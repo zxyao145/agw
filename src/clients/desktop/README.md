@@ -8,7 +8,8 @@ The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; th
 
 - The default profile connects to `http://127.0.0.1:30816`.
 - A Full package installs the bundled self-contained `Agw.Standalone.Host` as a current-user daemon. A Client package contains no Server.
-- If port 30816 is occupied, Server chooses an available loopback port and publishes it to `~/agw/runtime/server.json`; Desktop validates that descriptor and follows the live process.
+- Server data defaults to `~/Library/Application Support/Agw` on macOS, `~/.local/share/agw` on Linux, and `%LOCALAPPDATA%\Agw` on Windows. Logs default to the data directory's `logs/` folder.
+- If port 30816 is occupied, Server chooses an available loopback port and publishes it to `<data directory>/runtime/server.json`; Desktop validates that descriptor and follows the live process.
 - Desktop uses named Bearer tokens, either entered manually or issued after third-party OIDC login in the system browser. Local first-run setup is the Server-owned `/setup` Razor page in a sandboxed modal window; after setup, the main process provisions a unique token and encrypts it with the operating system credential store.
 - Multiple remote profiles are supported. HTTPS is required unless the user explicitly accepts the HTTP warning for a profile.
 - Each Server profile owns an isolated React Query cache. Changing its URL or Token retires that cache, and switching profiles aborts stale connection probes and queries so data from the previous Server cannot overwrite the active view.
@@ -77,7 +78,7 @@ Opening About checks GitHub's latest stable Release and offers the artifact matc
 
 ## Close and uninstall behavior
 
-Closing the window minimizes to the tray by default; users can change it to quit Desktop. The Server daemon continues in either case. In-app uninstall preparation unregisters the daemon and asks whether to retain or delete `~/agw`. Direct operating-system uninstall preserves `~/agw` by default.
+Closing the window minimizes to the tray by default; users can change it to quit Desktop. The Server daemon continues in either case. In-app uninstall preparation unregisters the daemon and asks whether to retain or delete the system-specific Server data directory. Direct operating-system uninstall preserves Server data by default.
 
 
 ## Third-party Server login

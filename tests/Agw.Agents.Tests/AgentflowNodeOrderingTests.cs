@@ -132,7 +132,10 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
         // Assert
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
         Assert.True(resumed);
-        Assert.True(source.Finished);
+        Assert.True(
+            source.Finished,
+            $"Source calls: {source.Calls}; events: {string.Join(", ", events.Select(evt => evt.GetType().Name))}"
+        );
         Assert.Equal(1, target.Calls);
         Assert.Single(events.OfType<WorkflowOutputEvent>(), evt => evt.Data is List<ChatMessage>);
     }
@@ -354,7 +357,7 @@ public sealed class AgentflowNodeOrderingTests : IDisposable
                 [Edge("child", "child-output")],
                 new Dictionary<string, AIAgent> { ["child"] = Agent(source, "child") }
             )!;
-            agents["source"] = nested.AsAIAgent();
+            agents["source"] = nested.AsAIAgent(executionEnvironment: InProcessExecution.Lockstep);
         }
         var edges = new List<AgentflowEdge> { Edge("input", "source"), Edge("target", "output") };
         var outgoing = Edge(

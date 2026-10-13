@@ -7,7 +7,7 @@ function escapeXml(value: string): string {
     .replaceAll("'", "&apos;");
 }
 
-export function buildLaunchAgentPlist(serverPath: string): string {
+export function buildLaunchAgentPlist(serverPath: string, workingDirectory: string): string {
   const executable = escapeXml(serverPath);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -20,6 +20,8 @@ export function buildLaunchAgentPlist(serverPath: string): string {
     <string>${executable}</string>
     <string>serve</string>
   </array>
+  <key>WorkingDirectory</key>
+  <string>${escapeXml(workingDirectory)}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

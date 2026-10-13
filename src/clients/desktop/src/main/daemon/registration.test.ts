@@ -10,10 +10,15 @@ import {
 test("macOS LaunchAgent runs the bundled server for the current user", () => {
   const plist = buildLaunchAgentPlist(
     "/Applications/Agw Desktop.app/Contents/Resources/server/agw-server",
+    "/Users/Ben & Team/agw",
   );
 
   assert.match(plist, /com\.agw\.server/);
   assert.match(plist, /<string>serve<\/string>/);
+  assert.match(
+    plist,
+    /<key>WorkingDirectory<\/key>\s*<string>\/Users\/Ben &amp; Team\/agw<\/string>/,
+  );
   assert.match(plist, /<key>RunAtLoad<\/key>\s*<true\/>/);
 });
 

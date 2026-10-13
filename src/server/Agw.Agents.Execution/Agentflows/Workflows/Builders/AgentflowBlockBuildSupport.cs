@@ -112,10 +112,13 @@ internal static class AgentflowBlockBuildSupport
     internal static ExecutorBinding BindWorkflow(AgentflowBlockBuildContext context, Workflow workflow)
     {
         var blockNode = context.BlockNode;
+        // 2026-10-13: Block 的内部 Workflow 随当前枚举推进，按顺序处理暂停和恢复。
+        // Advance a Block's inner workflow through the current enumeration to order pause and resume.
         var blockAgent = workflow.AsAIAgent(
             id: blockNode.NodeId,
             name: blockNode.Name ?? blockNode.NodeId,
             description: string.Empty,
+            executionEnvironment: InProcessExecution.Lockstep,
             includeWorkflowOutputsInResponse: true
         );
 
