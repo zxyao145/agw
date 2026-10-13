@@ -285,7 +285,9 @@ public sealed class AgentflowRuntimeFactory
                     }
 
                     resources.Add(flowNode);
-                    aiAgent = flowNode.Workflow.AsAIAgent();
+                    // 2026-10-13: 由当前枚举推进嵌套 Workflow 的 SuperStep，按顺序处理暂停和恢复。
+                    // Advance nested SuperSteps through the current enumeration to order pause and resume.
+                    aiAgent = flowNode.Workflow.AsAIAgent(executionEnvironment: InProcessExecution.Lockstep);
                 }
                 else
                 {
