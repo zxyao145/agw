@@ -48,6 +48,7 @@
     "electron": "44.4.3",
     "electron-squirrel-startup": "1.0.1",
     "electron-winstaller": "5.4.4",
+    "env-paths": "2.2.1",
     "esbuild": "catalog:",
     "lucide-react": "catalog:",
     "next": "catalog:",

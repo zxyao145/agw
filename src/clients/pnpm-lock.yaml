@@ -388,6 +388,9 @@ importers:
       electron-winstaller:
         specifier: 5.4.4
         version: 5.4.4(supports-color@10.2.2)
+      env-paths:
+        specifier: 2.2.1
+        version: 2.2.1
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
