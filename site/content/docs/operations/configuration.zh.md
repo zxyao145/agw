@@ -22,7 +22,7 @@ translationKey: docs/operations/configuration
 
 程序默认值 → `appsettings.json` → 环境专用 JSON → 开发环境的 Secrets（机密配置）→ 环境变量 → 命令行。
 
-例如，文件中设置为 SQLite，启动命令中指定 PostgreSQL，最终会使用 PostgreSQL；但连接字符串不会随之自动更换，需要一起修改。配置文件位于 Server 程序目录。日志工具 Serilog 的读取方式有所不同，见下方日志配置。
+例如，文件中设置为 SQLite，启动命令中指定 PostgreSQL，最终会使用 PostgreSQL；但连接字符串不会随之自动更换，需要一起修改。配置文件位于 Server 程序目录。日志工具 Serilog 的配置也遵循同样的顺序。
 
 本页用冒号表示配置的分组，例如 `Database:Provider` 表示 Database 分组中的 Provider。它在环境变量中写成 `Database__Provider`，在启动命令中写成 `--Database:Provider postgres`。开关使用 `true`（开启）或 `false`（关闭）；需要从几个选项中选择时，请使用表格列出的名称。
 
@@ -140,8 +140,8 @@ Agent 执行时会不断产生回复和状态消息。系统保存这些消息�
 | --- | --- | --- |
 | `ASPNETCORE_URLS / --urls` | 本地默认端口 30816；容器由运行配置指定 | Server 接收请求的地址。用 `--urls http://127.0.0.1:30816` 仅供本机访问，或按部署需要绑定其他地址。多个地址用分号分隔。 |
 | `ASPNETCORE_ENVIRONMENT` | Production | 选择环境专用 JSON，例如 `appsettings.Production.json`。常用名称为 Development（开发）、Staging（预发布）、Production（生产）；这是环境名称，不是只接受三个值的枚举。 |
-| `AgwDataDir` | ~/agw | AGW 数据根目录，包含运行数据、Skills 和加密密钥等。支持 `~`；相对路径以启动程序时的工作目录为起点。 |
-| `AgwLogDir` | ./logs | 独立的日志目录，不随数据目录移动；支持 `~`，相对路径从工作目录解析。 |
+| `AgwDataDir` | macOS：`~/Library/Application Support/Agw`；Linux：`~/.local/share/agw`；Windows：`%LOCALAPPDATA%\Agw`；容器：`/data` | AGW 数据根目录，包含运行数据、Skills 和加密密钥等。支持 `~`；相对路径以启动程序时的工作目录为起点，作为系统服务运行时请使用绝对路径。 |
+| `AgwLogDir` | `<AgwDataDir>/logs` | 日志目录。不填或留空时位于数据根目录下；需要单独存放时设置绝对路径。支持 `~`；相对路径以启动程序时的工作目录为起点。 |
 | `AllowedHosts` | * | 允许用哪些域名访问 Server。`*` 表示不限制；也可以填写 `agw.example.com;localhost` 这样的域名列表，用分号分隔。客户端从哪个页面连接，则由 AllowedOrigins 设置。 |
 
 ### 数据库
@@ -222,20 +222,28 @@ OpenTelemetry 用于把运行指标和调用追踪等信息发送到监控系统
 | `Serilog:MinimumLevel:Override:Microsoft.AspNetCore` | Warning | 单独设置 Web 请求相关日志的最低级别。 |
 | `Serilog:MinimumLevel:Override:Microsoft.EntityFrameworkCore` | Warning | 单独设置数据库访问日志的最低级别。 |
 | `Serilog:MinimumLevel:Override:System` | Warning | 单独设置 System 系统组件日志的最低级别；其他类别可按同样方式设置。 |
-| `Serilog:WriteTo:0:Name` | Async | 让日志在后台输出，减少写日志对请求处理的影响。一般保留 Async。 |
-| `Serilog:WriteTo:0:Args:configure:0:Name` | Console | 将日志输出到运行 Server 的终端或容器日志中。 |
-| `Serilog:WriteTo:0:Args:configure:0:Args:outputTemplate` | 见下方 | 控制台行格式，包含时间、级别、来源、TraceId、SpanId、线程、消息与异常。 |
+| `Serilog:WriteTo:Console:Name` | Async | 让控制台日志在后台输出，减少写日志对请求处理的影响。一般保留 Async。 |
+| `Serilog:WriteTo:Console:Args:configure:Console:Name` | Console | 将日志输出到运行 Server 的终端或容器日志中。 |
+| `Serilog:WriteTo:Console:Args:configure:Console:Args:outputTemplate` | 见下方 | 控制台行格式，包含时间、级别、TraceId、SpanId、TraceFlags、线程、来源、消息、属性与异常。 |
+| `Serilog:WriteTo:Files:Name` | Async | 让内置日志文件在后台写入。必须保留 Async。 |
+| `Serilog:WriteTo:Files:Args:bufferSize` / `blockWhenFull` | 10000 / false | 后台队列的长度；队列已满时丢弃新的日志，不阻塞请求。 |
+| `Serilog:WriteTo:Files:Args:configure:Info:Args:path` | agw-info-.log | 通用日志的文件名格式，文件写入 `AgwLogDir`。只能填写文件名。 |
+| `Serilog:WriteTo:Files:Args:configure:Error:Args:path` | agw-error-.log | 错误日志的文件名格式，文件写入 `AgwLogDir`。只能填写文件名。 |
+| `Serilog:WriteTo:Files:Args:configure:Info:Args:{rollingInterval, retainedFileCountLimit, fileSizeLimitBytes, rollOnFileSizeLimit}` | Hour、168、2147483648、true | 通用日志的轮转与保留：每小时以及文件达到 2 GiB 时生成新文件，保留 168 个文件。错误日志使用相同的配置项和值。 |
+| `Serilog:WriteTo:Files:Args:configure:Error:Args:restrictedToMinimumLevel` | Error | 错误日志只保留 Error 和 Fatal 级别。 |
 | `Serilog:Enrich` | FromLogContext、WithMachineName、WithThreadId、WithOpenTelemetryTraceId、WithOpenTelemetrySpanId | 给日志补充主机名、线程和请求追踪信息，方便把同一次操作的记录联系起来。 |
 
-当前 Host 的 Serilog 配置从 `appsettings.json` 及 `appsettings.{ASPNETCORE_ENVIRONMENT}.json` 单独读取；不能假设 `Serilog__...` 环境变量会覆盖这条管线。修改日志输出或级别时编辑相应 JSON 并重启。`Logging` 与 `Serilog` 是两套级别配置，当前主要输出使用 Serilog。
+Serilog 读取 Host 最终生效的配置，因此环境专用 JSON、环境变量（例如 `Serilog__MinimumLevel__Default=Debug`、`Serilog__WriteTo__Files__Args__configure__Info__Args__retainedFileCountLimit=48`）和命令行参数都可以覆盖单个配置项，修改后需要重启。`Serilog:WriteTo` 和 `Serilog:WriteTo:Files:Args:configure` 使用命名节点；出现 `Serilog:WriteTo:0` 这样的数组下标时，Server 停止启动并报告对应的配置项。`Info` 和 `Error` 两个日志的名称必须保持 `File`，`path` 只能是文件名；绝对路径、目录分隔符、`.` 和 `..` 都会被拒绝，目录统一由 `AgwLogDir` 决定。以其他名称添加的日志输出保留各自配置的路径。`Logging` 与 `Serilog` 是两套级别配置，当前主要输出使用 Serilog。
 
 Microsoft 日志级别全部为：`Trace`（最细追踪）、`Debug`（调试）、`Information`（正常运行）、`Warning`（异常征兆）、`Error`（操作失败）、`Critical`（严重故障）、`None`（关闭）。Serilog 对应支持 `Verbose`、`Debug`、`Information`、`Warning`、`Error`、`Fatal`；其中 Verbose 对应最细追踪，Fatal 对应严重故障，Serilog 最小级别没有 None。
 
 WriteTo 的 Name、Using 和 Enrich 是插件名称，不是固定枚举；上表列的是当前`appsettings.json`。Host 还额外写入 `AgwLogDir/application-{角色}-.log`，每小时生成一个新日志文件，保留 30 个文件，每秒将日志写入磁盘；这些规则由程序固定，不能通过本页配置修改。
 
 ```text
-[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] [ThreadId:{ThreadId}] {Message:lj}{NewLine}{Exception}
+{Timestamp:yyyy-MM-ddTHH:mm:ss.fffK} [{Level:u3}] | [TraceId:{TraceId}] [SpanId:{SpanId}] [TraceFlags:{TraceFlags}] [ThreadId:{ThreadId}] | [{Flag}] | {SourceContext} | {Message:lj} | {Properties:j} {NewLine}{Exception}
 ```
+
+内置日志文件使用相同的格式。
 
 ### 认证与 API Key
 

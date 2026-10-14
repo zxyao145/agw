@@ -123,10 +123,20 @@ public sealed class AgwDataPaths
     }
 
     /// <summary>
-    /// Creates the required data directories and restricts them to the current user on Unix systems.
+    /// Creates missing data directories and verifies that the log directory accepts new files.
+    /// New Unix directories are private to the current user; existing directories keep their permissions.
+    /// 创建缺失的数据目录并验证日志目录可写入新文件。Unix 新建目录只允许当前用户访问，已有目录保留原有权限。
     /// </summary>
     public void EnsureCreated()
     {
+        EnsureCreated(_ => { });
+    }
+
+    /// <inheritdoc cref="EnsureCreated()"/>
+    /// <param name="onDirectory">Receives each directory before it is processed / 处理每个目录前接收该目录。</param>
+    public void EnsureCreated(Action<string> onDirectory)
+    {
+        onDirectory(Root);
         MigrateLegacyData();
         var directories = new[]
         {
@@ -140,15 +150,44 @@ public sealed class AgwDataPaths
         };
         foreach (var directory in directories)
         {
-            Directory.CreateDirectory(directory);
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(
-                    directory,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
-                );
-            }
+            onDirectory(directory);
+            CreateDirectory(directory);
         }
+
+        onDirectory(LogsDirectory);
+        VerifyWritable(LogsDirectory);
+    }
+
+    private static void CreateDirectory(string directory)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(directory);
+            return;
+        }
+
+        // .NET 只为最后一级目录应用 mode，因此逐级创建缺失的上级目录。
+        // 权限只作用于新建目录，已有目录保留 mode、ACL、属主和用户组。
+        // .NET applies the mode only to the last segment, so missing ancestors are created one level at a time.
+        // The mode applies only to new directories; existing ones keep their mode, ACL, owner, and group.
+        var parent = Path.GetDirectoryName(directory);
+        if (parent is not null && !Directory.Exists(parent))
+            CreateDirectory(parent);
+
+        Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
+    private static void VerifyWritable(string directory)
+    {
+        using var probe = new FileStream(
+            Path.Combine(directory, $".agw-write-probe-{Guid.NewGuid():N}"),
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 0,
+            FileOptions.DeleteOnClose
+        );
+        probe.WriteByte(0);
     }
 
     private static string ResolveDefaultRoot(string? localApplicationDataDirectory)

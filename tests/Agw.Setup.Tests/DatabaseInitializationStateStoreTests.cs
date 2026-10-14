@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Security.Claims;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
@@ -8,12 +10,15 @@ using Agw.Settings;
 using Agw.Settings.Application.Persistence;
 using Agw.Settings.Contracts;
 using Agw.Setup.Services;
+using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -115,6 +120,55 @@ public sealed class DatabaseInitializationStateStoreTests : IAsyncLifetime
         Assert.Equal(0L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
+    public static bool PostgresEnabled =>
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING"));
+
+    [Fact]
+    public async Task RefreshAsync_StorageMissing_ReadsStateWithoutFailedCommands()
+    {
+        var directory = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".scratch", $"auth-storage-{Guid.NewGuid():N}")
+        );
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "storage.db");
+        try
+        {
+            await VerifyStorageLifecycleAsync(DatabaseProvider.Sqlite, $"Data Source={path};Pooling=False", path);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact(
+        SkipUnless = nameof(PostgresEnabled),
+        Skip = "Requires an isolated PostgreSQL server with CREATE DATABASE permission."
+    )]
+    public async Task Postgres_RefreshAsync_StorageMissing_ReadsStateWithoutFailedCommands()
+    {
+        var settings = new NpgsqlConnectionStringBuilder(
+            Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING")
+        )
+        {
+            Pooling = false,
+        };
+        var adminConnectionString = settings.ConnectionString;
+        var database = $"agw_auth_state_test_{Guid.NewGuid():N}";
+        settings.Database = database;
+        try
+        {
+            await VerifyStorageLifecycleAsync(DatabaseProvider.Postgres, settings.ConnectionString, database);
+        }
+        finally
+        {
+            await using var admin = new NpgsqlConnection(adminConnectionString);
+            await admin.OpenAsync(CancellationToken.None);
+            await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{database}\" WITH (FORCE)", admin);
+            await drop.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+    }
+
     [Fact]
     public async Task RefreshAsync_DatabaseReadFails_DiscardsCachedCredentials()
     {
@@ -134,6 +188,125 @@ public sealed class DatabaseInitializationStateStoreTests : IAsyncLifetime
     }
 
     private DatabaseInitializationStateStore CreateStore() => new(_services.GetRequiredService<IServiceScopeFactory>());
+
+    private static async Task VerifyStorageLifecycleAsync(
+        DatabaseProvider provider,
+        string connectionString,
+        string databaseMarker
+    )
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var commands = new CommandRecorder(databaseMarker);
+        await using var services = CreateServices(provider, connectionString);
+        var store = new DatabaseInitializationStateStore(services.GetRequiredService<IServiceScopeFactory>());
+
+        // 数据库还不存在。The database does not exist yet.
+        await store.RefreshAsync(token);
+        Assert.False(store.IsInitialized);
+
+        // 数据库已有其他表，但还没有 setting 表。The database has other tables but no setting table yet.
+        await using (var scope = services.CreateAsyncScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<AgwDbContext>().Database;
+            await database.EnsureCreatedAsync(token);
+            await database.ExecuteSqlRawAsync("DROP TABLE setting", token);
+        }
+        await store.RefreshAsync(token);
+        Assert.False(store.IsInitialized);
+
+        // 建立完整架构后完成 Setup。Setup completes after the full schema exists.
+        await using (var scope = services.CreateAsyncScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<AgwDbContext>().Database;
+            await database.EnsureDeletedAsync(token);
+            await database.EnsureCreatedAsync(token);
+        }
+        await store.PersistAsync("password-hash", token);
+        commands.Executed.Clear();
+        await store.RefreshAsync(token);
+        await store.RefreshAsync(token);
+
+        Assert.True(store.IsInitialized);
+        Assert.Equal(new AuthenticationSnapshot("password-hash", 1), store.GetAuthenticationSnapshot());
+        Assert.Empty(commands.Failed);
+        Assert.NotEmpty(commands.Executed);
+        Assert.DoesNotContain(
+            commands.Executed,
+            command =>
+                command.Contains("sqlite_master", StringComparison.Ordinal)
+                || command.Contains("to_regclass", StringComparison.Ordinal)
+        );
+    }
+
+    private static ServiceProvider CreateServices(DatabaseProvider provider, string connectionString)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddAuth();
+        services.AddSettings();
+        services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<ISettingsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddDbContext<AgwDbContext>(options =>
+            AgwDbContextOptionsConfigurator.Configure(options, provider, connectionString)
+        );
+        services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>
+    /// 通过 EF 的 DiagnosticListener 记录某个数据库上执行成功和失败的命令，按连接字符串区分并行测试。
+    /// Records commands executed and failed on one database through EF's DiagnosticListener, keyed by the connection string.
+    /// </summary>
+    private sealed class CommandRecorder
+        : IObserver<DiagnosticListener>,
+            IObserver<KeyValuePair<string, object?>>,
+            IDisposable
+    {
+        private readonly string _databaseMarker;
+        private readonly List<IDisposable> _subscriptions = [];
+
+        public CommandRecorder(string databaseMarker)
+        {
+            _databaseMarker = databaseMarker;
+            lock (_subscriptions)
+                _subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(this));
+        }
+
+        public ConcurrentQueue<string> Executed { get; } = new();
+
+        public ConcurrentQueue<string> Failed { get; } = new();
+
+        public void OnNext(DiagnosticListener listener)
+        {
+            if (listener.Name == DbLoggerCategory.Name)
+                lock (_subscriptions)
+                    _subscriptions.Add(listener.Subscribe(this));
+        }
+
+        public void OnNext(KeyValuePair<string, object?> diagnostic)
+        {
+            if (
+                diagnostic.Value is not CommandEndEventData { Command: var command }
+                || command.Connection?.ConnectionString.Contains(_databaseMarker, StringComparison.Ordinal) != true
+            )
+                return;
+            if (diagnostic.Value is CommandErrorEventData)
+                Failed.Enqueue(command.CommandText);
+            else if (diagnostic.Value is CommandExecutedEventData)
+                Executed.Enqueue(command.CommandText);
+        }
+
+        public void OnCompleted() { }
+
+        public void OnError(Exception error) { }
+
+        public void Dispose()
+        {
+            lock (_subscriptions)
+                foreach (var subscription in _subscriptions)
+                    subscription.Dispose();
+        }
+    }
 
     [Theory]
     [InlineData("{broken-private-marker")]

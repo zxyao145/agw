@@ -53,7 +53,7 @@ Do not work around a failure by disabling issuer, audience, signature, state, no
 
 ## Logs and telemetry
 
-`AgwLogDir` defaults to `./logs` and does not follow `AgwDataDir`. Inspect the relevant role's logs in split deployments. Configure `OpenTelemetry:OtlpEndpoint` for centralized telemetry. Blank or missing values disable OpenTelemetry tracing, metrics, and log export.
+`AgwLogDir` defaults to `<AgwDataDir>/logs`, for example `~/Library/Application Support/Agw/logs` on macOS. General, error, and role logs are `agw-info-*.log`, `agw-error-*.log`, and `application-{role}-*.log`. Inspect the relevant role's logs in split deployments. Configure `OpenTelemetry:OtlpEndpoint` for centralized telemetry. Blank or missing values disable OpenTelemetry tracing, metrics, and log export.
 
 History uses Interval batch writes. The Host template sets `ConversationHistory:FlushIntervalSeconds` to 10 seconds; omitted configuration falls back to five seconds. Live output and committed history can differ temporarily.
 

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Reflection;
 using Agw.A2A.Extensions;
@@ -7,6 +8,7 @@ using Agw.Auth.Extensions;
 using Agw.Files;
 using Agw.Host.Data;
 using Agw.Host.Hosting;
+using Agw.Host.Logging;
 using Agw.Host.Middleware;
 using Agw.Host.OpenApi;
 using Agw.Host.Runtime;
@@ -42,7 +44,8 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using Serilog;
-using Serilog.Enrichers.OpenTelemetry;
+using Serilog.Core;
+using Serilog.Debugging;
 
 namespace Agw.Host;
 
@@ -54,72 +57,52 @@ public static class AgwHostApplication
         var hasControlPlane = profile is AgwHostProfile.ControlPlane or AgwHostProfile.Standalone;
         var hasDataPlane = profile is AgwHostProfile.DataPlane or AgwHostProfile.Standalone;
         var contentRootPath = AppContext.BaseDirectory;
-
-        if (args.Length == 1 && string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
-        {
-            args = [];
-        }
-
-        if (
-            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
-            && !string.Equals(
-                Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"),
-                "true",
-                StringComparison.OrdinalIgnoreCase
-            )
-        )
-        {
-            Environment.SetEnvironmentVariable("ASPNETCORE_URLS", LocalServerEndpointResolver.ResolveDefaultUrl());
-        }
-
-        var builder = WebApplication.CreateBuilder(
-            new WebApplicationOptions { Args = args, ContentRootPath = contentRootPath }
-        );
-        var dataPaths = AgwDataPaths.ResolveFromConfiguration(builder.Configuration);
-        dataPaths.EnsureCreated();
-
-        // Configure Serilog early in the pipeline
-        Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(
-                new ConfigurationBuilder()
-                    .SetBasePath(contentRootPath)
-                    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                    .AddJsonFile(
-                        $"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json",
-                        optional: true,
-                        reloadOnChange: true
-                    )
-                    .Build()
-            )
-            // Keep framework protocol errors visible for configuration and callback
-            // diagnostics; Agw.Auth.Oidc also emits bounded stage/category details.
-            .MinimumLevel.Override(
-                "Microsoft.AspNetCore.Authentication.OpenIdConnect",
-                Serilog.Events.LogEventLevel.Error
-            )
-            .MinimumLevel.Override("Microsoft.AspNetCore.Authentication.OAuth", Serilog.Events.LogEventLevel.Error)
-            .Enrich.FromLogContext()
-            .Enrich.WithMachineName()
-            .Enrich.WithThreadId()
-            .Enrich.WithOpenTelemetryTraceId()
-            .Enrich.WithOpenTelemetrySpanId()
-            .WriteTo.Async(sink =>
-                sink.File(
-                    Path.Combine(dataPaths.LogsDirectory, $"application-{profile.ToString().ToLowerInvariant()}-.log"),
-                    rollingInterval: RollingInterval.Hour,
-                    retainedFileCountLimit: 30,
-                    shared: true,
-                    flushToDiskInterval: TimeSpan.FromSeconds(1)
-                )
-            )
-            .CreateLogger();
+        // 启动失败诊断使用的阶段和相关路径；发布运行信息后启动完成。
+        // Stage and related path for startup failure diagnostics; startup completes after publishing runtime information.
+        var startupStage = ServerStartupStage.Configuration;
+        string? startupPath = null;
+        var started = false;
 
         try
         {
+            if (args.Length > 0 && string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
+            {
+                args = args[1..];
+            }
+
+            if (
+                string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
+                && !string.Equals(
+                    Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                Environment.SetEnvironmentVariable("ASPNETCORE_URLS", LocalServerEndpointResolver.ResolveDefaultUrl());
+            }
+
+            var builder = WebApplication.CreateBuilder(
+                new WebApplicationOptions { Args = args, ContentRootPath = contentRootPath }
+            );
+
+            startupStage = ServerStartupStage.DataPaths;
+            var dataPaths = AgwDataPaths.ResolveFromConfiguration(builder.Configuration);
+
+            startupStage = ServerStartupStage.Directories;
+            dataPaths.EnsureCreated(directory => startupPath = directory);
+
+            startupStage = ServerStartupStage.Logger;
+            startupPath = dataPaths.LogsDirectory;
+            Log.Logger = CreateLogger(builder.Configuration, dataPaths, profile);
             Log.Information("Starting Agw {HostProfile} Host", profile);
 
+            startupStage = ServerStartupStage.Deployment;
+            startupPath = dataPaths.Root;
             ServerDeploymentConfiguration.Apply(builder.Configuration);
             ServerDeploymentConfiguration.Validate(profile, builder.Configuration);
+
+            startupStage = ServerStartupStage.HostStart;
             builder.Services.AddSingleton(dataPaths);
             builder.Services.AddSingleton(TimeProvider.System);
             builder
@@ -456,6 +439,7 @@ public static class AgwHostApplication
                 );
             }
 
+            started = true;
             try
             {
                 await app.WaitForShutdownAsync();
@@ -472,6 +456,12 @@ public static class AgwHostApplication
         {
             Log.Warning(hae, "HostAbortedException");
         }
+        catch (Exception ex) when (!started)
+        {
+            ServerStartupFailure.Write(Console.Error, TimeProvider.System, startupStage, profile, startupPath, ex);
+            Log.Fatal(ex, "Agw {HostProfile} Host failed to start during {StartupStage}", profile, startupStage);
+            Environment.ExitCode = ServerStartupFailure.ExitCode;
+        }
         catch (Exception ex)
         {
             Log.Fatal(ex, "Agw Host terminated unexpectedly");
@@ -481,5 +471,31 @@ public static class AgwHostApplication
         {
             Log.CloseAndFlush();
         }
+    }
+
+    private static Logger CreateLogger(
+        ConfigurationManager configuration,
+        AgwDataPaths dataPaths,
+        AgwHostProfile profile
+    )
+    {
+        // 构造期间的 SelfLog 消息表示配置错误；构造完成后的异步日志失败只写入 stderr。
+        // SelfLog messages during construction are configuration errors; later asynchronous failures only go to stderr.
+        var constructionErrors = new ConcurrentQueue<string>();
+        SelfLog.Enable(message =>
+        {
+            Console.Error.WriteLine(message);
+            constructionErrors.Enqueue(message);
+        });
+        var logger = AgwLoggerFactory.CreateLogger(configuration, dataPaths, profile);
+        SelfLog.Enable(Console.Error);
+        if (constructionErrors.IsEmpty)
+            return logger;
+
+        logger.Dispose();
+        throw new AgwException(
+            ErrorCodes.InvalidParam,
+            $"Serilog reported errors while creating the logger: {string.Join(" ", constructionErrors)}"
+        );
     }
 }

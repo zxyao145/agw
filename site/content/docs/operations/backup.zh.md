@@ -12,7 +12,7 @@ translationKey: docs/operations/backup
 
 ## 数据范围
 
-`AgwDataDir` 默认 `~/agw`，Docker 使用 `/data`。路径支持 `~`，其他相对路径相对进程工作目录解析。默认的 SQLite 数据库文件是 `<AgwDataDir>/database/agw.db`，Docker 中为 `/data/database/agw.db`。
+`AgwDataDir` 在 macOS 上默认是 `~/Library/Application Support/Agw`，Linux 上是 `~/.local/share/agw`，Windows 上是 `%LOCALAPPDATA%\Agw`，Docker 使用 `/data`。路径支持 `~`，其他相对路径相对进程工作目录解析。默认的 SQLite 数据库文件是 `<AgwDataDir>/database/agw.db`，Docker 中为 `/data/database/agw.db`。
 
 需要一起保存：
 

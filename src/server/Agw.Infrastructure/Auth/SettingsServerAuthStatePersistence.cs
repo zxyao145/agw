@@ -1,8 +1,10 @@
 using Agw.Auth.Contracts;
+using Agw.Infrastructure.Data;
 using Agw.Settings.Contracts;
 using Agw.Shared.Exceptions;
-using Microsoft.Data.Sqlite;
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Agw.Infrastructure.Auth;
 
@@ -11,12 +13,44 @@ public sealed class SettingsServerAuthStatePersistence : IServerAuthStatePersist
 {
     private const string Key = "auth";
     private readonly ISettingsStore _settings;
+    private readonly AgwDbContext _dbContext;
     private readonly TimeProvider _clock;
 
-    public SettingsServerAuthStatePersistence(ISettingsStore settings, TimeProvider clock)
+    public SettingsServerAuthStatePersistence(ISettingsStore settings, AgwDbContext dbContext, TimeProvider clock)
     {
         _settings = settings;
+        _dbContext = dbContext;
         _clock = clock;
+    }
+
+    public async Task<bool> StorageExistsAsync(CancellationToken cancellationToken = default)
+    {
+        // 先确认数据库存在：EF 把这一步的连接失败作为预期情况，只记录 Debug 日志；再检查 setting 表，不执行会失败的查询。
+        // Checks the database first, where EF treats connection failures as expected and logs them at Debug;
+        // then checks the setting table without running a query that fails.
+        var database = _dbContext.Database;
+        if (!await database.GetService<IRelationalDatabaseCreator>().ExistsAsync(cancellationToken))
+            return false;
+
+        var table = _dbContext.Settings.EntityType;
+        var tableName = table.GetTableName()!;
+        if (database.IsSqlite())
+            return await database
+                .SqlQuery<bool>(
+                    $"SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = {tableName}) AS \"Value\""
+                )
+                .SingleAsync(cancellationToken);
+        if (database.IsNpgsql())
+        {
+            var qualifiedName = database
+                .GetService<ISqlGenerationHelper>()
+                .DelimitIdentifier(tableName, table.GetSchema());
+            return await database
+                .SqlQuery<bool>($"SELECT to_regclass({qualifiedName}) IS NOT NULL AS \"Value\"")
+                .SingleAsync(cancellationToken);
+        }
+
+        throw new AgwException(ErrorCodes.UnsupportedDatabaseProvider);
     }
 
     public async Task<AuthenticationSnapshot?> ReadAsync(CancellationToken cancellationToken = default)
@@ -64,23 +98,7 @@ public sealed class SettingsServerAuthStatePersistence : IServerAuthStatePersist
 
     private async Task<SettingSnapshot<AuthenticationSettings>?> ReadSettingsAsync(CancellationToken cancellationToken)
     {
-        SettingSnapshot<AuthenticationSettings>? snapshot;
-        try
-        {
-            snapshot = await _settings.GetGlobalAsync<AuthenticationSettings>(Key, cancellationToken);
-        }
-        catch (SqliteException exception)
-            when (exception.SqliteErrorCode == 1
-                && exception.Message.Contains("no such table: setting", StringComparison.Ordinal)
-            )
-        {
-            return null;
-        }
-        catch (PostgresException exception)
-            when (exception.SqlState is PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.InvalidCatalogName)
-        {
-            return null;
-        }
+        var snapshot = await _settings.GetGlobalAsync<AuthenticationSettings>(Key, cancellationToken);
         if (
             snapshot != null
             && (

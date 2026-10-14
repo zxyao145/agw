@@ -129,8 +129,8 @@ Control Plane 与 Data Plane 分离部署的说明见[部署指南](docs/4.Deplo
 
 ```json
 {
-  "AgwDataDir": "~/agw",
-  "AgwLogDir": "./logs",
+  "AgwDataDir": null,
+  "AgwLogDir": null,
   "Database": {
     "Provider": "sqlite",
     "ConnectionString": "Data Source=agw.db"
@@ -148,8 +148,8 @@ Control Plane 与 Data Plane 分离部署的说明见[部署指南](docs/4.Deplo
 }
 ```
 
-- `AgwDataDir` 保存数据库、`skills/` 和 Data Protection `keys/`。默认位置是 `~/agw`（Windows 上是 `%USERPROFILE%\agw`），容器中是 `/data`。使用相对路径的 SQLite 文件位于该目录的 `database/` 子目录中。
-- `AgwLogDir` 默认是进程工作目录下的 `./logs`，与 `AgwDataDir` 相互独立。
+- `AgwDataDir` 保存数据库、`skills/` 和 Data Protection `keys/`。默认位置在 macOS 上是 `~/Library/Application Support/Agw`，Linux 上是 `~/.local/share/agw`，Windows 上是 `%LOCALAPPDATA%\Agw`，容器中是 `/data`。使用默认位置启动时，如果原来的 `~/agw` 中有数据、使用它的 Server 已经停止并且目标目录可用，会把数据迁移到新位置。使用相对路径的 SQLite 文件位于该目录的 `database/` 子目录中。
+- `AgwLogDir` 默认是 `<AgwDataDir>/logs`，也可以单独设置。显式设置的相对路径以进程工作目录为起点。
 - 数据库 Provider 支持 `sqlite` 和 `postgres`。配置以单个配置键为单位进行覆盖，因此更换数据库时需要同时设置 `Database:Provider` 和 `Database:ConnectionString`。
 - `Execution:Provider` 支持 `InProcess` 和 `Distributed`。分布式执行要求数据库与锁都使用 PostgreSQL；事件流默认使用 PostgreSQL，也可以通过 `Execution:Distributed:EventStream:Provider` 改用 Redis。
 - 锁 Provider 支持 `inmemory` 和 `postgres`。`DistributedLock:Provider` 是 `null` 或不存在时，SQLite 使用进程内锁，PostgreSQL 使用 advisory lock；PostgreSQL 锁的连接字符串为空时，复用 `Database:ConnectionString`。
