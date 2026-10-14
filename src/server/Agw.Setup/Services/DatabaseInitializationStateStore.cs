@@ -39,6 +39,11 @@ public sealed class DatabaseInitializationStateStore
             var store = scope.ServiceProvider.GetRequiredService<IServerAuthStatePersistence>();
             if (write != null)
                 await write(store);
+            // 还没有读到管理员状态时，首次 Setup 之前的数据库或表可能不存在；读到之后存储一定存在，不再重复检查。
+            // Before administrator state has been read, the database or table may not exist until the first Setup;
+            // once it has been read the storage exists, so the check is skipped.
+            else if (_snapshot == null && !await store.StorageExistsAsync(cancellationToken))
+                return;
             _snapshot = await store.ReadAsync(cancellationToken);
         }
         catch

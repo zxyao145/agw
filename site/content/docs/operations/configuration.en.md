@@ -16,7 +16,7 @@ For remote access, check listening addresses, allowed origins, proxy trust, and 
 
 ## Configuration and precedence
 
-General precedence, from low to high: built-in defaults → `appsettings.json` → environment-specific JSON → Development Secrets → environment variables → command line. Files reside in the Server executable directory, and overrides apply per key. Serilog has a separate configuration reader described below.
+General precedence, from low to high: built-in defaults → `appsettings.json` → environment-specific JSON → Development Secrets → environment variables → command line. Files reside in the Server executable directory, and overrides apply per key. Serilog settings follow the same chain.
 
 Colons denote hierarchy: `Database:Provider` becomes nested JSON, `Database__Provider` in the environment, or `--Database:Provider postgres` on the command line. Use `true` and `false` for booleans and the listed names for enums.
 
@@ -132,8 +132,8 @@ These settings apply to either topology. In split deployments, configure them ac
 | --- | --- | --- |
 | `ASPNETCORE_URLS / --urls` | Local default port 30816; container runtime supplies its binding | Listening URLs. Use `--urls http://127.0.0.1:30816` for local access or bind another address as required. Separate multiple URLs with semicolons. |
 | `ASPNETCORE_ENVIRONMENT` | Production | Selects environment-specific JSON, such as `appsettings.Production.json`. Common names are Development, Staging, and Production; custom names are allowed. |
-| `AgwDataDir` | ~/agw | AGW data root for runtime data, Skills, encryption keys, and related files. Supports `~`; other relative paths resolve from the process working directory. |
-| `AgwLogDir` | ./logs | Separate log directory; moving the data root does not move it. Supports `~`, with other relative paths relative to the working directory. |
+| `AgwDataDir` | macOS: `~/Library/Application Support/Agw`; Linux: `~/.local/share/agw`; Windows: `%LOCALAPPDATA%\Agw`; container: `/data` | AGW data root for runtime data, Skills, encryption keys, and related files. Supports `~`; other relative paths resolve from the process working directory, so services should use absolute paths. |
+| `AgwLogDir` | `<AgwDataDir>/logs` | Log directory. Missing or blank values follow the data root; set an absolute path to keep logs elsewhere. Supports `~`; other relative paths resolve from the process working directory. |
 | `AllowedHosts` | * | HTTP Host filtering. `*` allows any hostname; use semicolon-separated hostnames such as `agw.example.com;localhost` to restrict it. This is not the client-origin list. |
 
 
@@ -216,20 +216,28 @@ All fields below use the prefix `OpenTelemetry:`.
 | `Serilog:MinimumLevel:Override:Microsoft.AspNetCore` | Warning | Override the ASP.NET Core category. |
 | `Serilog:MinimumLevel:Override:Microsoft.EntityFrameworkCore` | Warning | Override the EF Core category. |
 | `Serilog:MinimumLevel:Override:System` | Warning | Override System; additional categories use the same structure. |
-| `Serilog:WriteTo:0:Name` | Async | Name of the template’s asynchronous sink wrapper. |
-| `Serilog:WriteTo:0:Args:configure:0:Name` | Console | Console sink inside the asynchronous wrapper. |
-| `Serilog:WriteTo:0:Args:configure:0:Args:outputTemplate` | See below | Console format containing timestamp, level, source, TraceId, SpanId, thread, message, and exception. |
+| `Serilog:WriteTo:Console:Name` | Async | Asynchronous wrapper of the console sink. |
+| `Serilog:WriteTo:Console:Args:configure:Console:Name` | Console | Console sink inside the asynchronous wrapper. |
+| `Serilog:WriteTo:Console:Args:configure:Console:Args:outputTemplate` | See below | Console format containing timestamp, level, TraceId, SpanId, TraceFlags, thread, source, message, properties, and exception. |
+| `Serilog:WriteTo:Files:Name` | Async | Asynchronous wrapper of the built-in log files. Must remain Async. |
+| `Serilog:WriteTo:Files:Args:bufferSize` / `blockWhenFull` | 10000 / false | Queue length of the wrapper; when the queue is full, new events are dropped instead of blocking requests. |
+| `Serilog:WriteTo:Files:Args:configure:Info:Args:path` | agw-info-.log | General log file name pattern, written to `AgwLogDir`. Only a file name is accepted. |
+| `Serilog:WriteTo:Files:Args:configure:Error:Args:path` | agw-error-.log | Error log file name pattern, written to `AgwLogDir`. Only a file name is accepted. |
+| `Serilog:WriteTo:Files:Args:configure:Info:Args:{rollingInterval, retainedFileCountLimit, fileSizeLimitBytes, rollOnFileSizeLimit}` | Hour, 168, 2147483648, true | Rolling and retention of the general log: a new file every hour and whenever a file reaches 2 GiB, keeping 168 files. The Error sink uses the same keys and values. |
+| `Serilog:WriteTo:Files:Args:configure:Error:Args:restrictedToMinimumLevel` | Error | The error log keeps only Error and Fatal events. |
 | `Serilog:Enrich` | FromLogContext, WithMachineName, WithThreadId, WithOpenTelemetryTraceId, WithOpenTelemetrySpanId | Add context, machine, thread, and tracing identifiers. |
 
-The Host reads Serilog separately from `appsettings.json` and `appsettings.{ASPNETCORE_ENVIRONMENT}.json`. Do not assume `Serilog__...` environment variables override this pipeline. Edit the relevant JSON and restart to change its output or levels. `Logging` and `Serilog` are separate level configurations; the main output currently uses Serilog.
+Serilog reads the effective Host configuration, so environment-specific JSON, environment variables such as `Serilog__MinimumLevel__Default=Debug` or `Serilog__WriteTo__Files__Args__configure__Info__Args__retainedFileCountLimit=48`, and command-line arguments override individual keys. Restart after changing them. `Serilog:WriteTo` and `Serilog:WriteTo:Files:Args:configure` use named sections; array indexes such as `Serilog:WriteTo:0` stop startup with an error naming the key. The `Info` and `Error` sinks must keep the `File` name, and their `path` must be a file name; absolute paths, directory separators, `.`, and `..` are rejected because `AgwLogDir` sets their directory. Sinks added under other names keep the paths they configure. `Logging` and `Serilog` are separate level configurations; the main output currently uses Serilog.
 
 All Microsoft logging levels are `Trace` (finest tracing), `Debug` (diagnostics), `Information` (normal activity), `Warning` (potential trouble), `Error` (failed operations), `Critical` (severe failures), and `None` (disabled). Serilog supports `Verbose`, `Debug`, `Information`, `Warning`, `Error`, and `Fatal`. Verbose is its finest tracing level and Fatal denotes severe failures; its minimum levels do not include None.
 
 WriteTo Name, Using, and Enrich values are plugin names, not fixed enums. The table lists the current template. The Host additionally writes `AgwLogDir/application-{profile}-.log`, rolling hourly, retaining 30 files, and flushing every second. These values are fixed in code rather than configurable keys.
 
 ```text
-[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] [ThreadId:{ThreadId}] {Message:lj}{NewLine}{Exception}
+{Timestamp:yyyy-MM-ddTHH:mm:ss.fffK} [{Level:u3}] | [TraceId:{TraceId}] [SpanId:{SpanId}] [TraceFlags:{TraceFlags}] [ThreadId:{ThreadId}] | [{Flag}] | {SourceContext} | {Message:lj} | {Properties:j} {NewLine}{Exception}
 ```
+
+The built-in log files use the same format.
 
 ### Authentication and API Keys
 

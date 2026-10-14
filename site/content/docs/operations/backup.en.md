@@ -12,7 +12,7 @@ Locate the actual database, data directory, and Project workspaces first. Use th
 
 ## What to preserve
 
-`AgwDataDir` defaults to `~/agw`; Docker uses `/data`. Paths expand `~`; other relative paths resolve from the process working directory. The default SQLite database file is `<AgwDataDir>/database/agw.db`, or `/data/database/agw.db` in Docker.
+`AgwDataDir` defaults to `~/Library/Application Support/Agw` on macOS, `~/.local/share/agw` on Linux, and `%LOCALAPPDATA%\Agw` on Windows; Docker uses `/data`. Paths expand `~`; other relative paths resolve from the process working directory. The default SQLite database file is `<AgwDataDir>/database/agw.db`, or `/data/database/agw.db` in Docker.
 
 Preserve together:
 
