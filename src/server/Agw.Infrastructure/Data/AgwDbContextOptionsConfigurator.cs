@@ -1,3 +1,4 @@
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared.Configuration;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,7 @@ public static class AgwDbContextOptionsConfigurator
 
         options
             .UseSqlite(connectionString, migrations => migrations.MigrationsAssembly(SqliteMigrationsAssembly))
-            .UseSnakeCaseNamingConvention();
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(SqliteBusyTimeoutInterceptor.Instance);
     }
 }
