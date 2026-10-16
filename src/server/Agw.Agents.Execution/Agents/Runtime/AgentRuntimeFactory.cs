@@ -40,6 +40,7 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly AgentRuntimeConfiguration _configuration;
+    private readonly OllamaChatClientFactory _ollamaChatClientFactory;
     private readonly IAgentExecutionContextAccessor? _executionContext;
     private readonly IProjectDefaultResolver _projectDefaults;
     private readonly TimeProvider _timeProvider;
@@ -65,6 +66,7 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
         IServiceProvider services,
         IProjectDefaultResolver projectDefaults,
         AgentRuntimeConfiguration configuration,
+        OllamaChatClientFactory ollamaChatClientFactory,
         IEnumerable<IAgentSkillRegistration> skillRegistrations,
         IRemoteSkillContentResolver? remoteSkillContentResolver,
         ILoggerFactory loggerFactory,
@@ -96,6 +98,7 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
         _remoteSkillContentResolver = remoteSkillContentResolver;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
         _configuration = configuration;
+        _ollamaChatClientFactory = ollamaChatClientFactory;
         _executionContext = executionContext;
         _projectDefaults = projectDefaults;
         _generatedToolCatalog = generatedToolCatalog;

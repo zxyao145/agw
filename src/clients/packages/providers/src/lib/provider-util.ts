@@ -6,6 +6,8 @@ export function getProviderTypeName(providerType: number): string {
       return "OpenAIResponses";
     case 2:
       return "Anthropic";
+    case 3:
+      return "OllamaNative";
     default:
       return "Unknown";
   }

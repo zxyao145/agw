@@ -53,5 +53,15 @@ export function findDiscoveryApiKey(
 }
 
 export function isProviderModelDiscoverySupported(providerType: ProviderType): boolean {
-  return providerType === "OpenAIChatCompletions" || providerType === "OpenAIResponses";
+  return (
+    providerType === "OpenAIChatCompletions" ||
+    providerType === "OpenAIResponses" ||
+    providerType === "OllamaNative"
+  );
+}
+
+// Ollama 允许无认证访问；OpenAI 模型发现需要启用的 ApiKey。
+// Ollama allows unauthenticated access; OpenAI model discovery needs an enabled ApiKey.
+export function isProviderModelDiscoveryApiKeyRequired(providerType: ProviderType): boolean {
+  return providerType !== "OllamaNative";
 }

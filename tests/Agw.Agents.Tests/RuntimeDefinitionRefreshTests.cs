@@ -368,6 +368,7 @@ public sealed class RuntimeDefinitionRefreshTests
                 services: _services,
                 projectDefaults: new TestProjectDefaultResolver(),
                 configuration: configuration,
+                ollamaChatClientFactory: null!,
                 skillRegistrations: [],
                 remoteSkillContentResolver: null,
                 loggerFactory: NullLoggerFactory.Instance,

@@ -1,10 +1,12 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
-using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Infrastructure;
 using Agw.Shared.Exceptions;
+using Agw.Testing;
 
 namespace Agw.Projects.Tests;
 
@@ -166,6 +168,66 @@ public class ProviderModelDiscoveryServiceTests
         );
 
         Assert.Equal(ErrorCodes.ProviderModelDiscoveryFailed.Code, exception.Code);
+    }
+
+    [Theory]
+    [InlineData("not-a-url")]
+    [InlineData("/ollama")]
+    [InlineData("ftp://ollama.test")]
+    public async Task DiscoverAsync_OllamaInvalidEndpoint_ThrowsBeforeCreatingClient(string endpoint)
+    {
+        using var httpClientFactory = new RecordingHttpClientFactory();
+        var service = new ProviderModelDiscoveryService(httpClientFactory);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(ProviderType.OllamaNative, endpoint),
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidUrl.Code, exception.Code);
+        Assert.Empty(httpClientFactory.Clients);
+    }
+
+    [Theory]
+    [InlineData("", null, null, "/api/tags")]
+    [InlineData("/ollama", "  ", null, "/ollama/api/tags")]
+    [InlineData("/team/ollama/", " secret ", "secret", "/team/ollama/api/tags")]
+    public async Task DiscoverAsync_OllamaUnreachableEndpoint_ThrowsDiscoveryFailed(
+        string pathPrefix,
+        string? apiKey,
+        string? expectedToken,
+        string expectedTagsPath
+    )
+    {
+        // 占用后释放一个本机端口，连接该端口会被拒绝。
+        // Reserve and release a local port so connections to it are refused.
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        using var httpClientFactory = new RecordingHttpClientFactory();
+        var service = new ProviderModelDiscoveryService(httpClientFactory);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(
+                    ProviderType.OllamaNative,
+                    $"http://127.0.0.1:{port}{pathPrefix}",
+                    apiKey
+                ),
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.ProviderModelDiscoveryFailed.Code, exception.Code);
+        var httpClient = Assert.Single(httpClientFactory.Clients);
+        Assert.Equal(expectedTagsPath, new Uri(httpClient.BaseAddress!, "api/tags").AbsolutePath);
+        Assert.Equal(
+            expectedToken == null ? null : new AuthenticationHeaderValue("Bearer", expectedToken),
+            httpClient.DefaultRequestHeaders.Authorization
+        );
     }
 
     private static ProviderModelDiscoveryService CreateService(Func<HttpRequestMessage, HttpResponseMessage> handler)

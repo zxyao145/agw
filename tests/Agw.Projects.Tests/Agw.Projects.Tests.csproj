@@ -5,6 +5,7 @@
 
   <ItemGroup>
     <Compile Include="../ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
+    <Compile Include="../RecordingHttpClientFactory.cs" Link="RecordingHttpClientFactory.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

@@ -15,6 +15,7 @@
     <PackageVersion Include="Microsoft.Agents.AI.Tools.Shell" Version="1.21.0-preview.260911.1" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.21.0" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.21.0-preview.260911.1" />
+    <PackageVersion Include="OllamaSharp" Version="5.5.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="A2A" Version="1.0.0-preview2" />

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
@@ -89,6 +90,89 @@ public class ProviderAppServiceTests
                 Assert.Equal(0, relation.RpsLimit);
             }
         );
+    }
+
+    [Fact]
+    public async Task CreateAndUpdateAsync_OllamaWithoutAuth_PreservesProviderAndOwnership()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        Guid providerId;
+        await using (var createContext = new AgwDbContext(options))
+        {
+            var created = await CreateService(createContext)
+                .CreateAsync(
+                    new ProviderCreateRequest(
+                        Name: "Local Ollama",
+                        ProviderType: ProviderType.OllamaNative,
+                        Description: null,
+                        Endpoint: "http://localhost:11434",
+                        AuthConfigs: [],
+                        ModelNames: ["qwen3:4b"]
+                    )
+                );
+            providerId = created.Id;
+        }
+
+        await using (var updateContext = new AgwDbContext(options))
+        {
+            var updated = await CreateService(updateContext)
+                .UpdateAsync(
+                    providerId,
+                    new ProviderUpdateRequest(
+                        Name: "Remote Ollama",
+                        ProviderType: ProviderType.OllamaNative,
+                        Description: "updated",
+                        Endpoint: "http://ollama.test/ollama/",
+                        AuthConfigs: [],
+                        ModelNames: ["qwen3:4b", "llama3.2:latest"]
+                    )
+                );
+            Assert.NotNull(updated);
+        }
+
+        await using (var otherContext = new AgwDbContext(options))
+        {
+            var otherService = CreateService(otherContext, "other-user");
+            Assert.Empty(await otherService.ListAsync());
+            Assert.Null(await otherService.GetAsync(providerId));
+            Assert.Null(
+                await otherService.UpdateAsync(
+                    providerId,
+                    new ProviderUpdateRequest(
+                        Name: "Hijacked",
+                        ProviderType: ProviderType.OllamaNative,
+                        Description: null,
+                        Endpoint: "http://attacker.test",
+                        AuthConfigs: [],
+                        ModelNames: []
+                    )
+                )
+            );
+            Assert.False(await otherService.DeleteAsync(providerId));
+        }
+
+        await using var verifyContext = new AgwDbContext(options);
+        var provider = await CreateService(verifyContext).GetAsync(providerId);
+        Assert.NotNull(provider);
+        Assert.Equal("Remote Ollama", provider.Name);
+        Assert.Equal("http://ollama.test/ollama/", provider.Endpoint);
+        Assert.Equal("tester", provider.CreateBy);
+        Assert.Empty(provider.AuthConfigs);
+        Assert.Equal("\"OllamaNative\"", JsonSerializer.Serialize(provider.ProviderType));
+        var relatedNames = await verifyContext
+            .ModelProviders.Where(relation => relation.ProviderId == providerId)
+            .Join(verifyContext.Models, relation => relation.ModelId, model => model.Id, (_, model) => model.Name)
+            .OrderBy(name => name)
+            .ToListAsync(cancellationToken);
+        Assert.Equal(["llama3.2:latest", "qwen3:4b"], relatedNames);
     }
 
     [Fact]
@@ -446,9 +530,9 @@ public class ProviderAppServiceTests
         Assert.Equal("new-key", authConfig.ApiKey);
     }
 
-    private static ProviderAppService CreateService(AgwDbContext dbContext)
+    private static ProviderAppService CreateService(AgwDbContext dbContext, string userId = "tester")
     {
-        var user = new TestUserInfoService("tester");
+        var user = new TestUserInfoService(userId);
         return new ProviderAppService(
             dbContext,
             new ProviderModelBindingDomainService(
