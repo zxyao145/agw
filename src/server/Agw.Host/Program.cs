@@ -23,6 +23,7 @@ using Agw.Providers;
 using Agw.Settings;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
+using Agw.Shared.Configuration;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
@@ -37,6 +38,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -101,6 +103,24 @@ public static class AgwHostApplication
             startupPath = dataPaths.Root;
             ServerDeploymentConfiguration.Apply(builder.Configuration);
             ServerDeploymentConfiguration.Validate(profile, builder.Configuration);
+
+            // Server 第一次访问数据库之前确立 WAL，命令行子命令也包括在内。
+            // WAL is established before the Server's first database access, including command-line subcommands.
+            startupStage = ServerStartupStage.Database;
+            var databaseSettings =
+                builder.Configuration.GetSection(DatabaseSettings.SectionName).Get<DatabaseSettings>()
+                ?? new DatabaseSettings();
+            var databaseConnectionString = DatabaseConnectionStringResolver.Resolve(
+                databaseSettings.Provider,
+                databaseSettings.ConnectionString,
+                dataPaths
+            );
+            if (databaseSettings.Provider == DatabaseProvider.Sqlite)
+            {
+                startupPath = new SqliteConnectionStringBuilder(databaseConnectionString).DataSource;
+                var databaseFile = SqliteJournalMode.EnsureWriteAheadLog(databaseConnectionString);
+                Log.Information("SQLite database {DatabaseFile} uses WAL journal mode", databaseFile ?? ":memory:");
+            }
 
             startupStage = ServerStartupStage.HostStart;
             builder.Services.AddSingleton(dataPaths);
@@ -288,13 +308,7 @@ public static class AgwHostApplication
             if (hasControlPlane && await ServerCommand.TryRunAsync(args, stateStore))
                 return;
             _ = app.Services.GetRequiredService<ToolRegistryService>();
-            var databaseSettings = app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value;
             Log.Information("Database provider: {DatabaseProvider}", databaseSettings.Provider);
-            var databaseConnectionString = DatabaseConnectionStringResolver.Resolve(
-                databaseSettings.Provider,
-                databaseSettings.ConnectionString,
-                dataPaths
-            );
             Log.Debug(
                 "Database connection string: {DatabaseConnectionString}",
                 DatabaseConnectionStringResolver.ToSafeLogValue(databaseConnectionString)

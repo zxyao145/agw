@@ -18,4 +18,18 @@ public sealed class SqliteRuntimeTests
 
         Assert.True(actual >= new Version(3, 50, 2), $"SQLite {actual} predates the CVE-2025-6965 fix.");
     }
+
+    [Fact]
+    public async Task OpenConnection_BundledNativeLibrary_ContainsWalResetFix()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(token);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT sqlite_version()";
+
+        var actual = Version.Parse(Assert.IsType<string>(await command.ExecuteScalarAsync(token)));
+
+        Assert.True(actual >= new Version(3, 51, 3), $"SQLite {actual} predates the WAL-reset fix.");
+    }
 }

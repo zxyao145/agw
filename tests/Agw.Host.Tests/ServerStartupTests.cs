@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -142,6 +143,79 @@ public sealed class ServerStartupTests : IDisposable
     }
 
     [Fact]
+    public async Task Start_DefaultSqlite_UsesWalJournalMode()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var data = Path.Combine(_directory, "data");
+        var database = Path.Combine(data, "database", "agw.db");
+        var server = Start(_directory, "serve", $"--AgwDataDir={data}");
+
+        await server.WaitUntilReadyAsync(Path.Combine(data, "runtime", "server.json"));
+        Assert.True(File.Exists(database));
+        Assert.Equal("wal", ExecuteScalar(database, "PRAGMA journal_mode"));
+        Assert.False(await server.IsInitializedAsync());
+        await server.StopAsync();
+
+        Assert.Equal(0, server.ExitCode);
+        Assert.Contains(
+            $"SQLite database {database} uses WAL journal mode",
+            ReadLogs(Path.Combine(data, "logs"), "agw-info-*.log")
+        );
+    }
+
+    [Fact]
+    public async Task Start_RollbackJournalDatabase_ConvertsToWal()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var data = Path.Combine(_directory, "data");
+        var database = Path.Combine(data, "database", "agw.db");
+        CreateRollbackJournalDatabase(database);
+        var server = Start(_directory, "serve", $"--AgwDataDir={data}");
+
+        await server.WaitUntilReadyAsync(Path.Combine(data, "runtime", "server.json"));
+        Assert.Equal("wal", ExecuteScalar(database, "PRAGMA journal_mode"));
+        Assert.Equal("kept", ExecuteScalar(database, "SELECT value FROM marker"));
+        await server.StopAsync();
+
+        Assert.Equal(0, server.ExitCode);
+    }
+
+    [Fact]
+    public async Task Start_SqliteDirectoryReadOnly_ReportsDatabaseFailure()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var data = Path.Combine(_directory, "data");
+        var databaseDirectory = Path.Combine(data, "database");
+        var database = Path.Combine(databaseDirectory, "agw.db");
+        CreateRollbackJournalDatabase(database);
+        File.SetUnixFileMode(databaseDirectory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var server = Start(_directory, "serve", $"--AgwDataDir={data}");
+
+            var failure = await server.WaitForStartupFailureAsync();
+
+            Assert.Equal("Database", failure.GetProperty("stage").GetString());
+            Assert.Equal(database, failure.GetProperty("path").GetString());
+            Assert.Equal("Microsoft.Data.Sqlite.SqliteException", failure.GetProperty("exceptionType").GetString());
+            await server.AssertHttpUnavailableAsync();
+        }
+        finally
+        {
+            File.SetUnixFileMode(
+                databaseDirectory,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+            );
+        }
+    }
+
+    [Fact]
     public async Task Start_InvalidJsonConfiguration_ReportsConfigurationFailure()
     {
         if (OperatingSystem.IsWindows())
@@ -216,6 +290,27 @@ public sealed class ServerStartupTests : IDisposable
         return string.Concat(files.Select(File.ReadAllText));
     }
 
+    /// <summary>
+    /// 创建 rollback journal（delete）模式的数据库和一张标记表。
+    /// Creates a rollback journal (delete) mode database with a marker table.
+    /// </summary>
+    private static void CreateRollbackJournalDatabase(string database)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(database)!);
+        Assert.Equal("delete", ExecuteScalar(database, "PRAGMA journal_mode = DELETE"));
+        ExecuteScalar(database, "CREATE TABLE marker (value TEXT NOT NULL); INSERT INTO marker VALUES ('kept');");
+        Assert.Equal("delete", ExecuteScalar(database, "PRAGMA journal_mode"));
+    }
+
+    private static object? ExecuteScalar(string database, string sql)
+    {
+        using var connection = new SqliteConnection($"Data Source={database};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar();
+    }
+
     private sealed class ServerProcess : IDisposable
     {
         private readonly Process _process;
@@ -283,6 +378,13 @@ public sealed class ServerStartupTests : IDisposable
             using var client = CreateClient();
             using var response = await client.GetAsync("/api/server-info", CancellationToken);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        public async Task<bool> IsInitializedAsync()
+        {
+            using var client = CreateClient();
+            using var document = JsonDocument.Parse(await client.GetStringAsync("/api/server-info", CancellationToken));
+            return document.RootElement.GetProperty("data").GetProperty("initialized").GetBoolean();
         }
 
         public async Task StopAsync()

@@ -14,6 +14,7 @@ internal enum ServerStartupStage
     Directories,
     Logger,
     Deployment,
+    Database,
     HostStart,
 }
 
