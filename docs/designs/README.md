@@ -1,6 +1,6 @@
 # README
 
-当前目录（approachs）下面存储的是历史技术方案，一旦已经进入到 git commit history，禁止修改。
+当前目录（designs）下面存储的是历史技术方案，一旦已经进入到 git commit history，禁止修改。
 
 - `1.Chat Suggestions.md` 和 `2.Agentflow.md` 是早期的技术方案，仅做留存。
 - 文件命名格式为 `{yyyy-MM-dd}-{Technical Proposal name}.md`。

@@ -58,7 +58,7 @@ The global `auth` group in the Settings-owned `setting` table still holds the ad
 
 Configure `Auth:Oidc:PublicBaseUrl` and `Auth:Oidc:Providers:<id>`. OIDC providers require Authority; OAuth2 providers require explicit authorization and Token endpoints, an Issuer, ClientId and ClientSecret. Secrets come from environment variables or Secrets. Changes require restart. Production requires HTTPS. Development alone permits HTTP loopback.
 
-See [OIDC/OAuth2 deployment instructions](../../../docs/4.Deployment.md#oidc-login), the [OIDC design](../../../docs/approachs/2026-09-17-oidc.md) and the [OAuth2 design](../../../docs/approachs/2026-09-18-oauth2.md).
+See [OIDC/OAuth2 deployment instructions](../../../docs/4.Deployment.md#oidc-login), the [OIDC design](../../../docs/designs/2026-09-17-oidc.md) and the [OAuth2 design](../../../docs/designs/2026-09-18-oauth2.md).
 
 | Method | Path | Purpose |
 | --- | --- | --- |

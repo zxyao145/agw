@@ -2,7 +2,8 @@
 title: "Agentflow"
 description: "构建可验证的工作流，理解分支、汇合与检查点。"
 weight: 60
-lastmod: 2026-09-25
+date: 2026-09-15
+lastmod: 2026-10-17
 translationKey: docs/guides/agentflows
 ---
 
@@ -295,7 +296,7 @@ Output 的底层配置当前只有一个运行时字段 `enableSummary`，但 Ou
 
 ## 实现与参考
 
-- [Graph contract](https://github.com/zxyao145/agw/blob/main/docs/approachs/2.Agentflow.md)
+- [Graph contract](https://github.com/zxyao145/agw/blob/main/docs/designs/2.Agentflow.md)
 
 - [Node and block configuration](https://github.com/zxyao145/agw/blob/main/src/clients/packages/agents/src/ui-web/pages/agentflows/components/visual-agentflow-builder.tsx)
 - [Orchestration block execution](https://github.com/zxyao145/agw/tree/main/src/server/Agw.Agents.Execution/Agentflows/Workflows/Builders)
