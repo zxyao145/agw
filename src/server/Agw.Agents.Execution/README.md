@@ -1,10 +1,10 @@
 # Execution 执行子系统
 
-`Agw.Agents.Execution.csproj` 是 Agents 逻辑模块的执行实现程序集，单向引用 `Agw.Agents`。Host 分别调用 `AddAgents` 与 `AddAgentExecution`；定义管理通过 Contracts 中的 `IAgentflowMermaidProvider` 查询 Mermaid。启动清单的纯数据结构与持久化接口留在 Agents，运行时映射留在此工程。程序集划分见 [ADR 0003](../../../docs/adr/0003-agents-execution-assembly.md)。
+`Agw.Agents.Execution.csproj` 是 Agents 逻辑模块的执行实现程序集，单向引用 `Agw.Agents`。Host 分别调用 `AddAgents` 与 `AddAgentExecution`；定义管理通过 Contracts 中的 `IAgentflowMermaidProvider` 查询 Mermaid。启动清单的纯数据结构与持久化接口留在 Agents，运行时映射留在此工程。程序集职责见 [项目架构](../../../docs/2.Architecture.md)。
 
 `Execution` 负责把客户端命令转换为 Agent 或 Agentflow 的一次次执行 turn，并管理连接状态、运行时复用、中断、HumanGate、用户信息交互、消息输出和资源释放。它既包含 SignalR 实时执行入口，也提供给 A2A、Jobs 等模块复用的 Agent/Agentflow 执行服务。
 
-Connection 生命周期、Command Handler 扩展方式与状态所有权的决策依据见 [`ADR 0001`](../../../docs/adr/0001-execution-connection-command-architecture.md)。
+Connection 生命周期、Command Handler 接入与状态所有权见 [执行协议](../../../docs/ws-flow.md)。
 
 这里区分以下对象及其生命周期：
 
@@ -40,7 +40,7 @@ InProcess 连接的控制查询与后台 Runtime 使用独立的 DI scope，避�
 
 Runtime 拥有 Workflow Lease，Runner 拥有当前 `StreamingRun`；Durable Runner 还拥有该段的人工交互作用域。释放顺序为 Run、人工交互作用域、Workflow Lease。Factory 构建失败时清理已经创建的 Agent 和嵌套 Lease，清理异常不能覆盖构建异常。
 
-流式执行保持既有 Error/Finished 顺序；非流式执行保持原有输出集合与非交互审批错误。Durable Runner 逐条等待 sink 写入，返回分段状态；pending 与 terminal 控制消息仍由持久化提交后的协调层发布。节点间统一以完整 turn 交接：Direct、FanOut、Switch 等待源节点完成，FanIn 等待所有前驱的完成批次；并发块等待所有参与者完成。工具和人工等待期间不释放下游输入。详见 [Agentflow 执行约定](../../../docs/approachs/2.Agentflow.md#node-completion-and-downstream-activation)。Checkpoint 恢复会还原未完成 turn 的消息和待处理请求；只有首次执行发送启动 `TurnToken`，恢复时不能再次发送。Worker 故障后的整个 segment 重试仍为至少一次执行，不增加跨故障的恰好一次保证。
+流式执行保持既有 Error/Finished 顺序；非流式执行保持原有输出集合与非交互审批错误。Durable Runner 逐条等待 sink 写入，返回分段状态；pending 与 terminal 控制消息仍由持久化提交后的协调层发布。节点间统一以完整 turn 交接：Direct、FanOut、Switch 等待源节点完成，FanIn 等待所有前驱的完成批次；并发块等待所有参与者完成。工具和人工等待期间不释放下游输入。详见 [Agentflow 执行约定](../../../docs/designs/2.Agentflow.md#node-completion-and-downstream-activation)。Checkpoint 恢复会还原未完成 turn 的消息和待处理请求；只有首次执行发送启动 `TurnToken`，恢复时不能再次发送。Worker 故障后的整个 segment 重试仍为至少一次执行，不增加跨故障的恰好一次保证。
 
 InProcess 的每次显式恢复都携带当前 occurrence 的 Marker；Durable 只在新恢复分支的首段（`SegmentIndex == 1` 且 Manifest 含恢复 occurrence）自动继续这些 Marker，后续 HITL 分段保留自己的等待边界。两者的恢复条件对应不同的输入协议。
 
@@ -52,9 +52,9 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 
 Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后每 10 秒批量提交；省略间隔配置时，`ConversationHistoryOptions` 兜底为 5 秒；也支持 `TurnEnd` 和 `Immediate`。每个执行作用域默认最多缓冲 16 MiB 的序列化内容，达到阈值会提前提交。模型读取合并数据库和本作用域的待写历史，普通历史 API 返回已提交内容。
 
-`NormalizedChatHistoryProvider` 在 Execution 内维护每次 producer 调用的消息正文。普通模型、Claude、Codex、Pi 通过 `IAgentMessageAdapter<AgentResponseUpdate>` 提供新增内容，统一按消息和内容块身份追加；Projects 的 `EfCoreChatHistoryProvider` 负责原始输入去重、缓冲、owner/generation 校验和数据库提交。`AgentRequestContextAgent` 暂存原始输入并向 SDK 转发含记忆的临时副本；待写输入按 SDK session 隔离。
+`HistoryRecordingAgent` 暂存原始输入，将每个 Turn 的记忆上下文注入临时副本，并通过 `IAgentMessageAdapter<AgentResponseUpdate>` 将普通模型、Claude、Codex、Pi 的输出交给 `HistoryRecording` 归并。`AgwChatHistoryProvider` 按模型调用读取历史、校准回复并推进 Step；Projects 的 `ConversationHistoryStore` 负责消息写入、缓冲、owner/Generation 校验和数据库提交。每次 Agent 运行的记录按 SDK session 隔离。
 
-普通模型的 `StreamingChatHistoryClient` 位于 MAF 的 per-service-call 历史读取之后。流式内容到达时累积正文，在读取和提交边界序列化完整快照。同一个 MessageId 跨批次、跨 flush 更新同一行；同一来源的捕获和提交串行执行，保留首次排序、行 ID 和输入的任务关联。持久化确认只清除对应捕获对象的变更标记。执行结束、取消和失败时提交已经收到的内容；模型历史根据消息用途和工具调用配对规则读取正文。
+`HistoryRecording` 将流式输出累计为完整消息快照；相同 `MessageId` 的后续内容写入同一行。模型读取时合并已提交历史与当前作用域的待写消息，并按消息用途和工具调用配对规则整理请求。`TurnHistory` 在执行结束、取消或失败时完成其创建的历史缓冲。
 
 外层 Agent/Agentflow 回合与 durable segment 拥有写入作用域，嵌套节点复用当前作用域。流式入口通过 `RunStreaming` 在每次 `MoveNextAsync` 和 `DisposeAsync` 恢复历史及会话代次上下文；普通 Task 执行使用 `BeginScope`。仅在异步迭代器内部设置 AsyncLocal 不能跨 yield 保持该上下文。回合正常结束、取消、异常和枚举器释放都会尝试提交剩余历史。SDK session state 保存与 checkpoint 的历史序号计算先获取历史刷新屏障，阻止并发追加越过恢复边界；然后沿用 Project → History/Session 的锁顺序。历史提交仍验证原始 owner 和 Generation；失效作用域不能重新创建被删除的 Conversation。
 
@@ -429,7 +429,7 @@ sequenceDiagram
 
 Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 不持久化通用 SDK session state；Claude Code 与 Codex 通过 project conversation 作用域内的 task-session binding 保存 provider session id。Codex 从 `OnThreadStartedAsync` 获取 thread id，并以 `ThreadId + IsResume` 恢复；Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认真实 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
 
-Codex 的 SDK ChatHistoryProvider 会被禁用，由 `AgentRequestContextAgent` 暂存原始请求，`ExternalAgentChatHistoryAgent` 按 20 条响应或 1 秒窗口聚合流式更新并交给 EF Provider；正常结束、取消、异常和消费方提前释放都会提交剩余内容。Provider 按 `ConversationHistory` 配置决定实际数据库写入时机。Claude Code 则直接使用 `ClaudeCodeSdk.MAF` 的 ChatHistoryProvider；SDK 会在每个完整 Assistant 消息结束后聚合并分阶段交给 Agw 历史 Provider，不再经过外层历史包装器。External Agent 返回的 System/User 展示消息仍会标记 `modelHistoryExcluded`，因此可在 UI 历史中显示，但不会重新进入模型上下文或跨目标 handoff。
+Claude Code、Codex 和 Pi 的外层历史记录统一使用 `HistoryRecordingAgent`。原始输入在注入记忆上下文前暂存；流式增量通过 Engine 适配器归并到 `HistoryRecording`，再由 Projects 的 `ConversationHistoryStore` 按 `ConversationHistory` 配置缓冲和提交。运行完成、取消、异常或消费方提前释放时完成本次记录。External Agent 返回的 System/User 展示消息标记为 `modelHistoryExcluded`，可在 UI 历史中显示，模型上下文与跨目标 handoff 会过滤这些消息。
 
 ### External Agent 模型配置
 
@@ -459,7 +459,7 @@ Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内
 
 模型服务按各自协议校验回放的 Assistant 输出：DeepSeek thinking 模式要求带 tools 的请求把本轮 Assistant 输出的 `reasoning_text` 传回，空字符串视为缺失并返回 400；OpenAI Responses 要求推理条目后紧跟其原始条目。压缩只改写 Tool result 正文，不生成新的 Assistant 消息，因此压缩后的请求在所有协议下都保持合法。
 
-`CompactionProvider` 位于函数调用循环内部，并在逐次历史持久化层之后执行，所以同一轮中的每次模型请求都会重新评估上下文。`FunctionLoopMessageIsolationChatClient` 会为每次实际注入的动态上下文消息副本补充唯一 `MessageId`，同时继续移除同一函数循环中的未变化副本；这避免压缩索引按内容匹配到上一轮相同上下文并跳过其间的新消息。`LocalHistoryCompactionScopeChatClient` 仅在本地历史 sentinel 存在时为该 provider 暴露共享 `StateBag` 的本地 session 视图，避免后续 Tool iteration 被误判为远程服务托管历史。压缩结果只传给当前模型请求；`EfCoreChatHistoryProvider` 仍保存未压缩的原始消息，不会把合成或裁剪后的请求历史写回数据库。
+`CompactionProvider` 位于函数调用循环内部，并在逐次历史持久化层之后执行，所以同一轮中的每次模型请求都会重新评估上下文。`FunctionLoopMessageIsolationChatClient` 会为每次实际注入的动态上下文消息副本补充唯一 `MessageId`，同时继续移除同一函数循环中的未变化副本；这避免压缩索引按内容匹配到上一轮相同上下文并跳过其间的新消息。`LocalHistoryCompactionScopeChatClient` 仅在本地历史 sentinel 存在时为该 provider 暴露共享 `StateBag` 的本地 session 视图，避免后续 Tool iteration 被误判为远程服务托管历史。压缩结果只传给当前模型请求；`ConversationHistoryStore` 保存未压缩的原始消息。
 
 Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionStateStore` 序列化和恢复。state key 使用 `agw.compaction.{agentId}`，避免同一会话中的多个 Definition Agent 相互覆盖状态。Agw 另存内部索引版本；版本变化时会丢弃旧压缩索引，并在下一轮从完整聊天历史自动重建。
 
@@ -493,7 +493,7 @@ Agentflow 中的 Agent 节点同样遵守所引用 Agent 的 `EnableSummary`：�
 
 总结文字可在有助于可读性时使用 Markdown（如标题、列表、强调或代码块），也可以保持纯文本；服务端除去首尾空白外不会改写模型返回的 Markdown。
 
-总结为空或模型调用失败时仍返回 `Summary generation failed.`，不会使已成功的主执行失败；取消则继续向上传播。Summary 的 token usage 会累计到当前 project/context。`result` 会持久化供历史展示，但 `EfCoreChatHistoryProvider` 在构造下一轮模型历史时会过滤它。
+总结为空或模型调用失败时仍返回 `Summary generation failed.`，不会使已成功的主执行失败；取消则继续向上传播。Summary 的 token usage 会累计到当前 project/context。`result` 会持久化供历史展示，`AgwChatHistoryProvider` 在构造下一轮模型历史时会过滤它。
 
 ### Interrupt、HumanGate 与用户信息交互
 

@@ -10,7 +10,7 @@
 
 | 数据 | 用途 | 主要实现 | 适用模式 |
 | --- | --- | --- | --- |
-| 聊天历史 | 展示历史、为模型提供上下文、保留工具调用和回复 | Projects 的 `EfCoreChatHistoryProvider` | 两者 |
+| 聊天历史 | 展示历史、为模型提供上下文、保留工具调用和回复 | Projects 的 `ConversationHistoryStore` | 两者 |
 | Agent SDK Session | 保存 SDK 可序列化的会话状态，供后续构建 Agent 时恢复 | `AgentSessionStateStore` → `IAgentSessionStatePersistence` | 两者；当前 Store 跳过 External Agent |
 | Agentflow 检查点 occurrence | 记录某一次检查点、图定义指纹及聊天历史截止序号，支持显式恢复分支 | `AgentflowCheckpointStore` → `IAgentflowCheckpointPersistence` | 两者，恢复条件不同 |
 | Durable execution 状态 | 决定执行能否领取、正在等待谁、从哪里恢复、是否已结束 | 本目录的 `DurableExecutionStore` | Distributed |
@@ -74,7 +74,7 @@ Persistence/
 | [`Agw.Agents/Application/Persistence`](../../Agw.Agents/Application/Persistence/) | `IAgentsDbContext`、Session / Checkpoint 持久化接口、durable manifest 和维护接口 |
 | [`Agw.Infrastructure/Agents`](../../Agw.Infrastructure/Agents/) | Session / Checkpoint 持久化适配器、执行归属校验和隔离维护 |
 | [`Agw.Data/Entities/Executions`](../../Agw.Data/Entities/Executions/) | Durable execution、Agentflow checkpoint 的数据实体和 EF 配置 |
-| [`EfCoreChatHistoryProvider`](../../Agw.Projects/Infrastructure/EfCoreChatHistoryProvider.cs) | Projects 所有的聊天历史持久化及请求生命周期管理 |
+| [`ConversationHistoryStore`](../../Agw.Projects/Infrastructure/ConversationHistoryStore.cs) | Projects 所有的聊天历史持久化、缓冲、所属与 Generation 校验 |
 
 `Agw.Agents` 与 `Agw.Agents.Execution` 是同一逻辑 Agents 模块的两个程序集。执行记录和检查点由 Agents 所有；实体类型放在 `Agw.Data`、共用 `AgwDbContext`，不改变逻辑数据归属。
 
@@ -85,9 +85,9 @@ Persistence/
 ```mermaid
 flowchart TB
     SignalR["SignalR 命令"] --> Session["DurableExecutionAttachment"]
-    Facade["A2A / Jobs 执行 Facade"] --> Client["IDurableExecutionClient"]
+    Facade["A2A / Jobs 执行 Facade"] --> Acceptance["TurnAcceptanceService"]
     Session --> Coordinator["DurableExecutionCoordinator"]
-    Client --> Coordinator
+    Acceptance --> Coordinator
     Coordinator --> Store["DurableExecutionStore"]
     Worker["DistributedExecutionWorker"] --> Store
     Worker --> Lock["IApplicationLock / PostgreSQL advisory lock"]
@@ -443,7 +443,7 @@ Redis 是事件回放的可选实现，启用后仍需要 PostgreSQL 状态库�
 
 ### 9.3 后端模块接入与内部开发
 
-A2A、Jobs 等跨模块调用通过 [`IAgentExecutionFacade` / `IDurableAgentExecutionFacade`](../../Agw.Agents.Contracts/Execution/AgentExecutionContracts.cs) 接入。执行模块内部的 [`IDurableExecutionClient`](../Runtimes/Durable/Contracts/IDurableExecutionClient.cs) 提供登记、结果查询、等待、事件读取和中断；不要从外部模块直接构造内部 Store 或手动插入状态行。
+A2A、Jobs 等跨模块调用通过 [`IAgentExecutionFacade` / `IDurableAgentExecutionFacade`](../../Agw.Agents.Contracts/Execution/AgentExecutionContracts.cs) 接入。[`AgentExecutionFacade`](../Inbound/Facades/AgentExecutionFacade.cs) 经 `TurnAcceptanceService` 受理 Turn，再通过 `IExecutionCoordinator` 启动执行；Distributed 模式使用 `DurableExecutionCoordinator`。外部模块通过 Facade 查询结果和中断执行。
 
 无人值守的 Durable Job 通过轻量 outcome 查询等待状态变化，无需回放整条事件流。Jobs 固定使用 Full access 自动批准普通工具调用，并拒绝需要真实用户回答的交互；A2A 沿用执行请求的权限策略。当前以独立 Agent 为目标（`AgentRuntimeType.Agent`）的 durable 执行只支持 System Agent，External Agent 会返回不支持的分段失败。
 
@@ -481,26 +481,26 @@ A2A、Jobs 等跨模块调用通过 [`IAgentExecutionFacade` / `IDurableAgentExe
 | 测试 | 关注点 |
 | --- | --- |
 | [`DurableExecutionStoreTests`](../../../../tests/Agw.Agents.Tests/DurableExecutionStoreTests.cs) | 登记与回答幂等、owner 校验、状态转换、迟到结果、中断和事件 cursor |
-| [`DistributedExecutionWorkerOwnershipTests`](../../../../tests/Agw.Agents.Tests/DistributedExecutionWorkerOwnershipTests.cs) | 锁失效时取消分段并拒绝迟到完成 |
+| [`DurableLeaseFencingTests`](../../../../tests/Agw.Agents.Tests/DurableLeaseFencingTests.cs) | 租约接管后的写入拒绝、事件批次幂等与回放 |
 | [`AgentSessionStateStoreTests`](../../../../tests/Agw.Agents.Tests/AgentSessionStateStoreTests.cs) | Session 保存和恢复、范围隔离、并发插入 |
 | [`AgentflowCheckpointStoreTests`](../../../../tests/Agw.Agents.Tests/AgentflowCheckpointStoreTests.cs) | occurrence、历史边界、事务回滚、定义变更与恢复幂等 |
 | [`ConversationGenerationPersistenceTests`](../../../../tests/Agw.Agents.Tests/ConversationGenerationPersistenceTests.cs) | 会话重置后拒绝旧历史、checkpoint 和 manifest |
 | [`DurableExecutionScopeMaintenanceTests`](../../../../tests/Agw.Agents.Tests/DurableExecutionScopeMaintenanceTests.cs) | 归属校验、损坏隔离、并发保护和调度可见性 |
-| [`ExecutionEventBatchingTests`](../../../../tests/Agw.Agents.Tests/ExecutionEventBatchingTests.cs) | 批量写入、背压、作废 attempt 和终态顺序 |
+| [`ConversationHistoryBufferTests`](../../../../tests/Agw.Agents.Tests/ConversationHistoryBufferTests.cs) | 历史缓冲、提交、并发写入、Generation 与所属隔离 |
 | [`ExecutionRuntimeConfigurationTests`](../../../../tests/Agw.Agents.Tests/ExecutionRuntimeConfigurationTests.cs) | 注册生命周期、默认 Provider 和无效配置拒绝 |
 
 从仓库根目录运行定向验证：
 
 ```bash
-dotnet test tests/Agw.Agents.Tests --filter "FullyQualifiedName~DurableExecutionStoreTests|FullyQualifiedName~DistributedExecutionWorkerOwnershipTests|FullyQualifiedName~ConversationGenerationPersistenceTests"
+dotnet test tests/Agw.Agents.Tests --filter "FullyQualifiedName~DurableExecutionStoreTests|FullyQualifiedName~DurableLeaseFencingTests|FullyQualifiedName~ConversationGenerationPersistenceTests"
 dotnet test tests/Agw.Agents.Tests --filter "FullyQualifiedName~AgentSessionStateStoreTests|FullyQualifiedName~AgentflowCheckpointStoreTests|FullyQualifiedName~ExecutionRuntimeConfigurationTests"
 ```
 
-真实 PostgreSQL 验证见 [`PostgresExecutionFencingTests`](../../../../tests/Agw.Agents.Tests/PostgresExecutionFencingTests.cs) 和 [`PostgresEventBatchingTests`](../../../../tests/Agw.Agents.Tests/PostgresEventBatchingTests.cs)。它们通过 `AGW_TEST_POSTGRES_CONNECTION_STRING` 显式启用，需使用允许创建临时数据库的隔离实例。SQLite 测试覆盖不表示生产 Distributed 支持 SQLite，也不能替代 PostgreSQL 锁和并发行为验证。
+PostgreSQL 并发事件提交与租约接管验证见 [`DurableDistributedStoreTests`](../../../../tests/Agw.Agents.Tests/DurableDistributedStoreTests.cs)。PostgreSQL 测试通过 `AGW_TEST_POSTGRES_CONNECTION_STRING` 显式启用，需使用允许创建临时数据库的隔离实例。
 
 ## 11. 延伸阅读
 
 - [执行模块总览](../README.md)：命令、Runtime、Host 分工和传输协议。
 - [Turn 生命周期](../Turns/README.md)：执行上下文、取消、消息与历史刷新边界。
-- [Agentflow 设计](../../../../docs/approachs/2.Agentflow.md)：图执行、检查点分支与 Chat 归属。
+- [Agentflow 设计](../../../../docs/designs/2.Agentflow.md)：图执行、检查点分支与 Chat 归属。
 - [仓库规则](../../../../AGENTS.md)：模块数据所有权、用户隔离、时间和迁移约束。

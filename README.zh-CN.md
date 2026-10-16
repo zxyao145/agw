@@ -270,7 +270,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-预发布版本使用 `vX.Y.Z-preview.N`、`vX.Y.Z-alpha.N` 或 `vX.Y.Z-beta.N`。[发布工作流](.github/workflows/release.yml)会为受支持的 tag 或手动传入的 `release_tag` 发布 Linux amd64/arm64 镜像，并创建包含全部 Desktop Assets 的 GitHub Release。[Desktop 构建工作流](.github/workflows/build-desktop.yml)会在相关 Pull Request、推送到 `main` 或手动运行时生成临时 Desktop 产物。[站点工作流](.github/workflows/site.yml)负责构建 [`site/`](site/README.md) 中的文档站点，并在推送到 `main` 时部署到 GitHub Pages。
+预发布版本使用 `vX.Y.Z-preview.N`、`vX.Y.Z-alpha.N` 或 `vX.Y.Z-beta.N`。[发布工作流](.github/workflows/release.yml)会为受支持的 tag 或手动传入的 `release_tag` 发布 Linux amd64/arm64 镜像，并创建包含全部 Desktop Assets 的 GitHub Release。[Desktop 构建工作流](.github/workflows/build-desktop.yml)会在相关 Pull Request、推送到 `main` 或手动运行时生成临时 Desktop 产物。[站点工作流](.github/workflows/site.yml)负责构建并验证 [`site/`](site/README.md) 中的首页和文档站点，在推送到 `main` 时把文档镜像发布到 GitHub Pages，在 `main` 上手动运行时把两个站点发布到 Cloudflare Pages。
 
 ## 架构
 
@@ -469,8 +469,8 @@ flowchart TB
 - [领域架构](docs/human/5.domain-architecture.md)：Behavior、DomainService 与 ApplicationService 的职责划分。
 - [Agent 执行协议](docs/ws-flow.md)：SignalR 命令、权限能力、Turn 消息、输入队列与断线行为。
 - [Execution 子系统](src/server/Agw.Agents.Execution/README.md)：进程内与分布式执行、数据流、Definition Agent 自动上下文压缩与 Human-in-the-loop。
-- [Chat Suggestions 设计](docs/approachs/1.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
-- [Agentflow 指南](docs/approachs/2.Agentflow.md)：图路由与循环规则、Checkpoint 分支恢复、编辑器撤销和未保存状态、Chat 消息归属。
+- [Chat Suggestions 设计](docs/designs/1.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
+- [Agentflow 指南](docs/designs/2.Agentflow.md)：图路由与循环规则、Checkpoint 分支恢复、编辑器撤销和未保存状态、Chat 消息归属。
 - 模块 README：[Auth](src/server/Agw.Auth/README.md)、[Setup](src/server/Agw.Setup/README.md)、[Settings](src/server/Agw.Settings/README.md)、[Tools](src/server/Agw.Tools/README.zh-CN.md)、[Integrations](src/server/Agw.Integrations/README.zh-CN.md)、[Jobs](src/server/Agw.Jobs/README.zh-CN.md)、[Files](src/server/Agw.Files/README.zh-CN.md)。
 - 客户端：[Desktop](src/clients/desktop/README.md)、[Mobile](src/clients/mobile/README.md)。
 

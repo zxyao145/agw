@@ -270,7 +270,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Prereleases use `vX.Y.Z-preview.N`, `vX.Y.Z-alpha.N`, or `vX.Y.Z-beta.N`. The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop assets for supported tags or a manually supplied `release_tag`. The [Desktop build workflow](.github/workflows/build-desktop.yml) builds temporary Desktop assets for relevant pull requests, pushes to `main`, and manual runs. The [site workflow](.github/workflows/site.yml) builds the documentation site in [`site/`](site/README.md) and deploys it to GitHub Pages on pushes to `main`.
+Prereleases use `vX.Y.Z-preview.N`, `vX.Y.Z-alpha.N`, or `vX.Y.Z-beta.N`. The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop assets for supported tags or a manually supplied `release_tag`. The [Desktop build workflow](.github/workflows/build-desktop.yml) builds temporary Desktop assets for relevant pull requests, pushes to `main`, and manual runs. The [site workflow](.github/workflows/site.yml) builds and validates both sites in [`site/`](site/README.md), publishes the documentation mirror to GitHub Pages on pushes to `main`, and deploys both sites to Cloudflare Pages when run manually on `main`.
 
 ## Architecture
 
@@ -469,8 +469,8 @@ The pnpm Workspace at `src/clients` contains the `@agw/web`, `@agw/desktop`, and
 - [Domain Architecture](docs/human/5.domain-architecture.md): Behavior, DomainService, and ApplicationService responsibilities.
 - [Agent Execution Protocol](docs/ws-flow.md): SignalR commands, permission capabilities, turn messages, the input queue, and disconnection behavior.
 - [Execution Subsystem](src/server/Agw.Agents.Execution/README.md): In-process and distributed execution, data flow, Definition Agent compaction, and Human-in-the-loop.
-- [Chat Suggestions Design](docs/approachs/1.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
-- [Agentflow Guide](docs/approachs/2.Agentflow.md): Graph routing and cycle rules, checkpoint branching, editor Undo and dirty state, and Chat message attribution.
+- [Chat Suggestions Design](docs/designs/1.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
+- [Agentflow Guide](docs/designs/2.Agentflow.md): Graph routing and cycle rules, checkpoint branching, editor Undo and dirty state, and Chat message attribution.
 - Module READMEs: [Auth](src/server/Agw.Auth/README.md), [Setup](src/server/Agw.Setup/README.md), [Settings](src/server/Agw.Settings/README.md), [Tools](src/server/Agw.Tools/README.md), [Integrations](src/server/Agw.Integrations/README.md), [Jobs (Chinese)](src/server/Agw.Jobs/README.zh-CN.md), and [Files (Chinese)](src/server/Agw.Files/README.zh-CN.md).
 - Clients: [Desktop](src/clients/desktop/README.md) and [Mobile](src/clients/mobile/README.md).
 
