@@ -39,9 +39,17 @@ test("findDiscoveryApiKey ignores disabled ApiKey configs", async () => {
   assert.equal(apiKey, null);
 });
 
-test("model discovery supports only OpenAI provider types", async () => {
+test("model discovery supports OpenAI and Ollama provider types", async () => {
   const { isProviderModelDiscoverySupported } = await import("./provider-models" + ".ts");
   assert.equal(isProviderModelDiscoverySupported("OpenAIChatCompletions"), true);
   assert.equal(isProviderModelDiscoverySupported("OpenAIResponses"), true);
+  assert.equal(isProviderModelDiscoverySupported("OllamaNative"), true);
   assert.equal(isProviderModelDiscoverySupported("Anthropic"), false);
+});
+
+test("model discovery requires an ApiKey only for OpenAI provider types", async () => {
+  const { isProviderModelDiscoveryApiKeyRequired } = await import("./provider-models" + ".ts");
+  assert.equal(isProviderModelDiscoveryApiKeyRequired("OpenAIChatCompletions"), true);
+  assert.equal(isProviderModelDiscoveryApiKeyRequired("OpenAIResponses"), true);
+  assert.equal(isProviderModelDiscoveryApiKeyRequired("OllamaNative"), false);
 });

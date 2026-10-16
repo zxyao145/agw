@@ -433,7 +433,7 @@ Codex 的 SDK ChatHistoryProvider 会被禁用，由 `AgentRequestContextAgent` 
 
 ### External Agent 模型配置
 
-Claude Code、Codex 和 Pi 的 `ModelProviderId` 均为可选。选择后，运行时通过 Providers 边界解析当前用户的模型、Endpoint 和启用的凭据，覆盖 Extra Settings 及环境变量中的对应配置；Claude Code 仅接受 Anthropic，Codex 仅接受 OpenAI Responses，Pi 接受三种现有 ProviderType。创建、更新和运行时校验协议兼容性，所选配置不可访问或执行时没有可用凭据会明确失败。
+Claude Code、Codex 和 Pi 的 `ModelProviderId` 均为可选。选择后，运行时通过 Providers 边界解析当前用户的模型、Endpoint 和启用的凭据，覆盖 Extra Settings 及环境变量中的对应配置；Claude Code 仅接受 Anthropic，Codex 仅接受 OpenAI Responses，Pi 接受 OpenAI Chat Completions、OpenAI Responses 和 Anthropic。创建、更新和运行时校验协议兼容性，所选配置不可访问或执行时没有可用凭据会明确失败。
 
 创建和编辑弹窗均可取消选择，提交 `modelProviderId: null`。未选择时沿用 Extra Settings 或外部工具自身配置；修改在下一次创建执行实例时生效，既有会话按外部工具规则恢复。运行时覆盖不会写回 Agent.Extra 或宿主工具配置文件。
 

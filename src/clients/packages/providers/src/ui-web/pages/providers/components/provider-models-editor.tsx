@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
 
 import {
   findDiscoveryApiKey,
+  isProviderModelDiscoveryApiKeyRequired,
   isProviderModelDiscoverySupported,
   mergeProviderModelOptions,
 } from "./provider-models";
@@ -52,6 +53,7 @@ export function ProviderModelsEditor({
   const [discoveredModelNames, setDiscoveredModelNames] = React.useState<string[]>([]);
   const apiKey = findDiscoveryApiKey(authConfigs);
   const discoverySupported = isProviderModelDiscoverySupported(providerType);
+  const apiKeyRequired = isProviderModelDiscoveryApiKeyRequired(providerType);
   const modelOptions = React.useMemo(
     () => mergeProviderModelOptions(models, discoveredModelNames),
     [models, discoveredModelNames],
@@ -64,7 +66,7 @@ export function ProviderModelsEditor({
 
   const discoveryMutation = useMutation({
     mutationFn: async () => {
-      if (!apiKey) {
+      if (apiKeyRequired && !apiKey) {
         throw new Error("An enabled ApiKey is required");
       }
 
@@ -99,7 +101,10 @@ export function ProviderModelsEditor({
   };
 
   const discoveryDisabled =
-    !discoverySupported || !endpoint.trim() || !apiKey || discoveryMutation.isPending;
+    !discoverySupported ||
+    !endpoint.trim() ||
+    (apiKeyRequired && !apiKey) ||
+    discoveryMutation.isPending;
 
   return (
     <div className="space-y-4">
@@ -129,16 +134,18 @@ export function ProviderModelsEditor({
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">
-            Only OpenAI APIs are supported, and an ApiKey must be configured before fetching models.
+            OpenAI APIs and Ollama are supported. OpenAI APIs require an ApiKey before fetching
+            models.
           </TooltipContent>
         </Tooltip>
       </div>
 
       {!discoverySupported ? (
         <p className="text-xs text-muted-foreground">
-          Model discovery is available only for OpenAI Chat Completions and OpenAI Responses.
+          Model discovery is available only for OpenAI Chat Completions, OpenAI Responses, and
+          Ollama.
         </p>
-      ) : !apiKey ? (
+      ) : apiKeyRequired && !apiKey ? (
         <p className="text-xs text-muted-foreground">
           Add and enable an ApiKey in Auth Configs before fetching models.
         </p>

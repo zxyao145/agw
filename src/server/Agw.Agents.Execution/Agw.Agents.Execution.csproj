@@ -24,6 +24,7 @@
     <PackageReference Include="Microsoft.Agents.AI.Workflows" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="OllamaSharp" />
     <PackageReference Include="StackExchange.Redis" />
     <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
     <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />

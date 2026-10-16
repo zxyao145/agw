@@ -8,4 +8,5 @@ public enum ProviderType
     OpenAIChatCompletions = 0,
     OpenAIResponses = 1,
     Anthropic = 2,
+    OllamaNative = 3,
 }

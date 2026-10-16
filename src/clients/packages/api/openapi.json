@@ -12773,8 +12773,7 @@
       "ProviderModelDiscoveryRequest": {
         "required": [
           "providerType",
-          "endpoint",
-          "apiKey"
+          "endpoint"
         ],
         "type": "object",
         "properties": {
@@ -12785,7 +12784,10 @@
             "type": "string"
           },
           "apiKey": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -12872,7 +12874,8 @@
         "enum": [
           "OpenAIChatCompletions",
           "OpenAIResponses",
-          "Anthropic"
+          "Anthropic",
+          "OllamaNative"
         ]
       },
       "ProviderUpdateRequest": {

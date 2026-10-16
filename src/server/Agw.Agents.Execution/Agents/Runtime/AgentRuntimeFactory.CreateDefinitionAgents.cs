@@ -52,14 +52,21 @@ public partial class AgentRuntimeFactory
 
         var model = runtimeConfiguration.Model;
         var provider = runtimeConfiguration.Provider;
-        var authConfigs = provider.AuthConfigs.Where(x => x.Enable).ToList();
-        if (authConfigs.Count == 0)
+        // Ollama 允许无认证连接，认证由 OllamaChatClientFactory 按启用的 API Key 处理。
+        // Ollama allows unauthenticated connections; OllamaChatClientFactory handles enabled API keys.
+        ProviderAuthConfigSnapshot? authConfig = null;
+        if (provider.ProviderType != ProviderType.OllamaNative)
         {
-            _logger.LogError("no auth config for provider:{ProviderName}", provider.Name);
-            return null;
+            var authConfigs = provider.AuthConfigs.Where(x => x.Enable).ToList();
+            if (authConfigs.Count == 0)
+            {
+                _logger.LogError("no auth config for provider:{ProviderName}", provider.Name);
+                return null;
+            }
+
+            authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
         }
 
-        var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
         var supportsHostedWebSearch = provider.ProviderType == ProviderType.OpenAIResponses;
         Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<AIAgent>>>? backgroundAgentFactory =
             backgroundDepth == 0
@@ -108,11 +115,17 @@ public partial class AgentRuntimeFactory
                 ]);
             }
 
+            // 可能失败的解析放在创建 ChatClient 之前；ChatClient 创建后直接交给 AsAgwAgent，由 capabilities 负责释放。
+            // Parsing that can fail runs before the chat client exists; the new client goes straight to AsAgwAgent,
+            // which hands it to capabilities for disposal.
+            var responseFormat = AgentResponseSchemaFormat.Create(agentDefinition, provider.ProviderType);
+            var historyProvider = CreateHistoryProvider(EngineKind.Maf, structuredResult: responseFormat != null);
             var chatClient = provider.ProviderType switch
             {
-                ProviderType.OpenAIChatCompletions => CreateOpenAiChatClient(model, provider, authConfig),
-                ProviderType.OpenAIResponses => CreateOpenAiResponsesChatClient(model, provider, authConfig),
-                ProviderType.Anthropic => CreateAnthropicChatClient(model, provider, authConfig),
+                ProviderType.OpenAIChatCompletions => CreateOpenAiChatClient(model, provider, authConfig!),
+                ProviderType.OpenAIResponses => CreateOpenAiResponsesChatClient(model, provider, authConfig!),
+                ProviderType.Anthropic => CreateAnthropicChatClient(model, provider, authConfig!),
+                ProviderType.OllamaNative => _ollamaChatClientFactory.CreateClient(model, provider),
                 _ => throw new AgwException(
                     ErrorCodes.UnsupportedProviderType,
                     $"Provider type '{provider.ProviderType}' is not supported"
@@ -120,9 +133,6 @@ public partial class AgentRuntimeFactory
             };
 
             _logger.LogInformation("Creating definition agent {AgentName}", agentDefinition.Name);
-
-            var responseFormat = AgentResponseSchemaFormat.Create(agentDefinition, provider.ProviderType);
-            var historyProvider = CreateHistoryProvider(EngineKind.Maf, structuredResult: responseFormat != null);
             aiAgent = chatClient.AsAgwAgent(
                 new ResolvedAgentDefinition
                 {

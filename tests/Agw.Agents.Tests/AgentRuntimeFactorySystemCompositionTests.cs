@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Linq.Expressions;
+using System.Net.Http.Headers;
 using System.Reflection;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Composition;
@@ -20,11 +21,13 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
+using Agw.Testing;
 using Agw.Tools.Abstractions;
 using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Agw.Tools.ToolBlocks;
@@ -431,6 +434,231 @@ public class AgentRuntimeFactorySystemCompositionTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateAiAgentAsync_OllamaSystemAgent_ReturnsOwnedChatClient(bool withApiKey)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(
+            FindRepositoryRoot(AppContext.BaseDirectory),
+            "artifacts",
+            "ollama-tests",
+            Guid.CreateVersion7().ToString("N")
+        );
+        Directory.CreateDirectory(root);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var dbOptions = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(dbOptions);
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        var modelProviderId = await SeedOllamaModelProviderAsync(dbContext, withApiKey, cancellationToken);
+
+        var project = new Project { Id = Guid.CreateVersion7(), Workspace = Path.Combine(root, "workspace") };
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "ollama-agent",
+            DisplayName = "Ollama Agent",
+            Type = AgentType.System,
+            ModelProviderId = modelProviderId,
+        };
+        using var httpClientFactory = new RecordingHttpClientFactory();
+        var runtimeService = CreateRuntimeFactory(
+            CreateAgentAppService(dbContext),
+            new TestProjectRuntimeFacade(project),
+            CreateToolRegistry(),
+            AgwDataPaths.Resolve(root, root),
+            new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
+            new TestMcpToolMaterializer(),
+            httpClientFactory: httpClientFactory
+        );
+
+        try
+        {
+            var aiAgent = await InvokeCreateAiAgentAsync(runtimeService, agent, project, cancellationToken);
+
+            Assert.NotNull(aiAgent);
+            var metadata = aiAgent.GetService<ChatClientMetadata>();
+            Assert.NotNull(metadata);
+            Assert.Equal("ollama", metadata.ProviderName);
+            Assert.Equal("qwen3:4b", metadata.DefaultModelId);
+            Assert.Equal(new Uri("http://ollama.test/ollama/"), metadata.ProviderUri);
+            var chatOptions = Assert.IsType<ChatOptions>(
+                FindInObjectGraph<ChatClientAgentOptions>(aiAgent).ChatOptions
+            );
+            Assert.Equal("qwen3:4b", chatOptions.ModelId);
+            Assert.Equal(2048, chatOptions.MaxOutputTokens);
+            var httpClient = Assert.Single(httpClientFactory.Clients);
+            Assert.Equal(
+                withApiKey ? new AuthenticationHeaderValue("Bearer", "ollama-key") : null,
+                httpClient.DefaultRequestHeaders.Authorization
+            );
+
+            await Assert.IsAssignableFrom<IAsyncDisposable>(aiAgent).DisposeAsync();
+            await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+                httpClient.GetAsync("api/version", cancellationToken)
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CreateAiAgentAsync_OllamaInvalidStoredResponseSchema_FailsBeforeCreatingChatClient()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(
+            FindRepositoryRoot(AppContext.BaseDirectory),
+            "artifacts",
+            "ollama-tests",
+            Guid.CreateVersion7().ToString("N")
+        );
+        Directory.CreateDirectory(root);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var dbOptions = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(dbOptions);
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        var modelProviderId = await SeedOllamaModelProviderAsync(dbContext, withApiKey: false, cancellationToken);
+
+        var project = new Project { Id = Guid.CreateVersion7(), Workspace = Path.Combine(root, "workspace") };
+        // 未经接口校验直接写入的 ResponseSchema：根节点不是对象。
+        // A ResponseSchema written without API validation: the root is not an object.
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "ollama-agent",
+            DisplayName = "Ollama Agent",
+            Type = AgentType.System,
+            ModelProviderId = modelProviderId,
+            ResponseSchema = "[]",
+            AgentConnectionRelations = [new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() }],
+        };
+        var connectionResource = new TrackingResource();
+        using var httpClientFactory = new RecordingHttpClientFactory();
+        var runtimeService = CreateRuntimeFactory(
+            CreateAgentAppService(dbContext),
+            new TestProjectRuntimeFacade(project),
+            CreateToolRegistry(),
+            AgwDataPaths.Resolve(root, root),
+            new TestConnectionCapabilityResolver(CreateResolution([], connectionResource)),
+            new TestMcpToolMaterializer(),
+            httpClientFactory: httpClientFactory
+        );
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                InvokeCreateAiAgentAsync(runtimeService, agent, project, cancellationToken)
+            );
+
+            Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+            // 解析失败发生在创建 ChatClient 之前，没有遗留未释放的 HttpClient；已组合的能力资源照常释放。
+            // Parsing fails before the chat client exists, leaving no undisposed HttpClient; composed capability
+            // resources are still released.
+            Assert.Empty(httpClientFactory.Clients);
+            Assert.True(connectionResource.Disposed);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task<Guid> SeedOllamaModelProviderAsync(
+        AgwDbContext dbContext,
+        bool withApiKey,
+        CancellationToken cancellationToken
+    )
+    {
+        var modelProviderId = Guid.CreateVersion7();
+        var modelId = Guid.CreateVersion7();
+        var providerId = Guid.CreateVersion7();
+        dbContext.Models.Add(
+            new AgwAiModel
+            {
+                Id = modelId,
+                Name = "qwen3:4b",
+                MaxContextWindowTokens = 8192,
+                MaxOutputTokens = 2048,
+                CreateBy = "tester",
+            }
+        );
+        dbContext.Providers.Add(
+            new Provider
+            {
+                Id = providerId,
+                Name = "ollama",
+                ProviderType = ProviderType.OllamaNative,
+                Endpoint = "http://ollama.test/ollama",
+                CreateBy = "tester",
+                AuthConfigs = withApiKey
+                    ?
+                    [
+                        new ProviderAuthConfig
+                        {
+                            Id = Guid.CreateVersion7(),
+                            ProviderId = providerId,
+                            AuthType = ProviderAuthType.ApiKey,
+                            ApiKey = "ollama-key",
+                            Enable = true,
+                            CreateBy = "tester",
+                        },
+                    ]
+                    : [],
+            }
+        );
+        dbContext.ModelProviders.Add(
+            new ModelProviderRelation
+            {
+                Id = modelProviderId,
+                ModelId = modelId,
+                ProviderId = providerId,
+                CreateBy = "tester",
+            }
+        );
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return modelProviderId;
+    }
+
+    private static Task<AIAgent?> InvokeCreateAiAgentAsync(
+        AgentRuntimeFactory runtimeService,
+        Agent agent,
+        Project project,
+        CancellationToken cancellationToken
+    )
+    {
+        var method = typeof(AgentRuntimeFactory).GetMethod(
+            "CreateAiAgentAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            [typeof(CreateAiAgentRequest), typeof(CancellationToken)]
+        );
+        Assert.NotNull(method);
+        return Assert.IsType<Task<AIAgent?>>(
+            method.Invoke(
+                runtimeService,
+                [
+                    new CreateAiAgentRequest
+                    {
+                        Agent = agent,
+                        ProjectId = project.Id,
+                        EnvironmentVariables = new Dictionary<string, string>(),
+                    },
+                    cancellationToken,
+                ]
+            )
+        );
+    }
+
+    [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
@@ -575,7 +803,8 @@ public class AgentRuntimeFactorySystemCompositionTests
         IMcpToolMaterializer mcpToolMaterializer,
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
         IRemoteSkillContentResolver? remoteSkillContentResolver = null,
-        IEnumerable<IToolBlock>? toolBlocks = null
+        IEnumerable<IToolBlock>? toolBlocks = null,
+        IHttpClientFactory? httpClientFactory = null
     )
     {
         return new AgentRuntimeFactory(
@@ -610,6 +839,7 @@ public class AgentRuntimeFactorySystemCompositionTests
             services: new ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
             configuration: new AgentRuntimeConfiguration(appService, projectRuntimeFacade),
+            ollamaChatClientFactory: new OllamaChatClientFactory(httpClientFactory!),
             skillRegistrations: skillRegistrations ?? [],
             remoteSkillContentResolver: remoteSkillContentResolver,
             loggerFactory: NullLoggerFactory.Instance,
@@ -619,6 +849,17 @@ public class AgentRuntimeFactorySystemCompositionTests
             timeProvider: TimeProvider.System,
             generatedToolCatalog: null
         );
+    }
+
+    private static string FindRepositoryRoot(string startPath)
+    {
+        var directory = new DirectoryInfo(startPath);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Agw.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
     }
 
     private static ToolRegistryService CreateToolRegistry()

@@ -1,5 +1,6 @@
 using System.ClientModel;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Exceptions;
@@ -14,11 +15,17 @@ namespace Agw.Agents.Execution.Summaries;
 public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
 {
     private readonly AgentAppService _agentAppService;
+    private readonly OllamaChatClientFactory _ollamaChatClientFactory;
     private readonly ILogger<SummaryChatClientFactory> _logger;
 
-    public SummaryChatClientFactory(AgentAppService agentAppService, ILogger<SummaryChatClientFactory> logger)
+    public SummaryChatClientFactory(
+        AgentAppService agentAppService,
+        OllamaChatClientFactory ollamaChatClientFactory,
+        ILogger<SummaryChatClientFactory> logger
+    )
     {
         _agentAppService = agentAppService;
+        _ollamaChatClientFactory = ollamaChatClientFactory;
         _logger = logger;
     }
 
@@ -30,6 +37,13 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
         if (configuration == null)
         {
             return null;
+        }
+
+        // Ollama 允许无认证连接，认证由 OllamaChatClientFactory 按启用的 API Key 处理。
+        // Ollama allows unauthenticated connections; OllamaChatClientFactory handles enabled API keys.
+        if (configuration.Provider.ProviderType == ProviderType.OllamaNative)
+        {
+            return _ollamaChatClientFactory.CreateClient(configuration.Model, configuration.Provider);
         }
 
         var authConfigs = configuration.Provider.AuthConfigs.Where(config => config.Enable).ToList();

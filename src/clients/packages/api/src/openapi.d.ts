@@ -6479,7 +6479,7 @@ export interface components {
     ProviderModelDiscoveryRequest: {
       providerType: components["schemas"]["ProviderType"];
       endpoint: string;
-      apiKey: string;
+      apiKey?: null | string;
     };
     ProviderModelDiscoveryResponse: {
       modelNames: string[];
@@ -6510,7 +6510,7 @@ export interface components {
       updateTime: null | string;
     };
     /** @enum {unknown} */
-    ProviderType: "OpenAIChatCompletions" | "OpenAIResponses" | "Anthropic";
+    ProviderType: "OpenAIChatCompletions" | "OpenAIResponses" | "Anthropic" | "OllamaNative";
     ProviderUpdateRequest: {
       name: string;
       providerType: components["schemas"]["ProviderType"];

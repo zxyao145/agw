@@ -14,6 +14,7 @@ const providerTypeOptions: ProviderType[] = [
   "OpenAIChatCompletions",
   "OpenAIResponses",
   "Anthropic",
+  "OllamaNative",
 ];
 
 interface ProviderFormFieldsProps {
@@ -55,6 +56,7 @@ export function ProviderFormFields({
   modelsError,
   retryModels,
 }: ProviderFormFieldsProps) {
+  const isOllama = providerType === "OllamaNative";
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
       <div className="overflow-y-auto agw-scrollbar border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
@@ -65,7 +67,7 @@ export function ProviderFormFields({
               id={`${idPrefix}name`}
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="openai"
+              placeholder={isOllama ? "ollama" : "openai"}
             />
           </div>
 
@@ -75,7 +77,7 @@ export function ProviderFormFields({
               id={`${idPrefix}endpoint`}
               value={endpoint}
               onChange={(event) => setEndpoint(event.target.value)}
-              placeholder="https://api.openai.com/v1"
+              placeholder={isOllama ? "http://localhost:11434" : "https://api.openai.com/v1"}
             />
           </div>
 

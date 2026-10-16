@@ -1073,6 +1073,7 @@ public class AgentRuntimeFactoryCompositionTests
             services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),
             configuration: null!,
+            ollamaChatClientFactory: null!,
             skillRegistrations: [],
             remoteSkillContentResolver: null,
             loggerFactory: NullLoggerFactory.Instance,

@@ -84,6 +84,7 @@ public static class DependencyInjection
             services.AddScoped<AgentTurnExecutor>();
             services.AddScoped<ExternalProviderSessionBindings>();
             services.AddScoped<AgentRuntimeConfiguration>();
+            services.AddSingleton<OllamaChatClientFactory>();
             services.AddScoped(serviceProvider =>
                 ActivatorUtilities.CreateInstance<AgentRuntimeFactory>(serviceProvider)
             );

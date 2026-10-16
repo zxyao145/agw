@@ -22,6 +22,6 @@ public record ProviderUpdateRequest(
     IReadOnlyList<string>? ModelNames = null
 );
 
-public record ProviderModelDiscoveryRequest(ProviderType ProviderType, string Endpoint, string ApiKey);
+public record ProviderModelDiscoveryRequest(ProviderType ProviderType, string Endpoint, string? ApiKey = null);
 
 public record ProviderModelDiscoveryResponse(IReadOnlyList<string> ModelNames);
