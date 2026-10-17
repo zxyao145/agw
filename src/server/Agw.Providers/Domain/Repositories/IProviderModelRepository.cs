@@ -8,9 +8,12 @@ namespace Agw.Providers.Domain.Repositories;
 /// </summary>
 public interface IProviderModelRepository
 {
-    Task<bool> ProviderExistsAsync(Guid providerId);
+    Task<bool> ProviderExistsAsync(Guid providerId, CancellationToken cancellationToken = default);
 
-    Task<bool> ModelExistsAsync(Guid modelId);
+    Task<bool> ModelExistsAsync(Guid modelId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AgwAiModel>> ListModelsByNameAsync(IReadOnlyCollection<string> modelNames);
+    Task<IReadOnlyList<AgwAiModel>> ListModelsByNameAsync(
+        IReadOnlyCollection<string> modelNames,
+        CancellationToken cancellationToken = default
+    );
 }

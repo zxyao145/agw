@@ -57,9 +57,12 @@ public class ModelProvidersController : ControllerBase
 
     [HttpPost]
     [ProducesApiResult(typeof(ModelProviderRelation))]
-    public async Task<IActionResult> CreateAsync([FromBody] ModelProviderCreateRequest request)
+    public async Task<IActionResult> CreateAsync(
+        [FromBody] ModelProviderCreateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
-        var created = await _service.CreateAsync(request);
+        var created = await _service.CreateAsync(request, cancellationToken);
         return ApiResult.Ok(created);
     }
 
@@ -74,9 +77,9 @@ public class ModelProvidersController : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var deleted = await _service.DeleteAsync(id);
+        var deleted = await _service.DeleteAsync(id, cancellationToken);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

@@ -1,12 +1,14 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Catalog;
+using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
+using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Definitions.Facades;
 
-public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFacade
+public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFacade, IAgentProviderCompatibilityFacade
 {
     private readonly IAgentsDbContext _dbContext;
     private readonly IUserInfoService _userInfoService;
@@ -141,6 +143,30 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
                     && ids.Contains(agentflow.SummaryModelProviderId.Value),
                 cancellationToken
             );
+    }
+
+    public async Task EnsureCompatibleAsync(
+        IReadOnlyCollection<Guid> modelProviderIds,
+        ProviderType providerType,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var ownerUserId = ResolveOwnerUserId();
+        var kinds = await _dbContext
+            .Agents.AsNoTracking()
+            .Where(agent =>
+                agent.CreateBy == ownerUserId
+                && agent.Type == AgentType.External
+                && agent.ModelProviderId.HasValue
+                && modelProviderIds.Contains(agent.ModelProviderId.Value)
+            )
+            .Select(agent => agent.ExternalAgentKind)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        foreach (var kind in kinds)
+        {
+            ExternalAgentDefaults.ValidateProviderType(kind, providerType);
+        }
     }
 
     public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetAgentIdsBySkillIdsAsync(

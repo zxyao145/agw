@@ -532,6 +532,11 @@ public static class ErrorCodes
         "The previous execution is currently in progress, please wait and execute again.",
         HttpStatusCode.Conflict
     );
+    public static readonly ErrorCode JobModificationConflict = new(
+        409_0022,
+        "Job changed while the operation was in progress. Reload and try again.",
+        HttpStatusCode.Conflict
+    );
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(
         429_0001,

@@ -23,6 +23,7 @@ public class JobAppService
     private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
+    private readonly IJobDeletionCoordinator _deletionCoordinator;
 
     public JobAppService(
         IJobsDbContext dbContext,
@@ -31,6 +32,7 @@ public class JobAppService
         JobSchedulerWakeSignal schedulerWakeSignal,
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
+        IJobDeletionCoordinator deletionCoordinator,
         IApplicationLock? applicationLock = null
     )
     {
@@ -40,6 +42,7 @@ public class JobAppService
         _schedulerWakeSignal = schedulerWakeSignal;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
+        _deletionCoordinator = deletionCoordinator;
         _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
@@ -278,41 +281,16 @@ public class JobAppService
         return entity;
     }
 
-    public async Task<bool> DeleteAsync(Guid id)
-    {
-        var user = ResolveOwnerUserId();
-        var entity = await _dbContext.Jobs.FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == user);
-        if (entity == null)
-        {
-            return false;
-        }
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _deletionCoordinator.DeleteAsync(id, job => new JobBehavior(job).EnsureMutable(), cancellationToken);
 
-        new JobBehavior(entity).EnsureMutable();
-
-        await _dbContext.JobLogs.Where(log => log.JobId == entity.Id).ExecuteDeleteAsync().ConfigureAwait(false);
-        _dbContext.Jobs.Remove(entity);
-        await _dbContext.SaveChangesAsync();
-        return true;
-    }
-
-    public async Task<Job?> DeleteByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default)
-    {
-        var entity = await GetByProjectAsync(id, projectId, cancellationToken);
-        if (entity == null)
-        {
-            return null;
-        }
-
-        new JobBehavior(entity).EnsureMutable();
-
-        await _dbContext
-            .JobLogs.Where(log => log.JobId == entity.Id)
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
-        _dbContext.Jobs.Remove(entity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return entity;
-    }
+    public Task<Job?> DeleteByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default) =>
+        _deletionCoordinator.DeleteByProjectAsync(
+            id,
+            projectId,
+            job => new JobBehavior(job).EnsureMutable(),
+            cancellationToken
+        );
 
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
 }

@@ -38,7 +38,9 @@ public class AgentAppServiceUpdateTests : IDisposable
         agent.SummaryModelProviderId = summaryModelProviderId;
 
         // Act
-        var error = await Assert.ThrowsAsync<AgwException>(() => service.CreateAgentAsync(agent, null, null, null));
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+        );
 
         // Assert
         Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
@@ -86,7 +88,11 @@ public class AgentAppServiceUpdateTests : IDisposable
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Same(agent, updated);
         Assert.Equal("", agent.DisplayName);
@@ -126,7 +132,11 @@ public class AgentAppServiceUpdateTests : IDisposable
             _ => throw new Xunit.Sdk.XunitException($"Unexpected field: {fieldName}"),
         };
 
-        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize(json).ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            Deserialize(json).ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Same(agent, updated);
         Assert.Equal(fieldName == "displayName" ? "Updated Agent" : "External Agent", agent.DisplayName);
@@ -145,7 +155,11 @@ public class AgentAppServiceUpdateTests : IDisposable
         var agent = CreateExternalAgent();
         var service = CreateService(agent);
 
-        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize("{}").ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            Deserialize("{}").ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Same(agent, updated);
         Assert.Equal("External Agent", agent.DisplayName);
@@ -172,7 +186,11 @@ public class AgentAppServiceUpdateTests : IDisposable
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Same(agent, updated);
         Assert.Null(agent.ModelProviderId);
@@ -190,7 +208,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         var request = Deserialize($"{{\"{fieldName}\":null}}");
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand())
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -213,7 +231,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         var request = Deserialize(json);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand())
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -251,7 +269,11 @@ public class AgentAppServiceUpdateTests : IDisposable
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Same(agent, updated);
         Assert.Equal("After", agent.DisplayName);
@@ -287,7 +309,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand())
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -317,7 +339,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand())
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -351,7 +373,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         if (existingOwner == "tester")
         {
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
-                service.CreateAgentAsync(copy, null, null, null)
+                service.CreateAgentAsync(copy, null, null, null, TestContext.Current.CancellationToken)
             );
             Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
             Assert.Equal("An agent with this name already exists. Choose a different name.", exception.Message);
@@ -362,7 +384,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         }
         else
         {
-            var created = await service.CreateAgentAsync(copy, null, null, null);
+            var created = await service.CreateAgentAsync(copy, null, null, null, TestContext.Current.CancellationToken);
             Assert.NotNull(created);
             Assert.Equal(existing.Name, created.Name);
             Assert.NotEqual(existing.Id, created.Id);
@@ -388,7 +410,7 @@ public class AgentAppServiceUpdateTests : IDisposable
         var request = new AgentUpdateRequest { ModelProviderId = modelProviderId, DisplayName = "Changed" };
 
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand())
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), TestContext.Current.CancellationToken)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
@@ -406,7 +428,9 @@ public class AgentAppServiceUpdateTests : IDisposable
         agent.Name = "new-agent";
         agent.ModelProviderId = modelProviderId;
 
-        var error = await Assert.ThrowsAsync<AgwException>(() => service.CreateAgentAsync(agent, null, null, null));
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
         Assert.False(

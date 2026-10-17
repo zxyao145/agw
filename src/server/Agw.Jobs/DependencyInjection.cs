@@ -28,6 +28,8 @@ public static class DependencyInjection
         registrationOptions ??= new RegistrationOptions();
         if (registrationOptions.AddScheduler)
         {
+            services.AddSingleton(registrationOptions);
+            services.AddSingleton<InProcessJobRecovery>();
             services.AddHostedService<JobHostedService>();
             services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
             if (registrationOptions.UseDurableExecution)

@@ -28,6 +28,9 @@ public static class DependencyInjection
         services.AddScoped<AgentCatalogFacade>();
         services.AddScoped<IAgentCatalogFacade>(provider => provider.GetRequiredService<AgentCatalogFacade>());
         services.AddScoped<IAgentReferenceFacade>(provider => provider.GetRequiredService<AgentCatalogFacade>());
+        services.AddScoped<IAgentProviderCompatibilityFacade>(provider =>
+            provider.GetRequiredService<AgentCatalogFacade>()
+        );
         services.AddScoped<AgentSuggestionAppService>();
         services.AddScoped<ExecutionPermissionService>();
         services.AddScoped<McpToolServerAppService>();

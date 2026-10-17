@@ -39,9 +39,12 @@ public class ProvidersController : ControllerBase
 
     [HttpPost]
     [ProducesApiResult(typeof(Provider))]
-    public async Task<IActionResult> CreateAsync([FromBody] ProviderCreateRequest request)
+    public async Task<IActionResult> CreateAsync(
+        [FromBody] ProviderCreateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
-        var created = await _service.CreateAsync(request);
+        var created = await _service.CreateAsync(request, cancellationToken);
         return ApiResult.Ok(created);
     }
 
@@ -58,18 +61,22 @@ public class ProvidersController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [ProducesApiResult(typeof(Provider))]
-    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ProviderUpdateRequest request)
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromBody] ProviderUpdateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
-        var updated = await _service.UpdateAsync(id, request);
+        var updated = await _service.UpdateAsync(id, request, cancellationToken);
 
         return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var deleted = await _service.DeleteAsync(id);
+        var deleted = await _service.DeleteAsync(id, cancellationToken);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

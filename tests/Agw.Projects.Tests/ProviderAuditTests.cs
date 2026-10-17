@@ -1,14 +1,13 @@
+using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
-using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Providers;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Services;
 using Agw.Providers.Infrastructure;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
@@ -40,11 +39,28 @@ public class ProviderAuditTests
         await context.Database.EnsureCreatedAsync(cancellationToken);
         var bindingDomainService = new ProviderModelBindingDomainService(
             new ProviderModelRepository(context, user),
-            new TestAgentReferenceFacade(new EfRepository<Agent>(context), new EfRepository<Agentflow>(context))
+            new AgentCatalogFacade(context, user)
         );
-        var providers = new ProviderAppService(context, bindingDomainService, user);
-        var models = new ModelAppService(context, user);
-        var relations = new ModelProviderAppService(context, bindingDomainService, user);
+        var deletionCoordinator = new ProviderModelDeletionCoordinator(
+            context,
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+            user
+        );
+        var providers = new ProviderAppService(
+            context,
+            bindingDomainService,
+            user,
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+            deletionCoordinator,
+            new Agw.Agents.Definitions.Facades.AgentCatalogFacade(context, user)
+        );
+        var models = new ModelAppService(context, user, bindingDomainService, deletionCoordinator);
+        var relations = new ModelProviderAppService(
+            context,
+            bindingDomainService,
+            user,
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+        );
 
         // Act
         var provider = await providers.CreateAsync(
@@ -54,13 +70,15 @@ public class ProviderAuditTests
                 null,
                 "https://example.test",
                 [new ProviderAuthConfigRequest(ProviderAuthType.ApiKey, "key-a", null)]
-            )
+            ),
+            TestContext.Current.CancellationToken
         );
         context.ChangeTracker.Clear();
         var model = await models.CreateAsync(new ModelCreateRequest("model", null, 8192, 2048));
         context.ChangeTracker.Clear();
         var relation = await relations.CreateAsync(
-            new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0)
+            new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0),
+            TestContext.Current.CancellationToken
         );
         context.ChangeTracker.Clear();
         var credential = await context.ProviderAuthConfigs.SingleAsync(cancellationToken);
@@ -86,7 +104,8 @@ public class ProviderAuditTests
                     "updated",
                     "https://example.test",
                     [new ProviderAuthConfigRequest(ProviderAuthType.ApiKey, $"key-{update}", null)]
-                )
+                ),
+                TestContext.Current.CancellationToken
             );
             context.ChangeTracker.Clear();
             await models.UpdateAsync(model.Id, new ModelUpdateRequest("model", "updated", 8192, 2048));

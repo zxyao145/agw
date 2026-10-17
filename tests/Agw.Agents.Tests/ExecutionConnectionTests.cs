@@ -391,6 +391,7 @@ public class ExecutionConnectionTests
         await agent.Cancellation.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await removed.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
+        Assert.True(agent.Canceled);
         Assert.False(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
     }
 
@@ -432,15 +433,27 @@ public class ExecutionConnectionTests
             )
         );
         Assert.False(agent.Canceled);
-        Assert.True(
+        var activeAfterInterrupt = await registry.RecoverInProcessExecutionAsync(
+            "old-connection",
+            "user-id",
+            true,
+            TestContext.Current.CancellationToken
+        );
+        if (!activeAfterInterrupt)
+        {
+            Assert.True(fixture.Context.WhenIdleAsync().IsCompleted);
+        }
+        await agent.Cancellation.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
+        await fixture.Context.WhenIdleAsync().WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
+        Assert.True(agent.Canceled);
+        Assert.False(
             await registry.RecoverInProcessExecutionAsync(
                 "old-connection",
                 "user-id",
-                true,
+                false,
                 TestContext.Current.CancellationToken
             )
         );
-        await agent.Cancellation.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
     }
 
     [Fact]

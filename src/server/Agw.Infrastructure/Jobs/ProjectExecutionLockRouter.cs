@@ -1,5 +1,6 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Shared.Contracts.Coordination;
 using Medallion.Threading;
 using Microsoft.Extensions.Options;
 
@@ -30,7 +31,13 @@ public sealed class ProjectExecutionLockRouter : IProjectExecutionLock
         _providerFactory = providerFactory;
     }
 
-    public Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken)
+    public Task<IApplicationLockLease> AcquireAsync(Guid projectId, CancellationToken cancellationToken) =>
+        ResolveLock().AcquireAsync(projectId, cancellationToken);
+
+    public Task<IApplicationLockLease?> TryAcquireAsync(Guid projectId, CancellationToken cancellationToken) =>
+        ResolveLock().TryAcquireAsync(projectId, cancellationToken);
+
+    private IProjectExecutionLock ResolveLock()
     {
         var databaseSettings = _databaseSettings.CurrentValue;
         var effectiveSettings = DistributedLockSettingsResolver.Resolve(
@@ -40,9 +47,8 @@ public sealed class ProjectExecutionLockRouter : IProjectExecutionLock
         );
 
         return effectiveSettings.Provider == DistributedLockProvider.InMemory
-            ? _inMemoryLock.AcquireAsync(projectId, cancellationToken)
-            : GetDistributedLock(effectiveSettings.Provider!.Value, effectiveSettings.ConnectionString!)
-                .AcquireAsync(projectId, cancellationToken);
+            ? _inMemoryLock
+            : GetDistributedLock(effectiveSettings.Provider!.Value, effectiveSettings.ConnectionString!);
     }
 
     private DistributedProjectExecutionLock GetDistributedLock(

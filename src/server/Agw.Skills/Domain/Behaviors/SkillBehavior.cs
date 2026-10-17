@@ -93,6 +93,7 @@ public sealed class SkillBehavior
     {
         Define(name, description);
         _skill.RemoteUrl = remoteUrl;
+        _skill.ContentPath = string.Empty;
     }
 
     public void EnsureRemote()
@@ -132,8 +133,8 @@ public sealed class SkillBehavior
     }
 
     /// <summary>
-    /// <para>名称与描述去除两端空白后保存；本地技能的内容位于以稳定 Id 命名的目录中。</para>
-    /// <para>Name and description are stored trimmed; a local skill's content lives in a folder named by its stable ID.</para>
+    /// <para>名称与描述去除两端空白后保存。</para>
+    /// <para>Name and description are stored trimmed.</para>
     /// </summary>
     private void Define(string name, string description)
     {
@@ -142,7 +143,6 @@ public sealed class SkillBehavior
         _skill.Name = name.Trim();
         _skill.Description = description.Trim();
         _skill.Id = _skill.Id == Guid.Empty ? Guid.CreateVersion7() : _skill.Id;
-        _skill.ContentPath = _skill.Kind == SkillKind.Local ? $"skills/{_skill.Id:N}" : string.Empty;
     }
 
     private static void ValidateName(string name)

@@ -2,6 +2,7 @@ using Agw.Infrastructure.Data;
 using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 
 namespace Agw.Infrastructure.Jobs;
 
@@ -22,8 +23,8 @@ public sealed class JobOutcomeTransaction : IJobOutcomeTransaction
         CancellationToken cancellationToken
     )
     {
-        await using var lease = await _applicationLock.AcquireAsync($"job-outcome:{jobId:N}", cancellationToken);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        var lease = await _applicationLock.AcquireAsync(JobOutcomeLock.GetResourceName(jobId), cancellationToken);
+        await using var linked = new ApplicationLockScope(lease, cancellationToken);
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(linked.Token);
         try
         {

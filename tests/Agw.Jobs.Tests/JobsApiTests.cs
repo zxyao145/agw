@@ -6,6 +6,7 @@ using System.Text.Json;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Api;
 using Agw.Jobs.Application.Persistence;
@@ -15,6 +16,8 @@ using Agw.Jobs.Domain.Services;
 using Agw.Jobs.Infrastructure;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Testing;
@@ -98,6 +101,21 @@ public class JobsApiTests : IDisposable
         Assert.Equal(JobStatus.Pending, persisted.Status);
     }
 
+    [Fact]
+    public async Task DeleteAsync_MissingJob_ReturnsResourceNotFound()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
+        var response = await fixture.Client.DeleteAsync($"/api/jobs/{Guid.CreateVersion7()}", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        Assert.Equal(
+            Agw.Shared.Exceptions.ErrorCodes.ResourceNotFound.Code,
+            body.RootElement.GetProperty("code").GetInt32()
+        );
+    }
+
     private sealed class JobsApiFixture : IAsyncDisposable
     {
         private readonly WebApplication _app;
@@ -157,6 +175,8 @@ public class JobsApiTests : IDisposable
             );
             builder.Services.AddScoped<IJobRepository, JobRepository>();
             builder.Services.AddScoped<JobDefinitionDomainService>();
+            builder.Services.AddScoped<IJobDeletionCoordinator, JobDeletionCoordinator>();
+            builder.Services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
             builder.Services.AddSingleton<JobSchedulerWakeSignal>();
             builder.Services.AddScoped<IUserInfoService, UserInfoService>();
             builder.Services.AddScoped<

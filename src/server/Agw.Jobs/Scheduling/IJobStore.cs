@@ -9,11 +9,15 @@ namespace Agw.Jobs.Scheduling;
 /// </summary>
 public interface IJobStore
 {
+    Task<IReadOnlyList<Job>> ListRunningAsync(CancellationToken cancellationToken);
+
+    Task<Job?> GetRunningAsync(Guid jobId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<Job>> PrefetchAsync(
         DateTimeOffset now,
         DateTimeOffset horizon,
         CancellationToken cancellationToken
     );
 
-    Task<JobAttemptClaim?> TryStartAttemptAsync(Guid jobId, CancellationToken cancellationToken);
+    Task<JobAttemptStartResult> TryStartAttemptAsync(ScheduledJob scheduledJob, CancellationToken cancellationToken);
 }

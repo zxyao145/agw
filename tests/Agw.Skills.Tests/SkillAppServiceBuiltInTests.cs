@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
@@ -60,6 +61,7 @@ public class SkillAppServiceBuiltInTests
                 NullLogger<SkillAppService>.Instance,
                 new TestRemoteSkillClient(),
                 new TestRemoteSkillRefreshLock(),
+                InMemoryApplicationLock.Shared,
                 TimeProvider.System,
                 currentUser,
                 [new TestSkillRegistration()]

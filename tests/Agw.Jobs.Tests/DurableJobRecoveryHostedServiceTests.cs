@@ -1,275 +1,148 @@
 using System.Reflection;
-using Agw.Infrastructure.Data;
-using Agw.Jobs.Application.Persistence;
-using Agw.Jobs.Scheduling.Attempts;
+using Agw.Auth.Contracts;
+using Agw.Infrastructure.Jobs;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Setup.Services;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Exceptions;
-using Agw.Shared.Runtime;
-using Microsoft.Data.Sqlite;
+using Agw.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Jobs.Tests;
 
 public sealed class DurableJobRecoveryHostedServiceTests
 {
-    [Fact]
-    public async Task RecoverJobAsync_ExecutionWasNotRegistered_RecordsCurrentAttemptFailure()
+    [Theory]
+    [InlineData("owner", "was not registered", JobStatus.Pending)]
+    [InlineData("", "owner is missing", JobStatus.Paused)]
+    public async Task RecoverJobAsync_InterruptedAttempt_RecordsFailureAndClearsAttempt(
+        string owner,
+        string expectedError,
+        JobStatus expectedStatus
+    )
     {
-        var turnId = Guid.CreateVersion7();
-        var job = new Job
-        {
-            Id = Guid.CreateVersion7(),
-            ProjectId = Guid.CreateVersion7(),
-            Status = JobStatus.Running,
-            IsEnabled = true,
-            ActiveTurnId = turnId,
-            ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
-            CreateBy = "owner",
-        };
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await using var dbContext = new AgwDbContext(
-            new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        var job = await SeedAsync(database, owner, token);
+        await using var provider = JobTestServices.Create(
+            database.Options,
+            TimeProvider.System,
+            new InMemoryProjectExecutionLock()
         );
-        await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-        dbContext.Jobs.Add(job);
-        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
-        var recorder = new RecordingOutcomeRecorder();
-        var services = new ServiceCollection()
-            .AddSingleton<IJobsDbContext>(dbContext)
-            .AddSingleton<IDurableAgentExecutionFacade>(new MissingDurableExecutionFacade())
-            .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
-            .BuildServiceProvider();
-        var timeProvider = TimeProvider.System;
-        var service = new DurableJobRecoveryHostedService(
-            services.GetRequiredService<IServiceScopeFactory>(),
-            new InitializationState(true),
-            new ImmediateProjectExecutionLock(),
-            timeProvider,
-            new JobSchedulerWakeSignal(timeProvider),
-            NullLogger<DurableJobRecoveryHostedService>.Instance
-        );
-        var method = typeof(DurableJobRecoveryHostedService).GetMethod(
-            "RecoverJobAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic
-        );
+        using var service = ActivatorUtilities.CreateInstance<DurableJobRecoveryHostedService>(provider);
 
-        var invocation = method!.Invoke(service, [job, TestContext.Current.CancellationToken]);
-        await Assert.IsAssignableFrom<Task>(invocation);
+        Assert.False(UserInfoUtil.IsContextActive);
+        await RecoverJobAsync(service, job, token);
 
-        Assert.Equal(job.Id, recorder.JobId);
-        Assert.Equal(turnId, recorder.TurnId);
-        Assert.False(recorder.Success);
-        Assert.Contains("was not registered", recorder.ErrorMessage, StringComparison.Ordinal);
+        using var verificationScope = UserInfoUtil.PushSystemScope();
+        await using var verification = database.CreateContext();
+        var persisted = await verification.Jobs.SingleAsync(token);
+        var log = await verification.JobLogs.SingleAsync(token);
+        Assert.Equal(job.ActiveTurnId, log.TaskId);
+        Assert.False(log.Success);
+        Assert.Contains(expectedError, log.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal(expectedStatus, persisted.Status);
+        Assert.Null(persisted.ActiveTurnId);
     }
 
     [Fact]
-    public async Task RecoverJobAsync_MissingOwner_RecordsFailureWithoutRetryingForever()
+    public async Task RecoverJobAsync_ActiveTurnChangesWhileWaiting_PreservesNewAttempt()
     {
-        var turnId = Guid.CreateVersion7();
-        var job = new Job
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        var job = await SeedAsync(database, "owner", token);
+        var projectLock = new InMemoryProjectExecutionLock();
+        await using var provider = JobTestServices.Create(database.Options, TimeProvider.System, projectLock);
+        using var service = ActivatorUtilities.CreateInstance<DurableJobRecoveryHostedService>(provider);
+        var newTurnId = Guid.CreateVersion7();
+        Task recovery;
+        await using (var held = await projectLock.AcquireAsync(job.ProjectId, token))
         {
-            Id = Guid.CreateVersion7(),
-            ProjectId = Guid.CreateVersion7(),
-            Status = JobStatus.Running,
-            IsEnabled = true,
-            ActiveTurnId = turnId,
-            ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
-            CreateBy = string.Empty,
-        };
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await using var dbContext = new AgwDbContext(
-            new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options
-        );
-        await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-        dbContext.Jobs.Add(job);
-        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
-        var recorder = new RecordingOutcomeRecorder();
-        var executionFacade = new MissingDurableExecutionFacade();
-        var services = new ServiceCollection()
-            .AddSingleton<IJobsDbContext>(dbContext)
-            .AddSingleton<IDurableAgentExecutionFacade>(executionFacade)
-            .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
-            .BuildServiceProvider();
-        var timeProvider = TimeProvider.System;
-        var service = new DurableJobRecoveryHostedService(
-            services.GetRequiredService<IServiceScopeFactory>(),
-            new InitializationState(true),
-            new ImmediateProjectExecutionLock(),
-            timeProvider,
-            new JobSchedulerWakeSignal(timeProvider),
-            NullLogger<DurableJobRecoveryHostedService>.Instance
-        );
-        var method = typeof(DurableJobRecoveryHostedService).GetMethod(
-            "RecoverJobAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic
-        );
+            recovery = RecoverJobAsync(service, job, token);
+            Assert.False(recovery.IsCompleted);
+            using var updateScope = UserInfoUtil.PushSystemScope();
+            await using var update = database.CreateContext();
+            var current = await update.Jobs.SingleAsync(token);
+            current.ActiveTurnId = newTurnId;
+            await update.SaveChangesAsync(token);
+        }
 
-        var invocation = method!.Invoke(service, [job, TestContext.Current.CancellationToken]);
-        await Assert.IsAssignableFrom<Task>(invocation);
+        await recovery.WaitAsync(TimeSpan.FromSeconds(10), token);
 
-        Assert.Equal(job.Id, recorder.JobId);
-        Assert.Equal(turnId, recorder.TurnId);
-        Assert.False(recorder.Success);
-        Assert.Equal("The Job owner is missing.", recorder.ErrorMessage);
-        Assert.Equal(0, executionFacade.GetOutcomeCalls);
+        using var verificationScope = UserInfoUtil.PushSystemScope();
+        await using var verification = database.CreateContext();
+        var persisted = await verification.Jobs.SingleAsync(token);
+        Assert.Equal(JobStatus.Running, persisted.Status);
+        Assert.Equal(newTurnId, persisted.ActiveTurnId);
+        Assert.Empty(await verification.JobLogs.ToListAsync(token));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExecuteAsync_BeforeInitialization_WaitsWithoutQueryingDatabase(bool finishSetup)
+    public async Task ExecuteAsync_BeforeInitialization_WaitsWithoutRecoveringJobs(bool finishSetup)
     {
         var token = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(token);
-        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
-        var job = new Job
-        {
-            Id = Guid.NewGuid(),
-            ProjectId = Guid.NewGuid(),
-            Status = JobStatus.Running,
-            ActiveTurnId = Guid.NewGuid(),
-            ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
-            CreateBy = "owner",
-        };
-        await using (var seed = new AgwDbContext(options))
-        {
-            await seed.Database.EnsureCreatedAsync(token);
-            seed.Jobs.Add(job);
-            await seed.SaveChangesAsync(token);
-        }
-        var state = new InitializationState(false);
-        var recorder = new RecordingOutcomeRecorder();
-        var databaseAccesses = 0;
-        await using var provider = new ServiceCollection()
-            .AddScoped<IJobsDbContext>(_ =>
-            {
-                Interlocked.Increment(ref databaseAccesses);
-                return new AgwDbContext(options);
-            })
-            .AddSingleton<IDurableAgentExecutionFacade>(new MissingDurableExecutionFacade())
-            .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
-            .BuildServiceProvider();
-        using var service = new DurableJobRecoveryHostedService(
-            provider.GetRequiredService<IServiceScopeFactory>(),
-            state,
-            new ImmediateProjectExecutionLock(),
-            TimeProvider.System,
-            new JobSchedulerWakeSignal(TimeProvider.System),
-            NullLogger<DurableJobRecoveryHostedService>.Instance
-        );
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        var job = await SeedAsync(database, "owner", token);
+        var clock = new ManualTimeProvider();
+        await using var provider = JobTestServices.Create(database.Options, clock, new InMemoryProjectExecutionLock());
+        using var service = ActivatorUtilities.CreateInstance<DurableJobRecoveryHostedService>(provider);
+        await service.StartAsync(token);
         try
         {
-            await service.StartAsync(token);
-            await state.Checked.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
-            Assert.Equal(0, Volatile.Read(ref databaseAccesses));
+            await clock.WaitForTimerAsync(TimeSpan.FromMilliseconds(250), token);
+            using (UserInfoUtil.PushSystemScope())
+            await using (var verification = database.CreateContext())
+            {
+                Assert.Equal(JobStatus.Running, (await verification.Jobs.SingleAsync(token)).Status);
+                Assert.Empty(await verification.JobLogs.ToListAsync(token));
+            }
             if (finishSetup)
             {
-                state.IsInitialized = true;
-                await recorder.Recorded.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+                await provider
+                    .GetRequiredService<DatabaseInitializationStateStore>()
+                    .PersistAsync("test-password-hash", token);
+                clock.Advance(TimeSpan.FromMilliseconds(250));
+                await clock.WaitForTimerAsync(TimeSpan.FromSeconds(30), token);
+                using var verificationScope = UserInfoUtil.PushSystemScope();
+                await using var verification = database.CreateContext();
+                Assert.Equal(job.ActiveTurnId, (await verification.JobLogs.SingleAsync(token)).TaskId);
             }
         }
         finally
         {
             await service.StopAsync(token);
         }
-
-        Assert.Equal(finishSetup ? job.Id : (Guid?)null, recorder.JobId);
-        Assert.Equal(finishSetup, Volatile.Read(ref databaseAccesses) > 0);
     }
 
-    private sealed class InitializationState : IServerInitializationState
+    internal static Task RecoverJobAsync(DurableJobRecoveryHostedService service, Job job, CancellationToken token) =>
+        (Task)
+            typeof(DurableJobRecoveryHostedService)
+                .GetMethod("RecoverJobAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(service, [job, token])!;
+
+    private static async Task<Job> SeedAsync(SqliteJobTestDatabase database, string owner, CancellationToken token)
     {
-        private volatile bool _isInitialized;
-
-        public InitializationState(bool isInitialized)
+        var job = new Job
         {
-            _isInitialized = isInitialized;
-        }
-
-        public TaskCompletionSource Checked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public bool IsInitialized
-        {
-            get
-            {
-                Checked.TrySetResult();
-                return _isInitialized;
-            }
-            set => _isInitialized = value;
-        }
-    }
-
-    private sealed class MissingDurableExecutionFacade : IDurableAgentExecutionFacade
-    {
-        public int GetOutcomeCalls { get; private set; }
-
-        public Task<AgentExecutionResult> GetOutcomeAsync(
-            Guid turnId,
-            string ownerUserId,
-            CancellationToken cancellationToken = default
-        )
-        {
-            GetOutcomeCalls++;
-            throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        }
-
-        public async IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
-            Guid turnId,
-            string ownerUserId,
-            string? afterCursor,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
-        )
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<bool> InterruptAsync(
-            Guid turnId,
-            string ownerUserId,
-            string reason,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-    }
-
-    private sealed class RecordingOutcomeRecorder : IJobAttemptOutcomeRecorder
-    {
-        public TaskCompletionSource Recorded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public Guid? JobId { get; private set; }
-        public Guid? TurnId { get; private set; }
-        public bool Success { get; private set; }
-        public string? ErrorMessage { get; private set; }
-
-        public Task<JobAttemptResult> RecordAsync(
-            Guid jobId,
-            Guid turnId,
-            bool success,
-            string? errorMessage,
-            CancellationToken cancellationToken
-        )
-        {
-            JobId = jobId;
-            TurnId = turnId;
-            Success = success;
-            ErrorMessage = errorMessage;
-            Recorded.TrySetResult();
-            return Task.FromResult<JobAttemptResult>(new JobAttemptResult.Drop());
-        }
-    }
-
-    private sealed class ImmediateProjectExecutionLock : IProjectExecutionLock
-    {
-        public Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken) =>
-            Task.FromResult<IAsyncDisposable>(new Lease());
-
-        private sealed class Lease : IAsyncDisposable
-        {
-            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-        }
+            Id = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
+            Name = "interrupted",
+            Status = JobStatus.Running,
+            IsEnabled = true,
+            MaxRetryCount = 3,
+            TriggerType = TriggerType.Interval,
+            TriggerValue = "00:15:00",
+            ActiveTurnId = Guid.CreateVersion7(),
+            ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
+            CreateBy = owner,
+        };
+        using var seedScope = UserInfoUtil.PushSystemScope();
+        await using var seed = database.CreateContext();
+        await seed.Database.EnsureCreatedAsync(token);
+        seed.Jobs.Add(job);
+        await seed.SaveChangesAsync(token);
+        return job;
     }
 }

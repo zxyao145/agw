@@ -7,6 +7,7 @@ using Agw.Infrastructure.Data;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Tests;
 using Agw.Providers.Application.Facades;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
@@ -28,6 +29,67 @@ public class AgentConnectionRelationTests : IDisposable
     public void Dispose() => _userScope.Dispose();
 
     [Fact]
+    public async Task CreateAgentAsync_DefinitionLockHeld_WaitsForRelease()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await TestScope.CreateAsync(cancellationToken);
+        var agent = CreateAgent(Guid.CreateVersion7(), AgentType.System, scope.ModelProviderId);
+
+        var created = await ExecuteAfterDefinitionLockReleasedAsync(
+            () => scope.Service.CreateAgentAsync(agent, null, null, null, cancellationToken),
+            async () =>
+            {
+                await using var assertContext = scope.CreateDbContext();
+                Assert.False(
+                    await assertContext
+                        .Agents.IgnoreQueryFilters()
+                        .AnyAsync(persistedAgent => persistedAgent.Id == agent.Id, cancellationToken)
+                );
+            },
+            cancellationToken
+        );
+
+        Assert.NotNull(created);
+    }
+
+    [Fact]
+    public async Task UpdateAgentAsync_DefinitionLockHeld_WaitsForRelease()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await TestScope.CreateAsync(cancellationToken, AgentType.System);
+
+        var updated = await ExecuteAfterDefinitionLockReleasedAsync(
+            () =>
+                scope.Service.UpdateAgentAsync(
+                    scope.AgentId,
+                    new AgentUpdateRequest
+                    {
+                        DisplayName = "Updated agent",
+                        Description = "desc",
+                        SystemPrompt = "prompt",
+                        ModelProviderId = scope.ModelProviderId,
+                    }.ToCommand(),
+                    cancellationToken
+                ),
+            async () =>
+            {
+                await using var assertContext = scope.CreateDbContext();
+                var persistedAgent = await assertContext
+                    .Agents.IgnoreQueryFilters()
+                    .SingleAsync(agent => agent.Id == scope.AgentId, cancellationToken);
+                Assert.Equal("Agent", persistedAgent.DisplayName);
+                var relation = Assert.Single(
+                    await assertContext.AgentConnectionRelations.ToListAsync(cancellationToken)
+                );
+                Assert.Equal(scope.FirstConnectionId, relation.ConnectionId);
+            },
+            cancellationToken
+        );
+
+        Assert.NotNull(updated);
+    }
+
+    [Fact]
     public async Task CreateAgentAsync_WhenConnectionIdsContainUnknownValues_ThrowsInvalidParam()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -39,7 +101,8 @@ public class AgentConnectionRelationTests : IDisposable
                 agent,
                 mcpToolServerIds: null,
                 skillIds: null,
-                connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()]
+                connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()],
+                cancellationToken: TestContext.Current.CancellationToken
             )
         );
 
@@ -61,7 +124,8 @@ public class AgentConnectionRelationTests : IDisposable
                 SystemPrompt = "prompt",
                 ModelProviderId = scope.ModelProviderId,
                 ConnectionIds = [scope.SecondConnectionId],
-            }.ToCommand()
+            }.ToCommand(),
+            TestContext.Current.CancellationToken
         );
 
         Assert.NotNull(updated);
@@ -84,7 +148,8 @@ public class AgentConnectionRelationTests : IDisposable
                 Description = "desc",
                 SystemPrompt = "prompt",
                 ModelProviderId = scope.ModelProviderId,
-            }.ToCommand()
+            }.ToCommand(),
+            TestContext.Current.CancellationToken
         );
 
         await using var assertContext = scope.CreateDbContext();
@@ -107,7 +172,8 @@ public class AgentConnectionRelationTests : IDisposable
                 SystemPrompt = "prompt",
                 ModelProviderId = scope.ModelProviderId,
                 ConnectionIds = null,
-            }.ToCommand()
+            }.ToCommand(),
+            TestContext.Current.CancellationToken
         );
 
         await using var assertContext = scope.CreateDbContext();
@@ -156,7 +222,8 @@ public class AgentConnectionRelationTests : IDisposable
                 SystemPrompt = "prompt",
                 ModelProviderId = scope.ModelProviderId,
                 ConnectionIds = [scope.SecondConnectionId],
-            }.ToCommand()
+            }.ToCommand(),
+            TestContext.Current.CancellationToken
         );
 
         Assert.NotNull(ownView);
@@ -187,6 +254,29 @@ public class AgentConnectionRelationTests : IDisposable
             ModelProviderId = modelProviderId,
             CreateBy = "tester",
         };
+
+    private static async Task<T> ExecuteAfterDefinitionLockReleasedAsync<T>(
+        Func<Task<T>> action,
+        Func<Task> assertUnchanged,
+        CancellationToken cancellationToken
+    )
+    {
+        Task<T> operation;
+        await using (
+            var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
+                AgentDefinitionLock.GetResourceName("tester"),
+                cancellationToken
+            )
+        )
+        {
+            operation = action();
+            var timeout = Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            Assert.NotSame(operation, await Task.WhenAny(operation, timeout));
+            await assertUnchanged();
+        }
+
+        return await operation;
+    }
 
     private static Connection CreateConnection(Guid id, string alias, string user = "tester") =>
         new()
@@ -328,7 +418,8 @@ public class AgentConnectionRelationTests : IDisposable
                 new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
                     dbContext,
                     Agw.Shared.Coordination.InMemoryApplicationLock.Shared
-                )
+                ),
+                InMemoryApplicationLock.Shared
             );
         }
     }

@@ -10,6 +10,7 @@ using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Projects;
+using Agw.Infrastructure.Providers;
 using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Settings;
 using Agw.Infrastructure.Skills;
@@ -134,8 +135,10 @@ public static class DependencyInjection
         services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
         services.AddScoped<IAgentDeletionCoordinator, AgentDeletionCoordinator>();
         services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
+        services.AddScoped<IProviderModelDeletionCoordinator, ProviderModelDeletionCoordinator>();
         services.AddScoped<IProjectProviderSessionCoordinator, ProjectProviderSessionCoordinator>();
         services.AddScoped<IJobOutcomeTransaction, JobOutcomeTransaction>();
+        services.AddScoped<IJobDeletionCoordinator, JobDeletionCoordinator>();
         services.AddScoped<Agw.Projects.Contracts.Execution.IConversationExecutionGate, ConversationExecutionGate>();
         services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));

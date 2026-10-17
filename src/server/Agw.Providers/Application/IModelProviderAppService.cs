@@ -9,9 +9,12 @@ public interface IModelProviderAppService
 
     Task<ModelProviderRelation?> GetAsync(Guid id);
 
-    Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request);
+    Task<ModelProviderRelation> CreateAsync(
+        ModelProviderCreateRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     Task<ModelProviderRelation?> UpdateAsync(Guid id, ModelProviderUpdateRequest request);
 
-    Task<bool> DeleteAsync(Guid id);
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

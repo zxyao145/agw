@@ -35,11 +35,14 @@ public sealed class AgentDefinitionDomainService
         }
     }
 
-    public async Task<bool> AreModelProvidersVisibleAsync(Agent agent) =>
-        await IsModelProviderVisibleAsync(agent.ModelProviderId).ConfigureAwait(false)
-        && await IsModelProviderVisibleAsync(agent.SummaryModelProviderId).ConfigureAwait(false);
+    public async Task<bool> AreModelProvidersVisibleAsync(Agent agent, CancellationToken cancellationToken = default) =>
+        await IsModelProviderVisibleAsync(agent.ModelProviderId, cancellationToken).ConfigureAwait(false)
+        && await IsModelProviderVisibleAsync(agent.SummaryModelProviderId, cancellationToken).ConfigureAwait(false);
 
-    public async Task<bool> IsModelProviderVisibleAsync(Guid? modelProviderId)
+    public async Task<bool> IsModelProviderVisibleAsync(
+        Guid? modelProviderId,
+        CancellationToken cancellationToken = default
+    )
     {
         if (!modelProviderId.HasValue)
         {
@@ -47,7 +50,7 @@ public sealed class AgentDefinitionDomainService
         }
 
         var visibleIds = await _modelProviderReferences
-            .FilterVisibleModelProviderIdsAsync([modelProviderId.Value])
+            .FilterVisibleModelProviderIdsAsync([modelProviderId.Value], cancellationToken)
             .ConfigureAwait(false);
         return visibleIds.Contains(modelProviderId.Value);
     }
@@ -56,7 +59,11 @@ public sealed class AgentDefinitionDomainService
     /// <para>External Agent 的模型供应商必须存在，且其协议受该 External Agent 类型支持。</para>
     /// <para>An External agent's model provider must exist and use a protocol its kind supports.</para>
     /// </summary>
-    public async Task EnsureExternalModelProviderSupportedAsync(EngineKind kind, Guid? modelProviderId)
+    public async Task EnsureExternalModelProviderSupportedAsync(
+        EngineKind kind,
+        Guid? modelProviderId,
+        CancellationToken cancellationToken = default
+    )
     {
         if (!modelProviderId.HasValue)
         {
@@ -64,7 +71,9 @@ public sealed class AgentDefinitionDomainService
         }
 
         var snapshot =
-            await _modelProviderReferences.GetRuntimeSnapshotAsync(modelProviderId.Value).ConfigureAwait(false)
+            await _modelProviderReferences
+                .GetRuntimeSnapshotAsync(modelProviderId.Value, cancellationToken)
+                .ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Model provider is unavailable.");
         ExternalAgentDefaults.ValidateProviderType(kind, snapshot.Provider.ProviderType);
     }

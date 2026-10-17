@@ -19,6 +19,18 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         _timeProvider = timeProvider;
     }
 
+    public async Task<IReadOnlyList<Job>> ListRunningAsync(CancellationToken cancellationToken) =>
+        await _dbSet
+            .IgnoreUserScope()
+            .AsNoTracking()
+            .Where(job => job.Status == JobStatus.Running)
+            .ToListAsync(cancellationToken);
+
+    public Task<Job?> GetRunningAsync(Guid jobId, CancellationToken cancellationToken) =>
+        _dbSet
+            .IgnoreUserScope()
+            .FirstOrDefaultAsync(job => job.Id == jobId && job.Status == JobStatus.Running, cancellationToken);
+
     public async Task<IReadOnlyList<Job>> PrefetchAsync(
         DateTimeOffset now,
         DateTimeOffset horizon,
@@ -30,28 +42,39 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         return jobs.Where(t => t.Status == JobStatus.Pending && t.NextRunTime <= horizon).ToList();
     }
 
-    public async Task<JobAttemptClaim?> TryStartAttemptAsync(Guid jobId, CancellationToken cancellationToken)
+    public async Task<JobAttemptStartResult> TryStartAttemptAsync(
+        ScheduledJob scheduledJob,
+        CancellationToken cancellationToken
+    )
     {
         var now = _timeProvider.GetUtcNow();
         var job = await _dbSet
             .IgnoreUserScope()
-            .FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
+            .FirstOrDefaultAsync(t => t.Id == scheduledJob.JobId && t.IsEnabled, cancellationToken);
 
         if (job == null)
         {
-            var exists = await _dbSet.IgnoreUserScope().AsNoTracking().AnyAsync(t => t.Id == jobId, cancellationToken);
+            var exists = await _dbSet
+                .IgnoreUserScope()
+                .AsNoTracking()
+                .AnyAsync(t => t.Id == scheduledJob.JobId, cancellationToken);
 
             if (!exists)
             {
-                throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
+                throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {scheduledJob.JobId}");
             }
 
-            return null;
+            return new JobAttemptStartResult.Drop();
         }
 
         if (job.Status != JobStatus.Pending)
         {
-            return null;
+            return new JobAttemptStartResult.Drop();
+        }
+
+        if (job.ProjectId != scheduledJob.ProjectId || job.NextRunTime > now)
+        {
+            return new JobAttemptStartResult.Reschedule(ScheduledJob.FromJob(job));
         }
 
         if (string.IsNullOrWhiteSpace(job.CreateBy))
@@ -67,7 +90,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
             {
                 await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
-            return null;
+            return new JobAttemptStartResult.Drop();
         }
 
         var turnId = Guid.CreateVersion7();
@@ -78,6 +101,6 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         job.UpdateBy = "scheduler";
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return new JobAttemptClaim(job, turnId, now, job.RetryCount + 1);
+        return new JobAttemptStartResult.Claimed(new JobAttemptClaim(job, turnId, now, job.RetryCount + 1));
     }
 }

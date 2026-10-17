@@ -1075,6 +1075,7 @@ public class AgentRuntimeFactoryCompositionTests
             configuration: null!,
             ollamaChatClientFactory: null!,
             skillRegistrations: [],
+            localSkillContentResolver: null!,
             remoteSkillContentResolver: null,
             loggerFactory: NullLoggerFactory.Instance,
             conversationHistoryWriter: null,
