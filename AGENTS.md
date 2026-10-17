@@ -18,7 +18,7 @@ Agw is a modular-monolith agent gateway (Agents, Agentflows, Jobs, Chat, Integra
 | [docs/ws-flow.md](docs/ws-flow.md) | Execution WebSocket/SignalR protocol |
 | [src/clients/mobile/AGENTS.md](src/clients/mobile/AGENTS.md) | Mobile structure, allowed imports, token storage |
 
-`docs/approachs/` holds technical proposals. Once a file there is committed it must never be modified, deleted, or renamed. New proposals are named `{yyyy-MM-dd}-{name}.md` and follow the template in `docs/approachs/README.md`.
+`docs/designs/` holds technical proposals. Once a file there is committed it must never be modified, deleted, or renamed. New proposals are named `{yyyy-MM-dd}-{name}.md` and follow the template in `docs/designs/README.md`.
 
 ## Commands
 

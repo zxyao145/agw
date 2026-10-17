@@ -6,7 +6,7 @@ Virtualized row measurements can reduce `scrollTop` while the viewport remains a
 
 ## External Agent request persistence
 
-Stage the original input before forwarding transient memory-enriched messages. Request lifecycle belongs to Projects' [EfCoreChatHistoryProvider](../src/server/Agw.Projects/Infrastructure/EfCoreChatHistoryProvider.Requests.cs), exposed through `IConversationHistoryRequests`; [AgentRequestContextAgent](../src/server/Agw.Agents.Execution/Agents/Context/AgentRequestContextAgent.cs) must not persist injected context as new user history. Do not restore the removed duplicate request-history provider.
+Stage the original input before forwarding transient memory-enriched messages. [HistoryRecordingAgent](../src/server/Agw.Agents.Execution/Agents/History/HistoryRecordingAgent.cs) stages input and excludes forwarded copies from persistence; [AgwChatHistoryProvider](../src/server/Agw.Agents.Execution/Agents/History/AgwChatHistoryProvider.cs) manages each SDK session's recording. Projects' [ConversationHistoryStore](../src/server/Agw.Projects/Infrastructure/ConversationHistoryStore.cs) owns history persistence and buffering.
 
 ## Workflow checkpoint restore
 
