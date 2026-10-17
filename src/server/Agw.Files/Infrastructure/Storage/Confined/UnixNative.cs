@@ -33,6 +33,15 @@ internal static partial class UnixNative
     public const int EISDIR = 21;
     public const int EINVAL = 22;
     public static readonly int ELOOP;
+    public static readonly int ENOTEMPTY;
+
+    /// <summary>
+    /// renameat2 在 Linux 上的 RENAME_NOREPLACE，以及 renameatx_np 在 macOS 上的 RENAME_EXCL：目标已存在时以 EEXIST 失败。
+    /// RENAME_NOREPLACE of renameat2 on Linux and RENAME_EXCL of renameatx_np on macOS: fail with EEXIST when the
+    /// destination exists.
+    /// </summary>
+    private const uint LinuxRenameNoReplace = 0x1;
+    private const uint MacRenameExclusive = 0x4;
 
     public const int S_IFMT = 0xF000;
     public const int S_IFDIR = 0x4000;
@@ -61,6 +70,7 @@ internal static partial class UnixNative
             O_NOFOLLOW = 0x100;
             AT_REMOVEDIR = 0x80;
             ELOOP = 62;
+            ENOTEMPTY = 66;
             UseInode64Symbols = RuntimeInformation.ProcessArchitecture == Architecture.X64;
             return;
         }
@@ -79,6 +89,7 @@ internal static partial class UnixNative
         O_CLOEXEC = 0x80000;
         AT_REMOVEDIR = 0x200;
         ELOOP = 40;
+        ENOTEMPTY = 39;
         switch (RuntimeInformation.ProcessArchitecture)
         {
             case Architecture.X64:
@@ -153,6 +164,51 @@ internal static partial class UnixNative
 
     [LibraryImport(Library, EntryPoint = "unlinkat", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     public static partial int UnlinkAt(int directory, string name, int flags);
+
+    [LibraryImport(Library, EntryPoint = "renameat", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    private static partial int RenameAtReplacing(int fromDirectory, string fromName, int toDirectory, string toName);
+
+    [LibraryImport(Library, EntryPoint = "renameat2", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    private static partial int RenameAt2(
+        int fromDirectory,
+        string fromName,
+        int toDirectory,
+        string toName,
+        uint flags
+    );
+
+    [LibraryImport(
+        Library,
+        EntryPoint = "renameatx_np",
+        StringMarshalling = StringMarshalling.Utf8,
+        SetLastError = true
+    )]
+    private static partial int RenameAtxNp(
+        int fromDirectory,
+        string fromName,
+        int toDirectory,
+        string toName,
+        uint flags
+    );
+
+    /// <summary>
+    /// 在两个目录句柄之间重命名，不跟随两端的符号链接。<paramref name="replace"/> 为 false 时由内核原子地拒绝已存在的目标
+    /// （EEXIST）：Linux 使用 renameat2(RENAME_NOREPLACE)，macOS 使用 renameatx_np(RENAME_EXCL)。
+    /// Renames between two directory handles without following symbolic links at either end. When
+    /// <paramref name="replace"/> is false the kernel atomically rejects an existing destination (EEXIST): renameat2
+    /// with RENAME_NOREPLACE on Linux and renameatx_np with RENAME_EXCL on macOS.
+    /// </summary>
+    public static int RenameAt(int fromDirectory, string fromName, int toDirectory, string toName, bool replace)
+    {
+        if (replace)
+        {
+            return RenameAtReplacing(fromDirectory, fromName, toDirectory, toName);
+        }
+
+        return OperatingSystem.IsMacOS()
+            ? RenameAtxNp(fromDirectory, fromName, toDirectory, toName, MacRenameExclusive)
+            : RenameAt2(fromDirectory, fromName, toDirectory, toName, LinuxRenameNoReplace);
+    }
 
     /// <summary>
     /// 带 O_CREAT 的 openat。openat 在 C 中是可变参数函数，mode 属于可变部分：Apple arm64 把可变参数放在栈上，x86-64 与

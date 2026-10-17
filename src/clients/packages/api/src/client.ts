@@ -165,6 +165,126 @@ export type ApiResponse<P extends keyof paths, M extends keyof paths[P]> =
       : unknown
     : unknown;
 
+type UntypedRequestOptions = {
+  params?: {
+    path?: Record<string, unknown>;
+    query?: Record<string, unknown>;
+  };
+  body?: unknown;
+  headers?: HeadersInit;
+  signal?: AbortSignal;
+};
+
+function requestCredentials(runtime: ApiRuntimeConfig): RequestCredentials {
+  return runtime.explicitAuth || (runtime.baseUrl && runtime.token)
+    ? "omit"
+    : runtime.baseUrl
+      ? "include"
+      : "same-origin";
+}
+
+function setRequestBody(init: RequestInit, headers: Record<string, string>, body: unknown): void {
+  if (body === undefined) return;
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    delete headers["content-type"];
+    delete headers["Content-Type"];
+    init.body = body;
+    return;
+  }
+  headers["content-type"] ??= "application/json";
+  init.body = JSON.stringify(body);
+}
+
+/**
+ * Sends a request with the runtime identity that started it: auth headers, explicit-auth mode,
+ * credentials, and the antiforgery token for writes (refreshed and retried once when stale).
+ * Returns the successful response with its URL and throws ApiError with the parsed body otherwise.
+ * 以发起请求时的运行时身份发送请求：认证头、显式认证模式、credentials，以及写请求的 antiforgery token
+ * （过期时刷新并重试一次）。成功时返回响应与其 URL，否则抛出带解析后响应体的 ApiError。
+ */
+async function sendRuntimeRequest(
+  path: string,
+  method: ApiMethod,
+  options: UntypedRequestOptions | undefined,
+): Promise<{ response: Response; url: string }> {
+  const opts = options ?? {};
+  // In-flight requests and retries retain the identity that started them.
+  const runtime = apiRuntime;
+
+  const urlWithPath = compilePath(path, opts.params?.path);
+  const url = resolveApiUrl(runtime, appendQuery(urlWithPath, opts.params?.query));
+  let retriedAntiforgery = false;
+
+  while (true) {
+    const headers: Record<string, string> = { ...(opts.headers as Record<string, string>) };
+
+    if (runtime.explicitAuth) headers["X-Agw-Explicit-Auth"] = "1";
+    if (runtime.token) {
+      headers.Authorization = `Bearer ${runtime.token}`;
+    }
+
+    if (method !== "get") {
+      headers["X-CSRF-TOKEN"] = await getAntiforgeryToken(runtime, opts.signal);
+    }
+
+    const init: RequestInit = {
+      method: method.toUpperCase(),
+      headers,
+      signal: opts.signal,
+      credentials: requestCredentials(runtime),
+    };
+    setRequestBody(init, headers, opts.body);
+
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (caught) {
+      throw new ApiTransportError({ url, cause: caught });
+    }
+
+    if (response.ok) return { response, url };
+
+    const errBody = await readResponseBody(response);
+    if (
+      method !== "get" &&
+      !retriedAntiforgery &&
+      isAntiforgeryValidationFailure(response, errBody)
+    ) {
+      runtime.antiforgeryToken = null;
+      retriedAntiforgery = true;
+      continue;
+    }
+    if (
+      response.status === 401 &&
+      runtime === apiRuntime &&
+      typeof window !== "undefined" &&
+      !path.startsWith("/api/auth/") &&
+      !runtime.baseUrl
+    ) {
+      const returnUrl = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);
+    }
+    throw new ApiError({
+      status: response.status,
+      statusText: response.statusText,
+      url,
+      body: errBody,
+    });
+  }
+}
+
+/**
+ * Reads a successful binary response body; a transport failure while reading becomes ApiTransportError.
+ * 读取成功的二进制响应体；读取过程中的传输失败转换为 ApiTransportError。
+ */
+async function readBinaryBody(response: Response, url: string): Promise<Uint8Array> {
+  try {
+    return new Uint8Array(await response.arrayBuffer());
+  } catch (caught) {
+    throw new ApiTransportError({ url, cause: caught });
+  }
+}
+
 export function apiRequest<P extends PathsWith<"get">>(
   path: P,
   method: "get",
@@ -188,101 +308,29 @@ export function apiRequest<P extends PathsWith<"delete">>(
 export async function apiRequest(
   path: keyof paths,
   method: ApiMethod,
-  options?: {
-    params?: {
-      path?: Record<string, unknown>;
-      query?: Record<string, unknown>;
-    };
-    body?: unknown;
-    headers?: HeadersInit;
-    signal?: AbortSignal;
-  },
+  options?: UntypedRequestOptions,
 ): Promise<unknown> {
-  const opts = options ?? {};
-  // In-flight requests and retries retain the identity that started them.
-  const runtime = apiRuntime;
+  const { response } = await sendRuntimeRequest(String(path), method, options);
+  // Some endpoints return 200 with no response body.
+  return unwrapApiResultEnvelope(await readResponseBody(response));
+}
 
-  const urlWithPath = compilePath(String(path), opts.params?.path);
-  const url = resolveApiUrl(runtime, appendQuery(urlWithPath, opts.params?.query));
-  let retriedAntiforgery = false;
-
-  while (true) {
-    const headers: HeadersInit = { ...opts.headers };
-
-    if (runtime.explicitAuth) (headers as Record<string, string>)["X-Agw-Explicit-Auth"] = "1";
-    if (runtime.token) {
-      (headers as Record<string, string>).Authorization = `Bearer ${runtime.token}`;
-    }
-
-    if (method !== "get") {
-      (headers as Record<string, string>)["X-CSRF-TOKEN"] = await getAntiforgeryToken(
-        runtime,
-        opts.signal,
-      );
-    }
-
-    const init: RequestInit = {
-      method: method.toUpperCase(),
-      headers,
-      signal: opts.signal,
-      credentials:
-        runtime.explicitAuth || (runtime.baseUrl && runtime.token)
-          ? "omit"
-          : runtime.baseUrl
-            ? "include"
-            : "same-origin",
-    };
-
-    if (opts.body !== undefined) {
-      if (opts.body instanceof FormData) {
-        delete (headers as Record<string, string>)["content-type"];
-        delete (headers as Record<string, string>)["Content-Type"];
-        init.body = opts.body;
-      } else {
-        (headers as Record<string, string>)["content-type"] ??= "application/json";
-        init.body = JSON.stringify(opts.body);
-      }
-    }
-
-    let response: Response;
-    try {
-      response = await fetch(url, init);
-    } catch (caught) {
-      throw new ApiTransportError({ url, cause: caught });
-    }
-
-    if (!response.ok) {
-      const errBody = await readResponseBody(response);
-      if (
-        method !== "get" &&
-        !retriedAntiforgery &&
-        isAntiforgeryValidationFailure(response, errBody)
-      ) {
-        runtime.antiforgeryToken = null;
-        retriedAntiforgery = true;
-        continue;
-      }
-      if (
-        response.status === 401 &&
-        runtime === apiRuntime &&
-        typeof window !== "undefined" &&
-        !String(path).startsWith("/api/auth/") &&
-        !runtime.baseUrl
-      ) {
-        const returnUrl = `${window.location.pathname}${window.location.search}`;
-        window.location.assign(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);
-      }
-      throw new ApiError({
-        status: response.status,
-        statusText: response.statusText,
-        url,
-        body: errBody,
-      });
-    }
-
-    // Some endpoints return 200 with no response body.
-    return unwrapApiResultEnvelope(await readResponseBody(response));
-  }
+/**
+ * Downloads a binary GET response with the same authentication, credentials, and error handling
+ * as apiRequest. Returns the body bytes; a failure throws ApiError whose body is the parsed ApiResult.
+ * 以与 apiRequest 相同的认证、credentials 与错误处理下载二进制 GET 响应。返回响应体字节；
+ * 失败时抛出 ApiError，其 body 为解析后的 ApiResult。
+ */
+export function apiDownload<P extends PathsWith<"get">>(
+  path: P,
+  ...args: RequestArguments<P, "get">
+): Promise<Uint8Array>;
+export async function apiDownload(
+  path: keyof paths,
+  options?: UntypedRequestOptions,
+): Promise<Uint8Array> {
+  const { response, url } = await sendRuntimeRequest(String(path), "get", options);
+  return readBinaryBody(response, url);
 }
 
 export function apiGet<P extends PathsWith<"get">>(
@@ -318,6 +366,7 @@ export type AgwApiClient = {
   apiPost: typeof apiPost;
   apiPut: typeof apiPut;
   apiDelete: typeof apiDelete;
+  apiDownload: typeof apiDownload;
 };
 
 /**
@@ -331,24 +380,16 @@ export function createBearerApiClient(config: BearerApiClientConfig): AgwApiClie
   if (!baseUrl) throw new Error("API base URL is required.");
   if (!token) throw new Error("Bearer token is required.");
 
-  const request = async (
+  const send = async (
     path: keyof paths,
     method: ApiMethod,
-    options?: {
-      params?: {
-        path?: Record<string, unknown>;
-        query?: Record<string, unknown>;
-      };
-      body?: unknown;
-      headers?: HeadersInit;
-      signal?: AbortSignal;
-    },
-  ): Promise<unknown> => {
+    options?: UntypedRequestOptions,
+  ): Promise<{ response: Response; url: string }> => {
     const opts = options ?? {};
     const urlWithPath = compilePath(String(path), opts.params?.path);
     const url = `${baseUrl}${appendQuery(urlWithPath, opts.params?.query)}`;
-    const headers: HeadersInit = {
-      ...opts.headers,
+    const headers: Record<string, string> = {
+      ...(opts.headers as Record<string, string>),
       Authorization: `Bearer ${token}`,
     };
     const init: RequestInit = {
@@ -357,17 +398,7 @@ export function createBearerApiClient(config: BearerApiClientConfig): AgwApiClie
       signal: opts.signal,
       credentials: "omit",
     };
-
-    if (opts.body !== undefined) {
-      if (typeof FormData !== "undefined" && opts.body instanceof FormData) {
-        delete (headers as Record<string, string>)["content-type"];
-        delete (headers as Record<string, string>)["Content-Type"];
-        init.body = opts.body;
-      } else {
-        (headers as Record<string, string>)["content-type"] ??= "application/json";
-        init.body = JSON.stringify(opts.body);
-      }
-    }
+    setRequestBody(init, headers, opts.body);
 
     let response: Response;
     try {
@@ -375,8 +406,8 @@ export function createBearerApiClient(config: BearerApiClientConfig): AgwApiClie
     } catch (caught) {
       throw new ApiTransportError({ url, cause: caught });
     }
-    const responseBody = await readResponseBody(response);
     if (!response.ok) {
+      const responseBody = await readResponseBody(response);
       if (response.status === 401) config.onUnauthorized?.();
       throw new ApiError({
         status: response.status,
@@ -386,7 +417,24 @@ export function createBearerApiClient(config: BearerApiClientConfig): AgwApiClie
       });
     }
 
-    return unwrapApiResultEnvelope(responseBody);
+    return { response, url };
+  };
+
+  const request = async (
+    path: keyof paths,
+    method: ApiMethod,
+    options?: UntypedRequestOptions,
+  ): Promise<unknown> => {
+    const { response } = await send(path, method, options);
+    return unwrapApiResultEnvelope(await readResponseBody(response));
+  };
+
+  const download = async (
+    path: keyof paths,
+    options?: UntypedRequestOptions,
+  ): Promise<Uint8Array> => {
+    const { response, url } = await send(path, "get", options);
+    return readBinaryBody(response, url);
   };
 
   return {
@@ -398,5 +446,7 @@ export function createBearerApiClient(config: BearerApiClientConfig): AgwApiClie
       request(path, "put", options as never)) as AgwApiClient["apiPut"],
     apiDelete: ((path: keyof paths, options?: unknown) =>
       request(path, "delete", options as never)) as AgwApiClient["apiDelete"],
+    apiDownload: ((path: keyof paths, options?: unknown) =>
+      download(path, options as never)) as AgwApiClient["apiDownload"],
   };
 }

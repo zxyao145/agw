@@ -60,6 +60,7 @@ for (const dependency of workspaceDependencies(readManifest(join(clientsRoot, "m
 const scanRoots = [
   "web/src",
   "desktop/src",
+  "desktop/extension-sdk/src",
   "desktop/renderer/src",
   "desktop/scripts",
   "mobile/app",

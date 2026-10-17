@@ -231,7 +231,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
         }
     }
 
-    public async Task DeleteAsync(string path, CancellationToken ct)
+    public async Task DeleteAsync(string path, bool recursive, CancellationToken ct)
     {
         using var walk = Locate(path, createDirectories: false);
         var name = RequireFileName(walk);
@@ -243,9 +243,11 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
 
         walk.RequireInside(path);
         var directory = UnixNative.Fd(walk.Directory);
-        // unlinkat 不跟随符号链接：文件和链接本身直接删除，目录则递归清空后移除。
-        // unlinkat never follows symbolic links: files and links themselves are removed directly, and a directory is
-        // emptied recursively before removal.
+        // unlinkat 不跟随符号链接：文件和链接本身直接删除；目录在递归时先清空再移除，非递归时只调用一次 AT_REMOVEDIR，
+        // 目录非空则失败，期间新建的文件不会被删除。
+        // unlinkat never follows symbolic links: files and links themselves are removed directly; a directory is
+        // emptied first when recursive, and otherwise removed by a single AT_REMOVEDIR call that fails when the
+        // directory has entries, so files created meanwhile are never deleted.
         if (UnixNative.UnlinkAt(directory, name, 0) == 0)
         {
             return;
@@ -262,8 +264,9 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
             throw UnixNative.CreateException(errno, $"Cannot delete '{path}'");
         }
 
-        using (var child = OpenChildDirectory(walk.Directory, name))
+        if (recursive)
         {
+            using var child = OpenChildDirectory(walk.Directory, name);
             if (child == null)
             {
                 return;
@@ -272,13 +275,126 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
             DeleteContents(child, ct);
         }
 
+        if (UnixNative.UnlinkAt(directory, name, UnixNative.AT_REMOVEDIR) == 0)
+        {
+            return;
+        }
+
+        errno = UnixNative.LastError;
+        if (errno == UnixNative.ENOENT)
+        {
+            return;
+        }
+
+        throw errno == UnixNative.ENOTEMPTY
+            ? new AgwException(ErrorCodes.DirectoryNotEmpty, $"Directory '{path}' is not empty.")
+            : UnixNative.CreateException(errno, $"Cannot delete '{path}'");
+    }
+
+    public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
+    {
+        using var walk = Locate(path, createDirectories: false);
+        var handle = OpenExistingFile(walk, UnixNative.O_RDONLY, path);
+        try
+        {
+            return Task.FromResult<Stream>(new FileStream(handle, FileAccess.Read));
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
+    }
+
+    public async Task WriteAsync(string path, Stream content, bool overwrite, bool createParents, CancellationToken ct)
+    {
+        using var walk = Locate(path, createDirectories: createParents);
+        RequireFileName(walk);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(walk.FullPath, ct).ConfigureAwait(false);
+        using (var existing = OpenFinal(walk, UnixNative.O_RDONLY | UnixNative.O_NONBLOCK, path))
+        {
+            if (existing.Handle != null && existing.Status.IsDirectory)
+            {
+                throw overwrite
+                    ? new AgwException(ErrorCodes.InvalidParam, $"'{path}' is not a regular file.")
+                    : new AgwException(ErrorCodes.FileAlreadyExists, $"'{path}' already exists.");
+            }
+        }
+
+        // 不覆盖时以 O_EXCL 创建，由打开操作本身拒绝已存在的文件；之后的写入只经过这个句柄。
+        // Without overwrite the file is created with O_EXCL so the open itself rejects an existing file; the write then
+        // goes through that handle only.
+        using var handle =
+            OpenOrCreateFile(walk, path, mustCreate: !overwrite)
+            ?? throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{path}' already exists.");
+        await using var target = new FileStream(handle, FileAccess.ReadWrite);
+        await content.CopyToAsync(target, ct).ConfigureAwait(false);
+        target.SetLength(target.Position);
+    }
+
+    public async Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct)
+    {
+        using var source = Locate(sourcePath, createDirectories: false);
+        var sourceName = RequireFileName(source);
+        using var destination = Locate(destinationPath, createDirectories: false);
+        var destinationName = RequireFileName(destination);
+        using var pathLock = await LocalFilePathLocks
+            .AcquireAsync(source.FullPath, destination.FullPath, ct)
+            .ConfigureAwait(false);
+        if (!source.Found)
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"'{sourcePath}' was not found.");
+        }
+
+        source.RequireInside(sourcePath);
+        RequireParent(destination, destinationPath);
+        // 已存在的目录永远不被替换；renameat 在两个已校验的父目录句柄之间操作，源与目标的符号链接本身被移动或替换，不会被跟随。
+        // An existing directory is never replaced; renameat works between the two verified parent directory handles, and
+        // symbolic links at either end are moved or replaced themselves instead of being followed.
+        if (overwrite)
+        {
+            using var existingDirectory = OpenChildDirectory(destination.Directory, destinationName);
+            if (existingDirectory != null)
+            {
+                throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.");
+            }
+        }
+
         if (
-            UnixNative.UnlinkAt(directory, name, UnixNative.AT_REMOVEDIR) != 0
-            && UnixNative.LastError != UnixNative.ENOENT
+            UnixNative.RenameAt(
+                UnixNative.Fd(source.Directory),
+                sourceName,
+                UnixNative.Fd(destination.Directory),
+                destinationName,
+                replace: overwrite
+            ) == 0
         )
         {
-            throw UnixNative.CreateException(UnixNative.LastError, $"Cannot delete '{path}'");
+            return;
         }
+
+        var errno = UnixNative.LastError;
+        if (errno == UnixNative.ENOENT)
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"'{sourcePath}' was not found.");
+        }
+
+        // EISDIR、ENOTDIR、ENOTEMPTY 来自源与目标类型不同或目标是目录，都表示目标已存在且不能被替换。
+        // EISDIR, ENOTDIR and ENOTEMPTY come from a source and destination of different types or a directory
+        // destination, all meaning the destination exists and cannot be replaced.
+        if (
+            errno == UnixNative.EEXIST
+            || errno == UnixNative.EISDIR
+            || errno == UnixNative.ENOTDIR
+            || errno == UnixNative.ENOTEMPTY
+        )
+        {
+            throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.");
+        }
+
+        throw errno == UnixNative.EINVAL
+            ? new AgwException(ErrorCodes.InvalidParam, $"'{sourcePath}' cannot be moved into itself.")
+            : UnixNative.CreateException(errno, $"Cannot move '{sourcePath}' to '{destinationPath}'");
     }
 
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(

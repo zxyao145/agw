@@ -37,6 +37,7 @@ import { HumanGateApproval } from "./human-gate-approval";
 import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
 import { MessageActions } from "./message-actions";
+import type { ChatMessageActionArgs, ExtensionMenuItem } from "./chat-extension-types";
 import { PresentedMessageComponent } from "./presented-message";
 import { ToolState } from "./tool-state";
 import {
@@ -74,6 +75,8 @@ export interface ChatSessionProps {
   checkpointResumeDisabled?: boolean;
   onCheckpointResume?: (occurrenceId: string) => void;
   onHumanResponse?: (response: HumanResponseInput) => void;
+  /** 消息操作菜单的扩展菜单项。Extension items of the message action menu. */
+  messageActions?: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
 }
 
 export function Conversation({
@@ -99,6 +102,7 @@ export function Conversation({
   checkpointResumeDisabled = false,
   onCheckpointResume,
   onHumanResponse,
+  messageActions,
 }: ChatSessionProps) {
   const [imagePreview, setImagePreview] = React.useState<{
     image: ConversationImageSource;
@@ -320,6 +324,7 @@ export function Conversation({
                     checkpointResumeDisabled={checkpointResumeDisabled}
                     onCheckpointResume={onCheckpointResume}
                     onHumanResponse={onHumanResponse}
+                    messageActions={messageActions}
                   />
                 ) : null}
               </div>
@@ -349,6 +354,7 @@ function ConversationItem({
   checkpointResumeDisabled,
   onCheckpointResume,
   onHumanResponse,
+  messageActions,
 }: {
   item: ConversationRenderItem;
   workExpanded: boolean;
@@ -359,6 +365,7 @@ function ConversationItem({
   checkpointResumeDisabled: boolean;
   onCheckpointResume?: (occurrenceId: string) => void;
   onHumanResponse?: (response: HumanResponseInput) => void;
+  messageActions?: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
 }) {
   if (item.type === "work-summary") {
     return (
@@ -555,7 +562,7 @@ function ConversationItem({
         }
       />
       {item.type === "result" || message.alignment === "right" ? (
-        <MessageActions message={message} />
+        <MessageActions message={message} actions={messageActions} />
       ) : null}
     </div>
   );

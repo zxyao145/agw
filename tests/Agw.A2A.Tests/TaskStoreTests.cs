@@ -64,6 +64,46 @@ public class TaskStoreTests
     }
 
     [Fact]
+    public async Task SaveTaskAsync_SavedTwiceInOneContext_ReplacesTheSnapshot()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        await SeedA2AProjectAsync(options, cancellationToken);
+
+        // 一次 SendMessage 请求在同一个 scoped DbContext 中多次保存任务快照。
+        // One SendMessage request saves the task snapshot several times through the same scoped DbContext.
+        await using var dbContext = new AgwDbContext(options);
+        var store = CreateStore(dbContext);
+        var taskId = Guid.CreateVersion7().ToString("D");
+        var timestamp = new DateTimeOffset(2026, 4, 6, 0, 0, 0, TimeSpan.Zero);
+
+        await store.SaveTaskAsync(
+            taskId,
+            CreateTask(taskId, "ctx-twice", TaskState.Working, timestamp, ["hello"], []),
+            cancellationToken
+        );
+        await store.SaveTaskAsync(
+            taskId,
+            CreateTask(taskId, "ctx-twice", TaskState.Completed, timestamp.AddSeconds(1), ["hello", "done"], []),
+            cancellationToken
+        );
+
+        var loaded = await store.GetTaskAsync(taskId, cancellationToken);
+        Assert.NotNull(loaded);
+        Assert.Equal(TaskState.Completed, loaded!.Status.State);
+        Assert.Equal(2, loaded.History!.Count);
+        var record = await dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .SingleAsync(x => x.TaskId == Guid.Parse(taskId), cancellationToken);
+        Assert.Equal(TaskExecutionStatus.Succeeded, record.Status);
+    }
+
+    [Fact]
     public async Task ListTasksAsync_AppliesFiltersPaginationAndProjectionOptions()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

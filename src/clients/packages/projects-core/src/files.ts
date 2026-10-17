@@ -3,11 +3,22 @@
  * Uses the backend API for file browsing and reading
  */
 
-import { ApiError, apiDelete, apiGet, apiPost, type AgwApiClient } from "@agw/api";
+import {
+  ApiError,
+  apiDelete,
+  apiDownload,
+  apiGet,
+  apiPost,
+  apiPut,
+  type AgwApiClient,
+} from "@agw/api";
 
-type ProjectFilesApiClient = Pick<AgwApiClient, "apiGet" | "apiPost" | "apiDelete">;
+type ProjectFilesApiClient = Pick<
+  AgwApiClient,
+  "apiGet" | "apiPost" | "apiPut" | "apiDelete" | "apiDownload"
+>;
 
-const browserClient: ProjectFilesApiClient = { apiGet, apiPost, apiDelete };
+const browserClient: ProjectFilesApiClient = { apiGet, apiPost, apiPut, apiDelete, apiDownload };
 
 export type FileGitStatus = "added" | "modified" | "deleted" | "untracked";
 export type GitDiffScope = "staged" | "unstaged";
@@ -32,12 +43,19 @@ export interface ListFilesResponse {
 export class FileApiError extends Error {
   public readonly status?: number;
   public readonly statusText?: string;
+  /**
+   * The Server ApiResult error code (for example 4040001 or 4090023), or null when the failure has
+   * no ApiResult body, such as a transport error.
+   * Server ApiResult 的错误码（例如 4040001、4090023）；失败没有 ApiResult 响应体（例如传输错误）时为 null。
+   */
+  public readonly code: number | null;
 
-  constructor(message: string, status?: number, statusText?: string) {
+  constructor(message: string, status?: number, statusText?: string, code: number | null = null) {
     super(message);
     this.name = "FileApiError";
     this.status = status;
     this.statusText = statusText;
+    this.code = code;
   }
 }
 
@@ -55,7 +73,11 @@ function toFileApiError(err: unknown, fallbackMessage: string): FileApiError {
           ("title" in body && typeof body.title === "string" && body.title) ||
           fallbackMessage
         : fallbackMessage;
-    return new FileApiError(message, err.status, err.statusText);
+    const code =
+      typeof body === "object" && body !== null && "code" in body && typeof body.code === "number"
+        ? body.code
+        : null;
+    return new FileApiError(message, err.status, err.statusText, code);
   }
 
   return new FileApiError(`Network error: ${(err as Error).message}`);
@@ -138,20 +160,181 @@ export async function getFileDiff(
 
 /**
  * Delete a file or directory
+ * @param recursive - When false, a non-empty directory is kept and the Server returns
+ * DirectoryNotEmpty (4090023); omitted, the parameter is not sent and the Server deletes recursively.
+ * 为 false 时非空目录保持不变，Server 返回 DirectoryNotEmpty（4090023）；省略时不发送，Server 递归删除。
  */
 export async function deleteFile(
   projectId: string,
   path: string,
   client: ProjectFilesApiClient = browserClient,
   directoryId?: string | null,
+  recursive?: boolean,
 ): Promise<{ success: boolean; message: string }> {
   try {
     return (await client.apiDelete("/api/files/delete", {
-      params: { query: { projectId, path, directoryId: directoryId || undefined } },
+      params: { query: { projectId, path, directoryId: directoryId || undefined, recursive } },
     })) as { success: boolean; message: string };
   } catch (err) {
     throw toFileApiError(err, "Failed to delete");
   }
+}
+
+/**
+ * Get the entry of a file or directory; an empty path is the directory root.
+ * 获取文件或目录的条目；空路径表示目录根。
+ */
+export async function statFile(
+  projectId: string,
+  path: string,
+  client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
+): Promise<FileItem> {
+  try {
+    return (await client.apiGet("/api/files/stat", {
+      params: { query: { projectId, path, directoryId: directoryId || undefined } },
+    })) as FileItem;
+  } catch (err) {
+    throw toFileApiError(err, "Failed to get file information");
+  }
+}
+
+export interface DownloadFileOptions {
+  signal?: AbortSignal;
+}
+
+/**
+ * Download the content of a file (at most 100 MiB).
+ * 下载文件内容（不超过 100 MiB）。
+ */
+export async function downloadFile(
+  projectId: string,
+  path: string,
+  options: DownloadFileOptions = {},
+  client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
+): Promise<Uint8Array> {
+  try {
+    return await client.apiDownload("/api/files/download", {
+      params: { query: { projectId, path, directoryId: directoryId || undefined } },
+      signal: options.signal,
+    });
+  } catch (err) {
+    throw toFileApiError(err, "Failed to download file");
+  }
+}
+
+export interface WriteFileOptions {
+  /** Omitted, the parameter is not sent and the Server does not overwrite. 省略时不发送，Server 不覆盖。 */
+  overwrite?: boolean;
+  /**
+   * Omitted, the parameter is not sent and the Server does not create missing parents.
+   * 省略时不发送，Server 不创建缺失的父目录。
+   */
+  createParents?: boolean;
+  signal?: AbortSignal;
+}
+
+/**
+ * Write file content (at most 100 MiB) as the multipart field `content`; returns the written entry.
+ * 以 multipart 字段 `content` 写入文件内容（不超过 100 MiB），返回写入后的条目。
+ */
+export async function writeFile(
+  projectId: string,
+  path: string,
+  content: Uint8Array | string,
+  options: WriteFileOptions = {},
+  client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
+): Promise<FileItem> {
+  const form = new FormData();
+  form.append("content", new Blob([toBlobPart(content)]), getFileName(path));
+  try {
+    return (await client.apiPut("/api/files/write", {
+      params: {
+        query: {
+          projectId,
+          path,
+          overwrite: options.overwrite,
+          createParents: options.createParents,
+          directoryId: directoryId || undefined,
+        },
+      },
+      body: form,
+      signal: options.signal,
+    })) as FileItem;
+  } catch (err) {
+    throw toFileApiError(err, "Failed to write file");
+  }
+}
+
+/**
+ * Create a directory; returns the directory entry.
+ * 创建目录，返回目录条目。
+ * @param recursive - Create missing parents; omitted, the parameter is not sent and the Server does not.
+ * 创建缺失的父目录；省略时不发送，Server 不创建。
+ */
+export async function createDirectory(
+  projectId: string,
+  path: string,
+  recursive?: boolean,
+  client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
+): Promise<FileItem> {
+  try {
+    return (await client.apiPost("/api/files/create-directory", {
+      params: { query: { projectId, path, recursive, directoryId: directoryId || undefined } },
+    })) as FileItem;
+  } catch (err) {
+    throw toFileApiError(err, "Failed to create directory");
+  }
+}
+
+/**
+ * Move or rename a file or directory inside one Project directory; returns the destination entry.
+ * 在同一个 Project 目录内移动或重命名文件、目录，返回目标的条目。
+ * @param overwrite - Replace an existing destination file; omitted, the parameter is not sent and the
+ * Server does not overwrite. 替换已存在的目标文件；省略时不发送，Server 不覆盖。
+ */
+export async function moveFile(
+  projectId: string,
+  sourcePath: string,
+  destinationPath: string,
+  overwrite?: boolean,
+  client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
+): Promise<FileItem> {
+  try {
+    return (await client.apiPost("/api/files/move", {
+      params: {
+        query: {
+          projectId,
+          sourcePath,
+          destinationPath,
+          overwrite,
+          directoryId: directoryId || undefined,
+        },
+      },
+    })) as FileItem;
+  } catch (err) {
+    throw toFileApiError(err, "Failed to move");
+  }
+}
+
+/**
+ * Blob parts must be backed by an ArrayBuffer; a view over shared memory is copied first.
+ * Blob 的内容必须由 ArrayBuffer 承载；共享内存上的视图先复制一份。
+ */
+function toBlobPart(content: Uint8Array | string): BlobPart {
+  if (typeof content === "string") return content;
+  return content.buffer instanceof ArrayBuffer
+    ? (content as Uint8Array<ArrayBuffer>)
+    : new Uint8Array(content);
+}
+
+function getFileName(path: string): string {
+  const name = path.split("/").filter(Boolean).pop();
+  return name || "content";
 }
 
 /**
@@ -273,7 +456,35 @@ export type ProjectFilesService = {
     projectId: string,
     path: string,
     directoryId?: string | null,
+    recursive?: boolean,
   ): Promise<{ success: boolean; message: string }>;
+  statFile(projectId: string, path: string, directoryId?: string | null): Promise<FileItem>;
+  downloadFile(
+    projectId: string,
+    path: string,
+    options?: DownloadFileOptions,
+    directoryId?: string | null,
+  ): Promise<Uint8Array>;
+  writeFile(
+    projectId: string,
+    path: string,
+    content: Uint8Array | string,
+    options?: WriteFileOptions,
+    directoryId?: string | null,
+  ): Promise<FileItem>;
+  createDirectory(
+    projectId: string,
+    path: string,
+    recursive?: boolean,
+    directoryId?: string | null,
+  ): Promise<FileItem>;
+  moveFile(
+    projectId: string,
+    sourcePath: string,
+    destinationPath: string,
+    overwrite?: boolean,
+    directoryId?: string | null,
+  ): Promise<FileItem>;
   resetFile(
     projectId: string,
     path: string,
@@ -308,7 +519,17 @@ export function createProjectFilesService(client: ProjectFilesApiClient): Projec
     readFile: (projectId, path, directoryId) => readFile(projectId, path, client, directoryId),
     getFileDiff: (projectId, path, scope, directoryId) =>
       getFileDiff(projectId, path, scope, client, directoryId),
-    deleteFile: (projectId, path, directoryId) => deleteFile(projectId, path, client, directoryId),
+    deleteFile: (projectId, path, directoryId, recursive) =>
+      deleteFile(projectId, path, client, directoryId, recursive),
+    statFile: (projectId, path, directoryId) => statFile(projectId, path, client, directoryId),
+    downloadFile: (projectId, path, options, directoryId) =>
+      downloadFile(projectId, path, options, client, directoryId),
+    writeFile: (projectId, path, content, options, directoryId) =>
+      writeFile(projectId, path, content, options, client, directoryId),
+    createDirectory: (projectId, path, recursive, directoryId) =>
+      createDirectory(projectId, path, recursive, client, directoryId),
+    moveFile: (projectId, sourcePath, destinationPath, overwrite, directoryId) =>
+      moveFile(projectId, sourcePath, destinationPath, overwrite, client, directoryId),
     resetFile: (projectId, path, directoryId) => resetFile(projectId, path, client, directoryId),
     setFileStaged: (projectId, path, staged, directoryId) =>
       setFileStaged(projectId, path, staged, client, directoryId),

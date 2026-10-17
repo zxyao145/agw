@@ -19,6 +19,39 @@ Every `server + project + conversation` has an independent SignalR connection. S
 
 Opening Settings from Chat carries the active Project and optional conversation in a validated `returnTo` query value. Settings navigation preserves that value, so **Back to chat** returns to the same selection; an invalid external or non-Chat target falls back to `/desktop/chat/`.
 
+## Workspace layout
+
+`/desktop/chat` is a three-region layout: the Ribbon (built-in Conversations and Files items, then extension items), the Left Sidebar (one sidebar view at a time; clicking the active item hides the sidebar), and the Main Workspace (the built-in Chat and File views or an extension main view). `@agw/chat` provides the pieces through `ChatWorkspaceProvider`, `ChatConversationSidebar`, `ChatFilesSidebar`, `ChatConversationPane` and `ChatFilePane`; Web keeps using `ChatWorkspace`.
+
+## Extensions
+
+Extensions add Ribbon items, sidebar and main views, a settings page, chat composer/message/conversation actions and file-tree actions. They are managed under **Settings → Extensions**: install from a folder or a `.zip`, enable (approve permissions), disable, Reload, Uninstall (optionally deleting data), Rescan, open the extensions or data folder, and save the SDK types for authoring. Details also lists running frames with **Inspect** (DevTools) and recently blocked requests.
+
+### Package
+
+An extension is a directory named after its `id` with `manifest.json` at the root. The manifest is validated by `extensionManifestSchema` in `src/shared/extension-manifest.ts`; the generated `manifest.schema.json` can be referenced through `$schema`. Every path in the manifest is a relative POSIX path inside the package, and `__agw/` is reserved.
+
+Pages load the SDK from `agw-extension://<id>/__agw/sdk.js` (types: `__agw/sdk.d.ts`). A background script uses `defineBackground({ onInstalled, activate, deactivate, commands })`; a view uses `defineView({ onLoad, onShow, onHide, onUnload })`; `connect()` returns the API directly. Pages receive the `ExtensionApi` (`context`, `workspace`, `fs`, `dialog`, `shell`, `execution`, `a2a`, `http`, `chat`, `ui`, `theme`). Any front-end stack that builds to static files works (plain JS, React, Vue, Blazor WebAssembly, WASM).
+
+### Runtime
+
+- Installed packages live in `<userData>/extensions/<id>`; extension data lives in `<userData>/extension-data/<id>` and is exposed to the extension as `context.extension.storageUri`. Install and uninstall use a `journal.json` in `.staging/` so an interrupted operation is completed or rolled back at the next start.
+- Each extension runs in its own session (`persist:agw-extension-<id>`), and every frame (background, sidebar view, main view, settings) is a separate `WebContentsView` created by the main process. The renderer's `ExtensionHost` (`renderer/src/runtime/extensions/`) owns the lifecycle, layout and the per-frame bridge broker; the main process (`src/main/extensions/`) owns installation, sessions, frames, local files, file watching and external HTTP.
+- Network access is limited to the approved `hostPermissions`: a per-extension CSP covers page requests, a per-extension loopback egress proxy covers WebSocket and WebRTC TCP connections, and UDP outside the proxy is disabled. Navigation, popups and Service Workers are blocked. `http.request` follows redirects only to approved hosts.
+- Host menus, dialogs and toasts that cover an extension view temporarily replace the view with a snapshot, so the host UI always stays on top.
+- Activation, deactivation, view handshakes and heartbeats have timeouts. A hung or crashed extension is marked failed without affecting other extensions; a hung or crashed view shows an error panel with a reload action.
+- If the host page crashes or stops responding while extensions are activating, Desktop reloads in safe mode with extensions paused. **Reload without extensions** in the tray does the same on demand; **Resume extensions** on the Extensions page continues.
+
+### Tests
+
+```bash
+pnpm --filter @agw/desktop test                     # unit tests, including main, SDK and renderer extension code
+pnpm --filter @agw/desktop test:extension-network   # Electron: egress proxy, CSP and WebRTC rules
+pnpm --filter @agw/desktop test:extensions          # Electron + SQLite Standalone Host: full extension flow
+```
+
+`test:extensions` builds the renderer, main bundle, SDK and the fixtures under `test-fixtures/`, starts a Standalone Host and local test services, and keeps all files under `.scratch/extension-tests/`.
+
 ## Develop
 
 Install all client workspace dependencies once from the pnpm Workspace root:

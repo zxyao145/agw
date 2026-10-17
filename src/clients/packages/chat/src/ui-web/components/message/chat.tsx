@@ -59,6 +59,11 @@ import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
 import type { UserInputRef } from "./user-input";
+import type {
+  ChatComposerHandle,
+  ChatMessageActionArgs,
+  ExtensionMenuItem,
+} from "./chat-extension-types";
 import {
   getAgentSuggestionQueryParams,
   toCommandSource,
@@ -134,6 +139,12 @@ export interface ChatProps {
   /** 历史水合后查询服务端活动执行，并恢复 durable attachment。 */
   restoreExecution?: boolean;
   active?: boolean;
+  /** "+" 菜单 Extensions 分组的菜单项。Items of the Extensions group in the "+" menu. */
+  composerActions?: readonly ExtensionMenuItem<Record<string, never>>[];
+  /** 对话输入框句柄。Handle of the composer. */
+  composerRef?: React.Ref<ChatComposerHandle>;
+  /** 消息操作菜单的扩展菜单项。Extension items of the message action menu. */
+  messageActions?: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
 }
 
 const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
@@ -218,6 +229,9 @@ export function Chat({
   showUserInputNavigation = false,
   onReconnectStateChange,
   restoreExecution = false,
+  composerActions,
+  composerRef,
+  messageActions,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
   const queryClient = useQueryClient();
@@ -287,6 +301,17 @@ export function Chat({
   const [userInputNavigationHost, setUserInputNavigationHost] =
     React.useState<HTMLDivElement | null>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
+  React.useImperativeHandle(
+    composerRef,
+    () => ({
+      insertText: (text: string) => {
+        const userInput = userInputRef.current;
+        if (!userInput) throw new Error("The composer is not mounted.");
+        userInput.insertText(text);
+      },
+    }),
+    [],
+  );
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
   const [restoredExecutionKey, setRestoredExecutionKey] = React.useState<string | null>(null);
@@ -1891,6 +1916,7 @@ export function Chat({
                   showCheckpointResume={target?.type === "agentflow"}
                   checkpointResumeDisabled={checkpointResumeDisabled}
                   onCheckpointResume={handleResumeCheckpoint}
+                  messageActions={messageActions}
                 />
               </ToolDirectoriesContext.Provider>
 
@@ -1953,6 +1979,7 @@ export function Chat({
                     topLeft={inputTopLeft}
                     userInputRef={userInputRef}
                     onInputDraftChange={handleInputDraftChange}
+                    composerActions={composerActions}
                   />
                 </div>
               </div>

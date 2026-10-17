@@ -28,11 +28,15 @@ import type {
   DesktopRuntimeState,
   DesktopSettings,
   DesktopSettingsUpdate,
+  ExtensionSafeModeState,
   ImageContextMenuRequest,
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
 import { DaemonManager } from "./daemon/daemon-manager";
+import { registerExtensionIpc } from "./extensions/extension-ipc";
+import { EXTENSION_SCHEME_PRIVILEGES } from "./extensions/extension-protocol";
+import { ExtensionRuntime } from "./extensions/extension-runtime";
 import { getExternalHttpUrl } from "./external-navigation";
 import { showImageContextMenu } from "./image-context-menu";
 import { DESKTOP_OAUTH_PROTOCOL, findOAuthDeepLink, parseOAuthDeepLink } from "./oauth-deep-link";
@@ -60,6 +64,7 @@ protocol.registerSchemesAsPrivileged([
     scheme: "agw",
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
   },
+  EXTENSION_SCHEME_PRIVILEGES,
 ]);
 
 if (started) app.quit();
@@ -84,6 +89,7 @@ let rendererReloadRequired = false;
 let rendererRecoveryInProgress = false;
 let rendererRecoveryAttempt: Promise<boolean> | null = null;
 const rendererRecoveryGuard = new RendererRecoveryGuard();
+let extensionRuntime: ExtensionRuntime;
 
 function reportMainProcessError(title: string, error: unknown): void {
   console.error(title, error);
@@ -141,6 +147,12 @@ function rendererRoot(): string {
     : resolve(__dirname, "..", "..", "resources", "renderer");
 }
 
+function extensionSdkRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "extension-sdk")
+    : resolve(__dirname, "..", "..", "resources", "extension-sdk");
+}
+
 function trayIconPath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "assets", "tray-icon.svg")
@@ -182,6 +194,7 @@ async function runtimeState(): Promise<DesktopRuntimeState> {
     activeToken,
     activeCredentialSource: await settingsStore.credentialSource(currentSettings.activeServerId),
     localServerRuntime: await readLocalServerRuntime(),
+    extensionSafeMode: extensionRuntime.safeMode.state,
   };
 }
 
@@ -224,13 +237,25 @@ async function loadTrustedRendererUrl(target: string): Promise<void> {
 }
 
 function writeRendererEvent(
-  event: "render-process-gone" | "did-fail-load" | "unresponsive" | "responsive",
+  event:
+    | "render-process-gone"
+    | "did-fail-load"
+    | "unresponsive"
+    | "responsive"
+    | "extension-safe-mode",
   reason: string,
   url: string,
   exitCode?: number,
+  extensionIds?: string[],
 ): void {
   const record = createRendererEventRecord(
-    { event, reason, pathname: url, ...(exitCode === undefined ? {} : { exitCode }) },
+    {
+      event,
+      reason,
+      pathname: url,
+      ...(exitCode === undefined ? {} : { exitCode }),
+      ...(extensionIds === undefined ? {} : { extensionIds }),
+    },
     {
       appVersion: packageMetadata?.appVersion ?? app.getVersion(),
       electronVersion: process.versions.electron,
@@ -240,6 +265,27 @@ function writeRendererEvent(
   void appendRendererEvent(join(app.getPath("logs"), "renderer-events.jsonl"), record).catch(
     (error) => console.warn("Unable to write renderer diagnostic event.", error),
   );
+}
+
+function writeExtensionSafeModeEvent(state: ExtensionSafeModeState, url: string): void {
+  writeRendererEvent("extension-safe-mode", state.reason, url, undefined, state.extensionIds);
+}
+
+/** 旧宿主页面结束：销毁 extension frame 并释放资源。The old host page ended: destroy extension frames and release resources. */
+function resetExtensionRuntime(): void {
+  void extensionRuntime.reset
+    .run()
+    .catch((error) => console.error("Unable to reset the extension runtime.", error));
+}
+
+/** 托盘 "Reload without extensions"。The tray's "Reload without extensions". */
+async function reloadWithoutExtensions(): Promise<void> {
+  const state = extensionRuntime.safeMode.enterManual();
+  writeExtensionSafeModeEvent(state, lastTrustedRendererUrl ?? "agw://app/");
+  await extensionRuntime.reset.run();
+  if (!mainWindow) mainWindow = createMainWindow();
+  await reloadRendererWindow();
+  mainWindow.show();
 }
 
 async function reloadRendererWindow(): Promise<void> {
@@ -337,6 +383,9 @@ function createMainWindow(): BrowserWindow {
   });
   window.webContents.on("did-navigate", (_event, target) => {
     if (isTrustedRenderer(target)) lastTrustedRendererUrl = target;
+    // 宿主文档已被替换，旧页面创建的 extension frame 与资源不再有接收方。
+    // The host document was replaced, so frames and resources created by the old page have no owner.
+    resetExtensionRuntime();
   });
   window.webContents.on("did-finish-load", () => {
     const target = window.webContents.getURL();
@@ -346,6 +395,13 @@ function createMainWindow(): BrowserWindow {
   window.webContents.on("render-process-gone", (_event, details) => {
     const target = window.webContents.getURL() || lastTrustedRendererUrl || "agw://app/";
     writeRendererEvent("render-process-gone", details.reason, target, details.exitCode);
+    // 安全模式的判断先于清理，判断使用的正在激活集合不受清理影响。
+    // Safe mode is decided before the cleanup, so the cleanup cannot affect the activation set it reads.
+    if (details.reason !== "clean-exit") {
+      const safeMode = extensionRuntime.safeMode.recordHostFailure("crashed");
+      if (safeMode) writeExtensionSafeModeEvent(safeMode, target);
+    }
+    resetExtensionRuntime();
     if (
       details.reason === "clean-exit" ||
       destructionPlanned ||
@@ -377,11 +433,15 @@ function createMainWindow(): BrowserWindow {
     },
   );
   window.on("unresponsive", () => {
-    writeRendererEvent(
-      "unresponsive",
-      "unresponsive",
-      window.webContents.getURL() || lastTrustedRendererUrl || "",
-    );
+    const target = window.webContents.getURL() || lastTrustedRendererUrl || "";
+    writeRendererEvent("unresponsive", "unresponsive", target);
+    // extension 激活期间主界面失去响应：进入安全模式并结束宿主进程，由现有恢复流程重新加载。
+    // The host hung while extensions were activating: enter safe mode and end the host process for recovery.
+    const safeMode = extensionRuntime.safeMode.recordHostFailure("unresponsive");
+    if (!safeMode) return;
+    writeExtensionSafeModeEvent(safeMode, target);
+    resetExtensionRuntime();
+    window.webContents.forcefullyCrashRenderer();
   });
   window.on("responsive", () => {
     writeRendererEvent(
@@ -402,6 +462,7 @@ function createMainWindow(): BrowserWindow {
   });
   window.on("closed", () => {
     mainWindow = null;
+    resetExtensionRuntime();
   });
   return window;
 }
@@ -417,6 +478,14 @@ function rebuildTrayMenu(): void {
       },
       { type: "separator" },
       { label: "Settings", click: () => showWindowSafely("/settings/") },
+      {
+        label: "Reload without extensions",
+        click: () => {
+          void reloadWithoutExtensions().catch((error) =>
+            reportMainProcessError("Unable to reload without extensions", error),
+          );
+        },
+      },
       { type: "separator" },
       {
         label: "Quit Desktop",
@@ -700,6 +769,19 @@ function registerIpc(): void {
   });
 }
 
+/**
+ * 集成测试在同一进程中读取 extension 登记表与窗口，并触发托盘菜单的操作。
+ * Integration tests in the same process read the extension registry and window and trigger tray actions.
+ */
+export function integrationTestHooks() {
+  return {
+    extensionRuntime: () => extensionRuntime,
+    mainWindow: () => mainWindow,
+    reloadWithoutExtensions,
+    openChatFromTray: () => showWindow("/desktop/chat/"),
+  };
+}
+
 app.on("before-quit", () => {
   isQuitting = true;
   rendererRecoveryGuard.dispose();
@@ -749,9 +831,28 @@ void app
       deleteToken: (profileId) => settingsStore.deleteToken(profileId),
     });
     daemonManager = new DaemonManager(process.platform, serverExecutablePath());
+    extensionRuntime = new ExtensionRuntime({
+      userDataDirectory: app.getPath("userData"),
+      appVersion: packageMetadata.appVersion,
+      sdkDirectory: extensionSdkRoot(),
+      extensionPreloadPath: resolve(__dirname, "..", "preload", "extension.js"),
+      settings: settingsStore,
+      getMainWindow: () => mainWindow,
+      onSettingsChanged: async () => {
+        currentSettings = await settingsStore.load();
+      },
+      log: (message) => console.info(message),
+    });
+    // 扫描之前先恢复未完成的安装与卸载。Recover unfinished installs and uninstalls before scanning.
+    await extensionRuntime.initialize();
 
     registerStaticProtocol();
     registerIpc();
+    registerExtensionIpc({
+      runtime: extensionRuntime,
+      assertTrusted: (event) => assertTrustedSender(senderUrl(event)),
+      runtimeState,
+    });
     mainWindow = createMainWindow();
     createTray();
     await prepareRendererSession();

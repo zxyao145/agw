@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- index.html 原样发布，不填充 importmap 与预加载占位符（内联 importmap 违反 extension CSP）。 -->
+    <!-- Publish index.html as written without filling the importmap and preload placeholders (an inline importmap violates the extension CSP). -->
+    <OverrideHtmlAssetPlaceholders>false</OverrideHtmlAssetPlaceholders>
+    <!-- 没有 importmap 时 _framework 文件需要固定的文件名。Without an importmap the _framework files need stable names. -->
+    <WasmFingerprintAssets>false</WasmFingerprintAssets>
+    <!-- Desktop 直接提供文件，不使用 .br / .gz。Desktop serves the files directly and never uses .br / .gz. -->
+    <CompressionEnabled>false</CompressionEnabled>
+    <!-- 不发布 ICU 数据，减小输出。Skip the ICU data to keep the output small. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
+  </ItemGroup>
+</Project>

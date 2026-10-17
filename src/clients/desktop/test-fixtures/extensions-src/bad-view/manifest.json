@@ -1,0 +1,14 @@
+{
+  "manifestVersion": 1,
+  "id": "bad-view",
+  "name": "Bad View",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture whose main view never loads the SDK.",
+  "background": "background.js",
+  "contributes": {
+    "ribbon": [
+      { "id": "open", "title": "Bad View", "icon": "Puzzle", "action": { "type": "openMainView", "view": "app" } }
+    ],
+    "mainViews": [{ "id": "app", "title": "Bad View", "icon": "Puzzle", "entry": "index.html" }]
+  }
+}

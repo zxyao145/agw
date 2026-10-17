@@ -1,0 +1,73 @@
+{
+  "manifestVersion": 1,
+  "id": "sample",
+  "name": "Sample",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture that uses every contribution point.",
+  "author": "Agw",
+  "icon": "icon.svg",
+  "background": "background.js",
+  "contributes": {
+    "commands": [
+      { "id": "insert-greeting", "title": "Insert greeting" },
+      { "id": "read-file", "title": "Read file" },
+      { "id": "spin-free", "title": "Spin free" }
+    ],
+    "ribbon": [
+      { "id": "open", "title": "Sample", "icon": "icon.svg", "action": { "type": "openMainView", "view": "app" } },
+      { "id": "list", "title": "Sample list", "icon": "Hand", "action": { "type": "toggleSidebarView", "view": "list" } }
+    ],
+    "sidebarViews": [{ "id": "list", "title": "Sample list", "icon": "Hand", "entry": "sidebar.html" }],
+    "mainViews": [
+      { "id": "app", "title": "Sample", "icon": "icon.svg", "entry": "index.html", "retainContextWhenHidden": true }
+    ],
+    "settings": { "entry": "settings.html" },
+    "chat": {
+      "composerActions": [
+        {
+          "id": "greet",
+          "title": "Insert greeting",
+          "icon": "Hand",
+          "action": { "type": "command", "command": "insert-greeting" }
+        }
+      ],
+      "messageActions": [
+        {
+          "id": "open-in-app",
+          "title": "Open in Sample",
+          "icon": "icon.svg",
+          "action": { "type": "openMainView", "view": "app" }
+        }
+      ],
+      "conversationActions": [
+        {
+          "id": "show-conversation",
+          "title": "Show in Sample",
+          "icon": "MessageSquare",
+          "action": { "type": "openMainView", "view": "app" }
+        }
+      ]
+    },
+    "explorerActions": [
+      {
+        "id": "read-file",
+        "title": "Read with Sample",
+        "icon": "FileText",
+        "action": { "type": "command", "command": "read-file" }
+      }
+    ]
+  },
+  "permissions": [
+    "context.user",
+    "context.project",
+    "context.agent",
+    "fs.cloud.read",
+    "fs.cloud.write",
+    "execution",
+    "a2a",
+    "chat.composer",
+    "clipboard.read",
+    "clipboard.write"
+  ],
+  "hostPermissions": ["http://127.0.0.1:__HTTP_PORT__"]
+}

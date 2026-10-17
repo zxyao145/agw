@@ -537,6 +537,17 @@ public static class ErrorCodes
         "Job changed while the operation was in progress. Reload and try again.",
         HttpStatusCode.Conflict
     );
+    public static readonly ErrorCode DirectoryNotEmpty = new(
+        409_0023,
+        "Directory is not empty.",
+        HttpStatusCode.Conflict
+    );
+
+    public static readonly ErrorCode FileTooLarge = new(
+        413_0001,
+        "File exceeds the 100 MiB transfer limit.",
+        HttpStatusCode.RequestEntityTooLarge
+    );
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(
         429_0001,

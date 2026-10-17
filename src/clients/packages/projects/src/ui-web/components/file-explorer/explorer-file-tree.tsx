@@ -27,6 +27,7 @@ import {
   type FileItem,
   type GitDiffScope,
 } from "../../../services/files";
+import type { ExplorerContextMenuArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -107,6 +108,7 @@ function FileTreeNode({
   onFileReset,
   onGitScopeChanged,
   defaultExpanded,
+  contextMenuItems,
 }: FileTreeNodeProps) {
   const { directoryId } = useProjectFileScope();
   const [isExpanded, setIsExpanded] = React.useState(
@@ -368,6 +370,27 @@ function FileTreeNode({
               </ContextMenuItem>
             </>
           )}
+          {contextMenuItems && contextMenuItems.length > 0 ? (
+            <>
+              <ContextMenuSeparator />
+              {contextMenuItems.map((menuItem) => (
+                <ContextMenuItem
+                  key={menuItem.id}
+                  onSelect={() =>
+                    menuItem.onSelect({
+                      path: item.path,
+                      name: item.name,
+                      type: item.type,
+                      directoryId: directoryId ?? null,
+                    })
+                  }
+                >
+                  {menuItem.icon}
+                  {menuItem.title}
+                </ContextMenuItem>
+              ))}
+            </>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
 
@@ -416,6 +439,7 @@ function FileTreeNode({
               onFileDeleted={onFileDeleted}
               onFileReset={onFileReset}
               onGitScopeChanged={onGitScopeChanged}
+              contextMenuItems={contextMenuItems}
             />
           ))}
         </div>
@@ -432,6 +456,7 @@ export function ExplorerFileTree({
   recursiveMode,
   onFileDeleted,
   onFileReset,
+  contextMenuItems,
 }: {
   projectId: string;
   rootItems: FileItem[];
@@ -440,6 +465,8 @@ export function ExplorerFileTree({
   onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
+  /** 右键菜单的扩展菜单项，非空时列在内置项之后。Extension context menu items listed after the built-in ones when non-empty. */
+  contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 }) {
   return (
     <div className="file-tree">
@@ -455,6 +482,7 @@ export function ExplorerFileTree({
           defaultExpanded={onlyDiff && recursiveMode}
           onFileDeleted={onFileDeleted}
           onFileReset={onFileReset}
+          contextMenuItems={contextMenuItems}
         />
       ))}
     </div>
@@ -468,6 +496,7 @@ function GitChangeGroupSection({
   onFileDeleted,
   onFileReset,
   onGitScopeChanged,
+  contextMenuItems,
 }: {
   projectId: string;
   group: GitChangeGroup;
@@ -475,6 +504,7 @@ function GitChangeGroupSection({
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
   onGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
+  contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 }) {
   const [isExpanded, setIsExpanded] = React.useState(true);
 
@@ -508,6 +538,7 @@ function GitChangeGroupSection({
             onFileDeleted={onFileDeleted}
             onFileReset={onFileReset}
             onGitScopeChanged={onGitScopeChanged}
+            contextMenuItems={contextMenuItems}
           />
         ))}
       </CollapsibleContent>
@@ -522,6 +553,7 @@ export function ExplorerGitChangeTree({
   onFileDeleted,
   onFileReset,
   onGitScopeChanged,
+  contextMenuItems,
 }: {
   projectId: string;
   groups: GitChangeGroup[];
@@ -529,6 +561,7 @@ export function ExplorerGitChangeTree({
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
   onGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
+  contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 }) {
   return (
     <div className="file-tree space-y-1">
@@ -541,6 +574,7 @@ export function ExplorerGitChangeTree({
           onFileDeleted={onFileDeleted}
           onFileReset={onFileReset}
           onGitScopeChanged={onGitScopeChanged}
+          contextMenuItems={contextMenuItems}
         />
       ))}
     </div>

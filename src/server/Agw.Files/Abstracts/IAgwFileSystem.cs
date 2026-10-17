@@ -50,10 +50,42 @@ public interface IAgwFileSystem
     Task CreateDirectoryAsync(string path, CancellationToken ct);
 
     /// <summary>
-    /// 删除指定的文件，或递归删除指定的目录；空路径表示根目录本身。
-    /// Deletes the specified file, or the specified directory recursively; an empty path means the root itself.
+    /// 删除指定的文件、符号链接本身或目录；空路径表示根目录本身。<paramref name="recursive"/> 为 false 时只删除空目录，
+    /// 由删除操作本身保证不清空目录，目录非空时抛出 <c>DirectoryNotEmpty</c>。
+    /// Deletes the specified file, the symbolic link itself, or the directory; an empty path means the root itself.
+    /// When <paramref name="recursive"/> is false only an empty directory is removed: the delete operation itself never
+    /// empties the directory, and <c>DirectoryNotEmpty</c> is thrown when it has entries.
     /// </summary>
-    Task DeleteAsync(string path, CancellationToken ct);
+    Task DeleteAsync(string path, bool recursive, CancellationToken ct);
+
+    /// <summary>
+    /// 打开指定的普通文件用于读取，返回的流可定位且长度为文件大小，由调用方释放；文件不存在时抛出 <c>FileNotFound</c>。
+    /// Opens the specified regular file for reading; the returned stream is seekable, its length is the file size, and
+    /// the caller disposes it. Throws <c>FileNotFound</c> when the file does not exist.
+    /// </summary>
+    Task<Stream> OpenReadAsync(string path, CancellationToken ct);
+
+    /// <summary>
+    /// 把 <paramref name="content"/> 从当前位置起的全部内容写入指定文件。目标已存在且 <paramref name="overwrite"/> 为 false
+    /// 时抛出 <c>FileAlreadyExists</c>；目标是目录且 <paramref name="overwrite"/> 为 true 时抛出 <c>InvalidParam</c>。
+    /// <paramref name="createParents"/> 为 false 且父目录不存在时抛出 <c>DirectoryNotFound</c>。
+    /// Writes everything from the current position of <paramref name="content"/> to the specified file. Throws
+    /// <c>FileAlreadyExists</c> when the target exists and <paramref name="overwrite"/> is false, and
+    /// <c>InvalidParam</c> when the target is a directory and <paramref name="overwrite"/> is true. Throws
+    /// <c>DirectoryNotFound</c> when <paramref name="createParents"/> is false and the parent directory does not exist.
+    /// </summary>
+    Task WriteAsync(string path, Stream content, bool overwrite, bool createParents, CancellationToken ct);
+
+    /// <summary>
+    /// 把文件、符号链接本身或目录移动到同一文件系统内的目标路径，目标的父目录必须已经存在（否则抛出
+    /// <c>DirectoryNotFound</c>）。目标已存在时抛出 <c>FileAlreadyExists</c>，只有 <paramref name="overwrite"/> 为 true
+    /// 且源与目标都不是目录时才替换目标；源不存在时抛出 <c>FileNotFound</c>。
+    /// Moves a file, the symbolic link itself, or a directory to the destination path in the same file system; the
+    /// destination's parent directory must already exist (otherwise <c>DirectoryNotFound</c> is thrown). An existing
+    /// destination yields <c>FileAlreadyExists</c>, and it is replaced only when <paramref name="overwrite"/> is true
+    /// and neither the source nor the destination is a directory; a missing source yields <c>FileNotFound</c>.
+    /// </summary>
+    Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct);
 
     /// <summary>
     /// 枚举指定目录下名称与 <paramref name="searchPattern"/>（<c>*</c>、<c>?</c> 通配符）匹配的文件和子目录，递归时跳过符号链接；

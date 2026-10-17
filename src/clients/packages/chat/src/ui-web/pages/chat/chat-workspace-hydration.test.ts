@@ -13,7 +13,7 @@ import { conversationComposerStorage } from "../../../lib/chat/conversation-comp
 import * as sessionRouting from "./lib/session-routing";
 import { getTargetValue } from "./lib/target-options";
 import type { ChatProps } from "../../components/message/chat";
-import type { ChatWorkspaceProps } from "./chat-workspace";
+import type { ChatWorkspaceContextValue } from "./chat-workspace";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@agw/components/query";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
@@ -68,7 +68,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
     });
   }
   const dom = new JSDOM("<div id='root'></div>", {
-    url: "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
+    url:
+      kind === "desktop-cached-project"
+        ? "http://localhost/desktop/chat/?projectId=project-1"
+        : "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
   });
   const refreshTimers = new Map<number, () => void>();
   if (kind === "history-refresh") {
@@ -110,7 +113,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
       onDirectoryChange: (value: string | null) => void;
       onFileSelected: (path: string) => void;
     };
-    file?: { selectedFile: string | null };
+    file?: {
+      selectedFile: string | null;
+      setComments: React.Dispatch<React.SetStateAction<import("@agw/projects").LineComment[]>>;
+    };
     chat?: ChatProps;
     items?: import("@agw/chat-core").ConversationRenderItem[];
     input?: {
@@ -125,6 +131,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
     };
     inputValue?: string;
     newChat?: () => void;
+    selectConversation?: (conversation: import("@agw/projects").ConversationSummary) => void;
     refreshSignal?: number;
     conversationStatuses?: ReadonlyMap<string, string>;
     currentConversationTurnId?: string | null;
@@ -319,12 +326,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
         conversationStatuses?: ReadonlyMap<string, string>;
         currentConversationTurnId?: string | null;
         onNewConversation?: () => void;
+        onConversationSelect?: typeof observed.selectConversation;
         onActiveConversationResolved?: (value: unknown) => void;
       }) => {
         observed.refreshSignal = props.refreshSignal;
         observed.conversationStatuses = props.conversationStatuses;
         observed.currentConversationTurnId = props.currentConversationTurnId;
         observed.newChat = props.onNewConversation;
+        observed.selectConversation = props.onConversationSelect;
         React.useEffect(() => {
           props.onActiveConversationResolved?.(conversation);
         }, [props.onActiveConversationResolved]);
@@ -447,9 +456,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
   modules["../../conversation-statuses"] = await loadComponent(
     new URL("../../conversation-statuses.ts", import.meta.url),
   );
-  const { ChatWorkspace } = await loadComponent<ChatWorkspaceProps>(
+  const workspaceModule = (await loadComponent(
     new URL("./chat-workspace.tsx", import.meta.url),
-  );
+  )) as unknown as typeof import("./chat-workspace");
+  const { ChatWorkspace } = workspaceModule;
   const root = createRoot(dom.window.document.getElementById("root")!);
   const queryClient = new QueryClient();
   const renderWithQueries = (children: React.ReactNode) =>
@@ -532,6 +542,131 @@ async function checkConversationSession(kind: string, strictMode = false) {
         "execute:third turn",
       ]);
       assert.equal(observed.input?.isTransitioning, false);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "desktop-cached-project") {
+      // 从 Settings 回到对话：查询已有缓存，路由只带 projectId。Back from Settings: queries are cached and the route has only projectId.
+      const { ChatWorkspaceProvider, useChatWorkspace } = workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat" },
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      assert.equal(workspace?.selectedProject?.id, "project-1");
+      assert.equal(workspace?.conversationId, null);
+      assert.equal(workspace?.selectedTarget?.id, "agent-1", "the first target is selected");
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "desktop") {
+      // Desktop 用 Provider 组合分别导出的组件，不经过 Tabs 布局。
+      // Desktop composes the Provider with the separately exported panes, without the Tabs layout.
+      const {
+        ChatConversationPane,
+        ChatConversationSidebar,
+        ChatFilePane,
+        ChatFilesSidebar,
+        ChatWorkspaceProvider,
+        useChatWorkspace,
+      } = workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      let conversationsOpened = 0;
+      let filesOpened = 0;
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat" },
+            React.createElement(ChatConversationSidebar, {
+              onConversationOpened: () => (conversationsOpened += 1),
+            }),
+            React.createElement(ChatFilesSidebar, { onFileOpened: () => (filesOpened += 1) }),
+            React.createElement(ChatConversationPane, {
+              compact: true,
+              showUserInputNavigation: true,
+            }),
+            React.createElement(ChatFilePane),
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      await React.act(async () => finishHistory());
+
+      assert.equal(detailsRequests, 1);
+      assert.equal(workspace?.selectedProject?.id, "project-1");
+      assert.equal(workspace?.conversationId, "conversation-1");
+      assert.equal(workspace?.selectedTarget?.id, "agent-1", "the server's target is restored");
+      assert.equal(observed.chat?.conversationId, "conversation-1");
+      assert.deepEqual(observed.chat?.sessionSeed.messages, messages);
+      assert.equal(observed.chat?.composerRef, workspace?.composerRef);
+      assert.equal(observed.input?.isTransitioning, false);
+
+      const refreshSignal = observed.refreshSignal!;
+      await React.act(async () => workspace!.refreshConversations());
+      assert.equal(
+        observed.refreshSignal,
+        refreshSignal + 1,
+        "refreshConversations refreshes the list",
+      );
+
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(observed.file?.selectedFile, "README.md");
+      assert.equal(filesOpened, 1);
+      const fileReadCount = fileReads.length;
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(filesOpened, 2, "selecting the current file again still opens the file view");
+      assert.equal(fileReads.length, fileReadCount, "the unchanged file is not read again");
+
+      const comment: import("@agw/projects").LineComment = {
+        id: "comment-1",
+        side: "current",
+        filePath: "README.md",
+        lineNumber: 3,
+        content: "Explain this line",
+        timestamp: new Date(0),
+      };
+      await React.act(async () => observed.file!.setComments([comment]));
+      assert.deepEqual(observed.chat?.pendingFileComments, [comment]);
+
+      await React.act(async () =>
+        observed.selectConversation!({
+          projectId: "project-1",
+          conversationId: "conversation-2",
+          contextId: "context-2",
+          title: "Second",
+          executionCount: 1,
+          messageCount: 0,
+          createTime: "2026-10-17T00:00:00Z",
+        }),
+      );
+      assert.equal(conversationsOpened, 0, "the conversation opens once its history loads");
+      await React.act(async () =>
+        pending
+          .get("conversation-2")!
+          .resolve({ ...conversation, conversationId: "conversation-2", contextId: "context-2" }),
+      );
+      assert.equal(conversationsOpened, 1);
+      assert.equal(observed.chat?.conversationId, "conversation-2");
+      assert.equal(
+        new URLSearchParams(dom.window.location.search).get("conversationId"),
+        "conversation-2",
+      );
+      await React.act(async () => observed.newChat!());
+      assert.equal(conversationsOpened, 2, "starting a new conversation opens it");
       assert.deepEqual(errors, []);
       return;
     }
@@ -1108,3 +1243,7 @@ test("Chat stays interactive during silent retries and blocks only for the visib
 test("Chat accepts input during silent retries", () => checkConversationSession("reconnect-send"));
 test("switching the browsing directory clears preview and removal restores primary without changing the conversation", () =>
   checkConversationSession("directories"));
+test("the Provider mounted with cached queries and only a projectId selects a default target", () =>
+  checkConversationSession("desktop-cached-project"));
+test("the Provider with separately composed panes restores the conversation and reports openings, comments and refreshes", () =>
+  checkConversationSession("desktop"));

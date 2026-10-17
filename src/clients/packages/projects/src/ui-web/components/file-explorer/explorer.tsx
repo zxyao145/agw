@@ -10,6 +10,7 @@ import { ExplorerFileTree, ExplorerGitChangeTree } from "./explorer-file-tree";
 import React from "react";
 import { buildGitChangeGroups } from "./git-change-tree";
 import type { GitChangeGroup } from "./types";
+import type { ExplorerContextMenuArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 
 const ROOT_RELOAD_DEBOUNCE_MS = 150;
 
@@ -26,6 +27,7 @@ export default function Explorer({
   onFileSelected,
   onFileReseted,
   onFileGitScopeChanged,
+  contextMenuItems,
 }: {
   projectId: string;
   directoryId?: string | null;
@@ -40,6 +42,8 @@ export default function Explorer({
   onFileSelected: (filePath: string | null, scope?: GitDiffScope) => void;
   onFileReseted: (filePath: string | null) => void;
   onFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
+  /** 右键菜单的扩展菜单项，非空时列在内置项之后。Extension context menu items listed after the built-in ones when non-empty. */
+  contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 }): React.ReactNode {
   const selectedDirectory = directories.find((directory) => directory.id === (directoryId ?? null));
   const [rootItems, setRootItems] = React.useState<FileItem[]>([]);
@@ -223,6 +227,7 @@ export default function Explorer({
                 onFileDeleted={handleFileDeleted}
                 onFileReset={handleFileReset}
                 onGitScopeChanged={handleGitScopeChanged}
+                contextMenuItems={contextMenuItems}
               />
             )}
 
@@ -235,6 +240,7 @@ export default function Explorer({
                 onFileSelect={handleFileSelect}
                 onFileDeleted={handleFileDeleted}
                 onFileReset={handleFileReset}
+                contextMenuItems={contextMenuItems}
               />
             )}
           </div>

@@ -1,4 +1,11 @@
-import { apiDelete, apiGet, apiPost, apiRequest, createBearerApiClient } from "../src/client";
+import {
+  apiDelete,
+  apiDownload,
+  apiGet,
+  apiPost,
+  apiRequest,
+  createBearerApiClient,
+} from "../src/client";
 
 // Compiled by test:types, never executed. Invalid calls must fail at the public boundary.
 function checkContract() {
@@ -27,9 +34,21 @@ function checkContract() {
   apiGet("/api/auth/login");
   // @ts-expect-error The route is not in the contract.
   apiGet("/api/not-a-route");
+  const bytes: Promise<Uint8Array> = apiDownload("/api/files/download", {
+    params: { query: { projectId: "project-1", path: "assets/logo.png" } },
+  });
+  // @ts-expect-error Downloads require the query parameters of the GET operation.
+  apiDownload("/api/files/download");
+  // @ts-expect-error Downloads are GET requests only.
+  apiDownload("/api/files/move", { params: { query: { projectId: "project-1" } } });
   const bearer = createBearerApiClient({ baseUrl: "https://example.com", token: "agw_test" });
   // @ts-expect-error Isolated clients preserve required body checks.
   bearer.apiPost("/api/auth/login");
+  const bearerBytes: Promise<Uint8Array> = bearer.apiDownload("/api/files/download", {
+    params: { query: { projectId: "project-1" } },
+  });
+  void bytes;
+  void bearerBytes;
 }
 
 void checkContract;

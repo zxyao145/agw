@@ -1,12 +1,5 @@
-import { ChatWorkspace } from "@agw/chat";
+import { DesktopWorkspace } from "./components/workspace/desktop-workspace";
 
 export function DesktopChatPage() {
-  return (
-    <ChatWorkspace
-      routeBasePath="/desktop/chat"
-      showProjectSelect={false}
-      compactToolbar
-      showUserInputNavigation
-    />
-  );
+  return <DesktopWorkspace />;
 }
