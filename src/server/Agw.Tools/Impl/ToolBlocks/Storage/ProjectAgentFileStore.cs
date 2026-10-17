@@ -113,7 +113,7 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
             return false;
         }
 
-        await fileSystem.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
+        await fileSystem.DeleteAsync(path, recursive: true, cancellationToken).ConfigureAwait(false);
         return true;
     }
 

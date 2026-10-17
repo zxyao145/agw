@@ -4,6 +4,8 @@ import { arch, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildExtensionSdk } from "./build-extension-sdk.mjs";
+
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopDirectory = resolve(scriptDirectory, "..");
 const repositoryRoot = resolve(desktopDirectory, "..", "..", "..");
@@ -53,6 +55,7 @@ await access(resolve(rendererOutput, "index.html")).catch(() => {
 });
 await rm(rendererDirectory, { recursive: true, force: true });
 await cp(rendererOutput, rendererDirectory, { recursive: true });
+await buildExtensionSdk();
 await writeFile(
   resolve(resourcesDirectory, "package-flavor.json"),
   `${JSON.stringify({ packageFlavor: flavor, appVersion: releaseVersion }, null, 2)}\n`,

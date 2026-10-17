@@ -9,6 +9,7 @@ export const mainBuildOptions = {
   entryPoints: {
     "main/index": "src/main/index.ts",
     "preload/index": "src/preload/index.ts",
+    "preload/extension": "src/preload/extension.ts",
   },
   outdir: "dist",
   bundle: true,

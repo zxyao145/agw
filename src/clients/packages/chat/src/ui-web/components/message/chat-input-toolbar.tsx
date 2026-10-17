@@ -21,6 +21,7 @@ import {
 } from "@agw/components";
 import type { AgentCommandSuggestion, CommandSource } from "../../../lib/chat/search-command";
 import type { AgentMode, PermissionMode } from "@agw/chat-runtime";
+import type { ExtensionMenuItem } from "./chat-extension-types";
 
 type ChatInputToolbarProps = {
   commandSource: CommandSource;
@@ -36,6 +37,8 @@ type ChatInputToolbarProps = {
   onCommandSelect: (command: string) => void;
   onPermissionModeChange: (mode: PermissionMode) => void;
   onAgentModeChange: (mode: AgentMode) => void;
+  /** "+" 菜单 Extensions 分组的菜单项。Items of the Extensions group in the "+" menu. */
+  composerActions?: readonly ExtensionMenuItem<Record<string, never>>[];
 };
 
 const permissionLabels: Record<PermissionMode, string> = {
@@ -58,6 +61,7 @@ export function ChatInputToolbar({
   onCommandSelect,
   onPermissionModeChange,
   onAgentModeChange,
+  composerActions = [],
 }: ChatInputToolbarProps) {
   const suggestions = commandSource.mode === "system" ? commandSource.suggestions : [];
   const skills = suggestions.filter((suggestion) => suggestion.kind === "skill");
@@ -70,7 +74,8 @@ export function ChatInputToolbar({
   const supportsMode =
     commandSource.mode === "system" &&
     commandSource.suggestions.some((suggestion) => suggestion.text === "/mode_set");
-  const hasAddItems = supportsMode || skills.length > 0 || tools.length > 0;
+  const hasAddItems =
+    supportsMode || skills.length > 0 || tools.length > 0 || composerActions.length > 0;
 
   return (
     <div className="flex min-w-0 items-center gap-1">
@@ -123,6 +128,24 @@ export function ChatInputToolbar({
             disabled={isExecuting || isTransitioning}
             onSelect={onCommandSelect}
           />
+          {composerActions.length > 0 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="px-2 py-1 text-xs font-normal text-muted-foreground">
+                Extensions
+              </DropdownMenuLabel>
+              {composerActions.map((action) => (
+                <DropdownMenuItem
+                  key={action.id}
+                  className="min-h-10 cursor-pointer rounded-xl px-2.5"
+                  onSelect={() => action.onSelect({})}
+                >
+                  {action.icon}
+                  <span className="block min-w-0 truncate font-medium">{action.title}</span>
+                </DropdownMenuItem>
+              ))}
+            </>
+          ) : null}
 
           {!hasAddItems ? (
             <div className="px-2.5 py-4 text-sm text-muted-foreground">

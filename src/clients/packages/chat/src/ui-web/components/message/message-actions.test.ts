@@ -88,6 +88,51 @@ test("clipboard failure reports an error without showing copied state", async (c
   assert.ok(screen.getByRole("button", { name: "Copy message" }));
 });
 
+test("the More menu passes a turn ID only when it is a string", async () => {
+  const selections: unknown[] = [];
+  const message = presentMessage({
+    messageId: "result",
+    role: "assistant",
+    additionalProperties: { type: "result", turnId: 42 },
+    contents: [{ type: "TextContent", content: "Done" }],
+  })!;
+  render(
+    React.createElement(MessageActions, {
+      message,
+      actions: [
+        {
+          id: "extension:share",
+          title: "Share",
+          icon: null,
+          onSelect: (args) => selections.push(args),
+        },
+      ],
+    }),
+  );
+
+  await act(async () => {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "More message actions" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+  });
+  await act(async () => fireEvent.click(await screen.findByText("Share")));
+
+  assert.deepEqual(selections, [
+    { messageId: "result", role: "assistant", text: "Done", turnId: null },
+  ]);
+});
+
+test("without actions only the copy button is shown", () => {
+  renderActions();
+
+  assert.deepEqual(
+    screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")),
+    ["Copy message"],
+  );
+});
+
 test("image-only messages disable copying", () => {
   const message = presentMessage({
     messageId: "image",

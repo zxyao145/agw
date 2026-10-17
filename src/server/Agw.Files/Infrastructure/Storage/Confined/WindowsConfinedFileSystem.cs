@@ -207,11 +207,113 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
         return Task.CompletedTask;
     }
 
-    public async Task DeleteAsync(string path, CancellationToken ct)
+    public async Task DeleteAsync(string path, bool recursive, CancellationToken ct)
     {
         var fullPath = ResolveFilePath(path);
         using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
-        Delete(path, ct);
+        Delete(path, recursive, ct);
+    }
+
+    public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
+    {
+        var opened = OpenExistingFile(path, WindowsNative.GENERIC_READ);
+        try
+        {
+            return Task.FromResult<Stream>(new FileStream(opened.Handle, FileAccess.Read));
+        }
+        catch
+        {
+            opened.Dispose();
+            throw;
+        }
+    }
+
+    public async Task WriteAsync(string path, Stream content, bool overwrite, bool createParents, CancellationToken ct)
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
+        if (createParents)
+        {
+            EnsureParentDirectories(path);
+        }
+        else
+        {
+            OpenParentDirectory(path).Dispose();
+        }
+
+        using (
+            var existing = OpenExisting(
+                path,
+                WindowsNative.FILE_READ_ATTRIBUTES,
+                WindowsNative.FILE_FLAG_BACKUP_SEMANTICS
+            )
+        )
+        {
+            if (existing is { IsDirectory: true })
+            {
+                throw overwrite
+                    ? new AgwException(ErrorCodes.InvalidParam, $"'{path}' is not a regular file.")
+                    : new AgwException(ErrorCodes.FileAlreadyExists, $"'{path}' already exists.");
+            }
+        }
+
+        // 不覆盖时以 CREATE_NEW 创建，由打开操作本身拒绝已存在的文件；之后的写入只经过这个已校验的句柄。
+        // Without overwrite the file is created with CREATE_NEW so the open itself rejects an existing file; the write
+        // then goes through that verified handle only.
+        using var opened =
+            OpenOrCreateFile(path, mustCreate: !overwrite)
+            ?? throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{path}' already exists.");
+        await using var target = new FileStream(opened.Handle, FileAccess.ReadWrite);
+        await content.CopyToAsync(target, ct).ConfigureAwait(false);
+        target.SetLength(target.Position);
+    }
+
+    public async Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct)
+    {
+        var sourceFullPath = ResolveFilePath(sourcePath);
+        var destinationFullPath = ResolveFilePath(destinationPath);
+        using var pathLock = await LocalFilePathLocks
+            .AcquireAsync(sourceFullPath, destinationFullPath, ct)
+            .ConfigureAwait(false);
+        // 源带 OPEN_REPARSE_POINT 打开，链接与 junction 移动的是其本身；目标位置相对已校验的父目录句柄解析。
+        // The source is opened with OPEN_REPARSE_POINT so a link or junction is moved itself; the destination is
+        // resolved relative to the verified parent directory handle.
+        using var source =
+            OpenExisting(
+                sourcePath,
+                WindowsNative.DELETE | WindowsNative.FILE_READ_ATTRIBUTES,
+                WindowsNative.FILE_FLAG_BACKUP_SEMANTICS | WindowsNative.FILE_FLAG_OPEN_REPARSE_POINT
+            ) ?? throw new AgwException(ErrorCodes.FileNotFound, $"'{sourcePath}' was not found.");
+        using var parent = OpenParentDirectory(destinationPath);
+        using (
+            var existing = OpenExisting(
+                destinationPath,
+                WindowsNative.FILE_READ_ATTRIBUTES,
+                WindowsNative.FILE_FLAG_BACKUP_SEMANTICS | WindowsNative.FILE_FLAG_OPEN_REPARSE_POINT
+            )
+        )
+        {
+            if (existing != null && (!overwrite || source.IsDirectory || existing.IsDirectory))
+            {
+                throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.");
+            }
+        }
+
+        var destination = RelativePath(destinationPath);
+        var error = WindowsNative.Rename(
+            source.Handle,
+            parent.Handle,
+            destination[(destination.LastIndexOf('/') + 1)..],
+            replace: overwrite && !source.IsDirectory
+        );
+        if (error == 0)
+        {
+            return;
+        }
+
+        throw error is WindowsNative.ERROR_ALREADY_EXISTS or WindowsNative.ERROR_FILE_EXISTS
+            ? new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.")
+            : WindowsNative.CreateException(error, $"Cannot move '{sourcePath}' to '{destinationPath}'");
     }
 
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(
@@ -350,12 +452,14 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
         }
     }
 
-    private void Delete(string path, CancellationToken ct)
+    private void Delete(string path, bool recursive, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        // 带 OPEN_REPARSE_POINT 打开，链接与 junction 删除的是其本身；目录先递归清空再通过句柄标记删除。
-        // Opened with OPEN_REPARSE_POINT so a link or junction is deleted itself; a directory is emptied recursively and
-        // then marked for deletion through its handle.
+        // 带 OPEN_REPARSE_POINT 打开，链接与 junction 删除的是其本身；目录在递归时先清空，非递归时只标记目录本身，目录
+        // 非空则标记失败，期间新建的文件不会被删除。
+        // Opened with OPEN_REPARSE_POINT so a link or junction is deleted itself; a directory is emptied first when
+        // recursive, and otherwise only the directory itself is marked, which fails when it has entries, so files created
+        // meanwhile are never deleted.
         using var opened = OpenExisting(
             path,
             WindowsNative.DELETE | WindowsNative.FILE_READ_ATTRIBUTES,
@@ -366,15 +470,38 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
             return;
         }
 
-        if (opened.IsDirectory && !opened.IsReparsePoint)
+        if (recursive && opened.IsDirectory && !opened.IsReparsePoint)
         {
             foreach (var child in Directory.EnumerateFileSystemEntries(opened.FinalPath))
             {
-                Delete(Combine(path, Path.GetFileName(child)), ct);
+                Delete(Combine(path, Path.GetFileName(child)), recursive: true, ct);
             }
         }
 
         WindowsNative.MarkForDeletion(opened.Handle, $"Cannot delete '{path}'");
+    }
+
+    /// <summary>
+    /// 打开并校验 <paramref name="path"/> 的父目录（本实例内的相对路径），不存在或不是目录时抛出 <c>DirectoryNotFound</c>。
+    /// Opens and verifies the parent directory of <paramref name="path"/> (relative to this instance), throwing
+    /// <c>DirectoryNotFound</c> when it is missing or not a directory.
+    /// </summary>
+    private VerifiedHandle OpenParentDirectory(string path)
+    {
+        var relativePath = RelativePath(path);
+        var separator = relativePath.LastIndexOf('/');
+        var parent = OpenExisting(
+            separator < 0 ? string.Empty : relativePath[..separator],
+            WindowsNative.FILE_READ_ATTRIBUTES,
+            WindowsNative.FILE_FLAG_BACKUP_SEMANTICS
+        );
+        if (parent is { IsDirectory: true })
+        {
+            return parent;
+        }
+
+        parent?.Dispose();
+        throw new AgwException(ErrorCodes.DirectoryNotFound, $"The parent directory of '{path}' was not found.");
     }
 
     /// <summary>

@@ -300,6 +300,7 @@ public class FileAppServiceTests
         var result = await service.DeleteAsync(
             ProjectId,
             isDirectory ? "directory" : "file.txt",
+            recursive: true,
             TestContext.Current.CancellationToken
         );
 
@@ -315,7 +316,12 @@ public class FileAppServiceTests
         using var scope = TempDirectoryScope.Create();
         var service = CreateService(scope.Path);
 
-        var result = await service.DeleteAsync(ProjectId, "missing.txt", TestContext.Current.CancellationToken);
+        var result = await service.DeleteAsync(
+            ProjectId,
+            "missing.txt",
+            recursive: true,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(FileOperationStatus.NotFound, result.Status);
         Assert.Equal("File or directory not found", result.Message);
@@ -327,7 +333,7 @@ public class FileAppServiceTests
         using var scope = TempDirectoryScope.Create();
         var service = CreateService(scope.Path);
 
-        var result = await service.DeleteAsync(ProjectId, "", TestContext.Current.CancellationToken);
+        var result = await service.DeleteAsync(ProjectId, "", recursive: true, TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
         Assert.Equal("Path parameter is required", result.Message);
@@ -617,7 +623,16 @@ public class FileAppServiceTests
 
         public Task CreateDirectoryAsync(string path, CancellationToken ct) => _inner.CreateDirectoryAsync(path, ct);
 
-        public Task DeleteAsync(string path, CancellationToken ct) => _inner.DeleteAsync(path, ct);
+        public Task DeleteAsync(string path, bool recursive, CancellationToken ct) =>
+            _inner.DeleteAsync(path, recursive, ct);
+
+        public Task<Stream> OpenReadAsync(string path, CancellationToken ct) => _inner.OpenReadAsync(path, ct);
+
+        public Task WriteAsync(string path, Stream content, bool overwrite, bool createParents, CancellationToken ct) =>
+            _inner.WriteAsync(path, content, overwrite, createParents, ct);
+
+        public Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct) =>
+            _inner.MoveAsync(sourcePath, destinationPath, overwrite, ct);
 
         public IAsyncEnumerable<Agw.Files.Abstracts.Dtos.FileEntry> EnumerateAsync(
             string path,

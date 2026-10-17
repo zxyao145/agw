@@ -112,9 +112,11 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             return ExternalTaskSaveResult.TaskIdConflict;
         }
 
+        // 同一请求会多次保存快照；跟踪查询返回上一次保存时已跟踪的实例，下面才能删除它。
+        // One request saves the snapshot several times; a tracking query returns the instance the previous save
+        // already tracks, so it can be removed below.
         var records = await _dbContext
-            .ProjectConversationChatHistories.AsNoTracking()
-            .Where(record => record.TaskId == request.TaskId)
+            .ProjectConversationChatHistories.Where(record => record.TaskId == request.TaskId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         ProjectConversation? conversation = null;

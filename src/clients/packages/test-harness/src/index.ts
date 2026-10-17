@@ -7,8 +7,14 @@ import { installBrowserApis, type ObserverRegistry } from "./browser-apis";
 
 export { installLayoutMetrics } from "./browser-apis";
 export type { LayoutMetrics, ObserverRegistry } from "./browser-apis";
-export { startApiServer } from "./api-server";
-export type { ApiRequestRecord, ApiRouteHandler, ApiRoutes, ApiServer } from "./api-server";
+export { RawApiResponse, rawApiResponse, startApiServer } from "./api-server";
+export type {
+  ApiRequestRecord,
+  ApiRouteHandler,
+  ApiRoutes,
+  ApiServer,
+  RawApiResponseInit,
+} from "./api-server";
 
 export type DomEnvironmentOptions = {
   html?: string;

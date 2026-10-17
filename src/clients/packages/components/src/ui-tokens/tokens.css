@@ -373,6 +373,60 @@ div[role="option"]:hover {
     @apply min-h-0 flex-1 overflow-hidden bg-card pb-2;
   }
 
+  /* Desktop 工作区：Ribbon、Left Sidebar、Main Workspace 与 extension 视图。
+     Desktop workspace: Ribbon, Left Sidebar, Main Workspace and extension views. */
+  .agw-ribbon {
+    @apply flex w-11 shrink-0 flex-col items-center gap-1 border-r bg-card py-2;
+  }
+
+  .agw-ribbon-item {
+    @apply grid size-8 shrink-0 cursor-pointer place-items-center rounded-[9px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+  }
+
+  .agw-ribbon-item svg,
+  .agw-ribbon-item img {
+    @apply size-4;
+  }
+
+  .agw-ribbon-item.is-active {
+    @apply bg-muted text-foreground;
+  }
+
+  /* 内置项与 extension 项之间的分隔线。Separator between built-in and extension items. */
+  .agw-ribbon-separator {
+    @apply my-1 h-px w-6 shrink-0 bg-border;
+  }
+
+  .agw-left-sidebar {
+    @apply flex h-full min-h-0 w-full flex-col overflow-hidden bg-card;
+  }
+
+  .agw-main-workspace {
+    @apply relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .agw-extension-view-header {
+    @apply flex h-8 shrink-0 items-center gap-2 border-b px-2.5 text-xs text-muted-foreground;
+  }
+
+  .agw-extension-view-header svg,
+  .agw-extension-view-header img {
+    @apply size-4 shrink-0;
+  }
+
+  .agw-extension-view-slot {
+    @apply relative min-h-0 flex-1 overflow-hidden bg-background;
+  }
+
+  /* 宿主弹出层遮住视图时显示的截图。The snapshot shown while a host overlay covers the view. */
+  .agw-extension-view-slot.is-snapshot {
+    @apply select-none;
+  }
+
+  .agw-extension-view-slot.is-snapshot > img {
+    @apply pointer-events-none absolute inset-0 size-full object-fill;
+  }
+
   .agw-settings-titlebar {
     @apply gap-3;
   }

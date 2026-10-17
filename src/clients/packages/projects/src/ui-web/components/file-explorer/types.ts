@@ -1,4 +1,5 @@
 import type { FileItem, GitDiffResponse, GitDiffScope } from "../../../services/files";
+import type { ExplorerContextMenuArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 
 export const CommentSide = {
   Current: "current",
@@ -88,6 +89,7 @@ export interface FileTreeNodeProps {
   onFileReset?: (filePath: string) => void;
   onGitScopeChanged?: (path: string, targetScope: GitDiffScope) => void;
   defaultExpanded?: boolean;
+  contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
 }
 
 export interface CodeViewerProps {

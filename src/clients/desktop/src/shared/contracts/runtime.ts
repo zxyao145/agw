@@ -1,3 +1,4 @@
+import type { ExtensionSafeModeState } from "./extension";
 import type { DesktopPlatform } from "./server-profile";
 import type { DesktopSettings, PackageFlavor } from "./settings";
 
@@ -21,4 +22,5 @@ export type DesktopRuntimeState = {
   activeToken: string | null;
   activeCredentialSource?: "manual" | "oidc";
   localServerRuntime: LocalServerRuntime | null;
+  extensionSafeMode: ExtensionSafeModeState | null;
 };

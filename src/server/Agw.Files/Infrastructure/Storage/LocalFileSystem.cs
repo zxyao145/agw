@@ -215,7 +215,7 @@ public sealed class LocalFileSystem : ILocalFileSystem
         return Task.CompletedTask;
     }
 
-    public async Task DeleteAsync(string path, CancellationToken ct)
+    public async Task DeleteAsync(string path, bool recursive, CancellationToken ct)
     {
         var fullPath = ResolvePath(path);
         using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
@@ -226,7 +226,106 @@ public sealed class LocalFileSystem : ILocalFileSystem
         }
         else if (Directory.Exists(fullPath))
         {
-            Directory.Delete(fullPath, recursive: true);
+            // 非递归时由 Directory.Delete 只移除空目录，非空目录的系统错误转换为 DirectoryNotEmpty。
+            // When not recursive, Directory.Delete removes only an empty directory, and the system error for a non-empty
+            // directory becomes DirectoryNotEmpty.
+            try
+            {
+                Directory.Delete(fullPath, recursive);
+            }
+            catch (IOException exception) when (IsDirectoryNotEmpty(exception))
+            {
+                throw new AgwException(ErrorCodes.DirectoryNotEmpty, $"Directory '{path}' is not empty.", exception);
+            }
+        }
+    }
+
+    public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
+    {
+        var fullPath = ResolveFilePath(path);
+        if (!File.Exists(fullPath))
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"File '{path}' was not found.");
+        }
+
+        return Task.FromResult<Stream>(
+            new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true)
+        );
+    }
+
+    public async Task WriteAsync(string path, Stream content, bool overwrite, bool createParents, CancellationToken ct)
+    {
+        var fullPath = ResolveFilePath(path);
+        using var pathLock = await LocalFilePathLocks.AcquireAsync(fullPath, ct).ConfigureAwait(false);
+        if (Directory.Exists(fullPath))
+        {
+            throw overwrite
+                ? new AgwException(ErrorCodes.InvalidParam, $"'{path}' is not a regular file.")
+                : new AgwException(ErrorCodes.FileAlreadyExists, $"'{path}' already exists.");
+        }
+
+        if (!overwrite && File.Exists(fullPath))
+        {
+            throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{path}' already exists.");
+        }
+
+        var directory = Path.GetDirectoryName(fullPath)!;
+        if (createParents)
+        {
+            Directory.CreateDirectory(directory);
+        }
+        else if (!Directory.Exists(directory))
+        {
+            throw new AgwException(ErrorCodes.DirectoryNotFound, $"The parent directory of '{path}' was not found.");
+        }
+
+        // CreateNew 使"不覆盖"由打开操作本身保证。CreateNew makes the open itself guarantee "no overwrite".
+        await using var target = new FileStream(
+            fullPath,
+            overwrite ? FileMode.Create : FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            81920,
+            useAsync: true
+        );
+        await content.CopyToAsync(target, ct).ConfigureAwait(false);
+    }
+
+    public async Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct)
+    {
+        var sourceFullPath = ResolveFilePath(sourcePath);
+        var destinationFullPath = ResolveFilePath(destinationPath);
+        using var pathLock = await LocalFilePathLocks
+            .AcquireAsync(sourceFullPath, destinationFullPath, ct)
+            .ConfigureAwait(false);
+
+        var sourceIsFile = File.Exists(sourceFullPath);
+        if (!sourceIsFile && !Directory.Exists(sourceFullPath))
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"'{sourcePath}' was not found.");
+        }
+
+        if (!Directory.Exists(Path.GetDirectoryName(destinationFullPath)))
+        {
+            throw new AgwException(
+                ErrorCodes.DirectoryNotFound,
+                $"The parent directory of '{destinationPath}' was not found."
+            );
+        }
+
+        var destinationIsFile = File.Exists(destinationFullPath);
+        if (Directory.Exists(destinationFullPath) || (destinationIsFile && (!overwrite || !sourceIsFile)))
+        {
+            throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.");
+        }
+
+        if (sourceIsFile)
+        {
+            File.Move(sourceFullPath, destinationFullPath, overwrite);
+        }
+        else
+        {
+            Directory.Move(sourceFullPath, destinationFullPath);
         }
     }
 
@@ -355,6 +454,17 @@ public sealed class LocalFileSystem : ILocalFileSystem
 
         await File.WriteAllTextAsync(fullPath, content, ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// 判断删除目录得到的 IOException 是否表示目录非空：Unix 上 HResult 是原始 errno（ENOTEMPTY），Windows 上是
+    /// ERROR_DIR_NOT_EMPTY 对应的 HRESULT。
+    /// Decides whether an IOException from deleting a directory means the directory is not empty: on Unix the HResult
+    /// is the raw errno (ENOTEMPTY), on Windows the HRESULT of ERROR_DIR_NOT_EMPTY.
+    /// </summary>
+    private static bool IsDirectoryNotEmpty(IOException exception) =>
+        OperatingSystem.IsWindows()
+            ? exception.HResult == unchecked((int)0x80070000 | WindowsNative.ERROR_DIR_NOT_EMPTY)
+            : exception.HResult == UnixNative.ENOTEMPTY;
 
     private static Task<string> ReadExistingFileAsync(string path, string fullPath, CancellationToken ct)
     {

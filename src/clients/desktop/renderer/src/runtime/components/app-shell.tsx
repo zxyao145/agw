@@ -15,6 +15,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Puzzle,
   Server,
   Settings,
   Sparkles,
@@ -39,10 +40,12 @@ import {
   DropdownMenuTrigger,
 } from "@agw/components";
 import { Popover, PopoverContent, PopoverTrigger } from "@agw/components";
-import { buildChatHref, ChatSidebarVisibilityContext, useExecutionActivity } from "@agw/chat";
+import { buildChatHref, useExecutionActivity } from "@agw/chat";
 import type { ExecutionStatus } from "@agw/chat-runtime";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
+import { useExtensionRuntime } from "../extensions/extension-host-provider";
+import { DEFAULT_WORKSPACE_LAYOUT } from "../extensions/workspace-layout-store";
 import { useDesktopRuntime } from "../runtime-provider";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./app-shell-routing";
 import {
@@ -52,6 +55,8 @@ import {
 } from "./project-picker";
 
 type ProjectSummary = DesktopProjectOption;
+
+const noSubscription = () => () => undefined;
 
 type SettingsNavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -68,7 +73,14 @@ function settingsItem(
   };
 }
 
-const SETTINGS_GROUPS: ReadonlyArray<{ label: string; items: SettingsNavItem[] }> = [
+const SETTINGS_GROUPS: ReadonlyArray<{
+  label: string;
+  items: SettingsNavItem[];
+}> = [
+  {
+    label: "Desktop",
+    items: [{ href: "/extensions/", label: "Extensions", icon: Puzzle }],
+  },
   {
     label: "Operations",
     items: [
@@ -79,9 +91,12 @@ const SETTINGS_GROUPS: ReadonlyArray<{ label: string; items: SettingsNavItem[] }
   { label: "Workspace", items: [settingsItem(APP_ROUTES.projects)] },
   {
     label: "AI runtime",
-    items: [APP_ROUTES.agents, APP_ROUTES.agentflows, APP_ROUTES.providers, APP_ROUTES.models].map(
-      (route) => settingsItem(route),
-    ),
+    items: [
+      APP_ROUTES.agents,
+      APP_ROUTES.agentflows,
+      APP_ROUTES.providers,
+      APP_ROUTES.models,
+    ].map((route) => settingsItem(route)),
   },
   {
     label: "Capabilities",
@@ -97,7 +112,11 @@ const SETTINGS_GROUPS: ReadonlyArray<{ label: string; items: SettingsNavItem[] }
     items: [
       settingsItem(APP_ROUTES.quickPrompts, { icon: Sparkles }),
       settingsItem(APP_ROUTES.settings, { label: "Servers", icon: Server }),
-      { href: "/settings/#appearance", label: "Appearance & close", icon: Moon },
+      {
+        href: "/settings/#appearance",
+        label: "Appearance & close",
+        icon: Moon,
+      },
       { href: "/settings/#about", label: "About", icon: Info },
     ],
   },
@@ -140,7 +159,12 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const desktop = useDesktopRuntime();
   const activity = useExecutionActivity();
   const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
-  const [sidebarVisible, setSidebarVisible] = React.useState(true);
+  const layoutStore = useExtensionRuntime()?.host.layout ?? null;
+  const sidebarVisible = React.useSyncExternalStore(
+    layoutStore?.subscribe ?? noSubscription,
+    () => (layoutStore?.getSnapshot() ?? DEFAULT_WORKSPACE_LAYOUT).sidebarVisible,
+    () => DEFAULT_WORKSPACE_LAYOUT.sidebarVisible,
+  );
   const projectTabsRef = React.useRef<HTMLElement>(null);
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
   const chatReturnHref = buildChatHref("/desktop/chat", {
@@ -308,7 +332,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
           aria-label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
           aria-expanded={sidebarVisible}
-          onClick={() => setSidebarVisible((visible) => !visible)}
+          onClick={() => layoutStore?.setSidebarVisible(!sidebarVisible)}
         >
           {sidebarVisible ? <PanelLeftClose /> : <PanelLeftOpen />}
         </button>
@@ -467,11 +491,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           <Settings />
         </Link>
       </header>
-      <main className="agw-chat-workspace">
-        <ChatSidebarVisibilityContext value={sidebarVisible}>
-          {children}
-        </ChatSidebarVisibilityContext>
-      </main>
+      <main className="agw-chat-workspace">{children}</main>
     </div>
   );
 }

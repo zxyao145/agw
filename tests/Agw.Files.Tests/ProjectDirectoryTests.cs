@@ -94,7 +94,7 @@ public sealed class ProjectDirectoryTests : IDisposable
     [InlineData("nested/..")]
     public async Task DeleteAsync_DirectoryRoot_IsProtected(string path)
     {
-        var result = await _files.DeleteAsync(_projectId, path, Token, _directoryId);
+        var result = await _files.DeleteAsync(_projectId, path, recursive: true, Token, _directoryId);
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
         Assert.True(Directory.Exists(Additional));
     }

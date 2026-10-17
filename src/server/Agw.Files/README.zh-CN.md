@@ -114,7 +114,7 @@ public sealed class WorkspaceDocumentService
 }
 ```
 
-`IAgwFileSystem` 提供存在性检查、stat、文本读写、建目录、删除、枚举和内容搜索。所有 I/O 方法都接收 `CancellationToken`；调用方不得用 `CancellationToken.None` 覆盖上游取消信号。
+`IAgwFileSystem` 提供存在性检查、stat、文本读写、读取流、二进制写入（`overwrite`、`createParents`）、移动（`overwrite` 只替换文件，已存在的目录不被替换）、建目录、删除（`recursive` 为 false 时只删除空目录，非空目录抛出 `DirectoryNotEmpty`）、枚举和内容搜索。所有 I/O 方法都接收 `CancellationToken`；调用方不得用 `CancellationToken.None` 覆盖上游取消信号。
 
 ## HTTP 文件接口
 
@@ -125,7 +125,12 @@ public sealed class WorkspaceDocumentService
 | `GET /api/files/list` | `projectId`、`path`、`diff`、`recursive` | 列出目录，可按 Git 变更过滤 |
 | `GET /api/files/read` | `projectId`、`path` | 读取文本文件 |
 | `GET /api/files/diff` | `projectId`、`path`、可选 `scope` | 获取完整、`staged` 或 `unstaged` Git diff |
-| `DELETE /api/files/delete` | `projectId`、`path` | 删除文件或递归删除目录 |
+| `DELETE /api/files/delete` | `projectId`、`path`、`recursive`（默认 true） | 删除文件或目录；`recursive=false` 时非空目录返回 `DirectoryNotEmpty` |
+| `GET /api/files/stat` | `projectId`、`path`（空为目录根） | 返回文件或目录的 `FileItem` |
+| `GET /api/files/download` | `projectId`、`path` | 以 `application/octet-stream` 返回文件内容，失败时返回 ApiResult |
+| `PUT /api/files/write` | `projectId`、`path`、`overwrite`、`createParents`，multipart 字段 `content` | 写入文件并返回 `FileItem` |
+| `POST /api/files/create-directory` | `projectId`、`path`、`recursive` | 创建目录并返回 `FileItem` |
+| `POST /api/files/move` | `projectId`、`sourcePath`、`destinationPath`、`overwrite` | 在同一个目录内移动或重命名，返回目标的 `FileItem` |
 | `POST /api/files/reset` | `projectId`、`path` | 把文件重置到 Git HEAD |
 | `POST /api/files/stage` | `projectId`、`path` | 暂存一个文件或目录下的变更 |
 | `POST /api/files/unstage` | `projectId`、`path` | 取消暂存一个文件或目录下的变更 |
@@ -141,7 +146,9 @@ HTTP `search` 搜索文件或目录名称；`IAgwFileSystem.SearchAsync` 搜索�
 
 当前检查是词法路径检查，不解析符号链接的最终目标。部署时不要在 Workspace 中放置指向敏感目录的符号链接；需要增强时必须同时处理跨平台链接解析、目标不存在和竞态条件。
 
-`DELETE /api/files/delete` 会递归删除目录，但空路径、`.` 及规范化后指向根的路径返回 `400`，保护所选目录根。Stage/Unstage 同样拒绝目录根。
+`DELETE /api/files/delete` 默认递归删除目录，但空路径、`.` 及规范化后指向根的路径返回 `400`，保护所选目录根。Stage/Unstage、write 与 move 同样拒绝目录根。
+
+单次下载或写入的内容上限是 `FileAppService.MaxTransferBytes`（100 MiB），超出时返回 `FileTooLarge`（413）；write 接口的请求与 multipart 上限是该值加 1 MiB。
 
 ## 扩展原则
 

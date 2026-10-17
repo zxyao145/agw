@@ -5,6 +5,7 @@ export * from "./lib/chat/search-command";
 export * from "./lib/chat/search-file";
 export * from "./ui-web/components/agent-selector";
 export * from "./ui-web/components/message/chat";
+export * from "./ui-web/components/message/chat-extension-types";
 export {
   ConversationImagePlatformProvider,
   type ImageContextMenuRequest,
@@ -15,7 +16,19 @@ export * from "./ui-web/execution-activity";
 export * from "./ui-web/execution-platform";
 export { default as ChatPage } from "./ui-web/pages/chat/page";
 export {
-  ChatSidebarVisibilityContext,
+  ChatConversationPane,
+  ChatConversationSidebar,
+  ChatFilePane,
+  ChatFilesSidebar,
   ChatWorkspace,
+  ChatWorkspaceProvider,
+  useChatWorkspace,
+  type ChatConversationPaneProps,
+  type ChatConversationSidebarProps,
+  type ChatFilesSidebarProps,
+  type ChatWorkspaceContextValue,
+  type ChatWorkspaceProject,
   type ChatWorkspaceProps,
+  type ChatWorkspaceProviderProps,
 } from "./ui-web/pages/chat/chat-workspace";
+export { default as ColResizeSplit } from "./ui-web/pages/chat/components/split-layout";

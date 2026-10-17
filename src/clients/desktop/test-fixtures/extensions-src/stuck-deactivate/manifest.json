@@ -1,0 +1,14 @@
+{
+  "manifestVersion": 1,
+  "id": "stuck-deactivate",
+  "name": "Stuck Deactivate",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture whose deactivate hook never finishes.",
+  "background": "background.js",
+  "contributes": {
+    "ribbon": [
+      { "id": "open", "title": "Stuck Deactivate", "icon": "Puzzle", "action": { "type": "openMainView", "view": "app" } }
+    ],
+    "mainViews": [{ "id": "app", "title": "Stuck Deactivate", "icon": "Puzzle", "entry": "index.html" }]
+  }
+}

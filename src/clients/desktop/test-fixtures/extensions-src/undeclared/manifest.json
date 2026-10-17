@@ -1,0 +1,15 @@
+{
+  "manifestVersion": 1,
+  "id": "undeclared",
+  "name": "Undeclared",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture without permissions or host permissions.",
+  "contributes": {
+    "ribbon": [
+      { "id": "open", "title": "Undeclared", "icon": "Puzzle", "action": { "type": "openMainView", "view": "app" } }
+    ],
+    "mainViews": [{ "id": "app", "title": "Undeclared", "icon": "Puzzle", "entry": "index.html" }]
+  },
+  "permissions": [],
+  "hostPermissions": []
+}

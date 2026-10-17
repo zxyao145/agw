@@ -61,12 +61,19 @@ export class RendererRecoveryGuard {
 
 export type RendererEventRecord = {
   timestamp: string;
-  event: "render-process-gone" | "did-fail-load" | "unresponsive" | "responsive";
+  event:
+    | "render-process-gone"
+    | "did-fail-load"
+    | "unresponsive"
+    | "responsive"
+    | "extension-safe-mode";
   appVersion: string;
   electronVersion: string;
   os: string;
   reason: string;
   exitCode?: number;
+  /** 进入安全模式时正在激活的 extension。Extensions activating when safe mode was entered. */
+  extensionIds?: string[];
   pathname: string;
 };
 
@@ -86,7 +93,7 @@ export function sanitizeRendererReason(value: string): string {
 
 export function createRendererEventRecord(
   input: Pick<RendererEventRecord, "event" | "reason" | "pathname"> &
-    Partial<Pick<RendererEventRecord, "exitCode">>,
+    Partial<Pick<RendererEventRecord, "exitCode" | "extensionIds">>,
   environment: Pick<RendererEventRecord, "appVersion" | "electronVersion" | "os"> & {
     now?: Date;
   },
@@ -99,6 +106,7 @@ export function createRendererEventRecord(
     os: environment.os,
     reason: sanitizeRendererReason(input.reason),
     ...(input.exitCode === undefined ? {} : { exitCode: input.exitCode }),
+    ...(input.extensionIds === undefined ? {} : { extensionIds: [...input.extensionIds] }),
     pathname: sanitizeRendererPathname(input.pathname),
   };
 }

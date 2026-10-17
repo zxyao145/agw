@@ -3,6 +3,9 @@ export { DesktopChatPage } from "./desktop-chat-page";
 export { DesktopConnectionGate } from "./desktop-connection-gate";
 export { DesktopWorkspaceBoundary, DesktopWorkspaceErrorState } from "./desktop-workspace-boundary";
 export { DesktopSettingsPage } from "./desktop-settings-page";
+export { DesktopExtensionsPage } from "./desktop-extensions-page";
+export { DesktopExtensionSettingsPage } from "./desktop-extension-settings-page";
+export { ExtensionHostProvider } from "./extensions/extension-host-provider";
 export {
   classifyDesktopConnection,
   getActiveServerProfile,

@@ -6,6 +6,7 @@ import {
   CircleAlert,
   CircleSlash,
   LoaderCircle,
+  MoreHorizontal,
   Pencil,
   Plus,
   RotateCw,
@@ -31,7 +32,14 @@ import {
   type ConversationPage,
   type ConversationSummary,
 } from "../../../services/task-client";
+import type { ConversationItemActionArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 import { Button } from "@agw/components";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@agw/components";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +69,8 @@ interface ConversationListProps {
   onConversationDeleted?: (conversationId: string) => void;
   onProjectConversationsCleared?: () => void;
   headerActions?: (currentConversation: ConversationSummary | null) => React.ReactNode;
+  /** 对话列表项的扩展菜单项，非空时在 Rename、Delete 旁显示。Extension items shown beside Rename and Delete when non-empty. */
+  itemActions?: readonly ExtensionMenuItem<ConversationItemActionArgs>[];
 }
 
 const CONVERSATION_PAGE_SIZE = 20;
@@ -98,6 +108,7 @@ export function ConversationList({
   onConversationDeleted,
   onProjectConversationsCleared,
   headerActions,
+  itemActions,
 }: ConversationListProps) {
   const queryClient = useQueryClient();
   const [clearAllDialogOpen, setClearAllDialogOpen] = React.useState(false);
@@ -442,9 +453,10 @@ export function ConversationList({
                     ) : null}
                   </div>
                   {/* Actions sit left of the status slot 操作按钮位于状态位置左侧 */}
+                  {/* An open menu keeps its trigger visible 菜单打开时保持触发按钮可见 */}
                   <div
                     className="absolute inset-y-1 right-0
-                        hidden group-hover:flex
+                        hidden group-hover:flex has-[[data-state=open]]:flex
                         items-center"
                   >
                     {/* Fade the title out before it reaches the actions
@@ -479,6 +491,43 @@ export function ConversationList({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      {itemActions && itemActions.length > 0 ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground"
+                              aria-label="More conversation actions"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          {/* Portal 中的点击仍沿 React 树冒泡，不能选中该对话。
+                              Clicks in the portal still bubble through the React tree and must not select the conversation. */}
+                          <DropdownMenuContent
+                            align="end"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {itemActions.map((action) => (
+                              <DropdownMenuItem
+                                key={action.id}
+                                className="cursor-pointer"
+                                onSelect={() =>
+                                  action.onSelect({
+                                    conversationId: conversation.conversationId,
+                                    title: conversation.title,
+                                  })
+                                }
+                              >
+                                {action.icon}
+                                {action.title}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
                     </div>
                   </div>
                 </div>

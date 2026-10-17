@@ -303,8 +303,8 @@ public sealed class ConfinedFileSystemTests
             File.CreateSymbolicLink(Path.Combine(workspace, "tree", "escape"), outside);
             var fileSystem = Confine(workspace);
 
-            await fileSystem.DeleteAsync("outside-dir", ct);
-            await fileSystem.DeleteAsync("tree", ct);
+            await fileSystem.DeleteAsync("outside-dir", recursive: true, ct);
+            await fileSystem.DeleteAsync("tree", recursive: true, ct);
 
             Assert.False(Directory.Exists(Path.Combine(workspace, "outside-dir")));
             Assert.False(Directory.Exists(Path.Combine(workspace, "tree")));

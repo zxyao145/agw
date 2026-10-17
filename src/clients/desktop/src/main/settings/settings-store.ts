@@ -1,8 +1,36 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 
-import type { DesktopSettings, DesktopSettingsUpdate, PackageFlavor } from "../../shared/contracts";
+import type {
+  DesktopSettings,
+  DesktopSettingsUpdate,
+  ExtensionGrants,
+  ExtensionSettings,
+  PackageFlavor,
+} from "../../shared/contracts";
+import { HOST_PERMISSION_PATTERN } from "../../shared/extension-host-permissions";
+import { EXTENSION_PERMISSIONS } from "../../shared/extension-permissions";
+import { writeJsonFile } from "./json-file";
 import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
+
+const extensionSettingsSchema = z.record(
+  z.string(),
+  z.strictObject({
+    enabled: z.boolean(),
+    grantedPermissions: z.array(z.enum(EXTENSION_PERMISSIONS)),
+    grantedHostPermissions: z.array(z.string().regex(HOST_PERMISSION_PATTERN)),
+    lastActivatedVersion: z.string().nullable(),
+  }),
+);
+
+/** 声明集合全部包含在已批准集合中。Every declared entry is already approved. */
+export function isGrantCovered(declared: ExtensionGrants, settings: ExtensionSettings): boolean {
+  return (
+    declared.permissions.every((permission) => settings.grantedPermissions.includes(permission)) &&
+    declared.hostPermissions.every((host) => settings.grantedHostPermissions.includes(host))
+  );
+}
 
 export type SecretCodec = {
   encrypt(value: string): Buffer;
@@ -21,7 +49,7 @@ export class DesktopSettingsStore {
   private pendingWrite: Promise<void> = Promise.resolve();
 
   public constructor(
-    private readonly directory: string,
+    directory: string,
     private readonly packageFlavor: PackageFlavor,
     private readonly secretCodec: SecretCodec,
   ) {
@@ -48,6 +76,7 @@ export class DesktopSettingsStore {
         profiles,
         activeServerId,
         projectTabsByServer: parsed.projectTabsByServer ?? {},
+        extensions: extensionSettingsSchema.parse(parsed.extensions ?? {}),
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -86,9 +115,9 @@ export class DesktopSettingsStore {
             changed = true;
           }
         }
-        if (changed) await this.writeJson(this.secretsFile, secrets);
+        if (changed) await writeJsonFile(this.secretsFile, secrets);
       }
-      await this.writeJson(this.settingsFile, {
+      await writeJsonFile(this.settingsFile, {
         ...current,
         closeBehavior: update.closeBehavior ?? current.closeBehavior,
         profiles,
@@ -111,7 +140,98 @@ export class DesktopSettingsStore {
       secrets.oidcProfiles ??= {};
       if (source === "oidc") secrets.oidcProfiles[profileId] = true;
       else delete secrets.oidcProfiles[profileId];
-      await this.writeJson(this.secretsFile, secrets, beforeCommit);
+      await writeJsonFile(this.secretsFile, secrets, beforeCommit);
+    });
+  }
+
+  /** 启用时写入批准结果；停用时保留批准结果。Enabling stores the grants; disabling keeps them. */
+  public async setExtensionEnabled(
+    extensionId: string,
+    enabled: boolean,
+    grants?: ExtensionGrants,
+  ): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      const current = extensions[extensionId];
+      if (enabled) {
+        if (!grants) throw new Error("Enabling an extension requires its grants.");
+        extensions[extensionId] = {
+          enabled: true,
+          grantedPermissions: [...grants.permissions],
+          grantedHostPermissions: [...grants.hostPermissions],
+          lastActivatedVersion: current?.lastActivatedVersion ?? null,
+        };
+      } else if (current) {
+        extensions[extensionId] = { ...current, enabled: false };
+      }
+    });
+  }
+
+  public async recordExtensionActivation(extensionId: string, version: string): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      const current = extensions[extensionId];
+      if (!current) throw new Error(`Extension ${extensionId} has no settings.`);
+      extensions[extensionId] = { ...current, lastActivatedVersion: version };
+    });
+  }
+
+  /**
+   * 替换安装后按新声明更新：新声明都已批准时保持启用状态并收窄批准集合，否则停用等待重新批准。
+   * After a replacement install: keep the enabled state and narrow the grants when everything is approved; otherwise disable until approved again.
+   */
+  public async applyInstalledExtension(
+    extensionId: string,
+    declared: ExtensionGrants,
+  ): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      const current = extensions[extensionId];
+      if (!current) return;
+      extensions[extensionId] = isGrantCovered(declared, current)
+        ? {
+            ...current,
+            grantedPermissions: [...declared.permissions],
+            grantedHostPermissions: [...declared.hostPermissions],
+          }
+        : { ...current, enabled: false };
+    });
+  }
+
+  /**
+   * 保证"启用时批准集合等于当前声明"：声明增加时停用，声明减少时收窄。
+   * Keeps "enabled grants equal the current declaration": additions disable, removals narrow.
+   */
+  public async reconcileExtensionGrants(
+    declared: ReadonlyMap<string, ExtensionGrants>,
+  ): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      for (const [extensionId, grants] of declared) {
+        const current = extensions[extensionId];
+        if (!current?.enabled) continue;
+        extensions[extensionId] = isGrantCovered(grants, current)
+          ? {
+              ...current,
+              grantedPermissions: [...grants.permissions],
+              grantedHostPermissions: [...grants.hostPermissions],
+            }
+          : { ...current, enabled: false };
+      }
+    });
+  }
+
+  public async removeExtension(extensionId: string): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      delete extensions[extensionId];
+    });
+  }
+
+  private async updateExtensions(
+    change: (extensions: Record<string, ExtensionSettings>) => void,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const current = await this.load();
+      const extensions = structuredClone(current.extensions);
+      change(extensions);
+      if (JSON.stringify(extensions) === JSON.stringify(current.extensions)) return;
+      await writeJsonFile(this.settingsFile, { ...current, extensions });
     });
   }
 
@@ -129,7 +249,7 @@ export class DesktopSettingsStore {
     await this.enqueueWrite(async () => {
       const secrets = await this.loadSecretFile();
       delete secrets.tokens[profileId];
-      await this.writeJson(this.secretsFile, secrets);
+      await writeJsonFile(this.secretsFile, secrets);
     });
   }
 
@@ -141,6 +261,7 @@ export class DesktopSettingsStore {
       profiles: [DEFAULT_LOCAL_PROFILE],
       activeServerId: "local",
       projectTabsByServer: {},
+      extensions: {},
     };
   }
 
@@ -162,24 +283,5 @@ export class DesktopSettingsStore {
     const pending = this.pendingWrite.then(write);
     this.pendingWrite = pending.catch(() => undefined);
     return pending;
-  }
-
-  private async writeJson(
-    file: string,
-    value: unknown,
-    beforeCommit?: () => Promise<void>,
-  ): Promise<void> {
-    await mkdir(this.directory, { recursive: true });
-    const temporaryFile = `${file}.${process.pid}.tmp`;
-    await writeFile(temporaryFile, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    try {
-      await beforeCommit?.();
-      await rename(temporaryFile, file);
-    } finally {
-      await rm(temporaryFile, { force: true });
-    }
   }
 }

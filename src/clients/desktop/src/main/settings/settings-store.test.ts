@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { writeFile } from "node:fs/promises";
+import { createScratchDirectory } from "../scratch-directory.test-helper";
 import { DesktopSettingsStore, type SecretCodec } from "./settings-store";
 
 const codec: SecretCodec = {
@@ -251,5 +253,148 @@ test("cancelled OIDC save leaves the previous token and credential source intact
     assert.equal(await store.credentialSource("local"), "manual");
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("settings written before extensions existed read extensions as empty", async () => {
+  const scratch = await createScratchDirectory("settings-extensions");
+  try {
+    await writeFile(
+      join(scratch.path, "settings.json"),
+      JSON.stringify({ schemaVersion: 1, closeBehavior: "quit-desktop" }),
+    );
+    const settings = await new DesktopSettingsStore(scratch.path, "client", codec).load();
+    assert.deepEqual(settings.extensions, {});
+    assert.equal(settings.schemaVersion, 1);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("extension settings with wrong field types are rejected", async () => {
+  const scratch = await createScratchDirectory("settings-extensions");
+  try {
+    for (const entry of [
+      {
+        enabled: "yes",
+        grantedPermissions: [],
+        grantedHostPermissions: [],
+        lastActivatedVersion: null,
+      },
+      {
+        enabled: true,
+        grantedPermissions: ["fs.everything"],
+        grantedHostPermissions: [],
+        lastActivatedVersion: null,
+      },
+      {
+        enabled: true,
+        grantedPermissions: [],
+        grantedHostPermissions: ["https://a.test/x"],
+        lastActivatedVersion: null,
+      },
+      {
+        enabled: true,
+        grantedPermissions: [],
+        grantedHostPermissions: [],
+        lastActivatedVersion: 1,
+      },
+      { enabled: true, grantedPermissions: [], grantedHostPermissions: [] },
+    ]) {
+      await writeFile(
+        join(scratch.path, "settings.json"),
+        JSON.stringify({ schemaVersion: 1, extensions: { sample: entry } }),
+      );
+      await assert.rejects(new DesktopSettingsStore(scratch.path, "client", codec).load());
+    }
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("saving other settings keeps the extensions field", async () => {
+  const scratch = await createScratchDirectory("settings-extensions");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    await store.setExtensionEnabled("sample", true, {
+      permissions: ["context.project"],
+      hostPermissions: ["https://api.example.com"],
+    });
+    await store.save({ projectTabsByServer: { local: ["project-a"] } });
+    await store.save({ closeBehavior: "quit-desktop" });
+    const saved = await store.load();
+    assert.deepEqual(saved.extensions, {
+      sample: {
+        enabled: true,
+        grantedPermissions: ["context.project"],
+        grantedHostPermissions: ["https://api.example.com"],
+        lastActivatedVersion: null,
+      },
+    });
+    assert.deepEqual(saved.projectTabsByServer, { local: ["project-a"] });
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("consecutive enable and activation records are both saved", async () => {
+  const scratch = await createScratchDirectory("settings-extensions");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    await Promise.all([
+      store.setExtensionEnabled("first", true, { permissions: [], hostPermissions: [] }),
+      store.setExtensionEnabled("second", true, {
+        permissions: ["execution"],
+        hostPermissions: [],
+      }),
+      store.recordExtensionActivation("first", "1.0.0"),
+    ]);
+    assert.equal((await store.load()).extensions.first.lastActivatedVersion, "1.0.0");
+    await Promise.all([
+      store.recordExtensionActivation("first", "1.1.0"),
+      store.recordExtensionActivation("second", "2.0.0"),
+      store.save({ closeBehavior: "quit-desktop" }),
+    ]);
+    const saved = await store.load();
+    assert.equal(saved.extensions.first.lastActivatedVersion, "1.1.0");
+    assert.equal(saved.extensions.second.lastActivatedVersion, "2.0.0");
+    assert.deepEqual(saved.extensions.second.grantedPermissions, ["execution"]);
+    assert.equal(saved.closeBehavior, "quit-desktop");
+
+    await store.setExtensionEnabled("first", false);
+    const disabled = (await store.load()).extensions.first;
+    assert.equal(disabled.enabled, false);
+    assert.equal(disabled.lastActivatedVersion, "1.1.0");
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("declaration changes narrow approved grants or disable until approved again", async () => {
+  const scratch = await createScratchDirectory("settings-extensions");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    await store.setExtensionEnabled("narrow", true, {
+      permissions: ["execution", "a2a"],
+      hostPermissions: ["https://a.example.com"],
+    });
+    await store.setExtensionEnabled("grow", true, { permissions: ["a2a"], hostPermissions: [] });
+    await store.reconcileExtensionGrants(
+      new Map([
+        ["narrow", { permissions: ["a2a" as const], hostPermissions: [] }],
+        ["grow", { permissions: ["a2a" as const, "execution" as const], hostPermissions: [] }],
+      ]),
+    );
+    const saved = (await store.load()).extensions;
+    assert.deepEqual(saved.narrow, {
+      enabled: true,
+      grantedPermissions: ["a2a"],
+      grantedHostPermissions: [],
+      lastActivatedVersion: null,
+    });
+    assert.equal(saved.grow.enabled, false);
+    assert.deepEqual(saved.grow.grantedPermissions, ["a2a"]);
+  } finally {
+    await scratch.dispose();
   }
 });

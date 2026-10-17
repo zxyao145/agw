@@ -1,0 +1,48 @@
+@* 通过 JS interop 读取 context，在存储目录中写入并读回 blazor.json，成功后显示 #result。 *@
+@* Reads the context through JS interop, writes and reads back blazor.json in storage, then renders #result. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@if (completed)
+{
+    <p id="result">blazor ok</p>
+}
+else
+{
+    <p id="status">Loading</p>
+}
+
+@code {
+    private IJSObjectReference? interop;
+    private bool completed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        interop = await JS.InvokeAsync<IJSObjectReference>("import", "./agw-interop.js");
+        var context = await interop.InvokeAsync<FixtureContext>("getContext");
+        var uri = $"{context.StorageUri}/blazor.json";
+        var written = JsonSerializer.Serialize(new StorageRecord(context.ExtensionId, Guid.NewGuid().ToString()));
+        await interop.InvokeVoidAsync("writeTextFile", uri, written);
+        var read = await interop.InvokeAsync<string>("readTextFile", uri);
+        if (read != written)
+        {
+            throw new InvalidOperationException($"Storage round-trip mismatch: {read}");
+        }
+
+        completed = true;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (interop is not null)
+        {
+            await interop.DisposeAsync();
+        }
+    }
+}

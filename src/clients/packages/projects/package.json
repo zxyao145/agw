@@ -26,5 +26,10 @@
     "next": "catalog:",
     "react": "catalog:",
     "sonner": "catalog:"
+  },
+  "devDependencies": {
+    "@agw/test-harness": "workspace:*",
+    "@types/jsdom": "catalog:",
+    "jsdom": "catalog:"
   }
 }

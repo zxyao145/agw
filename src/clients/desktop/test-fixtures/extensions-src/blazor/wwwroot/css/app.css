@@ -1,0 +1,10 @@
+body {
+  font-family: system-ui, sans-serif;
+}
+
+#blazor-error-ui {
+  display: none;
+  padding: 0.5rem 1rem;
+  background: #fdecea;
+  color: #8a1c1c;
+}
