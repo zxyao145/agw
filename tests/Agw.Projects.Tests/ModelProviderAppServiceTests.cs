@@ -1,12 +1,11 @@
+using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
-using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Services;
 using Agw.Providers.Infrastructure;
-using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
@@ -40,13 +39,21 @@ public class ModelProviderAppServiceTests
         user.UserId = "tester";
         var bindingDomainService = new ProviderModelBindingDomainService(
             new ProviderModelRepository(context, user),
-            new TestAgentReferenceFacade(new EfRepository<Agent>(context), new EfRepository<Agentflow>(context))
+            new AgentCatalogFacade(context, user)
         );
-        var service = new ModelProviderAppService(context, bindingDomainService, user);
+        var service = new ModelProviderAppService(
+            context,
+            bindingDomainService,
+            user,
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+        );
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.CreateAsync(new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0))
+            service.CreateAsync(
+                new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0),
+                TestContext.Current.CancellationToken
+            )
         );
 
         // Assert
@@ -122,14 +129,18 @@ public class ModelProviderAppServiceTests
             var user = new TestUserInfoService("seed");
             var bindingDomainService = new ProviderModelBindingDomainService(
                 new ProviderModelRepository(deleteContext, user),
-                new TestAgentReferenceFacade(
-                    new EfRepository<Agent>(deleteContext),
-                    new EfRepository<Agentflow>(deleteContext)
-                )
+                new AgentCatalogFacade(deleteContext, user)
             );
-            var service = new ModelProviderAppService(deleteContext, bindingDomainService, user);
+            var service = new ModelProviderAppService(
+                deleteContext,
+                bindingDomainService,
+                user,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+            );
 
-            var exception = await Assert.ThrowsAsync<AgwException>(() => service.DeleteAsync(relationId));
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                service.DeleteAsync(relationId, TestContext.Current.CancellationToken)
+            );
 
             Assert.Equal(ErrorCodes.ModelProviderInUse.Code, exception.Code);
         }

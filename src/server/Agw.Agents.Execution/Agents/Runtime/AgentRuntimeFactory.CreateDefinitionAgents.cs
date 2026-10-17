@@ -101,7 +101,8 @@ public partial class AgentRuntimeFactory
                     agentDefinition,
                     project,
                     capabilities.PluginSkills,
-                    capabilities
+                    capabilities,
+                    cancellationToken
                 )
                 .ConfigureAwait(false);
             if (skillsProvider != null)

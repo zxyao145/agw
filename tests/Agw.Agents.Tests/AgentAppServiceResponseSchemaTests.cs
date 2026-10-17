@@ -33,7 +33,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
         var agent = CreateSystemAgent(modelProviderId);
         agent.ResponseSchema = $"  {Schema}  ";
 
-        var created = await service.CreateAgentAsync(agent, null, null, null);
+        var created = await service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken);
 
         Assert.NotNull(created);
         Assert.Equal(Schema, created.ResponseSchema);
@@ -47,7 +47,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
         var agent = CreateSystemAgent(modelProviderId);
         agent.ResponseSchema = "   ";
 
-        var created = await service.CreateAgentAsync(agent, null, null, null);
+        var created = await service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken);
 
         Assert.NotNull(created);
         Assert.Null(created.ResponseSchema);
@@ -66,7 +66,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
 
         Assert.Equal(
             ErrorCodes.InvalidParam.Code,
-            (await Assert.ThrowsAsync<AgwException>(() => service.CreateAgentAsync(agent, null, null, null))).Code
+            (
+                await Assert.ThrowsAsync<AgwException>(() =>
+                    service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+                )
+            ).Code
         );
     }
 
@@ -77,7 +81,7 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
         var agent = CreateExternalAgent();
         agent.ResponseSchema = Schema;
 
-        var created = await service.CreateAgentAsync(agent, null, null, null);
+        var created = await service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken);
 
         Assert.NotNull(created);
         Assert.Equal(Schema, created.ResponseSchema);
@@ -102,7 +106,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.NotNull(updated);
         Assert.Null(agent.ResponseSchema);
@@ -126,7 +134,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.NotNull(updated);
         Assert.Equal(Schema, agent.ResponseSchema);
@@ -150,7 +162,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.NotNull(updated);
         Assert.Equal("{\"type\":\"object\"}", agent.ResponseSchema);
@@ -169,7 +185,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.NotNull(updated);
         Assert.Equal(Schema, agent.ResponseSchema);
@@ -185,7 +205,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
 
         Assert.Equal(
             ErrorCodes.InvalidParam.Code,
-            (await Assert.ThrowsAsync<AgwException>(() => service.CreateAgentAsync(agent, null, null, null))).Code
+            (
+                await Assert.ThrowsAsync<AgwException>(() =>
+                    service.CreateAgentAsync(agent, null, null, null, TestContext.Current.CancellationToken)
+                )
+            ).Code
         );
     }
 
@@ -199,7 +223,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
 
         Assert.Equal(
             ErrorCodes.InvalidParam.Code,
-            (await Assert.ThrowsAsync<AgwException>(() => service.UpdateAgentAsync(agent.Id, request.ToCommand()))).Code
+            (
+                await Assert.ThrowsAsync<AgwException>(() =>
+                    service.UpdateAgentAsync(agent.Id, request.ToCommand(), TestContext.Current.CancellationToken)
+                )
+            ).Code
         );
     }
 
@@ -211,7 +239,11 @@ public class AgentAppServiceResponseSchemaTests : IDisposable
         var service = CreateService(agent);
         var request = Deserialize("""{"responseSchema": null}""");
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
+        var updated = await service.UpdateAgentAsync(
+            agent.Id,
+            request.ToCommand(),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.NotNull(updated);
         Assert.Null(agent.ResponseSchema);

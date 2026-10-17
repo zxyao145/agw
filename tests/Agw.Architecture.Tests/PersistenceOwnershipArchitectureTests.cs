@@ -243,7 +243,6 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Infrastructure/Data/DbSeeder.cs",
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
                 "Agw.Jobs/Scheduling/Attempts/JobAttemptOutcomeRecorder.cs",
-                "Agw.Jobs/Scheduling/Coordination/DurableJobRecoveryHostedService.cs",
                 "Agw.Infrastructure/Auth/SettingsServerAuthStatePersistence.cs",
             ],
             StringComparer.Ordinal

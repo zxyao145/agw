@@ -9,6 +9,7 @@ using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Runtime;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;
 using Agw.Tools.Generated;
@@ -37,6 +38,7 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
     private readonly IAgentTurnSummaryService _summaryService;
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
+    private readonly ILocalSkillContentResolver _localSkillContentResolver;
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly AgentRuntimeConfiguration _configuration;
@@ -68,6 +70,7 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
         AgentRuntimeConfiguration configuration,
         OllamaChatClientFactory ollamaChatClientFactory,
         IEnumerable<IAgentSkillRegistration> skillRegistrations,
+        ILocalSkillContentResolver localSkillContentResolver,
         IRemoteSkillContentResolver? remoteSkillContentResolver,
         ILoggerFactory loggerFactory,
         IConversationHistoryWriter? conversationHistoryWriter,
@@ -95,6 +98,7 @@ public partial class AgentRuntimeFactory : IAgentRuntimeFactory
         _skillRegistrations = skillRegistrations
             .GroupBy(registration => registration.Id)
             .ToDictionary(group => group.Key, group => group.First());
+        _localSkillContentResolver = localSkillContentResolver;
         _remoteSkillContentResolver = remoteSkillContentResolver;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
         _configuration = configuration;

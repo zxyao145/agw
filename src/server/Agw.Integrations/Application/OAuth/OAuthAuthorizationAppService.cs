@@ -171,7 +171,7 @@ public sealed class OAuthAuthorizationAppService
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, state.UserId)], "OAuthState"))
         );
 
-        IntegrationMutationCoordinator.MutationScope mutation;
+        Agw.Shared.Coordination.ApplicationLockScope mutation;
         try
         {
             mutation = await _mutations.AcquireConnectionAsync(state.ConnectionId, cancellationToken);

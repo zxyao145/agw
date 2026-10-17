@@ -87,7 +87,10 @@ public class AgentsController : ControllerBase
 
     [HttpPost]
     [ProducesApiResult(typeof(AgentResponse))]
-    public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
+    public async Task<IActionResult> CreateAsync(
+        [FromBody] AgentCreateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         var agent = new Agent
         {
@@ -110,7 +113,8 @@ public class AgentsController : ControllerBase
             agent,
             request.McpToolServerIds,
             request.SkillIds,
-            request.ConnectionIds
+            request.ConnectionIds,
+            cancellationToken
         );
         return created == null
             ? ApiResult.BadRequest("Failed to create agent.", ErrorCodes.InvalidParam.Code)
@@ -119,9 +123,13 @@ public class AgentsController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [ProducesApiResult(typeof(AgentResponse))]
-    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromBody] AgentUpdateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
-        var updated = await _agentAppService.UpdateAgentAsync(id, request.ToCommand());
+        var updated = await _agentAppService.UpdateAgentAsync(id, request.ToCommand(), cancellationToken);
 
         return updated == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()

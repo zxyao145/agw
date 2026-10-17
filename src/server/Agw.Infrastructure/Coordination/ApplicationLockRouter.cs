@@ -52,33 +52,7 @@ public sealed class ApplicationLockRouter : IApplicationLock
             )
             .AcquireLockAsync($"agw:application:{resourceName}", cancellationToken: cancellationToken)
             .ConfigureAwait(false);
-        return new DistributedLease(handle);
-    }
-
-    private sealed class DistributedLease : IApplicationLockLease
-    {
-        private readonly IDistributedSynchronizationHandle _handle;
-
-        public DistributedLease(IDistributedSynchronizationHandle handle)
-        {
-            _handle = handle;
-        }
-
-        public CancellationToken HandleLostToken => _handle.HandleLostToken;
-
-        public async ValueTask DisposeAsync()
-        {
-            var lost = _handle.HandleLostToken.IsCancellationRequested;
-            try
-            {
-                await _handle.DisposeAsync().ConfigureAwait(false);
-            }
-            catch (Exception exception)
-                when (lost && exception is System.Data.Common.DbException or InvalidOperationException)
-            {
-                // The owning database connection is gone; its locks have already been released.
-            }
-        }
+        return new DistributedSynchronizationLease(handle);
     }
 
     private IDistributedLockProvider GetDistributedLockProvider(

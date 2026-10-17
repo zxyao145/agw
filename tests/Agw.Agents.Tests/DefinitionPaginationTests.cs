@@ -243,6 +243,7 @@ public class DefinitionPaginationTests
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
             new TestRemoteSkillRefreshLock(),
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
             TimeProvider.System,
             new TestUserInfoService()
         );

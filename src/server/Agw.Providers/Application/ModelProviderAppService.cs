@@ -2,6 +2,8 @@ using Agw.Providers.Application.Persistence;
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Services;
 using Agw.Shared.Contracts;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Providers;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,16 +14,19 @@ public class ModelProviderAppService : IModelProviderAppService
     private readonly IProvidersDbContext _dbContext;
     private readonly ProviderModelBindingDomainService _bindingDomainService;
     private readonly ICurrentUser _currentUser;
+    private readonly IApplicationLock _applicationLock;
 
     public ModelProviderAppService(
         IProvidersDbContext dbContext,
         ProviderModelBindingDomainService bindingDomainService,
-        ICurrentUser currentUser
+        ICurrentUser currentUser,
+        IApplicationLock applicationLock
     )
     {
         _dbContext = dbContext;
         _bindingDomainService = bindingDomainService;
         _currentUser = currentUser;
+        _applicationLock = applicationLock;
     }
 
     public async Task<IReadOnlyList<ModelProviderRelation>> ListAsync(Guid? modelId = null, Guid? providerId = null)
@@ -64,10 +69,19 @@ public class ModelProviderAppService : IModelProviderAppService
             .FirstOrDefaultAsync(modelProvider => modelProvider.Id == id && modelProvider.CreateBy == ownerUserId);
     }
 
-    public async Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request)
+    public async Task<ModelProviderRelation> CreateAsync(
+        ModelProviderCreateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
-        _ = ResolveOwnerUserId();
-        await _bindingDomainService.EnsureBindableAsync(request.ProviderId, request.ModelId);
+        var ownerUserId = ResolveOwnerUserId();
+        await using var mutationCancellation = await AgentDefinitionLock.AcquireScopeAsync(
+            _applicationLock,
+            ownerUserId,
+            cancellationToken
+        );
+        cancellationToken = mutationCancellation.Token;
+        await _bindingDomainService.EnsureBindableAsync(request.ProviderId, request.ModelId, cancellationToken);
 
         var entity = new ModelProviderRelation
         {
@@ -81,8 +95,8 @@ public class ModelProviderAppService : IModelProviderAppService
             RpsLimit = request.RpsLimit,
         };
 
-        await _dbContext.ModelProviders.AddAsync(entity);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.ModelProviders.AddAsync(entity, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return entity;
     }
 
@@ -109,17 +123,27 @@ public class ModelProviderAppService : IModelProviderAppService
         return existing;
     }
 
-    public async Task<bool> DeleteAsync(Guid id)
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var existing = await GetAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        await using var mutationCancellation = await AgentDefinitionLock.AcquireScopeAsync(
+            _applicationLock,
+            ownerUserId,
+            cancellationToken
+        );
+        cancellationToken = mutationCancellation.Token;
+        var existing = await _dbContext.ModelProviders.FirstOrDefaultAsync(
+            relation => relation.Id == id && relation.CreateBy == ownerUserId,
+            cancellationToken
+        );
         if (existing == null)
         {
             return false;
         }
 
-        await _bindingDomainService.EnsureUnbindableAsync([existing.Id]);
+        await _bindingDomainService.EnsureUnbindableAsync([existing.Id], cancellationToken);
         _dbContext.ModelProviders.Remove(existing);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
 

@@ -1,7 +1,8 @@
 using System.Text.Json;
+using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
-using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Providers;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
@@ -60,7 +61,8 @@ public class ProviderAppServiceTests
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
                     ModelNames: [" existing-model ", "new-model", "new-model"]
-                )
+                ),
+                TestContext.Current.CancellationToken
             );
         }
 
@@ -116,7 +118,8 @@ public class ProviderAppServiceTests
                         Endpoint: "http://localhost:11434",
                         AuthConfigs: [],
                         ModelNames: ["qwen3:4b"]
-                    )
+                    ),
+                    TestContext.Current.CancellationToken
                 );
             providerId = created.Id;
         }
@@ -133,7 +136,8 @@ public class ProviderAppServiceTests
                         Endpoint: "http://ollama.test/ollama/",
                         AuthConfigs: [],
                         ModelNames: ["qwen3:4b", "llama3.2:latest"]
-                    )
+                    ),
+                    TestContext.Current.CancellationToken
                 );
             Assert.NotNull(updated);
         }
@@ -153,10 +157,11 @@ public class ProviderAppServiceTests
                         Endpoint: "http://attacker.test",
                         AuthConfigs: [],
                         ModelNames: []
-                    )
+                    ),
+                    TestContext.Current.CancellationToken
                 )
             );
-            Assert.False(await otherService.DeleteAsync(providerId));
+            Assert.False(await otherService.DeleteAsync(providerId, TestContext.Current.CancellationToken));
         }
 
         await using var verifyContext = new AgwDbContext(options);
@@ -211,7 +216,8 @@ public class ProviderAppServiceTests
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
                     ModelNames: ["keep-model", "add-model"]
-                )
+                ),
+                TestContext.Current.CancellationToken
             );
         }
 
@@ -256,7 +262,8 @@ public class ProviderAppServiceTests
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
                     ModelNames: null
-                )
+                ),
+                TestContext.Current.CancellationToken
             );
         }
 
@@ -345,7 +352,8 @@ public class ProviderAppServiceTests
                             ),
                         ],
                         ModelNames: []
-                    )
+                    ),
+                    TestContext.Current.CancellationToken
                 )
             );
 
@@ -426,7 +434,7 @@ public class ProviderAppServiceTests
         {
             var service = CreateService(deleteContext);
 
-            var deleted = await service.DeleteAsync(providerId);
+            var deleted = await service.DeleteAsync(providerId, TestContext.Current.CancellationToken);
 
             Assert.True(deleted);
         }
@@ -512,7 +520,8 @@ public class ProviderAppServiceTests
                             Enable: true
                         ),
                     ]
-                )
+                ),
+                TestContext.Current.CancellationToken
             );
 
             Assert.NotNull(updated);
@@ -533,13 +542,22 @@ public class ProviderAppServiceTests
     private static ProviderAppService CreateService(AgwDbContext dbContext, string userId = "tester")
     {
         var user = new TestUserInfoService(userId);
+        var bindingDomainService = new ProviderModelBindingDomainService(
+            new ProviderModelRepository(dbContext, user),
+            new AgentCatalogFacade(dbContext, user)
+        );
+        var deletionCoordinator = new ProviderModelDeletionCoordinator(
+            dbContext,
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+            user
+        );
         return new ProviderAppService(
             dbContext,
-            new ProviderModelBindingDomainService(
-                new ProviderModelRepository(dbContext, user),
-                new TestAgentReferenceFacade(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
-            ),
-            user
+            bindingDomainService,
+            user,
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+            deletionCoordinator,
+            new Agw.Agents.Definitions.Facades.AgentCatalogFacade(dbContext, user)
         );
     }
 

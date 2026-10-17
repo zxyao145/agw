@@ -1,7 +1,12 @@
+using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
+using Agw.Infrastructure.Providers;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Services;
+using Agw.Providers.Infrastructure;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Providers;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -79,5 +84,14 @@ public sealed class ModelAppServiceTests
         Assert.Equal(64_000, persisted.MaxOutputTokens);
     }
 
-    private static ModelAppService CreateService(AgwDbContext dbContext) => new(dbContext, new TestUserInfoService());
+    private static ModelAppService CreateService(AgwDbContext dbContext)
+    {
+        var user = new TestUserInfoService();
+        var bindingDomainService = new ProviderModelBindingDomainService(
+            new ProviderModelRepository(dbContext, user),
+            new AgentCatalogFacade(dbContext, user)
+        );
+        var deletionCoordinator = new ProviderModelDeletionCoordinator(dbContext, InMemoryApplicationLock.Shared, user);
+        return new ModelAppService(dbContext, user, bindingDomainService, deletionCoordinator);
+    }
 }

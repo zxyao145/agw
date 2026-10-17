@@ -1,97 +1,223 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using System.Reflection;
 using System.Threading.Channels;
+using Agw.Auth.Contracts;
+using Agw.Infrastructure.Configuration;
+using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Jobs;
 using Agw.Jobs.Scheduling;
-using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Setup.Services;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Runtime;
 using Agw.Testing;
+using Medallion.Threading.Postgres;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Jobs.Tests;
 
 public sealed class JobHostedServiceTests
 {
     [Theory]
-    [InlineData(true)]
     [InlineData(false)]
+    [InlineData(true)]
     public async Task Dispatch_InfrastructureFailure_NextJobInProjectCanRun(bool lockFailure)
     {
-        using var services = CreateServices(new ClaimStore { FailNext = !lockFailure });
-        var projectLock = new TestLock { FailNext = lockFailure };
-        using var scheduler = CreateScheduler(services, projectLock, TimeProvider.System);
-        var first = new ScheduledJob { JobId = Guid.NewGuid(), ProjectId = Guid.NewGuid() };
-        Invoke(scheduler, "DispatchOrQueueByProject", first, TestContext.Current.CancellationToken);
-        var running = (ConcurrentDictionary<Guid, Task>)Field(scheduler, "_runningExecutions");
-        try
-        {
-            await Task.WhenAll(running.Values);
-        }
-        catch (IOException) { }
-
-        Invoke(
-            scheduler,
-            "DispatchOrQueueByProject",
-            first with
-            {
-                JobId = Guid.NewGuid(),
-            },
-            TestContext.Current.CancellationToken
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        var job = await SeedAsync(database, TimeProvider.System.GetUtcNow(), token);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Provider"] = lockFailure ? "postgres" : "inmemory",
+                    ["ConnectionString"] = "Host=127.0.0.1;Port=1;Database=postgres;Username=unused;Timeout=1",
+                }
+            )
+            .Build();
+        using var lockServices = new ServiceCollection()
+            .AddOptions()
+            .Configure<DatabaseSettings>(_ => { })
+            .Configure<DistributedLockSettings>(configuration)
+            .BuildServiceProvider();
+        var projectLock = new ProjectExecutionLockRouter(
+            lockServices.GetRequiredService<IOptionsMonitor<DatabaseSettings>>(),
+            lockServices.GetRequiredService<IOptionsMonitor<DistributedLockSettings>>(),
+            new InMemoryProjectExecutionLock(),
+            (_, connection) => new PostgresDistributedSynchronizationProvider(connection)
         );
+        await using var provider = JobTestServices.Create(database.Options, TimeProvider.System, projectLock);
+        using var scheduler = ActivatorUtilities.CreateInstance<JobHostedService>(provider);
+        await using var setup = database.CreateContext();
+        if (lockFailure is false)
+            await setup.Database.ExecuteSqlRawAsync("ALTER TABLE job RENAME TO unavailable_job", token);
 
-        Assert.Equal(2, projectLock.Attempts);
+        Invoke(scheduler, "DispatchOrQueueByProject", ScheduledJob.FromJob(job), token);
+        await WaitForExecutionsAsync(scheduler);
+        var queued = (ConcurrentDictionary<Guid, ScheduledJob>)Field(scheduler, "_jobMap");
+        Assert.Contains(job.Id, queued.Keys);
+        configuration["Provider"] = "inmemory";
+        configuration.Reload();
+        if (lockFailure is false)
+            await setup.Database.ExecuteSqlRawAsync("ALTER TABLE unavailable_job RENAME TO job", token);
+
+        Invoke(scheduler, "DispatchOrQueueByProject", ScheduledJob.FromJob(job), token);
+        await WaitForExecutionsAsync(scheduler);
+        using var verificationScope = UserInfoUtil.PushSystemScope();
+        Assert.Equal(JobStatus.Paused, (await setup.Jobs.SingleAsync(token)).Status);
+        Assert.DoesNotContain(job.Id, queued.Keys);
+    }
+
+    [Fact]
+    public async Task Dispatch_ProjectChangedAfterPrefetch_RefreshesSnapshotWithoutStartingAttempt()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        var original = await SeedAsync(database, TimeProvider.System.GetUtcNow(), token);
+        var movedProjectId = Guid.CreateVersion7();
+        using (UserInfoUtil.PushSystemScope())
+        {
+            await using var update = database.CreateContext();
+            var persisted = await update.Jobs.SingleAsync(job => job.Id == original.Id, token);
+            persisted.ProjectId = movedProjectId;
+            await update.SaveChangesAsync(token);
+        }
+
+        await using var provider = JobTestServices.Create(
+            database.Options,
+            TimeProvider.System,
+            new InMemoryProjectExecutionLock()
+        );
+        using var scheduler = ActivatorUtilities.CreateInstance<JobHostedService>(provider);
+        var scheduledSnapshot = ScheduledJob.FromJob(original);
+        Invoke(scheduler, "UpsertScheduledJob", scheduledSnapshot);
+        Invoke(scheduler, "DispatchOrQueueByProject", scheduledSnapshot, token);
+        await WaitForExecutionsAsync(scheduler);
+
+        var queued = (ConcurrentDictionary<Guid, ScheduledJob>)Field(scheduler, "_jobMap");
+        Assert.True(queued.TryGetValue(original.Id, out var refreshed));
+        Assert.Equal(movedProjectId, refreshed!.ProjectId);
+        Assert.True(refreshed.Version > scheduledSnapshot.Version);
+        var runningProjects = (ConcurrentDictionary<Guid, byte>)Field(scheduler, "_runningProjects");
+        Assert.DoesNotContain(original.ProjectId, runningProjects.Keys);
+
+        using (UserInfoUtil.PushSystemScope())
+        await using (var verification = database.CreateContext())
+        {
+            var persisted = await verification.Jobs.SingleAsync(job => job.Id == original.Id, token);
+            Assert.Equal(JobStatus.Pending, persisted.Status);
+            Assert.Null(persisted.ActiveTurnId);
+            Assert.Null(persisted.ActiveAttemptStartedAt);
+            Assert.Empty(await verification.JobLogs.Where(log => log.JobId == original.Id).ToListAsync(token));
+        }
     }
 
     [Fact]
     public async Task RunExecuteLoop_TimerWins_NextDueJobNeedsOnlyOneWake()
     {
+        var token = TestContext.Current.CancellationToken;
         var clock = new ManualTimeProvider();
-        var store = new ClaimStore();
-        using var services = CreateServices(store);
-        using var scheduler = CreateScheduler(services, new TestLock(), clock);
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        var first = new ScheduledJob
-        {
-            JobId = Guid.NewGuid(),
-            ProjectId = Guid.NewGuid(),
-            NextRunTime = clock.GetUtcNow().AddSeconds(10),
-        };
-        Invoke(scheduler, "UpsertScheduledJob", first);
-        ((SemaphoreSlim)Field(scheduler, "_wakeSignal")).Wait(0, TestContext.Current.CancellationToken);
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        var first = await SeedAsync(database, clock.GetUtcNow().AddSeconds(10), token);
+        var second = await SeedAsync(database, clock.GetUtcNow().AddSeconds(10), token);
+        var observer = new ClaimReadObserver();
+        var options = new DbContextOptionsBuilder<AgwDbContext>(database.Options).AddInterceptors(observer).Options;
+        await using var provider = JobTestServices.Create(options, clock, new InMemoryProjectExecutionLock());
+        using var scheduler = ActivatorUtilities.CreateInstance<JobHostedService>(provider);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        Invoke(scheduler, "UpsertScheduledJob", ScheduledJob.FromJob(first));
+        ((SemaphoreSlim)Field(scheduler, "_wakeSignal")).Wait(0, token);
         var loop = (Task)Invoke(scheduler, "RunExecuteLoopAsync", cancellation.Token)!;
         try
         {
-            await clock.WaitForTimerAsync(TimeSpan.FromSeconds(10), cancellation.Token);
+            await clock.WaitForTimerAsync(TimeSpan.FromSeconds(10), token);
             clock.Advance(TimeSpan.FromSeconds(10));
             Assert.Equal(
-                first.JobId,
-                await store
-                    .Claims.Reader.ReadAsync(cancellation.Token)
-                    .AsTask()
-                    .WaitAsync(TimeSpan.FromSeconds(2), cancellation.Token)
+                first.Id,
+                await observer.Claims.Reader.ReadAsync(token).AsTask().WaitAsync(TimeSpan.FromSeconds(10), token)
             );
-            var second = first with { JobId = Guid.NewGuid(), NextRunTime = clock.GetUtcNow() };
-
-            Invoke(scheduler, "UpsertScheduledJob", second);
-
+            Invoke(scheduler, "UpsertScheduledJob", ScheduledJob.FromJob(second));
             Assert.Equal(
-                second.JobId,
-                await store
-                    .Claims.Reader.ReadAsync(cancellation.Token)
-                    .AsTask()
-                    .WaitAsync(TimeSpan.FromSeconds(2), cancellation.Token)
+                second.Id,
+                await observer.Claims.Reader.ReadAsync(token).AsTask().WaitAsync(TimeSpan.FromSeconds(10), token)
             );
         }
         finally
         {
-            cancellation.Cancel();
-            try
+            await cancellation.CancelAsync();
+            var failure = await Record.ExceptionAsync(() => loop);
+            if (failure != null)
+                Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            await WaitForExecutionsAsync(scheduler);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunExecuteLoop_FarFutureJob_ImmediateJobStillDispatches(bool useMaxValue)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var clock = new ManualTimeProvider();
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        await using (var schema = database.CreateContext())
+        {
+            await schema.Database.EnsureCreatedAsync(token);
+        }
+        await using var provider = JobTestServices.Create(database.Options, clock, new InMemoryProjectExecutionLock());
+        using var scheduler = ActivatorUtilities.CreateInstance<JobHostedService>(provider);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var farFuture = new Job
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
+            Name = "far-future-job",
+            IsEnabled = true,
+            Status = JobStatus.Pending,
+            NextRunTime = useMaxValue ? DateTimeOffset.MaxValue : clock.GetUtcNow().AddDays(60),
+            TriggerType = TriggerType.Once,
+            TriggerValue = string.Empty,
+        };
+        var immediate = new Job
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
+            Name = "missing-immediate-job",
+            IsEnabled = true,
+            Status = JobStatus.Pending,
+            NextRunTime = clock.GetUtcNow(),
+            TriggerType = TriggerType.Once,
+            TriggerValue = string.Empty,
+        };
+        Invoke(scheduler, "UpsertScheduledJob", ScheduledJob.FromJob(farFuture));
+        var loop = (Task)Invoke(scheduler, "RunExecuteLoopAsync", cancellation.Token)!;
+        try
+        {
+            var timerReady = clock.WaitForTimerAsync(JobSchedulingDefaults.PrefetchInterval, token);
+            Assert.Same(timerReady, await Task.WhenAny(timerReady, loop).WaitAsync(TimeSpan.FromSeconds(10), token));
+            await timerReady;
+
+            Invoke(scheduler, "UpsertScheduledJob", ScheduledJob.FromJob(immediate));
+            var queued = (ConcurrentDictionary<Guid, ScheduledJob>)Field(scheduler, "_jobMap");
+            for (var attempt = 0; attempt < 100 && queued.ContainsKey(immediate.Id); attempt++)
             {
-                await loop;
+                await Task.Delay(TimeSpan.FromMilliseconds(20), token);
             }
-            catch (OperationCanceledException) { }
+
+            Assert.DoesNotContain(immediate.Id, queued.Keys);
+            Assert.Contains(farFuture.Id, queued.Keys);
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            var failure = await Record.ExceptionAsync(() => loop);
+            if (failure != null)
+                Assert.IsAssignableFrom<OperationCanceledException>(failure);
+            await WaitForExecutionsAsync(scheduler);
         }
     }
 
@@ -99,70 +225,70 @@ public sealed class JobHostedServiceTests
     public async Task StopAsync_RunningQueue_WaitsForExecutionCleanup()
     {
         var token = TestContext.Current.CancellationToken;
-        var cleanupStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var store = new ClaimStore
-        {
-            Jobs = [new Job { Id = Guid.NewGuid(), ProjectId = Guid.NewGuid() }],
-            OnClaim = async cancellation =>
-            {
-                try
-                {
-                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellation);
-                }
-                finally
-                {
-                    cleanupStarted.TrySetResult();
-                    await release.Task;
-                }
-            },
-        };
-        using var services = CreateServices(store);
-        using var scheduler = CreateScheduler(services, new TestLock(), TimeProvider.System);
+        await using var database = await SqliteJobTestDatabase.CreateAsync();
+        await SeedAsync(database, TimeProvider.System.GetUtcNow(), token);
+        var gate = new DatabaseCommandGate(IsClaimQuery, holdCleanup: true);
+        var options = new DbContextOptionsBuilder<AgwDbContext>(database.Options).AddInterceptors(gate).Options;
+        await using var provider = JobTestServices.Create(
+            options,
+            TimeProvider.System,
+            new InMemoryProjectExecutionLock()
+        );
+        await provider.GetRequiredService<DatabaseInitializationStateStore>().PersistAsync("test-password-hash", token);
+        using var scheduler = ActivatorUtilities.CreateInstance<JobHostedService>(provider);
         await scheduler.StartAsync(token);
-        await store.Claims.Reader.ReadAsync(token).AsTask().WaitAsync(TimeSpan.FromSeconds(2), token);
+        await gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
         var stopping = scheduler.StopAsync(token);
         try
         {
-            await cleanupStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), token);
+            await gate.CleanupStarted.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
             Assert.False(stopping.IsCompleted);
         }
         finally
         {
-            release.TrySetResult();
-            await stopping.WaitAsync(TimeSpan.FromSeconds(2), token);
+            gate.FinishCleanup();
+            gate.Release();
+            await stopping.WaitAsync(TimeSpan.FromSeconds(10), token);
         }
     }
 
-    private sealed class InitializedState : IServerInitializationState
+    internal static Task ExecuteOneAsync(JobHostedService scheduler, ScheduledJob job, CancellationToken token) =>
+        (Task)Invoke(scheduler, "ExecuteOneAsync", job, token)!;
+
+    private static async Task<Job> SeedAsync(
+        SqliteJobTestDatabase database,
+        DateTimeOffset dueAt,
+        CancellationToken token
+    )
     {
-        public bool IsInitialized => true;
+        var job = new Job
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
+            Name = "unowned-job",
+            IsEnabled = true,
+            Status = JobStatus.Pending,
+            NextRunTime = dueAt,
+            TriggerType = TriggerType.Interval,
+            TriggerValue = "00:15:00",
+            CreateBy = string.Empty,
+        };
+        using var seedScope = UserInfoUtil.PushSystemScope();
+        await using var seed = database.CreateContext();
+        await seed.Database.EnsureCreatedAsync(token);
+        seed.Jobs.Add(job);
+        await seed.SaveChangesAsync(token);
+        return job;
     }
 
-    private static ServiceProvider CreateServices(ClaimStore store) =>
-        new ServiceCollection()
-            .AddSingleton<IJobStore>(store)
-            .AddScoped(provider => new JobAttemptRunner(
-                provider.GetRequiredService<IJobStore>(),
-                null!,
-                null!,
-                NullLogger<JobAttemptRunner>.Instance
-            ))
-            .BuildServiceProvider();
+    private static Task WaitForExecutionsAsync(JobHostedService scheduler) =>
+        Task.WhenAll(((ConcurrentDictionary<Guid, Task>)Field(scheduler, "_runningExecutions")).Values);
 
-    private static JobHostedService CreateScheduler(
-        ServiceProvider services,
-        TestLock projectLock,
-        TimeProvider clock
-    ) =>
-        new(
-            services.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<JobHostedService>.Instance,
-            new JobSchedulerWakeSignal(clock),
-            projectLock,
-            new InitializedState(),
-            clock
-        );
+    private static bool IsClaimQuery(DbCommand command) =>
+        command.CommandText.Contains("is_enabled", StringComparison.Ordinal)
+        && command
+            .Parameters.Cast<DbParameter>()
+            .Any(parameter => parameter.ParameterName.Contains("JobId", StringComparison.OrdinalIgnoreCase));
 
     private static object Field(object instance, string name) =>
         typeof(JobHostedService).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
@@ -178,52 +304,25 @@ public sealed class JobHostedServiceTests
             )!
             .Invoke(instance, args);
 
-    private sealed class ClaimStore : IJobStore
+    private sealed class ClaimReadObserver : DbCommandInterceptor
     {
         public Channel<Guid> Claims { get; } = Channel.CreateUnbounded<Guid>();
-        public bool FailNext { get; set; }
-        public IReadOnlyList<Job> Jobs { get; set; } = [];
-        public Func<CancellationToken, Task>? OnClaim { get; set; }
 
-        public Task<IReadOnlyList<Job>> PrefetchAsync(
-            DateTimeOffset now,
-            DateTimeOffset horizon,
-            CancellationToken cancellationToken
-        ) => Task.FromResult(Jobs);
-
-        public async Task<JobAttemptClaim?> TryStartAttemptAsync(Guid jobId, CancellationToken cancellationToken)
+        public override ValueTask<DbDataReader> ReaderExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            DbDataReader result,
+            CancellationToken cancellationToken = default
+        )
         {
-            Claims.Writer.TryWrite(jobId);
-            if (FailNext)
+            if (IsClaimQuery(command))
             {
-                FailNext = false;
-                throw new IOException("Simulated claim failure");
+                var parameter = command
+                    .Parameters.Cast<DbParameter>()
+                    .Single(item => item.ParameterName.Contains("JobId", StringComparison.OrdinalIgnoreCase));
+                Claims.Writer.TryWrite(Guid.Parse(parameter.Value!.ToString()!));
             }
-            if (OnClaim != null)
-                await OnClaim(cancellationToken);
-            return null;
-        }
-    }
-
-    private sealed class TestLock : IProjectExecutionLock
-    {
-        public bool FailNext { get; set; }
-        public int Attempts { get; private set; }
-
-        public Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken)
-        {
-            Attempts++;
-            if (FailNext)
-            {
-                FailNext = false;
-                return Task.FromException<IAsyncDisposable>(new IOException("Simulated lock outage"));
-            }
-            return Task.FromResult<IAsyncDisposable>(new Lease());
-        }
-
-        private sealed class Lease : IAsyncDisposable
-        {
-            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+            return ValueTask.FromResult(result);
         }
     }
 }

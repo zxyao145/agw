@@ -30,17 +30,28 @@ public sealed class JobAttemptRunner
 
     public async Task<JobAttemptResult> RunAsync(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
-        JobAttemptClaim? claim;
+        JobAttemptClaim claim;
         try
         {
-            claim = await _jobStore.TryStartAttemptAsync(scheduledJob.JobId, cancellationToken);
-            if (claim == null)
+            var startResult = await _jobStore.TryStartAttemptAsync(scheduledJob, cancellationToken);
+            switch (startResult)
             {
-                _logger.LogInformation(
-                    "Job {JobId} is no longer enabled/pending. Dropping stale in-memory entry.",
-                    scheduledJob.JobId
-                );
-                return new JobAttemptResult.Drop();
+                case JobAttemptStartResult.Reschedule reschedule:
+                    return new JobAttemptResult.Reschedule(reschedule.Job);
+                case JobAttemptStartResult.Drop:
+                    _logger.LogInformation(
+                        "Job {JobId} is no longer enabled/pending. Dropping stale in-memory entry.",
+                        scheduledJob.JobId
+                    );
+                    return new JobAttemptResult.Drop();
+                case JobAttemptStartResult.Claimed claimed:
+                    claim = claimed.Claim;
+                    break;
+                default:
+                    throw new AgwException(
+                        ErrorCodes.AgentExecutionFailed,
+                        $"Unsupported Job attempt start result '{startResult.GetType().Name}'."
+                    );
             }
         }
         catch (Exception ex)

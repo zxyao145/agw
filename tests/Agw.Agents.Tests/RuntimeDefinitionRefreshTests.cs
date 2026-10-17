@@ -370,6 +370,7 @@ public sealed class RuntimeDefinitionRefreshTests
                 configuration: configuration,
                 ollamaChatClientFactory: null!,
                 skillRegistrations: [],
+                localSkillContentResolver: null!,
                 remoteSkillContentResolver: null,
                 loggerFactory: NullLoggerFactory.Instance,
                 conversationHistoryWriter: null,

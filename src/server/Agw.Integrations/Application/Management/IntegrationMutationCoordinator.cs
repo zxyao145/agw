@@ -1,6 +1,7 @@
 using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,7 +25,10 @@ public sealed class IntegrationMutationCoordinator
         _userInfo = userInfo;
     }
 
-    public async Task<MutationScope> AcquireConnectionAsync(Guid connectionId, CancellationToken cancellationToken)
+    public async Task<ApplicationLockScope> AcquireConnectionAsync(
+        Guid connectionId,
+        CancellationToken cancellationToken
+    )
     {
         var user = _userInfo.RequiredUserId;
         var pluginId =
@@ -37,7 +41,7 @@ public sealed class IntegrationMutationCoordinator
         return await AcquirePluginAsync(pluginId, cancellationToken);
     }
 
-    public async Task<MutationScope> AcquirePluginAsync(string pluginId, CancellationToken cancellationToken)
+    public async Task<ApplicationLockScope> AcquirePluginAsync(string pluginId, CancellationToken cancellationToken)
     {
         var user = _userInfo.RequiredUserId;
         var lease = await _applicationLock.AcquireAsync(
@@ -51,7 +55,7 @@ public sealed class IntegrationMutationCoordinator
             DetachUnchanged(_dbContext.Connections);
             DetachUnchanged(_dbContext.PluginInstallationCredentials);
             DetachUnchanged(_dbContext.PluginInstallations);
-            return new MutationScope(lease, cancellationToken);
+            return new ApplicationLockScope(lease, cancellationToken);
         }
         catch
         {
@@ -68,26 +72,6 @@ public sealed class IntegrationMutationCoordinator
             var entry = entities.Entry(entity);
             if (entry.State == EntityState.Unchanged)
                 entry.State = EntityState.Detached;
-        }
-    }
-
-    public sealed class MutationScope : IAsyncDisposable
-    {
-        private readonly IApplicationLockLease _lease;
-        private readonly CancellationTokenSource _cancellation;
-
-        public MutationScope(IApplicationLockLease lease, CancellationToken cancellationToken)
-        {
-            _lease = lease;
-            _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
-        }
-
-        public CancellationToken Token => _cancellation.Token;
-
-        public async ValueTask DisposeAsync()
-        {
-            _cancellation.Dispose();
-            await _lease.DisposeAsync();
         }
     }
 }

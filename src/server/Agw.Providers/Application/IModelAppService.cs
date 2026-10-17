@@ -13,5 +13,5 @@ public interface IModelAppService
 
     Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request);
 
-    Task<bool> DeleteAsync(Guid id);
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

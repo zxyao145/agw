@@ -1,11 +1,9 @@
-using Agw.Auth.Contracts;
-using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling.Attempts;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -49,17 +47,9 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                await RecoverAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            if (!await JobRecoverySupport.TryRecoverAsync(RecoverAsync, _logger, "distributed", stoppingToken))
             {
                 break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Failed to recover distributed Job executions.");
             }
 
             await Task.Delay(RecoveryInterval, _timeProvider, stoppingToken);
@@ -69,45 +59,43 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     private async Task RecoverAsync(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<IJobsDbContext>();
-        IReadOnlyList<Job> runningJobs;
-        using (UserInfoUtil.PushSystemScope())
-        {
-            runningJobs = await dbContext
-                .Jobs.AsNoTracking()
-                .Where(job => job.Status == JobStatus.Running)
-                .ToListAsync();
-        }
+        var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
+        var runningJobs = await jobStore.ListRunningAsync(cancellationToken);
         await Task.WhenAll(runningJobs.Select(job => RecoverJobAsync(job, cancellationToken)));
     }
 
     private async Task RecoverJobAsync(Job job, CancellationToken cancellationToken)
     {
-        await using var projectLock = await _projectExecutionLock.AcquireAsync(job.ProjectId, cancellationToken);
+        var lease = await _projectExecutionLock.AcquireAsync(job.ProjectId, cancellationToken);
+        await using var projectLock = new ApplicationLockScope(lease, cancellationToken);
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<IJobsDbContext>();
-        Job? currentJob;
-        using (UserInfoUtil.PushSystemScope())
-        {
-            currentJob = await dbContext.Jobs.SingleOrDefaultAsync(item => item.Id == job.Id, cancellationToken);
-        }
-        if (currentJob?.Status != JobStatus.Running)
+        var jobStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
+        var currentJob = await jobStore.GetRunningAsync(job.Id, projectLock.Token);
+        if (currentJob == null || currentJob.ActiveTurnId != job.ActiveTurnId)
         {
             return;
         }
 
-        if (!currentJob.ActiveTurnId.HasValue || !currentJob.ActiveAttemptStartedAt.HasValue)
+        if (JobRecoverySupport.GetActiveTurnId(currentJob, _logger) is not Guid turnId)
         {
-            _logger.LogError("Running Job {JobId} does not have a persisted active attempt.", currentJob.Id);
             return;
         }
 
-        var turnId = currentJob.ActiveTurnId.Value;
-        if (!JobAgentExecutor.TryResolveOwnerUserId(currentJob, out var ownerUserId))
+        await RecoverAttemptAsync(scope.ServiceProvider, currentJob, turnId, projectLock.Token);
+    }
+
+    private async Task RecoverAttemptAsync(
+        IServiceProvider services,
+        Job job,
+        Guid turnId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!JobAgentExecutor.TryResolveOwnerUserId(job, out var ownerUserId))
         {
             await RecordOutcomeAsync(
-                scope.ServiceProvider,
-                currentJob.Id,
+                services,
+                job.Id,
                 turnId,
                 success: false,
                 "The Job owner is missing.",
@@ -116,7 +104,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
             return;
         }
 
-        var executionClient = scope.ServiceProvider.GetRequiredService<IDurableAgentExecutionFacade>();
+        var executionClient = services.GetRequiredService<IDurableAgentExecutionFacade>();
         AgentExecutionResult outcome;
         try
         {
@@ -125,8 +113,8 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
         catch (AgwException exception) when (exception.Code == ErrorCodes.DurableExecutionNotFound.Code)
         {
             await RecordOutcomeAsync(
-                scope.ServiceProvider,
-                currentJob.Id,
+                services,
+                job.Id,
                 turnId,
                 success: false,
                 "The durable Job execution was not registered before the scheduler stopped.",
@@ -135,6 +123,27 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
             return;
         }
 
+        await RecordExecutionOutcomeAsync(
+            services,
+            executionClient,
+            job.Id,
+            turnId,
+            ownerUserId,
+            outcome,
+            cancellationToken
+        );
+    }
+
+    private async Task RecordExecutionOutcomeAsync(
+        IServiceProvider services,
+        IDurableAgentExecutionFacade executionClient,
+        Guid jobId,
+        Guid turnId,
+        string ownerUserId,
+        AgentExecutionResult outcome,
+        CancellationToken cancellationToken
+    )
+    {
         if (outcome.State is AgentExecutionState.Queued or AgentExecutionState.Running)
         {
             return;
@@ -149,8 +158,8 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
                 cancellationToken
             );
             await RecordOutcomeAsync(
-                scope.ServiceProvider,
-                currentJob.Id,
+                services,
+                jobId,
                 turnId,
                 success: false,
                 "Scheduled Jobs do not support human interaction.",
@@ -161,20 +170,13 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
 
         if (outcome.State == AgentExecutionState.Completed)
         {
-            await RecordOutcomeAsync(
-                scope.ServiceProvider,
-                currentJob.Id,
-                turnId,
-                success: true,
-                errorMessage: null,
-                cancellationToken
-            );
+            await RecordOutcomeAsync(services, jobId, turnId, success: true, errorMessage: null, cancellationToken);
             return;
         }
 
         await RecordOutcomeAsync(
-            scope.ServiceProvider,
-            currentJob.Id,
+            services,
+            jobId,
             turnId,
             success: false,
             outcome.ErrorMessage ?? "The distributed Job execution did not complete.",

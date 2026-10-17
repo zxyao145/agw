@@ -48,7 +48,7 @@ public class SkillBehaviorTests
     }
 
     [Fact]
-    public void DefineLocal_ValidDefinition_StoresTrimmedValuesUnderStableIdFolder()
+    public void DefineLocal_ValidDefinition_StoresTrimmedValuesAndAssignsId()
     {
         var skill = new Skill { Kind = SkillKind.Local, RemoteUrl = "https://example.test/skill" };
 
@@ -57,7 +57,7 @@ public class SkillBehaviorTests
         Assert.NotEqual(Guid.Empty, skill.Id);
         Assert.Equal("expense-report", skill.Name);
         Assert.Equal("Reports expenses.", skill.Description);
-        Assert.Equal($"skills/{skill.Id:N}", skill.ContentPath);
+        Assert.Equal(string.Empty, skill.ContentPath);
         Assert.Null(skill.RemoteUrl);
     }
 

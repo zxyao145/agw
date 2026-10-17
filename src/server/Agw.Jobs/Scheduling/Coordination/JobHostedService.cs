@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Agw.Jobs.Scheduling.Attempts;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Runtime;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,8 @@ public sealed class JobHostedService : BackgroundService
     private readonly IProjectExecutionLock _projectExecutionLock;
     private readonly IServerInitializationState _serverInitializationState;
     private readonly TimeProvider _timeProvider;
+    private readonly InProcessJobRecovery _inProcessJobRecovery;
+    private readonly DependencyInjection.RegistrationOptions _registrationOptions;
 
     private readonly PriorityQueue<ScheduledJob, DateTimeOffset> _queue = new();
     private readonly ConcurrentDictionary<Guid, ScheduledJob> _jobMap = new();
@@ -35,7 +38,9 @@ public sealed class JobHostedService : BackgroundService
         JobSchedulerWakeSignal schedulerWakeSignal,
         IProjectExecutionLock projectExecutionLock,
         IServerInitializationState serverInitializationState,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        InProcessJobRecovery inProcessJobRecovery,
+        DependencyInjection.RegistrationOptions registrationOptions
     )
     {
         _scopeFactory = scopeFactory;
@@ -44,6 +49,8 @@ public sealed class JobHostedService : BackgroundService
         _projectExecutionLock = projectExecutionLock;
         _serverInitializationState = serverInitializationState;
         _timeProvider = timeProvider;
+        _inProcessJobRecovery = inProcessJobRecovery;
+        _registrationOptions = registrationOptions;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -53,11 +60,19 @@ public sealed class JobHostedService : BackgroundService
             await Task.Delay(TimeSpan.FromMilliseconds(250), _timeProvider, stoppingToken);
         }
 
+        var recoverInProcess = _registrationOptions.UseDurableExecution is false;
+        var recoveryTask = Task.CompletedTask;
+        if (recoverInProcess)
+        {
+            await _inProcessJobRecovery.RecoverAsync(stoppingToken);
+            recoveryTask = _inProcessJobRecovery.RunPeriodicAsync(stoppingToken);
+        }
+
         var prefetchTask = RunPrefetchLoopAsync(stoppingToken);
         var executeTask = RunExecuteLoopAsync(stoppingToken);
         try
         {
-            await Task.WhenAll(prefetchTask, executeTask);
+            await Task.WhenAll(prefetchTask, executeTask, recoveryTask);
         }
         finally
         {
@@ -129,6 +144,10 @@ public sealed class JobHostedService : BackgroundService
             if (nextJob.NextRunTime > now)
             {
                 var delay = nextJob.NextRunTime - now;
+                if (delay > JobSchedulingDefaults.PrefetchInterval)
+                {
+                    delay = JobSchedulingDefaults.PrefetchInterval;
+                }
                 using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var delayTask = Task.Delay(delay, _timeProvider, waitCancellation.Token);
                 var signalTask = _wakeSignal.WaitAsync(waitCancellation.Token);
@@ -285,14 +304,12 @@ public sealed class JobHostedService : BackgroundService
 
     private async Task ExecuteOneAsync(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
-        await using var projectLock = await _projectExecutionLock.AcquireAsync(
-            scheduledJob.ProjectId,
-            cancellationToken
-        );
+        var projectLock = await _projectExecutionLock.AcquireAsync(scheduledJob.ProjectId, cancellationToken);
+        await using var executionScope = new ApplicationLockScope(projectLock, cancellationToken);
 
         using var scope = _scopeFactory.CreateScope();
         var attemptRunner = scope.ServiceProvider.GetRequiredService<JobAttemptRunner>();
-        var result = await attemptRunner.RunAsync(scheduledJob, cancellationToken);
+        var result = await attemptRunner.RunAsync(scheduledJob, executionScope.Token);
 
         if (result is JobAttemptResult.Reschedule reschedule)
         {

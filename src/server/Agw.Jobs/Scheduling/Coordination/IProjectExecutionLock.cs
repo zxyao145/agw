@@ -1,3 +1,5 @@
+using Agw.Shared.Contracts.Coordination;
+
 namespace Agw.Jobs.Scheduling.Coordination;
 
 /// <summary>
@@ -5,5 +7,7 @@ namespace Agw.Jobs.Scheduling.Coordination;
 /// </summary>
 public interface IProjectExecutionLock
 {
-    Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken);
+    Task<IApplicationLockLease> AcquireAsync(Guid projectId, CancellationToken cancellationToken);
+
+    Task<IApplicationLockLease?> TryAcquireAsync(Guid projectId, CancellationToken cancellationToken);
 }

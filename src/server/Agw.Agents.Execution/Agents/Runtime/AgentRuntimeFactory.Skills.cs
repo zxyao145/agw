@@ -2,7 +2,6 @@ using Agw.Agents.Execution.Agents.Composition;
 using Agw.Integrations.Contracts.Capabilities;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Exceptions;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.References;
 using Agw.Skills.Contracts.Registration;
@@ -37,7 +36,8 @@ public partial class AgentRuntimeFactory
         Agent agent,
         Project project,
         IReadOnlyList<PluginSkillReference> pluginSkills,
-        AgentCapabilityComposition capabilities
+        AgentCapabilityComposition capabilities,
+        CancellationToken cancellationToken
     )
     {
         var skillIds = agent
@@ -50,12 +50,7 @@ public partial class AgentRuntimeFactory
             .Cast<IAgentSkillRegistration>()
             .DistinctBy(registration => registration.Id)
             .ToArray();
-        var userSkillPaths = skills
-            .Where(skill => skill.Kind == SkillKind.Local && !_skillRegistrations.ContainsKey(skill.Id))
-            .Select(GetSkillAbsolutePath)
-            .Where(Directory.Exists)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        var userSkillPaths = await ResolveLocalSkillPathsAsync(skills, cancellationToken);
         var remoteSkills =
             _remoteSkillContentResolver == null
                 ? []
@@ -164,24 +159,25 @@ public partial class AgentRuntimeFactory
         return builder.Build();
     }
 
-    private string GetSkillAbsolutePath(SkillReferenceSnapshot skill)
+    private async Task<string[]> ResolveLocalSkillPathsAsync(
+        IReadOnlyList<SkillReferenceSnapshot> skills,
+        CancellationToken cancellationToken
+    )
     {
-        var relativePath = string.IsNullOrWhiteSpace(skill.ContentPath)
-            ? Path.Combine("skills", skill.Name)
-            : skill.ContentPath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
-        var rootPath = Path.GetFullPath(_dataPaths.Root);
-        var absolutePath = Path.GetFullPath(Path.Combine(rootPath, relativePath));
-        var relativeToRoot = Path.GetRelativePath(rootPath, absolutePath);
-        if (
-            Path.IsPathRooted(relativeToRoot)
-            || string.Equals(relativeToRoot, "..", StringComparison.Ordinal)
-            || relativeToRoot.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (
+            var skill in skills.Where(skill =>
+                skill.Kind == SkillKind.Local && !_skillRegistrations.ContainsKey(skill.Id)
+            )
         )
         {
-            throw new AgwException(ErrorCodes.InvalidSkillDirectoryPath);
+            var path = await _localSkillContentResolver.ResolveDirectoryAsync(skill.Id, cancellationToken);
+            if (path != null)
+            {
+                paths.Add(path);
+            }
         }
-
-        return absolutePath;
+        return paths.ToArray();
     }
 
     private static bool TryGetPluginSkillDirectory(string skillFilePath, out string skillDirectory)

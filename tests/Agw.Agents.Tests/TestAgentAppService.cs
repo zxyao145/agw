@@ -4,6 +4,7 @@ using Agw.Agents.Definitions.Domain.Services;
 using Agw.Agents.Definitions.Persistence;
 using Agw.Integrations.Contracts.References;
 using Agw.Providers.Contracts.References;
+using Agw.Shared.Coordination;
 using Agw.Skills.Contracts.References;
 
 namespace Agw.Agents.Tests;
@@ -27,7 +28,8 @@ internal static class TestAgentAppService
             modelProviderReferences,
             skillReferences,
             userInfoService,
-            deletionCoordinator
+            deletionCoordinator,
+            InMemoryApplicationLock.Shared
         );
     }
 }

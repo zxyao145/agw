@@ -1,6 +1,7 @@
 using Agw.Skills.Application;
 using Agw.Skills.Application.Facades;
 using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.References;
 using Agw.Skills.Contracts.Remote;
 using Agw.Skills.Domain.Repositories;
@@ -19,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<ISkillRepository, SkillRepository>();
         services.AddScoped<SkillNameUniquenessDomainService>();
         services.AddScoped<SkillAppService>();
+        services.AddScoped<ILocalSkillContentResolver, LocalSkillContentFacade>();
         services.AddScoped<ISkillReferenceFacade, SkillReferenceFacade>();
         services.AddSingleton<IRemoteSkillClient, RemoteSkillHttpClient>();
         services.AddSingleton<IRemoteSkillContentResolver, RemoteSkillContentResolver>();

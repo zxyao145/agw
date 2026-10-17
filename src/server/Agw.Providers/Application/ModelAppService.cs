@@ -1,6 +1,7 @@
 using Agw.Providers.Application.Persistence;
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Behaviors;
+using Agw.Providers.Domain.Services;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Microsoft.EntityFrameworkCore;
@@ -11,11 +12,20 @@ public class ModelAppService : IModelAppService
 {
     private readonly IProvidersDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
+    private readonly ProviderModelBindingDomainService _bindingDomainService;
+    private readonly IProviderModelDeletionCoordinator _deletionCoordinator;
 
-    public ModelAppService(IProvidersDbContext dbContext, ICurrentUser currentUser)
+    public ModelAppService(
+        IProvidersDbContext dbContext,
+        ICurrentUser currentUser,
+        ProviderModelBindingDomainService bindingDomainService,
+        IProviderModelDeletionCoordinator deletionCoordinator
+    )
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
+        _bindingDomainService = bindingDomainService;
+        _deletionCoordinator = deletionCoordinator;
     }
 
     public async Task<IReadOnlyList<AgwAiModel>> ListAsync()
@@ -71,21 +81,8 @@ public class ModelAppService : IModelAppService
         return existing;
     }
 
-    public async Task<bool> DeleteAsync(Guid id)
-    {
-        var ownerUserId = ResolveOwnerUserId();
-        var existing = await _dbContext.Models.FirstOrDefaultAsync(model =>
-            model.Id == id && model.CreateBy == ownerUserId
-        );
-        if (existing == null)
-        {
-            return false;
-        }
-
-        _dbContext.Models.Remove(existing);
-        await _dbContext.SaveChangesAsync();
-        return true;
-    }
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _deletionCoordinator.DeleteModelAsync(id, _bindingDomainService.EnsureUnbindableAsync, cancellationToken);
 
     private string ResolveOwnerUserId() => _currentUser.RequiredUserId;
 }

@@ -25,17 +25,22 @@ public sealed class ProviderModelBindingDomainService
         _agentReferences = agentReferences;
     }
 
-    public async Task EnsureBindableAsync(Guid providerId, Guid modelId)
+    public async Task EnsureBindableAsync(Guid providerId, Guid modelId, CancellationToken cancellationToken = default)
     {
-        var providerExists = await _providerModels.ProviderExistsAsync(providerId).ConfigureAwait(false);
-        var modelExists = await _providerModels.ModelExistsAsync(modelId).ConfigureAwait(false);
+        var providerExists = await _providerModels
+            .ProviderExistsAsync(providerId, cancellationToken)
+            .ConfigureAwait(false);
+        var modelExists = await _providerModels.ModelExistsAsync(modelId, cancellationToken).ConfigureAwait(false);
         if (!providerExists || !modelExists)
         {
             throw new AgwException(ErrorCodes.InvalidParam);
         }
     }
 
-    public async Task EnsureUnbindableAsync(IEnumerable<Guid> modelProviderIds)
+    public async Task EnsureUnbindableAsync(
+        IEnumerable<Guid> modelProviderIds,
+        CancellationToken cancellationToken = default
+    )
     {
         var ids = modelProviderIds.Where(id => id != Guid.Empty).Distinct().ToList();
         if (ids.Count == 0)
@@ -43,7 +48,7 @@ public sealed class ProviderModelBindingDomainService
             return;
         }
 
-        if (await _agentReferences.UsesAnyModelProviderAsync(ids).ConfigureAwait(false))
+        if (await _agentReferences.UsesAnyModelProviderAsync(ids, cancellationToken).ConfigureAwait(false))
         {
             throw new AgwException(ErrorCodes.ModelProviderInUse);
         }
@@ -56,7 +61,8 @@ public sealed class ProviderModelBindingDomainService
     public async Task<ProviderModelSelection> SelectModelsAsync(
         Guid providerId,
         IReadOnlyCollection<ModelProviderRelation> currentRelations,
-        IReadOnlyList<string> modelNames
+        IReadOnlyList<string> modelNames,
+        CancellationToken cancellationToken = default
     )
     {
         var selectedNames = NormalizeModelNames(modelNames);
@@ -64,12 +70,13 @@ public sealed class ProviderModelBindingDomainService
         var removedRelations = currentRelations
             .Where(relation => relation.Model == null || !selectedNameSet.Contains(relation.Model.Name))
             .ToList();
-        await EnsureUnbindableAsync(removedRelations.Select(relation => relation.Id)).ConfigureAwait(false);
+        await EnsureUnbindableAsync(removedRelations.Select(relation => relation.Id), cancellationToken)
+            .ConfigureAwait(false);
 
         var existingModels =
             selectedNames.Count == 0
                 ? []
-                : await _providerModels.ListModelsByNameAsync(selectedNames).ConfigureAwait(false);
+                : await _providerModels.ListModelsByNameAsync(selectedNames, cancellationToken).ConfigureAwait(false);
         var modelByName = existingModels.ToDictionary(model => model.Name, StringComparer.Ordinal);
         var createdModels = selectedNames
             .Where(modelName => !modelByName.ContainsKey(modelName))

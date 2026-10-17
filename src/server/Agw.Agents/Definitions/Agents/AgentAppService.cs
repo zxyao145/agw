@@ -5,7 +5,9 @@ using Agw.Agents.Definitions.Domain.ValueObjects;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Providers.Contracts.References;
+using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Pagination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Pagination;
 using Agw.Shared.Exceptions;
@@ -28,6 +30,7 @@ public class AgentAppService
     private readonly IModelProviderReferenceFacade _modelProviderReferences;
     private readonly ISkillReferenceFacade _skillReferences;
     private readonly IUserInfoService _userInfoService;
+    private readonly IApplicationLock _applicationLock;
 
     public AgentAppService(
         IAgentsDbContext dbContext,
@@ -36,7 +39,8 @@ public class AgentAppService
         IModelProviderReferenceFacade modelProviderReferences,
         ISkillReferenceFacade skillReferences,
         IUserInfoService userInfoService,
-        IAgentDeletionCoordinator deletionCoordinator
+        IAgentDeletionCoordinator deletionCoordinator,
+        IApplicationLock applicationLock
     )
     {
         _dbContext = dbContext;
@@ -46,6 +50,7 @@ public class AgentAppService
         _skillReferences = skillReferences;
         _userInfoService = userInfoService;
         _deletionCoordinator = deletionCoordinator;
+        _applicationLock = applicationLock;
     }
 
     public async Task<IReadOnlyList<Agent>> ListAgentsAsync()
@@ -173,11 +178,18 @@ public class AgentAppService
         Agent agent,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds
+        IEnumerable<Guid>? connectionIds,
+        CancellationToken cancellationToken = default
     )
     {
-        _ = _userInfoService.RequiredUserId;
-        if (!await _definitionDomainService.AreModelProvidersVisibleAsync(agent))
+        var definitionOwner = _userInfoService.RequiredUserId;
+        await using var mutationCancellation = await AgentDefinitionLock.AcquireScopeAsync(
+            _applicationLock,
+            definitionOwner,
+            cancellationToken
+        );
+        cancellationToken = mutationCancellation.Token;
+        if (!await _definitionDomainService.AreModelProvidersVisibleAsync(agent, cancellationToken))
         {
             return null;
         }
@@ -186,7 +198,8 @@ public class AgentAppService
         {
             await _definitionDomainService.EnsureExternalModelProviderSupportedAsync(
                 agent.ExternalAgentKind,
-                agent.ModelProviderId
+                agent.ModelProviderId,
+                cancellationToken
             );
             agent.Extra = AgentExtraSettings.Normalize(agent.Extra);
         }
@@ -197,20 +210,33 @@ public class AgentAppService
         {
             agent.Extra = ExternalAgentDefaults.GetDefaultExtra(agent.ExternalAgentKind);
         }
-        await _dbContext.Agents.AddAsync(agent);
+        await _dbContext.Agents.AddAsync(agent, cancellationToken);
         await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds);
         await SyncAgentSkillRelationsAsync(agent.Id, skillIds);
         await SyncAgentConnectionRelationsAsync(agent.Id, connectionIds);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return agent;
     }
 
-    public async Task<Agent?> UpdateAgentAsync(Guid id, AgentUpdateCommand command)
+    public async Task<Agent?> UpdateAgentAsync(
+        Guid id,
+        AgentUpdateCommand command,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(command);
         var user = _userInfoService.RequiredUserId;
+        await using var mutationCancellation = await AgentDefinitionLock.AcquireScopeAsync(
+            _applicationLock,
+            user,
+            cancellationToken
+        );
+        cancellationToken = mutationCancellation.Token;
 
-        var existing = await _dbContext.Agents.SingleOrDefaultAsync(agent => agent.Id == id && agent.CreateBy == user);
+        var existing = await _dbContext.Agents.SingleOrDefaultAsync(
+            agent => agent.Id == id && agent.CreateBy == user,
+            cancellationToken
+        );
         if (existing == null)
         {
             return null;
@@ -222,18 +248,19 @@ public class AgentAppService
         if (existing.Type == AgentType.External)
         {
             var modelProviderId = behavior.ResolveModelProviderId(update);
-            if (!await _definitionDomainService.IsModelProviderVisibleAsync(modelProviderId))
+            if (!await _definitionDomainService.IsModelProviderVisibleAsync(modelProviderId, cancellationToken))
             {
                 return null;
             }
             await _definitionDomainService.EnsureExternalModelProviderSupportedAsync(
                 existing.ExternalAgentKind,
-                modelProviderId
+                modelProviderId,
+                cancellationToken
             );
         }
 
         behavior.ApplyUpdate(update);
-        if (!await _definitionDomainService.AreModelProvidersVisibleAsync(existing))
+        if (!await _definitionDomainService.AreModelProvidersVisibleAsync(existing, cancellationToken))
         {
             return null;
         }
@@ -250,7 +277,7 @@ public class AgentAppService
             }
         }
 
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return existing;
     }
 

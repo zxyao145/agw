@@ -2,6 +2,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Agents.AI" />
     <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
+    <ProjectReference Include="..\Agw.Providers.Contracts\Agw.Providers.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
 </Project>

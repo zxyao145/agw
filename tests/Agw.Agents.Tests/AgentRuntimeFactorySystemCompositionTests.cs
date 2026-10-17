@@ -2,7 +2,9 @@ using System.Collections;
 using System.Linq.Expressions;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Agents.Execution.Agents.Contracts;
@@ -10,11 +12,15 @@ using Agw.Agents.Execution.Agents.Middleware.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Auth.Application;
+using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Skills;
 using Agw.Integrations.Mcp;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Providers.Contracts;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
@@ -24,13 +30,20 @@ using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
+using Agw.Skills.Application;
+using Agw.Skills.Application.Facades;
 using Agw.Skills.Contracts;
+using Agw.Skills.Contracts.References;
 using Agw.Skills.Contracts.Registration;
+using Agw.Skills.Domain.Services;
 using Agw.Skills.Execution;
+using Agw.Skills.Infrastructure;
+using Agw.Skills.Infrastructure.Remote;
 using Agw.Testing;
 using Agw.Tools.Abstractions;
 using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Agw.Tools.ToolBlocks;
+using Medallion.Threading.Postgres;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Data.Sqlite;
@@ -38,6 +51,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
 
@@ -51,10 +65,23 @@ public class AgentRuntimeFactorySystemCompositionTests
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "Test"))
+        );
         using var toolServices = new ServiceCollection().BuildServiceProvider();
-        var root = Path.Combine(Path.GetTempPath(), $"agw-system-composition-{Guid.CreateVersion7():N}");
-        Directory.CreateDirectory(Path.Combine(root, "agent-skill"));
+        var root = Path.Combine(AppContext.BaseDirectory, ".runtime-composition", Guid.CreateVersion7().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "legacy-agent-skill"));
         Directory.CreateDirectory(Path.Combine(root, "project-skill"));
+        await File.WriteAllTextAsync(
+            Path.Combine(root, "legacy-agent-skill", "SKILL.md"),
+            "---\nname: agent-skill\ndescription: Agent instructions\n---\nInstructions",
+            cancellationToken
+        );
+        await File.WriteAllTextAsync(
+            Path.Combine(root, "project-skill", "SKILL.md"),
+            "---\nname: project-skill\ndescription: Project instructions\n---\nInstructions",
+            cancellationToken
+        );
         var overriddenPluginSkillDirectory = Path.Combine(root, "plugin-overridden-skill");
         var pluginSkillDirectory = Path.Combine(root, "plugin-skill");
         Directory.CreateDirectory(overriddenPluginSkillDirectory);
@@ -147,7 +174,7 @@ public class AgentRuntimeFactorySystemCompositionTests
                 Name = "agent-skill",
                 Description = "agent skill",
                 Kind = SkillKind.Local,
-                ContentPath = "agent-skill",
+                ContentPath = "legacy-agent-skill",
                 CreateBy = "tester",
             },
             new Skill
@@ -260,6 +287,7 @@ public class AgentRuntimeFactorySystemCompositionTests
             )
         );
 
+        using var runtimeServices = CreateSkillServices(dbContext, AgwDataPaths.Resolve(root, root));
         var runtimeService = CreateRuntimeFactory(
             agentAppService,
             new TestProjectRuntimeFacade(project),
@@ -269,7 +297,8 @@ public class AgentRuntimeFactorySystemCompositionTests
             mcpMaterializer,
             [classSkillRegistration],
             remoteSkillResolver,
-            toolBlocks: [new UserMemoryToolBlock(toolServices.GetRequiredService<IServiceScopeFactory>())]
+            toolBlocks: [new UserMemoryToolBlock(toolServices.GetRequiredService<IServiceScopeFactory>())],
+            runtimeServices: runtimeServices
         );
         var request = new CreateAiAgentRequest
         {
@@ -353,8 +382,23 @@ public class AgentRuntimeFactorySystemCompositionTests
             );
             Assert.Contains(project.Workspace, instructionsContext.Instructions, StringComparison.Ordinal);
             var providerStrings = CollectStringsInObjectGraph(skillsProvider);
-            Assert.Contains(Path.Combine(root, "agent-skill"), providerStrings);
+            var persistedSkill = await dbContext
+                .Skills.AsNoTracking()
+                .SingleAsync(skill => skill.Id == agentSkillId, cancellationToken);
+            var agentSkillDirectory = Path.Combine(root, persistedSkill.ContentPath);
+            Assert.Contains(agentSkillDirectory, providerStrings);
             Assert.Contains(Path.Combine(root, "project-skill"), providerStrings);
+            var fileSource = TraverseObjectGraph(skillsProvider)
+                .OfType<AgentFileSkillsSource>()
+                .Single(source => CollectStringsInObjectGraph(source).Contains(agentSkillDirectory));
+            var loadedSkills = await fileSource.GetSkillsAsync(
+                new AgentSkillsSourceContext(aiAgent, null),
+                cancellationToken
+            );
+            Assert.Equal(
+                ["agent-skill", "project-skill"],
+                loadedSkills.Select(skill => skill.Frontmatter.Name).Order().ToArray()
+            );
             Assert.Contains(pluginSkillDirectory, providerStrings);
             Assert.DoesNotContain(overriddenPluginSkillDirectory, providerStrings);
             Assert.Equal(1, classSkillRegistration.CreateCount);
@@ -722,6 +766,7 @@ public class AgentRuntimeFactorySystemCompositionTests
                 typeof(Project),
                 typeof(IReadOnlyList<PluginSkillReference>),
                 typeof(AgentCapabilityComposition),
+                typeof(CancellationToken),
             ]
         );
 
@@ -741,7 +786,10 @@ public class AgentRuntimeFactorySystemCompositionTests
         {
             Assert.NotNull(method);
             var providerTask = Assert.IsType<Task<AgentSkillsProvider?>>(
-                method.Invoke(runtimeService, [agent, project, Array.Empty<PluginSkillReference>(), capabilities])
+                method.Invoke(
+                    runtimeService,
+                    [agent, project, Array.Empty<PluginSkillReference>(), capabilities, cancellationToken]
+                )
             );
             var provider = await providerTask;
 
@@ -761,6 +809,107 @@ public class AgentRuntimeFactorySystemCompositionTests
             var result = await tool.InvokeAsync(new AIFunctionArguments(), cancellationToken);
             Assert.Equal(project.Id.ToString(), result?.ToString());
             Assert.Single(TraverseObjectGraph(skillsProvider).OfType<TestClassSkill>());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveLocalSkillPathsAsync_CancellationToken_CancelsSkillLockWait()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "skill-cancel-test")], "Test"))
+        );
+        var root = Path.Combine(AppContext.BaseDirectory, ".skill-test-data", Guid.CreateVersion7().ToString("N"));
+        Directory.CreateDirectory(root);
+        var paths = AgwDataPaths.Resolve(root, root);
+        paths.EnsureCreated();
+        var skillId = Guid.CreateVersion7();
+        var contentPath = $"skills/{skillId:N}-{Guid.CreateVersion7():N}/local-skill";
+        var skillDirectory = Path.Combine(paths.Root, contentPath);
+        Directory.CreateDirectory(skillDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(skillDirectory, "SKILL.md"),
+            "---\nname: local-skill\ndescription: description\n---\nInstructions",
+            cancellationToken
+        );
+        var databasePath = Path.Combine(root, "skills.db");
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite($"Data Source={databasePath};Cache=Shared")
+            .Options;
+
+        try
+        {
+            await using var dbContext = new AgwDbContext(options);
+            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+            dbContext.Skills.Add(
+                new Skill
+                {
+                    Id = skillId,
+                    Name = "local-skill",
+                    Description = "description",
+                    Kind = SkillKind.Local,
+                    ContentPath = contentPath,
+                    CreateBy = "skill-cancel-test",
+                }
+            );
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            using var skillServices = CreateSkillServices(dbContext, paths);
+            var runtime = CreateRuntimeFactory(
+                CreateAgentAppService(dbContext),
+                new TestProjectRuntimeFacade(new Project { Id = Guid.CreateVersion7() }),
+                CreateToolRegistry(),
+                paths,
+                new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
+                new TestMcpToolMaterializer(),
+                httpClientFactory: skillServices.GetRequiredService<IHttpClientFactory>(),
+                runtimeServices: skillServices
+            );
+            var resolveMethod = typeof(AgentRuntimeFactory).GetMethod(
+                "ResolveLocalSkillPathsAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                [typeof(IReadOnlyList<SkillReferenceSnapshot>), typeof(CancellationToken)]
+            );
+            Assert.NotNull(resolveMethod);
+
+            var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
+                SkillMutationLock.GetResourceName(skillId),
+                cancellationToken
+            );
+            Task<string[]> resolveTask;
+            try
+            {
+                using var cancelled = new CancellationTokenSource();
+                cancelled.Cancel();
+                resolveTask = Assert.IsType<Task<string[]>>(
+                    resolveMethod.Invoke(
+                        runtime,
+                        [
+                            new[]
+                            {
+                                new SkillReferenceSnapshot(
+                                    skillId,
+                                    "local-skill",
+                                    "description",
+                                    SkillKind.Local,
+                                    contentPath
+                                ),
+                            },
+                            cancelled.Token,
+                        ]
+                    )
+                );
+            }
+            finally
+            {
+                await lease.DisposeAsync();
+            }
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resolveTask);
         }
         finally
         {
@@ -804,9 +953,11 @@ public class AgentRuntimeFactorySystemCompositionTests
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
         IRemoteSkillContentResolver? remoteSkillContentResolver = null,
         IEnumerable<IToolBlock>? toolBlocks = null,
-        IHttpClientFactory? httpClientFactory = null
+        IHttpClientFactory? httpClientFactory = null,
+        IServiceProvider? runtimeServices = null
     )
     {
+        var services = runtimeServices ?? new ServiceCollection().BuildServiceProvider();
         return new AgentRuntimeFactory(
             appService,
             projectRuntimeFacade,
@@ -836,11 +987,12 @@ public class AgentRuntimeFactorySystemCompositionTests
                 NullLogger<AgentTelemetryMiddleware>.Instance
             ),
             summaryService: null!,
-            services: new ServiceCollection().BuildServiceProvider(),
+            services: services,
             projectDefaults: new TestProjectDefaultResolver(),
             configuration: new AgentRuntimeConfiguration(appService, projectRuntimeFacade),
             ollamaChatClientFactory: new OllamaChatClientFactory(httpClientFactory!),
             skillRegistrations: skillRegistrations ?? [],
+            localSkillContentResolver: services.GetService<ILocalSkillContentResolver>()!,
             remoteSkillContentResolver: remoteSkillContentResolver,
             loggerFactory: NullLoggerFactory.Instance,
             conversationHistoryWriter: null,
@@ -849,6 +1001,38 @@ public class AgentRuntimeFactorySystemCompositionTests
             timeProvider: TimeProvider.System,
             generatedToolCatalog: null
         );
+    }
+
+    private static ServiceProvider CreateSkillServices(AgwDbContext dbContext, AgwDataPaths paths)
+    {
+        var services = new ServiceCollection();
+        services.AddOptions();
+        services.AddHttpClient();
+        services.AddSingleton<ILocalSkillContentResolver>(provider =>
+        {
+            var user = new UserInfoService();
+            var refreshLock = new RemoteSkillRefreshLockRouter(
+                provider.GetRequiredService<IOptionsMonitor<DatabaseSettings>>(),
+                provider.GetRequiredService<IOptionsMonitor<DistributedLockSettings>>(),
+                (_, connectionString) => new PostgresDistributedSynchronizationProvider(connectionString),
+                NullLogger<RemoteSkillRefreshLockRouter>.Instance
+            );
+            return new LocalSkillContentFacade(
+                new SkillAppService(
+                    dbContext,
+                    new AgentCatalogFacade(dbContext, user),
+                    new SkillNameUniquenessDomainService(new SkillRepository(dbContext, user)),
+                    paths,
+                    NullLogger<SkillAppService>.Instance,
+                    new RemoteSkillHttpClient(provider.GetRequiredService<IHttpClientFactory>()),
+                    refreshLock,
+                    InMemoryApplicationLock.Shared,
+                    TimeProvider.System,
+                    user
+                )
+            );
+        });
+        return services.BuildServiceProvider();
     }
 
     private static string FindRepositoryRoot(string startPath)

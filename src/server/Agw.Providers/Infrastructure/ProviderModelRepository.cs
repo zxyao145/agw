@@ -17,24 +17,33 @@ public sealed class ProviderModelRepository : IProviderModelRepository
         _currentUser = currentUser;
     }
 
-    public Task<bool> ProviderExistsAsync(Guid providerId)
+    public Task<bool> ProviderExistsAsync(Guid providerId, CancellationToken cancellationToken = default)
     {
         var ownerUserId = _currentUser.RequiredUserId;
-        return _dbContext.Providers.AnyAsync(provider => provider.Id == providerId && provider.CreateBy == ownerUserId);
+        return _dbContext.Providers.AnyAsync(
+            provider => provider.Id == providerId && provider.CreateBy == ownerUserId,
+            cancellationToken
+        );
     }
 
-    public Task<bool> ModelExistsAsync(Guid modelId)
+    public Task<bool> ModelExistsAsync(Guid modelId, CancellationToken cancellationToken = default)
     {
         var ownerUserId = _currentUser.RequiredUserId;
-        return _dbContext.Models.AnyAsync(model => model.Id == modelId && model.CreateBy == ownerUserId);
+        return _dbContext.Models.AnyAsync(
+            model => model.Id == modelId && model.CreateBy == ownerUserId,
+            cancellationToken
+        );
     }
 
-    public async Task<IReadOnlyList<AgwAiModel>> ListModelsByNameAsync(IReadOnlyCollection<string> modelNames)
+    public async Task<IReadOnlyList<AgwAiModel>> ListModelsByNameAsync(
+        IReadOnlyCollection<string> modelNames,
+        CancellationToken cancellationToken = default
+    )
     {
         var ownerUserId = _currentUser.RequiredUserId;
         return await _dbContext
             .Models.AsNoTracking()
             .Where(model => modelNames.Contains(model.Name) && model.CreateBy == ownerUserId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 }
