@@ -1,13 +1,13 @@
 import { getApiRuntime } from "@agw/api";
-import type {
-  ContextProject,
-  ContextTarget,
-  ContextUser,
-  HostContext,
-  WorkspaceState,
-} from "@desktop/shared/extension-api";
-import type { ExtensionPermission } from "@desktop/shared/extension-permissions";
-import { createExtensionError } from "@desktop/shared/extension-rpc";
+import {
+  type ContextProject,
+  type ContextTarget,
+  type ContextUser,
+  createExtensionError,
+  type ExtensionPermission,
+  type HostContext,
+  type WorkspaceState,
+} from "@agw/extension-sdk";
 
 /** 连接标识：profile id、规范化后的 baseUrl 与当前 token。Connection identity: profile id, normalized base URL and token. */
 export type ConnectionIdentity = {

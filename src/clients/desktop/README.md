@@ -25,17 +25,23 @@ Opening Settings from Chat carries the active Project and optional conversation 
 
 ## Extensions
 
-Extensions add Ribbon items, sidebar and main views, a settings page, chat composer/message/conversation actions and file-tree actions. They are managed under **Settings → Extensions**: install from a folder or a `.zip`, enable (approve permissions), disable, Reload, Uninstall (optionally deleting data), Rescan, open the extensions or data folder, and save the SDK types for authoring. Details also lists running frames with **Inspect** (DevTools) and recently blocked requests.
+Extensions add Ribbon items, sidebar and main views, file viewers, a settings page, chat composer/message/conversation actions and file-tree actions. They are managed under **Settings → Extensions**: install from a folder or a `.zip`, enable (approve permissions), disable, Reload, Uninstall (optionally deleting data), Rescan, open the extensions or data folder, and save the SDK types for authoring. Details also lists running frames with **Inspect** (DevTools) and recently blocked requests.
 
 ### Package
 
 An extension is a directory named after its `id` with `manifest.json` at the root. The manifest is validated by `extensionManifestSchema` in `src/shared/extension-manifest.ts`; the generated `manifest.schema.json` can be referenced through `$schema`. Every path in the manifest is a relative POSIX path inside the package, and `__agw/` is reserved.
 
-Pages load the SDK from `agw-extension://<id>/__agw/sdk.js` (types: `__agw/sdk.d.ts`). A background script uses `defineBackground({ onInstalled, activate, deactivate, commands })`; a view uses `defineView({ onLoad, onShow, onHide, onUnload })`; `connect()` returns the API directly. Pages receive the `ExtensionApi` (`context`, `workspace`, `fs`, `dialog`, `shell`, `execution`, `a2a`, `http`, `chat`, `ui`, `theme`). Any front-end stack that builds to static files works (plain JS, React, Vue, Blazor WebAssembly, WASM).
+Pages load the SDK from `agw-extension://<id>/__agw/sdk.js` (types: `__agw/sdk.d.ts`). A background script uses `defineBackground({ onInstalled, activate, deactivate, commands })`; a view uses `defineView({ onLoad, onShow, onHide, onUnload })`; `connect()` returns the API directly. Pages receive the `ExtensionApi` (`context`, `workspace`, `fs`, `dialog`, `shell`, `execution`, `a2a`, `http`, `chat`, `ui`, `theme`). Any front-end stack that builds to static files works (plain JS, React, Vue, Blazor WebAssembly, WASM). The SDK source and its types are the workspace package `@agw/extension-sdk` (`packages/extension-sdk`); a bundler that marks it external with the output path `/__agw/sdk.js` uses the types at build time and the served SDK at run time.
+
+A `contributes.fileViewers` entry (`{ id, title, icon, patterns, entry }`) opens matching files in the Files view. `patterns` match the file name case-insensitively (`*` and `?`). Matching viewers appear as tabs to the right of the file name, followed by **Source** and, while a viewer is selected, **Reload view** and an Info button whose popup names the viewer and its extension (file viewers have no host title bar); the first viewer is selected. The viewer receives `{ file: { uri, name, projectId } }` in `onLoad`, and `onShow` again when the selected file changes; the host grants read access to that file. `workspace.openFile(uri)` opens another file of the same Project, and `workspace.setUnsavedChanges(unsaved)` marks the tab with "●": while a viewer has unsaved changes, selecting another file or directory, switching Project, opening Settings, reloading the page or quitting Desktop ask for confirmation first. `ui.openExternal` opens approved hosts directly and asks the user for any other `http(s)` address.
+
+### Bundled extensions
+
+`src/clients/packages/extensions/<id>` holds extensions that ship with Desktop (`@agw/extension-<id>`, depending only on `@agw/extension-sdk`): **Markdown Preview** renders `*.md`/`*.markdown` files, and **Excalidraw** opens, edits and saves `*.excalidraw` files (`Cmd/Ctrl+S`). `scripts/build-bundled-extensions.mjs` builds them, validates each `dist/` (manifest, package paths and SDK imports) and copies it to `resources/extensions/<id>`; `dev`, `test:extensions` and packaging run it, and packaged apps read them from the application resources. Bundled extensions are enabled on first run with their declared permissions approved, follow Desktop upgrades (new declarations are approved too), can be disabled like any extension, and stay removed after **Uninstall** (`removedBundledExtensions` in `settings.json`). A user-installed extension with the same `id` replaces the bundled one.
 
 ### Runtime
 
-- Installed packages live in `<userData>/extensions/<id>`; extension data lives in `<userData>/extension-data/<id>` and is exposed to the extension as `context.extension.storageUri`. Install and uninstall use a `journal.json` in `.staging/` so an interrupted operation is completed or rolled back at the next start.
+- Installed packages live in `<userData>/extensions/<id>` and bundled ones in the application resources (`resources/extensions/<id>`); extension data lives in `<userData>/extension-data/<id>` and is exposed to the extension as `context.extension.storageUri`. Install and uninstall use a `journal.json` in `.staging/` so an interrupted operation is completed or rolled back at the next start.
 - Each extension runs in its own session (`persist:agw-extension-<id>`), and every frame (background, sidebar view, main view, settings) is a separate `WebContentsView` created by the main process. The renderer's `ExtensionHost` (`renderer/src/runtime/extensions/`) owns the lifecycle, layout and the per-frame bridge broker; the main process (`src/main/extensions/`) owns installation, sessions, frames, local files, file watching and external HTTP.
 - Network access is limited to the approved `hostPermissions`: a per-extension CSP covers page requests, a per-extension loopback egress proxy covers WebSocket and WebRTC TCP connections, and UDP outside the proxy is disabled. Navigation, popups and Service Workers are blocked. `http.request` follows redirects only to approved hosts.
 - Host menus, dialogs and toasts that cover an extension view temporarily replace the view with a snapshot, so the host UI always stays on top.
@@ -50,7 +56,7 @@ pnpm --filter @agw/desktop test:extension-network   # Electron: egress proxy, CS
 pnpm --filter @agw/desktop test:extensions          # Electron + SQLite Standalone Host: full extension flow
 ```
 
-`test:extensions` builds the renderer, main bundle, SDK and the fixtures under `test-fixtures/`, starts a Standalone Host and local test services, and keeps all files under `.scratch/extension-tests/`.
+`test:extensions` builds the renderer, main bundle, SDK, the bundled extensions and the fixtures under `test-fixtures/`, starts a Standalone Host and local test services, and keeps all files under `.scratch/extension-tests/`. Each bundled extension package also has its own `test`, `typecheck` and `lint` scripts.
 
 ## Develop
 

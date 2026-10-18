@@ -13,6 +13,8 @@ export type DesktopSettings = {
   projectTabsByServer: Record<string, string[]>;
   /** 只通过 extension 管理通道修改。Changed only through the extension management channels. */
   extensions: Record<string, ExtensionSettings>;
+  /** 用户卸载的内置 extension id，它们不再出现。Ids of bundled extensions the user uninstalled; they no longer appear. */
+  removedBundledExtensions: string[];
 };
 
 /** Only fields changed by the caller; tab entries merge per Server. */

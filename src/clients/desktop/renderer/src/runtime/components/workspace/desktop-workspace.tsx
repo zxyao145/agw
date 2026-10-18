@@ -10,9 +10,11 @@ import {
   type ExtensionMenuItem,
 } from "@agw/chat";
 import { useQuery } from "@agw/components/query";
+import type { FileViewerFile } from "@agw/extension-sdk";
 import type { ConversationItemActionArgs, ExplorerContextMenuArgs } from "@agw/projects";
 
 import { formatCloudUri } from "../../extensions/cloud-file-system";
+import { fileBaseName } from "../../extensions/file-viewer-patterns";
 import { toContextProject, toContextTarget } from "../../extensions/extension-bridge-broker";
 import type { ExtensionHost } from "../../extensions/extension-host";
 import { useExtensionRuntime } from "../../extensions/extension-host-provider";
@@ -117,6 +119,40 @@ function DesktopWorkspaceLayout({
     () => tracker.setObscureAll(workspace.isReconnecting),
     [tracker, workspace.isReconnecting],
   );
+
+  // 文件查看器：按当前文件名匹配；不再匹配的查看器 frame 关闭。File viewers match the current file; others close.
+  const { selectedFile, selectedDirectory, openFile } = workspace;
+  const selectedDirectoryId = selectedDirectory?.id ?? null;
+  // 每次渲染按 registry 快照匹配。Matched against the registry snapshot on every render.
+  const fileViewers = selectedFile ? host.registry.fileViewersFor(fileBaseName(selectedFile)) : [];
+  const fileViewerFile = React.useMemo<FileViewerFile | null>(
+    () =>
+      selectedFile && selectedProjectId
+        ? {
+            uri: formatCloudUri({
+              serverId,
+              projectId: selectedProjectId,
+              directoryId: selectedDirectoryId,
+              path: selectedFile,
+            }),
+            name: fileBaseName(selectedFile),
+            projectId: selectedProjectId,
+          }
+        : null,
+    [serverId, selectedProjectId, selectedDirectoryId, selectedFile],
+  );
+  const fileViewerIds = fileViewers.map((view) => view.id).join("\n");
+  React.useEffect(() => {
+    host.retainFileViewers(fileViewerIds ? fileViewerIds.split("\n") : []);
+  }, [host, fileViewerIds]);
+  React.useEffect(() => {
+    host.setFileOpener(async ({ directoryId, path }) => {
+      const opened = await openFile(directoryId, path);
+      if (opened) host.layout.openMainView(BUILT_IN_VIEWS.file);
+      return opened;
+    });
+    return () => host.setFileOpener(null);
+  }, [host, openFile]);
 
   const toMenuItems = <T,>(
     entries: readonly WorkspaceEntry[],
@@ -231,6 +267,8 @@ function DesktopWorkspaceLayout({
             openRequests={layout.openRequests}
             composerActions={composerActions}
             messageActions={messageActions}
+            fileViewers={fileViewers}
+            fileViewerFile={fileViewerFile}
           />
         </ColResizeSplit.Right>
       </ColResizeSplit>
@@ -244,7 +282,10 @@ export function DesktopWorkspace() {
   if (!runtime) throw new Error("DesktopWorkspace requires the extension host.");
   return (
     <div className="relative flex h-full min-h-0 w-full">
-      <ChatWorkspaceProvider routeBasePath="/desktop/chat">
+      <ChatWorkspaceProvider
+        routeBasePath="/desktop/chat"
+        confirmFileChange={() => runtime.host.confirmDiscardUnsaved()}
+      >
         <DesktopWorkspaceLayout host={runtime.host} tracker={runtime.tracker} />
       </ChatWorkspaceProvider>
     </div>

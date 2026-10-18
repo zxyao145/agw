@@ -91,12 +91,9 @@ const SETTINGS_GROUPS: ReadonlyArray<{
   { label: "Workspace", items: [settingsItem(APP_ROUTES.projects)] },
   {
     label: "AI runtime",
-    items: [
-      APP_ROUTES.agents,
-      APP_ROUTES.agentflows,
-      APP_ROUTES.providers,
-      APP_ROUTES.models,
-    ].map((route) => settingsItem(route)),
+    items: [APP_ROUTES.agents, APP_ROUTES.agentflows, APP_ROUTES.providers, APP_ROUTES.models].map(
+      (route) => settingsItem(route),
+    ),
   },
   {
     label: "Capabilities",
@@ -159,7 +156,8 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const desktop = useDesktopRuntime();
   const activity = useExecutionActivity();
   const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
-  const layoutStore = useExtensionRuntime()?.host.layout ?? null;
+  const extensionHost = useExtensionRuntime()?.host ?? null;
+  const layoutStore = extensionHost?.layout ?? null;
   const sidebarVisible = React.useSyncExternalStore(
     layoutStore?.subscribe ?? noSubscription,
     () => (layoutStore?.getSnapshot() ?? DEFAULT_WORKSPACE_LAYOUT).sidebarVisible,
@@ -262,6 +260,27 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     [projects],
   );
 
+  // 离开当前文件（换 Project、换 Server、离开对话页面）前确认文件查看器的未保存修改。
+  // Leaving the current file (another Project or Server, or leaving the chat page) first confirms unsaved changes.
+  const afterUnsavedConfirmed = (action: () => void) => {
+    if (!extensionHost?.hasUnsavedChanges()) {
+      action();
+      return;
+    }
+    void extensionHost.confirmDiscardUnsaved().then((confirmed) => {
+      if (confirmed) action();
+    });
+  };
+  const confirmTitlebarLink = (event: React.MouseEvent) => {
+    if (!extensionHost?.hasUnsavedChanges()) return;
+    const anchor = (event.target as Element).closest("a[href]");
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const href = anchor.getAttribute("href")!;
+    afterUnsavedConfirmed(() => router.push(href));
+  };
+
   const closeTab = (projectId: string) => {
     const status = activity.getProjectStatus(projectId);
     if (
@@ -325,7 +344,10 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const hasBackgroundConversations = tabs.some((id) => activity.getProjectStatus(id) !== "idle");
   return (
     <div className="agw-app-shell">
-      <header className={cn("agw-titlebar", `platform-${platform}`)}>
+      <header
+        className={cn("agw-titlebar", `platform-${platform}`)}
+        onClickCapture={confirmTitlebarLink}
+      >
         <button
           type="button"
           className="agw-titlebar-button agw-titlebar-control"
@@ -354,7 +376,11 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                       type="button"
                       className="cursor-pointer"
                       aria-label={`Close ${projectId}`}
-                      onClick={() => closeTab(projectId)}
+                      onClick={() =>
+                        projectId === activeProjectId
+                          ? afterUnsavedConfirmed(() => closeTab(projectId))
+                          : closeTab(projectId)
+                      }
                     >
                       <X />
                     </button>
@@ -368,7 +394,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
             activeProjectId={activeProjectId}
             isLoading={projectsQuery.isLoading}
             errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
-            onSelect={openProject}
+            onSelect={(projectId) => afterUnsavedConfirmed(() => openProject(projectId))}
             onCreate={createProject}
           />
         </nav>
@@ -455,7 +481,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                       "hover:bg-muted/70 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40",
                       active && "bg-primary/8 text-foreground",
                     )}
-                    onClick={() => switchServer(profile.id)}
+                    onClick={() => afterUnsavedConfirmed(() => switchServer(profile.id))}
                   >
                     <span
                       className={cn(

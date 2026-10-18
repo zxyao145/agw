@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import electronPath from "electron";
 
+import { buildBundledExtensions } from "./build-bundled-extensions.mjs";
 import { buildExtensionSdk } from "./build-extension-sdk.mjs";
 import { watchMain } from "./watch-main.mjs";
 
@@ -111,6 +112,7 @@ let mainWatcher;
 
 try {
   await buildExtensionSdk();
+  await buildBundledExtensions();
   await waitForRenderer();
   electronLaunch = await prepareElectronLaunch();
   if (!stopping) {

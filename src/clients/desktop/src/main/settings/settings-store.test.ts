@@ -398,3 +398,60 @@ test("declaration changes narrow approved grants or disable until approved again
     await scratch.dispose();
   }
 });
+
+test("bundled extensions are enabled by default with their declaration approved, including later additions", async () => {
+  const scratch = await createScratchDirectory("settings-extensions");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    await store.applyBundledExtensions(
+      new Map([["viewer", { permissions: ["fs.cloud.read" as const], hostPermissions: [] }]]),
+    );
+    assert.deepEqual((await store.load()).extensions.viewer, {
+      enabled: true,
+      grantedPermissions: ["fs.cloud.read"],
+      grantedHostPermissions: [],
+      lastActivatedVersion: null,
+    });
+
+    // 用户停用后保持停用；升级新增的权限自动批准。Disabled stays disabled; permissions added by an upgrade are approved.
+    await store.recordExtensionActivation("viewer", "1.0.0");
+    await store.setExtensionEnabled("viewer", false);
+    await store.applyBundledExtensions(
+      new Map([
+        [
+          "viewer",
+          {
+            permissions: ["fs.cloud.read" as const, "fs.cloud.write" as const],
+            hostPermissions: [],
+          },
+        ],
+      ]),
+    );
+    assert.deepEqual((await store.load()).extensions.viewer, {
+      enabled: false,
+      grantedPermissions: ["fs.cloud.read", "fs.cloud.write"],
+      grantedHostPermissions: [],
+      lastActivatedVersion: "1.0.0",
+    });
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("uninstalling a bundled extension records it and keeps it from coming back", async () => {
+  const scratch = await createScratchDirectory("settings-extensions");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    const declared = new Map([["viewer", { permissions: [], hostPermissions: [] }]]);
+    await store.applyBundledExtensions(declared);
+    await store.removeBundledExtension("viewer");
+    await store.removeBundledExtension("viewer");
+    await store.applyBundledExtensions(declared);
+    await store.save({ closeBehavior: "quit-desktop" });
+    const saved = await store.load();
+    assert.deepEqual(saved.extensions, {});
+    assert.deepEqual(saved.removedBundledExtensions, ["viewer"]);
+  } finally {
+    await scratch.dispose();
+  }
+});

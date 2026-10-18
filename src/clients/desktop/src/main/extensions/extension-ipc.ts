@@ -7,6 +7,7 @@ import type {
   ExtensionCaller,
   ExtensionFileSystemRequest,
   ExtensionFrameLayoutUpdate,
+  ExtensionFrameObscureRequest,
   ExtensionGrants,
   ExtensionHttpRequest,
   ExtensionInstallSource,
@@ -127,6 +128,11 @@ export function registerExtensionIpc({
   );
   handle("agw:obscure-extension-frames", (hostInstanceId: string, frameIds: string[]) =>
     runtime.obscureFrames(hostInstanceId, frameIds),
+  );
+  handle(
+    "agw:hide-obscured-extension-frames",
+    (hostInstanceId: string, requests: ExtensionFrameObscureRequest[]) =>
+      runtime.hideObscuredFrames(hostInstanceId, requests),
   );
   handle("agw:reveal-extension-frames", (hostInstanceId: string, frameIds: string[]) =>
     runtime.revealFrames(hostInstanceId, frameIds),

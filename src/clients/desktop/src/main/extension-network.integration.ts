@@ -215,6 +215,8 @@ async function run(): Promise<void> {
     userDataDirectory: userData,
     appVersion: "0.5.0",
     sdkDirectory: resolve("resources/extension-sdk"),
+    // 这个测试只使用临时目录中的 extension。This test uses only the extension in its scratch directory.
+    bundledExtensionsDirectory: join(directory, "bundled-extensions"),
     extensionPreloadPath: resolve("dist/preload/extension.js"),
     settings,
     getMainWindow: () => window,

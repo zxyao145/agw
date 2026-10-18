@@ -4,6 +4,7 @@ import { arch, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildBundledExtensions } from "./build-bundled-extensions.mjs";
 import { buildExtensionSdk } from "./build-extension-sdk.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -56,6 +57,7 @@ await access(resolve(rendererOutput, "index.html")).catch(() => {
 await rm(rendererDirectory, { recursive: true, force: true });
 await cp(rendererOutput, rendererDirectory, { recursive: true });
 await buildExtensionSdk();
+await buildBundledExtensions();
 await writeFile(
   resolve(resourcesDirectory, "package-flavor.json"),
   `${JSON.stringify({ packageFlavor: flavor, appVersion: releaseVersion }, null, 2)}\n`,

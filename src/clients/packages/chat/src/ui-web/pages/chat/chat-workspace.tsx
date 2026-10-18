@@ -30,7 +30,7 @@ import {
   type ConversationSummary,
 } from "@agw/projects";
 import { AgentSelector, type AgentSelection } from "../../components/agent-selector";
-import { Explorer, FileContent } from "@agw/projects";
+import { Explorer, FileContent, type FileViewerOption } from "@agw/projects";
 import type {
   ConversationItemActionArgs,
   ExplorerContextMenuArgs,
@@ -134,6 +134,11 @@ export type ChatWorkspaceProps = {
 
 export type ChatWorkspaceProviderProps = {
   routeBasePath: string;
+  /**
+   * 当前文件改变前的确认（选择其他文件、切换目录或 Project）；返回 false 时保留当前文件。
+   * Confirmation before the current file changes (another file, directory or Project); false keeps the current file.
+   */
+  confirmFileChange?: () => Promise<boolean>;
   children?: React.ReactNode;
 };
 
@@ -179,6 +184,11 @@ export type ChatWorkspaceContextValue = {
   recursiveMode: boolean;
   /** 选中文件；文件与 diff scope 都未变化时不重新加载。Selects a file; nothing reloads when neither the file nor the diff scope changes. */
   selectFile: (filePath: string | null, scope?: GitDiffScope) => void;
+  /**
+   * 确认后选中目录中的文件；用户取消时返回 false。
+   * Selects a file in a directory after confirmation; resolves false when the user cancels.
+   */
+  openFile: (directoryId: string | null, filePath: string) => Promise<boolean>;
   handleFileDeleted: (filePath: string) => void;
   handleFileReset: (filePath: string | null) => void;
   handleFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
@@ -487,8 +497,29 @@ function ProjectRequiredState() {
  * dialog. The dialog is absolutely positioned over the nearest positioned ancestor, so place the
  * Provider inside a positioned container.
  */
-export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspaceProviderProps) {
+export function ChatWorkspaceProvider({
+  routeBasePath,
+  confirmFileChange,
+  children,
+}: ChatWorkspaceProviderProps) {
   const router = useRouter();
+  const confirmFileChangeRef = React.useRef(confirmFileChange);
+  confirmFileChangeRef.current = confirmFileChange;
+  const guardFileChange = React.useCallback(
+    async () => (confirmFileChangeRef.current ? confirmFileChangeRef.current() : true),
+    [],
+  );
+  // 没有确认函数时同步执行，Web 的行为不变。Without a confirmation the action runs synchronously, as before on Web.
+  const afterFileChangeConfirmed = React.useCallback((action: () => void) => {
+    const confirm = confirmFileChangeRef.current;
+    if (!confirm) {
+      action();
+      return;
+    }
+    void confirm().then((confirmed) => {
+      if (confirmed) action();
+    });
+  }, []);
   const searchParams = useSearchParams();
   const executionServerId = useExecutionPlatform().serverId;
   const queryProjectId = searchParams.get("projectId");
@@ -782,11 +813,40 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
 
   const handleOnFileSelected = React.useCallback(
     (filePath: string | null, scope?: GitDiffScope) => {
-      if (filePath && (filePath !== selectedFile || scope !== selectedDiffScope)) {
+      if (!filePath || (filePath === selectedFile && scope === selectedDiffScope)) return;
+      if (filePath === selectedFile) {
         void loadFileContent(filePath, scope);
+        return;
       }
+      afterFileChangeConfirmed(() => void loadFileContent(filePath, scope));
     },
-    [loadFileContent, selectedDiffScope, selectedFile],
+    [afterFileChangeConfirmed, loadFileContent, selectedDiffScope, selectedFile],
+  );
+
+  // 其他目录中的文件在目录切换并清空预览之后加载。A file in another directory loads after the switch clears the preview.
+  const pendingFileRef = React.useRef<{ directoryId: string | null; path: string } | null>(null);
+  const openFile = React.useCallback(
+    async (directoryId: string | null, filePath: string) => {
+      const currentDirectoryId = selectedDirectory?.id ?? null;
+      if (directoryId === currentDirectoryId && filePath === selectedFile) return true;
+      if (!(await guardFileChange())) return false;
+      if (directoryId === currentDirectoryId) {
+        await loadFileContent(filePath);
+      } else {
+        pendingFileRef.current = { directoryId, path: filePath };
+        setSelectedDirectoryId(directoryId);
+      }
+      return true;
+    },
+    [guardFileChange, loadFileContent, selectedDirectory?.id, selectedFile],
+  );
+
+  const selectDirectory = React.useCallback(
+    (directoryId: string | null) => {
+      if (directoryId === selectedDirectoryId) return;
+      afterFileChangeConfirmed(() => setSelectedDirectoryId(directoryId));
+    },
+    [afterFileChangeConfirmed, selectedDirectoryId],
   );
 
   const clearLocalSessionState = React.useCallback(() => {
@@ -913,6 +973,12 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
   React.useEffect(() => {
     clearFilePreview(false);
   }, [clearFilePreview, resolvedWorkspace, selectedProjectId, selectedDirectory?.id]);
+  React.useEffect(() => {
+    const pending = pendingFileRef.current;
+    if (!pending || (selectedDirectory?.id ?? null) !== pending.directoryId) return;
+    pendingFileRef.current = null;
+    void loadFileContent(pending.path);
+  }, [loadFileContent, selectedDirectory?.id]);
   React.useEffect(() => {
     setComments([]);
   }, [selectedProjectId]);
@@ -1078,6 +1144,14 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
       syncRoute(nextProjectId, null);
     },
     [replaceChatSession, selectedProjectId, syncRoute],
+  );
+
+  const selectProject = React.useCallback(
+    (nextProjectId: string) => {
+      if (nextProjectId === selectedProjectId) return;
+      afterFileChangeConfirmed(() => handleProjectChange(nextProjectId));
+    },
+    [afterFileChangeConfirmed, handleProjectChange, selectedProjectId],
   );
 
   const handleTargetChange = React.useCallback(
@@ -1270,7 +1344,7 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
       projects,
       selectedProjectId,
       selectedProject,
-      selectProject: handleProjectChange,
+      selectProject,
       conversationId,
       selectedTarget,
       targetOptions,
@@ -1278,7 +1352,7 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
       composerRef,
       projectDirectories,
       selectedDirectory,
-      selectDirectory: setSelectedDirectoryId,
+      selectDirectory,
       resolvedWorkspace,
       conversationListRefreshSignal,
       conversationStatuses,
@@ -1294,6 +1368,7 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
       setOnlyDiff,
       recursiveMode,
       selectFile: handleOnFileSelected,
+      openFile,
       handleFileDeleted: handleOnFileDeleted,
       handleFileReset: handleOnFileReseted,
       handleFileGitScopeChanged: handleOnFileGitScopeChanged,
@@ -1340,7 +1415,6 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
       handleOnFileReseted,
       handleOnFileSelected,
       handlePendingFileCommentsRemove,
-      handleProjectChange,
       handleProjectConversationsCleared,
       handleReconnectStateChange,
       handleSaveChatSettings,
@@ -1349,6 +1423,7 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
       isReconnecting,
       onlyDiff,
       openConversation,
+      openFile,
       projectDirectories,
       projects,
       recursiveMode,
@@ -1359,6 +1434,8 @@ export function ChatWorkspaceProvider({ routeBasePath, children }: ChatWorkspace
       restoreExecution,
       resultOnly,
       searchDirectoryIds,
+      selectDirectory,
+      selectProject,
       selectedDiffScope,
       selectedDirectory,
       selectedFile,
@@ -1545,8 +1622,23 @@ export function ChatConversationPane({
   );
 }
 
+export type ChatFilePaneProps = {
+  /** 匹配当前文件的查看器（Desktop extension）。Viewers matching the current file (Desktop extensions). */
+  fileViewers?: readonly FileViewerOption[];
+  renderFileViewer?: (viewerId: string) => React.ReactNode;
+  /** 重新加载查看器。Reloads a viewer. */
+  onReloadFileViewer?: (viewerId: string) => void;
+  /** 显示在 "Reload view" 右侧的查看器说明。The viewer info shown to the right of "Reload view". */
+  renderFileViewerInfo?: (viewerId: string) => React.ReactNode;
+};
+
 /** 选中文件的内容或 diff；未选择项目时显示提示。The selected file's content or diff, or a prompt without a project. */
-export function ChatFilePane() {
+export function ChatFilePane({
+  fileViewers,
+  renderFileViewer,
+  onReloadFileViewer,
+  renderFileViewerInfo,
+}: ChatFilePaneProps = {}) {
   const workspace = useChatWorkspace();
   const { projectDirectories, selectedDirectory, selectedProjectId } = workspace;
 
@@ -1568,6 +1660,10 @@ export function ChatFilePane() {
       setComments={workspace.setComments}
       fileContent={workspace.fileContent}
       diffScope={workspace.selectedDiffScope}
+      fileViewers={fileViewers}
+      renderFileViewer={renderFileViewer}
+      onReloadFileViewer={onReloadFileViewer}
+      renderFileViewerInfo={renderFileViewerInfo}
     />
   );
 }
@@ -1793,7 +1889,7 @@ function ChatWorkspaceLayout({
               </TabsContent>
 
               <TabsContent value="files" className="flex min-h-0 flex-1">
-                <div className="flex justify-center flex-1 overflow-hidden">
+                <div className="flex justify-center flex-1 overflow-hidden px-2">
                   <ChatFilePane />
                 </div>
               </TabsContent>

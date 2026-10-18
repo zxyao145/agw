@@ -1,13 +1,9 @@
 // Agw Desktop extension SDK。extension 用 `import { defineView } from "/__agw/sdk.js"` 引用。
 // The Agw Desktop extension SDK, imported with `import { defineView } from "/__agw/sdk.js"`.
-import type {
-  BackgroundDefinition,
-  ExtensionApi,
-  ViewDefinition,
-} from "../../src/shared/extension-api";
+import type { BackgroundDefinition, ExtensionApi, ViewDefinition } from "../api";
 import { connect as connectToHost, registerBackground, registerView } from "./connection";
 
-export type * from "../../src/shared/extension-api";
+export type * from "../api";
 
 /** 建立连接并返回 API。Connects and returns the API. */
 export function connect(): Promise<ExtensionApi> {

@@ -1,6 +1,5 @@
 import { createParser } from "eventsource-parser";
-import type { A2AStreamMethod } from "@desktop/shared/extension-api";
-import { createExtensionError } from "@desktop/shared/extension-rpc";
+import { type A2AStreamMethod, createExtensionError } from "@agw/extension-sdk";
 import type { ConnectionIdentity, ContextService } from "./context-service";
 
 /** 宿主放行的 A2A 方法；推送通知配置相关的方法被拒绝。A2A methods the host allows; push-notification config methods are refused. */

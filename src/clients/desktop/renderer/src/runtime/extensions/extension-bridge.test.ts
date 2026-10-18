@@ -3,16 +3,21 @@ import test, { after } from "node:test";
 
 import { configureApiRuntime } from "@agw/api";
 import { rawApiResponse, startApiServer } from "@agw/test-harness";
-import type {
-  ExtensionApi,
-  ExtensionManifest,
-  ExtensionWelcome,
-  HostContext,
-} from "@desktop/shared/extension-api";
+import {
+  createExtensionApi,
+  createExtensionError,
+  type EventRouter,
+  type ExtensionApi,
+  ExtensionError,
+  type ExtensionFrameKind,
+  type ExtensionManifest,
+  type ExtensionPermission,
+  type ExtensionWelcome,
+  type HostContext,
+  RpcEndpoint,
+  type RpcPort,
+} from "@agw/extension-sdk";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
-import type { ExtensionPermission } from "@desktop/shared/extension-permissions";
-import { ExtensionError, RpcEndpoint, type RpcPort } from "@desktop/shared/extension-rpc";
-import { createExtensionApi, type EventRouter } from "../../../../extension-sdk/src/api";
 import { A2AService } from "./a2a-service";
 import { CloudAccessGrants, CloudFileSystem, formatCloudUri } from "./cloud-file-system";
 import { ContextService, connectionKeyOf } from "./context-service";
@@ -58,7 +63,16 @@ async function connectSdk(port: MessagePort): Promise<{
   };
 }
 
-async function createHarness(permissions: ExtensionPermission[]) {
+type HarnessOptions = {
+  kind?: ExtensionFrameKind;
+  /** 用户对打开链接的回答。The user's answer to opening a link. */
+  openLink?: boolean;
+  openFile?(extensionId: string, uri: string): Promise<void>;
+};
+
+async function createHarness(permissions: ExtensionPermission[], options: HarnessOptions = {}) {
+  const linkRequests: string[] = [];
+  const unsaved: [string, string, boolean][] = [];
   const api = await startApiServer({
     "GET /api/files/download": rawApiResponse({
       headers: { "content-type": "application/octet-stream" },
@@ -112,6 +126,15 @@ async function createHarness(permissions: ExtensionPermission[]) {
     insertComposerText: () => undefined,
     notify: () => undefined,
     onPong: () => undefined,
+    openFile: async (extensionId, uri) => {
+      if (!options.openFile) throw new Error("openFile is not part of this test.");
+      await options.openFile(extensionId, uri);
+    },
+    setUnsavedChanges: (frameId, pageId, value) => unsaved.push([frameId, pageId, value]),
+    confirmOpenExternal: async (_extensionId, url) => {
+      linkRequests.push(url);
+      return options.openLink === true;
+    },
   });
   const channel = new MessageChannel();
   broker.connect(
@@ -119,7 +142,7 @@ async function createHarness(permissions: ExtensionPermission[]) {
       extensionId: "sample",
       frameId: "frame-1",
       pageId: "page-1",
-      kind: "mainView",
+      kind: options.kind ?? "mainView",
       viewId: "app",
       params: { a: 1 },
     },
@@ -136,6 +159,8 @@ async function createHarness(permissions: ExtensionPermission[]) {
     context,
     key,
     broker,
+    linkRequests,
+    unsaved,
     uri: (path: string) =>
       formatCloudUri({ serverId: "local", projectId: PROJECT, directoryId: null, path }),
   };
@@ -245,4 +270,48 @@ test("the context snapshot and change events only carry permitted fields", async
   assert.equal("project" in restrictedChanges[0], false);
   assert.equal(projectChanges[0].project?.id, "next");
   assert.equal(withProject.api.context.get().project?.id, "next");
+});
+
+test("only file viewers report unsaved changes", async () => {
+  const view = await createHarness([]);
+  await assert.rejects(view.api.workspace.setUnsavedChanges(true), {
+    code: "ERR_UNSUPPORTED_OPERATION",
+  });
+  assert.deepEqual(view.unsaved, []);
+
+  const viewer = await createHarness([], { kind: "fileViewer" });
+  await viewer.api.workspace.setUnsavedChanges(true);
+  await viewer.api.workspace.setUnsavedChanges(false);
+  assert.deepEqual(viewer.unsaved, [
+    ["frame-1", "page-1", true],
+    ["frame-1", "page-1", false],
+  ]);
+});
+
+test("openFile passes the URI to the host and returns its rejection", async () => {
+  const opened: [string, string][] = [];
+  const { api, uri } = await createHarness([], {
+    openFile: async (extensionId, target) => {
+      opened.push([extensionId, target]);
+      if (target.endsWith("cancel.md")) throw createExtensionError("ERR_CANCELED", "Canceled.");
+    },
+  });
+  await api.workspace.openFile(uri("docs/notes.md"));
+  await assert.rejects(api.workspace.openFile(uri("cancel.md")), { code: "ERR_CANCELED" });
+  assert.deepEqual(opened, [
+    ["sample", uri("docs/notes.md")],
+    ["sample", uri("cancel.md")],
+  ]);
+});
+
+test("openExternal accepts only HTTP(S) and asks the user about unapproved hosts", async () => {
+  const declined = await createHarness([], { openLink: false });
+  await assert.rejects(declined.api.ui.openExternal("mailto:someone@example.com"), {
+    code: "ERR_INVALID_URL",
+  });
+  await assert.rejects(declined.api.ui.openExternal("not a url"), { code: "ERR_INVALID_URL" });
+  await assert.rejects(declined.api.ui.openExternal("https://example.com/docs"), {
+    code: "ERR_CANCELED",
+  });
+  assert.deepEqual(declined.linkRequests, ["https://example.com/docs"]);
 });

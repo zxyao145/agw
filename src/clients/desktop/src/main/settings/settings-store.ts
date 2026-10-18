@@ -10,7 +10,7 @@ import type {
   PackageFlavor,
 } from "../../shared/contracts";
 import { HOST_PERMISSION_PATTERN } from "../../shared/extension-host-permissions";
-import { EXTENSION_PERMISSIONS } from "../../shared/extension-permissions";
+import { EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import { writeJsonFile } from "./json-file";
 import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
 
@@ -77,6 +77,7 @@ export class DesktopSettingsStore {
         activeServerId,
         projectTabsByServer: parsed.projectTabsByServer ?? {},
         extensions: extensionSettingsSchema.parse(parsed.extensions ?? {}),
+        removedBundledExtensions: z.array(z.string()).parse(parsed.removedBundledExtensions ?? []),
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -223,15 +224,62 @@ export class DesktopSettingsStore {
     });
   }
 
+  /**
+   * 内置 extension：没有设置项且未被卸载时默认启用并批准声明；已有设置项时把批准集合更新为当前声明，保持启用状态。
+   * Bundled extensions: without an entry and not uninstalled they are enabled with the declaration approved;
+   * existing entries get the current declaration approved and keep their enabled state.
+   */
+  public async applyBundledExtensions(
+    declared: ReadonlyMap<string, ExtensionGrants>,
+  ): Promise<void> {
+    await this.updateExtensionState((state) => {
+      for (const [extensionId, grants] of declared) {
+        if (state.removedBundledExtensions.includes(extensionId)) continue;
+        const current = state.extensions[extensionId];
+        state.extensions[extensionId] = {
+          enabled: current?.enabled ?? true,
+          grantedPermissions: [...grants.permissions],
+          grantedHostPermissions: [...grants.hostPermissions],
+          lastActivatedVersion: current?.lastActivatedVersion ?? null,
+        };
+      }
+    });
+  }
+
+  /** 卸载内置 extension：记录 id 并删除设置项。Uninstalling a bundled extension records its id and deletes its entry. */
+  public async removeBundledExtension(extensionId: string): Promise<void> {
+    await this.updateExtensionState((state) => {
+      delete state.extensions[extensionId];
+      if (!state.removedBundledExtensions.includes(extensionId)) {
+        state.removedBundledExtensions.push(extensionId);
+      }
+    });
+  }
+
   private async updateExtensions(
     change: (extensions: Record<string, ExtensionSettings>) => void,
   ): Promise<void> {
+    await this.updateExtensionState((state) => change(state.extensions));
+  }
+
+  private async updateExtensionState(
+    change: (state: Pick<DesktopSettings, "extensions" | "removedBundledExtensions">) => void,
+  ): Promise<void> {
     await this.enqueueWrite(async () => {
       const current = await this.load();
-      const extensions = structuredClone(current.extensions);
-      change(extensions);
-      if (JSON.stringify(extensions) === JSON.stringify(current.extensions)) return;
-      await writeJsonFile(this.settingsFile, { ...current, extensions });
+      const state = structuredClone({
+        extensions: current.extensions,
+        removedBundledExtensions: current.removedBundledExtensions,
+      });
+      change(state);
+      if (
+        JSON.stringify(state.extensions) === JSON.stringify(current.extensions) &&
+        JSON.stringify(state.removedBundledExtensions) ===
+          JSON.stringify(current.removedBundledExtensions)
+      ) {
+        return;
+      }
+      await writeJsonFile(this.settingsFile, { ...current, ...state });
     });
   }
 
@@ -262,6 +310,7 @@ export class DesktopSettingsStore {
       activeServerId: "local",
       projectTabsByServer: {},
       extensions: {},
+      removedBundledExtensions: [],
     };
   }
 

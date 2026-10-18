@@ -50,6 +50,8 @@ function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHost
     recoveryNotices: [],
     extensions: [],
     viewErrors: {},
+    unsavedViewIds: [],
+    confirmation: null,
     ...overrides,
   };
 }
@@ -75,6 +77,23 @@ test("the title bar names the view and its extension and reloads the view", () =
   );
   environment.fireEvent.click(environment.screen.getByRole("button", { name: "Reload view" }));
   assert.equal(reloads, 1);
+});
+
+test("the file viewer Info button shows the title bar content in a popup", async () => {
+  render(environment.React.createElement(views.ExtensionViewInfo, { view }));
+  assert.equal(document.querySelector('[data-slot="popover-content"]'), null);
+
+  await environment.act(async () => {
+    environment.fireEvent.click(environment.screen.getByRole("button", { name: "View info" }));
+  });
+
+  const popup = document.querySelector('[data-slot="popover-content"]')!;
+  assert.match(popup.textContent ?? "", /Greeting app/u);
+  assert.match(popup.textContent ?? "", /Sample/u);
+  assert.equal(
+    popup.querySelector("img")?.getAttribute("src"),
+    view.icon.kind === "image" ? view.icon.src : null,
+  );
 });
 
 test("the slot shows the snapshot while a host overlay covers the view", () => {

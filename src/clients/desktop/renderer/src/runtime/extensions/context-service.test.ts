@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { apiGet, configureApiRuntime } from "@agw/api";
 import { startApiServer } from "@agw/test-harness";
-import type { HostContext } from "@desktop/shared/extension-api";
+import type { HostContext } from "@agw/extension-sdk";
 import { ContextService, connectionKeyOf, filterContextForPermissions } from "./context-service";
 
 const app: HostContext["app"] = { version: "0.5.0", platform: "darwin", architecture: "arm64" };

@@ -1,4 +1,4 @@
-import { createExtensionError } from "@desktop/shared/extension-rpc";
+import { createExtensionError } from "@agw/extension-sdk";
 import { DEFAULT_MAIN_VIEW_ID, DEFAULT_SIDEBAR_VIEW_ID } from "./workspace-ids";
 import type { WorkspaceRegistry, WorkspaceViewLocation } from "./workspace-registry";
 

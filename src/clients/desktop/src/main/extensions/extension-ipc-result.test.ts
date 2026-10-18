@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 
-import { ExtensionError, fromExtensionErrorData } from "../../shared/extension-rpc";
+import { ExtensionError, fromExtensionErrorData } from "@agw/extension-sdk";
 import { createScratchDirectory } from "../scratch-directory.test-helper";
 import { toExtensionIpcResult } from "./extension-ipc-result";
 

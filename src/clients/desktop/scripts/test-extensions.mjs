@@ -18,6 +18,7 @@ import {
   HTTP_PORT_PLACEHOLDER,
   writeSampleV2Zip,
 } from "./build-extension-fixtures.mjs";
+import { buildBundledExtensions } from "./build-bundled-extensions.mjs";
 import { buildExtensionSdk } from "./build-extension-sdk.mjs";
 import { mainBuildOptions } from "./build-main.mjs";
 
@@ -29,6 +30,34 @@ const fixtures = join(root, "fixtures");
 const projectDirectory = join(root, "project");
 const adminPassword = randomBytes(18).toString("hex");
 const children = new Set();
+
+const GUIDE_MARKDOWN = `# Guide
+
+| Name | Value |
+| --- | --- |
+| alpha | 1 |
+
+\`\`\`js
+const answer = 42;
+\`\`\`
+
+![Logo](images/logo.png)
+
+[Notes](docs/notes.md) and [Example](https://example.com/docs).
+`;
+
+// 两个元素的 Excalidraw 场景，其余字段由 restore 补全。A two-element scene; restore fills the other fields.
+const DIAGRAM = {
+  type: "excalidraw",
+  version: 2,
+  source: "https://excalidraw.com",
+  elements: [
+    { id: "box", type: "rectangle", x: 100, y: 100, width: 160, height: 80 },
+    { id: "circle", type: "ellipse", x: 320, y: 100, width: 100, height: 100 },
+  ],
+  appState: { viewBackgroundColor: "#ffffff" },
+  files: {},
+};
 
 function run(command, args, options = {}) {
   return new Promise((resolvePromise, reject) => {
@@ -263,6 +292,18 @@ async function prepareServerData(baseUrl, echoPort) {
   await mkdir(join(projectDirectory, "docs"), { recursive: true });
   await writeFile(join(projectDirectory, "readme.md"), "hello cloud\n");
   await writeFile(join(projectDirectory, "docs", "notes.md"), "project notes\n");
+  // 内置文件查看器使用的文件。Files for the bundled file viewers.
+  await mkdir(join(projectDirectory, "images"), { recursive: true });
+  await cp(
+    join(desktopDirectory, "assets", "agw-logo.png"),
+    join(projectDirectory, "images", "logo.png"),
+  );
+  await writeFile(join(projectDirectory, "guide.md"), GUIDE_MARKDOWN);
+  await writeFile(
+    join(projectDirectory, "diagram.excalidraw"),
+    `${JSON.stringify(DIAGRAM, null, 2)}\n`,
+  );
+  await writeFile(join(projectDirectory, "blank.excalidraw"), "");
   const project = await api(baseUrl, session, "POST", "/api/projects", {
     name: "Extension tests",
     description: "Project for the extension integration tests.",
@@ -325,6 +366,7 @@ async function main() {
   );
   await build(mainBuildOptions);
   await buildExtensionSdk();
+  await buildBundledExtensions();
   await buildExtensionFixtures(fixtures);
 
   await run("dotnet", ["build", "src/server/Agw.Standalone.Host"], { cwd: repositoryRoot });

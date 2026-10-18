@@ -46,6 +46,7 @@ function createRegistry(): WorkspaceRegistry {
 
 const sample: InstalledExtension = {
   id: "sample",
+  source: "user",
   directory: "/extensions/sample",
   validation: "valid",
   errors: [],
@@ -107,9 +108,76 @@ const sample: InstalledExtension = {
           action: { type: "toggleSidebarView", view: "list" },
         },
       ],
+      fileViewers: [
+        {
+          id: "markdown",
+          title: "Markdown",
+          icon: "BookOpen",
+          patterns: ["*.md"],
+          entry: "md.html",
+        },
+        {
+          id: "readme",
+          title: "Readme",
+          icon: "Book",
+          patterns: ["README*"],
+          entry: "readme.html",
+        },
+      ],
     },
   },
 };
+
+/** 另一个声明 `*.md` 查看器的 extension，id 排在 sample 之前。Another extension with a `*.md` viewer, sorted before sample. */
+function alphaRegistration() {
+  return extensionRegistration({
+    ...sample,
+    id: "alpha",
+    manifest: {
+      ...sample.manifest!,
+      id: "alpha",
+      name: "Alpha",
+      contributes: {
+        fileViewers: [
+          { id: "md", title: "Alpha MD", icon: "Box", patterns: ["*.MD"], entry: "index.html" },
+        ],
+      },
+    },
+  });
+}
+
+test("file viewers match by name, ordered by extension id and then declaration order", () => {
+  const registry = createRegistry();
+  registry.registerExtension("sample", extensionRegistration(sample));
+  registry.registerExtension("alpha", alphaRegistration());
+
+  const viewer = registry.view("sample:markdown")!;
+  assert.equal(viewer.location, "file");
+  assert.equal(viewer.retainContextWhenHidden, true);
+  assert.deepEqual(viewer.patterns, ["*.md"]);
+  assert.deepEqual(
+    registry.fileViewersFor("README.md").map((view) => view.id),
+    ["alpha:md", "sample:markdown", "sample:readme"],
+  );
+  assert.deepEqual(
+    registry.fileViewersFor("notes.md").map((view) => view.id),
+    ["alpha:md", "sample:markdown"],
+  );
+  assert.deepEqual(registry.fileViewersFor("diagram.excalidraw"), []);
+
+  // 停用后不再匹配；失败时保留并标记。Unregistered viewers stop matching; failed ones stay marked.
+  registry.unregisterExtension("alpha");
+  registry.markExtensionFailed(
+    "sample",
+    { code: "UNRESPONSIVE", message: "gone" },
+    extensionRegistration(sample).views,
+  );
+  const failed = registry.fileViewersFor("notes.md");
+  assert.deepEqual(
+    failed.map((view) => [view.id, view.failure?.code]),
+    [["sample:markdown", "UNRESPONSIVE"]],
+  );
+});
 
 test("registering an extension adds its views and entries and notifies subscribers", () => {
   const registry = createRegistry();

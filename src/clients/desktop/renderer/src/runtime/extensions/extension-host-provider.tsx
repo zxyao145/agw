@@ -5,7 +5,8 @@ import { useTheme } from "next-themes";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import type { ThemeInfo } from "@desktop/shared/extension-api";
+import type { ThemeInfo } from "@agw/extension-sdk";
+import { HostConfirmationDialog } from "../components/workspace/host-confirmation-dialog";
 import { useDesktopRuntime } from "../runtime-provider";
 import { normalizeBaseUrl } from "./context-service";
 import { ExtensionHost } from "./extension-host";
@@ -171,7 +172,12 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
     return () => cancelAnimationFrame(frame);
   }, [host, resolvedTheme]);
 
-  return <ExtensionHostContext value={value}>{children}</ExtensionHostContext>;
+  return (
+    <ExtensionHostContext value={value}>
+      {children}
+      {host ? <HostConfirmationDialog host={host} /> : null}
+    </ExtensionHostContext>
+  );
 }
 
 /** 宿主与遮挡跟踪器；预渲染阶段为 null。The host and overlay tracker; null while prerendering. */

@@ -12,8 +12,8 @@ import type {
   HostContext,
   HttpResponse,
   ThemeInfo,
-} from "../../src/shared/extension-api";
-import { createExtensionError, type RpcEndpoint } from "../../src/shared/extension-rpc";
+} from "../api";
+import { createExtensionError, type RpcEndpoint } from "../rpc";
 
 export type EventRouter = Map<string, Set<(data: unknown) => void>>;
 
@@ -95,6 +95,8 @@ export function createExtensionApi(
       toggleSidebarView: (id) => call("workspace.toggleSidebarView", { id }),
       setSidebarVisible: (visible) => call("workspace.setSidebarVisible", { visible }),
       openMainView: (id, params) => call("workspace.openMainView", { id, params: params ?? {} }),
+      openFile: (uri) => call("workspace.openFile", { uri }),
+      setUnsavedChanges: (unsaved) => call("workspace.setUnsavedChanges", { unsaved }),
     },
     fs: {
       kind: fileKind,

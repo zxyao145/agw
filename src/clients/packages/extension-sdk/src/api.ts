@@ -1,7 +1,7 @@
 // Extension API 类型，只含类型声明；SDK 与宿主用 `import type` 引用，`sdk.d.ts` 由此生成。
 // Extension API types (declarations only); the SDK and the host import them with `import type`, and `sdk.d.ts` is generated from them.
 import type { ExecutionMessage, InteractionResponse, PermissionMode } from "@agw/execution-core";
-import type { ExtensionPermission } from "./extension-permissions";
+import type { ExtensionPermission } from "./permissions";
 
 export type { ExecutionMessage, InteractionResponse, PermissionMode, ExtensionPermission };
 
@@ -40,6 +40,19 @@ export interface ExtensionMainViewContribution {
   retainContextWhenHidden?: boolean;
 }
 
+/**
+ * 文件查看器：Files 的文件视图显示文件名匹配 `patterns` 的文件时使用。
+ * A file viewer, used by the Files view for files whose names match `patterns`.
+ */
+export interface ExtensionFileViewerContribution {
+  id: string;
+  title: string;
+  icon: string;
+  /** 文件基本名的模式，不区分大小写；`*` 匹配任意个字符，`?` 匹配一个字符。Case-insensitive base-name patterns; `*` matches any run, `?` one character. */
+  patterns: string[];
+  entry: string;
+}
+
 export interface ExtensionContributes {
   commands?: ExtensionCommandContribution[];
   ribbon?: ExtensionActionContribution[];
@@ -52,6 +65,7 @@ export interface ExtensionContributes {
     conversationActions?: ExtensionActionContribution[];
   };
   explorerActions?: ExtensionActionContribution[];
+  fileViewers?: ExtensionFileViewerContribution[];
 }
 
 export interface ExtensionManifest {
@@ -118,7 +132,10 @@ export interface ExtensionApi {
   };
   readonly ui: {
     notify(notification: { type: "info" | "success" | "error"; message: string }): void;
-    /** URL 必须匹配已批准的域名。The URL must match an approved host permission. */
+    /**
+     * 用系统浏览器打开 `http:` 或 `https:` 地址。匹配已批准域名的地址直接打开，其他地址先由用户确认。
+     * Opens an `http:` or `https:` URL in the system browser. URLs on approved hosts open directly; others need the user's confirmation.
+     */
     openExternal(url: string): Promise<void>;
   };
   readonly theme: {
@@ -139,7 +156,21 @@ export interface BackgroundDefinition {
   commands?: Record<string, (args: unknown, api: ExtensionApi) => void | Promise<void>>;
 }
 
+/** 文件查看器打开的云端文件。The cloud file a file viewer opens. */
+export interface FileViewerFile {
+  /** `agw-cloud://` 地址。An `agw-cloud://` URI. */
+  uri: string;
+  name: string;
+  projectId: string;
+}
+
+/** 文件查看器 `onLoad` 与 `onShow` 的参数。The `onLoad` and `onShow` params of a file viewer. */
+export interface FileViewerParams {
+  file: FileViewerFile;
+}
+
 export interface ViewDefinition {
+  /** 文件查看器的 `params` 为 `FileViewerParams`。A file viewer's `params` is `FileViewerParams`. */
   onLoad?(api: ExtensionApi, params: unknown): void | Promise<void>;
   onShow?(params: unknown): void;
   onHide?(): void;
@@ -208,6 +239,13 @@ export interface WorkspaceApi {
   toggleSidebarView(id: string): Promise<void>;
   setSidebarVisible(visible: boolean): Promise<void>;
   openMainView(id: string, params?: unknown): Promise<void>;
+  /**
+   * 在 Files 中选中并在文件视图中打开当前 Project 的云端文件；有未保存修改时先由用户确认。
+   * Selects and opens a cloud file of the current Project in the Files view, after confirming unsaved changes.
+   */
+  openFile(uri: string): Promise<void>;
+  /** 文件查看器报告未保存修改。A file viewer reports unsaved changes. */
+  setUnsavedChanges(unsaved: boolean): Promise<void>;
 }
 
 /* ---------- 文件系统 File system ---------- */
@@ -351,7 +389,12 @@ export interface HttpResponse {
 
 /* ---------- bridge 协议 Bridge protocol ---------- */
 
-export type ExtensionFrameKind = "background" | "sidebarView" | "mainView" | "settings";
+export type ExtensionFrameKind =
+  | "background"
+  | "sidebarView"
+  | "mainView"
+  | "fileViewer"
+  | "settings";
 
 /** `welcome` 事件的数据。Data of the `welcome` event. */
 export interface ExtensionWelcome {

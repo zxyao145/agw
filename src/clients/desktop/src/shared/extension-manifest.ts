@@ -1,3 +1,4 @@
+import { EXTENSION_PERMISSIONS, type ExtensionManifest } from "@agw/extension-sdk";
 import semver from "semver";
 import { z } from "zod";
 import {
@@ -5,9 +6,7 @@ import {
   isSupportedDesktopVersion,
 } from "../main/update/github-release-updater";
 import type { ExtensionValidation, ExtensionValidationError } from "./contracts/extension";
-import type { ExtensionManifest } from "./extension-api";
 import { HOST_PERMISSION_PATTERN } from "./extension-host-permissions";
-import { EXTENSION_PERMISSIONS } from "./extension-permissions";
 
 export const EXTENSION_MANIFEST_VERSION_MIN = 1;
 export const EXTENSION_MANIFEST_VERSION_CURRENT = 1;
@@ -52,6 +51,13 @@ const actionContributionSchema = z.strictObject({
   icon: iconSchema,
   action: actionSchema,
 });
+
+// 文件查看器的文件名模式：不含路径分隔符。File viewer name patterns contain no path separators.
+const fileViewerPatternSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(new RegExp(String.raw`^[^/\\\u0000]+$`, "u"));
 
 export const extensionManifestSchema = z
   .strictObject({
@@ -105,6 +111,17 @@ export const extensionManifestSchema = z
           })
           .optional(),
         explorerActions: z.array(actionContributionSchema).optional(),
+        fileViewers: z
+          .array(
+            z.strictObject({
+              id: localIdSchema,
+              title: titleSchema,
+              icon: iconSchema,
+              patterns: z.array(fileViewerPatternSchema).min(1).max(20),
+              entry: entrySchema,
+            }),
+          )
+          .optional(),
       })
       .optional(),
     permissions: z.array(z.enum(EXTENSION_PERMISSIONS)).optional(),
@@ -129,15 +146,37 @@ export const extensionManifestSchema = z
     unique(contributes.chat?.messageActions, ["contributes", "chat", "messageActions"]);
     unique(contributes.chat?.conversationActions, ["contributes", "chat", "conversationActions"]);
     unique(contributes.explorerActions, ["contributes", "explorerActions"]);
+    unique(contributes.fileViewers, ["contributes", "fileViewers"]);
 
-    const uniqueValues = (values: readonly string[] | undefined, path: string) =>
+    // 侧栏视图、主区视图与文件查看器共用 `<extensionId>:<id>` 视图 id。
+    // Sidebar views, main views and file viewers share the `<extensionId>:<id>` view id.
+    const viewOwners = new Map<string, string>();
+    for (const collection of ["sidebarViews", "mainViews", "fileViewers"] as const) {
+      contributes[collection]?.forEach((view, index) => {
+        const owner = viewOwners.get(view.id);
+        if (owner !== undefined && owner !== collection) {
+          report("DUPLICATE_ID", `View id "${view.id}" is also used in ${owner}.`, [
+            "contributes",
+            collection,
+            index,
+            "id",
+          ]);
+        }
+        viewOwners.set(view.id, owner ?? collection);
+      });
+    }
+
+    const uniqueValues = (values: readonly string[] | undefined, path: (string | number)[]) =>
       values?.forEach((value, index) => {
         if (values.indexOf(value) !== index) {
-          report("DUPLICATE_VALUE", `Duplicate value "${value}".`, [path, index]);
+          report("DUPLICATE_VALUE", `Duplicate value "${value}".`, [...path, index]);
         }
       });
-    uniqueValues(manifest.permissions, "permissions");
-    uniqueValues(manifest.hostPermissions, "hostPermissions");
+    uniqueValues(manifest.permissions, ["permissions"]);
+    uniqueValues(manifest.hostPermissions, ["hostPermissions"]);
+    contributes.fileViewers?.forEach((viewer, index) =>
+      uniqueValues(viewer.patterns, ["contributes", "fileViewers", index, "patterns"]),
+    );
 
     const mainViews = new Set(contributes.mainViews?.map((view) => view.id));
     const sidebarViews = new Set(contributes.sidebarViews?.map((view) => view.id));
@@ -185,8 +224,8 @@ export const extensionManifestSchema = z
     checkActions(contributes.explorerActions, ["contributes", "explorerActions"]);
   });
 
-// SDK 的 `sdk.d.ts` 使用 extension-api.ts 中显式声明的类型；这里保证它与 schema 推导出的类型相同。
-// The SDK's `sdk.d.ts` uses the explicit type in extension-api.ts; this keeps it identical to the type inferred from the schema.
+// SDK 的 `sdk.d.ts` 使用 `@agw/extension-sdk` 中显式声明的类型；这里保证它与 schema 推导出的类型相同。
+// The SDK's `sdk.d.ts` uses the explicit type in `@agw/extension-sdk`; this keeps it identical to the type inferred from the schema.
 type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const manifestTypeMatchesSchema: MutuallyAssignable<
   z.output<typeof extensionManifestSchema>,
@@ -321,6 +360,14 @@ export function manifestPackagePaths(manifest: ExtensionManifest): ManifestPacka
   contributes.mainViews?.forEach((view, index) => {
     icon(view.icon, `contributes.mainViews[${index}].icon`);
     paths.push({ path: view.entry, field: `contributes.mainViews[${index}].entry`, kind: "entry" });
+  });
+  contributes.fileViewers?.forEach((viewer, index) => {
+    icon(viewer.icon, `contributes.fileViewers[${index}].icon`);
+    paths.push({
+      path: viewer.entry,
+      field: `contributes.fileViewers[${index}].entry`,
+      kind: "entry",
+    });
   });
   if (contributes.settings) {
     paths.push({

@@ -1,10 +1,5 @@
-import type {
-  BackgroundDefinition,
-  ExtensionApi,
-  ExtensionWelcome,
-  ViewDefinition,
-} from "../../src/shared/extension-api";
-import { createExtensionError, RpcEndpoint, type RpcPort } from "../../src/shared/extension-rpc";
+import type { BackgroundDefinition, ExtensionApi, ExtensionWelcome, ViewDefinition } from "../api";
+import { createExtensionError, RpcEndpoint, type RpcPort } from "../rpc";
 import { createExtensionApi, type EventRouter } from "./api";
 
 /** SDK 对应的 Extension API 版本。The Extension API version of this SDK. */

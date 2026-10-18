@@ -57,7 +57,17 @@ export function ExtensionViewSlot({ host, tracker, frameId, snapshot }: Extensio
       className={cn("agw-extension-view-slot", snapshot && "is-snapshot")}
       data-frame-id={frameId}
     >
-      {snapshot ? <img src={snapshot} alt="" aria-hidden="true" /> : null}
+      {snapshot ? (
+        // 同步解码：加载完成后的下一次绘制一定包含截图，宿主随后隐藏 view。
+        // Synchronous decoding: the paint after loading always includes the snapshot, then the host hides the view.
+        <img
+          src={snapshot}
+          alt=""
+          aria-hidden="true"
+          decoding="sync"
+          onLoad={() => host.snapshotShown(frameId, snapshot)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -8,17 +8,19 @@ import type {
   ExtensionSafeModeState,
   InstalledExtension,
 } from "@desktop/shared/contracts";
-import type {
-  ExecutionCloseReason,
-  ExtensionAction,
-  ExtensionFrameKind,
-  HostContext,
-  ThemeInfo,
-} from "@desktop/shared/extension-api";
+import {
+  createExtensionError,
+  type ExecutionCloseReason,
+  type ExtensionAction,
+  type ExtensionFrameKind,
+  type FileViewerFile,
+  type FileViewerParams,
+  type HostContext,
+  type ThemeInfo,
+} from "@agw/extension-sdk";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
-import { createExtensionError } from "@desktop/shared/extension-rpc";
 import { A2AService } from "./a2a-service";
-import { CloudAccessGrants, CloudFileSystem } from "./cloud-file-system";
+import { CloudAccessGrants, CloudFileSystem, parseCloudUri } from "./cloud-file-system";
 import { ContextService } from "./context-service";
 import { extensionRegistration } from "./extension-contributions";
 import { type BrokerExtension, ExtensionBridgeBroker } from "./extension-bridge-broker";
@@ -66,6 +68,17 @@ export type ExtensionState = {
   frames: readonly HostFrameState[];
 };
 
+/** 宿主显示的确认对话框。A confirmation dialog shown by the host. */
+export type HostConfirmation =
+  | {
+      kind: "discard-unsaved";
+      items: readonly { fileName: string; viewerTitle: string; extensionName: string }[];
+    }
+  | { kind: "open-link"; extensionName: string; url: string };
+
+/** 文件视图打开文件的位置。Where the Files view opens a file. */
+export type FileOpenLocation = { directoryId: string | null; path: string };
+
 export type ExtensionHostSnapshot = {
   started: boolean;
   safeMode: ExtensionSafeModeState | null;
@@ -73,6 +86,10 @@ export type ExtensionHostSnapshot = {
   extensions: readonly ExtensionState[];
   /** 握手失败、崩溃或失去响应的视图。Views whose handshake failed, crashed or hung. */
   viewErrors: Readonly<Record<string, ExtensionFailure>>;
+  /** 有未保存修改的文件查看器。File viewers with unsaved changes. */
+  unsavedViewIds: readonly string[];
+  /** 等待用户回答的确认对话框。The confirmation waiting for the user. */
+  confirmation: HostConfirmation | null;
 };
 
 type Deferred = {
@@ -121,6 +138,8 @@ type HostFrame = {
   shown: boolean;
   loaded: boolean;
   snapshot: string | null;
+  /** 主进程遮挡请求的序号，画出截图后用它隐藏 view。The main-process obscure token used to hide the view once painted. */
+  snapshotToken: number;
   wantsObscured: boolean;
   obscureRequest: number;
 };
@@ -192,6 +211,13 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   ]);
 }
 
+/** 等到下一帧画出之后。Resolves once the next frame has been painted. */
+function afterNextPaint(): Promise<void> {
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+}
+
 /**
  * extension 的生命周期：激活、停用、frame 关闭流程、心跳、页面替换与进程结束。
  * The extension lifecycle: activation, deactivation, the frame close flow, heartbeats, page replacement and process exits.
@@ -229,6 +255,15 @@ export class ExtensionHost {
   private themeBackground = "#ffffff";
   private composer: { insertText(text: string): void } | null = null;
   private refreshConversations: ((projectId: string) => void) | null = null;
+  private fileOpener: ((location: FileOpenLocation) => Promise<boolean>) | null = null;
+  /** 文件查看器当前显示的文件，按视图 id 记录。The file each file viewer shows, by view id. */
+  private readonly fileViewerFiles = new Map<string, FileViewerFile>();
+  /** 报告了未保存修改的 frame。Frames that reported unsaved changes. */
+  private readonly unsavedFrames = new Set<string>();
+  private readonly confirmations: {
+    request: HostConfirmation;
+    resolve(accepted: boolean): void;
+  }[] = [];
   private readonly listeners = new Set<() => void>();
   private snapshot: ExtensionHostSnapshot = {
     started: false,
@@ -236,6 +271,8 @@ export class ExtensionHost {
     recoveryNotices: [],
     extensions: [],
     viewErrors: {},
+    unsavedViewIds: [],
+    confirmation: null,
   };
 
   public constructor(private readonly options: ExtensionHostOptions) {
@@ -303,6 +340,19 @@ export class ExtensionHost {
         const frame = this.frames.get(frameId);
         if (frame && frame.pageId === pageId) frame.lastPong = Date.now();
       },
+      openFile: (extensionId, uri) => this.openFile(extensionId, uri),
+      setUnsavedChanges: (frameId, pageId, unsaved) => {
+        const frame = this.frames.get(frameId);
+        if (frame?.kind === "fileViewer" && frame.pageId === pageId && frame.closing === null) {
+          this.setUnsaved(frameId, unsaved);
+        }
+      },
+      confirmOpenExternal: (extensionId, url) =>
+        this.confirm({
+          kind: "open-link",
+          extensionName: this.records.get(extensionId)?.installed.manifest?.name ?? extensionId,
+          url,
+        }),
     });
   }
 
@@ -339,6 +389,7 @@ export class ExtensionHost {
 
   private async startOnce(): Promise<void> {
     window.addEventListener("message", this.onWindowMessage);
+    window.addEventListener("beforeunload", this.onBeforeUnload);
     this.bridge.onExtensionEvent((event) => this.onMainEvent(event));
     await this.bridge.attachExtensionHost(this.hostInstanceId);
     this.heartbeatTimer = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
@@ -457,7 +508,80 @@ export class ExtensionHost {
   /** 文件浏览器右键菜单授予读取授权。Grants read access from the file explorer context menu. */
   public grantCloudRead(extensionId: string, uri: string, directory: boolean): void {
     const key = this.context.connectionKey;
-    if (key !== null) this.cloudGrants.grant(extensionId, uri, directory, key);
+    if (key !== null && !this.cloudGrants.allows(extensionId, uri, key)) {
+      this.cloudGrants.grant(extensionId, uri, directory, key);
+    }
+  }
+
+  /** Desktop 工作区提供的打开文件函数；返回 false 表示用户取消。The workspace's file opener; false means the user canceled. */
+  public setFileOpener(opener: ((location: FileOpenLocation) => Promise<boolean>) | null): void {
+    this.fileOpener = opener;
+  }
+
+  /**
+   * 文件视图把文件交给文件查看器：授予读取权限；frame 已加载且文件变化时发送 `view.onShow`。
+   * The Files view hands a file to a viewer: grants read access, and sends `view.onShow` when a loaded frame gets
+   * another file.
+   */
+  public setFileViewerFile(viewId: string, file: FileViewerFile): void {
+    const view = this.registry.view(viewId);
+    if (view?.location !== "file" || view.extensionId === null) return;
+    this.grantCloudRead(view.extensionId, file.uri, false);
+    if (this.fileViewerFiles.get(viewId)?.uri === file.uri) return;
+    this.fileViewerFiles.set(viewId, file);
+    const frame = this.viewFrames.get(viewId);
+    if (!frame || frame.closing !== null) return;
+    const params: FileViewerParams = { file };
+    frame.params = params;
+    this.setUnsaved(frame.frameId, false);
+    if (frame.loaded) {
+      void this.broker.call(frame.frameId, "view.onShow", { params }).catch((error: unknown) => {
+        console.error(`[extension ${frame.extensionId}/${viewId}] onShow failed.`, error);
+      });
+    }
+  }
+
+  /** 只保留匹配当前文件的文件查看器，其余关闭。Keeps the file viewers matching the current file and closes the rest. */
+  public retainFileViewers(viewIds: readonly string[]): void {
+    for (const [viewId, frame] of this.viewFrames) {
+      if (frame.kind === "fileViewer" && !viewIds.includes(viewId)) {
+        void this.closeFrame(frame, "frame-unloaded", true);
+      }
+    }
+    for (const viewId of this.fileViewerFiles.keys()) {
+      if (!viewIds.includes(viewId)) this.fileViewerFiles.delete(viewId);
+    }
+  }
+
+  public hasUnsavedChanges(): boolean {
+    return this.unsavedFrames.size > 0;
+  }
+
+  /** 存在未保存修改时由用户确认放弃。Asks the user to discard unsaved changes when there are any. */
+  public confirmDiscardUnsaved(): Promise<boolean> {
+    const items = [...this.unsavedFrames].flatMap((frameId) => {
+      const frame = this.frames.get(frameId);
+      const view = frame?.viewId ? this.registry.view(frame.viewId) : undefined;
+      if (!frame || !view) return [];
+      return [
+        {
+          fileName: (frame.params as FileViewerParams).file.name,
+          viewerTitle: view.title,
+          extensionName: view.extensionName ?? frame.extensionId,
+        },
+      ];
+    });
+    return items.length === 0
+      ? Promise.resolve(true)
+      : this.confirm({ kind: "discard-unsaved", items });
+  }
+
+  /** 用户回答当前的确认对话框。The user answers the current confirmation. */
+  public resolveConfirmation(accepted: boolean): void {
+    const current = this.confirmations.shift();
+    if (!current) return;
+    current.resolve(accepted);
+    this.publish();
   }
 
   /** 外壳挂载；卸载时关闭全部视图 frame（下一轮执行，StrictMode 重新挂载会取消）。Shell mount; unmount closes every view frame. */
@@ -542,7 +666,12 @@ export class ExtensionHost {
     });
   }
 
-  /** 弹出层遮挡的 frame 换成截图。Frames under host overlays are swapped for snapshots. */
+  /**
+   * 弹出层遮挡的 frame 换成截图。截图在占位组件中画出后才隐藏 view（`snapshotShown`），恢复时 view 显示后才移除截图，
+   * 切换期间不出现空白。
+   * Frames under host overlays are swapped for snapshots. The view hides only after its slot painted the snapshot
+   * (`snapshotShown`), and on reveal the snapshot goes only after the view shows, so no blank shows in between.
+   */
   public setObscuredFrames(frameIds: ReadonlySet<string>): void {
     for (const frame of this.frames.values()) {
       if (frame.kind === "background") continue;
@@ -556,17 +685,46 @@ export class ExtensionHost {
             if (!frame.wantsObscured || frame.obscureRequest !== request || !result?.snapshot)
               return;
             frame.snapshot = result.snapshot;
+            frame.snapshotToken = result.token;
             this.publish();
           })
           .catch((error: unknown) => console.error("Unable to obscure an extension view.", error));
       } else if (!wanted && frame.wantsObscured) {
         frame.wantsObscured = false;
-        frame.obscureRequest += 1;
-        frame.snapshot = null;
-        void this.bridge.revealExtensionFrames(this.hostInstanceId, [frame.frameId]);
-        this.publish();
+        const request = ++frame.obscureRequest;
+        void this.bridge
+          .revealExtensionFrames(this.hostInstanceId, [frame.frameId])
+          .then(afterNextPaint)
+          .then(() => {
+            if (frame.obscureRequest !== request || frame.snapshot === null) return;
+            frame.snapshot = null;
+            this.publish();
+          })
+          .catch((error: unknown) => console.error("Unable to reveal an extension view.", error));
       }
     }
+  }
+
+  /**
+   * 占位组件已加载截图：截图画出后隐藏 view。截图已过期（遮挡已结束或有更新的截图）时不处理。
+   * The slot loaded the snapshot: hide the view once it is painted. Stale snapshots (the overlay ended or a newer
+   * snapshot arrived) are ignored.
+   */
+  public snapshotShown(frameId: string, snapshot: string): void {
+    const frame = this.frames.get(frameId);
+    if (!frame || frame.snapshot !== snapshot) return;
+    const request = frame.obscureRequest;
+    void afterNextPaint()
+      .then(() => {
+        if (!frame.wantsObscured || frame.obscureRequest !== request || frame.snapshot !== snapshot)
+          return;
+        return this.bridge.hideObscuredExtensionFrames(this.hostInstanceId, [
+          { frameId, token: frame.snapshotToken },
+        ]);
+      })
+      .catch((error: unknown) =>
+        console.error("Unable to hide an obscured extension view.", error),
+      );
   }
 
   public visibleFrameIds(): string[] {
@@ -782,6 +940,7 @@ export class ExtensionHost {
       shown: false,
       loaded: false,
       snapshot: null,
+      snapshotToken: 0,
       wantsObscured: false,
       obscureRequest: 0,
     };
@@ -853,6 +1012,7 @@ export class ExtensionHost {
         .releaseExtensionFrameResources(this.hostInstanceId, frame.extensionId, frame.frameId)
         .catch(() => undefined);
       this.frames.delete(frame.frameId);
+      this.unsavedFrames.delete(frame.frameId);
       if (frame.viewId !== null && this.viewFrames.get(frame.viewId) === frame)
         this.viewFrames.delete(frame.viewId);
       this.publish();
@@ -883,11 +1043,17 @@ export class ExtensionHost {
     if (!view || view.extensionId === null || view.failure || this.viewErrors.has(viewId)) return;
     const record = this.records.get(view.extensionId);
     if (!record || record.status !== "active") return;
-    const params = this.layout.getSnapshot().openRequests[viewId]?.params ?? {};
+    const file = this.fileViewerFiles.get(viewId);
+    if (view.location === "file" && !file) return;
+    const params: unknown =
+      view.location === "file"
+        ? ({ file } satisfies Partial<FileViewerParams>)
+        : (this.layout.getSnapshot().openRequests[viewId]?.params ?? {});
     const existing = this.viewFrames.get(viewId);
     if (existing && existing.closing === null) {
       existing.shown = true;
-      if (existing.loaded) this.reopenView(viewId, params);
+      // 文件查看器只在文件变化时收到 onShow（setFileViewerFile）。File viewers get onShow only for another file.
+      if (existing.loaded && existing.kind !== "fileViewer") this.reopenView(viewId, params);
       return;
     }
     const kind: ExtensionFrameKind =
@@ -895,7 +1061,9 @@ export class ExtensionHost {
         ? "settings"
         : view.location === "main"
           ? "mainView"
-          : "sidebarView";
+          : view.location === "file"
+            ? "fileViewer"
+            : "sidebarView";
     let frame: HostFrame;
     try {
       frame = await this.createFrame(view.extensionId, kind, viewId, view.entry, params);
@@ -915,10 +1083,17 @@ export class ExtensionHost {
 
   private async loadView(frame: HostFrame): Promise<void> {
     try {
-      await this.broker.call(frame.frameId, "view.onLoad", { params: frame.params });
+      const loadedParams = frame.params;
+      await this.broker.call(frame.frameId, "view.onLoad", { params: loadedParams });
       frame.loaded = true;
-      if (frame.shown)
+      // 文件查看器在 onLoad 中收到文件；onLoad 期间文件变化时补发 onShow。
+      // File viewers get their file in onLoad; a file change during onLoad is sent with onShow.
+      if (frame.kind === "fileViewer") {
+        if (frame.params !== loadedParams)
+          await this.broker.call(frame.frameId, "view.onShow", { params: frame.params });
+      } else if (frame.shown) {
         await this.broker.call(frame.frameId, "view.onShow", { params: frame.params });
+      }
     } catch (error) {
       console.error(`[extension ${frame.extensionId}/${frame.viewId}] view hook failed.`, error);
     }
@@ -929,7 +1104,11 @@ export class ExtensionHost {
     if (!frame || frame.closing) return;
     frame.shown = false;
     const view = this.registry.view(viewId);
-    if (view?.location === "main" && view.retainContextWhenHidden && frame.kind === "mainView") {
+    // 保留页面的主区视图与文件查看器只隐藏。Retained main views and file viewers are only hidden.
+    if (
+      (view?.location === "main" && view.retainContextWhenHidden && frame.kind === "mainView") ||
+      frame.kind === "fileViewer"
+    ) {
       if (frame.loaded) {
         void this.broker.call(frame.frameId, "view.onHide", {}).catch((error: unknown) => {
           console.error(`[extension ${frame.extensionId}/${viewId}] onHide failed.`, error);
@@ -1030,10 +1209,52 @@ export class ExtensionHost {
   }
 
   /** 已完成握手的页面被新文档替换。A connected page was replaced by a new document. */
+  private confirm(request: HostConfirmation): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.confirmations.push({ request, resolve });
+      this.publish();
+    });
+  }
+
+  private setUnsaved(frameId: string, unsaved: boolean): void {
+    if (this.unsavedFrames.has(frameId) === unsaved) return;
+    if (unsaved) this.unsavedFrames.add(frameId);
+    else this.unsavedFrames.delete(frameId);
+    this.publish();
+  }
+
+  private readonly onBeforeUnload = (event: BeforeUnloadEvent) => {
+    // 主进程在 will-prevent-unload 中由用户确认。The main process asks the user in will-prevent-unload.
+    if (this.unsavedFrames.size > 0) event.preventDefault();
+  };
+
+  private async openFile(extensionId: string, uri: string): Promise<void> {
+    const location = parseCloudUri(uri);
+    const context = this.context.snapshot();
+    if (
+      location.serverId !== context.server.id ||
+      !context.project ||
+      location.projectId !== context.project.id ||
+      location.path === ""
+    ) {
+      throw createExtensionError(
+        "ERR_INVALID_URI",
+        `${uri} is not a file of the current Project on the current Server.`,
+      );
+    }
+    if (!this.fileOpener) {
+      throw createExtensionError("ERR_UNAVAILABLE", "The Files view is not available.");
+    }
+    if (!(await this.fileOpener({ directoryId: location.directoryId, path: location.path }))) {
+      throw createExtensionError("ERR_CANCELED", `Opening the file was canceled (${extensionId}).`);
+    }
+  }
+
   private async pageReplaced(frame: HostFrame, pageId: string): Promise<void> {
     if (frame.pageId !== pageId) return;
     frame.pageId = null;
     frame.loaded = false;
+    this.setUnsaved(frame.frameId, false);
     await this.execution.closePage(frame.frameId, pageId);
     this.broker.disconnect(frame.frameId, pageId);
     if (frame.kind === "background") {
@@ -1151,6 +1372,11 @@ export class ExtensionHost {
       safeMode: this.safeMode,
       recoveryNotices: this.recoveryNotices,
       viewErrors: Object.fromEntries(this.viewErrors),
+      unsavedViewIds: [...this.unsavedFrames].flatMap((frameId) => {
+        const viewId = this.frames.get(frameId)?.viewId;
+        return viewId ? [viewId] : [];
+      }),
+      confirmation: this.confirmations[0]?.request ?? null,
       extensions: [...this.records.values()]
         .sort((left, right) => left.installed.id.localeCompare(right.installed.id))
         .map((record) => ({

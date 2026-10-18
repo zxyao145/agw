@@ -4,7 +4,7 @@ import {
   matchesHostPermissionHttpUrl,
   matchesHostPermissionUrl,
 } from "../../shared/extension-host-permissions";
-import type { ExtensionPermission } from "../../shared/extension-permissions";
+import type { ExtensionPermission } from "@agw/extension-sdk";
 
 export const EXTENSION_SCHEME = "agw-extension";
 

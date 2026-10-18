@@ -7,7 +7,16 @@ import { generateDtsBundle } from "dts-bundle-generator";
 import { build } from "esbuild";
 
 const desktopDirectory = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const sdkEntry = join(desktopDirectory, "extension-sdk", "src", "index.ts");
+// 只导出 connect、defineBackground、defineView 的浏览器入口。The browser entry exporting only connect, defineBackground and defineView.
+const sdkEntry = resolve(
+  desktopDirectory,
+  "..",
+  "packages",
+  "extension-sdk",
+  "src",
+  "sdk",
+  "index.ts",
+);
 // 当前只有 Extension API 版本 1。Only Extension API version 1 exists today.
 const manifestVersion = 1;
 
@@ -32,7 +41,7 @@ export async function buildExtensionSdk() {
   // The SDK tsconfig maps `@agw/execution-core` to its sources, so those types are bundled into sdk.d.ts as local files.
   const [declarations] = generateDtsBundle(
     [{ filePath: sdkEntry, output: { noBanner: true, exportReferencedTypes: true } }],
-    { preferredConfigPath: join(desktopDirectory, "extension-sdk", "tsconfig.json") },
+    { preferredConfigPath: join(desktopDirectory, "scripts", "extension-sdk-dts.tsconfig.json") },
   );
   await writeFile(join(outputDirectory, "sdk.d.ts"), declarations, "utf8");
 
