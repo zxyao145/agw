@@ -10,6 +10,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   session,
   type WebContents,
@@ -814,6 +815,186 @@ async function chatContributions(): Promise<void> {
   pass("message actions open the extension view with the message");
 }
 
+const CHAT_MARKDOWN = [
+  "Markdown check[^n] and [^missing].",
+  "",
+  "| Item | Count |",
+  "| --- | ---: |",
+  "| apples | 3 |",
+  "",
+  "- [ ] first loose task",
+  "",
+  "- [x] second loose task",
+  "",
+  "Mixed list:",
+  "",
+  "- plain item",
+  "- [ ] task item",
+  "  see [^n]",
+  "",
+  "```ts",
+  "const answer = 42;",
+  "```",
+  "",
+  "```py",
+  "if ready:",
+  "    run()",
+  "```",
+  "",
+  "Indented code follows:",
+  "",
+  "    indented code line",
+  "",
+  "<b>raw</b> C++ and C++ $x^2$",
+  "",
+  "[^n]: Footnote text.",
+].join("\n");
+
+const CONVERSATION_ITEMS = `[...document.querySelectorAll('.agw-left-sidebar[data-view-id="agw.conversations"] div.cursor-pointer')]`;
+const MARKDOWN_CONVERSATION = `${CONVERSATION_ITEMS}.find((item) => item.textContent.includes("Markdown check"))`;
+const MARKDOWN_REPLY = `[...document.querySelectorAll(".agw-main-workspace .msg-content")].find((element) => element.textContent.includes("Echo: Markdown check"))`;
+
+/** 回复中标题为 language 的代码块。The reply's code block whose header names language. */
+function codeBlock(language: string): string {
+  return `[...${MARKDOWN_REPLY}.querySelectorAll(".msg-content-md-code-block")].find((block) => block.querySelector(".msg-content-md-code-header span")?.textContent === ${JSON.stringify(language)})`;
+}
+
+async function copyCode(language: string): Promise<string> {
+  host().focus();
+  await evalHost(
+    `${codeBlock(language)}.querySelector('button[aria-label="Copy code"]').click(); true`,
+  );
+  await untilHost(
+    `Boolean(${codeBlock(language)}.querySelector('button[aria-label="Code copied"]'))`,
+    `the ${language} code to be copied`,
+  );
+  return clipboard.readText();
+}
+
+async function chatMarkdown(): Promise<void> {
+  const main = await untilFrame("sample", "mainView");
+  const result = await api<{ conversationId: string; text: string }>(
+    main,
+    `
+    const session = await api.execution.createSession({ projectId: ${JSON.stringify(config.projectId)} });
+    const finished = new Promise((resolve) => {
+      const texts = [];
+      session.onMessage((message) => {
+        if (message.role === "assistant") {
+          for (const content of message.contents ?? []) if (typeof content.content === "string") texts.push(content.content);
+        }
+        if (message.additionalProperties?.type === "agw-turn-finished") resolve(texts.join(""));
+      });
+    });
+    await session.send({ target: { type: "agent", id: ${JSON.stringify(config.agentId)} }, text: ${JSON.stringify(CHAT_MARKDOWN)} });
+    const text = await finished;
+    await session.dispose();
+    return { conversationId: session.conversationId, text };`,
+  );
+  assert.match(result.text, /^Echo: Markdown check/u);
+  await untilHost(`Boolean(${MARKDOWN_CONVERSATION})`, "the Markdown conversation in the list");
+  await evalHost(`${MARKDOWN_CONVERSATION}.click(); true`);
+  await untilHost(
+    `new URLSearchParams(location.search).get("conversationId") === ${JSON.stringify(result.conversationId)}`,
+    "the Markdown conversation to open",
+  );
+  await untilHost(
+    `Boolean(${MARKDOWN_REPLY}?.querySelector("section[data-footnotes]"))`,
+    "the rendered Markdown reply",
+  );
+
+  const reply = await evalHost<Record<string, unknown>>(`(() => {
+    const message = ${MARKDOWN_REPLY};
+    const reference = message.querySelector("sup > a[data-footnote-ref]");
+    const footnote = message.querySelector("section[data-footnotes] li");
+    const region = message.querySelector('[role="region"][aria-label="Scrollable table"]');
+    const lists = [...message.querySelectorAll("ul")];
+    const looseLists = lists.filter((list) => list.textContent.includes("loose task"));
+    const mixedLists = lists.filter((list) => list.textContent.includes("plain item"));
+    return {
+      referenceText: reference?.textContent,
+      referenceTarget: Boolean(footnote?.id) && reference?.getAttribute("href") === "#" + footnote.id,
+      missingReferenceText: message.textContent.includes("[^missing]"),
+      headCells: region?.querySelectorAll("thead th").length,
+      secondColumnAlign: region?.querySelectorAll("tbody td")[1]?.style.textAlign,
+      cellParagraphs: region?.querySelectorAll("td p").length,
+      looseLists: looseLists.length,
+      looseItemsWithCheckboxInParagraph: [...(looseLists[0]?.children ?? [])].map((item) => Boolean(item.querySelector(":scope > p > input[type=checkbox]"))),
+      mixedLists: mixedLists.length,
+      mixedListReference: Boolean(mixedLists[0]?.querySelector("li:last-child a[data-footnote-ref]")),
+      pythonText: ${codeBlock("py")}?.querySelector("pre code")?.textContent,
+      indentedCode: [...message.querySelectorAll("pre.msg-content-md-code")].map((pre) => [pre.closest(".msg-content-md-code-block") === null, pre.textContent]),
+      htmlElements: message.querySelectorAll("b, u").length,
+      literalText: message.textContent.includes("<b>raw</b>") && message.textContent.includes("C++ and C++"),
+      math: Boolean(message.querySelector(".katex")),
+    };
+  })()`);
+  assert.deepEqual(reply, {
+    referenceText: "1",
+    referenceTarget: true,
+    missingReferenceText: true,
+    headCells: 2,
+    secondColumnAlign: "right",
+    cellParagraphs: 0,
+    looseLists: 1,
+    looseItemsWithCheckboxInParagraph: [true, true],
+    mixedLists: 1,
+    mixedListReference: true,
+    pythonText: "if ready:\n    run()\n",
+    indentedCode: [[true, "indented code line\n"]],
+    htmlElements: 0,
+    literalText: true,
+    math: true,
+  });
+  assert.equal(await copyCode("ts"), "const answer = 42;");
+  assert.equal(await copyCode("py"), "if ready:\n    run()");
+  pass(
+    "chat replies render footnotes, tables, task lists, code blocks, math, and raw HTML as text with Tiptap",
+  );
+
+  const page = await evalHost<Record<string, unknown>>(`(() => {
+    const userMessage = [...document.querySelectorAll(".agw-main-workspace .agw-msg-user")].find((element) => element.textContent.includes("Markdown check"));
+    const ids = [...document.querySelectorAll(".agw-main-workspace [id]")].map((element) => element.id);
+    const message = ${MARKDOWN_REPLY};
+    message.querySelector("sup > a[data-footnote-ref]").click();
+    return {
+      userMessageReference: Boolean(userMessage?.querySelector("a[data-footnote-ref]")),
+      uniqueIds: ids.length === new Set(ids).size,
+      focusedFootnote: document.activeElement === message.querySelector("section[data-footnotes] li"),
+      hash: location.hash,
+    };
+  })()`);
+  assert.deepEqual(page, {
+    userMessageReference: true,
+    uniqueIds: true,
+    focusedFootnote: true,
+    hash: "",
+  });
+  pass(
+    "user messages use Tiptap too, footnote ids stay unique, and a reference focuses its footnote",
+  );
+
+  await evalHost(
+    `${CONVERSATION_ITEMS}.find((item) => !item.textContent.includes("Markdown check")).click(); true`,
+  );
+  await untilHost(
+    `new URLSearchParams(location.search).get("conversationId") !== ${JSON.stringify(result.conversationId)}`,
+    "another conversation to open",
+  );
+  await evalHost(`${MARKDOWN_CONVERSATION}.click(); true`);
+  await untilHost(
+    `Boolean(${MARKDOWN_REPLY}?.querySelector("section[data-footnotes]"))`,
+    "the Markdown reply after switching back",
+  );
+  assert.equal(
+    await evalHost<boolean>(
+      `document.querySelector(".agw-main-workspace").textContent.includes("This view couldn’t be loaded")`,
+    ),
+    false,
+  );
+  pass("switching conversations keeps the Markdown reply rendering");
+}
+
 async function undeclaredExtension(): Promise<void> {
   await enable("undeclared", "Undeclared");
   await untilStatus("undeclared", "Active");
@@ -1355,6 +1536,20 @@ async function filesView(): Promise<void> {
 }
 
 const MARKDOWN_VIEWER = "markdown-preview:preview";
+
+/**
+ * 文件标题行右侧各元素及其是否在窗口内可以点到，例如 `[["File views", true], ["Reload file", true], ["View info", true]]`。
+ * The file title row's right-side items and whether each is clickable inside the window.
+ */
+const FILE_HEADER_ACTIONS = `(() => {
+  const actions = document.querySelector('.agw-main-workspace [role="tablist"]')?.parentElement;
+  const clickable = (element) => {
+    const rect = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return rect.right <= window.innerWidth && (hit === element || element.contains(hit));
+  };
+  return [...(actions?.children ?? [])].map((element) => [element.getAttribute("aria-label") ?? element.getAttribute("role"), clickable(element)]);
+})()`;
 const OPEN_CONFIRMATION = `document.querySelector('[data-host-confirmation][data-state="open"]')`;
 
 function markdownText(includes: string): string {
@@ -1380,6 +1575,34 @@ async function markdownPreview(): Promise<void> {
   pass(
     "Markdown files open in Markdown Preview with headings, tables, highlighted code, and project images",
   );
+
+  const structure = await evalFrame<Record<string, unknown>>(
+    firstPreview,
+    `(() => {
+      const article = document.querySelector("article.markdown-body");
+      return {
+        headingId: Boolean(article.querySelector("h1#guide")),
+        headCells: article.querySelectorAll("table thead th").length,
+        cellParagraphs: article.querySelectorAll("table td p").length,
+        footnoteReference: Boolean(article.querySelector('sup a[data-footnote-ref][href="#user-content-fn-note"]')),
+        footnote: Boolean(article.querySelector("section.footnotes li#user-content-fn-note")),
+        tasks: article.querySelectorAll("li.task-list-item input[disabled]").length,
+        boldElements: article.querySelectorAll("b").length,
+        rawHtmlText: article.textContent.includes("<b>raw</b>"),
+      };
+    })()`,
+  );
+  assert.deepEqual(structure, {
+    headingId: true,
+    headCells: 2,
+    cellParagraphs: 0,
+    footnoteReference: true,
+    footnote: true,
+    tasks: 2,
+    boldElements: 0,
+    rawHtmlText: true,
+  });
+  pass("Markdown Preview renders heading ids, footnotes, task lists, and raw HTML as text");
 
   // 文件标题行右侧的 "Reload view" 是文件视图中唯一的刷新按钮，点击后用新的 frame 重新加载查看器。
   // "Reload view" next to the file name is the only one in the file view, and it reloads the viewer in a new frame.
@@ -1454,6 +1677,38 @@ async function markdownPreview(): Promise<void> {
   // 切换到 Source 时查看器隐藏并保留页面。Switching to Source hides the viewer and keeps its page.
   await until(() => !preview.view.getVisible(), "the preview to hide");
   assert.equal(frameOf("markdown-preview", "fileViewer")?.frameId, preview.frameId);
+  // 源码中的长行不撑宽主区；Source 时标题行仍有切换按钮、"Reload file" 与 Info，都在窗口内可以点到。
+  // Long source lines do not widen the main workspace; with Source the title row keeps the switch, "Reload file"
+  // and Info, all clickable inside the window.
+  assert.equal(
+    await evalHost<boolean>(
+      `document.querySelector('.agw-main-workspace').getBoundingClientRect().right <= window.innerWidth`,
+    ),
+    true,
+  );
+  assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
+    ["File views", true],
+    ["Reload file", true],
+    ["View info", true],
+  ]);
+  // Info 仍说明切换前的查看器。Info still describes the viewer selected before the switch.
+  await clickHost('.agw-main-workspace [aria-label="View info"]');
+  await untilHost(
+    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Markdown Preview")`,
+    "the viewer info popup with Source selected",
+  );
+  await pressEscape();
+  await untilHost(`!${infoPopup}`, "the viewer info popup to close");
+  // "Reload file" 重新读取源码。"Reload file" reads the source again.
+  const guidePath = join(config.projectDirectory, "guide.md");
+  const guide = await readFile(guidePath, "utf8");
+  await writeFile(guidePath, `${guide}\nReloaded source line.\n`);
+  await clickHost('.agw-main-workspace [aria-label="Reload file"]');
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes("Reloaded source line.")`,
+    "the reloaded source",
+  );
+  await writeFile(guidePath, guide);
   await clickHost(`[data-file-viewer-tab="${MARKDOWN_VIEWER}"]`);
   await until(() => preview.view.getVisible(), "the preview to show again");
 
@@ -1564,6 +1819,20 @@ async function excalidrawEditor(): Promise<void> {
   await delay(500);
   assert.equal(await evalHost<boolean>(UNSAVED_MARKER), false);
   pass("Excalidraw files open in the Excalidraw editor with the saved scene");
+
+  await clickHost('[data-file-viewer-tab="source"]');
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes('"elements"')`,
+    "the Excalidraw source",
+  );
+  assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
+    ["File views", true],
+    ["Reload file", true],
+    ["View info", true],
+  ]);
+  await clickHost(`[data-file-viewer-tab="${EXCALIDRAW_VIEWER}"]`);
+  await until(() => editor.view.getVisible(), "the editor to show again");
+  pass("with Source selected the Excalidraw file keeps the reload and info buttons");
 
   pressKey(editor, "r");
   await until(
@@ -1887,6 +2156,7 @@ async function run(): Promise<void> {
   await execution();
   await a2aAndHttp();
   await chatContributions();
+  await chatMarkdown();
   await undeclaredExtension();
   await hookOrderAndReload();
   await failureModes();

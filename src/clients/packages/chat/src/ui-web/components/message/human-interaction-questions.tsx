@@ -12,7 +12,7 @@ import {
   OTHER_OPTION_VALUE,
   type HumanInteractionQuestionSelections,
 } from "./human-interaction-questions-state";
-import MdCard from "./renders/md-card";
+import { MarkdownView } from "./renders/markdown-renderer";
 
 type HumanInteractionQuestionsProps = {
   request: PendingInteraction & { questions: HumanInteractionQuestion[] };
@@ -288,7 +288,7 @@ export function HumanInteractionQuestions({
                 )}
               >
                 {preview ? (
-                  <MdCard mdText={preview} />
+                  <MarkdownView markdown={preview} />
                 ) : (
                   <p className="text-center text-muted-foreground">
                     {focusedLabel

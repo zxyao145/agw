@@ -12,8 +12,10 @@ import { configureApiRuntime, resetApiRuntime } from "@agw/api";
 import {
   ConversationImagePlatformProvider,
   ExecutionPlatformProvider,
+  MarkdownRendererProvider,
   type ImageContextMenuRequest,
 } from "@agw/chat";
+import { TiptapMarkdown } from "@agw/chat/markdown-tiptap";
 import { configureExecutionRuntime, executionSessionManager } from "@agw/chat-runtime";
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type InfiniteData, type QueryClient } from "@agw/components/query";
@@ -404,7 +406,9 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
           <ConversationImagePlatformProvider
             onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
           >
-            {children}
+            <MarkdownRendererProvider renderer={TiptapMarkdown}>
+              {children}
+            </MarkdownRendererProvider>
           </ConversationImagePlatformProvider>
         </ExecutionPlatformProvider>
       </QueryClientProvider>

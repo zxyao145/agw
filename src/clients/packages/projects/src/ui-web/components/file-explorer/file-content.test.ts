@@ -17,6 +17,7 @@ function element(
   fileViewers?: readonly FileViewerOption[],
   onReloadFileViewer?: (viewerId: string) => void,
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode,
+  onReloadSource?: () => void,
 ) {
   return React.createElement(FileContent, {
     projectId: "project-1",
@@ -34,7 +35,12 @@ function element(
       React.createElement("div", { "data-testid": "viewer" }, `viewer ${viewerId}`),
     onReloadFileViewer,
     renderFileViewerInfo,
+    onReloadSource,
   });
+}
+
+function renderInfo(viewerId: string) {
+  return React.createElement("span", { "data-testid": "info" }, `info ${viewerId}`);
 }
 
 function tabs(): { id: string | null; selected: boolean; text: string }[] {
@@ -70,12 +76,13 @@ test("FileContent_WithViewers_ShowsSwitchReloadAndInfoNextToFileName", async () 
       "README.md",
       VIEWERS,
       () => {},
-      (viewerId) => React.createElement("span", { "data-testid": "info" }, `info ${viewerId}`),
+      renderInfo,
+      () => {},
     ),
   );
 
-  // 文件标题行右侧依次是切换按钮、"Reload view" 与查看器说明。
-  // The file title row's right side holds the switch, "Reload view" and the viewer info, in that order.
+  // 文件标题行右侧依次是切换按钮、刷新按钮与查看器说明，切换到 Source 后位置不变。
+  // The file title row's right side holds the switch, the reload button and the viewer info, also in Source.
   const actions = screen.getByRole("tablist").parentElement!;
   assert.deepEqual(
     [...actions.children],
@@ -89,10 +96,17 @@ test("FileContent_WithViewers_ShowsSwitchReloadAndInfoNextToFileName", async () 
   assert.ok(actions.parentElement!.textContent!.includes("README.md"));
 
   await selectTab("source");
-  assert.equal(screen.queryByTestId("info"), null);
+  assert.deepEqual(
+    [...actions.children],
+    [
+      screen.getByRole("tablist"),
+      screen.getByRole("button", { name: "Reload file" }),
+      screen.getByTestId("info"),
+    ],
+  );
 });
 
-test("FileContent_ReloadView_ReloadsSelectedViewerAndHidesForSource", async () => {
+test("FileContent_ReloadView_ReloadsSelectedViewer", async () => {
   const reloads: string[] = [];
   render(element("README.md", VIEWERS, (viewerId) => reloads.push(viewerId)));
 
@@ -103,16 +117,51 @@ test("FileContent_ReloadView_ReloadsSelectedViewerAndHidesForSource", async () =
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Reload view" }));
   });
-  await selectTab("source");
 
   assert.deepEqual(reloads, ["markdown-preview:preview", "other:outline"]);
+});
+
+test("FileContent_SourceSelected_ReloadRereadsFileInsteadOfViewer", async () => {
+  const viewerReloads: string[] = [];
+  let sourceReloads = 0;
+  render(
+    element(
+      "README.md",
+      VIEWERS,
+      (viewerId) => viewerReloads.push(viewerId),
+      undefined,
+      () => (sourceReloads += 1),
+    ),
+  );
+
+  await selectTab("source");
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Reload file" }));
+  });
+
+  assert.equal(sourceReloads, 1);
+  assert.deepEqual(viewerReloads, []);
   assert.equal(screen.queryByRole("button", { name: "Reload view" }), null);
 });
 
-test("FileContent_WithoutReloadHandler_HasNoReloadButton", async () => {
+test("FileContent_SourceSelected_InfoShowsViewerSelectedBeforeSource", async () => {
+  render(element("README.md", VIEWERS, undefined, renderInfo));
+
+  await selectTab("source");
+  assert.equal(screen.getByTestId("info").textContent, "info markdown-preview:preview");
+
+  await selectTab("other:outline");
+  await selectTab("source");
+  await selectTab("source");
+  assert.equal(screen.getByTestId("info").textContent, "info other:outline");
+});
+
+test("FileContent_WithoutReloadHandlers_HasNoReloadButton", async () => {
   render(element("README.md", VIEWERS));
 
   assert.equal(screen.queryByRole("button", { name: "Reload view" }), null);
+  await selectTab("source");
+  assert.equal(screen.queryByRole("button", { name: "Reload file" }), null);
 });
 
 test("FileContent_SelectSource_ShowsFileText", async () => {

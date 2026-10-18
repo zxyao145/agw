@@ -42,8 +42,14 @@ interface FileContentProps extends ProjectFileScope {
   /** 有值时选中查看器后切换按钮右侧显示 "Reload view"。When set, a selected viewer shows "Reload view" after the switch. */
   onReloadFileViewer?: (viewerId: string) => void;
   /**
-   * 选中查看器时显示在 "Reload view" 右侧的内容，例如查看器的来源说明。
-   * Shown to the right of "Reload view" while a viewer is selected, such as where the viewer comes from.
+   * 有值时选中 Source 后同一位置显示 "Reload file"，重新读取文件内容。
+   * When set, selecting Source shows "Reload file" in the same place, which reads the file again.
+   */
+  onReloadSource?: () => void;
+  /**
+   * 显示在刷新按钮右侧的内容，例如查看器的来源说明；选中 Source 时对应切换前的查看器。
+   * Shown to the right of the reload button, such as where the viewer comes from; with Source selected it describes
+   * the viewer selected before the switch.
    */
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode;
 }
@@ -64,20 +70,38 @@ export default function FileContent({
   fileViewers = [],
   renderFileViewer,
   onReloadFileViewer,
+  onReloadSource,
   renderFileViewerInfo,
 }: FileContentProps) {
   // 切换文件时回到默认查看器。Switching files returns to the default viewer.
-  const [choice, setChoice] = React.useState<{ file: string | null; viewerId: string } | null>(
-    null,
-  );
+  const [choice, setChoice] = React.useState<{
+    file: string | null;
+    viewerId: string;
+    /** 选中 Source 之前的查看器。The viewer selected before Source. */
+    previousViewerId: string | null;
+  } | null>(null);
   const viewers = onlyDiff || !renderFileViewer ? [] : fileViewers;
-  const chosen = choice?.file === selectedFile ? choice.viewerId : null;
+  const currentChoice = choice?.file === selectedFile ? choice : null;
+  const chosen = currentChoice?.viewerId ?? null;
   const activeViewerId =
     viewers.length === 0
       ? SOURCE_VIEWER_ID
       : chosen === SOURCE_VIEWER_ID || viewers.some((viewer) => viewer.id === chosen)
         ? chosen!
         : viewers[0].id;
+  const previousViewerId = currentChoice?.previousViewerId ?? null;
+  const infoViewerId =
+    activeViewerId !== SOURCE_VIEWER_ID
+      ? activeViewerId
+      : viewers.some((viewer) => viewer.id === previousViewerId)
+        ? previousViewerId
+        : (viewers[0]?.id ?? null);
+  const choose = (viewerId: string) =>
+    setChoice({
+      file: selectedFile,
+      viewerId,
+      previousViewerId: activeViewerId === SOURCE_VIEWER_ID ? previousViewerId : activeViewerId,
+    });
 
   return (
     <div className="flex h-full min-w-0 w-full flex-col">
@@ -112,7 +136,7 @@ export default function FileContent({
                               viewer.id === activeViewerId &&
                                 "bg-accent font-medium text-foreground",
                             )}
-                            onClick={() => setChoice({ file: selectedFile, viewerId: viewer.id })}
+                            onClick={() => choose(viewer.id)}
                           >
                             {viewer.unsaved ? (
                               <span aria-label="Unsaved changes" className="mr-1">
@@ -123,7 +147,22 @@ export default function FileContent({
                           </button>
                         ))}
                       </div>
-                      {onReloadFileViewer && activeViewerId !== SOURCE_VIEWER_ID ? (
+                      {/* 选中 Source 时刷新按钮重新读取文件，位置不变。With Source selected the reload button reads the file again in place. */}
+                      {activeViewerId === SOURCE_VIEWER_ID ? (
+                        onReloadSource ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-6"
+                            aria-label="Reload file"
+                            title="Reload file"
+                            onClick={onReloadSource}
+                          >
+                            <RotateCw className="size-3.5" />
+                          </Button>
+                        ) : null
+                      ) : onReloadFileViewer ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -135,8 +174,8 @@ export default function FileContent({
                           <RotateCw className="size-3.5" />
                         </Button>
                       ) : null}
-                      {renderFileViewerInfo && activeViewerId !== SOURCE_VIEWER_ID
-                        ? renderFileViewerInfo(activeViewerId)
+                      {renderFileViewerInfo && infoViewerId !== null
+                        ? renderFileViewerInfo(infoViewerId)
                         : null}
                     </>
                   ) : undefined

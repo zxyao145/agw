@@ -10,6 +10,11 @@ export {
   ConversationImagePlatformProvider,
   type ImageContextMenuRequest,
 } from "./ui-web/components/message/conversation-image";
+export {
+  MarkdownRendererProvider,
+  type MarkdownRenderer,
+  type MarkdownRendererProps,
+} from "./ui-web/components/message/renders/markdown-renderer";
 export * from "./ui-web/components/message/suggestion-trigger";
 export * from "./ui-web/components/message/user-input";
 export * from "./ui-web/execution-activity";

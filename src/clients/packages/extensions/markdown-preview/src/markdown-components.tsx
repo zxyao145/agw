@@ -7,10 +7,9 @@ import {
   type ComponentPropsWithoutRef,
   type MouseEvent,
 } from "react";
-import type { Components, ExtraProps } from "react-markdown";
-
 import { errorMessage, notifyFailure } from "./errors";
 import { classifyImage, classifyLink, imageMimeType } from "./markdown-links";
+import type { MarkdownComponents, MarkdownImageProps } from "./markdown-pipeline";
 
 /** 当前渲染的文件与 API。The file being rendered and the API. */
 export type MarkdownContextValue = { api: ExtensionApi; fileUri: string };
@@ -23,7 +22,7 @@ function useMarkdownContext(): MarkdownContextValue {
   return value;
 }
 
-function MarkdownLink({ node: _node, href, ...props }: ComponentPropsWithoutRef<"a"> & ExtraProps) {
+function MarkdownLink({ href, ...props }: ComponentPropsWithoutRef<"a">) {
   const { api, fileUri } = useMarkdownContext();
   const open = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -92,9 +91,9 @@ function CloudImage({ uri, alt, title }: { uri: string; alt?: string; title?: st
   return <ImagePlaceholder alt={alt} marker="Loading image" title={title} />;
 }
 
-function MarkdownImage({ src, alt, title }: ComponentPropsWithoutRef<"img"> & ExtraProps) {
+function MarkdownImage({ src, alt, title }: MarkdownImageProps) {
   const { fileUri } = useMarkdownContext();
-  const raw = typeof src === "string" ? src : "";
+  const raw = src ?? "";
   const source = classifyImage(fileUri, raw);
   if (source.kind === "data") return <img src={source.src} alt={alt} title={title} />;
   if (source.kind === "external") {
@@ -103,4 +102,4 @@ function MarkdownImage({ src, alt, title }: ComponentPropsWithoutRef<"img"> & Ex
   return <CloudImage key={source.uri} uri={source.uri} alt={alt} title={title} />;
 }
 
-export const markdownComponents: Components = { a: MarkdownLink, img: MarkdownImage };
+export const markdownComponents: MarkdownComponents = { a: MarkdownLink, img: MarkdownImage };
