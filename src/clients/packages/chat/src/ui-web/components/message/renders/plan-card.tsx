@@ -5,7 +5,7 @@ import { Button } from "@agw/components";
 import { Check, Copy, Brain } from "lucide-react";
 import { toast } from "sonner";
 import type { ProposedPlanPresentation } from "../types";
-import MdCard from "./md-card";
+import { MarkdownView } from "./markdown-renderer";
 
 const COPY_STATE_DURATION_MS = 2_000;
 
@@ -45,7 +45,7 @@ export default function PlanCard({
     <>
       {leadingMarkdown ? (
         <div className="msg-content mb-4">
-          <MdCard mdText={leadingMarkdown} />
+          <MarkdownView markdown={leadingMarkdown} />
         </div>
       ) : null}
       <section
@@ -76,12 +76,12 @@ export default function PlanCard({
           </Button>
         </header>
         <div className="msg-content pt-3 pb-5 text-[15px] leading-7 sm:pt-4 sm:pb-6">
-          <MdCard mdText={markdown} />
+          <MarkdownView markdown={markdown} />
         </div>
       </section>
       {trailingMarkdown ? (
         <div className="msg-content mt-4">
-          <MdCard mdText={trailingMarkdown} />
+          <MarkdownView markdown={trailingMarkdown} />
         </div>
       ) : null}
     </>

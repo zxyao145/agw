@@ -44,6 +44,17 @@ const answer = 42;
 ![Logo](images/logo.png)
 
 [Notes](docs/notes.md) and [Example](https://example.com/docs).
+
+Long line: https://example.com/${"a".repeat(600)}
+
+See the note[^note].
+
+- [x] done
+- [ ] todo
+
+<b>raw</b>
+
+[^note]: Guide note.
 `;
 
 // 两个元素的 Excalidraw 场景，其余字段由 restore 补全。A two-element scene; restore fills the other fields.

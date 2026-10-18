@@ -1,10 +1,9 @@
 import type { ExtensionApi, FileViewerFile } from "@agw/extension-sdk";
 import { useEffect, useMemo, useState } from "react";
-import Markdown from "react-markdown";
 
 import { errorMessage } from "./errors";
 import { MarkdownContext, markdownComponents } from "./markdown-components";
-import { rehypePlugins, remarkPlugins, urlTransform } from "./markdown-pipeline";
+import { renderMarkdown } from "./markdown-pipeline";
 
 type DocumentState =
   | { status: "loading" }
@@ -29,6 +28,12 @@ export function MarkdownDocument({ api, file }: { api: ExtensionApi; file: FileV
     return () => controller.abort();
   }, [api, file.uri]);
 
+  const text = state.status === "loaded" ? state.text : null;
+  const content = useMemo(
+    () => (text === null ? null : renderMarkdown(text, markdownComponents)),
+    [text],
+  );
+
   if (state.status === "loading") return <p className="status">Loading {file.name}…</p>;
   if (state.status === "error") {
     return (
@@ -40,16 +45,7 @@ export function MarkdownDocument({ api, file }: { api: ExtensionApi; file: FileV
   }
   return (
     <MarkdownContext value={context}>
-      <article className="markdown-body">
-        <Markdown
-          remarkPlugins={remarkPlugins}
-          rehypePlugins={rehypePlugins}
-          urlTransform={urlTransform}
-          components={markdownComponents}
-        >
-          {state.text}
-        </Markdown>
-      </article>
+      <article className="markdown-body">{content}</article>
     </MarkdownContext>
   );
 }

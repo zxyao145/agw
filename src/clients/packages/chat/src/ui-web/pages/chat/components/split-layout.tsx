@@ -85,7 +85,9 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }: ColSplitProps) =>
   }, [isResizing]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full">
+    // 作为横向 flex 子项时 min-w-0 让宽度不被内容撑大（例如源码视图中的长行）。
+    // As a flex item in a row, min-w-0 keeps content (such as long source lines) from widening it.
+    <div className="flex flex-col flex-1 min-w-0 min-h-0 h-full">
       <div className="w-full flex flex-1 flex-row min-h-0 h-full">
         {left && (
           <>

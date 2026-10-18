@@ -796,6 +796,18 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
   font-size: 1em;
 }
 
+.msg-content-md-footnotes {
+  @apply mt-2 border-t border-border pt-2 text-xs text-muted-foreground whitespace-normal;
+}
+
+.msg-content-md-footnotes ol {
+  @apply list-decimal list-outside pl-5;
+}
+
+.msg-content-md-footnotes li:focus-visible {
+  @apply rounded-sm outline-none ring-[3px] ring-ring/50;
+}
+
 .session-aside-row {
   @apply flex items-center gap-3 py-0;
 }

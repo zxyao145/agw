@@ -1,7 +1,7 @@
 import { Button } from "@agw/components";
 import { getMessagePreview } from "@agw/chat-core";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import MdCard from "./md-card";
+import { MarkdownView } from "./markdown-renderer";
 import { useState } from "react";
 import { MessageNode } from "../types";
 
@@ -29,7 +29,7 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
         </Button>
 
         <div className="flex flex-1 flex-col">
-          <MdCard mdText={expanded ? node.content : preview} />
+          <MarkdownView markdown={expanded ? node.content : preview} />
         </div>
       </div>
     </div>
