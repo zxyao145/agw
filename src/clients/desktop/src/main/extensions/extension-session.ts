@@ -2,7 +2,7 @@ import { net, session, type Session } from "electron";
 
 import type { ExtensionEvent } from "../../shared/contracts";
 import type { HostPermission } from "../../shared/extension-host-permissions";
-import type { ExtensionPermission } from "../../shared/extension-permissions";
+import type { ExtensionPermission } from "@agw/extension-sdk";
 import type { ExtensionHttpTransport, HttpHop } from "./extension-http";
 import {
   EXTENSION_SCHEME,

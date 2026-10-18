@@ -14,8 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { ExtensionFileSystemRequest, ExtensionFileSystemResult } from "../../shared/contracts";
-import type { DirectoryEntry, FileStat, FileType } from "../../shared/extension-api";
-import type { ExtensionPermission } from "../../shared/extension-permissions";
+import type { DirectoryEntry, ExtensionPermission, FileStat, FileType } from "@agw/extension-sdk";
 import type { ExtensionAccessGrants } from "./extension-access-grants";
 import { isPathInside } from "./extension-catalog";
 import { ExtensionOperationError } from "./extension-ipc-result";

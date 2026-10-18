@@ -8,9 +8,13 @@ import {
   statFile,
   writeFile,
 } from "@agw/projects-core";
-import type { DirectoryEntry, FileStat } from "@desktop/shared/extension-api";
-import type { ExtensionPermission } from "@desktop/shared/extension-permissions";
-import { createExtensionError, ExtensionError } from "@desktop/shared/extension-rpc";
+import {
+  createExtensionError,
+  type DirectoryEntry,
+  ExtensionError,
+  type ExtensionPermission,
+  type FileStat,
+} from "@agw/extension-sdk";
 import type { ContextService } from "./context-service";
 import { connectionChangedError } from "./context-service";
 

@@ -22,7 +22,7 @@ import type { ExecutionHubHandlers, ExecutionRequest, ExecutionSetting } from "@
 
 async function checkConversationSession(kind: string, strictMode = false) {
   const failHistory = kind === "restore-failure";
-  let hasAdditionalDirectory = kind === "directories";
+  let hasAdditionalDirectory = kind === "directories" || kind === "desktop-confirm-file-change";
   const fileReads: unknown[][] = [];
   const conversation = {
     conversationId: "conversation-1",
@@ -565,6 +565,65 @@ async function checkConversationSession(kind: string, strictMode = false) {
       assert.equal(workspace?.selectedProject?.id, "project-1");
       assert.equal(workspace?.conversationId, null);
       assert.equal(workspace?.selectedTarget?.id, "agent-1", "the first target is selected");
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "desktop-confirm-file-change") {
+      // Desktop 在当前文件改变前确认（文件查看器有未保存修改）。Desktop confirms before the current file changes.
+      const { ChatFilePane, ChatFilesSidebar, ChatWorkspaceProvider, useChatWorkspace } =
+        workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      let allowChange = true;
+      let confirmations = 0;
+      const confirmFileChange = async () => {
+        confirmations += 1;
+        return allowChange;
+      };
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat", confirmFileChange },
+            React.createElement(ChatFilesSidebar),
+            React.createElement(ChatFilePane),
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      await React.act(async () => finishHistory());
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(confirmations, 1);
+      assert.equal(observed.file?.selectedFile, "README.md");
+      const readCount = fileReads.length;
+
+      allowChange = false;
+      await React.act(async () => observed.explorer!.onFileSelected("guide.md"));
+      assert.equal(
+        await React.act(async () => workspace!.openFile("extra", "notes.md")),
+        false,
+        "openFile reports the cancel",
+      );
+      await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
+      await React.act(async () => workspace!.selectProject("project-2"));
+      assert.equal(confirmations, 5);
+      assert.equal(observed.file?.selectedFile, "README.md");
+      assert.equal(workspace?.selectedDirectory?.id, null);
+      assert.equal(workspace?.selectedProject?.id, "project-1");
+      assert.equal(fileReads.length, readCount, "nothing is read after a cancel");
+
+      allowChange = true;
+      assert.equal(await React.act(async () => workspace!.openFile("extra", "notes.md")), true);
+      assert.equal(workspace?.selectedDirectory?.id, "extra");
+      assert.equal(observed.file?.selectedFile, "notes.md");
+      assert.equal(fileReads.at(-1)?.at(-1), "extra");
+      await React.act(async () => workspace!.selectProject("project-2"));
+      assert.equal(workspace?.selectedProject?.id, "project-2");
+      assert.equal(observed.file?.selectedFile, null);
+      assert.equal(confirmations, 7);
       assert.deepEqual(errors, []);
       return;
     }
@@ -1247,3 +1306,5 @@ test("the Provider mounted with cached queries and only a projectId selects a de
   checkConversationSession("desktop-cached-project"));
 test("the Provider with separately composed panes restores the conversation and reports openings, comments and refreshes", () =>
   checkConversationSession("desktop"));
+test("a declined file change keeps the current file, directory and Project", () =>
+  checkConversationSession("desktop-confirm-file-change"));

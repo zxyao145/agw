@@ -5,26 +5,24 @@ import type {
   ExtensionCaller,
   ExtensionIpcResult,
 } from "@desktop/shared/contracts";
-import type {
-  ContextProject,
-  ContextTarget,
-  ExtensionFrameKind,
-  ExtensionManifest,
-  ExtensionWelcome,
-  HostContext,
-  ThemeInfo,
-} from "@desktop/shared/extension-api";
+import {
+  type ContextProject,
+  type ContextTarget,
+  createExtensionError,
+  type ExtensionFrameKind,
+  type ExtensionManifest,
+  type ExtensionPermission,
+  type ExtensionWelcome,
+  fromExtensionErrorData,
+  type HostContext,
+  RpcEndpoint,
+  type RpcPort,
+  type ThemeInfo,
+} from "@agw/extension-sdk";
 import {
   type HostPermission,
   matchesHostPermissionHttpUrl,
 } from "@desktop/shared/extension-host-permissions";
-import type { ExtensionPermission } from "@desktop/shared/extension-permissions";
-import {
-  createExtensionError,
-  fromExtensionErrorData,
-  RpcEndpoint,
-  type RpcPort,
-} from "@desktop/shared/extension-rpc";
 import type { A2AService } from "./a2a-service";
 import { type CloudAccess, type CloudFileSystem, formatCloudUri } from "./cloud-file-system";
 import { type ContextService, filterContextForPermissions } from "./context-service";
@@ -72,6 +70,11 @@ export type ExtensionBridgeBrokerOptions = {
     notification: { type: "info" | "success" | "error"; message: string },
   ): void;
   onPong(frameId: string, pageId: string): void;
+  /** 在 Files 中打开当前 Project 的云端文件。Opens a cloud file of the current Project in the Files view. */
+  openFile(extensionId: string, uri: string): Promise<void>;
+  setUnsavedChanges(frameId: string, pageId: string, unsaved: boolean): void;
+  /** 打开未批准的地址前由用户确认。Asks the user before opening a URL outside the approved hosts. */
+  confirmOpenExternal(extensionId: string, url: string): Promise<boolean>;
 };
 
 type RequestHandler = (connection: FrameConnection, params: never, signal: AbortSignal) => unknown;
@@ -391,6 +394,24 @@ export class ExtensionBridgeBroker {
         layout.openMainView(resolveViewId(connection.extensionId, params.id), params.params ?? {});
         return null;
       },
+      "workspace.openFile": async (connection, params: { uri: string }) => {
+        await this.options.openFile(connection.extensionId, params.uri);
+        return null;
+      },
+      "workspace.setUnsavedChanges": (connection, params: { unsaved: boolean }) => {
+        if (connection.kind !== "fileViewer") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only file viewers report unsaved changes.",
+          );
+        }
+        this.options.setUnsavedChanges(
+          connection.frameId,
+          connection.pageId,
+          params.unsaved === true,
+        );
+        return null;
+      },
 
       "fs.readFile": (connection, params: { uri: string }, signal) =>
         fileKind(params.uri) === "local"
@@ -652,11 +673,24 @@ export class ExtensionBridgeBroker {
       },
       "ui.openExternal": async (connection, params: { url: string }) => {
         const extension = this.requireExtension(connection.extensionId);
-        if (!matchesHostPermissionHttpUrl(extension.hostPermissions, params.url)) {
+        let protocol: string;
+        try {
+          protocol = new URL(params.url).protocol;
+        } catch {
+          throw createExtensionError("ERR_INVALID_URL", `Invalid URL: ${params.url}`);
+        }
+        if (protocol !== "http:" && protocol !== "https:") {
           throw createExtensionError(
-            "ERR_HOST_NOT_PERMITTED",
-            `${params.url} does not match an approved host permission.`,
+            "ERR_INVALID_URL",
+            `Only HTTP(S) URLs can be opened: ${params.url}`,
           );
+        }
+        // 已批准的域名直接打开，其他地址由用户确认。Approved hosts open directly; other URLs need the user's confirmation.
+        if (
+          !matchesHostPermissionHttpUrl(extension.hostPermissions, params.url) &&
+          !(await this.options.confirmOpenExternal(connection.extensionId, params.url))
+        ) {
+          throw createExtensionError("ERR_CANCELED", "The user did not open the link.");
         }
         await bridge().openExternal(params.url);
         return null;

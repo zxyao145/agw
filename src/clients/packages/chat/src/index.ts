@@ -25,6 +25,7 @@ export {
   useChatWorkspace,
   type ChatConversationPaneProps,
   type ChatConversationSidebarProps,
+  type ChatFilePaneProps,
   type ChatFilesSidebarProps,
   type ChatWorkspaceContextValue,
   type ChatWorkspaceProject,

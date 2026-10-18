@@ -10,6 +10,7 @@ import type {
   ExtensionEvent,
   ExtensionFileSystemRequest,
   ExtensionFrameLayoutUpdate,
+  ExtensionFrameObscureRequest,
   ExtensionFrameSnapshot,
   ExtensionGrants,
   ExtensionHttpRequest,
@@ -26,13 +27,15 @@ import type {
 } from "../../shared/contracts";
 import { EXTENSION_MANIFEST_VERSION_CURRENT } from "../../shared/extension-manifest";
 import { type HostPermission, parseHostPermissions } from "../../shared/extension-host-permissions";
-import type { ExtensionPermission } from "../../shared/extension-permissions";
+import type { ExtensionPermission } from "@agw/extension-sdk";
 import type { DesktopSettingsStore } from "../settings/settings-store";
 import { ExtensionAccessGrants } from "./extension-access-grants";
 import {
   type CatalogEntry,
   declaredGrants,
+  mergeExtensionCatalogs,
   scanExtensionDirectory,
+  type SourcedCatalogEntry,
   toInstalledExtension,
 } from "./extension-catalog";
 import { ExtensionEgressProxy } from "./extension-egress-proxy";
@@ -53,6 +56,8 @@ export type ExtensionRuntimeOptions = {
   userDataDirectory: string;
   appVersion: string;
   sdkDirectory: string;
+  /** 随 Desktop 提供的内置 extension 目录，只读。The read-only directory of extensions bundled with Desktop. */
+  bundledExtensionsDirectory: string;
   extensionPreloadPath: string;
   settings: DesktopSettingsStore;
   getMainWindow(): BrowserWindow | null;
@@ -74,7 +79,7 @@ export class ExtensionRuntime {
   public readonly views: ExtensionViewManager;
   public readonly reset: ExtensionRuntimeReset;
 
-  private catalog = new Map<string, CatalogEntry>();
+  private catalog = new Map<string, SourcedCatalogEntry>();
   private extensionSettings: Record<string, ExtensionSettings> = {};
   private recoveryNotices: ExtensionRecoveryNotice[] = [];
   private readonly grants = new ExtensionAccessGrants();
@@ -176,14 +181,19 @@ export class ExtensionRuntime {
       source === "directory"
         ? await this.installer.prepareFromDirectory(result.filePaths[0])
         : await this.installer.prepareFromArchive(result.filePaths[0]);
-    return { canceled: false, ...prepared };
+    // 只有内置副本时，确认弹窗显示内置 extension 的版本。With only a bundled copy, the confirmation shows the bundled version.
+    const bundled = prepared.manifest ? this.catalog.get(prepared.manifest.id) : undefined;
+    const installedVersion =
+      prepared.installedVersion ??
+      (bundled?.source === "bundled" ? (bundled.manifest?.version ?? null) : null);
+    return { canceled: false, ...prepared, installedVersion };
   }
 
   public async commitInstall(installId: string): Promise<InstalledExtension> {
     const entry = await this.installer.commit(installId);
     await this.refresh();
     return toInstalledExtension(
-      this.catalog.get(entry.id) ?? entry,
+      this.catalog.get(entry.id) ?? { ...entry, source: "user" },
       this.extensionSettings[entry.id],
     );
   }
@@ -193,8 +203,11 @@ export class ExtensionRuntime {
   }
 
   public async uninstall(extensionId: string, deleteData: boolean): Promise<void> {
+    const entry = this.catalog.get(extensionId);
+    if (!entry) throw new Error(`Extension ${extensionId} is not installed.`);
     this.releaseExtension(extensionId);
-    await this.installer.uninstall(extensionId, deleteData);
+    if (entry.source === "bundled") await this.installer.removeBundled(extensionId, deleteData);
+    else await this.installer.uninstall(extensionId, deleteData);
     await this.refresh();
   }
 
@@ -329,6 +342,14 @@ export class ExtensionRuntime {
   ): Promise<ExtensionFrameSnapshot[]> {
     this.registry.assertHost(hostInstanceId);
     return this.views.obscure(frameIds);
+  }
+
+  public hideObscuredFrames(
+    hostInstanceId: string,
+    requests: readonly ExtensionFrameObscureRequest[],
+  ): void {
+    this.registry.assertHost(hostInstanceId);
+    this.views.hideObscured(requests);
   }
 
   public revealFrames(hostInstanceId: string, frameIds: readonly string[]): void {
@@ -544,14 +565,29 @@ export class ExtensionRuntime {
   }
 
   private async refresh(): Promise<void> {
-    const entries = await scanExtensionDirectory(this.extensionsDirectory, this.options.appVersion);
+    const [bundled, user, settings] = await Promise.all([
+      scanExtensionDirectory(
+        this.options.bundledExtensionsDirectory,
+        this.options.appVersion,
+        "bundled",
+      ),
+      scanExtensionDirectory(this.extensionsDirectory, this.options.appVersion, "user"),
+      this.options.settings.load(),
+    ]);
+    const entries = mergeExtensionCatalogs(bundled, user, settings.removedBundledExtensions);
     this.catalog = new Map(entries.map((entry) => [entry.id, entry]));
-    const declared = new Map<string, ExtensionGrants>();
+    // 内置 extension 的声明视为已批准；用户 extension 有新增项时停用等待批准。
+    // Bundled declarations count as approved; user extensions with new entries are disabled until approved.
+    const declared: Record<"bundled" | "user", Map<string, ExtensionGrants>> = {
+      bundled: new Map(),
+      user: new Map(),
+    };
     for (const entry of entries) {
       if (entry.validation === "valid" && entry.manifest)
-        declared.set(entry.id, declaredGrants(entry.manifest));
+        declared[entry.source].set(entry.id, declaredGrants(entry.manifest));
     }
-    await this.options.settings.reconcileExtensionGrants(declared);
+    await this.options.settings.applyBundledExtensions(declared.bundled);
+    await this.options.settings.reconcileExtensionGrants(declared.user);
     await this.reloadSettings();
   }
 

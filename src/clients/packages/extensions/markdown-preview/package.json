@@ -1,0 +1,27 @@
+{
+  "name": "@agw/extension-markdown-preview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agw Desktop bundled extension that renders Markdown files in the Files view",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../../.oxlintrc.json ./src ./vite.config.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "format": "oxfmt -c ../../../.oxfmtrc.json ./src ./vite.config.ts *.json *.html",
+    "format:check": "oxfmt -c ../../../.oxfmtrc.json --check ./src ./vite.config.ts *.json *.html"
+  },
+  "devDependencies": {
+    "@agw/extension-sdk": "workspace:*",
+    "@vitejs/plugin-react": "catalog:",
+    "highlight.js": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-markdown": "catalog:",
+    "rehype-highlight": "catalog:",
+    "rehype-slug": "catalog:",
+    "remark-gfm": "catalog:",
+    "vite": "catalog:"
+  }
+}

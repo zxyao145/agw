@@ -14,7 +14,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 
 import type { ExtensionEvent } from "../../shared/contracts";
-import type { ExtensionPermission } from "../../shared/extension-permissions";
+import type { ExtensionPermission } from "@agw/extension-sdk";
 import { createScratchDirectory } from "../scratch-directory.test-helper";
 import { ExtensionAccessGrants } from "./extension-access-grants";
 import {

@@ -27,9 +27,44 @@ function workspaceDependencies(manifest) {
   }).filter((name) => name.startsWith("@agw/"));
 }
 
-const packageDirectories = readdirSync(packagesRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && existsSync(join(packagesRoot, entry.name, "package.json")))
-  .map((entry) => join(packagesRoot, entry.name));
+function packageDirectoriesIn(root) {
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))
+    .map((entry) => join(root, entry.name));
+}
+
+// packages/extensions/* 是随 Desktop 打包的 extension 页面应用，只依赖 @agw/extension-sdk，也不被任何包依赖。
+// packages/extensions/* are extension page apps bundled with Desktop; they depend only on @agw/extension-sdk and
+// nothing depends on them.
+const extensionPackageDirectories = packageDirectoriesIn(join(packagesRoot, "extensions"));
+const extensionPackageNames = new Set(
+  extensionPackageDirectories.map((directory) => readManifest(directory).name),
+);
+for (const directory of extensionPackageDirectories) {
+  const manifest = readManifest(directory);
+  assert.match(manifest.name, /^@agw\/extension-/u, `${directory} must be named @agw/extension-*`);
+  for (const dependency of workspaceDependencies(manifest)) {
+    assert.equal(
+      dependency,
+      "@agw/extension-sdk",
+      `${manifest.name} may only depend on @agw/extension-sdk, found ${dependency}`,
+    );
+  }
+}
+
+const packageDirectories = [...packageDirectoriesIn(packagesRoot), ...extensionPackageDirectories];
+
+for (const directory of [
+  ...packageDirectories,
+  ...["web", "desktop", "mobile"].map((name) => join(clientsRoot, name)),
+]) {
+  for (const dependency of workspaceDependencies(readManifest(directory))) {
+    assert.ok(
+      !extensionPackageNames.has(dependency),
+      `${readManifest(directory).name} must not depend on the extension package ${dependency}`,
+    );
+  }
+}
 
 for (const directory of packageDirectories) {
   const manifest = readManifest(directory);
@@ -60,7 +95,6 @@ for (const dependency of workspaceDependencies(readManifest(join(clientsRoot, "m
 const scanRoots = [
   "web/src",
   "desktop/src",
-  "desktop/extension-sdk/src",
   "desktop/renderer/src",
   "desktop/scripts",
   "mobile/app",

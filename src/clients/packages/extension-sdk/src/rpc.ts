@@ -1,5 +1,5 @@
 // SDK 与宿主 broker 共用的端口消息协议。The port message protocol shared by the SDK and the host broker.
-import type { ExtensionErrorData } from "./extension-api";
+import type { ExtensionErrorData } from "./api";
 
 export type RpcMessage =
   | { kind: "request"; id: number; method: string; params: unknown }

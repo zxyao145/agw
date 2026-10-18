@@ -13,5 +13,5 @@
       "@desktop/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "extension-sdk/src/**/*.ts"]
+  "include": ["src/**/*.ts"]
 }

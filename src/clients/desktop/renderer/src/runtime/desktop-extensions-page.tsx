@@ -35,15 +35,15 @@ import {
   Switch,
 } from "@agw/components";
 import type { ExtensionInstallPreview, ExtensionRecoveryNotice } from "@desktop/shared/contracts";
-import type { ExtensionManifest } from "@desktop/shared/extension-api";
+import {
+  type ExtensionManifest,
+  type ExtensionPermission,
+  HIGH_RISK_EXTENSION_PERMISSIONS,
+} from "@agw/extension-sdk";
 import {
   isUnencryptedHostPermission,
   parseHostPermission,
 } from "@desktop/shared/extension-host-permissions";
-import {
-  type ExtensionPermission,
-  HIGH_RISK_EXTENSION_PERMISSIONS,
-} from "@desktop/shared/extension-permissions";
 import { extensionIcon } from "./extensions/extension-contributions";
 import type { ExtensionHost, ExtensionState } from "./extensions/extension-host";
 import { useExtensionRuntime } from "./extensions/extension-host-provider";

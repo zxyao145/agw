@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { ExtensionFrameKind } from "../../shared/extension-api";
+import type { ExtensionFrameKind } from "@agw/extension-sdk";
 import { ExtensionOperationError } from "./extension-ipc-result";
 
 export type RegisteredFrame = {

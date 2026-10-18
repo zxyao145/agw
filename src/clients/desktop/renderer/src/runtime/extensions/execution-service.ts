@@ -13,8 +13,7 @@ import {
   type InteractionResponse,
   type PermissionMode,
 } from "@agw/execution-core";
-import type { ExecutionCloseReason } from "@desktop/shared/extension-api";
-import { createExtensionError } from "@desktop/shared/extension-rpc";
+import { createExtensionError, type ExecutionCloseReason } from "@agw/extension-sdk";
 import type { ContextService } from "./context-service";
 
 export const MAX_SESSIONS_PER_EXTENSION = 4;

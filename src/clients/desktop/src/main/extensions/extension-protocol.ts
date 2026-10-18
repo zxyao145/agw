@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lookup } from "mime-types";
 
-import type { ExtensionManifest } from "../../shared/extension-api";
+import type { ExtensionManifest } from "@agw/extension-sdk";
 import { isValidPackagePath } from "../../shared/extension-manifest";
 import { isPathInside } from "./extension-catalog";
 import { buildExtensionCsp } from "./extension-csp";

@@ -70,6 +70,15 @@ function sampleManifest(): Record<string, unknown> {
         conversationActions: [],
       },
       explorerActions: [],
+      fileViewers: [
+        {
+          id: "preview",
+          title: "Preview",
+          icon: "BookOpen",
+          patterns: ["*.md", "README"],
+          entry: "preview.html",
+        },
+      ],
     },
     permissions: ["context.project", "fs.cloud.read", "chat.composer"],
     hostPermissions: ["https://api.example.com"],
@@ -214,6 +223,58 @@ test("duplicate ids and permissions are rejected", () => {
   );
 });
 
+test("file viewers need name patterns without path separators", () => {
+  const viewer = (manifest: Record<string, unknown>) =>
+    (contributes(manifest).fileViewers as Record<string, unknown>[])[0];
+  assert.deepEqual(errorCodes(withChange((manifest) => (viewer(manifest).patterns = []))), [
+    "INVALID_FIELD",
+  ]);
+  assert.deepEqual(
+    errorCodes(withChange((manifest) => (viewer(manifest).patterns = ["docs/*.md"]))),
+    ["INVALID_FIELD"],
+  );
+  assert.deepEqual(
+    errorCodes(withChange((manifest) => (viewer(manifest).patterns = ["*.md\\x"]))),
+    ["INVALID_FIELD"],
+  );
+  assert.deepEqual(
+    errorCodes(
+      withChange((manifest) => (viewer(manifest).patterns = ["*.excalidraw", "?.txt", "*"])),
+    ),
+    [],
+  );
+  const duplicate = evaluateExtensionManifest(
+    withChange((manifest) => (viewer(manifest).patterns = ["*.md", "*.md"])),
+    APP_VERSION,
+  );
+  assert.deepEqual(
+    duplicate.errors.map((error) => [error.code, error.path]),
+    [["DUPLICATE_VALUE", "contributes.fileViewers[0].patterns[1]"]],
+  );
+});
+
+test("sidebar views, main views and file viewers cannot share an id", () => {
+  const result = evaluateExtensionManifest(
+    withChange((manifest) => {
+      (contributes(manifest).fileViewers as Record<string, unknown>[])[0].id = "app";
+      (contributes(manifest).sidebarViews as Record<string, unknown>[]).push({
+        id: "app",
+        title: "Hello",
+        icon: "Hand",
+        entry: "sidebar.html",
+      });
+    }),
+    APP_VERSION,
+  );
+  assert.deepEqual(
+    result.errors.map((error) => [error.code, error.path]),
+    [
+      ["DUPLICATE_ID", "contributes.mainViews[0].id"],
+      ["DUPLICATE_ID", "contributes.fileViewers[0].id"],
+    ],
+  );
+});
+
 test("host permissions accept origins and reject paths, bare wildcards and IP wildcards", () => {
   for (const value of [
     "https://api.example.com",
@@ -330,6 +391,7 @@ test("package paths referenced by the manifest are listed with their fields", ()
     { path: "sidebar.html", field: "contributes.sidebarViews[0].entry", kind: "entry" },
     { path: "icon.svg", field: "contributes.mainViews[0].icon", kind: "icon" },
     { path: "index.html", field: "contributes.mainViews[0].entry", kind: "entry" },
+    { path: "preview.html", field: "contributes.fileViewers[0].entry", kind: "entry" },
     { path: "settings.html", field: "contributes.settings.entry", kind: "entry" },
     { path: "icon.svg", field: "contributes.chat.messageActions[0].icon", kind: "icon" },
   ]);
@@ -348,6 +410,16 @@ test("the generated JSON Schema validates the same samples", () => {
     ],
     ["id format", withChange((manifest) => (manifest.id = "Hello")), false],
     ["agw prefix", withChange((manifest) => (manifest.id = "agw-tools")), false],
+    [
+      "file viewer pattern with a path",
+      withChange(
+        (manifest) =>
+          ((contributes(manifest).fileViewers as Record<string, unknown>[])[0].patterns = [
+            "a/*.md",
+          ]),
+      ),
+      false,
+    ],
     ["path escape", withChange((manifest) => (manifest.background = "../background.js")), false],
     ["absolute path", withChange((manifest) => (manifest.background = "/background.js")), false],
     [

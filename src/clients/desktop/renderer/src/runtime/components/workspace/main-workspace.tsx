@@ -6,13 +6,14 @@ import {
   type ChatMessageActionArgs,
   type ExtensionMenuItem,
 } from "@agw/chat";
+import type { FileViewerFile } from "@agw/extension-sdk";
 
 import type { ExtensionHost, ExtensionHostSnapshot } from "../../extensions/extension-host";
 import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
 import type { ViewOpenRequest } from "../../extensions/workspace-layout-store";
 import type { WorkspaceView } from "../../extensions/workspace-registry";
-import { ExtensionView } from "./extension-view";
+import { ExtensionView, ExtensionViewInfo, reloadExtensionView } from "./extension-view";
 
 export type MainWorkspaceProps = {
   host: ExtensionHost;
@@ -24,6 +25,9 @@ export type MainWorkspaceProps = {
   openRequests: Readonly<Record<string, ViewOpenRequest>>;
   composerActions: readonly ExtensionMenuItem<Record<string, never>>[];
   messageActions: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
+  /** 匹配当前文件的文件查看器及其文件。File viewers matching the current file, and that file. */
+  fileViewers: readonly WorkspaceView[];
+  fileViewerFile: FileViewerFile | null;
 };
 
 /**
@@ -33,7 +37,7 @@ export type MainWorkspaceProps = {
  * main views hide or unload according to `retainContextWhenHidden`.
  */
 export function MainWorkspace(props: MainWorkspaceProps) {
-  const { activeView } = props;
+  const { activeView, fileViewerFile } = props;
   const isChat = activeView.id === BUILT_IN_VIEWS.chat;
   const retained = new Set(props.retainedViews.map((view) => view.id));
   const extensionView = (view: WorkspaceView, hidden: boolean) => (
@@ -48,6 +52,12 @@ export function MainWorkspace(props: MainWorkspaceProps) {
       />
     </div>
   );
+  const fileViewers = fileViewerFile ? props.fileViewers : [];
+  const fileViewer = (viewerId: string) => {
+    const view = fileViewers.find((item) => item.id === viewerId);
+    if (!view) throw new Error(`File viewer ${viewerId} is not available.`);
+    return view;
+  };
 
   return (
     <main className="agw-main-workspace" aria-label={activeView.title} data-view-id={activeView.id}>
@@ -59,7 +69,32 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           messageActions={props.messageActions}
         />
       </div>
-      {activeView.id === BUILT_IN_VIEWS.file ? <ChatFilePane /> : null}
+      {activeView.id === BUILT_IN_VIEWS.file ? (
+        <ChatFilePane
+          fileViewers={fileViewers.map((view) => ({
+            id: view.id,
+            title: view.title,
+            unsaved: props.snapshot.unsavedViewIds.includes(view.id),
+          }))}
+          renderFileViewer={(viewerId) => {
+            const view = fileViewers.find((item) => item.id === viewerId);
+            return view && fileViewerFile ? (
+              <ExtensionView
+                key={view.id}
+                host={props.host}
+                tracker={props.tracker}
+                snapshot={props.snapshot}
+                view={view}
+                openRequest={undefined}
+                file={fileViewerFile}
+                showHeader={false}
+              />
+            ) : null;
+          }}
+          onReloadFileViewer={(viewerId) => reloadExtensionView(props.host, fileViewer(viewerId))}
+          renderFileViewerInfo={(viewerId) => <ExtensionViewInfo view={fileViewer(viewerId)} />}
+        />
+      ) : null}
       {props.retainedViews.map((view) => extensionView(view, view.id !== activeView.id))}
       {activeView.extensionId !== null && !retained.has(activeView.id)
         ? extensionView(activeView, false)

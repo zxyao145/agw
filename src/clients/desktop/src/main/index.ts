@@ -153,6 +153,12 @@ function extensionSdkRoot(): string {
     : resolve(__dirname, "..", "..", "resources", "extension-sdk");
 }
 
+function bundledExtensionsRoot(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "extensions")
+    : resolve(__dirname, "..", "..", "resources", "extensions");
+}
+
 function trayIconPath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "assets", "tray-icon.svg")
@@ -226,6 +232,9 @@ async function loadRenderer(pathname = "/desktop/chat/"): Promise<void> {
   await loadTrustedRendererUrl(target);
 }
 
+// 主进程主动加载渲染页面时不询问未保存修改。Renderer loads started by the main process skip the unsaved-changes prompt.
+let mainProcessRendererLoad = false;
+
 async function loadTrustedRendererUrl(target: string): Promise<void> {
   if (!mainWindow) return;
   if (!isTrustedRenderer(target)) {
@@ -233,7 +242,12 @@ async function loadTrustedRendererUrl(target: string): Promise<void> {
   }
   rendererRecoveryGuard.markLoadStarted();
   lastTrustedRendererUrl = target;
-  await mainWindow.loadURL(target);
+  mainProcessRendererLoad = true;
+  try {
+    await mainWindow.loadURL(target);
+  } finally {
+    mainProcessRendererLoad = false;
+  }
 }
 
 function writeRendererEvent(
@@ -380,6 +394,23 @@ function createMainWindow(): BrowserWindow {
   });
   window.webContents.on("will-navigate", (event, target) => {
     if (!isTrustedRenderer(target)) event.preventDefault();
+  });
+  // 文件查看器有未保存修改时，关闭窗口、退出或刷新前由用户确认。preventDefault 表示继续卸载。
+  // With unsaved file viewer changes, closing, quitting or reloading asks the user first; preventDefault continues the unload.
+  window.webContents.on("will-prevent-unload", (event) => {
+    if (mainProcessRendererLoad) {
+      event.preventDefault();
+      return;
+    }
+    const choice = dialog.showMessageBoxSync(window, {
+      type: "warning",
+      buttons: ["Discard", "Cancel"],
+      defaultId: 1,
+      cancelId: 1,
+      message: "Discard unsaved changes?",
+      detail: "A file opened in an extension has changes that have not been saved.",
+    });
+    if (choice === 0) event.preventDefault();
   });
   window.webContents.on("did-navigate", (_event, target) => {
     if (isTrustedRenderer(target)) lastTrustedRendererUrl = target;
@@ -835,6 +866,7 @@ void app
       userDataDirectory: app.getPath("userData"),
       appVersion: packageMetadata.appVersion,
       sdkDirectory: extensionSdkRoot(),
+      bundledExtensionsDirectory: bundledExtensionsRoot(),
       extensionPreloadPath: resolve(__dirname, "..", "preload", "extension.js"),
       settings: settingsStore,
       getMainWindow: () => mainWindow,

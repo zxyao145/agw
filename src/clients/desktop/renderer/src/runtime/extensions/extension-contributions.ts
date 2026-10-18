@@ -1,5 +1,5 @@
 import type { InstalledExtension } from "@desktop/shared/contracts";
-import type { ExtensionActionContribution, ExtensionManifest } from "@desktop/shared/extension-api";
+import type { ExtensionActionContribution, ExtensionManifest } from "@agw/extension-sdk";
 import { extensionViewId } from "./workspace-ids";
 import type {
   ExtensionRegistration,
@@ -50,6 +50,17 @@ export function extensionViews(installed: InstalledExtension): WorkspaceView[] {
       icon: resolveIcon(view.icon, installed.icons),
       entry: view.entry,
       retainContextWhenHidden: view.retainContextWhenHidden ?? false,
+    })),
+    ...(manifest.contributes?.fileViewers ?? []).map((viewer): WorkspaceView => ({
+      ...base,
+      id: extensionViewId(installed.id, viewer.id),
+      location: "file",
+      title: viewer.title,
+      icon: resolveIcon(viewer.icon, installed.icons),
+      entry: viewer.entry,
+      // 文件查看器隐藏时保留页面，由文件变化决定关闭。File viewers keep their page when hidden; file changes close them.
+      retainContextWhenHidden: true,
+      patterns: viewer.patterns,
     })),
   ];
 }

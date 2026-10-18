@@ -9,6 +9,7 @@ import type {
   CreateExtensionFrameRequest,
   ExtensionEvent,
   ExtensionFrameLayoutUpdate,
+  ExtensionFrameObscureRequest,
   ExtensionFrameSnapshot,
 } from "../../shared/contracts";
 import type { HostPermission } from "../../shared/extension-host-permissions";
@@ -205,33 +206,51 @@ export class ExtensionViewManager {
     }
   }
 
+  /**
+   * 截取被遮挡 view 的截图，view 仍然显示；宿主画出截图后调用 `hideObscured`。没有截图时直接隐藏。
+   * Captures obscured views while they still show; the host calls `hideObscured` once it painted the snapshot.
+   * Without a snapshot the view hides at once.
+   */
   public obscure(frameIds: readonly string[]): Promise<ExtensionFrameSnapshot[]> {
     return Promise.all(
       frameIds.map(async (frameId): Promise<ExtensionFrameSnapshot> => {
         const frame = this.frames.get(frameId);
-        if (!frame || !frame.inWindow) return { frameId, snapshot: null };
+        if (!frame || !frame.inWindow) return { frameId, snapshot: null, token: 0 };
         const token = frame.visibility.beginObscure();
+        const hideNow = () => {
+          if (frame.visibility.hide(token)) frame.view.setVisible(frame.visibility.visible);
+        };
         if (!frame.view.getVisible()) {
-          if (frame.visibility.completeObscure(token))
-            frame.view.setVisible(frame.visibility.visible);
-          return { frameId, snapshot: null };
+          hideNow();
+          return { frameId, snapshot: null, token };
         }
         let image: Electron.NativeImage;
         try {
           image = await frame.view.webContents.capturePage();
-        } catch {
-          return { frameId, snapshot: null };
+        } catch (error) {
+          console.error(`Unable to capture extension frame ${frameId}.`, error);
+          hideNow();
+          return { frameId, snapshot: null, token };
         }
         if (!this.frames.has(frameId) || !frame.visibility.completeObscure(token)) {
-          return { frameId, snapshot: null };
+          return { frameId, snapshot: null, token };
         }
-        frame.view.setVisible(frame.visibility.visible);
         return {
           frameId,
           snapshot: `data:image/jpeg;base64,${image.toJPEG(JPEG_QUALITY).toString("base64")}`,
+          token,
         };
       }),
     );
+  }
+
+  /** 宿主画出截图后隐藏 view；过期的请求不生效。Hides views once the host painted their snapshots; stale requests are ignored. */
+  public hideObscured(requests: readonly ExtensionFrameObscureRequest[]): void {
+    for (const request of requests) {
+      const frame = this.frames.get(request.frameId);
+      if (!frame || !frame.inWindow) continue;
+      if (frame.visibility.hide(request.token)) frame.view.setVisible(frame.visibility.visible);
+    }
   }
 
   public reveal(frameIds: readonly string[]): void {

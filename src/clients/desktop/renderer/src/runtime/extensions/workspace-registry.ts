@@ -1,8 +1,10 @@
-import type { ExtensionAction } from "@desktop/shared/extension-api";
+import type { ExtensionAction } from "@agw/extension-sdk";
+import { matchesFileNamePattern } from "./file-viewer-patterns";
 
 export type WorkspaceIcon = { kind: "lucide"; name: string } | { kind: "image"; src: string };
 
-export type WorkspaceViewLocation = "sidebar" | "main";
+/** `file` 为文件查看器，在 Files 的文件视图中显示。`file` is a file viewer, shown inside the Files view. */
+export type WorkspaceViewLocation = "sidebar" | "main" | "file";
 
 export type WorkspaceViewFailure = { code: string; message: string };
 
@@ -19,6 +21,8 @@ export type WorkspaceView = {
   retainContextWhenHidden: boolean;
   /** extension 进入 failed 后保留注册并标记失败。Kept and marked when the extension fails. */
   failure: WorkspaceViewFailure | null;
+  /** 文件查看器的文件名模式。A file viewer's name patterns. */
+  patterns?: readonly string[];
 };
 
 /** Ribbon 项或对话扩展菜单项。A Ribbon item or a chat extension menu item. */
@@ -80,6 +84,26 @@ export class WorkspaceRegistry {
 
   public view(viewId: string): WorkspaceView | undefined {
     return this.snapshot.views.get(viewId);
+  }
+
+  /**
+   * 文件名匹配的文件查看器：按 extension id 排序，同一 extension 内按声明顺序。
+   * File viewers whose patterns match the file name, ordered by extension id and then by declaration order.
+   */
+  public fileViewersFor(fileName: string): WorkspaceView[] {
+    return [...this.snapshot.views.values()]
+      .filter(
+        (view) =>
+          view.location === "file" &&
+          (view.patterns ?? []).some((pattern) => matchesFileNamePattern(pattern, fileName)),
+      )
+      .sort((left, right) =>
+        left.extensionId === right.extensionId
+          ? 0
+          : (left.extensionId ?? "") < (right.extensionId ?? "")
+            ? -1
+            : 1,
+      );
   }
 
   /** extension 进入 active 时注册它的视图与入口。Registers an extension's views and entries when it becomes active. */

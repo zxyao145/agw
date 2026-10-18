@@ -3,10 +3,10 @@ import type {
   ExtensionErrorData,
   ExtensionFrameKind,
   ExtensionManifest,
+  ExtensionPermission,
   FileChangeEvent,
   FileStat,
-} from "../extension-api";
-import type { ExtensionPermission } from "../extension-permissions";
+} from "@agw/extension-sdk";
 
 export type ExtensionValidation = "valid" | "invalid" | "incompatible";
 
@@ -26,8 +26,12 @@ export type ExtensionSettings = {
   lastActivatedVersion: string | null;
 };
 
+/** 内置 extension 来自应用资源目录，用户 extension 来自 `<userData>/extensions`。Bundled from the app resources, user from `<userData>/extensions`. */
+export type ExtensionSource = "bundled" | "user";
+
 export type InstalledExtension = {
   id: string;
+  source: ExtensionSource;
   directory: string;
   manifest: ExtensionManifest | null;
   validation: ExtensionValidation;
@@ -107,6 +111,14 @@ export type ExtensionFrameLayoutUpdate = {
 export type ExtensionFrameSnapshot = {
   frameId: string;
   snapshot: string | null;
+  /** 遮挡请求的序号，画出截图后用它隐藏 view。The obscure request token used to hide the view once the snapshot is painted. */
+  token: number;
+};
+
+/** 宿主画出截图后请求隐藏的 view。A view the host asks to hide once it painted the snapshot. */
+export type ExtensionFrameObscureRequest = {
+  frameId: string;
+  token: number;
 };
 
 /** 主窗口 preload 交给宿主页面的端口消息。Port message the main-window preload hands to the host page. */

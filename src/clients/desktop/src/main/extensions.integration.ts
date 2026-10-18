@@ -71,6 +71,14 @@ async function overlayState(frame: FrameHandle): Promise<string> {
   return `overlays ${overlays}; slot ${slot}; visible ${frame.view.getVisible()}; visibility ${JSON.stringify(visibility)}; document ${documentState}`;
 }
 
+/** 占位组件中的截图已加载。The snapshot in the frame's slot has loaded. */
+function snapshotLoaded(frameId: string): string {
+  return `(() => {
+    const image = document.querySelector('[data-frame-id="${frameId}"] img');
+    return Boolean(image?.complete && image.naturalWidth > 0);
+  })()`;
+}
+
 function evalHost<T>(code: string): Promise<T> {
   return host().executeJavaScript(code, true) as Promise<T>;
 }
@@ -277,11 +285,11 @@ async function boot(): Promise<void> {
     await evalHost(
       `window.agwDesktop.saveToken(${JSON.stringify(config.remoteProfile.id)}, ${JSON.stringify(config.firstToken)}).then(() => true)`,
     );
-    await evalHost(
-      `location.assign(${JSON.stringify(`/desktop/chat/?projectId=${config.projectId}`)}); true`,
-    );
-    await delay(500);
   }
+  await evalHost(
+    `location.assign(${JSON.stringify(`/desktop/chat/?projectId=${config.projectId}`)}); true`,
+  );
+  await delay(500);
   await untilHost("Boolean(document.querySelector('.agw-ribbon'))", "the chat workspace", 60_000);
   await untilHost(
     `Boolean(document.querySelector('.agw-left-sidebar[data-view-id="agw.conversations"]'))`,
@@ -303,6 +311,29 @@ async function beforeEnabling(): Promise<void> {
   assert.equal(result.ok, false);
   assert.equal(result.error?.code, "ERR_EXTENSION_DISABLED");
   pass("before enabling, the Ribbon has only built-in items and capability calls are refused");
+}
+
+type SettingsFile = {
+  extensions: Record<string, { enabled: boolean; grantedPermissions: string[] }>;
+  removedBundledExtensions: string[];
+};
+
+async function bundledDefaults(): Promise<void> {
+  await goToExtensions();
+  await untilStatus("markdown-preview", "Active");
+  await untilStatus("excalidraw", "Active");
+  assert.equal(await evalHost<boolean>(`Boolean(${OPEN_DIALOG})`), false);
+  const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
+  assert.equal(settings.extensions["markdown-preview"].enabled, true);
+  assert.deepEqual(settings.extensions["markdown-preview"].grantedPermissions, ["fs.cloud.read"]);
+  assert.equal(settings.extensions.excalidraw.enabled, true);
+  assert.deepEqual([...settings.extensions.excalidraw.grantedPermissions].sort(), [
+    "fs.cloud.read",
+    "fs.cloud.write",
+  ]);
+  assert.deepEqual(settings.removedBundledExtensions, []);
+  await goToChat();
+  pass("bundled extensions are active on first launch with their permissions approved");
 }
 
 async function enableSample(): Promise<void> {
@@ -441,10 +472,8 @@ async function hostOverlays(): Promise<void> {
 
   await openMenu("button.agw-task-button");
   await until(() => !main.view.getVisible(), "the main view to be replaced by a snapshot");
-  await untilHost(
-    `Boolean(document.querySelector('[data-frame-id="${main.frameId}"] img'))`,
-    "the snapshot image",
-  );
+  // view 在截图加载并画出之后才隐藏。The view hides only after the snapshot loaded and was painted.
+  assert.equal(await evalHost<boolean>(snapshotLoaded(main.frameId)), true);
   await untilHost(
     `Boolean(document.querySelector('[data-slot="dropdown-menu-content"]'))`,
     "the menu",
@@ -905,8 +934,13 @@ async function failureModes(): Promise<void> {
   assert.equal(await extensionStatus("sample"), "Active");
   pass("a failing activate marks only that extension as failed");
 
+  const neverRequests = async () =>
+    (await serviceState()).requests.filter((line) => line === "GET /never").length;
+  const requestsBefore = await neverRequests();
   await enable("slow", "Slow");
   await untilStatus("slow", "Activating");
+  // activate 发出请求后再停用，才能检查请求被关闭。Disable after activate sent its request, so its closing can be checked.
+  await until(async () => (await neverRequests()) > requestsBefore, "the pending request");
   const neverClosed = (await serviceState()).neverClosed;
   await disable("slow");
   await untilStatus("slow", "Disabled", 3000);
@@ -1266,20 +1300,47 @@ async function connectionChanges(): Promise<void> {
   pass("changing the profile URL or token clears the context once and requests keep working");
 }
 
-async function filesView(): Promise<void> {
+/** 在 Files 中点击根目录下的文件。Clicks a root file in Files. */
+async function clickFileInTree(name: string): Promise<void> {
   await goToChat();
-  await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.files"]');
-  await untilHost(
-    `[...document.querySelectorAll('.agw-left-sidebar *')].some((item) => item.textContent === "readme.md")`,
-    "the file tree",
-  );
-  await evalHost(
-    `[...document.querySelectorAll('.agw-left-sidebar *')].find((item) => item.textContent === "readme.md").click(); true`,
-  );
+  if (
+    !(await evalHost<boolean>(
+      `Boolean(document.querySelector('.agw-left-sidebar[data-view-id="agw.files"]'))`,
+    ))
+  ) {
+    await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.files"]');
+  }
+  const item = `[...document.querySelectorAll('.agw-left-sidebar *')].find((element) => element.textContent === ${JSON.stringify(name)} && element.children.length === 0)`;
+  await untilHost(`Boolean(${item})`, `${name} in the file tree`);
+  await evalHost(`${item}.click(); true`);
+}
+
+/** 在 Files 中点击根目录下的文件并等待文件视图显示它。Clicks a root file in Files and waits for the File view to show it. */
+async function openFileInTree(name: string): Promise<void> {
+  await clickFileInTree(name);
   await untilHost(
     `document.querySelector('.agw-main-workspace')?.getAttribute('data-view-id') === "agw.file"`,
     "the file view",
   );
+  await untilHost(shownFileIs(name), `the file view to show ${name}`);
+}
+
+function shownFileIs(name: string): string {
+  return `[...document.querySelectorAll('.agw-main-workspace span.font-medium')].some((element) => element.textContent === ${JSON.stringify(name)})`;
+}
+
+function viewerTab(id: string): string {
+  return `document.querySelector('[data-file-viewer-tab="${id}"]')`;
+}
+
+async function filesView(): Promise<void> {
+  await openFileInTree("readme.md");
+  // Markdown 文件默认由 Markdown Preview 显示，切换到 Source 显示原文。Markdown opens in Markdown Preview; Source shows the text.
+  await untilHost(
+    `${viewerTab("markdown-preview:preview")}?.getAttribute("aria-selected") === "true"`,
+    "the Preview tab",
+  );
+  await clickHost('[data-file-viewer-tab="source"]');
   await untilHost(
     `document.querySelector('.agw-main-workspace')?.textContent.includes("hello cloud")`,
     "the file content",
@@ -1291,6 +1352,288 @@ async function filesView(): Promise<void> {
   );
   await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.conversations"]');
   pass("the Files view opens file content and the chat composer survives switching back");
+}
+
+const MARKDOWN_VIEWER = "markdown-preview:preview";
+const OPEN_CONFIRMATION = `document.querySelector('[data-host-confirmation][data-state="open"]')`;
+
+function markdownText(includes: string): string {
+  return `Boolean(document.querySelector("article.markdown-body")?.textContent.includes(${JSON.stringify(includes)}))`;
+}
+
+async function markdownPreview(): Promise<void> {
+  await openFileInTree("guide.md");
+  await untilHost(
+    `${viewerTab(MARKDOWN_VIEWER)}?.getAttribute("aria-selected") === "true"`,
+    "the Preview tab",
+  );
+  const firstPreview = await untilFrame("markdown-preview", "fileViewer");
+  const rendered = `(() => {
+    const article = document.querySelector("article.markdown-body");
+    const image = article?.querySelector('img[alt="Logo"]');
+    return article?.querySelector("h1")?.textContent === "Guide"
+      && Boolean(article.querySelector("table td"))
+      && Boolean(article.querySelector("pre code.hljs .hljs-keyword"))
+      && Boolean(image?.src.startsWith("blob:") && image.complete && image.naturalWidth > 0);
+  })()`;
+  await until(() => evalFrame<boolean>(firstPreview, rendered), "the rendered Markdown");
+  pass(
+    "Markdown files open in Markdown Preview with headings, tables, highlighted code, and project images",
+  );
+
+  // 文件标题行右侧的 "Reload view" 是文件视图中唯一的刷新按钮，点击后用新的 frame 重新加载查看器。
+  // "Reload view" next to the file name is the only one in the file view, and it reloads the viewer in a new frame.
+  const reloadButtons = `document.querySelectorAll('.agw-main-workspace [aria-label="Reload view"]')`;
+  assert.equal(await evalHost<number>(`${reloadButtons}.length`), 1);
+  assert.equal(
+    await evalHost<boolean>(
+      `${reloadButtons}[0].parentElement === document.querySelector('.agw-main-workspace [role="tablist"]').parentElement`,
+    ),
+    true,
+  );
+  await evalHost(`${reloadButtons}[0].click(); true`);
+  const preview = await until(() => {
+    const frame = frameOf("markdown-preview", "fileViewer");
+    return frame &&
+      frame.frameId !== firstPreview.frameId &&
+      runtime().registry.get(frame.frameId)?.pageId
+      ? frame
+      : null;
+  }, "the reloaded preview");
+  await until(() => evalFrame<boolean>(preview, rendered), "the Markdown after reloading");
+  pass("Reload view next to the file name reloads the viewer");
+
+  // 文件查看器没有宿主标题条，来源显示在 "Reload view" 右侧 Info 按钮的弹出层中。
+  // File viewers have no host title bar; the source shows in the popup of the Info button right of "Reload view".
+  assert.equal(
+    await evalHost<boolean>(
+      `Boolean(document.querySelector('.agw-main-workspace .agw-extension-view-header'))`,
+    ),
+    false,
+  );
+  assert.equal(
+    await evalHost<string | null>(
+      `${reloadButtons}[0].nextElementSibling?.getAttribute("aria-label") ?? null`,
+    ),
+    "View info",
+  );
+  const infoPopup = `document.querySelector('[data-slot="popover-content"][data-state="open"]')`;
+  const pageBeforeInfo = runtime().registry.get(preview.frameId)!.pageId;
+  await evalFrame(preview, "window.__infoProbe = 1; true");
+  await clickHost('.agw-main-workspace [aria-label="View info"]');
+  await untilHost(
+    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Markdown Preview")`,
+    "the viewer info popup",
+  );
+  // 弹出层盖住查看器时换成已画出的截图，页面不重新加载。Under the popup the viewer swaps to a painted snapshot without reloading.
+  await until(() => !preview.view.getVisible(), "the preview to be replaced by its snapshot");
+  assert.equal(await evalHost<boolean>(snapshotLoaded(preview.frameId)), true);
+  await pressEscape();
+  await untilHost(`!${infoPopup}`, "the viewer info popup to close");
+  await until(() => preview.view.getVisible(), "the preview to show again");
+  await untilHost(
+    `!document.querySelector('[data-frame-id="${preview.frameId}"] img')`,
+    "the preview snapshot to go away",
+  );
+  assert.equal(runtime().registry.get(preview.frameId)!.pageId, pageBeforeInfo);
+  assert.equal(await evalFrame<number>(preview, "window.__infoProbe"), 1);
+  // 文件标题行的边框与主区域两侧对齐，没有内边距留下的空隙。The file title row's border spans the main workspace edge to edge.
+  const edges = await evalHost<{ header: [number, number]; main: [number, number] }>(`(() => {
+    const header = document.querySelector('.agw-main-workspace [role="tablist"]').parentElement.parentElement.getBoundingClientRect();
+    const main = document.querySelector('.agw-main-workspace').getBoundingClientRect();
+    return { header: [header.left, header.right], main: [main.left, main.right] };
+  })()`);
+  assert.deepEqual(edges.header, edges.main);
+  pass("the Info button right of Reload view names the viewer and its extension");
+
+  await clickHost('[data-file-viewer-tab="source"]');
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes("[Notes](docs/notes.md)")`,
+    "the Markdown source",
+  );
+  // 切换到 Source 时查看器隐藏并保留页面。Switching to Source hides the viewer and keeps its page.
+  await until(() => !preview.view.getVisible(), "the preview to hide");
+  assert.equal(frameOf("markdown-preview", "fileViewer")?.frameId, preview.frameId);
+  await clickHost(`[data-file-viewer-tab="${MARKDOWN_VIEWER}"]`);
+  await until(() => preview.view.getVisible(), "the preview to show again");
+
+  await evalFrame(preview, `document.querySelector('a[href="docs/notes.md"]').click(); true`);
+  await untilHost(shownFileIs("notes.md"), "docs/notes.md in the file view");
+  await until(
+    () => evalFrame<boolean>(preview, markdownText("project notes")),
+    "the notes preview",
+  );
+  assert.equal(frameOf("markdown-preview", "fileViewer")?.frameId, preview.frameId);
+  pass("Source shows the text, and a relative link opens the linked file in the same viewer");
+
+  await openFileInTree("guide.md");
+  await until(() => evalFrame<boolean>(preview, markdownText("Example")), "the guide preview");
+  await evalFrame(
+    preview,
+    `document.querySelector('a[href="https://example.com/docs"]').click(); true`,
+  );
+  await untilHost(
+    `${OPEN_CONFIRMATION}?.getAttribute("data-host-confirmation") === "open-link"
+      && ${OPEN_CONFIRMATION}.textContent.includes("https://example.com/docs")
+      && ${OPEN_CONFIRMATION}.textContent.includes("Markdown Preview")`,
+    "the Open link dialog",
+  );
+  await clickText("Cancel", OPEN_CONFIRMATION);
+  await untilHost(`!${OPEN_CONFIRMATION}`, "the Open link dialog to close");
+  await untilHost(shownFileIs("guide.md"), "the guide to stay open");
+  pass("an external link asks before opening the browser");
+
+  await disable("markdown-preview");
+  await untilStatus("markdown-preview", "Disabled", 10_000);
+  assert.equal(frames("markdown-preview").length, 0);
+  await openFileInTree("guide.md");
+  await untilHost(
+    `!document.querySelector('[data-file-viewer-tab]')
+      && document.querySelector('.agw-main-workspace')?.textContent.includes("[Notes](docs/notes.md)")`,
+    "the Markdown source without viewers",
+  );
+  await enable("markdown-preview", "Markdown Preview");
+  await untilStatus("markdown-preview", "Active");
+  await openFileInTree("readme.md");
+  await untilHost(
+    `${viewerTab(MARKDOWN_VIEWER)}?.getAttribute("aria-selected") === "true"`,
+    "the Preview tab after enabling",
+  );
+  const enabled = await untilFrame("markdown-preview", "fileViewer");
+  await until(() => evalFrame<boolean>(enabled, markdownText("hello cloud")), "the readme preview");
+  pass(
+    "disabling Markdown Preview leaves only the source, and enabling it again restores the preview",
+  );
+}
+
+const EXCALIDRAW_VIEWER = "excalidraw:editor";
+const UNSAVED_MARKER = `Boolean(${viewerTab(EXCALIDRAW_VIEWER)}?.querySelector('[aria-label="Unsaved changes"]'))`;
+const DISCARD_DIALOG = `document.querySelector('[data-host-confirmation="discard-unsaved"][data-state="open"]')`;
+// 静态画布上的深色像素数，画布尚未渲染时为 -1；暗色主题只给画布加 CSS 滤镜，像素仍是浅色主题。
+// Dark pixels on the static canvas, or -1 before it renders; the dark theme only adds a CSS filter, so pixels stay light.
+const DRAWN_PIXELS = `(() => {
+  const canvas = document.querySelector("canvas.excalidraw__canvas.static");
+  if (!canvas || canvas.width === 0) return -1;
+  const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+  let count = 0;
+  for (let index = 0; index < data.length; index += 4) if (data[index] < 128) count += 1;
+  return count;
+})()`;
+
+/** 在 frame 中按下并松开一个键。Presses and releases a key in a frame. */
+function pressKey(
+  frame: FrameHandle,
+  keyCode: string,
+  modifiers: ("meta" | "control")[] = [],
+): void {
+  const contents = frame.view.webContents;
+  contents.focus();
+  contents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
+  if (modifiers.length === 0) contents.sendInputEvent({ type: "char", keyCode });
+  contents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
+}
+
+/** 在 frame 中按住左键从 start 拖到 end。Drags with the left button from start to end in a frame. */
+function drag(frame: FrameHandle, start: { x: number; y: number }, end: { x: number; y: number }) {
+  const contents = frame.view.webContents;
+  contents.sendInputEvent({ type: "mouseMove", ...start });
+  contents.sendInputEvent({ type: "mouseDown", ...start, button: "left", clickCount: 1 });
+  for (let step = 1; step <= 5; step += 1) {
+    contents.sendInputEvent({
+      type: "mouseMove",
+      x: Math.round(start.x + ((end.x - start.x) * step) / 5),
+      y: Math.round(start.y + ((end.y - start.y) * step) / 5),
+      modifiers: ["leftbuttondown"],
+    });
+  }
+  contents.sendInputEvent({ type: "mouseUp", ...end, button: "left", clickCount: 1 });
+}
+
+async function excalidrawEditor(): Promise<void> {
+  const diagramPath = join(config.projectDirectory, "diagram.excalidraw");
+  await openFileInTree("diagram.excalidraw");
+  await untilHost(
+    `${viewerTab(EXCALIDRAW_VIEWER)}?.getAttribute("aria-selected") === "true"`,
+    "the Excalidraw tab",
+  );
+  const editor = await untilFrame("excalidraw", "fileViewer");
+  await until(
+    async () => (await evalFrame<number>(editor, DRAWN_PIXELS)) > 0,
+    "the restored diagram",
+  );
+  await delay(500);
+  assert.equal(await evalHost<boolean>(UNSAVED_MARKER), false);
+  pass("Excalidraw files open in the Excalidraw editor with the saved scene");
+
+  pressKey(editor, "r");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        editor,
+        `document.querySelector('[data-testid="toolbar-rectangle"]')?.checked === true`,
+      ),
+    "the rectangle tool",
+  );
+  const { width, height } = editor.view.getBounds();
+  const start = { x: Math.round(width * 0.55), y: Math.round(height * 0.65) };
+  drag(editor, start, { x: start.x + 120, y: start.y + 80 });
+  await untilHost(UNSAVED_MARKER, "the unsaved marker");
+
+  await clickFileInTree("guide.md");
+  await untilHost(
+    `${DISCARD_DIALOG}?.textContent.includes("diagram.excalidraw") && ${DISCARD_DIALOG}.textContent.includes("Excalidraw")`,
+    "the discard dialog",
+  );
+  await clickText("Cancel", DISCARD_DIALOG);
+  await untilHost(`!${OPEN_CONFIRMATION}`, "the discard dialog to close");
+  assert.equal(await evalHost<boolean>(shownFileIs("diagram.excalidraw")), true);
+  assert.equal(await evalHost<boolean>(UNSAVED_MARKER), true);
+
+  await clickHost('a[aria-label="Settings"]');
+  await untilHost(`Boolean(${DISCARD_DIALOG})`, "the discard dialog before Settings");
+  await clickText("Cancel", DISCARD_DIALOG);
+  await untilHost(`!${OPEN_CONFIRMATION}`, "the discard dialog to close");
+  assert.equal(await evalHost<boolean>("location.pathname.startsWith('/desktop/chat')"), true);
+  pass("unsaved changes show a marker and ask before another file or Settings replaces them");
+
+  pressKey(editor, "s", [process.platform === "darwin" ? "meta" : "control"]);
+  await until(async () => {
+    const scene = JSON.parse(await readFile(diagramPath, "utf8")) as {
+      elements: { type: string; isDeleted: boolean }[];
+    };
+    return scene.elements.filter((element) => !element.isDeleted).length === 3;
+  }, "the saved diagram");
+  await untilHost(`!${UNSAVED_MARKER}`, "the unsaved marker to clear");
+  await openFileInTree("guide.md");
+  assert.equal(await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`), false);
+  await until(() => frames("excalidraw").length === 0, "the Excalidraw frame to close");
+  pass("saving writes the new element and later file changes need no confirmation");
+
+  await openFileInTree("blank.excalidraw");
+  const blank = await untilFrame("excalidraw", "fileViewer");
+  await until(async () => (await evalFrame<number>(blank, DRAWN_PIXELS)) === 0, "the blank canvas");
+  assert.equal(
+    await evalFrame<boolean>(blank, `Boolean(document.querySelector(".status-error"))`),
+    false,
+  );
+  await delay(500);
+  assert.equal(await evalHost<boolean>(UNSAVED_MARKER), false);
+
+  // 离开对话页面会关闭查看器，所以在最后检查被拦截的请求。Leaving the chat page closes viewers, so blocked requests come last.
+  await goToExtensions();
+  await clickText("Details", `document.querySelector('[data-extension-id="excalidraw"]')`);
+  await untilHost(
+    `Boolean(document.querySelector('[data-extension-id="excalidraw"] [data-slot="collapsible-content"][data-state="open"]'))`,
+    "the Excalidraw details",
+  );
+  assert.equal(
+    await evalHost<string | null>(
+      `document.querySelector('[data-extension-id="excalidraw"] [data-testid="blocked-requests"]')?.textContent ?? null`,
+    ),
+    null,
+  );
+  await goToChat();
+  pass("an empty file opens as a blank canvas and Excalidraw loads without blocked requests");
 }
 
 async function viewReloads(): Promise<void> {
@@ -1461,7 +1804,42 @@ async function safeMode(): Promise<void> {
   pass("Reload without extensions enters safe mode, and Resume reactivates");
 }
 
+async function uninstallBundled(): Promise<void> {
+  await goToExtensions();
+  await clickText("Uninstall", `document.querySelector('[data-extension-id="excalidraw"]')`);
+  await clickHost("#extension-delete-data");
+  await clickText("Uninstall", OPEN_DIALOG);
+  await untilHost(
+    `!document.querySelector('[data-extension-id="excalidraw"]')`,
+    "Excalidraw to leave the list",
+  );
+  assert.equal(existsSync(storage("excalidraw")), false);
+  assert.equal(frames("excalidraw").length, 0);
+  const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
+  assert.deepEqual(settings.removedBundledExtensions, ["excalidraw"]);
+  assert.equal(settings.extensions.excalidraw, undefined);
+  pass(
+    "uninstalling a bundled extension with data removes it from the list and records the removal",
+  );
+}
+
 async function restartPhase(): Promise<void> {
+  await goToExtensions();
+  await untilStatus("markdown-preview", "Active", 30_000);
+  assert.equal(
+    await evalHost<boolean>(`Boolean(document.querySelector('[data-extension-id="excalidraw"]'))`),
+    false,
+  );
+  await openFileInTree("diagram.excalidraw");
+  await delay(500);
+  assert.equal(
+    await evalHost<boolean>(`Boolean(document.querySelector('[data-file-viewer-tab]'))`),
+    false,
+  );
+  pass(
+    "after restarting Desktop, Markdown Preview activates and the uninstalled Excalidraw stays absent",
+  );
+
   await goToExtensions();
   await untilStatus("sample", "Active", 30_000);
   assert.equal(frames("sample").filter((frame) => frame.kind === "background").length, 1);
@@ -1499,6 +1877,7 @@ async function run(): Promise<void> {
     return;
   }
   await beforeEnabling();
+  await bundledDefaults();
   await enableSample();
   await processIsolation();
   await viewsAndLayout();
@@ -1518,10 +1897,13 @@ async function run(): Promise<void> {
   await zipInstall();
   await connectionChanges();
   await filesView();
+  await markdownPreview();
+  await excalidrawEditor();
   await viewReloads();
   await hostReloads();
   await rejectedNavigation();
   await safeMode();
+  await uninstallBundled();
 }
 
 void run().then(

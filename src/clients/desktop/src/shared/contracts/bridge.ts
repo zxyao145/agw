@@ -10,6 +10,7 @@ import type {
   ExtensionFileSystemRequest,
   ExtensionFileSystemResult,
   ExtensionFrameLayoutUpdate,
+  ExtensionFrameObscureRequest,
   ExtensionFrameSnapshot,
   ExtensionGrants,
   ExtensionHttpRequest,
@@ -112,6 +113,11 @@ export type AgwDesktopBridge = {
     hostInstanceId: string,
     frameIds: string[],
   ): Promise<ExtensionFrameSnapshot[]>;
+  /** 宿主画出截图后隐藏 view。Hides views once the host painted their snapshots. */
+  hideObscuredExtensionFrames(
+    hostInstanceId: string,
+    requests: ExtensionFrameObscureRequest[],
+  ): Promise<void>;
   revealExtensionFrames(hostInstanceId: string, frameIds: string[]): Promise<void>;
   setExtensionFrameBackground(hostInstanceId: string, color: string): Promise<void>;
   destroyExtensionFrame(hostInstanceId: string, frameId: string): Promise<void>;

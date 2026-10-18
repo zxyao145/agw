@@ -11,7 +11,7 @@ import type {
   ExtensionRecoveryNotice,
   ExtensionValidationError,
 } from "../../shared/contracts";
-import type { ExtensionManifest } from "../../shared/extension-api";
+import type { ExtensionManifest } from "@agw/extension-sdk";
 import { writeJsonFile } from "../settings/json-file";
 import { type CatalogEntry, declaredGrants, readExtensionDirectory } from "./extension-catalog";
 
@@ -56,6 +56,7 @@ export type ExtensionInstallerOptions = {
   settings: {
     applyInstalledExtension(extensionId: string, declared: ExtensionGrants): Promise<void>;
     removeExtension(extensionId: string): Promise<void>;
+    removeBundledExtension(extensionId: string): Promise<void>;
   };
   /** 清除该 extension 的 session 数据。Clears the extension's session data. */
   clearSessionData(extensionId: string): Promise<void>;
@@ -214,6 +215,17 @@ export class ExtensionInstaller {
     });
   }
 
+  /**
+   * 卸载内置 extension：应用资源目录只读，记录卸载并按需删除数据。
+   * Uninstalls a bundled extension: the app resources are read-only, so record the removal and delete data on request.
+   */
+  public removeBundled(extensionId: string, deleteData: boolean): Promise<void> {
+    return this.serialize(async () => {
+      await this.options.settings.removeBundledExtension(extensionId);
+      if (deleteData) await this.deleteData(extensionId);
+    });
+  }
+
   /** 启动时、扫描之前恢复未完成的替换与卸载。Recovers unfinished replacements and uninstalls at startup, before scanning. */
   public recover(): Promise<ExtensionRecoveryNotice[]> {
     return this.serialize(async () => {
@@ -289,11 +301,14 @@ export class ExtensionInstaller {
     deleteData: boolean,
   ): Promise<void> {
     await this.options.settings.removeExtension(extensionId);
-    if (deleteData) {
-      await rm(join(this.options.dataDirectory, extensionId), { recursive: true, force: true });
-      await this.options.clearSessionData(extensionId);
-    }
+    if (deleteData) await this.deleteData(extensionId);
     await rm(this.installDirectory(uninstallId), { recursive: true, force: true });
+  }
+
+  /** 删除存储目录与 session 数据。Deletes the storage directory and session data. */
+  private async deleteData(extensionId: string): Promise<void> {
+    await rm(join(this.options.dataDirectory, extensionId), { recursive: true, force: true });
+    await this.options.clearSessionData(extensionId);
   }
 
   private async preview(installId: string): Promise<PreparedExtensionInstall> {

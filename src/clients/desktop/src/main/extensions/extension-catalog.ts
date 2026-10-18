@@ -4,11 +4,12 @@ import { basename, join, relative, isAbsolute, sep } from "node:path";
 import type {
   ExtensionGrants,
   ExtensionSettings,
+  ExtensionSource,
   ExtensionValidation,
   ExtensionValidationError,
   InstalledExtension,
 } from "../../shared/contracts";
-import type { ExtensionManifest } from "../../shared/extension-api";
+import type { ExtensionManifest } from "@agw/extension-sdk";
 import { evaluateExtensionManifest, manifestPackagePaths } from "../../shared/extension-manifest";
 import { isGrantCovered } from "../settings/settings-store";
 
@@ -164,11 +165,15 @@ export async function readExtensionDirectory(
   };
 }
 
+/** 带来源的目录项。A catalog entry with its source. */
+export type SourcedCatalogEntry = CatalogEntry & { source: ExtensionSource };
+
 /** 扫描安装目录，跳过以 `.` 开头的目录（包括 `.staging`）。Scans the install directory, skipping dot directories such as `.staging`. */
 export async function scanExtensionDirectory(
   extensionsDirectory: string,
   appVersion: string,
-): Promise<CatalogEntry[]> {
+  source: ExtensionSource,
+): Promise<SourcedCatalogEntry[]> {
   let names: string[];
   try {
     names = await readdir(extensionsDirectory);
@@ -176,23 +181,42 @@ export async function scanExtensionDirectory(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
-  const entries: CatalogEntry[] = [];
+  const entries: SourcedCatalogEntry[] = [];
   for (const name of names.sort()) {
     if (name.startsWith(".")) continue;
     const directory = join(extensionsDirectory, name);
     if (!(await stat(directory)).isDirectory()) continue;
     const entry = await readExtensionDirectory(directory, appVersion);
-    entries.push({ ...entry, id: name });
+    entries.push({ ...entry, id: name, source });
   }
   return entries;
 }
 
+/**
+ * 合并内置与用户目录：同 id 时用户 extension 优先；用户卸载过的内置 extension 不出现。结果按 id 排序。
+ * Merges the bundled and user directories: user extensions win on the same id, uninstalled bundled extensions are
+ * left out, and the result is sorted by id.
+ */
+export function mergeExtensionCatalogs(
+  bundled: readonly SourcedCatalogEntry[],
+  user: readonly SourcedCatalogEntry[],
+  removedBundled: readonly string[],
+): SourcedCatalogEntry[] {
+  const merged = new Map<string, SourcedCatalogEntry>();
+  for (const entry of bundled) {
+    if (!removedBundled.includes(entry.id)) merged.set(entry.id, entry);
+  }
+  for (const entry of user) merged.set(entry.id, entry);
+  return [...merged.values()].sort((left, right) => (left.id < right.id ? -1 : 1));
+}
+
 export function toInstalledExtension(
-  entry: CatalogEntry,
+  entry: SourcedCatalogEntry,
   settings: ExtensionSettings | undefined,
 ): InstalledExtension {
   return {
     id: entry.id,
+    source: entry.source,
     directory: entry.directory,
     manifest: entry.manifest,
     validation: entry.validation,

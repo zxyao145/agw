@@ -1,0 +1,61 @@
+html,
+body,
+#root,
+.editor {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, sans-serif;
+}
+
+.status {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  padding: 24px;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  text-align: center;
+}
+
+.status p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.status-error .status-title {
+  color: var(--destructive);
+  font-weight: 600;
+}
+
+.excalidraw .save-button {
+  --button-width: auto;
+  --button-height: var(--lg-button-size);
+  padding: 0 0.875rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.4px;
+}
+
+.excalidraw .save-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/*
+ * Excalidraw 没有关闭在线库的选项：隐藏浏览在线库的链接与发布到在线库的菜单项（库自己的测试 id 为 lib-dropdown--remove）。
+ * Excalidraw has no option for the online library: hide the browse link and the publish item (its own test id is
+ * lib-dropdown--remove).
+ */
+.excalidraw .library-menu-browse-button,
+.excalidraw [data-testid="lib-dropdown--remove"] {
+  display: none;
+}

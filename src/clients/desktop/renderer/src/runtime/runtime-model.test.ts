@@ -15,6 +15,7 @@ const settings: DesktopSettings = {
   activeServerId: "local",
   projectTabsByServer: {},
   extensions: {},
+  removedBundledExtensions: [],
   profiles: [
     {
       id: "local",
