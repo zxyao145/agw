@@ -51,6 +51,7 @@ import { ExtensionRuntimeReset } from "./extension-runtime-reset";
 import { ExtensionSafeModeGuard } from "./extension-safe-mode";
 import { ExtensionSessionFactory } from "./extension-session";
 import { ExtensionViewManager } from "./extension-view-manager";
+import { ReplacedFileRegistry } from "./replaced-file-registry";
 
 export type ExtensionRuntimeOptions = {
   userDataDirectory: string;
@@ -83,7 +84,8 @@ export class ExtensionRuntime {
   private extensionSettings: Record<string, ExtensionSettings> = {};
   private recoveryNotices: ExtensionRecoveryNotice[] = [];
   private readonly grants = new ExtensionAccessGrants();
-  private readonly files = new ExtensionFileSystem(this.grants);
+  private readonly replacedFiles = new ReplacedFileRegistry();
+  private readonly files = new ExtensionFileSystem(this.grants, this.replacedFiles);
   private readonly watcher: ExtensionFileWatcher;
   private readonly http: ExtensionHttpClient;
   private readonly proxies = new Map<string, ExtensionEgressProxy>();
@@ -93,7 +95,7 @@ export class ExtensionRuntime {
   public constructor(private readonly options: ExtensionRuntimeOptions) {
     this.extensionsDirectory = join(options.userDataDirectory, "extensions");
     this.dataDirectory = join(options.userDataDirectory, "extension-data");
-    this.watcher = new ExtensionFileWatcher((event) => this.emit(event));
+    this.watcher = new ExtensionFileWatcher((event) => this.emit(event), this.replacedFiles);
     this.sessions = new ExtensionSessionFactory({
       sdkDirectory: options.sdkDirectory,
       protocolState: (id) => this.protocolState(id),

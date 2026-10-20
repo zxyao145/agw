@@ -61,6 +61,23 @@ jobs:
     - name: Build Docker image
       run: docker build --tag agw:ci .
 
+  windows:
+    name: Windows file systems
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      # 每个测试项目单独一个步骤：pwsh 的多行脚本只按最后一条命令的退出码判断步骤结果
+      # One step per test project: a multi-line pwsh script fails the step only on the last command's exit code
+      - name: Test Files on Windows
+        run: dotnet test --project tests/Agw.Files.Tests/Agw.Files.Tests.csproj -c Release
+      - name: Test Tools on Windows
+        run: dotnet test --project tests/Agw.Tools.Tests/Agw.Tools.Tests.csproj -c Release
+
   postgres:
     name: PostgreSQL correctness
     needs: changes
@@ -91,7 +108,8 @@ jobs:
         run: |
           dotnet build tests/Agw.Agents.Tests -c Release
           dotnet build tests/Agw.Jobs.Tests -c Release
-      - name: Configure Jobs PostgreSQL tests
+          dotnet build tests/Agw.Files.Tests -c Release
+      - name: Configure Jobs and Files PostgreSQL tests
         run: |
           mkdir -p .scratch
           cp .github/postgres-tests.json .scratch/postgres-tests.json
@@ -106,6 +124,12 @@ jobs:
           tests/Agw.Jobs.Tests/bin/Release/net10.0/Agw.Jobs.Tests
           -filterVSTest "Category=Postgres"
           -result-trx TestResults/Postgres/jobs.trx
+          -failSkips
+      - name: Test PostgreSQL file write serialization across Hosts
+        run: >-
+          tests/Agw.Files.Tests/bin/Release/net10.0/Agw.Files.Tests
+          -filterVSTest "Category=Postgres"
+          -result-trx TestResults/Postgres/files.trx
           -failSkips
       - name: Require actual PostgreSQL test execution
         run: python3 .github/scripts/verify-postgres-tests.py TestResults/Postgres

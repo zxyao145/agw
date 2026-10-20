@@ -1,0 +1,63 @@
+/* 文本文档读取失败时的说明面板，颜色来自宿主主题变量（theme.apply）。
+   The panel for text documents that fail to read; colors come from the host theme variables (theme.apply). */
+
+.document-error {
+  padding: 24px 32px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+}
+
+.document-error p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.document-error-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: var(--destructive);
+}
+
+.document-error button {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.document-error button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.document-error button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.document-error > button,
+.document-error > .document-error-note,
+.encoding-picker {
+  margin-top: 12px;
+}
+
+.encoding-list {
+  max-width: 360px;
+  max-height: 320px;
+  margin: 8px 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  list-style: none;
+}
+
+.document-error .encoding-list button {
+  display: block;
+  width: 100%;
+  border: none;
+  text-align: left;
+}

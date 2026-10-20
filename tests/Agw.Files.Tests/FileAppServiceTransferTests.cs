@@ -1,7 +1,7 @@
+using System.Security.Cryptography;
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
 using Agw.Files.Infrastructure.Git;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -27,7 +27,7 @@ public sealed class FileAppServiceTransferTests : IDisposable
     {
         Directory.CreateDirectory(Workspace);
         _service = new FileAppService(
-            new ProjectFileSystemResolver(ProjectId, new LocalFileSystem(Workspace)),
+            new ProjectFileSystemResolver(ProjectId, TestFileSystems.Local(Workspace)),
             new GitCommandService(NullLogger<GitCommandService>.Instance),
             NullLogger<FileAppService>.Instance
         );
@@ -146,6 +146,7 @@ public sealed class FileAppServiceTransferTests : IDisposable
             new MemoryStream("content"u8.ToArray()),
             overwrite: false,
             createParents: true,
+            expectedSha256: null,
             Token
         );
 
@@ -165,6 +166,7 @@ public sealed class FileAppServiceTransferTests : IDisposable
             new MemoryStream("content"u8.ToArray()),
             overwrite: true,
             createParents: false,
+            expectedSha256: null,
             Token
         );
 
@@ -184,12 +186,76 @@ public sealed class FileAppServiceTransferTests : IDisposable
                 new MemoryStream("replaced"u8.ToArray()),
                 overwrite: false,
                 createParents: false,
+                expectedSha256: null,
                 Token
             )
         );
 
         Assert.Equal(ErrorCodes.FileAlreadyExists.Code, exception.Code);
         Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(Workspace, "b.md"), Token));
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a0")]
+    [InlineData("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08f")]
+    [InlineData("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a0g")]
+    public async Task WriteAsync_InvalidExpectedSha256_ThrowsInvalidParam(string expectedSha256)
+    {
+        await File.WriteAllTextAsync(Path.Combine(Workspace, "b.md"), "original", Token);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            _service.WriteAsync(
+                ProjectId,
+                "b.md",
+                new MemoryStream("replaced"u8.ToArray()),
+                overwrite: true,
+                createParents: false,
+                expectedSha256,
+                Token
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(Workspace, "b.md"), Token));
+    }
+
+    [Fact]
+    public async Task WriteAsync_ExpectedSha256WithoutOverwrite_ThrowsInvalidParam()
+    {
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            _service.WriteAsync(
+                ProjectId,
+                "b.md",
+                new MemoryStream("content"u8.ToArray()),
+                overwrite: false,
+                createParents: false,
+                Convert.ToHexStringLower(SHA256.HashData("original"u8)),
+                Token
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.False(File.Exists(Path.Combine(Workspace, "b.md")));
+    }
+
+    [Fact]
+    public async Task WriteAsync_UppercaseExpectedSha256_WritesContent()
+    {
+        await File.WriteAllTextAsync(Path.Combine(Workspace, "b.md"), "original", Token);
+
+        var result = await _service.WriteAsync(
+            ProjectId,
+            "b.md",
+            new MemoryStream("replaced"u8.ToArray()),
+            overwrite: true,
+            createParents: false,
+            Convert.ToHexString(SHA256.HashData("original"u8)),
+            Token
+        );
+
+        Assert.Equal(FileOperationStatus.Success, result.Status);
+        Assert.Equal("replaced", await File.ReadAllTextAsync(Path.Combine(Workspace, "b.md"), Token));
     }
 
     [Fact]
@@ -200,7 +266,15 @@ public sealed class FileAppServiceTransferTests : IDisposable
         await using var content = File.OpenRead(source);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            _service.WriteAsync(ProjectId, "large.bin", content, overwrite: true, createParents: true, Token)
+            _service.WriteAsync(
+                ProjectId,
+                "large.bin",
+                content,
+                overwrite: true,
+                createParents: true,
+                expectedSha256: null,
+                Token
+            )
         );
 
         Assert.Equal(ErrorCodes.FileTooLarge.Code, exception.Code);
@@ -219,6 +293,7 @@ public sealed class FileAppServiceTransferTests : IDisposable
             new MemoryStream("content"u8.ToArray()),
             overwrite: true,
             createParents: true,
+            expectedSha256: null,
             Token
         );
 

@@ -15,10 +15,14 @@ import type { WorkspaceView } from "../../extensions/workspace-registry";
 import { ExtensionViewSlot } from "./extension-view-slot";
 import { WorkspaceIconView } from "./workspace-icon";
 
-/** 重新加载视图；extension 已失败时重新加载 extension。Reloads the view, or the extension once it failed. */
-export function reloadExtensionView(host: ExtensionHost, view: WorkspaceView): void {
-  if (view.failure !== null && view.extensionId) void host.reload(view.extensionId);
-  else void host.reloadView(view.id);
+/**
+ * 重新加载视图；extension 已失败时重新加载 extension。视图有未保存修改时先由用户确认放弃。
+ * Reloads the view, or the extension once it failed. With unsaved changes the user confirms discarding them first.
+ */
+export async function reloadExtensionView(host: ExtensionHost, view: WorkspaceView): Promise<void> {
+  if (!(await host.confirmDiscardUnsaved([view.id]))) return;
+  if (view.failure !== null && view.extensionId) await host.reload(view.extensionId);
+  else await host.reloadView(view.id);
 }
 
 /** 宿主绘制的标题条，标明这块内容由哪个 extension 提供。The host-drawn title bar naming the extension behind the view. */
@@ -190,7 +194,7 @@ export function ExtensionView({
   return (
     <div className="flex h-full min-h-0 w-full flex-col" data-extension-view={view.id}>
       {showHeader ? (
-        <ExtensionViewHeader view={view} onReload={() => reloadExtensionView(host, view)} />
+        <ExtensionViewHeader view={view} onReload={() => void reloadExtensionView(host, view)} />
       ) : null}
       {failed && view.failure && view.extensionId ? (
         <ExtensionErrorView

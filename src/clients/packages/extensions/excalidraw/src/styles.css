@@ -32,6 +32,18 @@ body {
   overflow-wrap: anywhere;
 }
 
+.editor {
+  position: relative;
+}
+
+/* 盖住画布：读取文件期间或读取失败时不显示场景。Covers the canvas while the file loads or after loading failed. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  background: var(--background);
+}
+
 .status-error .status-title {
   color: var(--destructive);
   font-weight: 600;

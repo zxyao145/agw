@@ -6,6 +6,7 @@ import { rawApiResponse, startApiServer } from "@agw/test-harness";
 import {
   CloudAccessGrants,
   CloudFileSystem,
+  type FileWriteLocation,
   formatCloudUri,
   parseCloudUri,
 } from "./cloud-file-system";
@@ -50,10 +51,11 @@ async function createHarness(routes: Parameters<typeof startApiServer>[0] = {}) 
   configureApiRuntime({ baseUrl: identity.baseUrl, token: identity.token });
   context.setConnection(identity, { id: "local", name: "Local", kind: "local" });
   const grants = new CloudAccessGrants();
-  const files = new CloudFileSystem(context, grants);
+  const written: FileWriteLocation[] = [];
+  const files = new CloudFileSystem(context, grants, (location) => written.push(location));
   const uri = (path: string, directoryId: string | null = null) =>
     formatCloudUri({ serverId: "local", projectId: PROJECT, directoryId, path });
-  return { api, context, grants, files, uri, identity };
+  return { api, context, grants, files, uri, identity, written };
 }
 
 const reader = { extensionId: "sample", permissions: ["fs.cloud.read" as const] };
@@ -201,6 +203,92 @@ test("Server error codes become Node.js-style codes", async () => {
     code: "ERR_SERVER",
     message: "Operation failed.",
   });
+});
+
+test("a read-only target on the Server becomes EACCES like a local write", async () => {
+  const { files, uri, written } = await createHarness({
+    "PUT /api/files/write": failure(403, 4030007, "'locked.md' is read-only or not writable."),
+  });
+  await assert.rejects(
+    files.writeFile(writer, uri("locked.md"), new Uint8Array([1]), {
+      overwrite: true,
+      createParents: false,
+    }),
+    { code: "EACCES", message: "'locked.md' is read-only or not writable." },
+  );
+  assert.deepEqual(written, []);
+});
+
+test("writeFile success calls the file-write listener with the Project, directory and path", async () => {
+  const { files, uri, written } = await createHarness({
+    "PUT /api/files/write": fileItem("docs/b.md"),
+  });
+  await files.writeFile(writer, uri("docs/b.md"), new Uint8Array([1]), {
+    overwrite: true,
+    createParents: false,
+  });
+  await files.writeFile(writer, uri("notes/a b.md", DIRECTORY), new Uint8Array([2]), {
+    overwrite: true,
+    createParents: true,
+  });
+  assert.deepEqual(written, [
+    { projectId: PROJECT, directoryId: null, path: "docs/b.md" },
+    { projectId: PROJECT, directoryId: DIRECTORY, path: "notes/a b.md" },
+  ]);
+});
+
+test("expectedSha256 is sent with the write and a changed file becomes ERR_FILE_CHANGED", async () => {
+  const expectedSha256 = "0123456789abcdef".repeat(4);
+  const { api, files, uri, written } = await createHarness({
+    "PUT /api/files/write": (request: { query: URLSearchParams }) =>
+      request.query.get("path") === "changed.md"
+        ? failure(409, 4090024, "The file was changed after it was read.")
+        : fileItem("docs/b.md"),
+  });
+  await files.writeFile(writer, uri("docs/b.md"), new Uint8Array([1]), {
+    overwrite: true,
+    createParents: false,
+    expectedSha256,
+  });
+  const sent = api.requests.filter((request) => request.path === "/api/files/write");
+  assert.deepEqual(Object.fromEntries(sent[0].query), {
+    projectId: PROJECT,
+    path: "docs/b.md",
+    overwrite: "true",
+    createParents: "false",
+    expectedSha256,
+  });
+
+  await assert.rejects(
+    files.writeFile(writer, uri("changed.md"), new Uint8Array([2]), {
+      overwrite: true,
+      createParents: false,
+      expectedSha256,
+    }),
+    { code: "ERR_FILE_CHANGED", message: "The file was changed after it was read." },
+  );
+  assert.deepEqual(written, [{ projectId: PROJECT, directoryId: null, path: "docs/b.md" }]);
+});
+
+test("a failed or refused writeFile does not call the file-write listener", async () => {
+  const { files, uri, written } = await createHarness({
+    "PUT /api/files/write": failure(400, 4000040, "File already exists."),
+  });
+  await assert.rejects(
+    files.writeFile(writer, uri("a.md"), new Uint8Array([1]), {
+      overwrite: false,
+      createParents: true,
+    }),
+    { code: "EEXIST" },
+  );
+  await assert.rejects(
+    files.writeFile(reader, uri("a.md"), new Uint8Array([1]), {
+      overwrite: true,
+      createParents: true,
+    }),
+    { code: "ERR_PERMISSION_DENIED" },
+  );
+  assert.deepEqual(written, []);
 });
 
 test("URIs for another server, another directory, or missing permissions are refused before sending", async () => {

@@ -20,11 +20,20 @@ import {
 } from "@agw/extension-sdk";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
 import { A2AService } from "./a2a-service";
-import { CloudAccessGrants, CloudFileSystem, parseCloudUri } from "./cloud-file-system";
+import {
+  CloudAccessGrants,
+  CloudFileSystem,
+  type FileWriteLocation,
+  parseCloudUri,
+} from "./cloud-file-system";
 import { ContextService } from "./context-service";
 import { extensionRegistration } from "./extension-contributions";
-import { type BrokerExtension, ExtensionBridgeBroker } from "./extension-bridge-broker";
-import { ExecutionService } from "./execution-service";
+import {
+  type BrokerExtension,
+  ExtensionBridgeBroker,
+  type MessageBoxRequest,
+} from "./extension-bridge-broker";
+import { ExecutionService, type SessionOwner } from "./execution-service";
 import { BUILT_IN_VIEWS, isBuiltInViewId } from "./workspace-ids";
 import { WorkspaceLayoutStore } from "./workspace-layout-store";
 import { type WorkspaceView, WorkspaceRegistry } from "./workspace-registry";
@@ -68,13 +77,31 @@ export type ExtensionState = {
   frames: readonly HostFrameState[];
 };
 
-/** 宿主显示的确认对话框。A confirmation dialog shown by the host. */
+/**
+ * 宿主显示的确认对话框；`message` 以按钮下标回答，其他以 true/false 回答。
+ * A confirmation dialog shown by the host; `message` is answered with a button index, the others with true or false.
+ */
 export type HostConfirmation =
   | {
       kind: "discard-unsaved";
       items: readonly { fileName: string; viewerTitle: string; extensionName: string }[];
     }
-  | { kind: "open-link"; extensionName: string; url: string };
+  | { kind: "open-link"; extensionName: string; url: string }
+  | ({
+      kind: "message";
+      /** 每个消息框不同。Unique per message box. */
+      id: number;
+      extensionName: string;
+    } & MessageBoxRequest);
+
+/** 排队中的确认对话框。A queued confirmation. */
+type PendingConfirmation = {
+  request: HostConfirmation;
+  /** 显示消息框的页面，页面不在时移除；其他对话框为 null。The page that asked for a message box; null for the others. */
+  page: { frameId: string; pageId: string } | null;
+  answer(value: boolean | number): void;
+  dismiss(error: Error): void;
+};
 
 /** 文件视图打开文件的位置。Where the Files view opens a file. */
 export type FileOpenLocation = { directoryId: string | null; path: string };
@@ -256,14 +283,13 @@ export class ExtensionHost {
   private composer: { insertText(text: string): void } | null = null;
   private refreshConversations: ((projectId: string) => void) | null = null;
   private fileOpener: ((location: FileOpenLocation) => Promise<boolean>) | null = null;
+  private fileWriteListener: ((location: FileWriteLocation) => void) | null = null;
   /** 文件查看器当前显示的文件，按视图 id 记录。The file each file viewer shows, by view id. */
   private readonly fileViewerFiles = new Map<string, FileViewerFile>();
   /** 报告了未保存修改的 frame。Frames that reported unsaved changes. */
   private readonly unsavedFrames = new Set<string>();
-  private readonly confirmations: {
-    request: HostConfirmation;
-    resolve(accepted: boolean): void;
-  }[] = [];
+  private readonly confirmations: PendingConfirmation[] = [];
+  private nextMessageBoxId = 1;
   private readonly listeners = new Set<() => void>();
   private snapshot: ExtensionHostSnapshot = {
     started: false,
@@ -309,7 +335,9 @@ export class ExtensionHost {
     this.context = new ContextService(options.app, this.workspaceState());
     this.layout.subscribe(() => this.context.setWorkspace(this.workspaceState()));
     this.context.onConnectionChanged(() => this.cloudGrants.clear());
-    const cloud = new CloudFileSystem(this.context, this.cloudGrants);
+    const cloud = new CloudFileSystem(this.context, this.cloudGrants, (location) =>
+      this.fileWriteListener?.(location),
+    );
     this.execution = new ExecutionService({
       context: this.context,
       deliver: (owner, event, data) => this.broker.deliverExecution(owner, event, data),
@@ -317,6 +345,7 @@ export class ExtensionHost {
     });
     this.broker = new ExtensionBridgeBroker({
       bridge: () => this.bridge,
+      codec: () => this.bridge,
       hostInstanceId: this.hostInstanceId,
       context: this.context,
       layout: this.layout,
@@ -353,6 +382,7 @@ export class ExtensionHost {
           extensionName: this.records.get(extensionId)?.installed.manifest?.name ?? extensionId,
           url,
         }),
+      showMessageBox: (owner, request) => this.showMessageBox(owner, request),
     });
   }
 
@@ -479,6 +509,11 @@ export class ExtensionHost {
     this.refreshConversations = refresh;
   }
 
+  /** extension 经云端文件系统写入文件成功后调用。Called after an extension wrote a file through the cloud file system. */
+  public setFileWriteListener(listener: ((location: FileWriteLocation) => void) | null): void {
+    this.fileWriteListener = listener;
+  }
+
   /** 贡献点被点击：打开视图或在 background 中执行命令。Runs a contribution: open a view or execute a background command. */
   public runAction(extensionId: string | null, action: ExtensionAction, args: unknown): void {
     if (action.type === "openMainView") {
@@ -557,12 +592,15 @@ export class ExtensionHost {
     return this.unsavedFrames.size > 0;
   }
 
-  /** 存在未保存修改时由用户确认放弃。Asks the user to discard unsaved changes when there are any. */
-  public confirmDiscardUnsaved(): Promise<boolean> {
+  /**
+   * 存在未保存修改时由用户确认放弃；传入 `viewIds` 时只考虑这些视图。
+   * Asks the user to discard unsaved changes when there are any; with `viewIds`, only those views count.
+   */
+  public confirmDiscardUnsaved(viewIds?: readonly string[]): Promise<boolean> {
     const items = [...this.unsavedFrames].flatMap((frameId) => {
       const frame = this.frames.get(frameId);
       const view = frame?.viewId ? this.registry.view(frame.viewId) : undefined;
-      if (!frame || !view) return [];
+      if (!frame || !view || (viewIds !== undefined && !viewIds.includes(view.id))) return [];
       return [
         {
           fileName: (frame.params as FileViewerParams).file.name,
@@ -576,11 +614,26 @@ export class ExtensionHost {
       : this.confirm({ kind: "discard-unsaved", items });
   }
 
-  /** 用户回答当前的确认对话框。The user answers the current confirmation. */
-  public resolveConfirmation(accepted: boolean): void {
-    const current = this.confirmations.shift();
+  /**
+   * 用户回答当前的确认对话框：`message` 为按钮下标，其他为 true/false。
+   * The user answers the current confirmation: a button index for `message`, true or false for the others.
+   */
+  public resolveConfirmation(answer: boolean | number): void {
+    const current = this.confirmations[0];
     if (!current) return;
-    current.resolve(accepted);
+    const { request } = current;
+    if (
+      request.kind === "message"
+        ? typeof answer !== "number" ||
+          !Number.isInteger(answer) ||
+          answer < 0 ||
+          answer >= request.buttons.length
+        : typeof answer !== "boolean"
+    ) {
+      throw new Error(`${String(answer)} does not answer a ${request.kind} confirmation.`);
+    }
+    this.confirmations.shift();
+    current.answer(answer);
     this.publish();
   }
 
@@ -981,6 +1034,7 @@ export class ExtensionHost {
   ): Promise<void> {
     frame.closing ??= (async () => {
       this.publish();
+      this.dismissMessageBoxes(frame.frameId);
       if (frame.handshakeTimer !== null) clearTimeout(frame.handshakeTimer);
       if (!frame.handshake.settled)
         frame.handshake.reject(createExtensionError("ERR_FRAME_CLOSING", "The frame is closing."));
@@ -1051,9 +1105,13 @@ export class ExtensionHost {
         : (this.layout.getSnapshot().openRequests[viewId]?.params ?? {});
     const existing = this.viewFrames.get(viewId);
     if (existing && existing.closing === null) {
+      const wasShown = existing.shown;
       existing.shown = true;
-      // 文件查看器只在文件变化时收到 onShow（setFileViewerFile）。File viewers get onShow only for another file.
-      if (existing.loaded && existing.kind !== "fileViewer") this.reopenView(viewId, params);
+      // 文件查看器从隐藏变为显示时收到 onShow；释放计时器被取消时 frame 一直显示，不重复发送。
+      // File viewers get onShow when they go from hidden to shown; after a canceled release timer the frame stayed
+      // shown, so nothing is sent again.
+      if (existing.loaded && (existing.kind !== "fileViewer" || !wasShown))
+        this.reopenView(viewId, params);
       return;
     }
     const kind: ExtensionFrameKind =
@@ -1208,12 +1266,60 @@ export class ExtensionHost {
     }
   }
 
-  /** 已完成握手的页面被新文档替换。A connected page was replaced by a new document. */
-  private confirm(request: HostConfirmation): Promise<boolean> {
-    return new Promise((resolve) => {
-      this.confirmations.push({ request, resolve });
+  /** 确认对话框排进队列，得到用户是否同意。Queues a confirmation that resolves with whether the user agreed. */
+  private confirm(request: Exclude<HostConfirmation, { kind: "message" }>): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      this.confirmations.push({
+        request,
+        page: null,
+        answer: (value) => resolve(value === true),
+        dismiss: reject,
+      });
       this.publish();
     });
+  }
+
+  /** 视图页面的消息框排进确认队列（9.5 节）。A view page's message box joins the confirmation queue (section 9.5). */
+  private showMessageBox(owner: SessionOwner, request: MessageBoxRequest): Promise<number> {
+    const frame = this.frames.get(owner.frameId);
+    if (!frame || frame.closing !== null || frame.pageId !== owner.pageId) {
+      return Promise.reject(createExtensionError("ERR_FRAME_GONE", "The frame is gone."));
+    }
+    return new Promise((resolve, reject) => {
+      this.confirmations.push({
+        request: {
+          kind: "message",
+          id: this.nextMessageBoxId++,
+          extensionName:
+            this.records.get(owner.extensionId)?.installed.manifest?.name ?? owner.extensionId,
+          ...request,
+        },
+        page: { frameId: owner.frameId, pageId: owner.pageId },
+        answer: (value) => resolve(value as number),
+        dismiss: reject,
+      });
+      this.publish();
+    });
+  }
+
+  /**
+   * 移除 frame（指定 `pageId` 时只限该页面）排队中与显示中的消息框，调用以 `ERR_FRAME_GONE` 结束。
+   * Removes the queued and shown message boxes of a frame (of one page when `pageId` is given); the calls fail with
+   * `ERR_FRAME_GONE`.
+   */
+  private dismissMessageBoxes(frameId: string, pageId?: string): void {
+    const dismissed = this.confirmations.filter(
+      ({ page }) =>
+        page !== null &&
+        page.frameId === frameId &&
+        (pageId === undefined || page.pageId === pageId),
+    );
+    if (dismissed.length === 0) return;
+    for (const confirmation of dismissed) {
+      this.confirmations.splice(this.confirmations.indexOf(confirmation), 1);
+      confirmation.dismiss(createExtensionError("ERR_FRAME_GONE", "The frame is gone."));
+    }
+    this.publish();
   }
 
   private setUnsaved(frameId: string, unsaved: boolean): void {
@@ -1250,10 +1356,12 @@ export class ExtensionHost {
     }
   }
 
+  /** 已完成握手的页面被新文档替换。A connected page was replaced by a new document. */
   private async pageReplaced(frame: HostFrame, pageId: string): Promise<void> {
     if (frame.pageId !== pageId) return;
     frame.pageId = null;
     frame.loaded = false;
+    this.dismissMessageBoxes(frame.frameId, pageId);
     this.setUnsaved(frame.frameId, false);
     await this.execution.closePage(frame.frameId, pageId);
     this.broker.disconnect(frame.frameId, pageId);
@@ -1354,6 +1462,7 @@ export class ExtensionHost {
       entry,
       retainContextWhenHidden: false,
       failure: null,
+      priority: "default",
     };
   }
 
@@ -1426,5 +1535,6 @@ function builtInView(
     entry: null,
     retainContextWhenHidden: false,
     failure: null,
+    priority: "default",
   };
 }

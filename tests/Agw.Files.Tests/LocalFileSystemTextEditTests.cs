@@ -17,7 +17,7 @@ public sealed class LocalFileSystemTextEditTests : IDisposable
     public LocalFileSystemTextEditTests()
     {
         Directory.CreateDirectory(_root);
-        _fileSystem = new LocalFileSystem(_root);
+        _fileSystem = TestFileSystems.Local(_root);
     }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
@@ -136,7 +136,7 @@ public sealed class LocalFileSystemTextEditTests : IDisposable
         var token = TestContext.Current.CancellationToken;
         var tokens = Enumerable.Range(0, 20).Select(static index => $"t{index:D2}").ToArray();
         await File.WriteAllTextAsync(Path.Combine(_root, "notes.txt"), string.Join(' ', tokens), token);
-        LocalFileSystem[] fileSystems = [_fileSystem, new LocalFileSystem(_root)];
+        LocalFileSystem[] fileSystems = [_fileSystem, TestFileSystems.Local(_root)];
 
         await Task.WhenAll(
             tokens.Select(

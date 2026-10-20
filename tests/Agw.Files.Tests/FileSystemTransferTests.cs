@@ -1,5 +1,5 @@
+using System.Runtime.Versioning;
 using Agw.Files.Abstracts;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Files.Tests;
@@ -18,6 +18,8 @@ public sealed class FileSystemTransferTests : IDisposable
             Path.Combine(AppContext.BaseDirectory, "file-system-transfer", Guid.CreateVersion7().ToString("N"))
         )
         .FullName;
+
+    public static bool IsUnix => !OperatingSystem.IsWindows();
 
     private string Workspace => Path.Combine(_root, "workspace");
     private string Outside => Path.Combine(_root, "outside");
@@ -115,7 +117,14 @@ public sealed class FileSystemTransferTests : IDisposable
     {
         var fileSystem = Create(confined);
 
-        await fileSystem.WriteAsync("nested/deeper/data.bin", new MemoryStream(BinaryContent), false, true, Token);
+        await fileSystem.WriteAsync(
+            "nested/deeper/data.bin",
+            new MemoryStream(BinaryContent),
+            false,
+            true,
+            null,
+            Token
+        );
 
         Assert.Equal(
             BinaryContent,
@@ -131,7 +140,7 @@ public sealed class FileSystemTransferTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(Workspace, "notes.md"), "a much longer original text", Token);
         var fileSystem = Create(confined);
 
-        await fileSystem.WriteAsync("notes.md", new MemoryStream("short"u8.ToArray()), true, false, Token);
+        await fileSystem.WriteAsync("notes.md", new MemoryStream("short"u8.ToArray()), true, false, null, Token);
 
         Assert.Equal("short", await File.ReadAllTextAsync(Path.Combine(Workspace, "notes.md"), Token));
     }
@@ -145,7 +154,7 @@ public sealed class FileSystemTransferTests : IDisposable
         var fileSystem = Create(confined);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fileSystem.WriteAsync("notes.md", new MemoryStream("replaced"u8.ToArray()), false, false, Token)
+            fileSystem.WriteAsync("notes.md", new MemoryStream("replaced"u8.ToArray()), false, false, null, Token)
         );
 
         Assert.Equal(ErrorCodes.FileAlreadyExists.Code, exception.Code);
@@ -163,7 +172,7 @@ public sealed class FileSystemTransferTests : IDisposable
         var fileSystem = Create(confined);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fileSystem.WriteAsync("folder", new MemoryStream(BinaryContent), overwrite, false, Token)
+            fileSystem.WriteAsync("folder", new MemoryStream(BinaryContent), overwrite, false, null, Token)
         );
 
         Assert.Equal(code, exception.Code);
@@ -180,7 +189,7 @@ public sealed class FileSystemTransferTests : IDisposable
         var fileSystem = Create(confined);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fileSystem.WriteAsync("missing/data.bin", new MemoryStream(BinaryContent), true, false, Token)
+            fileSystem.WriteAsync("missing/data.bin", new MemoryStream(BinaryContent), true, false, null, Token)
         );
 
         Assert.Equal(ErrorCodes.DirectoryNotFound.Code, exception.Code);
@@ -195,7 +204,7 @@ public sealed class FileSystemTransferTests : IDisposable
         var fileSystem = Create(confined);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fileSystem.WriteAsync("../outside/escaped.bin", new MemoryStream(BinaryContent), true, true, Token)
+            fileSystem.WriteAsync("../outside/escaped.bin", new MemoryStream(BinaryContent), true, true, null, Token)
         );
 
         Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
@@ -209,7 +218,7 @@ public sealed class FileSystemTransferTests : IDisposable
         var fileSystem = Create(confined: true);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fileSystem.WriteAsync("link/nested/escaped.bin", new MemoryStream(BinaryContent), true, true, Token)
+            fileSystem.WriteAsync("link/nested/escaped.bin", new MemoryStream(BinaryContent), true, true, null, Token)
         );
 
         Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
@@ -224,7 +233,7 @@ public sealed class FileSystemTransferTests : IDisposable
         var fileSystem = Create(confined: true);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fileSystem.WriteAsync("link.txt", new MemoryStream("payload"u8.ToArray()), true, false, Token)
+            fileSystem.WriteAsync("link.txt", new MemoryStream("payload"u8.ToArray()), true, false, null, Token)
         );
 
         Assert.Equal(ErrorCodes.FilePathOutsideRoot.Code, exception.Code);
@@ -477,8 +486,107 @@ public sealed class FileSystemTransferTests : IDisposable
         Assert.Equal("secret", await File.ReadAllTextAsync(Path.Combine(Outside, "secret.txt"), Token));
     }
 
+    [Theory(SkipUnless = nameof(IsUnix), Skip = "Unix file modes exist on Linux and macOS only.")]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [UnsupportedOSPlatform("windows")]
+    public async Task DeleteAsync_UnresolvableSymbolicLink_RemovesLinkOnly(bool confined, bool loop)
+    {
+        var link = Path.Combine(Workspace, "link.md");
+        var locked = UnresolvableLinks.Create(Workspace, link, loop);
+        try
+        {
+            await Create(confined).DeleteAsync("link.md", recursive: false, Token);
+        }
+        finally
+        {
+            UnresolvableLinks.Restore(locked);
+        }
+
+        Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(Workspace), entry => entry == link);
+        Assert.True(locked == null || File.Exists(Path.Combine(locked, "secret.md")));
+    }
+
+    [Theory(SkipUnless = nameof(IsUnix), Skip = "Unix file modes exist on Linux and macOS only.")]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [UnsupportedOSPlatform("windows")]
+    public async Task MoveAsync_UnresolvableSymbolicLinkSource_MovesLinkItself(bool confined, bool loop)
+    {
+        var link = Path.Combine(Workspace, "link.md");
+        var moved = Path.Combine(Workspace, "moved.md");
+        var locked = UnresolvableLinks.Create(Workspace, link, loop);
+        var linkTarget = new FileInfo(link).LinkTarget;
+        try
+        {
+            await Create(confined).MoveAsync("link.md", "moved.md", false, Token);
+        }
+        finally
+        {
+            UnresolvableLinks.Restore(locked);
+        }
+
+        Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(Workspace), entry => entry == link);
+        Assert.Equal(linkTarget, new FileInfo(moved).LinkTarget);
+    }
+
+    [Theory(SkipUnless = nameof(IsUnix), Skip = "Unix file modes exist on Linux and macOS only.")]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [UnsupportedOSPlatform("windows")]
+    public async Task MoveAsync_OntoUnresolvableSymbolicLink_ReplacesLinkEntry(bool confined, bool loop)
+    {
+        var link = Path.Combine(Workspace, "link.md");
+        await File.WriteAllTextAsync(Path.Combine(Workspace, "source.md"), "source", Token);
+        var locked = UnresolvableLinks.Create(Workspace, link, loop);
+        try
+        {
+            await Create(confined).MoveAsync("source.md", "link.md", true, Token);
+        }
+        finally
+        {
+            UnresolvableLinks.Restore(locked);
+        }
+
+        Assert.Null(new FileInfo(link).LinkTarget);
+        Assert.Equal("source", await File.ReadAllTextAsync(link, Token));
+        Assert.True(locked == null || File.Exists(Path.Combine(locked, "secret.md")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateDirectoryAsync_EntryLockHeld_WaitsForRelease(bool confined)
+    {
+        var directory = Path.Combine(Workspace, "docs");
+        var held = await TestFileSystems.PathLocks.AcquireEntryAsync(directory, Token);
+        Task creating;
+        try
+        {
+            // 创建目录是目录条目操作，必须等待同一条目的锁释放之后才执行。
+            // Creating a directory is a directory-entry operation and must wait until the entry's lock is released.
+            creating = Create(confined).CreateDirectoryAsync("docs", Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(200), Token);
+            Assert.False(creating.IsCompleted);
+            Assert.False(Directory.Exists(directory));
+        }
+        finally
+        {
+            await held.DisposeAsync();
+        }
+
+        await creating.WaitAsync(TimeSpan.FromSeconds(5), Token);
+        Assert.True(Directory.Exists(directory));
+    }
+
     private IAgwFileSystem Create(bool confined, params string[] additionalRoots) =>
         confined
-            ? new LocalFileSystem(Workspace).Confine([Workspace, .. additionalRoots])
-            : new LocalFileSystem(Workspace);
+            ? TestFileSystems.Local(Workspace).Confine([Workspace, .. additionalRoots])
+            : TestFileSystems.Local(Workspace);
 }

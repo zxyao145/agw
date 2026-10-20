@@ -12,6 +12,8 @@ public sealed class FileAppService
     /// </summary>
     public const long MaxTransferBytes = 100L * 1024 * 1024;
 
+    private const int Sha256HexLength = 64;
+
     private const string GitRequiresLocalFileSystem =
         "Git operations are only supported for local project file systems";
 
@@ -383,6 +385,7 @@ public sealed class FileAppService
         Stream content,
         bool overwrite,
         bool createParents,
+        string? expectedSha256,
         CancellationToken cancellationToken = default,
         Guid? directoryId = null
     )
@@ -392,6 +395,7 @@ public sealed class FileAppService
             return FileOperationResult<FileListEntry>.Invalid("Project ID is required");
         }
 
+        expectedSha256 = NormalizeExpectedSha256(expectedSha256, overwrite);
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
@@ -423,9 +427,33 @@ public sealed class FileAppService
             return FileOperationResult<FileListEntry>.Missing("Parent directory not found");
         }
 
-        await fileSystem.WriteAsync(path, content, overwrite, createParents, cancellationToken);
+        await fileSystem.WriteAsync(path, content, overwrite, createParents, expectedSha256, cancellationToken);
         _logger.LogInformation("Wrote file in project {ProjectId}: {Path}", projectId, path);
         return await StatEntryAsync(fileSystem, path, cancellationToken);
+    }
+
+    /// <summary>
+    /// 校验写入前提：必须是 64 位十六进制并与 overwrite 一起使用，返回小写形式。
+    /// Validates the write precondition: it must be 64 hex digits used together with overwrite; returns it lowercased.
+    /// </summary>
+    private static string? NormalizeExpectedSha256(string? expectedSha256, bool overwrite)
+    {
+        if (expectedSha256 == null)
+        {
+            return null;
+        }
+
+        if (expectedSha256.Length != Sha256HexLength || !expectedSha256.All(char.IsAsciiHexDigit))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "expectedSha256 must be 64 hexadecimal characters.");
+        }
+
+        if (!overwrite)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "expectedSha256 requires overwrite=true.");
+        }
+
+        return expectedSha256.ToLowerInvariant();
     }
 
     public async Task<FileOperationResult<FileListEntry>> CreateDirectoryAsync(

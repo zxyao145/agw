@@ -1,33 +1,21 @@
-import type { ExtensionApi, ExtensionError, FileViewerFile, ThemeInfo } from "@agw/extension-sdk";
-import {
-  Button,
-  Excalidraw,
-  isElementLink,
-  MainMenu,
-  restore,
-  serializeAsJSON,
-} from "@excalidraw/excalidraw";
 import type {
-  AppState,
+  DocumentSession,
+  ExtensionApi,
+  ExtensionError,
+  FileViewerFile,
+  ThemeInfo,
+} from "@agw/extension-sdk";
+import { Button, Excalidraw, isElementLink, MainMenu } from "@excalidraw/excalidraw";
+import type {
   ExcalidrawImperativeAPI,
   ExcalidrawProps,
   UIOptions,
 } from "@excalidraw/excalidraw/types";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
-import { errorMessage } from "./error-message";
-import { readSaveShortcut } from "./save-shortcut";
-import { matchesSnapshot, takeSnapshot, type SceneSnapshot } from "./unsaved-changes";
-
-export type RestoredScene = ReturnType<typeof restore>;
-
-/**
- * 写入文件的 appState 字段（背景颜色、网格设置）的序列化结果，由 Excalidraw 自己挑选字段。
- * The serialized appState fields written to the file (background color, grid settings), as Excalidraw selects them.
- */
-function savedAppState(appState: Partial<AppState>): string {
-  return serializeAsJSON([], appState, {}, "local");
-}
+import { errorMessage, notifyFailure } from "./error-message";
+import { blockSaveAsShortcut } from "./save-as-shortcut";
+import { createSceneDocument, type SceneDocument } from "./scene-document";
 
 const EXTERNAL_LINK = /^https?:/i;
 
@@ -46,34 +34,54 @@ const UI_OPTIONS: Partial<UIOptions> = {
 
 export interface EditorProps {
   api: ExtensionApi;
+  /** 每次 `onShow` 都是新对象，用来触发文档会话的 `show`。A new object on every `onShow`; triggers the document session's `show`. */
   file: FileViewerFile;
-  scene: RestoredScene;
   theme: ThemeInfo["kind"];
-  reportUnsaved: (unsaved: boolean) => void;
 }
 
-export function Editor({ api, file, scene, theme, reportUnsaved }: EditorProps) {
+export function Editor({ api, file, theme }: EditorProps) {
   const excalidrawRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  const [loaded] = useState(() =>
-    takeSnapshot(scene.elements, scene.files, savedAppState(scene.appState)),
-  );
-  const savedRef = useRef<SceneSnapshot>(loaded);
-  const saveQueue = useRef(Promise.resolve());
-  const disposedRef = useRef(false);
-  const [saving, setSaving] = useState(false);
-  const initialData = useMemo(() => ({ ...scene, scrollToContent: true }), [scene]);
+  const sceneRef = useRef<SceneDocument | null>(null);
+  const sessionRef = useRef<DocumentSession | null>(null);
+  const fileRef = useRef(file);
+  const [excalidraw, setExcalidraw] = useState<ExcalidrawImperativeAPI | null>(null);
+  const [session, setSession] = useState<DocumentSession | null>(null);
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
 
+  // 同一个文件再次到达（视图从隐藏恢复）或换了文件，都交给文档会话处理。
+  // The same file arriving again (the view is shown after being hidden) or a new file is handled by the document session.
   useEffect(() => {
-    disposedRef.current = false;
+    fileRef.current = file;
+    if (sessionRef.current) notifyFailure(api, sessionRef.current.show(file));
+  }, [api, file]);
+
+  // Mod+Shift+S 会打开 Excalidraw 的另存为，在捕获阶段先拦下。Mod+Shift+S would open Excalidraw's save-as, so it is
+  // stopped first in the capture phase.
+  useEffect(() => blockSaveAsShortcut(window, api.context.get().app.platform), [api]);
+
+  // Excalidraw 就绪后才能打开文档会话，会话读取文件后通过适配器写入场景；effect 清理时释放会话。
+  // The document session opens once Excalidraw is ready; after reading the file it writes the scene through the adapter. The effect cleanup disposes it.
+  useEffect(() => {
+    if (!excalidraw) return;
+    const scene = createSceneDocument(excalidraw);
+    const opened = api.documents.openText({ file: fileRef.current, adapter: scene.adapter });
+    const subscription = opened.onDidChange(rerender);
+    sceneRef.current = scene;
+    sessionRef.current = opened;
+    setSession(opened);
     return () => {
-      disposedRef.current = true;
+      subscription.dispose();
+      opened.dispose();
+      sceneRef.current = null;
+      sessionRef.current = null;
     };
-  }, []);
+  }, [api, excalidraw]);
 
   const onChange = useCallback<NonNullable<ExcalidrawProps["onChange"]>>(
-    (elements, appState, files) =>
-      reportUnsaved(!matchesSnapshot(savedRef.current, elements, files, savedAppState(appState))),
-    [reportUnsaved],
+    (elements, appState, files) => {
+      if (sceneRef.current?.onChange(elements, appState, files)) sessionRef.current?.edited();
+    },
+    [],
   );
 
   // 页面不能打开新窗口：元素链接在画布内跳转，http(s) 链接由宿主确认后用浏览器打开，其他链接不响应。
@@ -96,78 +104,34 @@ export function Editor({ api, file, scene, theme, reportUnsaved }: EditorProps) 
     [api],
   );
 
-  const saveOnce = useCallback(async () => {
-    const excalidraw = excalidrawRef.current;
-    if (!excalidraw) throw new Error("The Excalidraw API is not ready.");
-    setSaving(true);
-    let saved: SceneSnapshot;
-    try {
-      const elements = excalidraw.getSceneElementsIncludingDeleted();
-      const files = excalidraw.getFiles();
-      const appState = excalidraw.getAppState();
-      saved = takeSnapshot(elements, files, savedAppState(appState));
-      const content = serializeAsJSON(elements, appState, files, "local");
-      await api.fs.writeFile(file.uri, content, { overwrite: true });
-    } catch (error) {
-      api.ui.notify({
-        type: "error",
-        message: `Could not save ${file.name}: ${errorMessage(error)}`,
-      });
-      return;
-    } finally {
-      setSaving(false);
-    }
-    // 卸载后报告属于新文件，不再更新。After unmount the reporter belongs to the next file.
-    if (disposedRef.current) return;
-    savedRef.current = saved;
-    // 写入期间可能继续编辑，与保存的快照比较。Editing may continue during the write, so compare with the saved snapshot.
-    reportUnsaved(
-      !matchesSnapshot(
-        saved,
-        excalidraw.getSceneElementsIncludingDeleted(),
-        excalidraw.getFiles(),
-        savedAppState(excalidraw.getAppState()),
-      ),
-    );
-  }, [api, file, reportUnsaved]);
-
-  // 按顺序保存，先发起的写入不会覆盖后发起的。Saves run in order, so an earlier write never overwrites a later one.
-  const save = useCallback(() => {
-    saveQueue.current = saveQueue.current.then(saveOnce);
-  }, [saveOnce]);
-
-  useEffect(() => {
-    const platform = api.context.get().app.platform;
-    const onKeyDown = (event: KeyboardEvent) => {
-      const shortcut = readSaveShortcut(event, platform);
-      if (!shortcut) return;
-      // 捕获阶段先于 Excalidraw 处理；另存为在沙箱中关闭。Runs before Excalidraw in the capture phase; save-as is off in the sandbox.
-      event.preventDefault();
-      event.stopPropagation();
-      if (shortcut === "save") save();
-    };
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [api, save]);
-
-  const setExcalidrawApi = useCallback((excalidraw: ExcalidrawImperativeAPI) => {
-    excalidrawRef.current = excalidraw;
+  // Excalidraw 在渲染阶段调用这个回调，所以只保存 API，不在这里做其他事。
+  // Excalidraw calls this during render, so it only stores the API and does nothing else.
+  const setExcalidrawApi = useCallback((instance: ExcalidrawImperativeAPI) => {
+    excalidrawRef.current = instance;
+    setExcalidraw(instance);
   }, []);
+
+  const state = session?.state ?? "loading";
 
   const renderTopRightUI = useCallback(
     () => (
-      <Button className="save-button" onSelect={save} disabled={saving}>
-        {saving ? "Saving…" : "Save"}
+      <Button
+        className="save-button"
+        onSelect={() => {
+          if (session) notifyFailure(api, session.save());
+        }}
+        disabled={!session || state === "loading" || state === "saving" || state === "failed"}
+      >
+        {state === "saving" ? "Saving…" : "Save"}
       </Button>
     ),
-    [save, saving],
+    [api, session, state],
   );
 
   return (
     <div className="editor">
       <Excalidraw
         excalidrawAPI={setExcalidrawApi}
-        initialData={initialData}
         onChange={onChange}
         onLinkOpen={onLinkOpen}
         theme={theme}
@@ -186,6 +150,15 @@ export function Editor({ api, file, scene, theme, reportUnsaved }: EditorProps) 
           <MainMenu.DefaultItems.ChangeCanvasBackground />
         </MainMenu>
       </Excalidraw>
+      {state === "loading" && (
+        <p className="status overlay">Loading {session?.file.name ?? file.name}…</p>
+      )}
+      {state === "failed" && session && (
+        <div className="status status-error overlay" role="alert">
+          <p className="status-title">Cannot open {session.file.name}</p>
+          <p>{session.error?.message}</p>
+        </div>
+      )}
     </div>
   );
 }

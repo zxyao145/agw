@@ -69,12 +69,35 @@ public interface IAgwFileSystem
     /// 把 <paramref name="content"/> 从当前位置起的全部内容写入指定文件。目标已存在且 <paramref name="overwrite"/> 为 false
     /// 时抛出 <c>FileAlreadyExists</c>；目标是目录且 <paramref name="overwrite"/> 为 true 时抛出 <c>InvalidParam</c>。
     /// <paramref name="createParents"/> 为 false 且父目录不存在时抛出 <c>DirectoryNotFound</c>。
+    /// <paramref name="expectedSha256"/>（64 位小写十六进制）有值时，在文件锁内计算磁盘上文件的 SHA-256，文件不存在、哈希
+    /// 不同，或提交前复核发现文件被替换或修改时抛出 <c>FileChanged</c>。写入是原子提交：内容先写入同一目录中的临时文件并
+    /// 刷新到磁盘，再用一次重命名替换目标，提交前的任何失败都不改变目标文件。目标已存在而当前进程不能写入它（例如只读文件）
+    /// 时抛出 <c>FileNotWritable</c>，目标不被替换。目标被替换为新文件，指向它的 hard link 不再共享内容，所有者与 Windows
+    /// ACL 使用新文件的默认值，Unix 上复制原文件的读、写、执行权限位，不复制 setuid、setgid 与 sticky；符号链接本身保持不变，
+    /// 替换的是它指向的文件。
     /// Writes everything from the current position of <paramref name="content"/> to the specified file. Throws
     /// <c>FileAlreadyExists</c> when the target exists and <paramref name="overwrite"/> is false, and
     /// <c>InvalidParam</c> when the target is a directory and <paramref name="overwrite"/> is true. Throws
     /// <c>DirectoryNotFound</c> when <paramref name="createParents"/> is false and the parent directory does not exist.
+    /// When <paramref name="expectedSha256"/> (64 lowercase hex digits) is set, the SHA-256 of the file on disk is
+    /// computed inside the file lock, and <c>FileChanged</c> is thrown when the file is missing, the hash differs, or
+    /// the re-check before committing finds the file replaced or modified. The write is an atomic commit: the content
+    /// goes to a temporary file in the same directory and is flushed to disk, then one rename replaces the target, so
+    /// any failure before the commit leaves the target unchanged. <c>FileNotWritable</c> is thrown when the target
+    /// exists and this process may not write it (for example a read-only file), and the target is not replaced. The
+    /// target is replaced by a new file: hard links to it no longer share its content, the owner and Windows ACL take
+    /// the defaults of the new file, and on Unix the read, write and execute permission bits of the original file are
+    /// copied while setuid, setgid and sticky are not; a symbolic link itself stays unchanged and the file it points to
+    /// is replaced.
     /// </summary>
-    Task WriteAsync(string path, Stream content, bool overwrite, bool createParents, CancellationToken ct);
+    Task WriteAsync(
+        string path,
+        Stream content,
+        bool overwrite,
+        bool createParents,
+        string? expectedSha256,
+        CancellationToken ct
+    );
 
     /// <summary>
     /// 把文件、符号链接本身或目录移动到同一文件系统内的目标路径，目标的父目录必须已经存在（否则抛出

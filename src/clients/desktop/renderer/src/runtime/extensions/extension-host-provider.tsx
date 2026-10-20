@@ -12,7 +12,10 @@ import { normalizeBaseUrl } from "./context-service";
 import { ExtensionHost } from "./extension-host";
 import { HostOverlayTracker } from "./host-overlay-tracker";
 
-/** 提供给 extension 的 tokens.css 颜色与圆角变量。tokens.css color and radius variables offered to extensions. */
+/**
+ * 提供给 extension 的 tokens.css 颜色、圆角与字体变量；读取的是计算值，其中的 `var()` 已经替换。
+ * tokens.css color, radius and font variables offered to extensions; their computed values have `var()` substituted.
+ */
 export const THEME_TOKEN_NAMES = [
   "--background",
   "--foreground",
@@ -50,6 +53,7 @@ export const THEME_TOKEN_NAMES = [
   "--radius-md",
   "--radius-lg",
   "--radius-xl",
+  "--font-mono",
 ] as const;
 
 type ExtensionRuntime = { host: ExtensionHost; tracker: HostOverlayTracker };

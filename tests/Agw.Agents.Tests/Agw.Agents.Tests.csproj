@@ -2,6 +2,7 @@
   <ItemGroup>
     <Compile Include="../ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
     <Compile Include="../RecordingHttpClientFactory.cs" Link="RecordingHttpClientFactory.cs" />
+    <Compile Include="../TestFileSystems.cs" Link="TestFileSystems.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />

@@ -1,6 +1,7 @@
-// extension 完整流程的集成测试：构建 → 启动 SQLite Standalone Host 与本地服务 → 两次运行 Electron（首次与重新启动）。
+// extension 完整流程的集成测试：构建 → 启动 SQLite Standalone Host 与本地服务 → 三次运行 Electron（首次、重新启动与
+// 性能测试）。
 // Full-flow extension integration test: build, start a SQLite Standalone Host and local services, then run
-// Electron twice (first launch and restart).
+// Electron three times (first launch, restart and performance).
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
@@ -12,6 +13,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import electron from "electron";
 import { build } from "esbuild";
+import iconv from "iconv-lite";
 
 import {
   buildExtensionFixtures,
@@ -69,6 +71,71 @@ const DIAGRAM = {
   appState: { viewBackgroundColor: "#ffffff" },
   files: {},
 };
+
+// Edit 写回检查使用的文档：每种需要原样保留的写法各出现一次。front matter 以列表结束，CommonMark 读到的标题只有正文中的
+// 两个，todo-editor 的 Outline 据此列出标题。
+// The document for the Edit write-back checks: every construct that must be kept verbatim appears once. The front
+// matter ends with a list, so CommonMark reads only the two headings of the body, which todo-editor's Outline lists.
+const EDIT_MARKDOWN = `---
+title: Edit sample
+tags:
+  - alpha
+  - beta
+---
+
+# Edit sample
+
+First paragraph with <kbd>inline HTML</kbd> and a footnote[^note].
+
+Second paragraph with a [reference link][docs] at the end.
+
+Related: [readme](../readme.md) and [example](https://example.com/related).
+
+* star item one
+* star item two
+
+Setext heading
+==============
+
+<div class="note">
+HTML block
+</div>
+
+[docs]: https://example.com/first
+[docs]: https://example.com/duplicate
+
+\`\`\`ts title=x
+const x = 1;
+\`\`\`
+
+| Name | Value |
+| --- | --- |
+| alpha | 1 |
+
+- [ ] open task
+- [x] done task
+
+[^note]: The footnote text.
+`;
+
+// 缩进不规范的 TypeScript：唯一缩进的一行为 4 个空格，Monaco 按 4 个空格缩进格式化。
+// TypeScript with irregular indentation: the only indented line uses 4 spaces, so Monaco formats with 4 spaces.
+const APP_TS = `function   add(a:number,b:number){
+    return a+b}
+const total=add( 1,2 )
+`;
+
+const CONFIG_JSON = `{
+  // The port the service listens on.
+  "port": 8080,
+  /* Hosts allowed to connect. */
+  "hosts": ["a", "b"],
+}
+`;
+
+const CHINESE_TEXT =
+  "这是一段用于测试编码识别的中文文字。文本编辑器需要正确地识别编码，并且按照原来的编码写回文件。\n第二行也是中文内容，包含标点符号：逗号、句号。\n";
+const UTF8_BOM = [0xef, 0xbb, 0xbf];
 
 function run(command, args, options = {}) {
   return new Promise((resolvePromise, reject) => {
@@ -315,6 +382,40 @@ async function prepareServerData(baseUrl, echoPort) {
     `${JSON.stringify(DIAGRAM, null, 2)}\n`,
   );
   await writeFile(join(projectDirectory, "blank.excalidraw"), "");
+  // Text Editor 与 todo-editor 使用的文件。Files for Text Editor and todo-editor.
+  await mkdir(join(projectDirectory, "notes"), { recursive: true });
+  await writeFile(join(projectDirectory, "notes", "edit.md"), EDIT_MARKDOWN);
+  await mkdir(join(projectDirectory, "src"), { recursive: true });
+  await writeFile(join(projectDirectory, "src", "app.ts"), APP_TS);
+  await writeFile(join(projectDirectory, "config.json"), CONFIG_JSON);
+  await writeFile(
+    join(projectDirectory, "crlf.txt"),
+    Buffer.concat([Buffer.from(UTF8_BOM), Buffer.from("first line\r\nsecond line\r\n")]),
+  );
+  await writeFile(
+    join(projectDirectory, "utf16.txt"),
+    Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from("UTF-16 text: héllo wörld\nsecond line\n", "utf16le"),
+    ]),
+  );
+  await writeFile(join(projectDirectory, "gbk.txt"), iconv.encode(CHINESE_TEXT, "gb18030"));
+  await writeFile(
+    join(projectDirectory, "data.bin"),
+    Buffer.from([0x50, 0x4b, 3, 4, 0, 0, 20, 0, 8, 0]),
+  );
+  // UTF-8 BOM 之后不是 UTF-8：BOM 是唯一的候选，识别失败；按 windows-1252 可以无损读取。
+  // Not UTF-8 after a UTF-8 BOM: the BOM is the only candidate, so detection fails; windows-1252 reads it losslessly.
+  await writeFile(
+    join(projectDirectory, "unknown.txt"),
+    Buffer.concat([
+      Buffer.from(UTF8_BOM),
+      Buffer.from("Caf"),
+      Buffer.from([0xe9]),
+      Buffer.from(" au lait\n"),
+    ]),
+  );
+  await writeFile(join(projectDirectory, "list.todo"), "- buy milk\n- write tests\n");
   const project = await api(baseUrl, session, "POST", "/api/projects", {
     name: "Extension tests",
     description: "Project for the extension integration tests.",
@@ -335,6 +436,103 @@ async function prepareServerData(baseUrl, echoPort) {
     extraSetting: a2aProject.extraSetting ?? null,
   });
   return { firstToken, secondToken, agentId: agent.id, agentName: "echo", projectId: project.id };
+}
+
+const FENCE = "```";
+
+/** paragraph 之间有空行，包含普通文字、表格、任务列表和代码块。Blank lines between blocks, with text, tables, task lists and code. */
+function spacedUnit(index) {
+  return [
+    `## Section ${index}`,
+    "",
+    `Paragraph ${index} explains the change with **bold words**, \`inline code\`, a [link](https://example.com/${index}) ` +
+      "and enough plain words to look like an ordinary answer from the assistant in a long conversation.",
+    "",
+    "| Name | Value | Note |",
+    "| --- | ---: | --- |",
+    `| alpha | ${index} | first row |`,
+    `| beta | ${index + 1} | second row |`,
+    "",
+    `- [x] finished item ${index}`,
+    `- [ ] open item ${index}`,
+    "",
+    `${FENCE}ts`,
+    `const value${index} = ${index};`,
+    `function double${index}(input: number) {`,
+    "  return input * 2;",
+    "}",
+    FENCE,
+    "",
+  ].join("\n");
+}
+
+/** 标题与正文之间都没有空行，整篇没有空行。No blank line anywhere: each heading is followed directly by body text. */
+function compactUnit(index) {
+  return [
+    `## Section title ${index}`,
+    `Body line one for section ${index} with **bold** text and \`code\` that keeps going for a while.`,
+    "Body line two continues the same paragraph with more ordinary words and a [link](https://example.com).",
+  ].join("\n");
+}
+
+/** 标题与短表格交替，没有空行，单元格含代码中的 `|`。Headings alternate with short tables, no blank lines, cells hold a code `|`. */
+function tableUnit(index) {
+  return [`# Section ${index}`, "| a | b |", "| --- | --- |", `| \`x|y\` | ${index} |`].join("\n");
+}
+
+function typescriptUnit(index) {
+  return [
+    `export interface Record${index} {`,
+    "  id: number;",
+    "  name: string;",
+    "}",
+    "",
+    `export function describe${index}(record: Record${index}): string {`,
+    `  const parts = [record.name, String(record.id), "${index}"];`,
+    '  return parts.join("-");',
+    "}",
+    "",
+  ].join("\n");
+}
+
+/** 重复同一单元直到达到目标大小（KiB，内容都是 ASCII）。Repeats one unit up to the target size in KiB (ASCII content). */
+function repeatUnit(unit, targetKiB) {
+  const parts = [];
+  let length = 0;
+  for (let index = 0; length < targetKiB * 1024; index += 1) {
+    const part = unit(index);
+    parts.push(part);
+    length += part.length + 1;
+  }
+  return `${parts.join("\n")}\n`;
+}
+
+/**
+ * 性能测试的输入，生成到 Project 目录：Tiptap 渲染方案“性能测试”中三组内容的 158 KiB 与 631 KiB Markdown，以及
+ * 10 MiB 的 TypeScript。返回相对 Project 目录的路径。
+ * Performance inputs generated into the Project directory: 158 KiB and 631 KiB Markdown in the three compositions of
+ * the Tiptap rendering design's performance tests, plus 10 MiB of TypeScript. Returns paths relative to the Project.
+ */
+async function writePerformanceInputs() {
+  await mkdir(join(projectDirectory, "perf"), { recursive: true });
+  const markdown = [];
+  for (const kib of [158, 631]) {
+    for (const [kind, unit] of [
+      ["spaced", spacedUnit],
+      ["compact", compactUnit],
+      ["tables", tableUnit],
+    ]) {
+      const path = `perf/${kind}-${kib}.md`;
+      await writeFile(join(projectDirectory, ...path.split("/")), repeatUnit(unit, kib));
+      markdown.push({ path, kind, kib });
+    }
+  }
+  const code = "perf/large.ts";
+  await writeFile(
+    join(projectDirectory, ...code.split("/")),
+    repeatUnit(typescriptUnit, 10 * 1024),
+  );
+  return { markdown, code };
 }
 
 /** 把 fixture 复制到安装目录，替换本地服务端口。Copies fixtures into the install directory with the service port. */
@@ -465,7 +663,8 @@ async function main() {
     logLevel: "warning",
   });
 
-  for (const phase of ["first", "restart"]) {
+  for (const phase of ["first", "restart", "performance"]) {
+    const performance = phase === "performance" ? await writePerformanceInputs() : null;
     await writeFile(
       join(root, "config.json"),
       JSON.stringify(
@@ -477,6 +676,8 @@ async function main() {
           remoteProfile,
           testServiceUrl: `http://127.0.0.1:${testService.port}`,
           hostUrl,
+          performance,
+          results: join(root, "performance.json"),
           ...serverData,
         },
         null,

@@ -14,6 +14,7 @@ public static class DependencyInjection
     {
         services.AddSingleton<FileAppService>();
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<FilePathLocks>();
         services.AddSingleton<ProjectScopedFileSystemResolver>();
         services.AddSingleton<IAgwFileSystemResolver>(provider =>
             provider.GetRequiredService<ProjectScopedFileSystemResolver>()

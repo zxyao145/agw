@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 1,
+  "id": "todo-editor",
+  "name": "Todo Editor",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture that edits *.todo files and outlines Markdown headings with the public Extension API only.",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "editor",
+        "title": "Todo",
+        "icon": "ListTodo",
+        "patterns": ["*.todo"],
+        "entry": "editor.html"
+      },
+      {
+        "id": "outline",
+        "title": "Outline",
+        "icon": "ListTree",
+        "patterns": ["*.md"],
+        "priority": "option",
+        "entry": "outline.html"
+      }
+    ]
+  },
+  "permissions": ["fs.cloud.read", "fs.cloud.write"]
+}

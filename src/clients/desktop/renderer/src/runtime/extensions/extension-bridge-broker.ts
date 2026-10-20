@@ -53,8 +53,29 @@ type FrameConnection = FrameConnectionInfo & {
   disposeContext: () => void;
 };
 
+/** broker 使用的编码识别与转换，形状与 Desktop bridge 的同名方法相同。The codec the broker uses, shaped like the Desktop bridge methods. */
+export type ExtensionTextCodec = Pick<
+  AgwDesktopBridge,
+  "decodeText" | "encodeText" | "listTextEncodings"
+>;
+
+/** 检查后的 `dialog.showMessageBox` 参数。Checked `dialog.showMessageBox` options. */
+export type MessageBoxRequest = {
+  /** 未指定时为 null。Null when not given. */
+  type: "info" | "warning" | "error" | null;
+  message: string;
+  detail: string | null;
+  buttons: readonly string[];
+  /** 获得焦点的按钮；未指定时为 null。The focused button; null when not given. */
+  defaultId: number | null;
+  /** 按 `Esc` 或关闭对话框时返回的下标。The index returned for `Esc` or closing the dialog. */
+  cancelId: number;
+};
+
 export type ExtensionBridgeBrokerOptions = {
   bridge(): AgwDesktopBridge;
+  /** 生产环境中为 Desktop bridge。The Desktop bridge in production. */
+  codec(): ExtensionTextCodec;
   hostInstanceId: string;
   context: ContextService;
   layout: WorkspaceLayoutStore;
@@ -75,13 +96,87 @@ export type ExtensionBridgeBrokerOptions = {
   setUnsavedChanges(frameId: string, pageId: string, unsaved: boolean): void;
   /** 打开未批准的地址前由用户确认。Asks the user before opening a URL outside the approved hosts. */
   confirmOpenExternal(extensionId: string, url: string): Promise<boolean>;
+  /** 在宿主的确认队列中显示消息框，返回按钮下标。Shows a message box in the host's confirmation queue and returns the button index. */
+  showMessageBox(owner: SessionOwner, request: MessageBoxRequest): Promise<number>;
 };
 
 type RequestHandler = (connection: FrameConnection, params: never, signal: AbortSignal) => unknown;
 
+/** broker 写入文件的请求。A file write the broker performs. */
+type WriteRequest = {
+  uri: string;
+  data: Uint8Array;
+  overwrite: boolean;
+  createParents: boolean;
+  expectedSha256?: string;
+};
+
 function unwrap<T>(result: ExtensionIpcResult<T>): T {
   if (result.ok) return result.value;
   throw fromExtensionErrorData(result.error);
+}
+
+function invalidArgument(message: string): Error {
+  return createExtensionError("ERR_INVALID_ARGUMENT", message);
+}
+
+const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+
+/** 检查写入前提（3.5 节）；只有 undefined 表示没有前提。Checks a write precondition (section 3.5); only undefined means none. */
+function checkExpectedSha256(expectedSha256: unknown, overwrite: unknown): void {
+  if (expectedSha256 === undefined) return;
+  if (typeof expectedSha256 !== "string" || !SHA256_PATTERN.test(expectedSha256)) {
+    throw invalidArgument("expectedSha256 must be 64 lowercase hexadecimal characters.");
+  }
+  if (overwrite !== true) {
+    throw invalidArgument("expectedSha256 can only be used with overwrite: true.");
+  }
+}
+
+function isText(value: unknown, minLength: number, maxLength: number): value is string {
+  return typeof value === "string" && value.length >= minLength && value.length <= maxLength;
+}
+
+function buttonIndex(value: unknown, buttonCount: number, name: string): number | null {
+  if (value === undefined) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value >= buttonCount) {
+    throw invalidArgument(`${name} must be the index of a button.`);
+  }
+  return value;
+}
+
+/** 检查 `dialog.showMessageBox` 的参数（9.5 节）。Checks the `dialog.showMessageBox` options (section 9.5). */
+function toMessageBoxRequest(options: unknown): MessageBoxRequest {
+  if (typeof options !== "object" || options === null) {
+    throw invalidArgument("The message box options must be an object.");
+  }
+  const { type, message, detail, buttons, defaultId, cancelId } = options as Record<
+    string,
+    unknown
+  >;
+  if (type !== undefined && type !== "info" && type !== "warning" && type !== "error") {
+    throw invalidArgument('type must be "info", "warning" or "error".');
+  }
+  if (!isText(message, 1, 500)) throw invalidArgument("message must have 1 to 500 characters.");
+  if (detail !== undefined && !isText(detail, 0, 2000)) {
+    throw invalidArgument("detail must have at most 2000 characters.");
+  }
+  if (
+    !Array.isArray(buttons) ||
+    buttons.length < 1 ||
+    buttons.length > 4 ||
+    !buttons.every((button) => isText(button, 1, 40))
+  ) {
+    throw invalidArgument("buttons must have 1 to 4 labels of 1 to 40 characters.");
+  }
+  return {
+    type: type ?? null,
+    message,
+    detail: detail ?? null,
+    buttons: [...(buttons as string[])],
+    defaultId: buttonIndex(defaultId, buttons.length, "defaultId"),
+    cancelId: buttonIndex(cancelId, buttons.length, "cancelId") ?? buttons.length - 1,
+  };
 }
 
 function fileKind(uri: string): "local" | "cloud" {
@@ -339,6 +434,47 @@ export class ExtensionBridgeBroker {
       connection: FrameConnection,
       operation: (caller: ExtensionCaller) => Promise<ExtensionIpcResult<T>>,
     ) => operation(this.caller(connection)).then(unwrap);
+    // 本地文件交给主进程，云端文件经 CloudFileSystem。Local files go to main, cloud files through CloudFileSystem.
+    const readBytes = (
+      connection: FrameConnection,
+      uri: string,
+      signal: AbortSignal,
+    ): Promise<Uint8Array> =>
+      fileKind(uri) === "local"
+        ? local(connection, (caller) =>
+            bridge().extensionFileSystem(caller, { operation: "readFile", uri }),
+          )
+        : this.tracked(connection, signal, (requestSignal) =>
+            cloud.readFile(this.cloudAccess(connection), uri, requestSignal),
+          );
+    const writeBytes = (
+      connection: FrameConnection,
+      { uri, data, overwrite, createParents, expectedSha256 }: WriteRequest,
+      signal: AbortSignal,
+    ): Promise<null> => {
+      // 没有写入前提时不带这个字段。The field is left out without a precondition.
+      const precondition = expectedSha256 === undefined ? {} : { expectedSha256 };
+      return fileKind(uri) === "local"
+        ? local(connection, (caller) =>
+            bridge().extensionFileSystem(caller, {
+              operation: "writeFile",
+              uri,
+              data,
+              overwrite,
+              createParents,
+              ...precondition,
+            }),
+          )
+        : this.tracked(connection, signal, (requestSignal) =>
+            cloud.writeFile(
+              this.cloudAccess(connection),
+              uri,
+              data,
+              { overwrite, createParents, ...precondition },
+              requestSignal,
+            ),
+          );
+    };
 
     return {
       "log.error": (connection, params: { message: string; stack: string | null }) => {
@@ -414,37 +550,70 @@ export class ExtensionBridgeBroker {
       },
 
       "fs.readFile": (connection, params: { uri: string }, signal) =>
-        fileKind(params.uri) === "local"
-          ? local(connection, (caller) =>
-              bridge().extensionFileSystem(caller, { operation: "readFile", uri: params.uri }),
-            )
-          : this.tracked(connection, signal, (requestSignal) =>
-              cloud.readFile(this.cloudAccess(connection), params.uri, requestSignal),
-            ),
-      "fs.writeFile": (
+        readBytes(connection, params.uri, signal),
+      "fs.writeFile": (connection, params: WriteRequest, signal) => {
+        checkExpectedSha256(params.expectedSha256, params.overwrite);
+        return writeBytes(connection, params, signal);
+      },
+      // 字节的读写与 fs.readFile、fs.writeFile 相同，编码由主进程的 text-codec 处理（3.3、3.4 节）。
+      // Bytes are read and written like fs.readFile and fs.writeFile; the main-process text codec handles encodings.
+      "fs.readTextDocument": async (
         connection,
-        params: { uri: string; data: Uint8Array; overwrite: boolean; createParents: boolean },
+        params: { uri: string; encoding?: string },
         signal,
-      ) =>
-        fileKind(params.uri) === "local"
-          ? local(connection, (caller) =>
-              bridge().extensionFileSystem(caller, {
-                operation: "writeFile",
+      ) => {
+        const bytes = await readBytes(connection, params.uri, signal);
+        return unwrap(await this.options.codec().decodeText(bytes, params.encoding));
+      },
+      "fs.writeTextDocument": async (
+        connection,
+        params: {
+          uri: string;
+          text: string;
+          encoding: string;
+          bom: boolean;
+          eol: "\n" | "\r\n";
+          expectedSha256: string | null;
+          createParents: boolean;
+        },
+        signal,
+      ) => {
+        // 不支持的 URI 在编码之前失败。An unsupported URI fails before encoding.
+        fileKind(params.uri);
+        const { expectedSha256 } = params;
+        if (expectedSha256 === undefined) {
+          throw invalidArgument("expectedSha256 must be a string or null.");
+        }
+        if (expectedSha256 !== null) checkExpectedSha256(expectedSha256, true);
+        const encoded = unwrap(
+          await this.options.codec().encodeText(params.text, {
+            encoding: params.encoding,
+            bom: params.bom,
+            eol: params.eol,
+          }),
+        );
+        // null 时创建文件，不覆盖已有文件。null creates the file and never overwrites one.
+        await writeBytes(
+          connection,
+          expectedSha256 === null
+            ? {
                 uri: params.uri,
-                data: params.data,
-                overwrite: params.overwrite,
+                data: encoded.bytes,
+                overwrite: false,
                 createParents: params.createParents,
-              }),
-            )
-          : this.tracked(connection, signal, (requestSignal) =>
-              cloud.writeFile(
-                this.cloudAccess(connection),
-                params.uri,
-                params.data,
-                { overwrite: params.overwrite, createParents: params.createParents },
-                requestSignal,
-              ),
-            ),
+              }
+            : {
+                uri: params.uri,
+                data: encoded.bytes,
+                overwrite: true,
+                createParents: params.createParents,
+                expectedSha256,
+              },
+          signal,
+        );
+        return { sha256: encoded.sha256 };
+      },
+      "fs.listTextEncodings": () => this.options.codec().listTextEncodings(),
       "fs.readDirectory": (connection, params: { uri: string }, signal) =>
         fileKind(params.uri) === "local"
           ? local(connection, (caller) =>
@@ -543,6 +712,15 @@ export class ExtensionBridgeBroker {
         local(connection, (caller) => bridge().showExtensionOpenDialog(caller, params)),
       "dialog.showSaveDialog": (connection, params) =>
         local(connection, (caller) => bridge().showExtensionSaveDialog(caller, params)),
+      "dialog.showMessageBox": (connection, params) => {
+        if (connection.kind === "background") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only views can show message boxes.",
+          );
+        }
+        return this.options.showMessageBox(this.owner(connection), toMessageBoxRequest(params));
+      },
       "shell.revealInFileManager": (connection, params: { uri: string }) => {
         if (fileKind(params.uri) === "cloud") {
           throw createExtensionError(

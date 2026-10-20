@@ -375,6 +375,11 @@ public static class ErrorCodes
         "Shell commands must not read, list, search, write, edit or delete files; use the file access tools.",
         HttpStatusCode.Forbidden
     );
+    public static readonly ErrorCode FileNotWritable = new(
+        403_0007,
+        "File is read-only or not writable.",
+        HttpStatusCode.Forbidden
+    );
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(
@@ -540,6 +545,11 @@ public static class ErrorCodes
     public static readonly ErrorCode DirectoryNotEmpty = new(
         409_0023,
         "Directory is not empty.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode FileChanged = new(
+        409_0024,
+        "File changed since it was read. Reload it and try again.",
         HttpStatusCode.Conflict
     );
 

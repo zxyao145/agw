@@ -1,0 +1,468 @@
+/* Edit 查看器（设计 5.7）：固定的顶部条、居中的内容列（最大宽度 760 px，左侧留出拖动手柄的位置）、Notion 风格的块与菜单。
+   颜色与等宽字体来自宿主主题变量（theme.apply），深色模式随之变化。
+   The Edit viewer (design section 5.7): a fixed top bar, a centered content column (at most 760 px, with room for
+   the drag handle on its left), Notion-style blocks and menus. Colors and the monospace font come from the host theme
+   variables (theme.apply), so dark mode follows. */
+
+:root {
+  --link: var(--sidebar-primary);
+  --code-background: var(--muted);
+  scrollbar-color: var(--border) transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 14px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.edit-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.edit-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.edit-toolbar .save-status {
+  margin-right: 4px;
+}
+
+.status {
+  margin: 0;
+  padding: 24px 32px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+}
+
+.edit-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.edit-column {
+  box-sizing: border-box;
+  max-width: calc(760px + 96px);
+  margin: 0 auto;
+  padding: 32px 48px 120px 48px;
+}
+
+/* 编辑区与块。The editing area and blocks. */
+.edit-content .ProseMirror {
+  outline: none;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.edit-content .ProseMirror > * + * {
+  margin-top: 0.5em;
+}
+
+.edit-content :is(p, ul, ol, blockquote, pre, table) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.edit-content :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.2em 0 0.3em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.edit-content h1 {
+  font-size: 30px;
+}
+
+.edit-content h2 {
+  font-size: 24px;
+}
+
+.edit-content h3 {
+  font-size: 20px;
+}
+
+.edit-content h4 {
+  font-size: 16px;
+}
+
+.edit-content :is(h5, h6) {
+  font-size: 14px;
+}
+
+.edit-content .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.edit-content a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: text;
+}
+
+.edit-content strong {
+  font-weight: 600;
+}
+
+.edit-content code {
+  font-family: var(--font-mono);
+}
+
+.edit-content :not(pre) > code {
+  padding: 0.15em 0.35em;
+  border-radius: var(--radius-sm);
+  background: var(--code-background);
+  font-size: max(14px, 0.875em);
+}
+
+.edit-content blockquote {
+  padding-left: 1em;
+  border-left: 3px solid var(--foreground);
+}
+
+.edit-content hr {
+  height: 1px;
+  margin: 1em 0;
+  border: 0;
+  background: var(--border);
+}
+
+.edit-content hr.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+}
+
+/* 列表与任务项。Lists and task items. */
+.edit-content :is(ul, ol) {
+  padding-left: 1.6em;
+}
+
+.edit-content li > p {
+  margin: 0;
+}
+
+.edit-content li.task-item {
+  display: flex;
+  gap: 0.4em;
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.edit-content .task-checkbox {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 1.6em;
+  user-select: none;
+}
+
+.edit-content .task-checkbox input {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  accent-color: var(--sidebar-primary);
+  cursor: pointer;
+}
+
+.edit-content .task-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-content li.task-item[data-checked="true"] > .task-content > p {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+/* 代码块：标题栏有语言选择与 Copy。Code blocks: a header with the language choice and Copy. */
+.edit-content .code-block {
+  border-radius: var(--radius-md);
+  background: var(--code-background);
+}
+
+.edit-content .code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 0;
+  font-size: 14px;
+  user-select: none;
+}
+
+.edit-content .code-block-header select,
+.edit-content .code-block-header button {
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.edit-content .code-block-header select:hover,
+.edit-content .code-block-header button:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.edit-content pre {
+  margin: 0;
+  padding: 8px 16px 12px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.edit-content pre code {
+  background: transparent;
+}
+
+/* 原文块与 front matter：等宽字体，左上角的标签。Raw blocks and front matter: monospace with a top-left label. */
+.edit-content .raw-block {
+  position: relative;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.edit-content .raw-block-label {
+  display: block;
+  padding: 4px 8px 0;
+  font-size: 14px;
+  color: var(--muted-foreground);
+  user-select: none;
+}
+
+.edit-content .raw-block pre {
+  padding: 4px 8px 8px;
+  white-space: pre-wrap;
+}
+
+.edit-content code[data-raw-inline] {
+  border: 1px dashed var(--border);
+}
+
+/* 脚注引用、缺少定义的引用、图片。Footnote references, references without definitions, images. */
+.edit-content .footnote-reference {
+  color: var(--link);
+  font-size: max(14px, 0.75em);
+}
+
+.edit-content .missing-link-definition {
+  color: var(--destructive);
+  text-decoration: wavy underline;
+}
+
+.edit-content .edit-image img {
+  max-width: 100%;
+  vertical-align: bottom;
+}
+
+.edit-content .edit-image.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+}
+
+.edit-content .image-placeholder {
+  display: inline-flex;
+  gap: 0.5em;
+  padding: 0.1em 0.5em;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: max(14px, 0.875em);
+  color: var(--muted-foreground);
+}
+
+.edit-content .image-placeholder-alt {
+  color: var(--foreground);
+}
+
+/* 表格。Tables. */
+.edit-content .tableWrapper {
+  overflow-x: auto;
+}
+
+.edit-content table {
+  border-collapse: collapse;
+}
+
+.edit-content :is(th, td) {
+  min-width: 4em;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.edit-content th {
+  font-weight: 600;
+  background: var(--muted);
+}
+
+.edit-content .selectedCell {
+  background: var(--accent);
+}
+
+/* 占位文字。Placeholders. */
+.edit-content :is(p, h1, h2, h3, h4, h5, h6).is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.edit-content .ProseMirror-gapcursor::after {
+  border-top-color: var(--foreground);
+}
+
+/* 菜单与浮层。Menus and popovers. */
+.slash-menu,
+.formatting-menu,
+.link-menu,
+.image-menu,
+.table-toolbar,
+.image-insert {
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16);
+  font-size: 14px;
+}
+
+.slash-menu {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.slash-menu-item {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.slash-menu-item[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.image-insert {
+  position: fixed;
+}
+
+.menu-button {
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu-button:hover:not(:disabled),
+.menu-button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.menu-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.link-address {
+  max-width: 320px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.link-address.missing-link-definition {
+  color: var(--destructive);
+}
+
+.link-label {
+  padding-right: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.address-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.address-form input {
+  width: 240px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+/* 块拖动手柄。The block drag handle. */
+.drag-handle {
+  z-index: 10;
+  padding-right: 4px;
+}
+
+.drag-handle .popup{
+  margin-top: .5em;
+}
+
+.drag-handle .chrome-button {
+  padding: 0 4px;
+  color: var(--muted-foreground);
+  font-size: 1rem;
+  letter-spacing: -2px;
+  cursor: grab;
+}
+
+.drag-handle .popup-menu {
+  left: 0;
+  right: auto;
+}

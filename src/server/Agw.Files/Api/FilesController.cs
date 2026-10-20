@@ -101,6 +101,7 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status413RequestEntityTooLarge)]
     public async Task<IActionResult> WriteAsync(
         [FromQuery, BindRequired] Guid projectId,
@@ -108,6 +109,7 @@ public class FilesController : ControllerBase
         IFormFile content,
         [FromQuery] bool overwrite = false,
         [FromQuery] bool createParents = false,
+        [FromQuery] string? expectedSha256 = null,
         [FromQuery] Guid? directoryId = null
     )
     {
@@ -118,6 +120,7 @@ public class FilesController : ControllerBase
             stream,
             overwrite,
             createParents,
+            expectedSha256,
             RequestCancellationToken,
             directoryId
         );

@@ -31,6 +31,9 @@ const bridge: AgwDesktopBridge = {
     ipcRenderer.invoke("agw:check-for-updates") as Promise<DesktopUpdateCheckResult>,
   saveSettings: (settings: DesktopSettingsUpdate) =>
     ipcRenderer.invoke("agw:save-settings", settings) as Promise<DesktopRuntimeState>,
+  getFileViewerDefaults: () => ipcRenderer.invoke("agw:get-file-viewer-defaults"),
+  setFileViewerDefault: (fileType, viewerId) =>
+    ipcRenderer.invoke("agw:set-file-viewer-default", fileType, viewerId),
   saveToken: (profileId: string, token: string) =>
     ipcRenderer.invoke("agw:save-token", profileId, token) as Promise<void>,
   deleteToken: (profileId: string) =>
@@ -122,6 +125,10 @@ const bridge: AgwDesktopBridge = {
     ipcRenderer.invoke("agw:reveal-extension-path", caller, uri),
   extensionHttpRequest: (caller, request) =>
     ipcRenderer.invoke("agw:extension-http-request", caller, request),
+
+  decodeText: (bytes, encoding) => ipcRenderer.invoke("agw:decode-text", bytes, encoding),
+  encodeText: (text, options) => ipcRenderer.invoke("agw:encode-text", text, options),
+  listTextEncodings: () => ipcRenderer.invoke("agw:list-text-encodings"),
 
   onExtensionEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, extensionEvent: ExtensionEvent) =>

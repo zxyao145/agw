@@ -41,6 +41,7 @@ const view: WorkspaceView = {
   entry: "index.html",
   retainContextWhenHidden: false,
   failure: null,
+  priority: "default",
 };
 
 function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHostSnapshot {

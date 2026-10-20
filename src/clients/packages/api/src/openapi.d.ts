@@ -2182,6 +2182,7 @@ export interface paths {
           path?: string;
           overwrite?: boolean;
           createParents?: boolean;
+          expectedSha256?: string;
           directoryId?: string;
         };
         header?: never;
@@ -2231,6 +2232,17 @@ export interface paths {
         };
         /** @description Not Found */
         404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
           headers: {
             [name: string]: unknown;
           };

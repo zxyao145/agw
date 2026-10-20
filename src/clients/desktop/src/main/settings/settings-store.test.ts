@@ -337,6 +337,69 @@ test("saving other settings keeps the extensions field", async () => {
   }
 });
 
+test("file viewer defaults are set, replaced and removed per file type and kept by other saves", async () => {
+  const scratch = await createScratchDirectory("settings-viewers");
+  try {
+    await writeFile(
+      join(scratch.path, "settings.json"),
+      JSON.stringify({ schemaVersion: 1, closeBehavior: "quit-desktop" }),
+    );
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    assert.deepEqual((await store.load()).fileViewerDefaults, {});
+
+    assert.deepEqual(await store.setFileViewerDefault("*.md", "sample:code"), {
+      "*.md": "sample:code",
+    });
+    assert.deepEqual(await store.setFileViewerDefault("dockerfile", "source"), {
+      "*.md": "sample:code",
+      dockerfile: "source",
+    });
+    assert.deepEqual(await store.setFileViewerDefault("*.md", "sample:preview"), {
+      "*.md": "sample:preview",
+      dockerfile: "source",
+    });
+    await store.save({ closeBehavior: "minimize-to-tray" });
+    await store.setExtensionEnabled("sample", true, { permissions: [], hostPermissions: [] });
+    assert.deepEqual((await store.load()).fileViewerDefaults, {
+      "*.md": "sample:preview",
+      dockerfile: "source",
+    });
+
+    assert.deepEqual(await store.setFileViewerDefault("*.md", null), { dockerfile: "source" });
+    assert.deepEqual(await store.setFileViewerDefault("*.txt", null), { dockerfile: "source" });
+    const reloaded = await new DesktopSettingsStore(scratch.path, "client", codec).load();
+    assert.deepEqual(reloaded.fileViewerDefaults, { dockerfile: "source" });
+    assert.deepEqual(reloaded.extensions.sample?.enabled, true);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("file viewer defaults with invalid keys or values are rejected", async () => {
+  const scratch = await createScratchDirectory("settings-viewers");
+  try {
+    for (const fileViewerDefaults of [
+      { "*.md": 1 },
+      { "*.md": "" },
+      { "": "source" },
+      ["source"],
+    ]) {
+      await writeFile(
+        join(scratch.path, "settings.json"),
+        JSON.stringify({ schemaVersion: 1, fileViewerDefaults }),
+      );
+      await assert.rejects(new DesktopSettingsStore(scratch.path, "client", codec).load());
+    }
+    await writeFile(join(scratch.path, "settings.json"), JSON.stringify({ schemaVersion: 1 }));
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    await assert.rejects(store.setFileViewerDefault("", "sample:code"));
+    await assert.rejects(store.setFileViewerDefault("*.md", ""));
+    assert.deepEqual((await store.load()).fileViewerDefaults, {});
+  } finally {
+    await scratch.dispose();
+  }
+});
+
 test("consecutive enable and activation records are both saved", async () => {
   const scratch = await createScratchDirectory("settings-extensions");
   try {

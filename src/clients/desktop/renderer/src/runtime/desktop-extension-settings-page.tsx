@@ -55,6 +55,7 @@ export function DesktopExtensionSettingsPage() {
               entry,
               retainContextWhenHidden: false,
               failure: null,
+              priority: "default",
             }}
             openRequest={undefined}
           />

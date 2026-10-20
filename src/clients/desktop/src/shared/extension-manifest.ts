@@ -119,6 +119,7 @@ export const extensionManifestSchema = z
               icon: iconSchema,
               patterns: z.array(fileViewerPatternSchema).min(1).max(20),
               entry: entrySchema,
+              priority: z.enum(["default", "option"]).optional(),
             }),
           )
           .optional(),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { ExtensionFileViewerContribution } from "@agw/extension-sdk";
 import type { InstalledExtension } from "@desktop/shared/contracts";
 import { extensionRegistration, extensionViews } from "./extension-contributions";
 import { BUILT_IN_VIEWS } from "./workspace-ids";
@@ -18,6 +19,7 @@ function builtIn(id: string, location: "sidebar" | "main"): WorkspaceView {
     entry: null,
     retainContextWhenHidden: false,
     failure: null,
+    priority: "default",
   };
 }
 
@@ -156,14 +158,14 @@ test("file viewers match by name, ordered by extension id and then declaration o
   assert.equal(viewer.retainContextWhenHidden, true);
   assert.deepEqual(viewer.patterns, ["*.md"]);
   assert.deepEqual(
-    registry.fileViewersFor("README.md").map((view) => view.id),
+    registry.fileViewersFor("README.md", {}).map((view) => view.id),
     ["alpha:md", "sample:markdown", "sample:readme"],
   );
   assert.deepEqual(
-    registry.fileViewersFor("notes.md").map((view) => view.id),
+    registry.fileViewersFor("notes.md", {}).map((view) => view.id),
     ["alpha:md", "sample:markdown"],
   );
-  assert.deepEqual(registry.fileViewersFor("diagram.excalidraw"), []);
+  assert.deepEqual(registry.fileViewersFor("diagram.excalidraw", {}), []);
 
   // 停用后不再匹配；失败时保留并标记。Unregistered viewers stop matching; failed ones stay marked.
   registry.unregisterExtension("alpha");
@@ -172,11 +174,186 @@ test("file viewers match by name, ordered by extension id and then declaration o
     { code: "UNRESPONSIVE", message: "gone" },
     extensionRegistration(sample).views,
   );
-  const failed = registry.fileViewersFor("notes.md");
+  const failed = registry.fileViewersFor("notes.md", {});
   assert.deepEqual(
     failed.map((view) => [view.id, view.failure?.code]),
     [["sample:markdown", "UNRESPONSIVE"]],
   );
+});
+
+/** 只声明给定文件查看器的 extension 的注册信息。The registration of an extension declaring only the given file viewers. */
+function viewerRegistration(id: string, fileViewers: ExtensionFileViewerContribution[]) {
+  return extensionRegistration({
+    ...sample,
+    id,
+    manifest: { ...sample.manifest!, id, name: id, contributes: { fileViewers } },
+  });
+}
+
+/**
+ * `code`（alpha）匹配全部文件、声明为 option；sample 的两个查看器没有声明 priority；zeta 的 `md` 声明为 default。
+ * `code` (alpha) matches every file as an option; sample's two viewers declare no priority; zeta's `md` is a default.
+ */
+function createPriorityRegistry(): WorkspaceRegistry {
+  const registry = createRegistry();
+  registry.registerExtension("sample", extensionRegistration(sample));
+  registry.registerExtension(
+    "alpha",
+    viewerRegistration("alpha", [
+      {
+        id: "code",
+        title: "Code",
+        icon: "Code",
+        patterns: ["*"],
+        entry: "code.html",
+        priority: "option",
+      },
+    ]),
+  );
+  registry.registerExtension(
+    "zeta",
+    viewerRegistration("zeta", [
+      {
+        id: "md",
+        title: "Zeta MD",
+        icon: "Box",
+        patterns: ["*.md"],
+        entry: "md.html",
+        priority: "default",
+      },
+    ]),
+  );
+  return registry;
+}
+
+function viewerIds(
+  registry: WorkspaceRegistry,
+  fileName: string,
+  defaults: Record<string, string>,
+) {
+  return registry.fileViewersFor(fileName, defaults).map((view) => view.id);
+}
+
+test("file viewers take their priority from the manifest, default when absent", () => {
+  const registry = createPriorityRegistry();
+  assert.equal(registry.view("alpha:code")?.priority, "option");
+  assert.equal(registry.view("zeta:md")?.priority, "default");
+  assert.equal(registry.view("sample:markdown")?.priority, "default");
+});
+
+test("the user's default comes first, then default viewers by extension id, then option viewers", () => {
+  const registry = createPriorityRegistry();
+  assert.deepEqual(viewerIds(registry, "notes.md", {}), [
+    "sample:markdown",
+    "zeta:md",
+    "alpha:code",
+  ]);
+  assert.deepEqual(viewerIds(registry, "notes.md", { "*.md": "zeta:md" }), [
+    "zeta:md",
+    "sample:markdown",
+    "alpha:code",
+  ]);
+  assert.deepEqual(viewerIds(registry, "notes.md", { "*.md": "alpha:code" }), [
+    "alpha:code",
+    "sample:markdown",
+    "zeta:md",
+  ]);
+  // Source 由文件视图选中，查看器按 priority 排序。Source is chosen by the File view; viewers keep the priority order.
+  assert.deepEqual(viewerIds(registry, "notes.md", { "*.md": "source" }), [
+    "sample:markdown",
+    "zeta:md",
+    "alpha:code",
+  ]);
+  // 同一 extension 内按声明顺序。Declaration order within one extension.
+  assert.deepEqual(viewerIds(registry, "README.md", {}), [
+    "sample:markdown",
+    "sample:readme",
+    "zeta:md",
+    "alpha:code",
+  ]);
+});
+
+test("an option viewer comes first when it is the only match", () => {
+  const registry = createPriorityRegistry();
+  assert.deepEqual(viewerIds(registry, "app.ts", {}), ["alpha:code"]);
+  assert.deepEqual(viewerIds(registry, "constructor", {}), ["alpha:code"]);
+});
+
+test("a default that does not match the file or whose extension is disabled falls back to priority order", () => {
+  const registry = createPriorityRegistry();
+  assert.deepEqual(viewerIds(registry, "notes.md", { "*.md": "sample:readme" }), [
+    "sample:markdown",
+    "zeta:md",
+    "alpha:code",
+  ]);
+  assert.deepEqual(viewerIds(registry, "notes.md", { "*.md": "missing:viewer" }), [
+    "sample:markdown",
+    "zeta:md",
+    "alpha:code",
+  ]);
+
+  const defaults = { "*.md": "zeta:md" };
+  registry.unregisterExtension("zeta");
+  assert.deepEqual(viewerIds(registry, "notes.md", defaults), ["sample:markdown", "alpha:code"]);
+  // 重新启用后设置再次生效。The setting applies again once the extension is enabled again.
+  registry.registerExtension(
+    "zeta",
+    viewerRegistration("zeta", [
+      { id: "md", title: "Zeta MD", icon: "Box", patterns: ["*.md"], entry: "md.html" },
+    ]),
+  );
+  assert.deepEqual(viewerIds(registry, "notes.md", defaults), [
+    "zeta:md",
+    "sample:markdown",
+    "alpha:code",
+  ]);
+});
+
+test("the file type is the lower-cased text after the last dot, or the whole lower-cased name", () => {
+  const registry = createPriorityRegistry();
+  assert.deepEqual(viewerIds(registry, "README.MD", { "*.md": "sample:readme" }), [
+    "sample:readme",
+    "sample:markdown",
+    "zeta:md",
+    "alpha:code",
+  ]);
+  assert.deepEqual(viewerIds(registry, "README.MD", { "*.MD": "sample:readme" }), [
+    "sample:markdown",
+    "sample:readme",
+    "zeta:md",
+    "alpha:code",
+  ]);
+
+  registry.registerExtension(
+    "docker",
+    viewerRegistration("docker", [
+      { id: "file", title: "Docker", icon: "Box", patterns: ["Dockerfile"], entry: "d.html" },
+    ]),
+  );
+  assert.deepEqual(viewerIds(registry, "Dockerfile", {}), ["docker:file", "alpha:code"]);
+  assert.deepEqual(viewerIds(registry, "Dockerfile", { dockerfile: "alpha:code" }), [
+    "alpha:code",
+    "docker:file",
+  ]);
+  assert.deepEqual(viewerIds(registry, "Dockerfile", { Dockerfile: "alpha:code" }), [
+    "docker:file",
+    "alpha:code",
+  ]);
+
+  registry.registerExtension(
+    "archive",
+    viewerRegistration("archive", [
+      { id: "tar", title: "Tar", icon: "Box", patterns: ["*.tar.gz"], entry: "t.html" },
+    ]),
+  );
+  assert.deepEqual(viewerIds(registry, "a.tar.gz", { "*.gz": "alpha:code" }), [
+    "alpha:code",
+    "archive:tar",
+  ]);
+  assert.deepEqual(viewerIds(registry, "a.tar.gz", { "*.tar.gz": "alpha:code" }), [
+    "archive:tar",
+    "alpha:code",
+  ]);
 });
 
 test("registering an extension adds its views and entries and notifies subscribers", () => {

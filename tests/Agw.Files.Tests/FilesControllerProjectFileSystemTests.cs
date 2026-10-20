@@ -2,7 +2,6 @@ using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Api;
 using Agw.Files.Application.Files;
-using Agw.Files.Infrastructure.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -70,7 +69,7 @@ public class FilesControllerProjectFileSystemTests
     private static FilesController CreateController()
     {
         var fileAppService = new FileAppService(
-            new FakeFileSystemResolver(new LocalFileSystem(Path.GetTempPath())),
+            new FakeFileSystemResolver(TestFileSystems.Local(Path.GetTempPath())),
             new FakeGitCommandService(),
             NullLogger<FileAppService>.Instance
         );

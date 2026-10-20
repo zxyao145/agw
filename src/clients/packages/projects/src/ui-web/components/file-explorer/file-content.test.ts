@@ -4,7 +4,7 @@ import { setupDomEnvironment } from "@agw/test-harness";
 
 import type { FileViewerOption } from "./file-content.tsx";
 
-const { React, act, fireEvent, render, screen } = await setupDomEnvironment();
+const { React, act, fireEvent, render, screen, within } = await setupDomEnvironment();
 const { default: FileContent } = await import("./file-content.tsx");
 
 const VIEWERS: FileViewerOption[] = [
@@ -191,4 +191,133 @@ test("FileContent_WithoutViewers_ShowsTextWithoutTabs", async () => {
   assert.equal(screen.queryAllByRole("tab").length, 0);
   assert.equal(screen.queryByTestId("viewer"), null);
   assert.ok(screen.getByText("# Title"));
+});
+
+function elementWithDefaults(
+  selectedFile: string,
+  defaultFileViewerId: string | null | undefined,
+  onSetDefaultFileViewer?: (viewerId: string | null) => void,
+) {
+  return React.createElement(FileContent, {
+    projectId: "project-1",
+    directoryId: "workspace",
+    selectedFile,
+    isLoadingContent: false,
+    contentError: null,
+    onlyDiff: false,
+    diffContentData: null,
+    comments: [],
+    setComments() {},
+    fileContent: "# Title",
+    fileViewers: VIEWERS,
+    renderFileViewer: (viewerId: string) =>
+      React.createElement("div", { "data-testid": "viewer" }, `viewer ${viewerId}`),
+    defaultFileViewerId,
+    onSetDefaultFileViewer,
+  });
+}
+
+async function openMoreMenu() {
+  const trigger = screen.getByRole("button", { name: "More" });
+  await act(async () => {
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(trigger);
+  });
+  return screen.findByRole("menu");
+}
+
+function menuTexts(menu: HTMLElement): string[] {
+  return Array.from(menu.querySelectorAll('[role="menuitem"]'), (item) =>
+    (item.textContent ?? "").trim(),
+  );
+}
+
+test("FileContent_DefaultViewerIdMatchesViewer_SelectsItInitially", () => {
+  render(elementWithDefaults("README.md", "other:outline"));
+
+  assert.equal(tabs().find((tab) => tab.selected)?.id, "other:outline");
+  assert.equal(screen.getByTestId("viewer").textContent, "viewer other:outline");
+});
+
+test("FileContent_DefaultViewerIdIsSource_SelectsSourceInitially", () => {
+  render(elementWithDefaults("README.md", "source"));
+
+  assert.equal(tabs().find((tab) => tab.selected)?.id, "source");
+  assert.equal(screen.queryByTestId("viewer"), null);
+});
+
+test("FileContent_DefaultViewerIdMatchesNothing_KeepsFirstViewer", () => {
+  render(elementWithDefaults("README.md", "gone:viewer"));
+
+  assert.equal(tabs().find((tab) => tab.selected)?.id, "markdown-preview:preview");
+});
+
+test("FileContent_MoreMenu_SetsSelectedViewerAsDefaultForFileType", async () => {
+  const calls: (string | null)[] = [];
+  render(elementWithDefaults("docs/README.MD", null, (viewerId) => calls.push(viewerId)));
+
+  await selectTab("other:outline");
+  const menu = await openMoreMenu();
+  assert.deepEqual(menuTexts(menu), ["Open with Outline by default for *.md"]);
+  await act(async () => {
+    fireEvent.click(within(menu).getByText("Open with Outline by default for *.md"));
+  });
+
+  assert.deepEqual(calls, ["other:outline"]);
+});
+
+test("FileContent_MoreMenu_SourceSelectedCanBecomeDefault", async () => {
+  const calls: (string | null)[] = [];
+  render(elementWithDefaults("Dockerfile", null, (viewerId) => calls.push(viewerId)));
+
+  await selectTab("source");
+  const menu = await openMoreMenu();
+  await act(async () => {
+    fireEvent.click(within(menu).getByText("Open with Source by default for dockerfile"));
+  });
+
+  assert.deepEqual(calls, ["source"]);
+});
+
+test("FileContent_MoreMenu_WithDefaultOffersReset", async () => {
+  const calls: (string | null)[] = [];
+  render(
+    elementWithDefaults("README.md", "markdown-preview:preview", (viewerId) =>
+      calls.push(viewerId),
+    ),
+  );
+
+  const menu = await openMoreMenu();
+  assert.deepEqual(menuTexts(menu), [
+    "Open with Preview by default for *.md",
+    "Reset default for *.md",
+  ]);
+  await act(async () => {
+    fireEvent.click(within(menu).getByText("Reset default for *.md"));
+  });
+
+  assert.deepEqual(calls, [null]);
+});
+
+test("FileContent_ResetDefaultWhileDefaultViewerShown_KeepsThatViewerSelected", async () => {
+  const calls: (string | null)[] = [];
+  const onSetDefaultFileViewer = (viewerId: string | null) => calls.push(viewerId);
+  const view = render(elementWithDefaults("README.md", "other:outline", onSetDefaultFileViewer));
+  assert.equal(tabs().find((tab) => tab.selected)?.id, "other:outline");
+
+  const menu = await openMoreMenu();
+  await act(async () => {
+    fireEvent.click(within(menu).getByText("Reset default for *.md"));
+  });
+  view.rerender(elementWithDefaults("README.md", null, onSetDefaultFileViewer));
+
+  assert.deepEqual(calls, [null]);
+  assert.equal(tabs().find((tab) => tab.selected)?.id, "other:outline");
+  assert.equal(screen.getByTestId("viewer").textContent, "viewer other:outline");
+});
+
+test("FileContent_WithoutOnSetDefaultFileViewer_HasNoMoreMenu", () => {
+  render(elementWithDefaults("README.md", "markdown-preview:preview"));
+
+  assert.equal(screen.queryByRole("button", { name: "More" }), null);
 });

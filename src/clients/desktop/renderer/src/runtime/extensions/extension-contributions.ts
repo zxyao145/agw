@@ -41,6 +41,7 @@ export function extensionViews(installed: InstalledExtension): WorkspaceView[] {
       icon: resolveIcon(view.icon, installed.icons),
       entry: view.entry,
       retainContextWhenHidden: false,
+      priority: "default",
     })),
     ...(manifest.contributes?.mainViews ?? []).map((view): WorkspaceView => ({
       ...base,
@@ -50,6 +51,7 @@ export function extensionViews(installed: InstalledExtension): WorkspaceView[] {
       icon: resolveIcon(view.icon, installed.icons),
       entry: view.entry,
       retainContextWhenHidden: view.retainContextWhenHidden ?? false,
+      priority: "default",
     })),
     ...(manifest.contributes?.fileViewers ?? []).map((viewer): WorkspaceView => ({
       ...base,
@@ -61,6 +63,7 @@ export function extensionViews(installed: InstalledExtension): WorkspaceView[] {
       // 文件查看器隐藏时保留页面，由文件变化决定关闭。File viewers keep their page when hidden; file changes close them.
       retainContextWhenHidden: true,
       patterns: viewer.patterns,
+      priority: viewer.priority ?? "default",
     })),
   ];
 }

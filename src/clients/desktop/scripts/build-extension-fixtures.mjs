@@ -7,6 +7,8 @@ import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parse } from "acorn";
+import { full } from "acorn-walk";
 import { build as esbuild } from "esbuild";
 import { JSDOM } from "jsdom";
 import { build as viteBuild } from "vite";
@@ -31,6 +33,9 @@ export const defaultFixturesDirectory = join(
 
 /** 测试复制 fixture 时替换为本地 HTTP 服务端口的占位符。Replaced with the local HTTP service port when the test copies fixtures. */
 export const HTTP_PORT_PLACEHOLDER = "__HTTP_PORT__";
+
+// 宿主提供 SDK 的地址。Where the host serves the SDK.
+const SDK_SPECIFIER = "/__agw/sdk.js";
 
 // 不需要构建、按原样复制的 fixture。Fixtures copied as-is without a build step.
 const PLAIN_FIXTURES = [
@@ -189,6 +194,45 @@ async function buildViteFixture(id, configFile, outputDirectory) {
   await cp(join(root, "manifest.json"), join(outDir, "manifest.json"));
 }
 
+/**
+ * 构建产物对 `/__agw/sdk.js` 的导入只有 `defineView`：单独安装的 extension 只使用公开 SDK 的视图入口，其余能力都来自
+ * `defineView` 交给它的 api。
+ * The built output imports only `defineView` from `/__agw/sdk.js`: a separately installed extension uses only the
+ * public SDK's view entry, and every other capability comes from the api `defineView` hands it.
+ */
+async function assertSdkImportsOnlyDefineView(directory) {
+  const id = basename(directory);
+  const entries = await readdir(directory, { recursive: true });
+  const imported = [];
+  for (const entry of entries.filter((name) => name.endsWith(".js"))) {
+    const label = `${id}/${entry.split(sep).join("/")}`;
+    const program = parse(await readFile(join(directory, entry), "utf8"), {
+      ecmaVersion: "latest",
+      sourceType: "module",
+    });
+    full(program, (node) => {
+      if (node.type === "ImportExpression" && node.source.type !== "Literal") {
+        throw new Error(`${label}: a dynamic import with a computed specifier.`);
+      }
+      if (node.source?.value !== SDK_SPECIFIER) return;
+      if (node.type !== "ImportDeclaration") {
+        throw new Error(`${label}: ${node.type} of ${SDK_SPECIFIER}.`);
+      }
+      for (const specifier of node.specifiers) {
+        if (specifier.type !== "ImportSpecifier") {
+          throw new Error(`${label}: ${specifier.type} of ${SDK_SPECIFIER}.`);
+        }
+        imported.push(specifier.imported.name);
+      }
+    });
+  }
+  if (imported.length === 0 || imported.some((name) => name !== "defineView")) {
+    throw new Error(
+      `${id}: the build imports ${JSON.stringify(imported)} from ${SDK_SPECIFIER}; only defineView is allowed.`,
+    );
+  }
+}
+
 async function buildReactTs(outputDirectory) {
   const root = join(sourceDirectory, "react-ts");
   // 与 Extensions 页面的 "Save SDK types…" 相同，把类型与 schema 保存到 agw/。Like "Save SDK types…", save the types and schema to agw/.
@@ -269,6 +313,11 @@ export async function buildExtensionFixtures(outputDirectory = defaultFixturesDi
   await validateFixture(join(outputDirectory, "react-ts"));
   await buildViteFixture("vue", "vite.config.mjs", outputDirectory);
   await validateFixture(join(outputDirectory, "vue"));
+  // 测试用 "Install from folder" 安装 todo-editor，不预先放进安装目录。The test installs todo-editor with
+  // "Install from folder"; it is not placed in the install directory beforehand.
+  await buildViteFixture("todo-editor", "vite.config.mjs", outputDirectory);
+  await validateFixture(join(outputDirectory, "todo-editor"));
+  await assertSdkImportsOnlyDefineView(join(outputDirectory, "todo-editor"));
   await buildBlazor(outputDirectory);
   await validateFixture(join(outputDirectory, "blazor"));
 

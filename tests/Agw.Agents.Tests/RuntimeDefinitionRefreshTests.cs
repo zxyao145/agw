@@ -10,7 +10,6 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Files.Abstracts;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Providers.Contracts;
@@ -20,6 +19,7 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 using Agw.Shared.Utils;
+using Agw.Testing;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -479,7 +479,7 @@ public sealed class RuntimeDefinitionRefreshTests
         }
 
         public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
-            Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(Path.GetTempPath()));
+            Task.FromResult<IAgwFileSystem?>(TestFileSystems.Local(Path.GetTempPath()));
 
         public async ValueTask DisposeAsync()
         {

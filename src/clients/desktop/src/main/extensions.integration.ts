@@ -2,10 +2,11 @@
 // Full-flow extension integration test: runs the production main process and renderer, drives the host page through
 // the DOM, and reads the main-process frame registry.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   app,
@@ -16,6 +17,7 @@ import {
   type WebContents,
   type WebContentsView,
 } from "electron";
+import iconv from "iconv-lite";
 
 import { config } from "./extensions-integration-setup";
 import { extensionPartition } from "./extensions/extension-session";
@@ -31,6 +33,22 @@ const host = (): WebContents => {
   return window.webContents;
 };
 const storage = (extensionId: string) => join(config.userData, "extension-data", extensionId);
+// 保存与撤销等快捷键的修饰键。The modifier of shortcuts such as save and undo.
+const MOD = process.platform === "darwin" ? "meta" : "control";
+
+// 每个 WebContents 的控制台输出与创建次数，用于检查 CSP 报错与额外打开的窗口。
+// Console output and creation count of every WebContents, for checking CSP errors and extra windows.
+const consoleMessages: { url: string; level: string; message: string }[] = [];
+let createdWebContents = 0;
+app.on("web-contents-created", (_event, contents) => {
+  createdWebContents += 1;
+  contents.on("console-message", (event) => {
+    consoleMessages.push({ url: contents.getURL(), level: event.level, message: event.message });
+  });
+  contents.on("render-process-gone", (_goneEvent, details) => {
+    console.log(`[render-process-gone] ${contents.getURL()} ${JSON.stringify(details)}`);
+  });
+});
 
 /* ---------- 通用辅助 Helpers ---------- */
 
@@ -85,7 +103,14 @@ function evalHost<T>(code: string): Promise<T> {
 }
 
 function untilHost(code: string, label: string, timeoutMs?: number) {
-  return until(() => evalHost<boolean>(code), label, timeoutMs);
+  return until(() => evalHost<boolean>(code), label, timeoutMs, hostDialogs);
+}
+
+/** 宿主页面中打开的对话框与通知的文字，供超时信息使用。Open dialogs and toasts of the host page, for timeout messages. */
+function hostDialogs(): Promise<string> {
+  return evalHost<string>(
+    `JSON.stringify([...document.querySelectorAll('[data-slot="dialog-content"][data-state="open"], [data-sonner-toast]')].map((element) => element.textContent))`,
+  );
 }
 
 async function clickHost(selector: string): Promise<void> {
@@ -119,6 +144,20 @@ async function openMenu(selector: string): Promise<void> {
     trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, ctrlKey: false, pointerType: "mouse" }));
     return true;
   })()`);
+}
+
+/** 打开菜单并等待它显示。Opens a menu and waits for it to show. */
+async function openMenuAndWait(selector: string): Promise<void> {
+  await openMenu(selector);
+  await until(
+    () => evalHost<boolean>(`Boolean(${OPEN_MENU})`),
+    `the menu of ${selector}`,
+    20_000,
+    () =>
+      evalHost<string>(
+        `JSON.stringify({ triggers: [...document.querySelectorAll(${JSON.stringify(selector)})].map((button) => button.getAttribute("aria-expanded")), menus: [...document.querySelectorAll('[data-slot="dropdown-menu-content"]')].map((menu) => menu.dataset.state), focus: document.hasFocus(), active: document.activeElement?.outerHTML.slice(0, 160) ?? null })`,
+      ),
+  );
 }
 
 async function pressEscape(): Promise<void> {
@@ -157,10 +196,43 @@ async function untilFrame(extensionId: string, kind: string) {
   return frame;
 }
 
+/** 文件查看器 `viewerId`（manifest 中的 id，例如 `preview`）的 frame。The frame of file viewer `viewerId` (its manifest id, e.g. `preview`). */
+function viewerFrameOf(extensionId: string, viewerId: string) {
+  return frames(extensionId).find(
+    (frame) => runtime().registry.get(frame.frameId)?.viewId === viewerId,
+  );
+}
+
+async function untilViewerFrame(extensionId: string, viewerId: string) {
+  return until(() => {
+    const found = viewerFrameOf(extensionId, viewerId);
+    return found && runtime().registry.get(found.frameId)?.pageId ? found : null;
+  }, `${extensionId} ${viewerId} frame`);
+}
+
 type FrameHandle = { frameId: string; view: WebContentsView };
 
-function evalFrame<T>(frame: FrameHandle, code: string): Promise<T> {
-  return frame.view.webContents.executeJavaScript(code, true) as Promise<T>;
+async function evalFrame<T>(frame: FrameHandle, code: string): Promise<T> {
+  // 页面所在进程结束时 executeJavaScript 不会返回，所以限定等待时间；返回后清除计时器。executeJavaScript never settles
+  // when the page's process ends, so the wait is bounded; the timer is cleared once it settles.
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(`The frame ${frame.frameId} did not answer within 60 s: ${code.slice(0, 120)}`),
+        ),
+      60_000,
+    );
+  });
+  try {
+    return await Promise.race([
+      frame.view.webContents.executeJavaScript(code, true) as Promise<T>,
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** 在 frame 中等待 `window.api` 可用后执行。Runs code in a frame once `window.api` is available. */
@@ -314,6 +386,50 @@ async function beforeEnabling(): Promise<void> {
   pass("before enabling, the Ribbon has only built-in items and capability calls are refused");
 }
 
+async function textCodecBridge(): Promise<void> {
+  const textBytes = [0xef, 0xbb, 0xbf, 0x61, 0x0d, 0x0a, 0x62];
+  const binaryBytes = [0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0x14, 0x00];
+  const result = await evalHost<{
+    decoded: unknown;
+    binary: { ok: boolean; error?: { code: string | null } };
+    encodedIsBytes: boolean;
+    encodedBytes: number[];
+    encodedSha256: string | null;
+    encodingCount: number;
+    gb18030Label: string | null;
+  }>(`(async () => {
+    const bridge = window.agwDesktop;
+    const decoded = await bridge.decodeText(new Uint8Array(${JSON.stringify(textBytes)}));
+    const binary = await bridge.decodeText(new Uint8Array(${JSON.stringify(binaryBytes)}));
+    const encoded = await bridge.encodeText("a\\nb", { encoding: "utf-16le", bom: true, eol: "\\r\\n" });
+    const encodings = await bridge.listTextEncodings();
+    return {
+      decoded,
+      binary,
+      encodedIsBytes: encoded.ok && encoded.value.bytes instanceof Uint8Array,
+      encodedBytes: encoded.ok ? [...encoded.value.bytes] : [],
+      encodedSha256: encoded.ok ? encoded.value.sha256 : null,
+      encodingCount: encodings.length,
+      gb18030Label: encodings.find((item) => item.id === "gb18030")?.label ?? null,
+    };
+  })()`);
+  const sha256 = (bytes: number[]) =>
+    createHash("sha256").update(Uint8Array.from(bytes)).digest("hex");
+  assert.deepEqual(result.decoded, {
+    ok: true,
+    value: { text: "a\r\nb", encoding: "utf-8", bom: true, eol: "\r\n", sha256: sha256(textBytes) },
+  });
+  assert.equal(result.binary.ok, false);
+  assert.equal(result.binary.error?.code, "ERR_NOT_TEXT");
+  const expectedBytes = [0xff, 0xfe, 0x61, 0x00, 0x0d, 0x00, 0x0a, 0x00, 0x62, 0x00];
+  assert.equal(result.encodedIsBytes, true);
+  assert.deepEqual(result.encodedBytes, expectedBytes);
+  assert.equal(result.encodedSha256, sha256(expectedBytes));
+  assert.equal(result.encodingCount, 38);
+  assert.equal(result.gb18030Label, "Chinese Simplified (GB18030)");
+  pass("the host page decodes, encodes and lists text encodings through the Desktop bridge");
+}
+
 type SettingsFile = {
   extensions: Record<string, { enabled: boolean; grantedPermissions: string[] }>;
   removedBundledExtensions: string[];
@@ -321,12 +437,15 @@ type SettingsFile = {
 
 async function bundledDefaults(): Promise<void> {
   await goToExtensions();
-  await untilStatus("markdown-preview", "Active");
+  await untilStatus("text-editor", "Active");
   await untilStatus("excalidraw", "Active");
   assert.equal(await evalHost<boolean>(`Boolean(${OPEN_DIALOG})`), false);
   const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
-  assert.equal(settings.extensions["markdown-preview"].enabled, true);
-  assert.deepEqual(settings.extensions["markdown-preview"].grantedPermissions, ["fs.cloud.read"]);
+  assert.equal(settings.extensions["text-editor"].enabled, true);
+  assert.deepEqual([...settings.extensions["text-editor"].grantedPermissions].sort(), [
+    "fs.cloud.read",
+    "fs.cloud.write",
+  ]);
   assert.equal(settings.extensions.excalidraw.enabled, true);
   assert.deepEqual([...settings.extensions.excalidraw.grantedPermissions].sort(), [
     "fs.cloud.read",
@@ -636,6 +755,9 @@ async function contextAndFiles(): Promise<void> {
     ),
     '{"theme":"dark"}',
   );
+  // macOS FSEvents 可能在监听开始后才报告不久之前的写入：先等它过去，再以写入前的 changed 数量为基准。
+  // macOS FSEvents may report a recent write after the watch starts: let it pass, then count changed events before writing.
+  await delay(500);
   await api(
     main,
     `
@@ -643,13 +765,15 @@ async function contextAndFiles(): Promise<void> {
     window.__watch = await api.fs.watch(${JSON.stringify(`${storageUri}/config.json`)}, {}, (event) => window.__changes.push(event));`,
   );
   await delay(300);
+  const changedCount = "window.__changes.filter((event) => event.type === 'changed').length";
+  const changedBefore = await evalFrame<number>(main, changedCount);
   await api(
     main,
     `await api.fs.writeFile(${JSON.stringify(`${storageUri}/config.json`)}, '{"theme":"light"}');`,
   );
   await until(
-    () => evalFrame<boolean>(main, "window.__changes.some((event) => event.type === 'changed')"),
-    "a changed event",
+    () => evalFrame<boolean>(main, `${changedCount} > ${changedBefore}`),
+    "a changed event after the write",
   );
   pass("the storage directory is readable, writable and watchable");
 
@@ -1403,21 +1527,30 @@ async function otherStacks(): Promise<void> {
   }
 }
 
-async function zipInstall(): Promise<void> {
-  await goToExtensions();
+/**
+ * 执行 `action` 期间系统文件选择对话框直接返回 `path`：系统对话框无法自动操作。
+ * While `action` runs the native file picker returns `path` right away: the native picker cannot be automated.
+ */
+async function withPickedPath(path: string, action: () => Promise<void>): Promise<void> {
   const original = dialog.showOpenDialog;
-  // 系统文件选择对话框无法自动操作，这里替换为返回 fixture 路径。The native picker cannot be automated, so it returns the fixture path.
   dialog.showOpenDialog = (async () => ({
     canceled: false,
-    filePaths: [join(config.fixtures, "sample-v2.zip")],
+    filePaths: [path],
   })) as typeof dialog.showOpenDialog;
   try {
-    await clickText("Install from .zip");
-    await untilHost(`${OPEN_DIALOG}?.textContent.includes("1.0.0 → 1.1.0")`, "the version change");
-    await clickText("Replace", OPEN_DIALOG);
+    await action();
   } finally {
     dialog.showOpenDialog = original;
   }
+}
+
+async function zipInstall(): Promise<void> {
+  await goToExtensions();
+  await withPickedPath(join(config.fixtures, "sample-v2.zip"), async () => {
+    await clickText("Install from .zip");
+    await untilHost(`${OPEN_DIALOG}?.textContent.includes("1.0.0 → 1.1.0")`, "the version change");
+    await clickText("Replace", OPEN_DIALOG);
+  });
   await untilStatus("sample", "Disabled");
   await untilHost(
     `document.querySelector('[data-extension-id="sample"]').textContent.includes("Permission approval required")`,
@@ -1481,8 +1614,16 @@ async function connectionChanges(): Promise<void> {
   pass("changing the profile URL or token clears the context once and requests keep working");
 }
 
-/** 在 Files 中点击根目录下的文件。Clicks a root file in Files. */
-async function clickFileInTree(name: string): Promise<void> {
+/** 文件树中名称为 name 的项（测试数据中的名称不重复）。The file tree item named name (names in the test data are unique). */
+function treeItem(name: string): string {
+  return `[...document.querySelectorAll('.agw-left-sidebar *')].find((element) => element.textContent === ${JSON.stringify(name)} && element.children.length === 0)`;
+}
+
+/**
+ * 在 Files 中点击文件，`path` 中的目录依次展开。
+ * Clicks a file in Files, expanding the directories in `path` on the way.
+ */
+async function clickFileInTree(path: string): Promise<void> {
   await goToChat();
   if (
     !(await evalHost<boolean>(
@@ -1491,19 +1632,27 @@ async function clickFileInTree(name: string): Promise<void> {
   ) {
     await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.files"]');
   }
-  const item = `[...document.querySelectorAll('.agw-left-sidebar *')].find((element) => element.textContent === ${JSON.stringify(name)} && element.children.length === 0)`;
-  await untilHost(`Boolean(${item})`, `${name} in the file tree`);
+  const segments = path.split("/");
+  for (const directory of segments.slice(0, -1)) {
+    const row = `${treeItem(directory)}?.parentElement`;
+    await untilHost(`Boolean(${row})`, `${directory}/ in the file tree`);
+    if (!(await evalHost<boolean>(`Boolean(${row}.querySelector(".lucide-chevron-down"))`))) {
+      await evalHost(`${row}.click(); true`);
+    }
+  }
+  const item = treeItem(segments.at(-1)!);
+  await untilHost(`Boolean(${item})`, `${path} in the file tree`);
   await evalHost(`${item}.click(); true`);
 }
 
-/** 在 Files 中点击根目录下的文件并等待文件视图显示它。Clicks a root file in Files and waits for the File view to show it. */
-async function openFileInTree(name: string): Promise<void> {
-  await clickFileInTree(name);
+/** 在 Files 中点击文件并等待文件视图显示它。Clicks a file in Files and waits for the File view to show it. */
+async function openFileInTree(path: string): Promise<void> {
+  await clickFileInTree(path);
   await untilHost(
     `document.querySelector('.agw-main-workspace')?.getAttribute('data-view-id') === "agw.file"`,
     "the file view",
   );
-  await untilHost(shownFileIs(name), `the file view to show ${name}`);
+  await untilHost(shownFileIs(basename(path)), `the file view to show ${path}`);
 }
 
 function shownFileIs(name: string): string {
@@ -1516,10 +1665,10 @@ function viewerTab(id: string): string {
 
 async function filesView(): Promise<void> {
   await openFileInTree("readme.md");
-  // Markdown 文件默认由 Markdown Preview 显示，切换到 Source 显示原文。Markdown opens in Markdown Preview; Source shows the text.
+  // Markdown 文件默认由 Text Editor 的 Edit 打开，切换到 Source 显示原文。Markdown opens in Text Editor's Edit; Source shows the text.
   await untilHost(
-    `${viewerTab("markdown-preview:preview")}?.getAttribute("aria-selected") === "true"`,
-    "the Preview tab",
+    `${viewerTab("text-editor:markdown")}?.getAttribute("aria-selected") === "true"`,
+    "the Edit tab",
   );
   await clickHost('[data-file-viewer-tab="source"]');
   await untilHost(
@@ -1535,10 +1684,10 @@ async function filesView(): Promise<void> {
   pass("the Files view opens file content and the chat composer survives switching back");
 }
 
-const MARKDOWN_VIEWER = "markdown-preview:preview";
+const MARKDOWN_VIEWER = "text-editor:preview";
 
 /**
- * 文件标题行右侧各元素及其是否在窗口内可以点到，例如 `[["File views", true], ["Reload file", true], ["View info", true]]`。
+ * 文件标题行右侧各元素及其是否在窗口内可以点到，例如 `[["File views", true], ["More", true], ["Reload file", true], ["View info", true]]`。
  * The file title row's right-side items and whether each is clickable inside the window.
  */
 const FILE_HEADER_ACTIONS = `(() => {
@@ -1556,13 +1705,19 @@ function markdownText(includes: string): string {
   return `Boolean(document.querySelector("article.markdown-body")?.textContent.includes(${JSON.stringify(includes)}))`;
 }
 
-async function markdownPreview(): Promise<void> {
-  await openFileInTree("guide.md");
+/** 选择 Preview：Markdown 文件默认由 Edit 打开。Selects Preview; Markdown files open in Edit by default. */
+async function selectPreview(): Promise<void> {
+  await clickHost(`[data-file-viewer-tab="${MARKDOWN_VIEWER}"]`);
   await untilHost(
     `${viewerTab(MARKDOWN_VIEWER)}?.getAttribute("aria-selected") === "true"`,
     "the Preview tab",
   );
-  const firstPreview = await untilFrame("markdown-preview", "fileViewer");
+}
+
+async function textEditorPreview(): Promise<void> {
+  await openFileInTree("guide.md");
+  await selectPreview();
+  const firstPreview = await untilViewerFrame("text-editor", "preview");
   const rendered = `(() => {
     const article = document.querySelector("article.markdown-body");
     const image = article?.querySelector('img[alt="Logo"]');
@@ -1573,7 +1728,7 @@ async function markdownPreview(): Promise<void> {
   })()`;
   await until(() => evalFrame<boolean>(firstPreview, rendered), "the rendered Markdown");
   pass(
-    "Markdown files open in Markdown Preview with headings, tables, highlighted code, and project images",
+    "Markdown files open in the Text Editor Preview with headings, tables, highlighted code, and project images",
   );
 
   const structure = await evalFrame<Record<string, unknown>>(
@@ -1602,7 +1757,7 @@ async function markdownPreview(): Promise<void> {
     boldElements: 0,
     rawHtmlText: true,
   });
-  pass("Markdown Preview renders heading ids, footnotes, task lists, and raw HTML as text");
+  pass("the Text Editor Preview renders heading ids, footnotes, task lists, and raw HTML as text");
 
   // 文件标题行右侧的 "Reload view" 是文件视图中唯一的刷新按钮，点击后用新的 frame 重新加载查看器。
   // "Reload view" next to the file name is the only one in the file view, and it reloads the viewer in a new frame.
@@ -1616,7 +1771,7 @@ async function markdownPreview(): Promise<void> {
   );
   await evalHost(`${reloadButtons}[0].click(); true`);
   const preview = await until(() => {
-    const frame = frameOf("markdown-preview", "fileViewer");
+    const frame = viewerFrameOf("text-editor", "preview");
     return frame &&
       frame.frameId !== firstPreview.frameId &&
       runtime().registry.get(frame.frameId)?.pageId
@@ -1643,14 +1798,26 @@ async function markdownPreview(): Promise<void> {
   const infoPopup = `document.querySelector('[data-slot="popover-content"][data-state="open"]')`;
   const pageBeforeInfo = runtime().registry.get(preview.frameId)!.pageId;
   await evalFrame(preview, "window.__infoProbe = 1; true");
+  // 重新加载的查看器显示后再打开弹出层：遮挡开始时 view 还没有显示就直接隐藏，没有截图。Open the popup once the
+  // reloaded viewer shows: a view that is not showing yet when obscuring starts is hidden at once, without a snapshot.
+  await until(
+    () => preview.view.getVisible(),
+    "the reloaded preview to show",
+    undefined,
+    () => overlayState(preview),
+  );
   await clickHost('.agw-main-workspace [aria-label="View info"]');
   await untilHost(
-    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Markdown Preview")`,
+    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Text Editor")`,
     "the viewer info popup",
   );
   // 弹出层盖住查看器时换成已画出的截图，页面不重新加载。Under the popup the viewer swaps to a painted snapshot without reloading.
   await until(() => !preview.view.getVisible(), "the preview to be replaced by its snapshot");
-  assert.equal(await evalHost<boolean>(snapshotLoaded(preview.frameId)), true);
+  assert.equal(
+    await evalHost<boolean>(snapshotLoaded(preview.frameId)),
+    true,
+    await overlayState(preview),
+  );
   await pressEscape();
   await untilHost(`!${infoPopup}`, "the viewer info popup to close");
   await until(() => preview.view.getVisible(), "the preview to show again");
@@ -1676,10 +1843,10 @@ async function markdownPreview(): Promise<void> {
   );
   // 切换到 Source 时查看器隐藏并保留页面。Switching to Source hides the viewer and keeps its page.
   await until(() => !preview.view.getVisible(), "the preview to hide");
-  assert.equal(frameOf("markdown-preview", "fileViewer")?.frameId, preview.frameId);
-  // 源码中的长行不撑宽主区；Source 时标题行仍有切换按钮、"Reload file" 与 Info，都在窗口内可以点到。
-  // Long source lines do not widen the main workspace; with Source the title row keeps the switch, "Reload file"
-  // and Info, all clickable inside the window.
+  assert.equal(viewerFrameOf("text-editor", "preview")?.frameId, preview.frameId);
+  // 源码中的长行不撑宽主区；Source 时标题行仍有切换按钮、"More"、"Reload file" 与 Info，都在窗口内可以点到。
+  // Long source lines do not widen the main workspace; with Source the title row keeps the switch, "More",
+  // "Reload file" and Info, all clickable inside the window.
   assert.equal(
     await evalHost<boolean>(
       `document.querySelector('.agw-main-workspace').getBoundingClientRect().right <= window.innerWidth`,
@@ -1688,13 +1855,14 @@ async function markdownPreview(): Promise<void> {
   );
   assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
     ["File views", true],
+    ["More", true],
     ["Reload file", true],
     ["View info", true],
   ]);
   // Info 仍说明切换前的查看器。Info still describes the viewer selected before the switch.
   await clickHost('.agw-main-workspace [aria-label="View info"]');
   await untilHost(
-    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Markdown Preview")`,
+    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Text Editor")`,
     "the viewer info popup with Source selected",
   );
   await pressEscape();
@@ -1714,14 +1882,21 @@ async function markdownPreview(): Promise<void> {
 
   await evalFrame(preview, `document.querySelector('a[href="docs/notes.md"]').click(); true`);
   await untilHost(shownFileIs("notes.md"), "docs/notes.md in the file view");
+  // 打开的文件回到默认的 Edit，再选 Preview 时由同一个 Preview frame 显示。The opened file returns to the default
+  // Edit; selecting Preview again shows it in the same Preview frame.
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "docs/notes.md in the default Edit viewer");
+  await selectPreview();
   await until(
     () => evalFrame<boolean>(preview, markdownText("project notes")),
     "the notes preview",
   );
-  assert.equal(frameOf("markdown-preview", "fileViewer")?.frameId, preview.frameId);
-  pass("Source shows the text, and a relative link opens the linked file in the same viewer");
+  assert.equal(viewerFrameOf("text-editor", "preview")?.frameId, preview.frameId);
+  pass(
+    "Source shows the text, a relative link opens the linked file in the default viewer, and Preview then shows it in the same frame",
+  );
 
   await openFileInTree("guide.md");
+  await selectPreview();
   await until(() => evalFrame<boolean>(preview, markdownText("Example")), "the guide preview");
   await evalFrame(
     preview,
@@ -1730,7 +1905,7 @@ async function markdownPreview(): Promise<void> {
   await untilHost(
     `${OPEN_CONFIRMATION}?.getAttribute("data-host-confirmation") === "open-link"
       && ${OPEN_CONFIRMATION}.textContent.includes("https://example.com/docs")
-      && ${OPEN_CONFIRMATION}.textContent.includes("Markdown Preview")`,
+      && ${OPEN_CONFIRMATION}.textContent.includes("Text Editor")`,
     "the Open link dialog",
   );
   await clickText("Cancel", OPEN_CONFIRMATION);
@@ -1738,32 +1913,50 @@ async function markdownPreview(): Promise<void> {
   await untilHost(shownFileIs("guide.md"), "the guide to stay open");
   pass("an external link asks before opening the browser");
 
-  await disable("markdown-preview");
-  await untilStatus("markdown-preview", "Disabled", 10_000);
-  assert.equal(frames("markdown-preview").length, 0);
+  await disable("text-editor");
+  await untilStatus("text-editor", "Disabled", 10_000);
+  assert.equal(frames("text-editor").length, 0);
   await openFileInTree("guide.md");
   await untilHost(
     `!document.querySelector('[data-file-viewer-tab]')
       && document.querySelector('.agw-main-workspace')?.textContent.includes("[Notes](docs/notes.md)")`,
     "the Markdown source without viewers",
   );
-  await enable("markdown-preview", "Markdown Preview");
-  await untilStatus("markdown-preview", "Active");
+  await enable("text-editor", "Text Editor");
+  await untilStatus("text-editor", "Active");
   await openFileInTree("readme.md");
-  await untilHost(
-    `${viewerTab(MARKDOWN_VIEWER)}?.getAttribute("aria-selected") === "true"`,
-    "the Preview tab after enabling",
-  );
-  const enabled = await untilFrame("markdown-preview", "fileViewer");
+  await selectPreview();
+  const enabled = await untilViewerFrame("text-editor", "preview");
   await until(() => evalFrame<boolean>(enabled, markdownText("hello cloud")), "the readme preview");
-  pass(
-    "disabling Markdown Preview leaves only the source, and enabling it again restores the preview",
-  );
+  pass("disabling Text Editor leaves only the source, and enabling it again restores the preview");
 }
 
 const EXCALIDRAW_VIEWER = "excalidraw:editor";
+// 测试写到磁盘上的 Excalidraw 场景，元素的其余字段由 restore 补全。A scene the test writes to disk; restore fills the
+// other element fields.
+const DIAGRAM_ON_DISK = {
+  type: "excalidraw",
+  version: 2,
+  source: "https://excalidraw.com",
+  elements: [] as {
+    id: string;
+    type: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    isDeleted?: boolean;
+  }[],
+  appState: { viewBackgroundColor: "#ffffff" },
+  files: {},
+};
 const UNSAVED_MARKER = `Boolean(${viewerTab(EXCALIDRAW_VIEWER)}?.querySelector('[aria-label="Unsaved changes"]'))`;
 const DISCARD_DIALOG = `document.querySelector('[data-host-confirmation="discard-unsaved"][data-state="open"]')`;
+// Excalidraw 根元素的主题，没有根元素时为 null。The theme of the Excalidraw root, or null without one.
+const EXCALIDRAW_THEME = `(() => {
+  const root = document.querySelector(".excalidraw");
+  return root ? (root.classList.contains("theme--dark") ? "dark" : "light") : null;
+})()`;
 // 静态画布上的深色像素数，画布尚未渲染时为 -1；暗色主题只给画布加 CSS 滤镜，像素仍是浅色主题。
 // Dark pixels on the static canvas, or -1 before it renders; the dark theme only adds a CSS filter, so pixels stay light.
 const DRAWN_PIXELS = `(() => {
@@ -1779,7 +1972,7 @@ const DRAWN_PIXELS = `(() => {
 function pressKey(
   frame: FrameHandle,
   keyCode: string,
-  modifiers: ("meta" | "control")[] = [],
+  modifiers: ("meta" | "control" | "shift" | "alt")[] = [],
 ): void {
   const contents = frame.view.webContents;
   contents.focus();
@@ -1827,6 +2020,7 @@ async function excalidrawEditor(): Promise<void> {
   );
   assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
     ["File views", true],
+    ["More", true],
     ["Reload file", true],
     ["View info", true],
   ]);
@@ -1865,7 +2059,83 @@ async function excalidrawEditor(): Promise<void> {
   assert.equal(await evalHost<boolean>("location.pathname.startsWith('/desktop/chat')"), true);
   pass("unsaved changes show a marker and ask before another file or Settings replaces them");
 
-  pressKey(editor, "s", [process.platform === "darwin" ? "meta" : "control"]);
+  // 同一个文件重新显示时文档会话不读取，未保存的矩形与画布保留。Showing the same file again does not read, so the
+  // unsaved rectangle and the canvas stay.
+  const drawn = await evalFrame<number>(editor, DRAWN_PIXELS);
+  await clickHost('[data-file-viewer-tab="source"]');
+  await until(() => !editor.view.getVisible(), "the editor to hide");
+  await clickHost(`[data-file-viewer-tab="${EXCALIDRAW_VIEWER}"]`);
+  await until(() => editor.view.getVisible(), "the editor to show again");
+  await delay(500);
+  assert.equal(await evalHost<boolean>(UNSAVED_MARKER), true);
+  assert.equal(await evalFrame<number>(editor, DRAWN_PIXELS), drawn);
+  pass("showing the same Excalidraw file again keeps its unsaved drawing");
+
+  // Mod+Shift+S 是 Excalidraw 自己的“保存到磁盘”：不打开保存对话框，也不写入文件，保存只经过文档会话。系统保存对话框
+  // 无法自动操作，这里记录页面对 showSaveFilePicker 的调用与 session 中的下载，并在 window 的捕获阶段记录按键。
+  // Mod+Shift+S is Excalidraw's own "save to disk": it opens no save dialog and writes nothing, so saving goes only
+  // through the document session. The native save dialog cannot be automated, so the page's showSaveFilePicker calls
+  // and the session's downloads are recorded, and the key is recorded in the window's capture phase.
+  const sceneBeforeSaveAs = await readFile(diagramPath, "utf8");
+  const pickerSupported = await evalFrame<boolean>(
+    editor,
+    `(() => {
+      const supported = typeof window.showSaveFilePicker === "function";
+      window.__saveAsCalls = 0;
+      window.showSaveFilePicker = async () => {
+        window.__saveAsCalls += 1;
+        throw new DOMException("The user aborted a request.", "AbortError");
+      };
+      window.__saveAsKeys = [];
+      window.addEventListener("keydown", (event) => {
+        if (event.key.toLowerCase() === "s") window.__saveAsKeys.push({ shift: event.shiftKey, prevented: event.defaultPrevented });
+      }, true);
+      return supported;
+    })()`,
+  );
+  const downloads: string[] = [];
+  const onDownload = (_event: Electron.Event, item: Electron.DownloadItem) => {
+    downloads.push(item.getFilename());
+    item.cancel();
+  };
+  editor.view.webContents.session.on("will-download", onDownload);
+  try {
+    pressKey(editor, "s", [MOD, "shift"]);
+    await until(
+      () => evalFrame<boolean>(editor, "window.__saveAsKeys.length > 0"),
+      "the Mod+Shift+S keydown",
+    );
+    await delay(1000);
+  } finally {
+    editor.view.webContents.session.off("will-download", onDownload);
+  }
+  console.log(`showSaveFilePicker in the Excalidraw page: ${pickerSupported}`);
+  assert.deepEqual(
+    {
+      keys: await evalFrame(editor, "window.__saveAsKeys"),
+      pickerCalls: await evalFrame<number>(editor, "window.__saveAsCalls"),
+      downloads,
+      excalidrawDialog: await evalFrame<boolean>(
+        editor,
+        `Boolean(document.querySelector(".excalidraw .Modal, .excalidraw .Dialog"))`,
+      ),
+      hostDialog: await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`),
+      unsaved: await evalHost<boolean>(UNSAVED_MARKER),
+      sceneUnchanged: (await readFile(diagramPath, "utf8")) === sceneBeforeSaveAs,
+    },
+    {
+      keys: [{ shift: true, prevented: true }],
+      pickerCalls: 0,
+      downloads: [],
+      excalidrawDialog: false,
+      hostDialog: false,
+      unsaved: true,
+      sceneUnchanged: true,
+    },
+  );
+  pass("Mod+Shift+S in Excalidraw opens no save dialog and writes nothing");
+
+  pressKey(editor, "s", [MOD]);
   await until(async () => {
     const scene = JSON.parse(await readFile(diagramPath, "utf8")) as {
       elements: { type: string; isDeleted: boolean }[];
@@ -1873,10 +2143,130 @@ async function excalidrawEditor(): Promise<void> {
     return scene.elements.filter((element) => !element.isDeleted).length === 3;
   }, "the saved diagram");
   await untilHost(`!${UNSAVED_MARKER}`, "the unsaved marker to clear");
+  assert.equal(await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`), false);
   await openFileInTree("guide.md");
   assert.equal(await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`), false);
   await until(() => frames("excalidraw").length === 0, "the Excalidraw frame to close");
   pass("saving writes the new element and later file changes need no confirmation");
+
+  // 冲突：保存时磁盘上的场景已被其他写入方修改。A conflict: the scene on disk was changed by another writer.
+  await openFileInTree("diagram.excalidraw");
+  const conflicted = await untilFrame("excalidraw", "fileViewer");
+  await until(
+    async () => (await evalFrame<number>(conflicted, DRAWN_PIXELS)) > 0,
+    "the saved diagram on the canvas",
+  );
+  pressKey(conflicted, "r");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        conflicted,
+        `document.querySelector('[data-testid="toolbar-rectangle"]')?.checked === true`,
+      ),
+    "the rectangle tool",
+  );
+  const bounds = conflicted.view.getBounds();
+  const third = { x: Math.round(bounds.width * 0.25), y: Math.round(bounds.height * 0.7) };
+  drag(conflicted, third, { x: third.x + 100, y: third.y + 60 });
+  await untilHost(UNSAVED_MARKER, "the unsaved marker for the conflict");
+  type Scene = typeof DIAGRAM_ON_DISK;
+  const readScene = async () => JSON.parse(await readFile(diagramPath, "utf8")) as Scene;
+  const writeScene = (scene: Scene) =>
+    writeFile(diagramPath, `${JSON.stringify(scene, null, 2)}\n`);
+  const liveElements = (scene: Scene) => scene.elements.filter((element) => !element.isDeleted);
+  await writeScene({
+    ...DIAGRAM_ON_DISK,
+    elements: [{ id: "disk", type: "diamond", x: 100, y: 300, width: 80, height: 80 }],
+  });
+  pressKey(conflicted, "s", [MOD]);
+  await expectConflictDialog("Excalidraw", "diagram.excalidraw", conflicted);
+  await clickText("Overwrite", OPEN_MESSAGE_BOX);
+  await untilHost(`!${UNSAVED_MARKER}`, "the unsaved marker to clear");
+  const overwritten = await readScene();
+  assert.deepEqual(
+    liveElements(overwritten)
+      .map((element) => element.type)
+      .sort(),
+    ["ellipse", "rectangle", "rectangle", "rectangle"],
+  );
+  assert.equal(
+    overwritten.elements.some((element) => element.id === "disk"),
+    false,
+  );
+  pass(
+    "saving over a changed diagram shows the Excalidraw conflict dialog, and Overwrite writes the new rectangle",
+  );
+
+  // 没有修改时重新显示读取磁盘上的新场景，未保存标记不出现。Showing again with no changes reads the new scene from
+  // disk without the unsaved marker appearing.
+  await clickHost('[data-file-viewer-tab="source"]');
+  await until(() => !conflicted.view.getVisible(), "the editor to hide");
+  const beforeRefresh = await evalFrame<number>(conflicted, DRAWN_PIXELS);
+  await writeScene({
+    ...overwritten,
+    elements: [
+      ...overwritten.elements,
+      { id: "added", type: "diamond", x: 100, y: 320, width: 200, height: 200 },
+    ],
+  });
+  await clickHost(`[data-file-viewer-tab="${EXCALIDRAW_VIEWER}"]`);
+  let markerSeen = false;
+  await until(async () => {
+    if (await evalHost<boolean>(UNSAVED_MARKER)) markerSeen = true;
+    return (await evalFrame<number>(conflicted, DRAWN_PIXELS)) !== beforeRefresh;
+  }, "the refreshed diagram");
+  await delay(500);
+  assert.equal(markerSeen || (await evalHost<boolean>(UNSAVED_MARKER)), false);
+  pass("showing the unchanged diagram again reads the file from disk without an unsaved marker");
+
+  // 场景打开期间切换宿主主题，画布随之切换。The host theme changes while the scene is open and the canvas follows.
+  const startTheme = await evalHost<"light" | "dark">(
+    `document.querySelector('[aria-label="Use dark theme"]') ? "light" : "dark"`,
+  );
+  const otherTheme = startTheme === "light" ? "dark" : "light";
+  const canvasThemeIs = (theme: "light" | "dark") => async () =>
+    (await evalFrame<string | null>(conflicted, EXCALIDRAW_THEME)) === theme;
+  await until(canvasThemeIs(startTheme), `the ${startTheme} Excalidraw canvas`);
+  await clickHost(`[aria-label="Use ${otherTheme} theme"]`);
+  await until(canvasThemeIs(otherTheme), `the ${otherTheme} Excalidraw canvas`);
+  pass("a host theme change while a scene is open switches the Excalidraw canvas theme");
+
+  // Reload 放弃画布上的修改并显示磁盘上的场景，载入后不出现未保存标记。Reload discards the canvas changes and shows the
+  // scene on disk, with no unsaved marker after loading.
+  pressKey(conflicted, "r");
+  const fourth = { x: Math.round(bounds.width * 0.25), y: Math.round(bounds.height * 0.3) };
+  drag(conflicted, fourth, { x: fourth.x + 100, y: fourth.y + 60 });
+  await untilHost(UNSAVED_MARKER, "the unsaved marker for another rectangle");
+  const beforeReload = await evalFrame<number>(conflicted, DRAWN_PIXELS);
+  const reloaded = {
+    ...DIAGRAM_ON_DISK,
+    elements: [{ id: "reloaded", type: "rectangle", x: 0, y: 0, width: 120, height: 90 }],
+  };
+  await writeScene(reloaded);
+  pressKey(conflicted, "s", [MOD]);
+  await expectConflictDialog("Excalidraw", "diagram.excalidraw", conflicted);
+  await clickText("Reload", OPEN_MESSAGE_BOX);
+  await untilHost(`!${UNSAVED_MARKER}`, "the unsaved marker to clear after Reload");
+  // 画布不再是 Reload 之前的绘制结果。The canvas no longer shows the drawing from before Reload.
+  await until(
+    async () => (await evalFrame<number>(conflicted, DRAWN_PIXELS)) !== beforeReload,
+    "the diagram on disk on the canvas",
+  );
+  await delay(500);
+  assert.equal(await evalHost<boolean>(UNSAVED_MARKER), false);
+  assert.deepEqual(await readScene(), reloaded);
+  pass("Reload shows the diagram on disk and leaves no unsaved marker");
+
+  // 主题切换之后载入的场景保持宿主主题。A scene loaded after the theme change keeps the host theme.
+  assert.equal(await canvasThemeIs(otherTheme)(), true);
+  await clickHost(`[aria-label="Use ${startTheme} theme"]`);
+  await until(canvasThemeIs(startTheme), `the ${startTheme} Excalidraw canvas again`);
+  pass("a scene loaded after a host theme change keeps the host theme");
+
+  await openFileInTree("guide.md");
+  assert.equal(await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`), false);
+  await until(() => frames("excalidraw").length === 0, "the Excalidraw frame to close");
+  pass("after an Overwrite or a Reload, other files open without confirmation");
 
   await openFileInTree("blank.excalidraw");
   const blank = await untilFrame("excalidraw", "fileViewer");
@@ -1903,6 +2293,1430 @@ async function excalidrawEditor(): Promise<void> {
   );
   await goToChat();
   pass("an empty file opens as a blank canvas and Excalidraw loads without blocked requests");
+}
+
+/* ---------- Text Editor 与 todo-editor Text Editor and todo-editor ---------- */
+
+const EDIT_VIEWER = "text-editor:markdown";
+const CODE_VIEWER = "text-editor:code";
+const FILE_VIEWER_TABS = `[...document.querySelectorAll('[data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`;
+const OPEN_MESSAGE_BOX = `document.querySelector('[data-host-confirmation="message"][data-state="open"]')`;
+// 查看器顶部条或工具栏中的保存状态为 "Saved"。The save status in a viewer's top bar or toolbar reads "Saved".
+const SAVED = `document.querySelector(".save-status")?.textContent === "Saved"`;
+const EDITOR = `document.querySelector(".ProseMirror")`;
+// Code 编辑器显示的全部文字，按行的位置排列；Monaco 把空格显示为 U+00A0。All text the Code editor shows, ordered by
+// line position; Monaco shows spaces as U+00A0.
+const CODE_TEXT = `[...document.querySelectorAll(".code-editor .view-line")].map((line) => [parseFloat(line.style.top), line.textContent.replace(/\\u00a0/g, " ")]).sort((left, right) => left[0] - right[0]).map((entry) => entry[1]).join("\\n")`;
+const CODE_STATUS = `(document.querySelector(".code-status-bar")?.textContent ?? "")`;
+const DOCUMENT_ERROR = `(document.querySelector(".document-error")?.textContent ?? "")`;
+
+function unsavedIn(viewerId: string): string {
+  return `Boolean(${viewerTab(viewerId)}?.querySelector('[aria-label="Unsaved changes"]'))`;
+}
+
+function selectedViewerIs(viewerId: string): string {
+  return `${viewerTab(viewerId)}?.getAttribute("aria-selected") === "true"`;
+}
+
+function projectPath(path: string): string {
+  return join(config.projectDirectory, ...path.split("/"));
+}
+
+async function selectViewer(viewerId: string): Promise<void> {
+  await clickHost(`[data-file-viewer-tab="${viewerId}"]`);
+  await untilHost(selectedViewerIs(viewerId), `the ${viewerId} tab`);
+}
+
+/** Edit 中文字包含 text 的顶层块，tag 为块的选择器。The top-level Edit block containing text; tag selects the block. */
+function editBlock(text: string, tag = "*"): string {
+  return `[...document.querySelectorAll(".ProseMirror > ${tag}")].find((block) => block.textContent.includes(${JSON.stringify(text)}))`;
+}
+
+/** frame 中元素的中心点，以及这一点是否点到元素本身。An element's center in a frame and whether that point hits it. */
+function centerOf(frame: FrameHandle, element: string) {
+  return evalFrame<{ x: number; y: number; hit: boolean } | null>(
+    frame,
+    `(() => {
+      const element = ${element};
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      return { x, y, hit: rect.width > 0 && (hit === element || element.contains(hit)) };
+    })()`,
+  );
+}
+
+/** 用鼠标点击 frame 中可以点到的元素。Clicks a hittable element in a frame with the mouse. */
+async function clickInFrame(
+  frame: FrameHandle,
+  element: string,
+  modifiers: ("meta" | "control")[] = [],
+): Promise<void> {
+  const point = await until(async () => {
+    const center = await centerOf(frame, element);
+    return center?.hit ? center : null;
+  }, `${element} to be clickable`);
+  const contents = frame.view.webContents;
+  contents.focus();
+  const x = Math.round(point.x);
+  const y = Math.round(point.y);
+  contents.sendInputEvent({ type: "mouseMove", x, y, modifiers });
+  contents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1, modifiers });
+  contents.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1, modifiers });
+}
+
+/**
+ * 把可编辑区域中的光标放在元素末尾，或元素中文字 `after` 之后；ProseMirror 在 selectionchange 时读取。
+ * Puts the caret at the end of an element in an editable area, or after the text `after` in it; ProseMirror reads
+ * it on selectionchange.
+ */
+async function placeCaret(frame: FrameHandle, element: string, after?: string): Promise<void> {
+  frame.view.webContents.focus();
+  await evalFrame(
+    frame,
+    `(() => {
+      const element = ${element};
+      element.closest('[contenteditable="true"]').focus();
+      const range = document.createRange();
+      const after = ${JSON.stringify(after ?? null)};
+      if (after === null) {
+        // 元素中最后一段文字的末尾。The end of the element's last text.
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        let last = null;
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) last = node;
+        if (last) range.setStart(last, last.data.length);
+        else range.selectNodeContents(element);
+        range.collapse(!!last);
+      } else {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        while (node && !node.data.includes(after)) node = walker.nextNode();
+        if (!node) throw new Error("The text " + after + " is not in the element.");
+        range.setStart(node, node.data.indexOf(after) + after.length);
+        range.collapse(true);
+      }
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    })()`,
+  );
+  await delay(200);
+}
+
+/** 选中可编辑区域中元素里的文字 text。Selects the text in an element of an editable area. */
+async function selectTextIn(frame: FrameHandle, element: string, text: string): Promise<void> {
+  frame.view.webContents.focus();
+  await evalFrame(
+    frame,
+    `(() => {
+      const element = ${element};
+      element.closest('[contenteditable="true"]').focus();
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node && !node.data.includes(${JSON.stringify(text)})) node = walker.nextNode();
+      const start = node.data.indexOf(${JSON.stringify(text)});
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + ${text.length});
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    })()`,
+  );
+  await delay(200);
+}
+
+/** 向 frame 中获得焦点的元素输入文字。Types text into the focused element of a frame. */
+async function typeIn(frame: FrameHandle, text: string): Promise<void> {
+  frame.view.webContents.focus();
+  await frame.view.webContents.insertText(text);
+}
+
+function saveIn(frame: FrameHandle): void {
+  pressKey(frame, "s", [MOD]);
+}
+
+/** 把 Monaco 的光标移到文档开头或末尾。Moves Monaco's cursor to the start or end of the document. */
+function moveCodeCursor(frame: FrameHandle, to: "start" | "end"): void {
+  if (process.platform === "darwin") pressKey(frame, to === "end" ? "Down" : "Up", ["meta"]);
+  else pressKey(frame, to === "end" ? "End" : "Home", ["control"]);
+}
+
+async function untilFileText(path: string, expected: string, label: string): Promise<void> {
+  await until(
+    async () => (await readFile(path, "utf8")) === expected,
+    label,
+    20_000,
+    async () => JSON.stringify(await readFile(path, "utf8")),
+  );
+}
+
+async function untilFileBytes(path: string, expected: Buffer, label: string): Promise<void> {
+  await until(
+    async () => (await readFile(path)).equals(expected),
+    label,
+    20_000,
+    async () => (await readFile(path)).toString("hex"),
+  );
+}
+
+/** 等待 Edit 显示满足条件的已保存文档。Waits for Edit to show a saved document matching the predicate. */
+async function editShowing(predicate: string, label: string): Promise<FrameHandle> {
+  const frame = await untilViewerFrame("text-editor", "markdown");
+  await until(
+    () => evalFrame<boolean>(frame, `${SAVED} && Boolean(${EDITOR}) && (${predicate})`),
+    label,
+  );
+  return frame;
+}
+
+/** 等待 Code 显示满足条件的已保存文档。Waits for Code to show a saved document matching the predicate. */
+async function codeShowing(predicate: string, label: string): Promise<FrameHandle> {
+  const frame = await untilViewerFrame("text-editor", "code");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        frame,
+        `${SAVED} && Boolean(document.querySelector(".code-status-bar")) && (${predicate})`,
+      ),
+    label,
+  );
+  return frame;
+}
+
+/**
+ * 宿主绘制的冲突对话框：标题为 extension 名称，文字与按钮符合文档会话的规定，默认焦点为 Cancel，按钮都在窗口内可以点到，
+ * 被盖住的查看器换成已画出的截图。
+ * The host-drawn conflict dialog: titled with the extension name, with the document session's text and buttons,
+ * Cancel focused, every button clickable inside the window, and the covered viewer swapped for its painted snapshot.
+ */
+async function expectConflictDialog(
+  title: string,
+  fileName: string,
+  frame: FrameHandle,
+): Promise<void> {
+  await untilHost(
+    `${OPEN_MESSAGE_BOX}?.querySelector('[data-slot="dialog-title"]')?.textContent === ${JSON.stringify(title)}`,
+    `the ${title} conflict dialog`,
+  );
+  const readBox = () =>
+    evalHost<{ clickable: boolean[]; focused: string | null }>(`(() => {
+    const dialog = ${OPEN_MESSAGE_BOX};
+    const buttons = [...dialog.querySelectorAll("[data-message-button]")];
+    const clickable = (element) => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight
+        && (hit === element || element.contains(hit));
+    };
+    return {
+      message: dialog.querySelector('[data-slot="dialog-description"]').textContent,
+      detail: dialog.textContent.includes("Overwrite it with your version, or reload it and discard your changes."),
+      buttons: buttons.map((button) => button.textContent),
+      clickable: buttons.map(clickable),
+      focused: document.activeElement?.textContent ?? null,
+    };
+  })()`);
+  // 打开动画结束、焦点移到默认按钮之后再检查。Checked once the opening animation ends and focus reaches the default
+  // button.
+  const box = await until(
+    async () => {
+      const current = await readBox();
+      return current.clickable.every(Boolean) && current.focused === "Cancel" ? current : null;
+    },
+    `the ${title} conflict dialog to settle`,
+    20_000,
+    async () =>
+      `${JSON.stringify(await readBox())}; ${await evalHost<string>(`(() => {
+        const button = ${OPEN_MESSAGE_BOX}.querySelector("[data-message-button]");
+        const rect = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        const layers = [...document.querySelectorAll('[data-slot$="-overlay"], [data-slot$="-content"], [data-sonner-toast]')].map((element) => [element.dataset.slot ?? "toast", element.dataset.state, getComputedStyle(element).pointerEvents, getComputedStyle(element).opacity, element.getAttribute("data-host-confirmation")]);
+        return JSON.stringify({ rect, hit: hit?.outerHTML.slice(0, 200) ?? null, layers, bodyPointer: getComputedStyle(document.body).pointerEvents, hasFocus: document.hasFocus() });
+      })()`)}`,
+  );
+  assert.deepEqual(box, {
+    message: `${fileName} was changed on disk after it was opened.`,
+    detail: true,
+    buttons: ["Overwrite", "Reload", "Cancel"],
+    clickable: [true, true, true],
+    focused: "Cancel",
+  });
+  await until(() => !frame.view.getVisible(), "the viewer to be replaced by its snapshot");
+  assert.equal(await evalHost<boolean>(snapshotLoaded(frame.frameId)), true);
+}
+
+/** frame 中运行的 worker 的脚本地址（通过 DevTools 协议）。Script URLs of the workers running in a frame (through CDP). */
+async function workerUrls(frame: FrameHandle): Promise<string[]> {
+  const debuggerApi = frame.view.webContents.debugger;
+  debuggerApi.attach("1.3");
+  try {
+    const urls: string[] = [];
+    const onMessage = (
+      _event: unknown,
+      method: string,
+      params: { targetInfo?: { url: string } },
+    ) => {
+      if (method === "Target.attachedToTarget" && params.targetInfo)
+        urls.push(params.targetInfo.url);
+    };
+    debuggerApi.on("message", onMessage);
+    await debuggerApi.sendCommand("Target.setAutoAttach", {
+      autoAttach: true,
+      waitForDebuggerOnStart: false,
+      flatten: true,
+    });
+    await delay(300);
+    debuggerApi.off("message", onMessage);
+    return urls;
+  } finally {
+    debuggerApi.detach();
+  }
+}
+
+async function closeToasts(): Promise<void> {
+  while (await evalHost<boolean>(`Boolean(document.querySelector('[data-sonner-toast]'))`)) {
+    await evalHost(
+      `document.querySelector('[data-sonner-toast] [data-close-button]')?.click(); true`,
+    );
+    await delay(300);
+  }
+}
+
+async function viewerOrderAndDefaults(): Promise<void> {
+  for (const [path, tabs] of [
+    ["notes/edit.md", [EDIT_VIEWER, MARKDOWN_VIEWER, CODE_VIEWER, "source"]],
+    ["diagram.excalidraw", [EXCALIDRAW_VIEWER, CODE_VIEWER, "source"]],
+    ["src/app.ts", [CODE_VIEWER, "source"]],
+  ] as const) {
+    await openFileInTree(path);
+    await untilHost(selectedViewerIs(tabs[0]), `the default viewer of ${path}`);
+    assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), tabs, path);
+  }
+  pass(
+    "viewers follow their priority: Edit, Preview, Code for Markdown, Excalidraw then Code for diagrams, Code for other files",
+  );
+
+  const settingsPath = join(config.userData, "settings.json");
+  const defaults = async () =>
+    (await readJson<{ fileViewerDefaults: Record<string, string> }>(settingsPath))
+      .fileViewerDefaults;
+  const more = '.agw-main-workspace button[aria-label="More"]';
+  await openFileInTree("notes/edit.md");
+  await selectViewer(CODE_VIEWER);
+  // 切换到 Code 后立即打开 More 菜单（宿主页面有焦点，与点击按钮相同）：Code 随后读取完文件并让编辑器获得焦点，
+  // 菜单保持打开。菜单盖住 Code 时 view 换成截图并隐藏，Monaco 不绘制文字，所以这里按状态栏中的语言判断读取完成。
+  // Open the More menu right after switching to Code (the host page has focus, as after clicking the button): Code then
+  // finishes reading the file and focuses its editor, and the menu stays open. Under the menu the Code view is swapped
+  // for its snapshot and hidden, so Monaco draws no text; the status bar's language shows the read finished.
+  host().focus();
+  await openMenuAndWait(more);
+  const codeHoldsEditMd = `${SAVED} && Boolean(document.querySelector(".code-status-bar")?.textContent.includes("Markdown"))`;
+  const codeBeforeMenu = viewerFrameOf("text-editor", "code");
+  const loadedBeforeMenu =
+    codeBeforeMenu !== undefined && (await evalFrame<boolean>(codeBeforeMenu, codeHoldsEditMd));
+  const code = await untilViewerFrame("text-editor", "code");
+  await until(() => evalFrame<boolean>(code, codeHoldsEditMd), "edit.md read in Code");
+  await delay(500);
+  console.log(
+    `More menu after a Code file switch: window focused ${hooks.mainWindow()!.isFocused()}, Code had read the file before the menu opened ${loadedBeforeMenu}`,
+  );
+  assert.equal(
+    await evalHost<boolean>(`Boolean(${OPEN_MENU})`),
+    true,
+    "the More menu stays open after Code reads the file",
+  );
+  await clickText("Open with Code by default for *.md", OPEN_MENU);
+  await until(
+    async () => (await defaults())["*.md"] === CODE_VIEWER,
+    "the *.md default in settings.json",
+  );
+  await openFileInTree("readme.md");
+  await untilHost(selectedViewerIs(CODE_VIEWER), "Code as the default for readme.md");
+  await codeShowing(`${CODE_TEXT}.includes("hello cloud")`, "readme.md in Code");
+  // 用户默认的查看器排在最前。The user's default viewer comes first.
+  assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
+    CODE_VIEWER,
+    EDIT_VIEWER,
+    MARKDOWN_VIEWER,
+    "source",
+  ]);
+  await untilHost(`!${OPEN_MENU}`, "the More menu to close");
+  await openMenuAndWait(more);
+  await clickText("Reset default for *.md", OPEN_MENU);
+  await until(async () => !("*.md" in (await defaults())), "the *.md default to be removed");
+  // 重置不切换正在显示的查看器。The reset keeps the viewer being shown.
+  await untilHost(
+    `${FILE_VIEWER_TABS}.join() === ${JSON.stringify([EDIT_VIEWER, MARKDOWN_VIEWER, CODE_VIEWER, "source"].join())}`,
+    "the priority order after the reset",
+  );
+  assert.equal(await evalHost<boolean>(selectedViewerIs(CODE_VIEWER)), true);
+  await openFileInTree("guide.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit as the default for guide.md");
+  pass(
+    "More sets Code as the default for *.md in settings.json, and after Reset default for *.md the shown file keeps Code while other Markdown files open in Edit",
+  );
+}
+
+async function textEditorMarkdown(): Promise<void> {
+  const path = projectPath("notes/edit.md");
+  const original = await readFile(path, "utf8");
+  // 回到同一个文件时文件视图保留之前选中的 Code，这里重新选中 Edit。Returning to the same file keeps the Code chosen
+  // earlier, so Edit is selected again.
+  await openFileInTree("notes/edit.md");
+  await selectViewer(EDIT_VIEWER);
+  const edit = await editShowing(`Boolean(${editBlock("Second paragraph", "p")})`, "edit.md");
+
+  // 1-2：修改一个 paragraph 后保存，只有这个 paragraph 变化；展开的 notes/ 重新读取子项。Editing one paragraph changes
+  // only that paragraph on save; the expanded notes/ reads its children again.
+  await placeCaret(edit, editBlock("Second paragraph", "p"));
+  await typeIn(edit, " Typed in Edit.");
+  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker");
+  await writeFile(projectPath("notes/added.md"), "added on disk\n");
+  await delay(500);
+  assert.equal(await evalHost<boolean>(`Boolean(${treeItem("added.md")})`), false);
+  saveIn(edit);
+  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
+  const typed = original.replace("at the end.\n", "at the end. Typed in Edit.\n");
+  await untilFileText(path, typed, "the paragraph edit on disk");
+  await untilHost(`Boolean(${treeItem("added.md")})`, "notes/ to be read again after the save");
+  pass("Edit saves a paragraph edit with Cmd/Ctrl+S, changing only that paragraph on disk");
+  pass("saving in Edit reads the expanded notes/ directory of the file tree again");
+
+  // 3：修改链接定义中的地址，只有该定义所在的行变化。Editing a definition's address changes only its line.
+  await placeCaret(
+    edit,
+    editBlock("https://example.com/first", "div.raw-block"),
+    "https://example.com/first",
+  );
+  await typeIn(edit, "-v2");
+  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker for the definition");
+  saveIn(edit);
+  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
+  const definition = typed.replace(
+    "[docs]: https://example.com/first\n",
+    "[docs]: https://example.com/first-v2\n",
+  );
+  await untilFileText(path, definition, "the definition edit on disk");
+  pass("editing a link definition changes only its line");
+
+  // 4：空 paragraph 中输入 `/` 选择 Heading 2。`/` in an empty paragraph, then Heading 2.
+  const trailing = `${EDITOR}.lastElementChild`;
+  assert.equal(
+    await evalFrame<boolean>(edit, `${trailing}.tagName === "P" && ${trailing}.textContent === ""`),
+    true,
+  );
+  await placeCaret(edit, trailing);
+  await typeIn(edit, "/");
+  const heading2 = `[...document.querySelectorAll('.slash-menu [role="option"]')].find((option) => option.textContent === "Heading 2")`;
+  await clickInFrame(edit, heading2);
+  await until(
+    () => evalFrame<boolean>(edit, `Boolean(document.querySelector(".ProseMirror > h2"))`),
+    "the Heading 2 block",
+  );
+  await typeIn(edit, "New section");
+  saveIn(edit);
+  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
+  const heading = `${definition}\n## New section\n`;
+  await untilFileText(path, heading, "the new heading on disk");
+  pass("the / menu turns an empty paragraph into Heading 2, saved as a ## line");
+
+  // 5：点击任务项的复选框。Clicking a task item's checkbox.
+  await clickInFrame(
+    edit,
+    `[...document.querySelectorAll(".ProseMirror li.task-item")].find((item) => item.textContent.includes("open task"))?.querySelector('input[type="checkbox"]')`,
+  );
+  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker for the checkbox");
+  saveIn(edit);
+  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
+  const checked = heading.replace("- [ ] open task", "- [x] open task");
+  await untilFileText(path, checked, "the checked task on disk");
+  pass("clicking a task checkbox saves only that item as - [x]");
+
+  // 6：Preview 显示保存的内容。Preview shows the saved content.
+  await selectPreview();
+  const preview = await untilViewerFrame("text-editor", "preview");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `document.querySelector("article.markdown-body h2")?.textContent === "New section"`,
+      ),
+    "the saved content in Preview",
+  );
+  assert.deepEqual(
+    await evalFrame(
+      preview,
+      `(() => {
+        const article = document.querySelector("article.markdown-body");
+        return {
+          typed: article.textContent.includes("at the end. Typed in Edit."),
+          href: [...article.querySelectorAll("a")].find((link) => link.textContent === "reference link")?.getAttribute("href") ?? null,
+          openTask: [...article.querySelectorAll("li")].find((item) => item.textContent.includes("open task"))?.querySelector("input")?.checked ?? null,
+        };
+      })()`,
+    ),
+    { typed: true, href: "https://example.com/first-v2", openTask: true },
+  );
+  pass("Preview shows the content saved in Edit, with the link pointing to the new address");
+
+  // 7：Code 中修改并保存，回到 Edit 时 onShow 读取新内容。Code edits and saves; back in Edit, onShow reads it.
+  await selectViewer(CODE_VIEWER);
+  // Monaco 只渲染可见的行，这里检查文件前部保存过的 paragraph。Monaco renders only visible lines, so the saved
+  // paragraph near the start of the file is checked.
+  const code = await codeShowing(
+    `${CODE_TEXT}.includes("at the end. Typed in Edit.")`,
+    "the saved edit.md in Code",
+  );
+  moveCodeCursor(code, "end");
+  await typeIn(code, "Code line.");
+  await untilHost(unsavedIn(CODE_VIEWER), "the unsaved marker in Code");
+  saveIn(code);
+  await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker in Code to clear");
+  await untilFileText(path, `${checked}Code line.`, "the Code edit on disk");
+  await selectViewer(EDIT_VIEWER);
+  await editShowing(`Boolean(${editBlock("Code line.", "p")})`, "Edit to show the Code change");
+  assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), false);
+  pass("a change saved in Code shows in Edit when it is shown again");
+}
+
+/**
+ * 在 frame 中用鼠标从一个元素的拖动手柄拖到另一个元素上方，返回拖动前手柄的中心点。
+ * Drags a block by its handle onto another element and returns the handle's center before the drag.
+ */
+async function dragBlock(
+  frame: FrameHandle,
+  block: string,
+  target: string,
+): Promise<{ x: number; y: number }> {
+  const contents = frame.view.webContents;
+  const debuggerApi = contents.debugger;
+  debuggerApi.attach("1.3");
+  try {
+    const mouse = (params: Record<string, unknown>) =>
+      debuggerApi.sendCommand("Input.dispatchMouseEvent", params);
+    const blockPoint = await until(() => centerOf(frame, block), "the block to drag");
+    await evalFrame(
+      frame,
+      `window.__moves = window.__moves ?? 0; document.addEventListener("mousemove", () => window.__moves++, true); true`,
+    );
+    await mouse({ type: "mouseMoved", x: blockPoint.x, y: blockPoint.y });
+    const handle = `document.querySelector(".drag-handle")`;
+    const handlePoint = await until(
+      async () => {
+        const visible = await evalFrame<boolean>(
+          frame,
+          `getComputedStyle(${handle}).visibility === "visible"`,
+        );
+        const center = await centerOf(frame, handle);
+        return visible && center?.hit ? center : null;
+      },
+      "the drag handle next to the block",
+      20_000,
+      () =>
+        evalFrame<string>(
+          frame,
+          `(() => { const handle = ${handle}; const rect = handle?.getBoundingClientRect(); const hit = rect && document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return JSON.stringify({ moves: window.__moves, count: document.querySelectorAll(".drag-handle").length, style: handle?.getAttribute("style"), rect, hit: hit?.outerHTML.slice(0, 120), block: ${JSON.stringify(blockPoint)} }); })()`,
+        ),
+    );
+    await debuggerApi.sendCommand("Input.setInterceptDrags", { enabled: true });
+    const intercepted = new Promise<unknown>((resolveDrag) => {
+      const onMessage = (_event: unknown, method: string, params: { data: unknown }) => {
+        if (method !== "Input.dragIntercepted") return;
+        debuggerApi.off("message", onMessage);
+        resolveDrag(params.data);
+      };
+      debuggerApi.on("message", onMessage);
+    });
+    await mouse({ type: "mouseMoved", x: handlePoint.x, y: handlePoint.y });
+    await mouse({
+      type: "mousePressed",
+      x: handlePoint.x,
+      y: handlePoint.y,
+      button: "left",
+      buttons: 1,
+      clickCount: 1,
+    });
+    const end = await evalFrame<{ x: number; y: number }>(
+      frame,
+      `(() => { const rect = ${target}.getBoundingClientRect(); return { x: rect.left + 10, y: rect.top + 2 }; })()`,
+    );
+    await mouse({ type: "mouseMoved", x: end.x, y: end.y, button: "left", buttons: 1 });
+    const data = await Promise.race([
+      intercepted,
+      delay(5000).then(() => {
+        throw new Error("The drag did not start from the handle.");
+      }),
+    ]);
+    for (const type of ["dragEnter", "dragOver", "drop"]) {
+      await debuggerApi.sendCommand("Input.dispatchDragEvent", { type, x: end.x, y: end.y, data });
+    }
+    await mouse({
+      type: "mouseReleased",
+      x: end.x,
+      y: end.y,
+      button: "left",
+      buttons: 0,
+      clickCount: 1,
+    });
+    await debuggerApi.sendCommand("Input.setInterceptDrags", { enabled: false });
+    return { x: handlePoint.x, y: handlePoint.y };
+  } finally {
+    debuggerApi.detach();
+  }
+}
+
+async function editInteractions(): Promise<void> {
+  const edit = await editShowing(`Boolean(${editBlock("Code line.", "p")})`, "edit.md in Edit");
+  const codeBlock = editBlock("const x = 1;", "div.code-block");
+
+  // 代码块的 Copy 在没有剪贴板权限时通过 execCommand("copy") 复制。Copy works through execCommand("copy") without a
+  // clipboard permission.
+  await clipboard.writeText("");
+  await clickInFrame(edit, `${codeBlock}.querySelector(".code-block-copy")`);
+  await until(async () => (await clipboard.readText()) === "const x = 1;", "the copied code");
+  pass("the code block Copy button puts the code on the clipboard");
+
+  // 语言选择框在 pointerdown 时得到全部选项，早于原生列表打开（原生列表在 mousedown 的默认行为中打开）。
+  // The language select gets every option on pointerdown, before the native list opens on mousedown's default action.
+  const options = await evalFrame<{ before: number; after: number; value: string }>(
+    edit,
+    `(() => {
+      const select = ${codeBlock}.querySelector("select.code-block-language");
+      const before = select.options.length;
+      select.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }));
+      return { before, after: select.options.length, value: select.value };
+    })()`,
+  );
+  assert.equal(options.before, 2);
+  assert.ok(options.after > 20, `the select lists every language: ${options.after}`);
+  assert.equal(options.value, "typescript");
+  pass("the code block language select gets its options on pointerdown");
+
+  // Mod+点击链接只调用 ui.openExternal 或 workspace.openFile，不打开其他窗口。Mod+click on a link only calls
+  // ui.openExternal or workspace.openFile and opens no other window.
+  const windows = BrowserWindow.getAllWindows().length;
+  const created = createdWebContents;
+  const editUrl = edit.view.webContents.getURL();
+  const link = (text: string) =>
+    `[...document.querySelectorAll(".ProseMirror a")].find((element) => element.textContent === ${JSON.stringify(text)})`;
+  await clickInFrame(edit, link("example"), [MOD]);
+  await untilHost(
+    `${OPEN_CONFIRMATION}?.getAttribute("data-host-confirmation") === "open-link"
+      && ${OPEN_CONFIRMATION}.textContent.includes("https://example.com/related")
+      && ${OPEN_CONFIRMATION}.textContent.includes("Text Editor")`,
+    "the Open link dialog from Edit",
+  );
+  await clickText("Cancel", OPEN_CONFIRMATION);
+  await untilHost(`!${OPEN_CONFIRMATION}`, "the Open link dialog to close");
+  await clickInFrame(edit, link("readme"), [MOD]);
+  await untilHost(shownFileIs("readme.md"), "readme.md opened from the Edit link");
+  assert.equal(BrowserWindow.getAllWindows().length, windows);
+  assert.equal(createdWebContents, created);
+  assert.equal(edit.view.webContents.getURL(), editUrl);
+  pass(
+    "Mod+click on links asks before opening the browser or opens the project file, and opens no extra window",
+  );
+
+  await openFileInTree("notes/edit.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "the Edit tab");
+  await editShowing(`Boolean(${editBlock("Related:", "p")})`, "edit.md in Edit again");
+
+  // 格式工具条中的 Turn into 弹出菜单获得焦点时工具条保持显示。The formatting toolbar stays while its Turn into popup
+  // has focus.
+  await selectTextIn(edit, editBlock("Related:", "p"), "Related");
+  const toolbar = `document.querySelector(".formatting-menu")`;
+  const toolbarButton = (text: string) =>
+    `[...(${toolbar}?.querySelectorAll("button") ?? [])].find((button) => button.textContent === ${JSON.stringify(text)})`;
+  await clickInFrame(edit, toolbarButton("Turn into"));
+  const popupItem = (text: string) =>
+    `[...(${toolbar}?.querySelectorAll('[role="menuitem"]') ?? [])].find((item) => item.textContent === ${JSON.stringify(text)})`;
+  await until(
+    async () => (await centerOf(edit, popupItem("Heading 3")))?.hit,
+    "the Turn into menu",
+  );
+  assert.equal((await centerOf(edit, toolbarButton("Bold")))?.hit, true);
+  await clickInFrame(edit, popupItem("Heading 3"));
+  await until(
+    () => evalFrame<boolean>(edit, `Boolean(${editBlock("Related:", "h3")})`),
+    "the paragraph to become Heading 3",
+  );
+  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker after Turn into");
+  pass(
+    "the formatting toolbar keeps focus with its Turn into popup and turns the block into Heading 3",
+  );
+
+  // 拖动手柄移动块与列表项。The drag handle moves blocks and list items.
+  const order = (selector: string) =>
+    evalFrame<string[]>(
+      edit,
+      `[...document.querySelectorAll(${JSON.stringify(selector)})].map((element) => element.textContent)`,
+    );
+  const blockHandle = await dragBlock(
+    edit,
+    editBlock("Setext heading", "h1"),
+    editBlock("First paragraph", "p"),
+  );
+  await until(async () => {
+    const blocks = await order(".ProseMirror > *");
+    const moved = blocks.findIndex((text) => text === "Setext heading");
+    return moved >= 0 && blocks[moved + 1]?.startsWith("First paragraph");
+  }, "the heading to move above the first paragraph");
+  const items = `.ProseMirror > ul > li`;
+  const starItem = (text: string) =>
+    `[...document.querySelectorAll(${JSON.stringify(items)})].find((item) => item.textContent === ${JSON.stringify(text)})`;
+  const itemHandle = await dragBlock(edit, starItem("star item two"), starItem("star item one"));
+  await until(async () => {
+    const listed = await order(items);
+    return (
+      listed.indexOf("star item two") >= 0 &&
+      listed.indexOf("star item two") < listed.indexOf("star item one")
+    );
+  }, "the list item to move up");
+  // 列表项的手柄与顶层块的手柄在同一列，不随列表缩进移动。A list item's handle shares the top-level blocks' column.
+  assert.ok(
+    Math.abs(itemHandle.x - blockHandle.x) <= 1,
+    `the list item's handle (x ${itemHandle.x}) is in the top-level column (x ${blockHandle.x})`,
+  );
+  pass("the drag handle moves a block and a list item, in one column left of the content");
+
+  // `/` 菜单的 Image：地址输入框打开期间在它前面输入文字，确认后图片仍插入在输入 `/` 的 paragraph 中。
+  // The `/` menu's Image: text typed before the place while the address input is open still leaves the image in the
+  // paragraph where `/` was typed.
+  await placeCaret(edit, editBlock("Code line.", "p"));
+  pressKey(edit, "Enter");
+  const lastBlock = `${EDITOR}.lastElementChild`;
+  await until(
+    () =>
+      evalFrame<boolean>(
+        edit,
+        `${lastBlock}.tagName === "P" && ${lastBlock}.textContent === "" && ${lastBlock}.previousElementSibling.textContent === "Code line."`,
+      ),
+    "an empty paragraph after Code line.",
+  );
+  await typeIn(edit, "/");
+  await clickInFrame(
+    edit,
+    `[...document.querySelectorAll('.slash-menu [role="option"]')].find((option) => option.textContent === "Image")`,
+  );
+  const addressInput = `document.querySelector('.image-insert input[aria-label="Image address"]')`;
+  await until(
+    () => evalFrame<boolean>(edit, `document.activeElement === ${addressInput}`),
+    "the image address input",
+  );
+  await placeCaret(edit, editBlock("Code line.", "p"));
+  await typeIn(edit, " Typed before the image.");
+  await until(
+    () =>
+      evalFrame<boolean>(edit, `Boolean(${editBlock("Code line. Typed before the image.", "p")})`),
+    "the text typed before the image",
+  );
+  await evalFrame(edit, `${addressInput}.focus(); true`);
+  await typeIn(edit, "https://example.com/later.png");
+  pressKey(edit, "Enter");
+  const laterImage = `document.querySelector('.ProseMirror .edit-image .image-placeholder[title="https://example.com/later.png"]')`;
+  await until(
+    () => evalFrame<boolean>(edit, `!${addressInput} && Boolean(${laterImage})`),
+    "the inserted image",
+  );
+  assert.deepEqual(
+    await evalFrame(
+      edit,
+      `(() => {
+        const block = ${laterImage}.closest(".ProseMirror > *");
+        return { last: block === ${lastBlock}, tag: block.tagName, before: block.previousElementSibling.textContent };
+      })()`,
+    ),
+    { last: true, tag: "P", before: "Code line. Typed before the image." },
+  );
+  pass(
+    "the / menu's image address input follows text typed before it and inserts where / was typed",
+  );
+
+  // "Reload view" 在有未保存修改时先确认。"Reload view" asks first when there are unsaved changes.
+  const reload = `.agw-main-workspace [aria-label="Reload view"]`;
+  await clickHost(reload);
+  await untilHost(
+    `${DISCARD_DIALOG}?.textContent.includes("Discard unsaved changes?") && ${DISCARD_DIALOG}.textContent.includes("edit.md")`,
+    "the discard dialog for Reload view",
+  );
+  await clickText("Cancel", DISCARD_DIALOG);
+  await untilHost(`!${OPEN_CONFIRMATION}`, "the discard dialog to close");
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, edit.frameId);
+  assert.equal(await evalFrame<boolean>(edit, `Boolean(${editBlock("Related:", "h3")})`), true);
+  assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), true);
+  await clickHost(reload);
+  await untilHost(`Boolean(${DISCARD_DIALOG})`, "the discard dialog for Reload view");
+  await clickText("Discard", DISCARD_DIALOG);
+  const reloaded = await until(() => {
+    const frame = viewerFrameOf("text-editor", "markdown");
+    return frame && frame.frameId !== edit.frameId && runtime().registry.get(frame.frameId)?.pageId
+      ? frame
+      : null;
+  }, "the reloaded Edit viewer");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        reloaded,
+        `${SAVED} && Boolean(${editBlock("Related:", "p")}) && !${editBlock("Related:", "h3")}`,
+      ),
+    "the file content after Reload view",
+  );
+  assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), false);
+  pass(
+    "Reload view asks before discarding Edit changes: Cancel keeps them, Discard reloads the viewer",
+  );
+}
+
+async function textEditorCode(): Promise<void> {
+  // 1：Shift+Alt+F 用 Prettier 格式化，保存后磁盘内容与格式化结果相同。Shift+Alt+F formats with Prettier; saving writes
+  // the formatted text.
+  const appPath = projectPath("src/app.ts");
+  await openFileInTree("src/app.ts");
+  await untilHost(selectedViewerIs(CODE_VIEWER), "the Code tab for app.ts");
+  const code = await codeShowing(`${CODE_TEXT}.includes("function   add")`, "app.ts in Code");
+  const formatted =
+    "function add(a: number, b: number) {\n    return a + b;\n}\nconst total = add(1, 2);\n";
+  pressKey(code, "F", ["shift", "alt"]);
+  await until(
+    async () => (await evalFrame<string>(code, CODE_TEXT)) === formatted,
+    "the Prettier output",
+    20_000,
+    async () => JSON.stringify(await evalFrame<string>(code, CODE_TEXT)),
+  );
+  await untilHost(unsavedIn(CODE_VIEWER), "the unsaved marker after formatting");
+  saveIn(code);
+  await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker to clear");
+  await untilFileText(appPath, formatted, "the formatted app.ts on disk");
+  pass("Shift+Alt+F formats TypeScript with Prettier and Cmd/Ctrl+S writes the formatted text");
+
+  // 语法高亮、worker 与 codicon 字体都从 extension 自身加载。Highlighting, workers and the codicon font load from the
+  // extension itself.
+  const assets = `(() => ({
+    tokens: new Set([...document.querySelectorAll(".code-editor .view-line span span")].map((span) => span.className)).size,
+    codicon: [...document.fonts].some((font) => font.family.replaceAll('"', "") === "codicon" && font.status === "loaded"),
+  }))()`;
+  await until(
+    async () => {
+      const loaded = await evalFrame<{ tokens: number; codicon: boolean }>(code, assets);
+      return loaded.tokens >= 4 && loaded.codicon;
+    },
+    "highlighting and the codicon font",
+    20_000,
+    async () => JSON.stringify(await evalFrame(code, assets)),
+  );
+  const editorWorker = /^agw-extension:\/\/text-editor\/assets\/editor\.worker-[^/]+\.js$/u;
+  await until(
+    async () => (await workerUrls(code)).some((url) => editorWorker.test(url)),
+    "the editor worker",
+    20_000,
+    async () => JSON.stringify(await workerUrls(code)),
+  );
+
+  // 2：带注释的 JSON 没有错误标记；无效内容出现标记，说明 JSON 语言服务在运行。Commented JSON has no error marks; an
+  // invalid edit gets one, so the JSON language service runs.
+  await openFileInTree("config.json");
+  await untilHost(selectedViewerIs(CODE_VIEWER), "the Code tab for config.json");
+  await codeShowing(`${CODE_TEXT}.includes('"port": 8080')`, "config.json in Code");
+  await delay(2000);
+  const squiggles = `document.querySelectorAll('.code-editor [class*="squiggly-"]').length`;
+  assert.equal(await evalFrame<number>(code, squiggles), 0);
+  moveCodeCursor(code, "start");
+  await typeIn(code, "x");
+  await until(() => evalFrame<number>(code, squiggles), "an error mark for invalid JSON");
+  pressKey(code, "z", [MOD]);
+  await until(async () => (await evalFrame<number>(code, squiggles)) === 0, "the mark to go away");
+  await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "undo to clear the unsaved marker");
+  const jsonWorker = /^agw-extension:\/\/text-editor\/assets\/json\.worker-[^/]+\.js$/u;
+  assert.ok((await workerUrls(code)).some((url) => jsonWorker.test(url)));
+  pass("JSON with comments shows no error marks while the JSON worker validates edits");
+
+  // 3：CRLF 与 UTF-8 BOM 按原样写回。CRLF and the UTF-8 BOM are written back.
+  await openFileInTree("crlf.txt");
+  await codeShowing(`${CODE_TEXT}.includes("first line")`, "crlf.txt in Code");
+  const crlfStatus = await evalFrame<string>(code, CODE_STATUS);
+  assert.ok(crlfStatus.includes("CRLF") && crlfStatus.includes("UTF-8 with BOM"), crlfStatus);
+  moveCodeCursor(code, "end");
+  await typeIn(code, "third line");
+  saveIn(code);
+  await untilFileBytes(
+    projectPath("crlf.txt"),
+    Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from("first line\r\nsecond line\r\nthird line"),
+    ]),
+    "crlf.txt with its BOM and CRLF",
+  );
+  pass("crlf.txt shows CRLF and UTF-8 with BOM and keeps both when saved");
+
+  // 4：UTF-16LE 与 GB18030 按原编码写回；GBK 不能编码的字符报错，按 UTF-8 保存成功。UTF-16LE and GB18030 are written
+  // back in their encodings; a character GBK cannot encode fails, and saving as UTF-8 succeeds.
+  await openFileInTree("utf16.txt");
+  await codeShowing(`${CODE_TEXT}.includes("UTF-16 text: héllo wörld")`, "utf16.txt in Code");
+  assert.ok((await evalFrame<string>(code, CODE_STATUS)).includes("UTF-16LE with BOM"));
+  moveCodeCursor(code, "end");
+  await typeIn(code, "third ✓");
+  saveIn(code);
+  await untilFileBytes(
+    projectPath("utf16.txt"),
+    Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from("UTF-16 text: héllo wörld\nsecond line\nthird ✓", "utf16le"),
+    ]),
+    "utf16.txt in UTF-16LE with BOM",
+  );
+  const gbkPath = projectPath("gbk.txt");
+  const chinese = iconv.decode(await readFile(gbkPath), "gb18030");
+  await openFileInTree("gbk.txt");
+  await codeShowing(
+    `${CODE_TEXT}.includes(${JSON.stringify(chinese.split("\n")[0])})`,
+    "gbk.txt in Code",
+  );
+  assert.ok((await evalFrame<string>(code, CODE_STATUS)).includes("GB18030"));
+  moveCodeCursor(code, "end");
+  await typeIn(code, "第三行");
+  saveIn(code);
+  await untilFileBytes(gbkPath, iconv.encode(`${chinese}第三行`, "gb18030"), "gbk.txt in GB18030");
+  pass("UTF-16LE and GB18030 files show their encodings and are saved in them");
+
+  const encodingButton = `document.querySelector('.code-status-bar .popup > button[aria-haspopup="menu"]')`;
+  const menuItem = (text: string) =>
+    `[...document.querySelectorAll('.code-status-bar [role="menuitem"]')].find((item) => item.textContent === ${JSON.stringify(text)})`;
+  await until(
+    async () => (await evalFrame<string>(code, `${encodingButton}?.textContent`)) === "GB18030",
+    "the GB18030 encoding button",
+  );
+  await clickInFrame(code, encodingButton);
+  await clickInFrame(code, menuItem("Reopen with Encoding…"));
+  await clickInFrame(code, `document.querySelector('.code-status-bar [data-encoding="gbk"]')`);
+  await until(
+    async () => (await evalFrame<string>(code, `${encodingButton}?.textContent`)) === "GBK",
+    "gbk.txt reopened as GBK",
+  );
+  moveCodeCursor(code, "end");
+  await typeIn(code, "😀");
+  await untilHost(unsavedIn(CODE_VIEWER), "the unsaved marker for the emoji");
+  saveIn(code);
+  await untilHost(
+    `[...document.querySelectorAll('[data-sonner-toast]')].some((toast) => toast.textContent.includes("cannot be encoded as gbk"))`,
+    "the unencodable error",
+  );
+  await closeToasts();
+  assert.equal(await evalHost<boolean>(unsavedIn(CODE_VIEWER)), true);
+  await untilFileBytes(gbkPath, iconv.encode(`${chinese}第三行`, "gb18030"), "gbk.txt unchanged");
+  await clickInFrame(code, encodingButton);
+  await clickInFrame(code, menuItem("Save with Encoding…"));
+  await clickInFrame(
+    code,
+    `document.querySelector('.code-status-bar [data-encoding="utf-8"][data-bom="false"]')`,
+  );
+  await untilHost(
+    `!${unsavedIn(CODE_VIEWER)}`,
+    "the unsaved marker to clear after saving as UTF-8",
+  );
+  await untilFileBytes(gbkPath, Buffer.from(`${chinese}第三行😀`, "utf8"), "gbk.txt in UTF-8");
+  assert.equal(await evalFrame<string>(code, `${encodingButton}?.textContent`), "UTF-8");
+  pass(
+    "a character GBK cannot encode fails to save and keeps the unsaved marker, and Save with Encoding UTF-8 succeeds",
+  );
+
+  // 5：二进制文件与不能识别编码的文件。A binary file and a file whose encoding is not detected.
+  await openFileInTree("data.bin");
+  await until(
+    async () =>
+      (await evalFrame<string>(code, DOCUMENT_ERROR)).includes(
+        "This file is binary, so it can't be edited as text.",
+      ),
+    "the binary panel",
+  );
+  await openFileInTree("unknown.txt");
+  await until(
+    async () =>
+      (await evalFrame<string>(code, DOCUMENT_ERROR)).includes(
+        "The encoding of this file couldn't be detected.",
+      ),
+    "the unknown encoding panel",
+  );
+  await clickInFrame(
+    code,
+    `[...document.querySelectorAll(".document-error button")].find((button) => button.textContent === "Reopen with Encoding…")`,
+  );
+  await clickInFrame(
+    code,
+    `document.querySelector('.document-error [data-encoding="windows-1252"]')`,
+  );
+  await codeShowing(`${CODE_TEXT}.includes("Café au lait")`, "unknown.txt read as windows-1252");
+  assert.ok((await evalFrame<string>(code, CODE_STATUS)).includes("WINDOWS-1252"));
+  pass(
+    "binary and undetected files show their panels, and Reopen with windows-1252 shows the text",
+  );
+
+  // Text Editor 页面没有 CSP 报错，Extensions 页面没有被拦截的请求。No CSP errors in Text Editor pages and no blocked
+  // requests on the Extensions page.
+  const cspErrors = consoleMessages.filter(
+    (message) =>
+      message.url.startsWith("agw-extension://text-editor/") &&
+      /Content Security Policy/iu.test(message.message),
+  );
+  assert.deepEqual(cspErrors, []);
+  await goToExtensions();
+  await clickText("Details", `document.querySelector('[data-extension-id="text-editor"]')`);
+  await untilHost(
+    `Boolean(document.querySelector('[data-extension-id="text-editor"] [data-slot="collapsible-content"][data-state="open"]'))`,
+    "the Text Editor details",
+  );
+  assert.equal(
+    await evalHost<string | null>(
+      `document.querySelector('[data-extension-id="text-editor"] [data-testid="blocked-requests"]')?.textContent ?? null`,
+    ),
+    null,
+  );
+  await goToChat();
+  pass(
+    "Code highlights with its own workers and codicon font, with no CSP errors or blocked requests",
+  );
+}
+
+async function conflictsAndRefresh(): Promise<void> {
+  const appPath = projectPath("src/app.ts");
+  await openFileInTree("src/app.ts");
+  await untilHost(selectedViewerIs(CODE_VIEWER), "the Code tab for app.ts");
+  const code = await codeShowing(`${CODE_TEXT}.includes("function add(a: number")`, "app.ts");
+  const saved = await readFile(appPath, "utf8");
+
+  // 1-3：磁盘被修改后保存显示冲突对话框，Cancel 保留修改。Saving after the disk changed shows the conflict dialog;
+  // Cancel keeps the changes.
+  moveCodeCursor(code, "end");
+  await typeIn(code, "// editor change");
+  await untilHost(unsavedIn(CODE_VIEWER), "the unsaved marker");
+  const changedOnDisk = `${saved}// changed on disk\n`;
+  await writeFile(appPath, changedOnDisk);
+  saveIn(code);
+  await expectConflictDialog("Text Editor", "app.ts", code);
+  await clickText("Cancel", OPEN_MESSAGE_BOX);
+  await untilHost(`!${OPEN_CONFIRMATION}`, "the conflict dialog to close");
+  await until(() => code.view.getVisible(), "Code to show again");
+  assert.equal(await readFile(appPath, "utf8"), changedOnDisk);
+  assert.equal(await evalHost<boolean>(unsavedIn(CODE_VIEWER)), true);
+  pass(
+    "saving a file changed on disk shows the Text Editor conflict dialog over a snapshot, and Cancel keeps the changes",
+  );
+
+  // 4：Overwrite 写入编辑器内容。Overwrite writes the editor content.
+  saveIn(code);
+  await expectConflictDialog("Text Editor", "app.ts", code);
+  await clickText("Overwrite", OPEN_MESSAGE_BOX);
+  await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker to clear");
+  const overwritten = `${saved}// editor change`;
+  await untilFileText(appPath, overwritten, "the overwritten app.ts");
+  pass("Overwrite writes the editor content and clears the unsaved marker");
+
+  // 在 Code 中保存后 Source 显示保存后的内容。After a Code save, Source shows the saved content.
+  await clickHost('[data-file-viewer-tab="source"]');
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes("// editor change")`,
+    "the saved content in Source",
+  );
+  pass("Source shows the content saved in Code");
+  await selectViewer(CODE_VIEWER);
+
+  // 5：Reload 显示磁盘上的内容。Reload shows the content on disk.
+  moveCodeCursor(code, "end");
+  await typeIn(code, "\n// discarded");
+  await untilHost(unsavedIn(CODE_VIEWER), "the unsaved marker");
+  const reloadedText = `${overwritten}\n// reloaded from disk\n`;
+  await writeFile(appPath, reloadedText);
+  saveIn(code);
+  await expectConflictDialog("Text Editor", "app.ts", code);
+  await clickText("Reload", OPEN_MESSAGE_BOX);
+  await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker to clear");
+  await until(
+    async () => (await evalFrame<string>(code, CODE_TEXT)) === reloadedText,
+    "the reloaded content",
+  );
+  assert.equal(await readFile(appPath, "utf8"), reloadedText);
+  pass("Reload shows the content on disk and clears the unsaved marker");
+
+  // 7：没有修改时切到 Source 再切回，Code 显示磁盘上的新内容。Without changes, Source and back shows the new disk content.
+  await clickHost('[data-file-viewer-tab="source"]');
+  await until(() => !code.view.getVisible(), "Code to hide");
+  const refreshed = `${reloadedText}// refreshed\n`;
+  await writeFile(appPath, refreshed);
+  await selectViewer(CODE_VIEWER);
+  await until(
+    async () => (await evalFrame<string>(code, CODE_TEXT)) === refreshed,
+    "the refreshed content",
+  );
+  assert.equal(await evalHost<boolean>(unsavedIn(CODE_VIEWER)), false);
+  pass("showing an unchanged Code viewer again reads the new content from disk");
+}
+
+/** 用 "Install from folder" 安装目录中的 extension。Installs the extension in a folder with "Install from folder". */
+async function installFromFolder(directory: string, name: string): Promise<void> {
+  await goToExtensions();
+  await withPickedPath(directory, async () => {
+    await clickText("Install from folder");
+    await untilHost(
+      `${OPEN_DIALOG}?.textContent.includes(${JSON.stringify(name)})`,
+      "the install dialog",
+    );
+    await clickText("Install", OPEN_DIALOG);
+  });
+}
+
+async function todoEditorFixture(): Promise<void> {
+  await installFromFolder(join(config.fixtures, "todo-editor"), "Todo Editor");
+  await untilHost(
+    `Boolean(document.querySelector('[data-extension-id="todo-editor"]'))`,
+    "todo-editor in the list",
+  );
+  const dialogText = await enable("todo-editor", "Todo Editor");
+  assert.ok(dialogText.includes("fs.cloud.read") && dialogText.includes("fs.cloud.write"));
+  await untilStatus("todo-editor", "Active");
+  pass(
+    "the todo-editor fixture installs from a folder and activates with fs.cloud.read and fs.cloud.write",
+  );
+
+  // 1：*.todo 默认由 fixture 的编辑器打开。*.todo opens in the fixture's editor by default.
+  const listPath = projectPath("list.todo");
+  const TODO_VIEWER = "todo-editor:editor";
+  await openFileInTree("list.todo");
+  await untilHost(selectedViewerIs(TODO_VIEWER), "the todo-editor tab");
+  assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
+    TODO_VIEWER,
+    CODE_VIEWER,
+    "source",
+  ]);
+  const todo = await untilViewerFrame("todo-editor", "editor");
+  const area = `document.querySelector("#todo")`;
+  await until(
+    () =>
+      evalFrame<boolean>(
+        todo,
+        `${area}.value === "- buy milk\\n- write tests\\n" && document.querySelector("#status").textContent === "clean"`,
+      ),
+    "list.todo in the fixture editor",
+  );
+  pass("list.todo opens in todo-editor by default, before Code and Source, showing the file");
+
+  // 2：输入出现 "●"，保存后消失并写入磁盘。Typing shows the marker; saving clears it and writes the file.
+  const focusEnd = `(() => { const area = ${area}; area.focus(); area.setSelectionRange(area.value.length, area.value.length); return true; })()`;
+  todo.view.webContents.focus();
+  await evalFrame(todo, focusEnd);
+  await typeIn(todo, "- ship it\n");
+  await untilHost(unsavedIn(TODO_VIEWER), "the unsaved marker in todo-editor");
+  saveIn(todo);
+  await untilHost(`!${unsavedIn(TODO_VIEWER)}`, "the unsaved marker to clear");
+  await untilFileText(listPath, "- buy milk\n- write tests\n- ship it\n", "the saved list.todo");
+  pass("typing in todo-editor shows the unsaved marker, and Cmd/Ctrl+S saves the file");
+
+  // 3：冲突对话框的标题为 fixture 名称，Reload 显示磁盘内容。The conflict dialog is titled with the fixture name;
+  // Reload shows the disk content.
+  await writeFile(listPath, "- changed on disk\n");
+  await evalFrame(todo, focusEnd);
+  await typeIn(todo, "- more\n");
+  await untilHost(unsavedIn(TODO_VIEWER), "the unsaved marker in todo-editor");
+  saveIn(todo);
+  await expectConflictDialog("Todo Editor", "list.todo", todo);
+  await clickText("Reload", OPEN_MESSAGE_BOX);
+  await until(
+    () => evalFrame<boolean>(todo, `${area}.value === "- changed on disk\\n"`),
+    "the disk content in todo-editor",
+  );
+  await untilHost(`!${unsavedIn(TODO_VIEWER)}`, "the unsaved marker to clear");
+  pass("todo-editor's conflict dialog is titled Todo Editor, and Reload shows the disk content");
+
+  // 4：Outline 为 *.md 的可选查看器，排在 Text Editor 的查看器之后（option 查看器按 extension id 排序），列出标题。
+  // Outline is an option viewer for *.md after Text Editor's viewers (option viewers sort by extension id) and lists
+  // the headings.
+  const OUTLINE_VIEWER = "todo-editor:outline";
+  await openFileInTree("notes/edit.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "the Edit tab");
+  assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
+    EDIT_VIEWER,
+    MARKDOWN_VIEWER,
+    CODE_VIEWER,
+    OUTLINE_VIEWER,
+    "source",
+  ]);
+  await selectViewer(OUTLINE_VIEWER);
+  const outline = await untilViewerFrame("todo-editor", "outline");
+  const headings = await until(async () => {
+    const listed = await evalFrame<string[]>(
+      outline,
+      `[...document.querySelectorAll("#outline li")].map((item) => item.dataset.depth + " " + item.textContent)`,
+    );
+    return listed.length > 0 ? listed : null;
+  }, "the outline");
+  assert.deepEqual(headings, ["1 Edit sample", "1 Setext heading", "2 New section"]);
+  pass("todo-editor's Outline is an option viewer for Markdown and lists the document's headings");
+}
+
+/* ---------- 性能测试 Performance ---------- */
+
+// 在每个新文档中最先执行：收到 view.onLoad 时记录时间，之后每一帧检查查看器是否可以输入，可以输入时强制完成布局并记录耗时。
+// Runs first in every new document: records the time when view.onLoad arrives, then checks every frame whether the
+// viewer accepts input, and once it does forces layout and records the duration.
+function openProbe(ready: string): string {
+  return `(() => {
+    const addEventListener = MessagePort.prototype.addEventListener;
+    MessagePort.prototype.addEventListener = function (type, listener, options) {
+      if (type === "message" && !this.__agwOpenProbe) {
+        this.__agwOpenProbe = true;
+        addEventListener.call(this, "message", (event) => {
+          const data = event.data;
+          if (data?.kind !== "request" || data.method !== "view.onLoad" || window.__agwOpenStart !== undefined) return;
+          window.__agwOpenStart = performance.now();
+          const poll = () => {
+            if (!(${ready})) {
+              requestAnimationFrame(poll);
+              return;
+            }
+            document.body.getBoundingClientRect();
+            window.__agwOpenTime = performance.now() - window.__agwOpenStart;
+          };
+          requestAnimationFrame(poll);
+        });
+      }
+      return addEventListener.call(this, type, listener, options);
+    };
+  })();`;
+}
+
+/**
+ * 重新加载查看器页面，测量从 `onLoad` 到可以输入的时间（毫秒）。
+ * Reloads the viewer page and measures the milliseconds from `onLoad` until it accepts input.
+ */
+async function measureOpen(frame: FrameHandle, ready: string): Promise<number> {
+  const debuggerApi = frame.view.webContents.debugger;
+  debuggerApi.attach("1.3");
+  try {
+    await debuggerApi.sendCommand("Page.enable");
+    const { identifier } = (await debuggerApi.sendCommand("Page.addScriptToEvaluateOnNewDocument", {
+      source: openProbe(ready),
+    })) as { identifier: string };
+    const previousPage = runtime().registry.get(frame.frameId)!.pageId;
+    void evalFrame(frame, "location.reload()").catch(() => undefined);
+    const time = await until(
+      async () => {
+        const page = runtime().registry.get(frame.frameId)?.pageId;
+        if (!page || page === previousPage) return null;
+        return evalFrame<number | null>(frame, "window.__agwOpenTime ?? null");
+      },
+      "the reloaded viewer to accept input",
+      120_000,
+      async () =>
+        `page ${runtime().registry.get(frame.frameId)?.pageId} (before ${previousPage}); ${await evalFrame<string>(
+          frame,
+          `JSON.stringify({ start: window.__agwOpenStart ?? null, time: window.__agwOpenTime ?? null, status: document.querySelector(".save-status")?.textContent ?? null, hidden: document.querySelector(".edit-scroll")?.hidden ?? null, blocks: document.querySelector(".ProseMirror")?.childElementCount ?? null, url: location.href })`,
+        )}`,
+    );
+    await debuggerApi.sendCommand("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+    return time;
+  } finally {
+    debuggerApi.detach();
+  }
+}
+
+/**
+ * 在元素末尾按一个键，测量从 keydown 到该元素的文字在 DOM 中更新、布局完成的时间（毫秒）。
+ * Presses one key at the end of an element and measures the milliseconds from keydown until the element's text is
+ * updated in the DOM and laid out.
+ */
+async function measureKeystroke(frame: FrameHandle, element: string): Promise<number> {
+  await placeCaret(frame, element);
+  await evalFrame(
+    frame,
+    `(() => {
+      const target = () => ${element};
+      const before = target().textContent.length;
+      window.__agwKeystroke = new Promise((resolve) => {
+        let start = null;
+        window.addEventListener("keydown", () => { start = performance.now(); }, { capture: true, once: true });
+        const timeout = setTimeout(() => resolve({ start, before, after: target().textContent.length, active: document.activeElement?.outerHTML.slice(0, 120) ?? null }), 10000);
+        const poll = () => {
+          if (start !== null && target().textContent.length > before) {
+            document.body.getBoundingClientRect();
+            clearTimeout(timeout);
+            resolve(performance.now() - start);
+            return;
+          }
+          requestAnimationFrame(poll);
+        };
+        requestAnimationFrame(poll);
+      });
+      return true;
+    })()`,
+  );
+  pressKey(frame, "q");
+  const result = await evalFrame<number | object>(frame, "window.__agwKeystroke");
+  if (typeof result !== "number")
+    throw new Error(`The keystroke was not shown: ${JSON.stringify(result)}`);
+  return result;
+}
+
+/**
+ * 按保存快捷键，测量从 keydown 到保存状态显示 "Saved" 的时间，以及其间最长的主线程任务（生成文本在一个任务中完成）。
+ * Presses the save shortcut and measures the time from keydown until the save status shows "Saved", plus the longest
+ * main-thread task meanwhile (text generation runs in one task).
+ */
+async function measureSave(
+  frame: FrameHandle,
+  viewerId: string,
+): Promise<{ save: number; longestTask: number }> {
+  // 保存前查看器与宿主都显示未保存。Before saving, the viewer and the host both show unsaved changes.
+  await until(
+    () =>
+      evalFrame<boolean>(
+        frame,
+        `document.querySelector(".save-status")?.textContent === "Unsaved changes"`,
+      ),
+    "the Unsaved changes status",
+  );
+  await untilHost(unsavedIn(viewerId), "the unsaved marker before saving");
+  await evalFrame(
+    frame,
+    `(() => {
+      window.__agwSave = new Promise((resolve) => {
+        const tasks = [];
+        const observer = new PerformanceObserver((list) => tasks.push(...list.getEntries()));
+        observer.observe({ type: "longtask" });
+        let start = null;
+        window.addEventListener("keydown", () => { start = performance.now(); }, { capture: true, once: true });
+        setTimeout(() => resolve({ start, status: document.querySelector(".save-status")?.textContent ?? null }), 30000);
+        const poll = () => {
+          if (start !== null && ${SAVED}) {
+            document.body.getBoundingClientRect();
+            const end = performance.now();
+            observer.disconnect();
+            const durations = tasks.filter((task) => task.startTime >= start).map((task) => task.duration);
+            resolve({ save: end - start, longestTask: Math.max(0, ...durations) });
+            return;
+          }
+          requestAnimationFrame(poll);
+        };
+        requestAnimationFrame(poll);
+      });
+      return true;
+    })()`,
+  );
+  saveIn(frame);
+  const result = await evalFrame<{ save?: number; longestTask?: number }>(
+    frame,
+    "window.__agwSave",
+  );
+  if (result.save === undefined || result.longestTask === undefined) {
+    throw new Error(`The save did not finish: ${JSON.stringify(result)}`);
+  }
+  return { save: result.save, longestTask: result.longestTask };
+}
+
+const EDIT_READY = `${SAVED} && !document.querySelector(".edit-scroll").hidden && document.querySelector(".ProseMirror")?.childElementCount > 0`;
+const CODE_READY = `${SAVED} && !document.querySelector(".code-editor").hidden && document.querySelectorAll(".code-editor .view-line").length > 0 && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`;
+
+function round(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+async function performancePhase(): Promise<void> {
+  const inputs = config.performance!;
+  const results: Record<string, unknown>[] = [];
+  const failures: string[] = [];
+  const check = (label: string, value: number, limit: number) => {
+    if (value > limit) failures.push(`${label}: ${round(value)} ms > ${limit} ms`);
+  };
+
+  for (const input of inputs.markdown) {
+    await openFileInTree(input.path);
+    await untilHost(selectedViewerIs(EDIT_VIEWER), `the Edit tab for ${input.path}`);
+    const edit = await editShowing("true", input.path);
+    const opens: number[] = [];
+    for (let run = 0; run < 3; run += 1) opens.push(await measureOpen(edit, EDIT_READY));
+    // 文档中间的 paragraph；表格组中 paragraph 都在单元格内。The paragraph in the middle of the document; in the tables
+    // composition every paragraph is inside a cell.
+    const paragraphs = input.kind === "tables" ? ".ProseMirror td" : ".ProseMirror > p";
+    const count = await evalFrame<number>(
+      edit,
+      `document.querySelectorAll("${paragraphs}").length`,
+    );
+    const middle = `document.querySelectorAll("${paragraphs}")[${Math.floor(count / 2)}]`;
+    // 保存后的第一次按键（未保存状态随之出现），以及已有未保存修改时的按键。The first keystroke after a save (the
+    // unsaved state appears with it) and keystrokes while changes are already unsaved.
+    const keystrokes: number[] = [];
+    const unsavedKeystrokes: number[] = [];
+    const saves: { save: number; longestTask: number }[] = [];
+    for (let run = 0; run < 3; run += 1) {
+      keystrokes.push(await measureKeystroke(edit, middle));
+      await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker after a keystroke");
+      unsavedKeystrokes.push(await measureKeystroke(edit, middle));
+      saves.push(await measureSave(edit, EDIT_VIEWER));
+    }
+    // 代码块中输入只作为参考（CodeBlockLowlight 每次重建全部装饰），没有指标。Typing in a code block is for
+    // information only (CodeBlockLowlight rebuilds every decoration); no target applies.
+    const codeKeystrokes: number[] = [];
+    if (input.kind === "spaced" && input.kib === 631) {
+      const blocks = await evalFrame<number>(
+        edit,
+        `document.querySelectorAll(".ProseMirror .code-block code").length`,
+      );
+      const block = `document.querySelectorAll(".ProseMirror .code-block code")[${Math.floor(blocks / 2)}]`;
+      for (let run = 0; run < 3; run += 1) {
+        codeKeystrokes.push(await measureKeystroke(edit, block));
+        await measureSave(edit, EDIT_VIEWER);
+      }
+    }
+    const result = {
+      viewer: "Edit",
+      file: input.path,
+      kind: input.kind,
+      kib: input.kib,
+      open: round(Math.min(...opens)),
+      keystroke: round(Math.min(...keystrokes)),
+      unsavedKeystroke: round(Math.min(...unsavedKeystrokes)),
+      save: round(Math.min(...saves.map((save) => save.save))),
+      longestSaveTask: round(Math.min(...saves.map((save) => save.longestTask))),
+      codeBlockKeystroke: codeKeystrokes.length > 0 ? round(Math.min(...codeKeystrokes)) : null,
+      runs: {
+        opens: opens.map(round),
+        keystrokes: keystrokes.map(round),
+        unsavedKeystrokes: unsavedKeystrokes.map(round),
+        saves,
+        codeKeystrokes: codeKeystrokes.map(round),
+      },
+    };
+    results.push(result);
+    console.log(`PERF ${JSON.stringify(result)}`);
+    check(`${input.path} open`, result.open, input.kib === 158 ? 1500 : 4000);
+    if (input.kib === 631) check(`${input.path} keystroke`, result.keystroke, 50);
+    if (input.kib === 631) check(`${input.path} save`, result.save, 1000);
+  }
+
+  await openFileInTree(inputs.code);
+  await untilHost(selectedViewerIs(CODE_VIEWER), `the Code tab for ${inputs.code}`);
+  const code = await codeShowing("true", inputs.code);
+  const opens: number[] = [];
+  for (let run = 0; run < 3; run += 1) opens.push(await measureOpen(code, CODE_READY));
+  // 打开后可以输入。The editor accepts input after opening.
+  await typeIn(code, "x");
+  await untilHost(unsavedIn(CODE_VIEWER), "typing in the 10 MiB file");
+  const codeResult = {
+    viewer: "Code",
+    file: inputs.code,
+    mib: 10,
+    open: round(Math.min(...opens)),
+    runs: { opens: opens.map(round) },
+  };
+  results.push(codeResult);
+  console.log(`PERF ${JSON.stringify(codeResult)}`);
+  check(`${inputs.code} open`, codeResult.open, 3000);
+
+  await writeFile(config.results, `${JSON.stringify(results, null, 2)}\n`);
+  assert.deepEqual(failures, []);
+  pass("Edit and Code meet the performance targets (results in performance.json)");
 }
 
 async function viewReloads(): Promise<void> {
@@ -2094,19 +3908,26 @@ async function uninstallBundled(): Promise<void> {
 
 async function restartPhase(): Promise<void> {
   await goToExtensions();
-  await untilStatus("markdown-preview", "Active", 30_000);
+  await untilStatus("text-editor", "Active", 30_000);
   assert.equal(
     await evalHost<boolean>(`Boolean(document.querySelector('[data-extension-id="excalidraw"]'))`),
     false,
   );
   await openFileInTree("diagram.excalidraw");
-  await delay(500);
-  assert.equal(
-    await evalHost<boolean>(`Boolean(document.querySelector('[data-file-viewer-tab]'))`),
-    false,
+  // 卸载的 Excalidraw 不再提供查看器，文件由匹配全部文件的 Code 打开，切换按钮依次为 Code、Source。
+  // The uninstalled Excalidraw contributes no viewer; Code, which matches every file, opens it with the tabs Code, Source.
+  await untilHost(
+    `${viewerTab("text-editor:code")}?.getAttribute("aria-selected") === "true"`,
+    "the Code tab",
+  );
+  assert.deepEqual(
+    await evalHost<string[]>(
+      `[...document.querySelectorAll('[data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`,
+    ),
+    ["text-editor:code", "source"],
   );
   pass(
-    "after restarting Desktop, Markdown Preview activates and the uninstalled Excalidraw stays absent",
+    "after restarting Desktop, Text Editor activates and the uninstalled Excalidraw stays absent, leaving Code and Source",
   );
 
   await goToExtensions();
@@ -2145,7 +3966,12 @@ async function run(): Promise<void> {
     await restartPhase();
     return;
   }
+  if (config.phase === "performance") {
+    await performancePhase();
+    return;
+  }
   await beforeEnabling();
+  await textCodecBridge();
   await bundledDefaults();
   await enableSample();
   await processIsolation();
@@ -2167,8 +3993,14 @@ async function run(): Promise<void> {
   await zipInstall();
   await connectionChanges();
   await filesView();
-  await markdownPreview();
+  await textEditorPreview();
+  await viewerOrderAndDefaults();
+  await textEditorMarkdown();
+  await editInteractions();
+  await textEditorCode();
+  await conflictsAndRefresh();
   await excalidrawEditor();
+  await todoEditorFixture();
   await viewReloads();
   await hostReloads();
   await rejectedNavigation();

@@ -1,9 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Files.Abstracts;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
+using Agw.Testing;
 using Agw.Tools.Impl.ToolBlocks.FileAccess;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -90,7 +90,7 @@ public sealed class AgwFileReadonlyAccessProviderTests : IDisposable
             ProjectWorkspaceSnapshot snapshot,
             Guid? directoryId,
             CancellationToken ct
-        ) => Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(snapshot.Workspace));
+        ) => Task.FromResult<IAgwFileSystem?>(TestFileSystems.Local(snapshot.Workspace));
     }
 
     private sealed class StubChatClient : IChatClient

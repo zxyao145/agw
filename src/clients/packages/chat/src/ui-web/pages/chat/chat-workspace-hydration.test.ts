@@ -24,6 +24,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const failHistory = kind === "restore-failure";
   let hasAdditionalDirectory = kind === "directories" || kind === "desktop-confirm-file-change";
   const fileReads: unknown[][] = [];
+  let diskContent = "contents";
   const conversation = {
     conversationId: "conversation-1",
     contextId: "original-context",
@@ -112,6 +113,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       directoryId?: string | null;
       onDirectoryChange: (value: string | null) => void;
       onFileSelected: (path: string) => void;
+      refreshSignal?: number;
     };
     file?: {
       selectedFile: string | null;
@@ -294,7 +296,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       },
       readFile: async (...args: unknown[]) => {
         fileReads.push(args);
-        return "contents";
+        return diskContent;
       },
       getFileDiff: async (...args: unknown[]) => {
         fileReads.push(args);
@@ -624,6 +626,66 @@ async function checkConversationSession(kind: string, strictMode = false) {
       assert.equal(workspace?.selectedProject?.id, "project-2");
       assert.equal(observed.file?.selectedFile, null);
       assert.equal(confirmations, 7);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "file-written") {
+      // 文件被写入：当前文件的 Source 重新读取并保留行评论，其他文件只刷新文件树，Only diff 模式不读取。
+      // A file write rereads the current file's Source and keeps line comments, other files only refresh the tree, and Only diff does not read.
+      const { ChatFilePane, ChatFilesSidebar, ChatWorkspaceProvider, useChatWorkspace } =
+        workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat" },
+            React.createElement(ChatFilesSidebar),
+            React.createElement(ChatFilePane),
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      await React.act(async () => finishHistory());
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(workspace?.fileContent, "contents");
+      const comment: import("@agw/projects").LineComment = {
+        id: "comment-1",
+        side: "current",
+        filePath: "README.md",
+        lineNumber: 1,
+        content: "Keep me",
+        timestamp: new Date(0),
+      };
+      await React.act(async () => workspace!.setComments([comment]));
+      const initialSignal = observed.explorer!.refreshSignal!;
+      assert.equal(initialSignal, 0);
+      let readCount = fileReads.length;
+
+      diskContent = "written";
+      await React.act(async () => workspace!.handleFileWritten(null, "README.md"));
+      assert.equal(fileReads.length, readCount + 1);
+      assert.equal(workspace?.fileContent, "written");
+      assert.deepEqual(workspace?.comments, [comment]);
+      assert.equal(observed.explorer!.refreshSignal, initialSignal + 1);
+
+      readCount = fileReads.length;
+      diskContent = "other";
+      await React.act(async () => workspace!.handleFileWritten(null, "guide.md"));
+      await React.act(async () => workspace!.handleFileWritten("extra", "README.md"));
+      assert.equal(fileReads.length, readCount, "other files and directories are not read");
+      assert.equal(workspace?.fileContent, "written");
+      assert.equal(observed.explorer!.refreshSignal, initialSignal + 3);
+
+      await React.act(async () => workspace!.setOnlyDiff(true));
+      const diffReadCount = fileReads.length;
+      await React.act(async () => workspace!.handleFileWritten(null, "README.md"));
+      assert.equal(fileReads.length, diffReadCount, "Only diff mode does not read the file");
+      assert.equal(observed.explorer!.refreshSignal, initialSignal + 4);
       assert.deepEqual(errors, []);
       return;
     }
@@ -1306,5 +1368,7 @@ test("the Provider mounted with cached queries and only a projectId selects a de
   checkConversationSession("desktop-cached-project"));
 test("the Provider with separately composed panes restores the conversation and reports openings, comments and refreshes", () =>
   checkConversationSession("desktop"));
+test("a file write rereads the current Source with its comments, refreshes the tree, and skips Only diff", () =>
+  checkConversationSession("file-written"));
 test("a declined file change keeps the current file, directory and Project", () =>
   checkConversationSession("desktop-confirm-file-change"));

@@ -253,6 +253,35 @@ test("file viewers need name patterns without path separators", () => {
   );
 });
 
+test("file viewer priority accepts default and option only", () => {
+  const viewer = (manifest: Record<string, unknown>) =>
+    (contributes(manifest).fileViewers as Record<string, unknown>[])[0];
+  for (const priority of ["default", "option"]) {
+    const result = evaluateExtensionManifest(
+      withChange((manifest) => (viewer(manifest).priority = priority)),
+      APP_VERSION,
+    );
+    assert.deepEqual(result.errors, [], priority);
+    assert.equal(result.manifest?.contributes?.fileViewers?.[0].priority, priority);
+  }
+  assert.equal(
+    evaluateExtensionManifest(sampleManifest(), APP_VERSION).manifest?.contributes?.fileViewers?.[0]
+      .priority,
+    undefined,
+  );
+  for (const priority of ["primary", "Option", "", 1, null]) {
+    const result = evaluateExtensionManifest(
+      withChange((manifest) => (viewer(manifest).priority = priority)),
+      APP_VERSION,
+    );
+    assert.deepEqual(
+      result.errors.map((error) => [error.code, error.path]),
+      [["INVALID_FIELD", "contributes.fileViewers[0].priority"]],
+      String(priority),
+    );
+  }
+});
+
 test("sidebar views, main views and file viewers cannot share an id", () => {
   const result = evaluateExtensionManifest(
     withChange((manifest) => {
@@ -417,6 +446,23 @@ test("the generated JSON Schema validates the same samples", () => {
           ((contributes(manifest).fileViewers as Record<string, unknown>[])[0].patterns = [
             "a/*.md",
           ]),
+      ),
+      false,
+    ],
+    [
+      "file viewer priority option",
+      withChange(
+        (manifest) =>
+          ((contributes(manifest).fileViewers as Record<string, unknown>[])[0].priority = "option"),
+      ),
+      true,
+    ],
+    [
+      "file viewer priority value",
+      withChange(
+        (manifest) =>
+          ((contributes(manifest).fileViewers as Record<string, unknown>[])[0].priority =
+            "primary"),
       ),
       false,
     ],

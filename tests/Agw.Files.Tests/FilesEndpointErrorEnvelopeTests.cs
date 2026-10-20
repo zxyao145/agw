@@ -68,7 +68,9 @@ public sealed class FilesEndpointErrorEnvelopeTests : IDisposable
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<IAgwFileSystemResolver>(provider => new ProjectScopedFileSystemResolver(
             provider.GetRequiredService<IServiceScopeFactory>(),
+            TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
+            NullLogger<LocalFileSystem>.Instance,
             TimeProvider.System
         ));
         builder.Services.AddSingleton<IGitCommandService>(

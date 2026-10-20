@@ -6,9 +6,9 @@ using Microsoft.Win32.SafeHandles;
 namespace Agw.Files.Infrastructure.Storage.Confined;
 
 /// <summary>
-/// Windows 受限文件系统用到的 Win32 调用：打开句柄、读取句柄的最终物理路径、按句柄删除与重命名。
-/// Win32 calls used by the Windows confined file system: opening handles, reading a handle's final physical path, and
-/// deleting and renaming by handle.
+/// Windows 文件系统实现用到的 Win32 调用：打开句柄、读取句柄的最终物理路径与文件信息、按句柄删除与重命名。
+/// Win32 calls used by the Windows file system implementations: opening handles, reading a handle's final physical
+/// path and file information, and deleting and renaming by handle.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static partial class WindowsNative
@@ -16,8 +16,20 @@ internal static partial class WindowsNative
     public const uint GENERIC_READ = 0x80000000;
     public const uint GENERIC_WRITE = 0x40000000;
     public const uint DELETE = 0x00010000;
+    public const uint FILE_TRAVERSE = 0x20;
     public const uint FILE_READ_ATTRIBUTES = 0x80;
     public const uint ShareAll = 0x1 | 0x2 | 0x4;
+
+    /// <summary>
+    /// FILE_SHARE_READ | FILE_SHARE_WRITE，不含 FILE_SHARE_DELETE。句柄请求了读取、写入、执行或删除访问（例如目录的
+    /// FILE_TRAVERSE）时，持有期间对象不能被重命名或删除；只请求属性访问（FILE_READ_ATTRIBUTES）的句柄不参与共享检查，共享
+    /// 方式不起作用。
+    /// FILE_SHARE_READ | FILE_SHARE_WRITE without FILE_SHARE_DELETE. When the handle requests read, write, execute or
+    /// delete access (for example FILE_TRAVERSE on a directory), the object cannot be renamed or deleted while it is
+    /// held; a handle requesting only attribute access (FILE_READ_ATTRIBUTES) takes no part in share checks, so its
+    /// share mode has no effect.
+    /// </summary>
+    public const uint ShareReadWrite = 0x1 | 0x2;
     public const uint CREATE_NEW = 1;
     public const uint OPEN_EXISTING = 3;
     public const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
@@ -25,6 +37,7 @@ internal static partial class WindowsNative
 
     public const int ERROR_FILE_NOT_FOUND = 2;
     public const int ERROR_PATH_NOT_FOUND = 3;
+    public const int ERROR_ACCESS_DENIED = 5;
     public const int ERROR_FILE_EXISTS = 80;
     public const int ERROR_DIR_NOT_EMPTY = 145;
     public const int ERROR_ALREADY_EXISTS = 183;
@@ -51,6 +64,36 @@ internal static partial class WindowsNative
         public uint FileNameLength;
         public ushort FileName;
     }
+
+    /// <summary>
+    /// BY_HANDLE_FILE_INFORMATION；每个 FILETIME 分成低位、高位两个 DWORD，布局与 fileapi.h 一致。
+    /// BY_HANDLE_FILE_INFORMATION with each FILETIME split into its low and high DWORDs, matching the layout in
+    /// fileapi.h.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ByHandleFileInformation
+    {
+        public uint FileAttributes;
+        public uint CreationTimeLow;
+        public uint CreationTimeHigh;
+        public uint LastAccessTimeLow;
+        public uint LastAccessTimeHigh;
+        public uint LastWriteTimeLow;
+        public uint LastWriteTimeHigh;
+        public uint VolumeSerialNumber;
+        public uint FileSizeHigh;
+        public uint FileSizeLow;
+        public uint NumberOfLinks;
+        public uint FileIndexHigh;
+        public uint FileIndexLow;
+    }
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetFileInformationByHandle", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetFileInformationByHandle(
+        SafeFileHandle file,
+        out ByHandleFileInformation information
+    );
 
     [LibraryImport(
         "kernel32.dll",
@@ -127,6 +170,28 @@ internal static partial class WindowsNative
 
             buffer = new char[length + 1];
         }
+    }
+
+    /// <summary>
+    /// 通过 GetFileInformationByHandle 读取句柄所指文件的身份（卷序列号与文件索引）、大小与修改时间。
+    /// Reads the identity (volume serial number and file index), size and modification time of the file behind the
+    /// handle through GetFileInformationByHandle.
+    /// </summary>
+    public static FileVersion GetFileVersion(SafeFileHandle handle)
+    {
+        if (!GetFileInformationByHandle(handle, out var information))
+        {
+            throw CreateException(LastError, "GetFileInformationByHandle failed");
+        }
+
+        var fileIndex = ((long)information.FileIndexHigh << 32) | information.FileIndexLow;
+        var size = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
+        var lastWriteTime = ((long)information.LastWriteTimeHigh << 32) | information.LastWriteTimeLow;
+        return new FileVersion(
+            new FileIdentity(information.VolumeSerialNumber, fileIndex),
+            size,
+            DateTimeOffset.FromFileTime(lastWriteTime).ToUniversalTime()
+        );
     }
 
     /// <summary>

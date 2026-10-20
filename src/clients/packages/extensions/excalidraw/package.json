@@ -15,7 +15,9 @@
   "devDependencies": {
     "@agw/extension-sdk": "workspace:*",
     "@excalidraw/excalidraw": "catalog:",
+    "@types/jsdom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "jsdom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "vite": "catalog:"

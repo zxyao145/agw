@@ -42,7 +42,9 @@ public sealed class ProjectDirectoryTests : IDisposable
             .BuildServiceProvider();
         _resolver = new ProjectScopedFileSystemResolver(
             _services.GetRequiredService<IServiceScopeFactory>(),
+            TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
+            NullLogger<LocalFileSystem>.Instance,
             TimeProvider.System
         );
         _files = new FileAppService(

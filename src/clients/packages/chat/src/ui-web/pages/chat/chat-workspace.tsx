@@ -192,6 +192,13 @@ export type ChatWorkspaceContextValue = {
   handleFileDeleted: (filePath: string) => void;
   handleFileReset: (filePath: string | null) => void;
   handleFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
+  /**
+   * 文件被写入后调用（Desktop）：目录与当前目录相同、path 是当前文件且不在 Only diff 模式时重新读取 Source，行评论保留；文件树刷新。
+   * Called after a file is written (Desktop): rereads Source when the directory is the current one, path is the current file and Only diff is off, keeping line comments; refreshes the file tree.
+   */
+  handleFileWritten: (directoryId: string | null, path: string) => void;
+  /** 每次文件被写入加 1，传给 Explorer。Increments on every file write; passed to Explorer. */
+  fileTreeRefreshSignal: number;
   selectedFile: string | null;
   selectedDiffScope: GitDiffScope | undefined;
   fileContent: string;
@@ -557,6 +564,7 @@ export function ChatWorkspaceProvider({
   const [recursiveMode] = React.useState(true);
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
+  const [fileTreeRefreshSignal, setFileTreeRefreshSignal] = React.useState(0);
   const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
   const [resultOnly, setResultOnly] = React.useState(false);
   const composerRef = React.useRef<ChatComposerHandle | null>(null);
@@ -799,6 +807,18 @@ export function ChatWorkspaceProvider({
       }
     },
     [loadFileContent, selectedDiffScope, selectedFile],
+  );
+
+  // 文件被写入：当前文件的 Source 重新读取（行评论保留），文件树刷新。
+  // A file was written: reread the current file's Source (line comments stay) and refresh the file tree.
+  const handleFileWritten = React.useCallback(
+    (directoryId: string | null, path: string) => {
+      if (directoryId === (selectedDirectory?.id ?? null) && path === selectedFile && !onlyDiff) {
+        void loadFileContent(path, selectedDiffScope);
+      }
+      setFileTreeRefreshSignal((signal) => signal + 1);
+    },
+    [loadFileContent, onlyDiff, selectedDiffScope, selectedDirectory?.id, selectedFile],
   );
 
   const handleOnFileGitScopeChanged = React.useCallback(
@@ -1372,6 +1392,8 @@ export function ChatWorkspaceProvider({
       handleFileDeleted: handleOnFileDeleted,
       handleFileReset: handleOnFileReseted,
       handleFileGitScopeChanged: handleOnFileGitScopeChanged,
+      handleFileWritten,
+      fileTreeRefreshSignal,
       selectedFile,
       selectedDiffScope,
       fileContent,
@@ -1406,10 +1428,12 @@ export function ChatWorkspaceProvider({
       diffContentData,
       environmentVariables,
       fileContent,
+      fileTreeRefreshSignal,
       getActiveSettingsDraft,
       handleAgentSelect,
       handleConversationAccepted,
       handleConversationDeleted,
+      handleFileWritten,
       handleOnFileDeleted,
       handleOnFileGitScopeChanged,
       handleOnFileReseted,
@@ -1553,6 +1577,7 @@ export function ChatFilesSidebar({ onFileOpened, contextMenuItems }: ChatFilesSi
       onFileReseted={workspace.handleFileReset}
       onFileGitScopeChanged={workspace.handleFileGitScopeChanged}
       contextMenuItems={contextMenuItems}
+      refreshSignal={workspace.fileTreeRefreshSignal}
     />
   );
 }
@@ -1630,6 +1655,10 @@ export type ChatFilePaneProps = {
   onReloadFileViewer?: (viewerId: string) => void;
   /** 显示在刷新按钮右侧的查看器说明，选中 Source 时也显示。The viewer info right of the reload button, also with Source. */
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode;
+  /** 用户为当前文件类型设置的默认查看器 id，或 "source"。The user's default viewer id for the file type, or "source". */
+  defaultFileViewerId?: string | null;
+  /** 把当前查看器设为默认，null 表示删除设置。Sets the current viewer as the default; null removes the setting. */
+  onSetDefaultFileViewer?: (viewerId: string | null) => void;
 };
 
 /** 选中文件的内容或 diff；未选择项目时显示提示。The selected file's content or diff, or a prompt without a project. */
@@ -1638,6 +1667,8 @@ export function ChatFilePane({
   renderFileViewer,
   onReloadFileViewer,
   renderFileViewerInfo,
+  defaultFileViewerId,
+  onSetDefaultFileViewer,
 }: ChatFilePaneProps = {}) {
   const workspace = useChatWorkspace();
   const { projectDirectories, selectedDirectory, selectedProjectId } = workspace;
@@ -1665,6 +1696,8 @@ export function ChatFilePane({
       onReloadFileViewer={onReloadFileViewer}
       onReloadSource={() => workspace.handleFileReset(workspace.selectedFile)}
       renderFileViewerInfo={renderFileViewerInfo}
+      defaultFileViewerId={defaultFileViewerId}
+      onSetDefaultFileViewer={onSetDefaultFileViewer}
     />
   );
 }

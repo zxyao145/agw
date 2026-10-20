@@ -11,9 +11,11 @@ import type {
   FileStat,
   HostContext,
   HttpResponse,
+  TextDocument,
   ThemeInfo,
 } from "../api";
 import { createExtensionError, type RpcEndpoint } from "../rpc";
+import { openBinaryDocument, openTextDocument } from "./documents";
 
 export type EventRouter = Map<string, Set<(data: unknown) => void>>;
 
@@ -81,7 +83,7 @@ export function createExtensionApi(
     dispose: () => call("execution.dispose", { sessionId }),
   });
 
-  return {
+  const api: ExtensionApi = {
     manifest: welcome.manifest,
     context: {
       get: () => context,
@@ -111,9 +113,31 @@ export function createExtensionApi(
             data: typeof data === "string" ? new TextEncoder().encode(data) : data,
             overwrite: options?.overwrite ?? true,
             createParents: options?.createParents ?? true,
+            expectedSha256: options?.expectedSha256,
           },
           options?.signal,
         ),
+      readTextDocument: (uri, options) =>
+        call<TextDocument>(
+          "fs.readTextDocument",
+          { uri, encoding: options?.encoding },
+          options?.signal,
+        ),
+      writeTextDocument: (uri, text, options) =>
+        call<{ sha256: string }>(
+          "fs.writeTextDocument",
+          {
+            uri,
+            text,
+            encoding: options.encoding,
+            bom: options.bom,
+            eol: options.eol,
+            expectedSha256: options.expectedSha256,
+            createParents: options.createParents ?? true,
+          },
+          options.signal,
+        ),
+      listTextEncodings: () => call("fs.listTextEncodings"),
       readDirectory: (uri) => call<DirectoryEntry[]>("fs.readDirectory", { uri }),
       stat: (uri) => call<FileStat>("fs.stat", { uri }),
       exists: (uri) => call<boolean>("fs.exists", { uri }),
@@ -142,6 +166,11 @@ export function createExtensionApi(
     dialog: {
       showOpenDialog: (options) => call("dialog.showOpenDialog", options),
       showSaveDialog: (options) => call("dialog.showSaveDialog", options),
+      showMessageBox: (options) => call("dialog.showMessageBox", options),
+    },
+    documents: {
+      openText: (options) => openTextDocument(api, options),
+      openBinary: (options) => openBinaryDocument(api, options),
     },
     shell: {
       revealInFileManager: (uri) => call("shell.revealInFileManager", { uri }),
@@ -216,4 +245,5 @@ export function createExtensionApi(
       },
     },
   };
+  return api;
 }

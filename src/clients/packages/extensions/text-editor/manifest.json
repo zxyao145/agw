@@ -1,0 +1,35 @@
+{
+  "manifestVersion": 1,
+  "id": "text-editor",
+  "name": "Text Editor",
+  "version": "1.0.0",
+  "description": "Renders Markdown files in the Files view.",
+  "author": "Agw",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "markdown",
+        "title": "Edit",
+        "icon": "SquarePen",
+        "patterns": ["*.md", "*.markdown"],
+        "entry": "markdown.html"
+      },
+      {
+        "id": "preview",
+        "title": "Preview",
+        "icon": "BookOpen",
+        "patterns": ["*.md", "*.markdown"],
+        "entry": "preview.html"
+      },
+      {
+        "id": "code",
+        "title": "Code",
+        "icon": "Code",
+        "patterns": ["*"],
+        "priority": "option",
+        "entry": "code.html"
+      }
+    ]
+  },
+  "permissions": ["fs.cloud.read", "fs.cloud.write"]
+}

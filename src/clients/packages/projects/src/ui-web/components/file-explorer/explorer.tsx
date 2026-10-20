@@ -28,6 +28,7 @@ export default function Explorer({
   onFileReseted,
   onFileGitScopeChanged,
   contextMenuItems,
+  refreshSignal,
 }: {
   projectId: string;
   directoryId?: string | null;
@@ -44,6 +45,8 @@ export default function Explorer({
   onFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
   /** 右键菜单的扩展菜单项，非空时列在内置项之后。Extension context menu items listed after the built-in ones when non-empty. */
   contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
+  /** 变化时重新加载根目录，已展开的目录重新读取子项；第一次的值不触发。Reloads the root and expanded directories when it changes; the first value does not. */
+  refreshSignal?: number;
 }): React.ReactNode {
   const selectedDirectory = directories.find((directory) => directory.id === (directoryId ?? null));
   const [rootItems, setRootItems] = React.useState<FileItem[]>([]);
@@ -109,6 +112,13 @@ export default function Explorer({
       void loadRootDirectory();
     }, ROOT_RELOAD_DEBOUNCE_MS);
   }, [loadRootDirectory]);
+
+  const observedRefreshSignalRef = React.useRef(refreshSignal);
+  React.useEffect(() => {
+    if (observedRefreshSignalRef.current === refreshSignal) return;
+    observedRefreshSignalRef.current = refreshSignal;
+    scheduleRootDirectoryReload();
+  }, [refreshSignal, scheduleRootDirectoryReload]);
 
   React.useEffect(
     () => () => {
@@ -241,6 +251,7 @@ export default function Explorer({
                 onFileDeleted={handleFileDeleted}
                 onFileReset={handleFileReset}
                 contextMenuItems={contextMenuItems}
+                refreshSignal={refreshSignal}
               />
             )}
           </div>
