@@ -45,7 +45,7 @@ internal sealed class PiProcessTransport : IPiProcessTransport
         }
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         cancellationToken.ThrowIfCancellationRequested();
@@ -54,7 +54,7 @@ internal sealed class PiProcessTransport : IPiProcessTransport
             throw new InvalidOperationException("Pi process transport has already been started.");
         }
 
-        var executable = CommandUtil.ResolvePiPath(_agentOptions.PiPathOverride);
+        var executable = await CommandUtil.ResolvePiPathAsync(_agentOptions.PiPathOverride, cancellationToken);
         var arguments = PiProcessArguments.Build(_sessionOptions, _resumeSessionId);
         var startInfo = CreateStartInfo(executable, arguments);
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
@@ -67,7 +67,6 @@ internal sealed class PiProcessTransport : IPiProcessTransport
         _process = process;
         _stderrPump = PumpStandardErrorAsync(process, _lifetime.Token);
         _logger?.LogDebug("Started Pi RPC process {ProcessId}.", process.Id);
-        return Task.CompletedTask;
     }
 
     public async ValueTask WriteLineAsync(string line, CancellationToken cancellationToken)
