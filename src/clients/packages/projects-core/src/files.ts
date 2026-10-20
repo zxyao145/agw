@@ -232,6 +232,13 @@ export interface WriteFileOptions {
    * 省略时不发送，Server 不创建缺失的父目录。
    */
   createParents?: boolean;
+  /**
+   * SHA-256 (64 hex characters) of the content the caller last read; requires `overwrite: true`. The Server
+   * rejects the write with a conflict when the file changed. Omitted, the parameter is not sent.
+   * 调用方上次读取内容的 SHA-256（64 位十六进制），须与 `overwrite: true` 一起使用；文件已变化时 Server
+   * 以冲突拒绝写入。省略时不发送。
+   */
+  expectedSha256?: string;
   signal?: AbortSignal;
 }
 
@@ -257,6 +264,7 @@ export async function writeFile(
           path,
           overwrite: options.overwrite,
           createParents: options.createParents,
+          expectedSha256: options.expectedSha256,
           directoryId: directoryId || undefined,
         },
       },

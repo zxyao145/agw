@@ -1,6 +1,13 @@
 import * as React from "react";
-import { Button, cn } from "@agw/components";
-import { RotateCw } from "lucide-react";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  cn,
+} from "@agw/components";
+import { MoreHorizontal, RotateCw } from "lucide-react";
 
 import { ProjectFileScopeContext, type ProjectFileScope } from "./project-file-scope";
 import type { GitDiffResponse, GitDiffScope } from "../../../services/files";
@@ -8,6 +15,7 @@ import { DiffViewer } from "./diff-viewer";
 import FileError from "./file-error";
 import FileHeader from "./file-header";
 import FileLoading from "./file-loading";
+import { fileViewerFileType } from "./file-viewer-file-type";
 import FileViewer from "./file-viewer";
 import NoSelectedFile from "./no-selected-file";
 import { LineComment } from "./types";
@@ -52,6 +60,16 @@ interface FileContentProps extends ProjectFileScope {
    * the viewer selected before the switch.
    */
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode;
+  /**
+   * 用户为当前文件类型设置的默认查看器 id，或 "source"；匹配时初始选中它，非空时 "More" 菜单提供 "Reset default"。
+   * The user's default viewer id for the file type, or "source"; selected initially when it matches, and a non-null value adds "Reset default" to the "More" menu.
+   */
+  defaultFileViewerId?: string | null;
+  /**
+   * 有值时切换按钮右侧显示 "More" 菜单：把当前选中的查看器（含 Source）设为默认，或传入 null 删除设置。
+   * When set, a "More" menu follows the switch: set the selected viewer (Source included) as the default, or pass null to remove the setting.
+   */
+  onSetDefaultFileViewer?: (viewerId: string | null) => void;
 }
 
 export default function FileContent({
@@ -72,6 +90,8 @@ export default function FileContent({
   onReloadFileViewer,
   onReloadSource,
   renderFileViewerInfo,
+  defaultFileViewerId,
+  onSetDefaultFileViewer,
 }: FileContentProps) {
   // 切换文件时回到默认查看器。Switching files returns to the default viewer.
   const [choice, setChoice] = React.useState<{
@@ -82,7 +102,7 @@ export default function FileContent({
   } | null>(null);
   const viewers = onlyDiff || !renderFileViewer ? [] : fileViewers;
   const currentChoice = choice?.file === selectedFile ? choice : null;
-  const chosen = currentChoice?.viewerId ?? null;
+  const chosen = currentChoice?.viewerId ?? defaultFileViewerId ?? null;
   const activeViewerId =
     viewers.length === 0
       ? SOURCE_VIEWER_ID
@@ -102,6 +122,16 @@ export default function FileContent({
       viewerId,
       previousViewerId: activeViewerId === SOURCE_VIEWER_ID ? previousViewerId : activeViewerId,
     });
+  // 修改默认查看器不切换正在显示的查看器。Changing the default keeps the viewer being shown.
+  const setDefaultFileViewer = (viewerId: string | null) => {
+    choose(activeViewerId);
+    onSetDefaultFileViewer!(viewerId);
+  };
+  const fileType = fileViewerFileType((selectedFile ?? "").split(/[\\/]/).pop()!);
+  const activeViewerTitle =
+    activeViewerId === SOURCE_VIEWER_ID
+      ? "Source"
+      : (viewers.find((viewer) => viewer.id === activeViewerId)?.title ?? activeViewerId);
 
   return (
     <div className="flex h-full min-w-0 w-full flex-col">
@@ -147,6 +177,37 @@ export default function FileContent({
                           </button>
                         ))}
                       </div>
+                      {onSetDefaultFileViewer ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6"
+                              aria-label="More"
+                            >
+                              <MoreHorizontal className="size-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => setDefaultFileViewer(activeViewerId)}
+                            >
+                              Open with {activeViewerTitle} by default for {fileType}
+                            </DropdownMenuItem>
+                            {defaultFileViewerId ? (
+                              <DropdownMenuItem
+                                className="cursor-pointer"
+                                onSelect={() => setDefaultFileViewer(null)}
+                              >
+                                Reset default for {fileType}
+                              </DropdownMenuItem>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
                       {/* 选中 Source 时刷新按钮重新读取文件，位置不变。With Source selected the reload button reads the file again in place. */}
                       {activeViewerId === SOURCE_VIEWER_ID ? (
                         onReloadSource ? (

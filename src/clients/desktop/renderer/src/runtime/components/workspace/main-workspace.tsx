@@ -28,6 +28,10 @@ export type MainWorkspaceProps = {
   /** 匹配当前文件的文件查看器及其文件。File viewers matching the current file, and that file. */
   fileViewers: readonly WorkspaceView[];
   fileViewerFile: FileViewerFile | null;
+  /** 用户为当前文件类型设置的默认查看器 id 或 "source"。The user's default viewer id for the file type, or "source". */
+  defaultFileViewerId: string | null;
+  /** 把查看器设为当前文件类型的默认，null 删除设置。Sets the file type's default viewer; null removes it. */
+  onSetDefaultFileViewer: ((viewerId: string | null) => void) | undefined;
 };
 
 /**
@@ -91,8 +95,12 @@ export function MainWorkspace(props: MainWorkspaceProps) {
               />
             ) : null;
           }}
-          onReloadFileViewer={(viewerId) => reloadExtensionView(props.host, fileViewer(viewerId))}
+          onReloadFileViewer={(viewerId) =>
+            void reloadExtensionView(props.host, fileViewer(viewerId))
+          }
           renderFileViewerInfo={(viewerId) => <ExtensionViewInfo view={fileViewer(viewerId)} />}
+          defaultFileViewerId={props.defaultFileViewerId}
+          onSetDefaultFileViewer={props.onSetDefaultFileViewer}
         />
       ) : null}
       {props.retainedViews.map((view) => extensionView(view, view.id !== activeView.id))}

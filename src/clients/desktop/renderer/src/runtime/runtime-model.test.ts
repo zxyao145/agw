@@ -16,6 +16,7 @@ const settings: DesktopSettings = {
   projectTabsByServer: {},
   extensions: {},
   removedBundledExtensions: [],
+  fileViewerDefaults: {},
   profiles: [
     {
       id: "local",

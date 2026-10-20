@@ -152,6 +152,11 @@ export type ExtensionFileSystemRequest =
       data: Uint8Array;
       overwrite: boolean;
       createParents: boolean;
+      /**
+       * 写入前提：磁盘上文件的内容哈希（64 位小写十六进制），只能与 `overwrite: true` 一起使用；与磁盘上的哈希不一致时为 `ERR_FILE_CHANGED`。
+       * Write precondition: the content hash on disk (64 lowercase hex digits), only with `overwrite: true`; a mismatch is `ERR_FILE_CHANGED`.
+       */
+      expectedSha256?: string;
     }
   | { operation: "readDirectory"; uri: string }
   | { operation: "stat"; uri: string }

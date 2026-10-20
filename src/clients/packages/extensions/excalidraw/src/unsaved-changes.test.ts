@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTransitionReporter, matchesSnapshot, takeSnapshot } from "./unsaved-changes";
+import { matchesSnapshot, takeSnapshot } from "./unsaved-changes";
 
 const rectangle = { id: "rect", version: 3, isDeleted: false, x: 10, y: 20 };
 const arrow = { id: "arrow", version: 7, isDeleted: false, x: 0, y: 0 };
@@ -98,35 +98,18 @@ test("matchesSnapshot compares the set of embedded files", () => {
   );
 });
 
-test("createTransitionReporter reports only state transitions", () => {
-  const reported: boolean[] = [];
-  const report = createTransitionReporter((unsaved) => reported.push(unsaved));
-  report(false);
-  report(true);
-  report(true);
-  report(false);
-  report(false);
-  report(true);
-  assert.deepEqual(reported, [true, false, true]);
-});
-
 test("a save of an older scene keeps later edits unsaved", () => {
-  const reported: boolean[] = [];
-  const report = createTransitionReporter((unsaved) => reported.push(unsaved));
   const loaded = takeSnapshot([rectangle], {}, WHITE);
 
   const edited = [{ ...rectangle, version: 4 }];
-  report(!matchesSnapshot(loaded, edited, {}, WHITE));
+  assert.equal(matchesSnapshot(loaded, edited, {}, WHITE), false);
   // 保存开始时的场景。The scene when the save starts.
   const saved = takeSnapshot(edited, {}, WHITE);
   // 写入期间继续编辑。Editing continues while the write is in flight.
   const current = [{ ...rectangle, version: 5 }];
-  report(!matchesSnapshot(loaded, current, {}, WHITE));
-  // 写入成功后与保存的快照比较。After the write succeeds, compare against the saved snapshot.
-  report(!matchesSnapshot(saved, current, {}, WHITE));
-  assert.deepEqual(reported, [true]);
+  // 写入成功后与保存的快照对比，仍有未保存修改。After the write succeeds, comparing with the saved snapshot still finds unsaved changes.
+  assert.equal(matchesSnapshot(saved, current, {}, WHITE), false);
 
-  // 再次保存当前场景后没有未保存修改。Saving the current scene again clears the unsaved state.
-  report(!matchesSnapshot(takeSnapshot(current, {}, WHITE), current, {}, WHITE));
-  assert.deepEqual(reported, [true, false]);
+  // 再次保存当前场景后没有未保存修改。Saving the current scene again leaves nothing unsaved.
+  assert.equal(matchesSnapshot(takeSnapshot(current, {}, WHITE), current, {}, WHITE), true);
 });

@@ -6,6 +6,7 @@ import { access, cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "acorn";
+import { full } from "acorn-walk";
 import { build } from "esbuild";
 
 const desktopDirectory = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -52,17 +53,6 @@ async function javascriptFiles(directory) {
     .map((entry) => join(entry.parentPath, entry.name));
 }
 
-/** 遍历 ESTree 节点。Visits every ESTree node. */
-function visit(node, callback) {
-  if (node === null || typeof node !== "object") return;
-  if (Array.isArray(node)) {
-    for (const item of node) visit(item, callback);
-    return;
-  }
-  if (typeof node.type === "string") callback(node);
-  for (const value of Object.values(node)) visit(value, callback);
-}
-
 /**
  * 产物只能从 SDK 导入 connect、defineBackground、defineView；其他名称在运行时不存在。
  * Built code may import only connect, defineBackground and defineView from the SDK; other names do not exist at runtime.
@@ -73,7 +63,7 @@ async function checkSdkImports(id, distDirectory) {
       ecmaVersion: "latest",
       sourceType: "module",
     });
-    visit(program, (node) => {
+    full(program, (node) => {
       const source = node.source?.value;
       if (source !== SDK_SPECIFIER) return;
       if (node.type === "ImportExpression" || node.type === "ExportAllDeclaration") {

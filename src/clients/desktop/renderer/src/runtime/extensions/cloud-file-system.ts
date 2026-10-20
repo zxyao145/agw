@@ -126,13 +126,15 @@ export function toCloudError(error: unknown): Error {
       ? "ENOENT"
       : error.code === 4000040
         ? "EEXIST"
-        : error.code === 4030005
+        : error.code === 4030005 || error.code === 4030007
           ? "EACCES"
           : error.code === 4090023
             ? "ENOTEMPTY"
-            : error.code === 4130001
-              ? "ERR_FILE_TOO_LARGE"
-              : "ERR_SERVER";
+            : error.code === 4090024
+              ? "ERR_FILE_CHANGED"
+              : error.code === 4130001
+                ? "ERR_FILE_TOO_LARGE"
+                : "ERR_SERVER";
   return createExtensionError(code, error.message);
 }
 
@@ -141,11 +143,16 @@ export type CloudAccess = {
   permissions: readonly ExtensionPermission[];
 };
 
+/** 写入成功的文件；`directoryId` 为 null 表示 Project 主目录。A written file; a null `directoryId` is the primary directory. */
+export type FileWriteLocation = { projectId: string; directoryId: string | null; path: string };
+
 /** 宿主中的云端文件系统，经 `@agw/projects-core` 访问 `/api/files`。The host's cloud file system over `/api/files`. */
 export class CloudFileSystem {
   public constructor(
     private readonly context: ContextService,
     private readonly grants: CloudAccessGrants,
+    /** `writeFile` 成功后调用。Called after a successful `writeFile`. */
+    private readonly onFileWritten: (location: FileWriteLocation) => void,
   ) {}
 
   public readFile(access: CloudAccess, uri: string, signal?: AbortSignal): Promise<Uint8Array> {
@@ -160,29 +167,37 @@ export class CloudFileSystem {
     );
   }
 
-  public writeFile(
+  public async writeFile(
     access: CloudAccess,
     uri: string,
     data: Uint8Array,
-    options: { overwrite: boolean; createParents: boolean },
+    options: { overwrite: boolean; createParents: boolean; expectedSha256?: string },
     signal?: AbortSignal,
   ): Promise<null> {
     if (data.byteLength > MAX_CLOUD_TRANSFER_BYTES) {
-      return Promise.reject(
-        createExtensionError("ERR_FILE_TOO_LARGE", "A single write cannot exceed 100 MB."),
-      );
+      throw createExtensionError("ERR_FILE_TOO_LARGE", "A single write cannot exceed 100 MB.");
     }
-    return this.run(access, uri, "write", signal, async (location, requestSignal) => {
+    const location = await this.run(access, uri, "write", signal, async (target, requestSignal) => {
       await writeFile(
-        location.projectId,
-        location.path,
+        target.projectId,
+        target.path,
         data,
         { ...options, signal: requestSignal },
         undefined,
-        location.directoryId,
+        target.directoryId,
       );
-      return null;
+      return target;
     });
+    // 写入已经提交：监听函数在之后的微任务中执行，它的错误不改变写入结果。
+    // The write is committed: the listener runs in a later microtask, so its error leaves the result unchanged.
+    queueMicrotask(() =>
+      this.onFileWritten({
+        projectId: location.projectId,
+        directoryId: location.directoryId,
+        path: location.path,
+      }),
+    );
+    return null;
   }
 
   public readDirectory(access: CloudAccess, uri: string): Promise<DirectoryEntry[]> {

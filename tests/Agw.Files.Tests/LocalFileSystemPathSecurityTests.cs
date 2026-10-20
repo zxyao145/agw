@@ -1,4 +1,3 @@
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Files.Tests;
@@ -9,7 +8,7 @@ public class LocalFileSystemPathSecurityTests
     public async Task WriteAllTextAsync_RelativePath_WritesUnderRoot()
     {
         using var scope = TempDirectoryScope.Create();
-        var fileSystem = new LocalFileSystem(scope.Path);
+        var fileSystem = TestFileSystems.Local(scope.Path);
 
         await fileSystem.WriteAllTextAsync("src/file.txt", "content", TestContext.Current.CancellationToken);
 
@@ -28,7 +27,7 @@ public class LocalFileSystemPathSecurityTests
     public async Task ReadAllTextAsync_TraversalPath_ThrowsPathOutsideRoot(string path)
     {
         using var scope = TempDirectoryScope.Create();
-        var fileSystem = new LocalFileSystem(scope.Path);
+        var fileSystem = TestFileSystems.Local(scope.Path);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             fileSystem.ReadAllTextAsync(path, TestContext.Current.CancellationToken)
@@ -42,7 +41,7 @@ public class LocalFileSystemPathSecurityTests
     public async Task ReadAllTextAsync_AbsolutePath_ThrowsPathOutsideRoot()
     {
         using var scope = TempDirectoryScope.Create();
-        var fileSystem = new LocalFileSystem(scope.Path);
+        var fileSystem = TestFileSystems.Local(scope.Path);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             fileSystem.ReadAllTextAsync(

@@ -20,6 +20,7 @@ function view(
     entry: extensionId ? "index.html" : null,
     retainContextWhenHidden: false,
     failure: null,
+    priority: "default",
   };
 }
 

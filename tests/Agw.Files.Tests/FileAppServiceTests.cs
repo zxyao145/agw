@@ -1,7 +1,6 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Application.Files;
-using Agw.Files.Infrastructure.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Files.Tests;
@@ -140,7 +139,7 @@ public class FileAppServiceTests
             "content",
             TestContext.Current.CancellationToken
         );
-        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(new LocalFileSystem(scope.Path)));
+        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(TestFileSystems.Local(scope.Path)));
 
         var result = await service.ReadAsync(ProjectId, "read.txt", TestContext.Current.CancellationToken);
 
@@ -255,7 +254,7 @@ public class FileAppServiceTests
     public async Task DiffAsync_NonLocalFileSystem_ReturnsInvalidRequest()
     {
         using var scope = TempDirectoryScope.Create();
-        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(new LocalFileSystem(scope.Path)));
+        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(TestFileSystems.Local(scope.Path)));
 
         var result = await service.DiffAsync(ProjectId, "file.txt", null, TestContext.Current.CancellationToken);
 
@@ -590,7 +589,7 @@ public class FileAppServiceTests
     )
     {
         return new FileAppService(
-            new FakeFileSystemResolver(fileSystem ?? new LocalFileSystem(rootPath)),
+            new FakeFileSystemResolver(fileSystem ?? TestFileSystems.Local(rootPath)),
             git ?? new FakeGitCommandService(),
             NullLogger<FileAppService>.Instance
         );
@@ -628,8 +627,14 @@ public class FileAppServiceTests
 
         public Task<Stream> OpenReadAsync(string path, CancellationToken ct) => _inner.OpenReadAsync(path, ct);
 
-        public Task WriteAsync(string path, Stream content, bool overwrite, bool createParents, CancellationToken ct) =>
-            _inner.WriteAsync(path, content, overwrite, createParents, ct);
+        public Task WriteAsync(
+            string path,
+            Stream content,
+            bool overwrite,
+            bool createParents,
+            string? expectedSha256,
+            CancellationToken ct
+        ) => _inner.WriteAsync(path, content, overwrite, createParents, expectedSha256, ct);
 
         public Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct) =>
             _inner.MoveAsync(sourcePath, destinationPath, overwrite, ct);

@@ -27,6 +27,10 @@
     "release:collect": "node scripts/collect-artifacts.mjs",
     "prepare:resources": "node scripts/prepare-resources.mjs"
   },
+  "dependencies": {
+    "chardet": "catalog:",
+    "iconv-lite": "catalog:"
+  },
   "devDependencies": {
     "@agw/agents": "workspace:*",
     "@agw/api": "workspace:*",
@@ -60,6 +64,7 @@
     "@vitejs/plugin-react": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "acorn": "catalog:",
+    "acorn-walk": "catalog:",
     "ajv": "catalog:",
     "code-inspector-plugin": "catalog:",
     "dts-bundle-generator": "catalog:",
@@ -71,6 +76,7 @@
     "eventsource-parser": "catalog:",
     "jsdom": "catalog:",
     "lucide-react": "catalog:",
+    "marked": "catalog:",
     "mime-types": "catalog:",
     "next": "catalog:",
     "next-themes": "catalog:",

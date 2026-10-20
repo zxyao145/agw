@@ -90,6 +90,8 @@ export interface FileTreeNodeProps {
   onGitScopeChanged?: (path: string, targetScope: GitDiffScope) => void;
   defaultExpanded?: boolean;
   contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
+  /** 变化时已展开的目录重新读取子项。An expanded directory rereads its children when it changes. */
+  refreshSignal?: number;
 }
 
 export interface CodeViewerProps {

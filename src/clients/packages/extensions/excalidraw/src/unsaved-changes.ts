@@ -57,18 +57,3 @@ export function matchesSnapshot(
     fileIds.length === snapshot.fileIds.size && fileIds.every((id) => snapshot.fileIds.has(id))
   );
 }
-
-/**
- * 返回一个函数，只在状态改变时调用 `report`；初始状态为没有未保存修改。
- * Returns a function that calls `report` only on transitions, starting from no unsaved changes.
- */
-export function createTransitionReporter(
-  report: (unsaved: boolean) => void,
-): (unsaved: boolean) => void {
-  let current = false;
-  return (unsaved) => {
-    if (unsaved === current) return;
-    current = unsaved;
-    report(unsaved);
-  };
-}

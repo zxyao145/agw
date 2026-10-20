@@ -24,6 +24,10 @@ const extensionSettingsSchema = z.record(
   }),
 );
 
+const fileTypeSchema = z.string().min(1);
+const fileViewerIdSchema = z.string().min(1);
+const fileViewerDefaultsSchema = z.record(fileTypeSchema, fileViewerIdSchema);
+
 /** 声明集合全部包含在已批准集合中。Every declared entry is already approved. */
 export function isGrantCovered(declared: ExtensionGrants, settings: ExtensionSettings): boolean {
   return (
@@ -78,6 +82,7 @@ export class DesktopSettingsStore {
         projectTabsByServer: parsed.projectTabsByServer ?? {},
         extensions: extensionSettingsSchema.parse(parsed.extensions ?? {}),
         removedBundledExtensions: z.array(z.string()).parse(parsed.removedBundledExtensions ?? []),
+        fileViewerDefaults: fileViewerDefaultsSchema.parse(parsed.fileViewerDefaults ?? {}),
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -256,6 +261,29 @@ export class DesktopSettingsStore {
     });
   }
 
+  /**
+   * 设置文件类型的默认查看器，`viewerId` 为 null 时删除该项；返回更新后的全部设置。
+   * Sets the default viewer of a file type, or removes the entry when `viewerId` is null; returns every setting after
+   * the change.
+   */
+  public async setFileViewerDefault(
+    fileType: string,
+    viewerId: string | null,
+  ): Promise<Record<string, string>> {
+    fileTypeSchema.parse(fileType);
+    fileViewerIdSchema.nullable().parse(viewerId);
+    let defaults: Record<string, string> = {};
+    await this.enqueueWrite(async () => {
+      const current = await this.load();
+      defaults = Object.fromEntries([
+        ...Object.entries(current.fileViewerDefaults).filter(([key]) => key !== fileType),
+        ...(viewerId === null ? [] : [[fileType, viewerId]]),
+      ]);
+      await writeJsonFile(this.settingsFile, { ...current, fileViewerDefaults: defaults });
+    });
+    return defaults;
+  }
+
   private async updateExtensions(
     change: (extensions: Record<string, ExtensionSettings>) => void,
   ): Promise<void> {
@@ -311,6 +339,7 @@ export class DesktopSettingsStore {
       projectTabsByServer: {},
       extensions: {},
       removedBundledExtensions: [],
+      fileViewerDefaults: {},
     };
   }
 

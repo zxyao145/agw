@@ -127,7 +127,7 @@ test("file service operations send the documented requests and return the Server
     "project-1",
     "docs/b.bin",
     new Uint8Array([7, 0, 255]),
-    { overwrite: true, createParents: false },
+    { overwrite: true, createParents: false, expectedSha256: "a".repeat(64) },
     "extra",
   );
   const created = await service.createDirectory("project-1", "docs/archive", true, "extra");
@@ -164,6 +164,7 @@ test("file service operations send the documented requests and return the Server
   assert.equal(downloadRequest?.query.get("path"), "assets/logo.png");
   assert.equal(writeRequest?.query.get("overwrite"), "true");
   assert.equal(writeRequest?.query.get("createParents"), "false");
+  assert.equal(writeRequest?.query.get("expectedSha256"), "a".repeat(64));
   assert.match(String(writeRequest?.headers["content-type"]), /^multipart\/form-data; boundary=/u);
   assert.deepEqual(await readUploadedFile(writeRequest!), { name: "b.bin", bytes: [7, 0, 255] });
   assert.equal(createRequest?.query.get("recursive"), "true");
@@ -190,6 +191,7 @@ test("omitted write and move options are not sent", async (t) => {
   const [writeRequest, createRequest, moveRequest] = server.requests;
   assert.equal(writeRequest?.query.has("overwrite"), false);
   assert.equal(writeRequest?.query.has("createParents"), false);
+  assert.equal(writeRequest?.query.has("expectedSha256"), false);
   assert.equal(writeRequest?.query.has("directoryId"), false);
   assert.deepEqual(await readUploadedFile(writeRequest!), {
     name: "notes.md",

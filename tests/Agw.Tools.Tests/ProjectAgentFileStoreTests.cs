@@ -1,8 +1,8 @@
 using Agw.Files.Abstracts;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
+using Agw.Testing;
 using Agw.Tools.Impl.ToolBlocks.Storage;
 
 namespace Agw.Tools.Tests;
@@ -52,7 +52,7 @@ public sealed class ProjectAgentFileStoreTests
                 [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), additional)]
             );
             var store = new ProjectAgentFileStore(
-                new StubFileSystemResolver(new LocalFileSystem(workspace)),
+                new StubFileSystemResolver(TestFileSystems.Local(workspace)),
                 projectId,
                 null,
                 snapshot
@@ -89,7 +89,7 @@ public sealed class ProjectAgentFileStoreTests
                 [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), additional)]
             );
             var store = new ProjectAgentFileStore(
-                new StubFileSystemResolver(new LocalFileSystem(workspace)),
+                new StubFileSystemResolver(TestFileSystems.Local(workspace)),
                 projectId,
                 null,
                 snapshot
@@ -117,7 +117,7 @@ public sealed class ProjectAgentFileStoreTests
             var projectId = Guid.CreateVersion7();
             var snapshot = ProjectWorkspacePaths.CreateSnapshot(projectId, linkedWorkspace);
             var store = new ProjectAgentFileStore(
-                new StubFileSystemResolver(new LocalFileSystem(linkedWorkspace)),
+                new StubFileSystemResolver(TestFileSystems.Local(linkedWorkspace)),
                 projectId,
                 null,
                 snapshot
@@ -168,7 +168,7 @@ public sealed class ProjectAgentFileStoreTests
             Directory.CreateDirectory(Path.Combine(workspace, ".agw"));
             Directory.CreateSymbolicLink(Path.Combine(workspace, ".agw", "memory"), outside);
             var store = new ProjectAgentFileStore(
-                new StubFileSystemResolver(new LocalFileSystem(workspace)),
+                new StubFileSystemResolver(TestFileSystems.Local(workspace)),
                 Guid.CreateVersion7(),
                 ".agw/memory"
             );
@@ -194,7 +194,7 @@ public sealed class ProjectAgentFileStoreTests
         Directory.CreateDirectory(workspace);
         try
         {
-            var fileSystem = new LocalFileSystem(workspace);
+            var fileSystem = TestFileSystems.Local(workspace);
             var store = new ProjectAgentFileStore(
                 new StubFileSystemResolver(fileSystem),
                 Guid.CreateVersion7(),
@@ -221,7 +221,7 @@ public sealed class ProjectAgentFileStoreTests
         Directory.CreateDirectory(workspace);
         try
         {
-            var resolver = new StubFileSystemResolver(new LocalFileSystem(workspace));
+            var resolver = new StubFileSystemResolver(TestFileSystems.Local(workspace));
             var firstStore = new ProjectAgentFileStore(resolver, Guid.CreateVersion7(), ".agw/memory");
             var secondStore = new ProjectAgentFileStore(resolver, Guid.CreateVersion7(), ".agw/memory");
 
@@ -238,7 +238,7 @@ public sealed class ProjectAgentFileStoreTests
     [Fact]
     public async Task ScopedStore_PathTraversal_IsRejected()
     {
-        var fileSystem = new LocalFileSystem(Path.GetTempPath());
+        var fileSystem = TestFileSystems.Local(Path.GetTempPath());
         var store = new ProjectAgentFileStore(
             new StubFileSystemResolver(fileSystem),
             Guid.CreateVersion7(),
@@ -499,7 +499,7 @@ public sealed class ProjectAgentFileStoreTests
     private static ProjectAgentFileStore CreateStore(string workspace)
     {
         return new ProjectAgentFileStore(
-            new StubFileSystemResolver(new LocalFileSystem(workspace)),
+            new StubFileSystemResolver(TestFileSystems.Local(workspace)),
             Guid.CreateVersion7()
         );
     }

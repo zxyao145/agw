@@ -1,6 +1,5 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Files.Tests;
@@ -148,11 +147,13 @@ public sealed class ConfinedFileSystemTests
             File.CreateSymbolicLink(link, Path.Combine(workspace, "inside.txt"));
             var fileSystem = Confine(workspace);
 
-            // 持有目标路径的写锁，让 WriteAllTextAsync 在锁上等待，期间把链接改为指向允许范围之外。
-            // Hold the write lock of the target path so WriteAllTextAsync waits on it, and repoint the link outside
-            // the allowed directories meanwhile.
+            // 持有链接当前指向的文件（inside.txt）的写锁，让 WriteAllTextAsync 在锁上等待，期间把链接改为指向允许范围之外；
+            // 取得锁之后它重新解析出新的物理路径，按新路径重新获取锁，再由受限解析拒绝。
+            // Hold the write lock of the file the link currently points to (inside.txt) so WriteAllTextAsync waits on
+            // it, and repoint the link outside the allowed directories meanwhile; after taking the lock it resolves the
+            // new physical path, reacquires the lock for it, and the confined resolution then rejects the write.
             Task write;
-            using (await LocalFilePathLocks.AcquireAsync(link, ct))
+            await using (await TestFileSystems.PathLocks.AcquireContentAsync(link, ct))
             {
                 write = fileSystem.WriteAllTextAsync("link.txt", "payload", ct);
                 await Task.Delay(TimeSpan.FromMilliseconds(200), ct);
@@ -475,7 +476,7 @@ public sealed class ConfinedFileSystemTests
     }
 
     private static IAgwFileSystem Confine(string workspace, params string[] additionalRoots) =>
-        new LocalFileSystem(workspace).Confine([workspace, .. additionalRoots]);
+        TestFileSystems.Local(workspace).Confine([workspace, .. additionalRoots]);
 
     private static string CreateDirectory(string root, string name) =>
         Directory.CreateDirectory(Path.Combine(root, name)).FullName;

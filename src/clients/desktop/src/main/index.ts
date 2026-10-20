@@ -723,6 +723,19 @@ function registerIpc(): void {
     currentSettings = await settingsStore.load();
     return runtimeState();
   });
+  ipcMain.handle("agw:get-file-viewer-defaults", async (event) => {
+    assertTrustedSender(senderUrl(event));
+    return (await settingsStore.load()).fileViewerDefaults;
+  });
+  ipcMain.handle(
+    "agw:set-file-viewer-default",
+    async (event, fileType: string, viewerId: string | null) => {
+      assertTrustedSender(senderUrl(event));
+      const defaults = await settingsStore.setFileViewerDefault(fileType, viewerId);
+      currentSettings = await settingsStore.load();
+      return defaults;
+    },
+  );
   ipcMain.handle("agw:save-token", async (event, profileId: string, token: string) => {
     assertTrustedSender(senderUrl(event));
     await settingsStore.saveToken(profileId, token);

@@ -48,4 +48,11 @@ export type {
   DesktopSettingsUpdate,
   PackageFlavor,
 } from "./settings";
+export type {
+  DecodedText,
+  EncodedText,
+  EncodeTextOptions,
+  TextEncodingInfo,
+  TextEol,
+} from "./text";
 export type { DesktopUpdateCheckResult, DesktopUpdateStatus } from "./update";

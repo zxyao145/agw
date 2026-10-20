@@ -1,10 +1,10 @@
 using System.Runtime.CompilerServices;
 using Agw.Files.Abstracts;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
+using Agw.Testing;
 using Agw.Tools.Impl.ToolBlocks.FileAccess;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -292,7 +292,7 @@ public sealed class FileAccessPermissionTests
 
         public FileSystemResolver(string workspace)
         {
-            _fileSystem = new LocalFileSystem(workspace);
+            _fileSystem = TestFileSystems.Local(workspace);
         }
 
         public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
@@ -309,7 +309,7 @@ public sealed class FileAccessPermissionTests
                 directoryId == null
                     ? snapshot.Workspace
                     : snapshot.AdditionalDirectories.Single(directory => directory.Id == directoryId).Path;
-            return Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(path));
+            return Task.FromResult<IAgwFileSystem?>(TestFileSystems.Local(path));
         }
     }
 

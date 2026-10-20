@@ -1,4 +1,5 @@
 using Agw.Files.Abstracts;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Files.Infrastructure.Storage.Confined;
 
@@ -11,13 +12,24 @@ namespace Agw.Files.Infrastructure.Storage.Confined;
 /// </summary>
 internal static class ConfinedFileSystem
 {
-    public static IAgwFileSystem Create(string rootFullPath, IReadOnlyList<string> allowedRoots)
+    public static IAgwFileSystem Create(
+        string rootFullPath,
+        IReadOnlyList<string> allowedRoots,
+        FilePathLocks pathLocks,
+        ILogger logger
+    )
     {
         if (OperatingSystem.IsWindows())
         {
-            return WindowsConfinedFileSystem.Create(rootFullPath, allowedRoots);
+            return WindowsConfinedFileSystem.Create(rootFullPath, allowedRoots, pathLocks, logger);
         }
 
-        return new UnixConfinedFileSystem(rootFullPath, [], UnixConfinedFileSystem.ResolveAllowedRoots(allowedRoots));
+        return new UnixConfinedFileSystem(
+            rootFullPath,
+            [],
+            UnixConfinedFileSystem.ResolveAllowedRoots(allowedRoots),
+            pathLocks,
+            logger
+        );
     }
 }

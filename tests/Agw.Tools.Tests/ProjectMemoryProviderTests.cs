@@ -2,9 +2,9 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
+using Agw.Testing;
 using Agw.Tools.Impl.ToolBlocks.ProjectMemory;
 using Agw.Tools.Impl.ToolBlocks.Storage;
 using Microsoft.Agents.AI;
@@ -330,7 +330,7 @@ public sealed class ProjectMemoryProviderTests : IDisposable
 
     private ProjectAgentFileStore CreateStore() =>
         new(
-            new LocalFileSystemResolver(new LocalFileSystem(_workspace)),
+            new LocalFileSystemResolver(TestFileSystems.Local(_workspace)),
             Guid.CreateVersion7(),
             ProjectMemoryToolBlock.FileSystemRoot
         );

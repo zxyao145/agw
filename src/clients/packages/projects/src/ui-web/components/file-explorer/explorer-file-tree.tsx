@@ -109,6 +109,7 @@ function FileTreeNode({
   onGitScopeChanged,
   defaultExpanded,
   contextMenuItems,
+  refreshSignal,
 }: FileTreeNodeProps) {
   const { directoryId } = useProjectFileScope();
   const [isExpanded, setIsExpanded] = React.useState(
@@ -130,8 +131,8 @@ function FileTreeNode({
     }
   }, [item.children]);
 
-  const loadChildren = async () => {
-    if (item.type !== FileItemType.Directory || children.length > 0) return;
+  const loadChildren = async (reload = false) => {
+    if (item.type !== FileItemType.Directory || (!reload && children.length > 0)) return;
 
     const generation = ++childrenLoadGenerationRef.current;
     setIsLoading(true);
@@ -162,6 +163,22 @@ function FileTreeNode({
       }
     }
   };
+
+  // 跳过第一次的值；已展开的目录重新读取子项，未展开的目录丢弃旧子项，下次展开时读取。
+  // Skip the first value; an expanded directory rereads its children, a collapsed one drops them and reads on the next expand.
+  const observedRefreshSignalRef = React.useRef(refreshSignal);
+  React.useEffect(() => {
+    if (observedRefreshSignalRef.current === refreshSignal) return;
+    observedRefreshSignalRef.current = refreshSignal;
+    if (item.type !== FileItemType.Directory || item.children) return;
+    if (isExpanded) {
+      void loadChildren(true);
+    } else {
+      childrenLoadGenerationRef.current += 1;
+      setIsLoading(false);
+      setChildren([]);
+    }
+  }, [refreshSignal]);
 
   const handleToggle = () => {
     if (item.type === FileItemType.Directory) {
@@ -440,6 +457,7 @@ function FileTreeNode({
               onFileReset={onFileReset}
               onGitScopeChanged={onGitScopeChanged}
               contextMenuItems={contextMenuItems}
+              refreshSignal={refreshSignal}
             />
           ))}
         </div>
@@ -457,6 +475,7 @@ export function ExplorerFileTree({
   onFileDeleted,
   onFileReset,
   contextMenuItems,
+  refreshSignal,
 }: {
   projectId: string;
   rootItems: FileItem[];
@@ -467,6 +486,8 @@ export function ExplorerFileTree({
   onFileReset: (filePath: string) => void;
   /** 右键菜单的扩展菜单项，非空时列在内置项之后。Extension context menu items listed after the built-in ones when non-empty. */
   contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
+  /** 变化时已展开的目录重新读取子项。Expanded directories reread their children when it changes. */
+  refreshSignal?: number;
 }) {
   return (
     <div className="file-tree">
@@ -483,6 +504,7 @@ export function ExplorerFileTree({
           onFileDeleted={onFileDeleted}
           onFileReset={onFileReset}
           contextMenuItems={contextMenuItems}
+          refreshSignal={refreshSignal}
         />
       ))}
     </div>

@@ -1,0 +1,71 @@
+/* Code 查看器的布局：工具栏、编辑器与状态栏，颜色来自宿主主题变量（theme.apply）。
+   The Code viewer layout: toolbar, editor and status bar; colors come from the host theme variables (theme.apply). */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.code-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.code-toolbar,
+.code-status-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  box-sizing: border-box;
+  padding: 0 8px;
+}
+
+.code-toolbar {
+  height: 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.code-toolbar .save-status {
+  margin-right: 4px;
+}
+
+.code-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.code-status-bar {
+  height: 26px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.code-status-bar > span {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.status {
+  margin: 0;
+  padding: 24px 32px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+}

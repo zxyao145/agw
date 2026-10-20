@@ -4,6 +4,7 @@ import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import type {
   CreateExtensionFrameRequest,
   DesktopRuntimeState,
+  EncodeTextOptions,
   ExtensionCaller,
   ExtensionFileSystemRequest,
   ExtensionFrameLayoutUpdate,
@@ -18,6 +19,7 @@ import type {
 } from "../../shared/contracts";
 import { toExtensionIpcResult } from "./extension-ipc-result";
 import type { ExtensionRuntime } from "./extension-runtime";
+import { decodeText, encodeText, listTextEncodings } from "./text-codec";
 
 const EXTENSION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
@@ -180,6 +182,15 @@ export function registerExtensionIpc({
     (caller: ExtensionCaller, request: ExtensionHttpRequest) =>
       runtime.httpRequest(caller, request),
   );
+
+  /* 文本编码通道：只供宿主页面调用，错误码与能力通道一样原样返回。Text codec channels for the host page; error codes come back like capability channels. */
+  capability("agw:decode-text", (bytes: Uint8Array, encoding?: string) =>
+    decodeText(bytes, encoding),
+  );
+  capability("agw:encode-text", (text: string, options: EncodeTextOptions) =>
+    encodeText(text, options),
+  );
+  handle("agw:list-text-encodings", () => listTextEncodings());
 
   /* extension preload 通道：身份由主进程登记的 WebContents 决定。Identity comes from the registered WebContents. */
   ipcMain.on("agw-extension:hello", (event, payload: unknown) =>

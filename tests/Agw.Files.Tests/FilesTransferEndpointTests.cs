@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Agw.Files.Abstracts;
@@ -185,6 +186,24 @@ public sealed class FilesTransferEndpointTests : IDisposable
         Assert.Equal("original", kept);
         Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
         Assert.Equal("second", await File.ReadAllTextAsync(Path.Combine(Workspace, "b.md"), Token));
+    }
+
+    [Fact]
+    public async Task Write_ExpectedSha256Differs_ReturnsFileChangedConflict()
+    {
+        await File.WriteAllTextAsync(Path.Combine(Workspace, "b.md"), "original", Token);
+        await using var app = await StartAsync();
+        using var client = app.GetTestClient();
+        var staleSha256 = Convert.ToHexStringLower(SHA256.HashData("stale"u8));
+
+        using var response = await client.PutAsync(
+            Url("write", $"path=b.md&overwrite=true&expectedSha256={staleSha256}"),
+            CreateForm("replaced"u8.ToArray()),
+            Token
+        );
+
+        await AssertErrorAsync(response, HttpStatusCode.Conflict, ErrorCodes.FileChanged.Code);
+        Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(Workspace, "b.md"), Token));
     }
 
     [Fact]
@@ -480,7 +499,9 @@ public sealed class FilesTransferEndpointTests : IDisposable
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<IAgwFileSystemResolver>(provider => new ProjectScopedFileSystemResolver(
             provider.GetRequiredService<IServiceScopeFactory>(),
+            TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
+            NullLogger<LocalFileSystem>.Instance,
             TimeProvider.System
         ));
         builder.Services.AddSingleton<IGitCommandService>(

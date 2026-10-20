@@ -11,7 +11,11 @@ import {
 } from "@agw/chat";
 import { useQuery } from "@agw/components/query";
 import type { FileViewerFile } from "@agw/extension-sdk";
-import type { ConversationItemActionArgs, ExplorerContextMenuArgs } from "@agw/projects";
+import {
+  fileViewerFileType,
+  type ConversationItemActionArgs,
+  type ExplorerContextMenuArgs,
+} from "@agw/projects";
 
 import { formatCloudUri } from "../../extensions/cloud-file-system";
 import { fileBaseName } from "../../extensions/file-viewer-patterns";
@@ -20,7 +24,11 @@ import type { ExtensionHost } from "../../extensions/extension-host";
 import { useExtensionRuntime } from "../../extensions/extension-host-provider";
 import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
-import type { WorkspaceEntry, WorkspaceView } from "../../extensions/workspace-registry";
+import {
+  fileViewerDefault,
+  type WorkspaceEntry,
+  type WorkspaceView,
+} from "../../extensions/workspace-registry";
 import { LeftSidebar } from "./left-sidebar";
 import { MainWorkspace } from "./main-workspace";
 import { Ribbon } from "./ribbon";
@@ -115,16 +123,55 @@ function DesktopWorkspaceLayout({
     };
   }, [host, composerRef, refreshConversations, selectedProjectId]);
 
+  // extension 写入当前 Project 的文件后刷新 Source 与文件树。An extension write to the current Project refreshes Source and the tree.
+  const { handleFileWritten } = workspace;
+  React.useEffect(() => {
+    host.setFileWriteListener(({ projectId, directoryId, path }) => {
+      if (projectId === selectedProjectId) handleFileWritten(directoryId, path);
+    });
+    return () => host.setFileWriteListener(null);
+  }, [host, handleFileWritten, selectedProjectId]);
+
   React.useEffect(
     () => tracker.setObscureAll(workspace.isReconnecting),
     [tracker, workspace.isReconnecting],
   );
 
+  // 用户为每类文件选择的默认查看器，经 bridge 保存在 settings.json 中。
+  // The user's default viewer per file type, kept in settings.json through the bridge.
+  const desktopBridge = window.agwDesktop ?? null;
+  const [fileViewerDefaults, setFileViewerDefaults] = React.useState<
+    Readonly<Record<string, string>>
+  >({});
+  React.useEffect(() => {
+    if (!desktopBridge) return;
+    let active = true;
+    void desktopBridge.getFileViewerDefaults().then((defaults) => {
+      if (active) setFileViewerDefaults(defaults);
+    });
+    return () => {
+      active = false;
+    };
+  }, [desktopBridge]);
+
   // 文件查看器：按当前文件名匹配；不再匹配的查看器 frame 关闭。File viewers match the current file; others close.
   const { selectedFile, selectedDirectory, openFile } = workspace;
   const selectedDirectoryId = selectedDirectory?.id ?? null;
+  const selectedFileName = selectedFile ? fileBaseName(selectedFile) : null;
   // 每次渲染按 registry 快照匹配。Matched against the registry snapshot on every render.
-  const fileViewers = selectedFile ? host.registry.fileViewersFor(fileBaseName(selectedFile)) : [];
+  const fileViewers = selectedFileName
+    ? host.registry.fileViewersFor(selectedFileName, fileViewerDefaults)
+    : [];
+  const defaultFileViewerId = selectedFileName
+    ? fileViewerDefault(fileViewerDefaults, selectedFileName)
+    : null;
+  const setDefaultFileViewer =
+    desktopBridge && selectedFileName
+      ? (viewerId: string | null) =>
+          void desktopBridge
+            .setFileViewerDefault(fileViewerFileType(selectedFileName), viewerId)
+            .then(setFileViewerDefaults)
+      : undefined;
   const fileViewerFile = React.useMemo<FileViewerFile | null>(
     () =>
       selectedFile && selectedProjectId
@@ -269,6 +316,8 @@ function DesktopWorkspaceLayout({
             messageActions={messageActions}
             fileViewers={fileViewers}
             fileViewerFile={fileViewerFile}
+            defaultFileViewerId={defaultFileViewerId}
+            onSetDefaultFileViewer={setDefaultFileViewer}
           />
         </ColResizeSplit.Right>
       </ColResizeSplit>

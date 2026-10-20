@@ -51,6 +51,12 @@ export interface ExtensionFileViewerContribution {
   /** 文件基本名的模式，不区分大小写；`*` 匹配任意个字符，`?` 匹配一个字符。Case-insensitive base-name patterns; `*` matches any run, `?` one character. */
   patterns: string[];
   entry: string;
+  /**
+   * 多个查看器匹配同一文件时的排序：`default`（缺省）排在 `option` 之前；匹配全部文件的通用查看器应声明为 `option`。
+   * Ordering when several viewers match a file: `default` (the default) comes before `option`; catch-all viewers
+   * should declare `option`.
+   */
+  priority?: "default" | "option";
 }
 
 export interface ExtensionContributes {
@@ -94,6 +100,20 @@ export interface Disposable {
 /** Extension API 抛出的错误。Errors thrown by the Extension API. */
 export interface ExtensionError extends Error {
   name: "ExtensionError";
+  /**
+   * 错误码。文本文档与写入前提的错误码如下。Error code. The codes for text documents and write preconditions:
+   * - `ERR_FILE_CHANGED`：文件在读取之后被修改或删除，写入前提不成立。The file changed or was deleted after it was
+   *   read, so the write precondition failed.
+   * - `ERR_NOT_TEXT`：文件含有 NUL 字节，不能按任何受支持的编码无损读取。The file contains NUL bytes and no supported
+   *   encoding reads it losslessly.
+   * - `ERR_UNKNOWN_ENCODING`：不能识别文件的编码，或指定的编码不能无损读取文件。The encoding cannot be detected, or
+   *   the given encoding cannot read the file losslessly.
+   * - `ERR_UNSUPPORTED_ENCODING`：编码不在 `fs.listTextEncodings` 的列表中。The encoding is not in the
+   *   `fs.listTextEncodings` list.
+   * - `ERR_UNENCODABLE`：文字中有目标编码不能表示的字符，信息给出字符与行号、列号。The text has a character the
+   *   target encoding cannot represent; the message names it with its line and column.
+   * - `ERR_INVALID_ARGUMENT`：参数不符合要求。An argument is invalid.
+   */
   code: string | null;
   syscall: string | null;
   path: string | null;
@@ -110,7 +130,7 @@ export interface ExtensionErrorData {
 
 export interface ThemeInfo {
   kind: "light" | "dark";
-  /** tokens.css 中的颜色与圆角变量。Color and radius variables from tokens.css. */
+  /** tokens.css 中的颜色、圆角与字体变量。Color, radius and font variables from tokens.css. */
   tokens: Record<string, string>;
 }
 
@@ -120,6 +140,25 @@ export interface ExtensionApi {
   readonly workspace: WorkspaceApi;
   readonly fs: FileSystemApi;
   readonly dialog: DialogApi;
+  /**
+   * 文档会话：组合一个文件的读取、编码、未保存报告、保存、冲突处理与刷新，供文件查看器中的编辑器使用。
+   * Document sessions: reading, encoding, unsaved reporting, saving, conflict handling and refreshing of one file,
+   * for editors in file viewers.
+   */
+  readonly documents: {
+    openText<Snapshot>(options: {
+      file: { uri: string; name: string };
+      adapter: TextDocumentAdapter<Snapshot>;
+      /** 处理 `Cmd/Ctrl+S`，缺省为 true。Handles `Cmd/Ctrl+S`; true by default. */
+      saveShortcut?: boolean;
+    }): DocumentSession;
+    openBinary<Snapshot>(options: {
+      file: { uri: string; name: string };
+      adapter: BinaryDocumentAdapter<Snapshot>;
+      /** 处理 `Cmd/Ctrl+S`，缺省为 true。Handles `Cmd/Ctrl+S`; true by default. */
+      saveShortcut?: boolean;
+    }): DocumentSession;
+  };
   readonly shell: {
     /** 只支持本地文件。Local files only. */
     revealInFileManager(uri: string): Promise<void>;
@@ -271,6 +310,22 @@ export interface FileChangeEvent {
   uri: string;
 }
 
+/** 换行符。A line ending. */
+export type Eol = "\n" | "\r\n";
+
+/** `fs.readTextDocument` 读取的文本文件。A text file read by `fs.readTextDocument`. */
+export interface TextDocument {
+  /** 解码后的文字，换行符保持原样，不含 BOM。The decoded text with its line endings unchanged and without the BOM. */
+  text: string;
+  /** 编码 id，例如 "utf-8"、"utf-16le"、"gb18030"。An encoding id such as "utf-8", "utf-16le" or "gb18030". */
+  encoding: string;
+  bom: boolean;
+  /** `\r\n` 多于单独的 `\n` 时为 `"\r\n"`。`"\r\n"` when CRLF outnumbers lone LF. */
+  eol: Eol;
+  /** 文件全部字节的 SHA-256，64 位小写十六进制。The SHA-256 of all bytes of the file, as 64 lowercase hex characters. */
+  sha256: string;
+}
+
 export interface FileSystemApi {
   kind(uri: string): FileKind;
   readFile(uri: string, options?: { signal?: AbortSignal }): Promise<Uint8Array>;
@@ -278,8 +333,51 @@ export interface FileSystemApi {
   writeFile(
     uri: string,
     data: Uint8Array | string,
-    options?: { overwrite?: boolean; createParents?: boolean; signal?: AbortSignal },
+    options?: {
+      overwrite?: boolean;
+      createParents?: boolean;
+      /**
+       * 写入前提：读取时的内容哈希（64 位小写十六进制），只能与 `overwrite: true` 一起使用；文件的内容哈希与它不同时
+       * 为 `ERR_FILE_CHANGED`，文件不变。
+       * Write precondition: the content hash read earlier (64 lowercase hex characters), only with `overwrite: true`;
+       * when the file's hash differs the write fails with `ERR_FILE_CHANGED` and the file is unchanged.
+       */
+      expectedSha256?: string;
+      signal?: AbortSignal;
+    },
   ): Promise<void>;
+  /**
+   * 读取文本文件并识别编码；指定 `encoding` 时按它读取。失败时为 `ERR_NOT_TEXT`、`ERR_UNKNOWN_ENCODING` 或
+   * `ERR_UNSUPPORTED_ENCODING`。
+   * Reads a text file and detects its encoding, or reads it as `encoding` when given. Fails with `ERR_NOT_TEXT`,
+   * `ERR_UNKNOWN_ENCODING` or `ERR_UNSUPPORTED_ENCODING`.
+   */
+  readTextDocument(
+    uri: string,
+    options?: { encoding?: string; signal?: AbortSignal },
+  ): Promise<TextDocument>;
+  /**
+   * 把全部换行替换为 `eol` 后按 `encoding` 写入，返回写入内容的哈希。`expectedSha256` 为字符串时覆盖写入并检查写入
+   * 前提；为 null 时创建文件，文件已存在为 `EEXIST`。不能表示的字符为 `ERR_UNENCODABLE`。
+   * Replaces every line break with `eol`, writes the text as `encoding` and returns the hash of the written content.
+   * A string `expectedSha256` overwrites under that precondition; null creates the file and fails with `EEXIST` when
+   * it exists. A character the encoding cannot represent fails with `ERR_UNENCODABLE`.
+   */
+  writeTextDocument(
+    uri: string,
+    text: string,
+    options: {
+      encoding: string;
+      /** 只有 `utf-8`、`utf-16le`、`utf-16be` 可以带 BOM。Only `utf-8`, `utf-16le` and `utf-16be` can have a BOM. */
+      bom: boolean;
+      eol: Eol;
+      expectedSha256: string | null;
+      createParents?: boolean;
+      signal?: AbortSignal;
+    },
+  ): Promise<{ sha256: string }>;
+  /** 受支持的编码，`label` 为英文名称。The supported encodings with English labels. */
+  listTextEncodings(): Promise<Array<{ id: string; label: string }>>;
   readDirectory(uri: string): Promise<DirectoryEntry[]>;
   stat(uri: string): Promise<FileStat>;
   exists(uri: string): Promise<boolean>;
@@ -313,6 +411,123 @@ export interface DialogApi {
     defaultName?: string;
     filters?: DialogFilter[];
   }): Promise<string | null>;
+  /**
+   * 宿主绘制的消息框，标题为 extension 名称；返回点击的按钮下标，按 `Esc` 或关闭时返回 `cancelId`（缺省为最后一个
+   * 按钮）。`message` 1 到 500 个字符，`detail` 不超过 2000 个字符，`buttons` 1 到 4 个、每个 1 到 40 个字符，
+   * `defaultId` 与 `cancelId` 必须是 `buttons` 的下标，否则为 `ERR_INVALID_ARGUMENT`。只有视图可以调用，background
+   * 为 `ERR_UNSUPPORTED_OPERATION`。
+   * A message box drawn by the host and titled with the extension name; returns the index of the clicked button, or
+   * `cancelId` (the last button by default) for `Esc` or closing. `message` has 1 to 500 characters, `detail` at most
+   * 2000, `buttons` 1 to 4 entries of 1 to 40 characters each, and `defaultId` and `cancelId` must be indexes into
+   * `buttons`, otherwise `ERR_INVALID_ARGUMENT`. Views only; the background gets `ERR_UNSUPPORTED_OPERATION`.
+   */
+  showMessageBox(options: {
+    type?: "info" | "warning" | "error";
+    message: string;
+    detail?: string;
+    buttons: string[];
+    /**
+     * 获得焦点的按钮下标，缺省时为第一个按钮；超出范围为 `ERR_INVALID_ARGUMENT`。
+     * The index of the focused button, the first button by default; out of range is `ERR_INVALID_ARGUMENT`.
+     */
+    defaultId?: number;
+    /**
+     * `Esc` 或关闭时返回的下标，缺省为最后一个按钮；超出范围为 `ERR_INVALID_ARGUMENT`。
+     * The index returned for `Esc` or closing, the last button by default; out of range is `ERR_INVALID_ARGUMENT`.
+     */
+    cancelId?: number;
+  }): Promise<number>;
+}
+
+/* ---------- 文档会话 Document sessions ---------- */
+
+/** 文本编辑器交给文档会话的适配器。The adapter a text editor gives a document session. */
+export interface TextDocumentAdapter<Snapshot> {
+  /** 用读到的内容替换编辑器内容，并清空撤销历史。Replaces the editor content and clears undo history. */
+  load(content: { text: string; eol: Eol }): void;
+  /** 当前内容的快照。A snapshot of the current content. */
+  snapshot(): Snapshot;
+  /**
+   * 快照对应的文字。`baseline` 为会话当前的基线快照（最近一次读取或成功写入时的快照）。
+   * The text of a snapshot. `baseline` is the session's current baseline snapshot (the snapshot of the last read or
+   * successful write).
+   */
+  serialize(snapshot: Snapshot, baseline: Snapshot): string;
+  /** 当前内容是否与快照相同。Whether the current content equals the snapshot. */
+  matches(snapshot: Snapshot): boolean;
+  /** 每次用户输入后增加的编辑版本。An edit version that increases with every user edit. */
+  version(): number;
+  /** 编辑器当前的换行符；不提供时使用基线的换行符。The editor's current EOL; the baseline EOL when omitted. */
+  eol?(): Eol;
+}
+
+/** 二进制格式的编辑器交给文档会话的适配器。The adapter an editor of a binary format gives a document session. */
+export interface BinaryDocumentAdapter<Snapshot> {
+  /** 用读到的字节替换编辑器内容，并清空撤销历史。Replaces the editor content and clears undo history. */
+  load(bytes: Uint8Array): void;
+  /** 当前内容的快照。A snapshot of the current content. */
+  snapshot(): Snapshot;
+  /**
+   * 快照对应的字节；写入时字节的 buffer 转移给宿主，之后不能再使用。`baseline` 为会话当前的基线快照（最近一次读取
+   * 或成功写入时的快照）。
+   * The bytes of a snapshot; writing transfers their buffer to the host, so they cannot be used afterwards.
+   * `baseline` is the session's current baseline snapshot (the snapshot of the last read or successful write).
+   */
+  serialize(snapshot: Snapshot, baseline: Snapshot): Uint8Array;
+  /** 当前内容是否与快照相同。Whether the current content equals the snapshot. */
+  matches(snapshot: Snapshot): boolean;
+  /** 每次用户输入后增加的编辑版本。An edit version that increases with every user edit. */
+  version(): number;
+}
+
+export type DocumentState = "loading" | "clean" | "dirty" | "saving" | "conflict" | "failed";
+
+/**
+ * 一个文件的文档会话。`save`、`show`、`reload`、`reopenWithEncoding`、`saveWithEncoding` 按调用顺序执行；
+ * 读取与保存的失败显示在 `state`、`error` 与通知中，返回的 Promise 在操作结束时完成，只有对话框失败（例如 frame
+ * 已关闭）时被拒绝。
+ * The document session of one file. `save`, `show`, `reload`, `reopenWithEncoding` and `saveWithEncoding` run in
+ * call order; read and save failures show in `state`, `error` and notifications, and the returned promises resolve
+ * when the operation ends. They reject only when a dialog fails (for example because the frame is gone).
+ */
+export interface DocumentSession {
+  readonly file: { uri: string; name: string };
+  readonly state: DocumentState;
+  /** 文本文档的编码；二进制文档为 null。The text encoding; null for binary documents. */
+  readonly format: { encoding: string; bom: boolean; eol: Eol } | null;
+  /** 刷新时发现磁盘内容已变化、但因为有输入没有替换。The disk changed during a refresh that was not applied. */
+  readonly changedOnDisk: boolean;
+  /** 使会话进入 Failed 的错误。The error that put the session in Failed. */
+  readonly error: ExtensionError | null;
+  /**
+   * 状态、文件（`show` 切换到另一个文件）、编码、`changedOnDisk` 或 `error` 变化后调用。
+   * Called after the state, the file (a `show` that switches to another file), format, changedOnDisk or error changes.
+   */
+  onDidChange(listener: () => void): Disposable;
+  /** 编辑器每次内容变化后调用。Called after every content change. */
+  edited(): void;
+  save(): Promise<void>;
+  /** 在 view.onShow 中调用。Called from view.onShow. */
+  show(file: { uri: string; name: string }): Promise<void>;
+  /** 有未保存修改时先确认放弃。Confirms discarding unsaved changes first. */
+  reload(): Promise<void>;
+  /**
+   * 按指定编码重新读取；有未保存修改时先确认放弃。二进制文档为 `ERR_UNSUPPORTED_OPERATION`。
+   * Reads again as `encoding`, confirming discarding unsaved changes first. `ERR_UNSUPPORTED_OPERATION` for binary
+   * documents.
+   */
+  reopenWithEncoding(encoding: string): Promise<void>;
+  /**
+   * 按指定编码与 BOM 写入，成功后基线的编码随之改变。二进制文档为 `ERR_UNSUPPORTED_OPERATION`。
+   * Writes as `encoding` and `bom`; the baseline takes the new encoding. `ERR_UNSUPPORTED_OPERATION` for binary
+   * documents.
+   */
+  saveWithEncoding(encoding: string, bom: boolean): Promise<void>;
+  /**
+   * 移除保存快捷键，不再处理未完成的结果；未完成的操作随之完成，之后的操作调用被拒绝。
+   * Removes the save shortcut and stops handling pending results; pending operations resolve and later calls reject.
+   */
+  dispose(): void;
 }
 
 /* ---------- 执行 Execution ---------- */

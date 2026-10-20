@@ -2,6 +2,7 @@ import type { DesktopRuntimeState } from "./runtime";
 import type { DesktopSettingsUpdate } from "./settings";
 import type { DesktopUpdateCheckResult } from "./update";
 import type { ImageContextMenuRequest } from "./image";
+import type { DecodedText, EncodedText, EncodeTextOptions, TextEncodingInfo } from "./text";
 import type {
   CreateExtensionFrameRequest,
   ExtensionActivation,
@@ -47,6 +48,10 @@ export type AgwDesktopBridge = {
   getRuntimeState(): Promise<DesktopRuntimeState>;
   checkForUpdates(): Promise<DesktopUpdateCheckResult>;
   saveSettings(settings: DesktopSettingsUpdate): Promise<DesktopRuntimeState>;
+  /** 文件类型 → 默认查看器 id。File type → default viewer id. */
+  getFileViewerDefaults(): Promise<Record<string, string>>;
+  /** 设置文件类型的默认查看器，null 删除该项；返回更新后的设置。Sets a file type's default viewer; null removes it. */
+  setFileViewerDefault(fileType: string, viewerId: string | null): Promise<Record<string, string>>;
   saveToken(profileId: string, token: string): Promise<void>;
   deleteToken(profileId: string): Promise<void>;
   provisionLocalToken(): Promise<string>;
@@ -147,6 +152,13 @@ export type AgwDesktopBridge = {
     caller: ExtensionCaller,
     request: ExtensionHttpRequest,
   ): Promise<ExtensionIpcResult<ExtensionHttpResult>>;
+
+  /* 文本编码通道，只供宿主页面调用 Text codec channels, for the host page only */
+  /** 识别编码并解码；指定 `encoding` 时按它解码。Detects the encoding and decodes, or decodes with `encoding` when given. */
+  decodeText(bytes: Uint8Array, encoding?: string): Promise<ExtensionIpcResult<DecodedText>>;
+  /** 替换换行符后按编码写出。Replaces line breaks and encodes. */
+  encodeText(text: string, options: EncodeTextOptions): Promise<ExtensionIpcResult<EncodedText>>;
+  listTextEncodings(): Promise<TextEncodingInfo[]>;
 
   /* 推送通道 Push channel */
   onExtensionEvent(listener: (event: ExtensionEvent) => void): () => void;

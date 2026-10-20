@@ -2,10 +2,10 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
+using Agw.Testing;
 using Agw.Tools.Impl.ToolBlocks.FileAccess;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -337,7 +337,7 @@ public sealed class AgwFileAccessProviderTests : IDisposable
                 directoryId == null
                     ? snapshot.Workspace
                     : snapshot.AdditionalDirectories.Single(directory => directory.Id == directoryId).Path;
-            return Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(path));
+            return Task.FromResult<IAgwFileSystem?>(TestFileSystems.Local(path));
         }
     }
 

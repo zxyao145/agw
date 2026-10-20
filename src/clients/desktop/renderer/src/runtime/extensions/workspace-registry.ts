@@ -1,4 +1,5 @@
 import type { ExtensionAction } from "@agw/extension-sdk";
+import { fileViewerFileType } from "@agw/projects";
 import { matchesFileNamePattern } from "./file-viewer-patterns";
 
 export type WorkspaceIcon = { kind: "lucide"; name: string } | { kind: "image"; src: string };
@@ -23,7 +24,21 @@ export type WorkspaceView = {
   failure: WorkspaceViewFailure | null;
   /** 文件查看器的文件名模式。A file viewer's name patterns. */
   patterns?: readonly string[];
+  /** 文件查看器的优先级；其他视图为 `default`。A file viewer's priority; `default` for other views. */
+  priority: "default" | "option";
 };
+
+/**
+ * 用户为文件所属类型设置的默认查看器 id（`<extensionId>:<viewerId>` 或 `"source"`），没有设置时为 null。
+ * The user's default viewer id for the file's type (`<extensionId>:<viewerId>` or `"source"`), or null when unset.
+ */
+export function fileViewerDefault(
+  defaults: Readonly<Record<string, string>>,
+  fileName: string,
+): string | null {
+  const fileType = fileViewerFileType(fileName);
+  return Object.hasOwn(defaults, fileType) ? defaults[fileType] : null;
+}
 
 /** Ribbon 项或对话扩展菜单项。A Ribbon item or a chat extension menu item. */
 export type WorkspaceEntry = {
@@ -87,11 +102,17 @@ export class WorkspaceRegistry {
   }
 
   /**
-   * 文件名匹配的文件查看器：按 extension id 排序，同一 extension 内按声明顺序。
-   * File viewers whose patterns match the file name, ordered by extension id and then by declaration order.
+   * 文件名匹配的文件查看器：用户为该文件类型设置的默认查看器排在最前（匹配该文件时），其次是其余 `default` 查看器，
+   * 最后是 `option` 查看器；同一组内按 extension id 排序，同一 extension 内按声明顺序。
+   * File viewers whose patterns match the file name: the user's default for the file type first (when it matches the
+   * file), then the other `default` viewers, then `option` viewers; each group is ordered by extension id and then by
+   * declaration order.
    */
-  public fileViewersFor(fileName: string): WorkspaceView[] {
-    return [...this.snapshot.views.values()]
+  public fileViewersFor(
+    fileName: string,
+    defaults: Readonly<Record<string, string>>,
+  ): WorkspaceView[] {
+    const matching = [...this.snapshot.views.values()]
       .filter(
         (view) =>
           view.location === "file" &&
@@ -104,6 +125,14 @@ export class WorkspaceRegistry {
             ? -1
             : 1,
       );
+    const defaultId = fileViewerDefault(defaults, fileName);
+    const preferred = matching.filter((view) => view.id === defaultId);
+    const others = matching.filter((view) => view.id !== defaultId);
+    return [
+      ...preferred,
+      ...others.filter((view) => view.priority === "default"),
+      ...others.filter((view) => view.priority === "option"),
+    ];
   }
 
   /** extension 进入 active 时注册它的视图与入口。Registers an extension's views and entries when it becomes active. */
