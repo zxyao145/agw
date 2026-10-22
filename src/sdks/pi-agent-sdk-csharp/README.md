@@ -74,9 +74,25 @@ Install Node.js and the pinned Pi CLI:
 npm install -g @earendil-works/pi-coding-agent@0.84.4
 ```
 
-Alternatively, set `PiAgentOptions.PiPathOverride` to an existing executable. On Windows, standard npm `pi.cmd`/`pi.bat` shims are resolved to the package-declared JavaScript entrypoint and launched through Node without `cmd.exe`; unrecognized command scripts fail closed.
+Alternatively, set `PiAgentOptions.PiPathOverride` to a Pi command or executable path. On Windows, standard npm `pi.cmd`/`pi.bat` shims are resolved to the package-declared JavaScript entrypoint and launched through Node without `cmd.exe`; unrecognized command scripts fail closed.
 
 The SDK never installs or updates Pi automatically and never probes the executable during construction.
+
+### Pi CLI discovery
+
+Before each process start, the SDK builds the child environment (the sanitized host environment followed by global and session overrides) and resolves `PiPathOverride`, or `pi` when it is omitted, in that environment. Command names are searched on its `PATH`; Windows uses `PATHEXT`, and Unix checks execute permission. After a Unix `PATH` miss, the SDK reads the `PATH` from a supported login shell named by the environment's `SHELL`, with a three-second timeout. A successful login-shell lookup also supplies the Pi process's `PATH`: relative entries are resolved against the shell's working directory, and other variables keep coming from the child environment. A lookup failure reports the requested command or path and any login-shell diagnostic.
+
+When Agw binds these options from an External Agent `Extra` block, provide the override as a nested object:
+
+```json
+{ "globalOptions": { "piPathOverride": "/opt/homebrew/bin/pi" } }
+```
+
+### "env: node: No such file or directory"
+
+The npm build of the Pi CLI is a Node.js script (`#!/usr/bin/env node`), so its process `PATH` must contain Node.js. Processes launched outside a login shell, such as a macOS LaunchAgent, often receive a minimal `PATH`. When the SDK discovers Pi through a login shell, it passes that shell's `PATH` to Pi, so the shell configuration must make both Pi and Node.js available, including installations in separate directories.
+
+An explicit `PiPathOverride` path selects the executable directly. Its interpreter is found through the child environment, so that environment's `PATH` must include Node.js.
 
 ## Core SDK
 
@@ -176,12 +192,15 @@ Before upgrading Pi:
 
 1. Confirm the published npm version.
 2. Compare RPC command/event types and framing rules.
-3. Update protocol fixtures.
+3. Update protocol fixtures, the pinned CLI fixture in `tests/fixtures/pi-cli`, and `PiCliStartupTests.CliVersion`.
 4. Run all Core, MAF, Agw, and optional real-CLI tests.
 
-Default tests never launch the real Pi CLI:
+The CLI startup component tests use the pinned npm Pi package, a real Node.js, and a Unix login shell. They only query `--version`, never start an RPC session, and require no Pi credentials. Install the fixture before running the tests on macOS or Linux:
 
 ```bash
+npm ci --prefix src/sdks/pi-agent-sdk-csharp/tests/fixtures/pi-cli --ignore-scripts --no-audit --no-fund
 dotnet test src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.Tests
 dotnet test src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.MAF.Tests
 ```
+
+The other tests use fake transports or short-lived generated helper processes and never launch the real Pi CLI. See [the fixture instructions](tests/fixtures/pi-cli/README.md).

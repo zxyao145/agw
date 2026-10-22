@@ -151,7 +151,9 @@ internal sealed class FakeExternalAgentCli
     private string WriteExecutable(string name, string script)
     {
         var path = Path.Combine(_directory, name);
-        File.WriteAllText(path, script);
+        // 原始字符串的换行跟随源文件；shebang 行末的 CR 会被 env 当作解释器名称的一部分。
+        // Raw string line endings follow the source file; a CR after the shebang becomes part of the interpreter name for env.
+        File.WriteAllText(path, script.ReplaceLineEndings("\n"));
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

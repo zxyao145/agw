@@ -54,9 +54,7 @@ internal sealed class PiProcessTransport : IPiProcessTransport
             throw new InvalidOperationException("Pi process transport has already been started.");
         }
 
-        var executable = await CommandUtil.ResolvePiPathAsync(_agentOptions.PiPathOverride, cancellationToken);
-        var arguments = PiProcessArguments.Build(_sessionOptions, _resumeSessionId);
-        var startInfo = CreateStartInfo(executable, arguments);
+        var startInfo = await CreateStartInfoAsync(cancellationToken).ConfigureAwait(false);
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         if (!process.Start())
         {
@@ -175,9 +173,27 @@ internal sealed class PiProcessTransport : IPiProcessTransport
         // unmanaged resource until AvailableWaitHandle is requested, so leaving this private gate undisposed avoids that race.
     }
 
-    private ProcessStartInfo CreateStartInfo(string executable, IReadOnlyList<string> arguments)
+    /// <summary>
+    /// 准备 Pi 的程序入口、参数、工作目录和环境。
+    /// Prepares the Pi executable, arguments, working directory, and environment.
+    /// </summary>
+    internal async Task<ProcessStartInfo> CreateStartInfoAsync(CancellationToken cancellationToken)
     {
-        var target = PiProcessTarget.Resolve(executable, arguments, OperatingSystem.IsWindows());
+        // 每次启动使用独立的环境快照，查找和子进程共用这一份环境。
+        // Each start uses its own environment snapshot, shared by lookup and the child process.
+        var environment = PiProcessEnvironment.Build(_agentOptions, _sessionOptions);
+        var command = await CommandUtil.ResolvePiPathAsync(
+            _agentOptions.PiPathOverride,
+            environment,
+            cancellationToken
+        );
+        if (command.SearchPath is { } searchPath)
+        {
+            environment["PATH"] = searchPath;
+        }
+
+        var arguments = PiProcessArguments.Build(_sessionOptions, _resumeSessionId);
+        var target = PiProcessTarget.Resolve(command.Path!, arguments, OperatingSystem.IsWindows());
         var startInfo = new ProcessStartInfo
         {
             FileName = target.FileName,
@@ -196,7 +212,7 @@ internal sealed class PiProcessTransport : IPiProcessTransport
         }
 
         startInfo.Environment.Clear();
-        foreach (var (key, value) in PiProcessEnvironment.Build(_agentOptions, _sessionOptions))
+        foreach (var (key, value) in environment)
         {
             startInfo.Environment[key] = value;
         }

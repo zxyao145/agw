@@ -856,7 +856,12 @@ public class AgentRuntimeFactoryCompositionTests
         try
         {
             var options = BuildCodexAIAgentOptions(
-                JsonUtil.Serialize(new CodexAIAgentOptions()),
+                JsonUtil.Serialize(
+                    new CodexAIAgentOptions
+                    {
+                        CodexOptions = new OpenAI.CodexSdk.CodexOptions { CodexPathOverride = "/opt/codex/bin/codex" },
+                    }
+                ),
                 workspace: null,
                 threadId: null,
                 resume: false,
@@ -867,11 +872,93 @@ public class AgentRuntimeFactoryCompositionTests
             Assert.NotNull(options.CodexOptions.Env);
             Assert.Equal("inherited", options.CodexOptions.Env[inheritedEnvName]);
             Assert.Equal("secret", options.CodexOptions.Env["AGW_TOKEN"]);
+            Assert.Equal("/opt/codex/bin/codex", options.CodexOptions.CodexPathOverride);
         }
         finally
         {
             Environment.SetEnvironmentVariable(inheritedEnvName, null);
         }
+    }
+
+    [Fact]
+    public void BuildCodexAIAgentOptions_WhenEnvConfigured_UsesEnvAsCompleteEnvironment()
+    {
+        const string hostOnlyEnvName = "AGW_TEST_HOST_ONLY_ENV";
+        Environment.SetEnvironmentVariable(hostOnlyEnvName, "host");
+
+        try
+        {
+            var options = BuildCodexAIAgentOptions(
+                JsonUtil.Serialize(
+                    new CodexAIAgentOptions
+                    {
+                        CodexOptions = new OpenAI.CodexSdk.CodexOptions
+                        {
+                            CodexPathOverride = "/opt/codex/bin/codex",
+                            BaseUrl = "https://codex.invalid/v1",
+                            ApiKey = "configured-key",
+                            Env = new Dictionary<string, string>
+                            {
+                                ["PATH"] = "/usr/bin:/bin",
+                                ["SHELL"] = "/bin/zsh",
+                                ["SHARED"] = "configured",
+                            },
+                        },
+                    }
+                ),
+                workspace: null,
+                threadId: null,
+                resume: false,
+                new Dictionary<string, string> { ["SHARED"] = "execution", ["AGW_TOKEN"] = "secret" }
+            );
+
+            Assert.NotNull(options);
+            var codexOptions = options.CodexOptions;
+            // 已配置的 Env 是完整基础环境，宿主独有变量不会补入。
+            // The configured Env is the complete base environment; host-only variables are not added.
+            Assert.Equal(
+                new Dictionary<string, string>
+                {
+                    ["PATH"] = "/usr/bin:/bin",
+                    ["SHELL"] = "/bin/zsh",
+                    ["SHARED"] = "execution",
+                    ["AGW_TOKEN"] = "secret",
+                },
+                codexOptions.Env
+            );
+            Assert.Equal("/opt/codex/bin/codex", codexOptions.CodexPathOverride);
+            Assert.Equal("https://codex.invalid/v1", codexOptions.BaseUrl);
+            Assert.Equal("configured-key", codexOptions.ApiKey);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(hostOnlyEnvName, null);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BuildCodexAIAgentOptions_WhenEnvironmentVariablesMissing_KeepsEnvForSdkInheritance(bool emptyVariables)
+    {
+        var options = BuildCodexAIAgentOptions(
+            JsonUtil.Serialize(
+                new CodexAIAgentOptions
+                {
+                    CodexOptions = new OpenAI.CodexSdk.CodexOptions { CodexPathOverride = "/opt/codex/bin/codex" },
+                }
+            ),
+            workspace: null,
+            threadId: null,
+            resume: false,
+            emptyVariables ? new Dictionary<string, string>() : null
+        );
+
+        Assert.NotNull(options);
+        // Env 保持 null，由 SDK 复制宿主环境用于查找和启动。
+        // Env stays null so the SDK copies the host environment for lookup and startup.
+        Assert.Null(options.CodexOptions.Env);
+        Assert.Equal("/opt/codex/bin/codex", options.CodexOptions.CodexPathOverride);
     }
 
     [Fact]
