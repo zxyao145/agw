@@ -16,6 +16,7 @@ import type {
 } from "../api";
 import { createExtensionError, type RpcEndpoint } from "../rpc";
 import { openBinaryDocument, openTextDocument } from "./documents";
+import { applyTheme } from "./theme";
 
 export type EventRouter = Map<string, Set<(data: unknown) => void>>;
 
@@ -41,14 +42,6 @@ function fileKind(uri: string): FileKind {
 
 function decodeText(data: Uint8Array): string {
   return new TextDecoder("utf-8", { ignoreBOM: false }).decode(data);
-}
-
-/** 把主题变量与 dark class 写到 document 上。Applies theme variables and the dark class to the document. */
-function applyTheme(theme: ThemeInfo): void {
-  const root = document.documentElement;
-  for (const [name, value] of Object.entries(theme.tokens)) root.style.setProperty(name, value);
-  root.classList.toggle("dark", theme.kind === "dark");
-  root.style.colorScheme = theme.kind;
 }
 
 export function createExtensionApi(
@@ -240,8 +233,10 @@ export function createExtensionApi(
       onDidChange: (listener) =>
         subscribe(router, "theme.changed", (data) => listener(data as ThemeInfo)),
       apply: () => {
-        applyTheme(theme);
-        return subscribe(router, "theme.changed", (data) => applyTheme(data as ThemeInfo));
+        applyTheme(theme, document);
+        return subscribe(router, "theme.changed", (data) =>
+          applyTheme(data as ThemeInfo, document),
+        );
       },
     },
   };

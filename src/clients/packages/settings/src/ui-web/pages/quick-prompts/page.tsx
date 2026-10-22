@@ -148,7 +148,7 @@ export default function QuickPromptsPage() {
                 <TabsTrigger value="system" className="gap-2">
                   System prompts
                   {!canManageSystem && (
-                    <Badge variant="outline" className="px-1.5 py-0 text-[10px] uppercase">
+                    <Badge variant="outline" className="px-1.5 py-0 text-2xs uppercase">
                       Read only
                     </Badge>
                   )}
@@ -220,12 +220,12 @@ export default function QuickPromptsPage() {
                     >
                       <GripVertical className="h-4 w-4" />
                     </span>
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium tabular-nums text-muted-foreground">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-11 font-medium tabular-nums text-muted-foreground">
                       {index + 1}
                     </span>
                     <Badge
                       variant="outline"
-                      className="h-5 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                      className="min-h-5 px-1.5 text-2xs leading-none font-semibold uppercase tracking-wide text-muted-foreground"
                     >
                       {item.kind}
                     </Badge>

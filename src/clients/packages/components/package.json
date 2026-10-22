@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./query": "./src/ui-web/query.ts",
-    "./ui-tokens.css": "./src/ui-tokens/tokens.css"
+    "./ui-tokens.css": "./src/ui-tokens/tokens.css",
+    "./typography.css": "./src/ui-tokens/typography.css"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

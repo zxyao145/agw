@@ -53,6 +53,13 @@ function slashMenu(): string[] {
   );
 }
 
+test("the editing area uses the shared Markdown typography in document density", async () => {
+  const { container } = await mount("typography.md", "# Title\n\nText.\n");
+  const editorElement = container.querySelector(".ProseMirror")!;
+  assert.ok(editorElement.classList.contains("agw-prose"));
+  assert.equal(editorElement.getAttribute("data-density"), "document");
+});
+
 test("the / menu filters by the typed text and is driven by the arrow keys and Enter", async () => {
   const { document } = await mount("slash.md", "First.\n");
   const { editor } = document;

@@ -8,6 +8,7 @@ import type {
   DesktopSettingsUpdate,
   ServerProfile,
 } from "@desktop/shared/contracts";
+import { DEFAULT_APPEARANCE } from "@desktop/shared/appearance";
 import { configureApiRuntime, resetApiRuntime } from "@agw/api";
 import {
   ConversationImagePlatformProvider,
@@ -29,6 +30,7 @@ import {
   type ServerInfo,
 } from "./runtime-model";
 import { ServerQueryClientRegistry } from "./query-client-registry";
+import { AppearanceProvider } from "./appearance/appearance-provider";
 
 declare global {
   interface Window {
@@ -398,20 +400,22 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
 
   return (
     <DesktopRuntimeContext.Provider value={value}>
-      <QueryClientProvider client={queryClient}>
-        <ExecutionPlatformProvider
-          serverId={activeProfile?.id ?? "browser"}
-          onActiveCountChange={handleActiveCountChange}
-        >
-          <ConversationImagePlatformProvider
-            onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+      <AppearanceProvider appearance={runtimeState?.settings.appearance ?? DEFAULT_APPEARANCE}>
+        <QueryClientProvider client={queryClient}>
+          <ExecutionPlatformProvider
+            serverId={activeProfile?.id ?? "browser"}
+            onActiveCountChange={handleActiveCountChange}
           >
-            <MarkdownRendererProvider renderer={TiptapMarkdown}>
-              {children}
-            </MarkdownRendererProvider>
-          </ConversationImagePlatformProvider>
-        </ExecutionPlatformProvider>
-      </QueryClientProvider>
+            <ConversationImagePlatformProvider
+              onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+            >
+              <MarkdownRendererProvider renderer={TiptapMarkdown}>
+                {children}
+              </MarkdownRendererProvider>
+            </ConversationImagePlatformProvider>
+          </ExecutionPlatformProvider>
+        </QueryClientProvider>
+      </AppearanceProvider>
     </DesktopRuntimeContext.Provider>
   );
 }

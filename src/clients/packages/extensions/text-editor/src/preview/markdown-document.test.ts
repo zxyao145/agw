@@ -118,6 +118,20 @@ function paragraph(viewer: Viewer): string | null {
   return viewer.container.querySelector("article.markdown-body p")?.textContent ?? null;
 }
 
+test("the Markdown article uses the shared Markdown typography in document density", async () => {
+  files.set(`${ROOT}typography.md`, { text: "# Title" });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("typography.md");
+    await until(viewer, () => heading(viewer) === "Title", "the content");
+    const article = viewer.container.querySelector("article.markdown-body")!;
+    assert.ok(article.classList.contains("agw-prose"));
+    assert.equal(article.getAttribute("data-density"), "document");
+  } finally {
+    await viewer.unmount();
+  }
+});
+
 test("every show reads the file again, same file included, and keeps the content until the read ends", async () => {
   files.set(`${ROOT}notes.md`, { text: "# First" });
   files.set(`${ROOT}other.md`, { text: "# Other" });

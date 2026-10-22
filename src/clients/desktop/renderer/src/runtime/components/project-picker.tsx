@@ -188,7 +188,7 @@ export function DesktopProjectPicker({
             >
               <Plus className="size-3.5" />
             </button>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-11 font-medium text-muted-foreground">
               {projects.length}
             </span>
           </div>

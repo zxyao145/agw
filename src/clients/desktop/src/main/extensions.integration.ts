@@ -8,6 +8,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { basename, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import {
   app,
   BrowserWindow,
@@ -19,6 +20,8 @@ import {
 } from "electron";
 import iconv from "iconv-lite";
 
+import { DEFAULT_APPEARANCE } from "../shared/appearance";
+import type { AppearanceSettings } from "../shared/contracts";
 import { config } from "./extensions-integration-setup";
 import { extensionPartition } from "./extensions/extension-session";
 
@@ -290,6 +293,20 @@ async function goToChat(): Promise<void> {
   if (await evalHost<boolean>("location.pathname.startsWith('/desktop/chat')")) return;
   await clickHost("a.agw-back-button");
   await untilHost("Boolean(document.querySelector('.agw-ribbon'))", "the chat workspace");
+}
+
+/**
+ * 通过 "Back to chat" 回到聊天页，并断言地址是测试 Project 的 Chat。
+ * Goes back through "Back to chat" and asserts the URL is the test Project's Chat.
+ */
+async function backToTestProjectChat(): Promise<void> {
+  await goToChat();
+  assert.deepEqual(
+    await evalHost<{ path: string; projectId: string | null }>(
+      `({ path: location.pathname, projectId: new URLSearchParams(location.search).get("projectId") })`,
+    ),
+    { path: "/desktop/chat/", projectId: config.projectId },
+  );
 }
 
 async function extensionStatus(id: string): Promise<string | null> {
@@ -686,6 +703,11 @@ async function leaveChatRoute(): Promise<void> {
   await goToChat();
   await clickHost('a[aria-label="Settings"]');
   await untilHost("Boolean(document.querySelector('.agw-settings-nav'))", "Settings");
+  assert.equal(
+    await evalHost<string>(`location.pathname`),
+    "/settings/appearance/",
+    "the Settings button opens the Appearance page",
+  );
   await until(
     () => frames().every((frame) => frame.kind === "background" || !frame.view.getVisible()),
     "extension views to be hidden",
@@ -2332,11 +2354,22 @@ function editBlock(text: string, tag = "*"): string {
   return `[...document.querySelectorAll(".ProseMirror > ${tag}")].find((block) => block.textContent.includes(${JSON.stringify(text)}))`;
 }
 
-/** frame 中元素的中心点，以及这一点是否点到元素本身。An element's center in a frame and whether that point hits it. */
+/**
+ * 等待 frame 渲染完下一帧：requestAnimationFrame 中排入的任务在这一帧的布局与 ResizeObserver 回调之后运行，
+ * 读取的是这一帧渲染的布局（例如 floating-ui 在下一帧修正的弹出层位置）。
+ * Waits until the frame has rendered its next frame: a task queued from requestAnimationFrame runs after that frame's
+ * layout and ResizeObserver callbacks, so reads see the layout of that frame (for example a popup position floating-ui
+ * corrects in the next frame).
+ */
+const NEXT_RENDERED_FRAME = `new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)))`;
+
+/** 渲染完下一帧后 frame 中元素的中心点，以及这一点是否点到元素本身。An element's center in a frame once the frame has
+ *  rendered its next frame, and whether that point hits it. */
 function centerOf(frame: FrameHandle, element: string) {
   return evalFrame<{ x: number; y: number; hit: boolean } | null>(
     frame,
-    `(() => {
+    `(async () => {
+      await ${NEXT_RENDERED_FRAME};
       const element = ${element};
       if (!element) return null;
       const rect = element.getBoundingClientRect();
@@ -2354,6 +2387,30 @@ async function clickInFrame(
   element: string,
   modifiers: ("meta" | "control")[] = [],
 ): Promise<void> {
+  // 排版规范使内容变高，元素可能在滚动区域之外，先滚动到可见位置。弹出层可能先显示在临时位置，到下一帧才修正（例如
+  // `/` 菜单先按空容器定位在光标下方，floating-ui 的 autoUpdate 在下一帧把它移到光标上方）；对临时位置滚动会滚动整个页面，
+  // 点击会点到别的项目。所以元素出现后等一帧渲染完再滚动，命中检查也在一帧渲染完后进行（centerOf）。
+  // The typography makes content taller, so the element may lie outside the scroll area; scroll it into view first. A
+  // popup can first show at a provisional position that is corrected in the next frame (for example the `/` menu is
+  // first placed below the cursor for its empty container, and floating-ui's autoUpdate moves it above the cursor in
+  // the next frame); scrolling to the provisional position scrolls the whole page and the click hits another item. So
+  // the scroll waits for a rendered frame once the element exists, and the hit test also runs after a rendered frame
+  // (centerOf).
+  await until(
+    () =>
+      evalFrame<boolean>(
+        frame,
+        `(async () => {
+          if (!(${element})) return false;
+          await ${NEXT_RENDERED_FRAME};
+          const element = ${element};
+          if (!element) return false;
+          element.scrollIntoView({ block: "center" });
+          return true;
+        })()`,
+      ),
+    `${element} to exist`,
+  );
   const point = await until(async () => {
     const center = await centerOf(frame, element);
     return center?.hit ? center : null;
@@ -2767,9 +2824,9 @@ async function textEditorMarkdown(): Promise<void> {
   // 7：Code 中修改并保存，回到 Edit 时 onShow 读取新内容。Code edits and saves; back in Edit, onShow reads it.
   await selectViewer(CODE_VIEWER);
   // Monaco 只渲染可见的行，这里检查文件前部保存过的 paragraph。Monaco renders only visible lines, so the saved
-  // paragraph near the start of the file is checked.
+  // paragraph near the start of the file is checked. 快捷键要等 Monaco 获得焦点后再按下。The shortcut waits until Monaco has focus.
   const code = await codeShowing(
-    `${CODE_TEXT}.includes("at the end. Typed in Edit.")`,
+    `${CODE_TEXT}.includes("at the end. Typed in Edit.") && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`,
     "the saved edit.md in Code",
   );
   moveCodeCursor(code, "end");
@@ -2868,6 +2925,1021 @@ async function dragBlock(
   } finally {
     debuggerApi.detach();
   }
+}
+
+/**
+ * Edit 与 Preview 使用共用排版：默认设置下按计算样式检查任务项、表格单元格、引用链接、拖动手柄菜单、引用块中的代码块与正文。
+ * Edit and Preview use the shared typography: at the default settings the computed styles of task items, table cells,
+ * a reference link, the drag-handle menu, a code block in a blockquote and body text are checked.
+ */
+async function textEditorTypography(): Promise<void> {
+  await openFileInTree("notes/typography.md");
+  await selectViewer(EDIT_VIEWER);
+  const edit = await editShowing(`Boolean(${editBlock("Top paragraph", "p")})`, "typography.md");
+  const styles = await evalFrame<Record<string, unknown>>(
+    edit,
+    `(() => {
+      const root = document.querySelector(".ProseMirror");
+      const center = (element) => { const rect = element.getBoundingClientRect(); return rect.top + rect.height / 2; };
+      const item = [...root.querySelectorAll("li.task-item")].find((candidate) => candidate.textContent.includes("first task"));
+      const link = [...root.querySelectorAll("a")].find((anchor) => anchor.textContent === "typography link");
+      const margins = (element) => { const style = getComputedStyle(element); return [style.marginTop, style.marginBottom]; };
+      const paragraph = root.querySelector(":scope > p");
+      return {
+        rootClass: root.className.includes("agw-prose") && root.getAttribute("data-density") === "document",
+        taskOffset: Math.abs(center(item.querySelector("input[type=checkbox]")) - center(item.querySelector(".task-content > p"))),
+        cellMargins: [...root.querySelectorAll("th > p, td > p")].map(margins),
+        linkDecoration: link ? getComputedStyle(link).textDecorationLine : null,
+        quotedCodeMarginTop: getComputedStyle(root.querySelector("blockquote > .code-block")).marginTop,
+        paragraphSize: getComputedStyle(paragraph).fontSize,
+        paragraphLineHeight: getComputedStyle(paragraph).lineHeight,
+      };
+    })()`,
+  );
+  assert.ok(styles.rootClass, "the editing area carries agw-prose and the document density");
+  assert.ok(
+    (styles.taskOffset as number) <= 1,
+    `the task text center is ${styles.taskOffset}px from the checkbox center`,
+  );
+  const cells = styles.cellMargins as string[][];
+  assert.ok(cells.length >= 4, `table cell paragraphs: ${cells.length}`);
+  assert.deepEqual(
+    cells.flat().filter((margin) => margin !== "0px"),
+    [],
+    "table cell paragraphs have no margin",
+  );
+  assert.ok(String(styles.linkDecoration).includes("underline"), `link: ${styles.linkDecoration}`);
+  assert.equal(styles.quotedCodeMarginTop, "0px");
+  assert.equal(styles.paragraphSize, "16px");
+  assert.equal(styles.paragraphLineHeight, "28px");
+
+  // 悬停到块上，点击拖动手柄打开 Turn into 菜单。Hover the block and click the drag handle to open the Turn into menu.
+  const block = await until(
+    () => centerOf(edit, editBlock("Top paragraph", "p")),
+    "the paragraph to hover",
+  );
+  edit.view.webContents.sendInputEvent({
+    type: "mouseMove",
+    x: Math.round(block.x),
+    y: Math.round(block.y),
+  });
+  await clickInFrame(edit, `document.querySelector(".drag-handle .chrome-button")`);
+  await until(
+    () => evalFrame<boolean>(edit, `Boolean(document.querySelector(".drag-handle .popup-menu"))`),
+    "the drag-handle menu",
+  );
+  assert.equal(
+    await evalFrame<string>(
+      edit,
+      `getComputedStyle(document.querySelector(".drag-handle .popup-menu")).fontSize`,
+    ),
+    "14px",
+  );
+  pass(
+    "Edit computes the shared typography: aligned task items, margin-free cell paragraphs, underlined reference links, 14px menus, a flush code block in a quote, 16px/28px text",
+  );
+
+  await selectPreview();
+  const preview = await untilViewerFrame("text-editor", "preview");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `document.querySelector("article.markdown-body h1")?.textContent === "Typography sample"`,
+      ),
+    "typography.md in Preview",
+  );
+  assert.deepEqual(
+    await evalFrame(
+      preview,
+      `(() => {
+        const article = document.querySelector("article.markdown-body");
+        return [
+          getComputedStyle(article.querySelector(":scope > p")).fontSize,
+          getComputedStyle(article.querySelector("h1")).fontSize,
+        ];
+      })()`,
+    ),
+    ["16px", "28px"],
+  );
+  pass("Preview computes 16px paragraphs and 28px level 1 headings at the default settings");
+}
+
+/**
+ * first-line.md 中的块与各块已知的第一行：文字块选取第一个文字的第一个字符，代码块选取标题栏的语言选择框，分隔线选取自身的外框。
+ * `line` 在 frame 中求值，可以使用 `block` 与 `firstCharacter`。
+ * The blocks of first-line.md and each block's known first line: text blocks use the first character of their first
+ * text, the code block its header's language select, the rule its own box. `line` is evaluated in the frame and may
+ * use `block` and `firstCharacter`.
+ */
+const FIRST_LINE_BLOCKS: { name: string; block: string; line: string }[] = [
+  {
+    name: "front matter",
+    block: `document.querySelector('.ProseMirror > .raw-block[data-kind="front-matter"]')`,
+    line: `firstCharacter(block.querySelector(".raw-block-label"))`,
+  },
+  {
+    name: "paragraph",
+    block: editBlock("Paragraph line", "p"),
+    line: "firstCharacter(block)",
+  },
+  { name: "H1", block: editBlock("Level one", "h1"), line: "firstCharacter(block)" },
+  { name: "H3", block: editBlock("Level three", "h3"), line: "firstCharacter(block)" },
+  {
+    name: "list item",
+    block: `[...document.querySelectorAll(".ProseMirror > ul > li")].find((item) => item.textContent === "Bullet item")`,
+    line: `firstCharacter(block.querySelector("p"))`,
+  },
+  {
+    name: "task item",
+    block: `document.querySelector(".ProseMirror > ul > li.task-item")`,
+    line: `firstCharacter(block.querySelector(".task-content > p"))`,
+  },
+  {
+    name: "blockquote",
+    block: editBlock("Quoted line", "blockquote"),
+    line: `firstCharacter(block.querySelector("p"))`,
+  },
+  {
+    name: "code block",
+    block: editBlock("const line = 1;", "div.code-block"),
+    line: `block.querySelector(".code-block-header select").getBoundingClientRect()`,
+  },
+  {
+    name: "table",
+    block: editBlock("Cell name", ".tableWrapper"),
+    line: `firstCharacter(block.querySelector("th > p"))`,
+  },
+  {
+    name: "image placeholder",
+    block: `document.querySelector(".ProseMirror > p .image-placeholder")?.closest(".ProseMirror > p")`,
+    line: `firstCharacter(block.querySelector(".image-placeholder-alt"))`,
+  },
+  {
+    name: "horizontal rule",
+    block: `document.querySelector(".ProseMirror > hr")`,
+    line: "block.getBoundingClientRect()",
+  },
+  {
+    name: "HTML block",
+    block: `document.querySelector('.ProseMirror > .raw-block[data-kind="html"]')`,
+    line: `firstCharacter(block.querySelector(".raw-block-label"))`,
+  },
+];
+
+const DRAG_HANDLE = `document.querySelector(".drag-handle")`;
+
+/**
+ * 依次用鼠标悬停 first-line.md 的每个块，检查手柄中心与块的第一行中心相差不超过 1px，所有手柄的 x 与 paragraph 的相同。
+ * Hovers every block of first-line.md with the mouse and checks that the handle center is within 1px of the block's
+ * first-line center and that every handle has the paragraph handle's x.
+ */
+async function checkFirstLineHandles(frame: FrameHandle, size: string): Promise<void> {
+  const debuggerApi = frame.view.webContents.debugger;
+  debuggerApi.attach("1.3");
+  try {
+    const moveMouse = (point: { x: number; y: number }) =>
+      debuggerApi.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+    // 顶部条在编辑区之外：滚动期间鼠标停留在这里，不会悬停到别的块上。The top bar lies outside the editing area; the mouse
+    // rests there while scrolling, so it hovers no other block.
+    const outside = await evalFrame<{ x: number; y: number }>(
+      frame,
+      `(() => { const rect = document.querySelector(".edit-toolbar").getBoundingClientRect(); return { x: rect.left + 8, y: rect.top + rect.height / 2 }; })()`,
+    );
+    const results: { name: string; handleX: number; handleCenter: number; lineCenter: number }[] =
+      [];
+    for (const { name, block, line } of FIRST_LINE_BLOCKS) {
+      await moveMouse(outside);
+      const before = await evalFrame<string>(frame, `${DRAG_HANDLE}.style.top`);
+      // 鼠标在块的水平中点、顶部之下 2px；只有 1px 高的分隔线选取它的垂直中点。The mouse goes to the block's horizontal
+      // middle, 2px below its top; the 1px high rule takes its vertical middle.
+      const point = await evalFrame<{ x: number; y: number }>(
+        frame,
+        `(() => {
+          const block = ${block};
+          block.scrollIntoView({ block: "center" });
+          const rect = block.getBoundingClientRect();
+          return { x: rect.left + rect.width / 2, y: rect.top + Math.min(2, rect.height / 2) };
+        })()`,
+      );
+      await moveMouse(point);
+      // 手柄切换到这个块时 top 改变。The handle's top changes when it moves to this block.
+      await until(
+        () =>
+          evalFrame<boolean>(
+            frame,
+            `getComputedStyle(${DRAG_HANDLE}).visibility === "visible" && ${DRAG_HANDLE}.style.top !== ${JSON.stringify(before)}`,
+          ),
+        `the drag handle next to the ${name} at ${size}`,
+        20_000,
+        async () =>
+          `${await evalFrame<string>(
+            frame,
+            `JSON.stringify({ point: ${JSON.stringify(point)}, before: ${JSON.stringify(before)}, style: ${DRAG_HANDLE}.getAttribute("style"), block: (${block}).getBoundingClientRect() })`,
+          )}; measured before: ${JSON.stringify(results)}`,
+      );
+      const measured = await evalFrame<{
+        handleX: number;
+        handleCenter: number;
+        lineCenter: number;
+      }>(
+        frame,
+        `(() => {
+          const firstCharacter = (element) => {
+            const text = element.firstChild;
+            if (!(text instanceof Text)) throw new Error("The element does not start with text.");
+            const range = document.createRange();
+            range.setStart(text, 0);
+            range.setEnd(text, 1);
+            return range.getClientRects()[0];
+          };
+          const block = ${block};
+          const line = ${line};
+          const handle = ${DRAG_HANDLE}.getBoundingClientRect();
+          return { handleX: handle.left, handleCenter: handle.top + handle.height / 2, lineCenter: line.top + line.height / 2 };
+        })()`,
+      );
+      results.push({ name, ...measured });
+    }
+    console.log(
+      `drag handle first lines at ${size}: ${JSON.stringify(results.map((result) => ({ ...result, offset: round(result.handleCenter - result.lineCenter) })))}`,
+    );
+    assert.deepEqual(
+      results
+        .filter((result) => Math.abs(result.handleCenter - result.lineCenter) > 1)
+        .map((result) => `${result.name} ${round(result.handleCenter - result.lineCenter)}px`),
+      [],
+      `drag handles off the first line at ${size}`,
+    );
+    const paragraphX = results.find((result) => result.name === "paragraph")!.handleX;
+    assert.deepEqual(
+      results
+        .filter((result) => result.handleX !== paragraphX)
+        .map((result) => `${result.name} x ${result.handleX}`),
+      [],
+      `drag handles outside the paragraph handle's column (x ${paragraphX}) at ${size}`,
+    );
+  } finally {
+    debuggerApi.detach();
+  }
+}
+
+/**
+ * 在 Appearance 页面保存字号设置，等待 settings.json 与宿主字号更新。
+ * Saves font sizes on the Appearance page and waits for settings.json and the host font size to update.
+ */
+async function saveAppearance(appearance: AppearanceSettings, action: () => Promise<void>) {
+  await openSettingsPage("/settings/appearance/");
+  await untilHost(
+    `Boolean(document.getElementById("appearance-base-font-size"))`,
+    "the Appearance page",
+  );
+  await action();
+  const settingsPath = join(config.userData, "settings.json");
+  await until(
+    async () =>
+      JSON.stringify(
+        (await readJson<{ appearance: AppearanceSettings }>(settingsPath)).appearance,
+      ) === JSON.stringify(appearance),
+    `the appearance ${JSON.stringify(appearance)} in settings.json`,
+  );
+  await untilHost(
+    `getComputedStyle(document.documentElement).fontSize === "${appearance.baseFontSize}px"`,
+    `the ${appearance.baseFontSize}px host font size`,
+  );
+}
+
+async function openFirstLine(): Promise<FrameHandle> {
+  await openFileInTree("first-line.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for first-line.md");
+  return editShowing(
+    `Boolean(${editBlock("Paragraph line", "p")}) && Boolean(document.querySelector(".ProseMirror .image-placeholder-alt"))`,
+    "first-line.md in Edit",
+  );
+}
+
+/**
+ * 拖动手柄垂直居中在被悬停块的第一行上（设计 5），默认字号与基础字号 20 下各检查一次，最后恢复默认字号。
+ * The drag handle is vertically centered on the hovered block's first line (design section 5), checked at the default
+ * size and at base size 20; the default sizes are restored at the end.
+ */
+async function dragHandleFirstLine(): Promise<void> {
+  const edit = await openFirstLine();
+  // 排版检查在同一个编辑器中留下打开的手柄菜单，菜单打开时手柄锁定；Escape 关闭菜单。The typography check leaves the
+  // handle menu open in the same editor, which locks the handle; Escape closes the menu.
+  pressKey(edit, "Escape");
+  await until(
+    () => evalFrame<boolean>(edit, `!document.querySelector(".drag-handle .popup-menu")`),
+    "the drag-handle menu to close",
+  );
+  await checkFirstLineHandles(edit, "the default sizes");
+
+  const larger: AppearanceSettings = { ...DEFAULT_APPEARANCE, baseFontSize: 20 };
+  await saveAppearance(larger, async () => {
+    await evalHost(`(() => {
+      const select = document.getElementById("appearance-base-font-size");
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, "20");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+  });
+  const largerEdit = await openFirstLine();
+  await until(
+    () =>
+      evalFrame<boolean>(
+        largerEdit,
+        `getComputedStyle(${editBlock("Paragraph line", "p")}).fontSize === "20px"`,
+      ),
+    "20px paragraphs in Edit",
+  );
+  await checkFirstLineHandles(largerEdit, "base size 20");
+
+  await saveAppearance(DEFAULT_APPEARANCE, () => clickText("Reset all"));
+  await goToChat();
+  pass(
+    "the drag handle is centered on the first line of every block kind, in one column, at the default sizes and at base size 20",
+  );
+}
+
+/**
+ * 当前页面上每个拥有自己文字节点的可见元素（inline 元素改为检查最近的非 inline 祖先）中，文字被截断的元素。
+ * 排除 `text-overflow: ellipsis`、可滚动容器、视觉隐藏元素，以及 textarea、input、select、pre 内的内容。
+ * Every visible element of the current page that owns a text node (an inline element is tested through its nearest
+ * non-inline ancestor) whose text is truncated. Excluded: `text-overflow: ellipsis`, scroll containers, visually hidden
+ * elements, and the content of textarea, input, select and pre.
+ */
+const TRUNCATED_TEXT = `(() => {
+  const describe = (element) => {
+    const path = [];
+    for (let node = element; node && node !== document.body && path.length < 4; node = node.parentElement) {
+      const classes = [...node.classList].slice(0, 3).map((name) => "." + name).join("");
+      path.unshift(node.tagName.toLowerCase() + classes);
+    }
+    return path.join(" > ");
+  };
+  const ownsText = (element) =>
+    [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== "");
+  const tested = new Set();
+  for (const element of document.body.querySelectorAll("*")) {
+    if (!ownsText(element)) continue;
+    if (element.closest("script, style, textarea, input, select, pre, svg")) continue;
+    let target = element;
+    while (target && ["inline", "contents"].includes(getComputedStyle(target).display)) target = target.parentElement;
+    if (!target || target === document.body || target === document.documentElement) continue;
+    tested.add(target);
+  }
+  const hidden = (element) => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0 || style.visibility === "hidden") return true;
+    if (rect.width <= 1 && style.overflow === "hidden") return true;
+    return (style.clip !== "auto" && style.clip !== "") || (style.clipPath !== "none" && style.clipPath !== "");
+  };
+  const scrolls = (style) => ["auto", "scroll"].includes(style.overflowX) || ["auto", "scroll"].includes(style.overflowY);
+  const checked = [...tested].filter((element) => !hidden(element));
+  const truncated = checked
+    .filter((element) => {
+      const style = getComputedStyle(element);
+      if (style.textOverflow === "ellipsis" || scrolls(style)) return false;
+      // overflow-y 不是 visible 时内容被裁剪，超出 1px 即报告；visible 时内容溢出并可能盖住下方元素，超出半个行高才报告，
+      // 这样 leading-none 标题约 2px 的字形溢出不计入。
+      // With overflow-y not visible the content is clipped, so more than 1px is reported; with visible the content spills
+      // and may cover what is below, so half a line height is reported, which skips the ~2px glyph overflow of a
+      // leading-none title.
+      const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize);
+      const spill = element.scrollHeight - element.clientHeight;
+      const verticalSpill = style.overflowY === "visible" ? spill >= 0.5 * lineHeight : spill > 1;
+      return element.scrollWidth > element.clientWidth + 1 || verticalSpill;
+    })
+    .map((element) => ({
+      selector: describe(element),
+      text: element.textContent.trim().slice(0, 60),
+      scroll: element.scrollWidth + "x" + element.scrollHeight,
+      client: element.clientWidth + "x" + element.clientHeight,
+    }));
+  return { checked: checked.length, truncated };
+})()`;
+
+type ScanResult = { checked: number; truncated: { selector: string; text: string }[] };
+
+/** 每个视图的扫描结果，在 hostScaling 结尾一起断言。The scan result of every view, asserted together at the end of hostScaling. */
+const scanResults: { view: string; checked: number; reported: ScanResult["truncated"] }[] = [];
+
+/** 扫描当前页面并记录结果，同时断言标题栏高度为 48。Scans the current page, records the result, and asserts the title bar is 48 high. */
+async function scanTruncation(view: string): Promise<void> {
+  const { checked, truncated } = await evalHost<ScanResult>(TRUNCATED_TEXT);
+  assert.ok(checked > 0, `${view} has no text elements to check`);
+  console.log(`SCAN ${view}: checked=${checked} reported=${truncated.length}`);
+  scanResults.push({ view, checked, reported: truncated });
+  assert.equal(
+    await evalHost<number>(
+      `document.querySelector(".agw-titlebar").getBoundingClientRect().height`,
+    ),
+    48,
+    `${view} title bar height`,
+  );
+}
+
+/** 依次打开 Settings 导航的每个页面并扫描。Opens every page of the Settings navigation in turn and scans it. */
+async function scanSettingsPages(suffix: string): Promise<number> {
+  const navLinks = `[...document.querySelectorAll(".agw-settings-nav section > a")]`;
+  if (!(await evalHost<boolean>(`Boolean(document.querySelector(".agw-settings-nav"))`))) {
+    await clickHost('a[aria-label="Settings"]');
+  }
+  await untilHost(`${navLinks}.length > 0`, "the Settings navigation");
+  const labels = await evalHost<string[]>(`${navLinks}.map((link) => link.textContent.trim())`);
+  for (const [index, label] of labels.entries()) {
+    await evalHost(`${navLinks}[${index}].click(); true`);
+    await untilHost(
+      `(() => {
+        const target = new URL(${navLinks}[${index}].href);
+        return location.pathname === target.pathname && location.hash === target.hash;
+      })()`,
+      `${label} to be shown`,
+    );
+    await delay(500);
+    await scanTruncation(`the Settings page ${label}${suffix}`);
+  }
+  return labels.length;
+}
+
+/** Quick prompts 页面中 `user` 徽标的高度。The height of the `user` badge on the Quick prompts page. */
+async function quickPromptBadgeHeight(): Promise<number> {
+  await openSettingsPage("/quick-prompts/");
+  const badge = `[...document.querySelectorAll('[data-slot="badge"]')].find((element) => element.textContent.trim() === "user")`;
+  await untilHost(`Boolean(${badge})`, "the user badge on Quick prompts");
+  return evalHost<number>(`${badge}.getBoundingClientRect().height`);
+}
+
+/** 通过 Host API 添加一个 Quick prompt，使列表行得以渲染。Adds one quick prompt through the Host API so its list row renders. */
+async function seedQuickPrompt(): Promise<void> {
+  const headers = {
+    accept: "application/json",
+    authorization: `Bearer ${config.firstToken}`,
+    "content-type": "application/json",
+  };
+  const manage = (await (
+    await fetch(`${config.hostUrl}/api/quick-prompts/manage`, { headers })
+  ).json()) as {
+    data: { userVersion?: number | null };
+  };
+  const response = await fetch(`${config.hostUrl}/api/quick-prompts?kind=user`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({
+      version: manage.data.userVersion ?? null,
+      items: [{ id: "scaling-check", label: "Scaling check", text: "Summarize the open file." }],
+    }),
+  });
+  assert.equal(response.ok, true, `PUT /api/quick-prompts -> ${response.status}`);
+}
+
+/**
+ * 基础字号 20 下，Chat、Files、每个 Settings 页面与服务器配置对话框没有被截断的文字，标题栏保持 48 高，
+ * macOS 红绿灯位置不变；最后恢复默认字号。
+ * At base size 20, Chat, Files, every Settings page and the server profile dialog show no truncated text, the title
+ * bar stays 48 high and the macOS traffic lights stay in place; the default sizes are restored at the end.
+ */
+async function hostScaling(): Promise<void> {
+  scanResults.length = 0;
+  await seedQuickPrompt();
+  await saveAppearance(
+    { baseFontSize: 20, chatFontSize: null },
+    chooseSize("appearance-base-font-size", "20"),
+  );
+
+  await openFileInTree("readme.md");
+  await untilHost(
+    `${viewerTab("text-editor:markdown")}?.getAttribute("aria-selected") === "true"`,
+    "the Edit tab",
+  );
+  // 对照：宽 20px 且隐藏溢出的按钮必须被扫描报告。Negative control: a 20px wide button with hidden overflow must be reported.
+  await evalHost(`(() => {
+    const control = document.createElement("button");
+    control.id = "truncation-control";
+    control.style.cssText = "width:20px;overflow:hidden;white-space:nowrap";
+    control.textContent = "Truncated control";
+    document.body.append(control);
+    const spill = document.createElement("div");
+    spill.id = "spill-control";
+    spill.style.cssText = "height:1.2em;width:60px";
+    spill.textContent = "Spilling control text that needs several lines to fit";
+    document.body.append(spill);
+    return true;
+  })()`);
+  const control = await evalHost<ScanResult>(TRUNCATED_TEXT);
+  await evalHost(
+    `document.getElementById("truncation-control").remove(); document.getElementById("spill-control").remove(); true`,
+  );
+  assert.ok(
+    control.truncated.some((entry) => entry.text === "Truncated control"),
+    `the scan reports the control button: ${JSON.stringify(control.truncated)}`,
+  );
+  assert.ok(
+    control.truncated.some((entry) => entry.text.startsWith("Spilling control text")),
+    `the scan reports the spilling control: ${JSON.stringify(control.truncated)}`,
+  );
+  await scanTruncation("the Files view with an open viewer tab");
+  await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.conversations"]');
+  await scanTruncation("the chat workspace");
+
+  const settingsPages = await scanSettingsPages("");
+  assert.equal(await quickPromptBadgeHeight(), 25, "the Quick prompts badge height at base 20");
+
+  await clickText("Servers", `document.querySelector(".agw-settings-nav")`);
+  await untilHost(
+    `Boolean(document.querySelector('button[aria-label="Add remote Server"]'))`,
+    "Servers",
+  );
+  await clickHost('button[aria-label="Add remote Server"]');
+  await untilHost(`Boolean(${OPEN_DIALOG})`, "the server profile dialog");
+  await delay(500);
+  await scanTruncation("the server profile dialog");
+  await pressEscape();
+  await untilHost(`!${OPEN_DIALOG}`, "the server profile dialog to close");
+
+  // 主窗口最小宽度下再检查一次 Chat 与 Settings 页面。Chat and the Settings pages are checked again at the main window's minimum width.
+  const window = hooks.mainWindow()!;
+  const [width, height] = window.getSize();
+  window.setSize(980, height);
+  await untilHost(`window.innerWidth <= 980`, "the minimum window width");
+  await goToChat();
+  await scanTruncation("the chat workspace at width 980");
+  await scanSettingsPages(" at width 980");
+  window.setSize(width, height);
+
+  if (process.platform === "darwin") {
+    assert.deepEqual(window.getWindowButtonPosition(), { x: 18, y: 18 });
+  }
+
+  await saveAppearance(DEFAULT_APPEARANCE, () => clickText("Reset all"));
+  assert.equal(await quickPromptBadgeHeight(), 20, "the Quick prompts badge height at base 16");
+  await goToChat();
+  const reported = scanResults.flatMap((result) =>
+    result.reported.map((entry) => ({ view: result.view, ...entry })),
+  );
+  assert.deepEqual(reported, [], `truncated text: ${JSON.stringify(reported, null, 2)}`);
+  pass(
+    `at base size 20, ${settingsPages} Settings pages (also at width 980), Chat, Files and the server profile dialog show no truncated text (${scanResults.length} views, ${scanResults.reduce((sum, result) => sum + result.checked, 0)} elements checked, the control button reported), the title bar is 48 high and the traffic lights stay at 18, 18`,
+  );
+}
+
+/** 在 Appearance 页面把下拉框设为 value 并触发 change。Sets a select on the Appearance page to value and fires change. */
+function chooseSize(id: string, value: string): () => Promise<void> {
+  return async () => {
+    await evalHost(`(() => {
+      const select = document.getElementById(${JSON.stringify(id)});
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, ${JSON.stringify(value)});
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+  };
+}
+
+/** Appearance 页面的 Settings 小标题（text-xs）的字号。The font size of the Appearance page's text-xs eyebrow. */
+function eyebrowSize(): Promise<string> {
+  return evalHost<string>(
+    `getComputedStyle([...document.querySelectorAll("p.text-xs")].find((element) => element.textContent === "Chat preview")).fontSize`,
+  );
+}
+
+const CHAT_PROSE = `.agw-prose[data-density="compact"]`;
+
+/** 回到 Chat 并打开 Markdown 对话。Goes back to Chat and opens the Markdown conversation. */
+async function showMarkdownReply(): Promise<void> {
+  await goToChat();
+  if (!(await evalHost<boolean>(`Boolean(${MARKDOWN_REPLY})`))) {
+    if (
+      !(await evalHost<boolean>(
+        `Boolean(document.querySelector('.agw-left-sidebar[data-view-id="agw.conversations"]'))`,
+      ))
+    ) {
+      await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.conversations"]');
+    }
+    await untilHost(`Boolean(${MARKDOWN_CONVERSATION})`, "the Markdown conversation in the list");
+    await evalHost(`${MARKDOWN_CONVERSATION}.click(); true`);
+  }
+  await untilHost(
+    `Boolean(${MARKDOWN_REPLY}?.querySelector("section[data-footnotes]"))`,
+    "the rendered Markdown reply",
+  );
+}
+
+/** Markdown 回复在 compact 排版中的第一个 paragraph 的字号。The font size of the first paragraph of the Markdown reply's compact prose. */
+async function chatParagraphSize(): Promise<string> {
+  await showMarkdownReply();
+  return evalHost<string>(`(() => {
+    const reply = ${MARKDOWN_REPLY};
+    const prose = reply.matches(${JSON.stringify(CHAT_PROSE)}) ? reply : (reply.closest(${JSON.stringify(CHAT_PROSE)}) ?? reply.querySelector(${JSON.stringify(CHAT_PROSE)}));
+    return getComputedStyle(prose.querySelector("p")).fontSize;
+  })()`);
+}
+
+/**
+ * 当前设置下新打开的 Edit、Preview 与 Code 的字号。
+ * The font sizes of Edit, Preview and Code opened now with the current settings.
+ */
+async function openedViewSizes(): Promise<{
+  edit: string;
+  editCode: string;
+  preview: string;
+  code: string;
+}> {
+  await showMarkdownReply();
+  await openFileInTree("notes/typography.md");
+  await selectViewer(EDIT_VIEWER);
+  const edit = await editShowing(`Boolean(${editBlock("Top paragraph", "p")})`, "typography.md");
+  const editSizes = await evalFrame<{ paragraph: string; code: string }>(
+    edit,
+    `(() => {
+      const paragraph = ${editBlock("Top paragraph", "p")};
+      return {
+        paragraph: getComputedStyle(paragraph).fontSize,
+        code: getComputedStyle(paragraph.querySelector("code")).fontSize,
+      };
+    })()`,
+  );
+  await selectPreview();
+  const preview = await untilViewerFrame("text-editor", "preview");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        preview,
+        `document.querySelector("article.markdown-body h1")?.textContent === "Typography sample"`,
+      ),
+    "typography.md in Preview",
+  );
+  const previewSize = await evalFrame<string>(
+    preview,
+    `getComputedStyle(document.querySelector("article.markdown-body > p")).fontSize`,
+  );
+  await openFileInTree("src/app.ts");
+  await untilHost(selectedViewerIs(CODE_VIEWER), "the Code tab for app.ts");
+  const code = await codeShowing(
+    `document.querySelectorAll(".code-editor .view-line").length > 0`,
+    "app.ts in Code",
+  );
+  const codeSize = await evalFrame<string>(
+    code,
+    `getComputedStyle(document.querySelector(".code-editor .view-lines")).fontSize`,
+  );
+  return {
+    edit: editSizes.paragraph,
+    editCode: editSizes.code,
+    preview: previewSize,
+    code: codeSize,
+  };
+}
+
+/**
+ * Appearance 设置：字号随设置改变，已打开的 extension 后台 frame 不重建并收到新的主题令牌，新打开的视图使用当前字号，
+ * 最小字号限制生效；Appearance 页面没有 Document font size，Edit 的文档字号跟随基础字号。
+ * Appearance settings: sizes follow the settings, an extension's background frame stays alive and receives the new
+ * theme tokens, views opened later use the current sizes, and the minimum font size applies; the Appearance page has
+ * no Document font size and Edit's document size follows the base size.
+ */
+async function appearanceSettings(): Promise<void> {
+  const background = await untilFrame("sample", "background");
+  await evalFrame(background, `window.__appearanceMarker = "kept"; true`);
+  const baseToken = (frame: FrameHandle) =>
+    api<string>(frame, `return api.theme.get().tokens["--agw-font-size-base"];`);
+  assert.equal(await baseToken(background), "16px");
+  assert.equal(
+    await api<string>(
+      background,
+      `return String(api.theme.get().tokens["--agw-font-size-document"]);`,
+    ),
+    "undefined",
+  );
+
+  // 基础字号 20：宿主、Settings 页面、Chat、新打开的 Edit、Preview 与 Code 一起放大。
+  // Base size 20 scales the host, the Settings page, Chat and Edit, Preview and Code opened now.
+  await saveAppearance(
+    { ...DEFAULT_APPEARANCE, baseFontSize: 20 },
+    chooseSize("appearance-base-font-size", "20"),
+  );
+  assert.equal(await eyebrowSize(), "15px");
+  assert.equal(
+    await evalHost<boolean>(
+      `!document.getElementById("appearance-document-font-size") && !document.body.textContent.includes("Document font size")`,
+    ),
+    true,
+    "the Appearance page has no Document font size",
+  );
+  await until(
+    async () => (await baseToken(background)) === "20px",
+    "the 20px base token in the background frame",
+  );
+  const kept = frameOf("sample", "background");
+  assert.equal(kept?.frameId, background.frameId);
+  assert.equal(await evalFrame<string>(background, "window.__appearanceMarker"), "kept");
+  assert.equal(await chatParagraphSize(), "17.5px");
+  const larger = await openedViewSizes();
+  assert.equal(larger.edit, "20px");
+  assert.equal(larger.preview, "20px");
+  assert.equal(larger.code, "17.5px");
+  pass(
+    "base size 20 scales the host and the Settings page, updates the background frame's tokens without rebuilding it, and Chat, Edit, Preview and Code opened afterwards use the new sizes",
+  );
+
+  // 聊天字号单独设置，基础字号改变时保持不变，Edit 与 Preview 跟随基础字号。
+  // The chat size is set on its own and stays when the base size changes; Edit and Preview follow the base size.
+  await saveAppearance(
+    { ...DEFAULT_APPEARANCE, baseFontSize: 20, chatFontSize: 15 },
+    chooseSize("appearance-chat-font-size", "15"),
+  );
+  assert.equal(await chatParagraphSize(), "15px");
+  let sizes = await openedViewSizes();
+  assert.equal(sizes.edit, "20px");
+  assert.equal(sizes.preview, "20px");
+  await saveAppearance(
+    { ...DEFAULT_APPEARANCE, baseFontSize: 17, chatFontSize: 15 },
+    chooseSize("appearance-base-font-size", "17"),
+  );
+  assert.equal(await chatParagraphSize(), "15px");
+  sizes = await openedViewSizes();
+  assert.equal(sizes.edit, "17px");
+  assert.equal(sizes.preview, "17px");
+  pass(
+    "the chat size 15 stays unchanged when the base size becomes 17, and Edit and Preview follow 17px",
+  );
+
+  // 重置后聊天字号回到跟随基础字号。Resetting returns the chat size to following the base size.
+  await saveAppearance({ ...DEFAULT_APPEARANCE, baseFontSize: 17 }, () =>
+    clickHost('button[aria-label="Reset chat font size"]'),
+  );
+  assert.equal(await chatParagraphSize(), "14.875px");
+  sizes = await openedViewSizes();
+  assert.equal(sizes.edit, "17px");
+  assert.equal(sizes.preview, "17px");
+  pass("Reset chat font size returns to 14.875px at base size 17");
+
+  // 最小字号固定为 14px：text-xs 为 14px，Edit 行内代码不小于 14px，Appearance 页面没有最小字号设置。
+  // The minimum font size is fixed at 14px: text-xs is 14px, Edit inline code is never below 14px, and the Appearance
+  // page has no minimum font size setting.
+  await saveAppearance(DEFAULT_APPEARANCE, chooseSize("appearance-base-font-size", "16"));
+  assert.equal(await eyebrowSize(), "14px");
+  assert.ok(parseFloat((await openedViewSizes()).editCode) >= 14);
+  assert.equal(
+    await evalHost<boolean>(
+      `!document.getElementById("appearance-min-font-size") && !document.body.textContent.includes("Minimum font size")`,
+    ),
+    true,
+    "the Appearance page has no minimum font size",
+  );
+  pass("the fixed minimum font size 14 limits text-xs and Edit inline code");
+}
+
+const TEXT_EDITOR_SETTINGS_FILE = join(storage("text-editor"), "settings.json");
+const TEXT_EDITOR_DEFAULTS = { schemaVersion: 1, documentFontSize: null, codeFontSize: null };
+const DOCUMENT_SIZE_SELECT = "text-editor-document-font-size";
+const CODE_SIZE_SELECT = "text-editor-code-font-size";
+
+/** 在设置页 frame 中按文字或 aria-label 找按钮的表达式。Expression for a button in the settings page frame, by text or aria-label. */
+function settingsButton(name: string): string {
+  return `[...document.querySelectorAll("button")].find((button) => (button.getAttribute("aria-label") ?? button.textContent.trim()) === ${JSON.stringify(name)})`;
+}
+
+/** 打开 Extensions → Text Editor 的设置页并等待两个下拉框出现。Opens Extensions → Text Editor settings and waits for both selects. */
+async function openTextEditorSettings(): Promise<FrameHandle> {
+  await goToExtensions();
+  await until(() => !frameOf("text-editor", "settings"), "the previous settings frame to close");
+  await clickHost(`[data-extension-id="text-editor"] a[href^="/extensions/settings/"]`);
+  await untilHost(`location.pathname.startsWith("/extensions/settings/")`, "the settings route");
+  const frame = await untilFrame("text-editor", "settings");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        frame,
+        `Boolean(document.getElementById(${JSON.stringify(DOCUMENT_SIZE_SELECT)}) && document.getElementById(${JSON.stringify(CODE_SIZE_SELECT)}))`,
+      ),
+    "the Text Editor settings selects",
+  );
+  // 设置页只显示 extension 自己的页面，没有视图标题条。The settings page shows only the extension's page, with no
+  // view title bar.
+  assert.deepEqual(
+    await evalHost<{ view: boolean; header: boolean }>(`(() => {
+      const view = document.querySelector('[data-extension-view="settings:text-editor"]');
+      return { view: Boolean(view), header: Boolean(view?.querySelector(".agw-extension-view-header")) };
+    })()`),
+    { view: true, header: false },
+    "the settings page has no view header",
+  );
+  // 原生视图是矩形的，与圆角边框各边至少相隔 4px 才不会盖住圆角。The native view is rectangular; at least 4px from every
+  // side of the rounded border keeps it off the corners.
+  const insets = await evalHost<number[]>(`(() => {
+    const view = document.querySelector('[data-extension-view="settings:text-editor"]');
+    const slot = view.querySelector(".agw-extension-view-slot").getBoundingClientRect();
+    const border = view.parentElement.getBoundingClientRect();
+    return [slot.left - border.left, slot.top - border.top, border.right - slot.right, border.bottom - slot.bottom];
+  })()`);
+  assert.ok(
+    insets.every((inset) => inset >= 4),
+    `the settings view stays inside the rounded border: ${JSON.stringify(insets)}`,
+  );
+  return frame;
+}
+
+/** 在设置页把下拉框设为 value 并触发 change。Sets a select on the settings page to value and fires change. */
+async function chooseInSettings(frame: FrameHandle, id: string, value: string): Promise<void> {
+  await evalFrame(
+    frame,
+    `(() => {
+      const select = document.getElementById(${JSON.stringify(id)});
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, ${JSON.stringify(value)});
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`,
+  );
+}
+
+async function untilTextEditorSettings(
+  expected: { schemaVersion: number; documentFontSize: number | null; codeFontSize: number | null },
+  label: string,
+): Promise<void> {
+  await until(
+    async () => isDeepStrictEqual(await readJson<unknown>(TEXT_EDITOR_SETTINGS_FILE), expected),
+    label,
+    20_000,
+    async () => readFile(TEXT_EDITOR_SETTINGS_FILE, "utf8"),
+  );
+}
+
+/**
+ * Text Editor 设置：设置页显示两项设置，选择写入 settings.json，新打开的 Edit、Preview 与 Code 使用选择的字号；Reset 恢复
+ * 跟随；设置文件不合法时查看器显示错误，设置页只有 Reset all 可用；最后保存文档字号 20 与 Appearance {18, 15}，供重新启动后检查。
+ * Text Editor settings: the settings page shows both settings, choices are written to settings.json, Edit, Preview and
+ * Code opened afterwards use the chosen sizes, Reset returns to following, an invalid settings file makes the viewers
+ * show the error and leaves only Reset all working on the settings page; document size 20 and Appearance
+ * {18, 15} stay saved for the check after the restart.
+ */
+async function textEditorSettings(): Promise<void> {
+  // 基础字号 16：跟随值为文档 16 px，代码 14 px。Base 16: following gives document 16 px and code 14 px.
+  let page = await openTextEditorSettings();
+  // 设置页的标签、下拉框与按钮不小于 14px。The labels, select and buttons of the settings page are 14px.
+  assert.deepEqual(
+    await evalFrame<string[]>(
+      page,
+      `(() => {
+        const size = (element) => getComputedStyle(element).fontSize;
+        const label = [...document.querySelectorAll("label")].find((item) => item.textContent === "Document font size");
+        return [
+          size(label),
+          size(document.getElementById(${JSON.stringify(DOCUMENT_SIZE_SELECT)})),
+          size(${settingsButton("Reset document font size")}),
+          size(${settingsButton("Reset all")}),
+        ];
+      })()`,
+    ),
+    ["14px", "14px", "14px", "14px"],
+    "the settings page controls compute 14px at the default appearance",
+  );
+  const state = await evalFrame<Record<string, string | string[]>>(
+    page,
+    `(() => {
+      const select = (id) => document.getElementById(id);
+      return {
+        document: select(${JSON.stringify(DOCUMENT_SIZE_SELECT)}).value,
+        documentText: select(${JSON.stringify(DOCUMENT_SIZE_SELECT)}).selectedOptions[0].textContent,
+        code: select(${JSON.stringify(CODE_SIZE_SELECT)}).value,
+        codeText: select(${JSON.stringify(CODE_SIZE_SELECT)}).selectedOptions[0].textContent,
+        labels: [...document.querySelectorAll("label")].map((label) => label.textContent),
+      };
+    })()`,
+  );
+  assert.deepEqual(state, {
+    document: "follow",
+    documentText: "Follow base size (16 px)",
+    code: "follow",
+    codeText: "Follow document size (14 px)",
+    labels: ["Document font size", "Code editor font size"],
+  });
+  assert.equal(
+    existsSync(TEXT_EDITOR_SETTINGS_FILE),
+    false,
+    "no settings file before the first change",
+  );
+  pass(
+    "the Text Editor settings page shows Document font size and Code editor font size following the base size",
+  );
+
+  // 文档字号 20、代码字号 15。Document size 20, code size 15.
+  await chooseInSettings(page, DOCUMENT_SIZE_SELECT, "20");
+  await untilTextEditorSettings(
+    { schemaVersion: 1, documentFontSize: 20, codeFontSize: null },
+    "document size 20 in settings.json",
+  );
+  await chooseInSettings(page, CODE_SIZE_SELECT, "15");
+  await untilTextEditorSettings(
+    { schemaVersion: 1, documentFontSize: 20, codeFontSize: 15 },
+    "code size 15 in settings.json",
+  );
+  await backToTestProjectChat();
+  let sizes = await openedViewSizes();
+  assert.equal(sizes.edit, "20px");
+  assert.equal(sizes.preview, "20px");
+  assert.equal(sizes.code, "15px");
+  pass(
+    "document size 20 and code size 15 are saved and Edit, Preview and Code opened afterwards use them",
+  );
+
+  // 逐项 Reset 与 Reset all。Reset per row and Reset all.
+  page = await openTextEditorSettings();
+  await clickInFrame(page, settingsButton("Reset document font size"));
+  await untilTextEditorSettings(
+    { schemaVersion: 1, documentFontSize: null, codeFontSize: 15 },
+    "Reset document font size in settings.json",
+  );
+  await clickInFrame(page, settingsButton("Reset code editor font size"));
+  await untilTextEditorSettings(
+    TEXT_EDITOR_DEFAULTS,
+    "Reset code editor font size in settings.json",
+  );
+  sizes = await openedViewSizes();
+  assert.equal(sizes.edit, "16px");
+  assert.equal(sizes.preview, "16px");
+  assert.equal(sizes.code, "14px");
+  page = await openTextEditorSettings();
+  await chooseInSettings(page, DOCUMENT_SIZE_SELECT, "24");
+  await chooseInSettings(page, CODE_SIZE_SELECT, "14");
+  await untilTextEditorSettings(
+    { schemaVersion: 1, documentFontSize: 24, codeFontSize: 14 },
+    "document size 24 and code size 14 in settings.json",
+  );
+  await clickInFrame(page, settingsButton("Reset all"));
+  await untilTextEditorSettings(TEXT_EDITOR_DEFAULTS, "Reset all in settings.json");
+  pass(
+    "Reset document font size, Reset code editor font size and Reset all return Edit to 16px and Code to 14px",
+  );
+
+  // 设置文件不合法：Edit 显示错误，设置页只有 Reset all 可用。An invalid settings file: Edit shows the error and only Reset all works.
+  await writeFile(TEXT_EDITOR_SETTINGS_FILE, "{ not json");
+  await backToTestProjectChat();
+  await openFileInTree("notes/typography.md");
+  await selectViewer(EDIT_VIEWER);
+  const edit = await untilViewerFrame("text-editor", "markdown");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        edit,
+        `document.body.textContent.includes("Text Editor settings are invalid:") && document.body.textContent.includes("Open Text Editor settings to reset them.")`,
+      ),
+    "the invalid settings error in Edit",
+  );
+  assert.equal(
+    await evalFrame<boolean>(edit, `Boolean(document.querySelector(".ProseMirror"))`),
+    false,
+  );
+  page = await openTextEditorSettings();
+  await until(
+    () =>
+      evalFrame<boolean>(
+        page,
+        `document.body.textContent.includes("Text Editor settings are invalid:") && document.body.textContent.includes("Use Reset all to restore the defaults.")`,
+      ),
+    "the invalid settings error on the settings page",
+  );
+  assert.deepEqual(
+    await evalFrame<string[]>(
+      page,
+      `[...document.querySelectorAll("select, button")].filter((element) => !element.disabled).map((element) => element.textContent.trim())`,
+    ),
+    ["Reset all"],
+  );
+  await clickInFrame(page, settingsButton("Reset all"));
+  await untilTextEditorSettings(TEXT_EDITOR_DEFAULTS, "Reset all after the invalid file");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        page,
+        `!document.body.textContent.includes("Text Editor settings are invalid:") && !document.getElementById(${JSON.stringify(DOCUMENT_SIZE_SELECT)}).disabled`,
+      ),
+    "the settings page to recover",
+  );
+  sizes = await openedViewSizes();
+  assert.equal(sizes.edit, "16px");
+  pass(
+    "an invalid settings file shows the error in Edit and leaves only Reset all on the settings page, which restores the defaults",
+  );
+
+  // 保存文档字号 20 与 Appearance {18, 15}，供重新启动后检查；文档字号与基础字号 18 不同。Saves document size 20 and
+  // Appearance {18, 15} for the check after the restart; the document size differs from the base size 18.
+  page = await openTextEditorSettings();
+  await chooseInSettings(page, DOCUMENT_SIZE_SELECT, "20");
+  await untilTextEditorSettings(
+    { schemaVersion: 1, documentFontSize: 20, codeFontSize: null },
+    "document size 20 in settings.json",
+  );
+  await saveAppearance(
+    { ...DEFAULT_APPEARANCE, baseFontSize: 18 },
+    chooseSize("appearance-base-font-size", "18"),
+  );
+  await saveAppearance(
+    { baseFontSize: 18, chatFontSize: 15 },
+    chooseSize("appearance-chat-font-size", "15"),
+  );
+  assert.equal(await chatParagraphSize(), "15px");
+  pass("document size 20 and Appearance {18, 15} stay saved for the restart check");
 }
 
 async function editInteractions(): Promise<void> {
@@ -3078,7 +4150,13 @@ async function textEditorCode(): Promise<void> {
   const appPath = projectPath("src/app.ts");
   await openFileInTree("src/app.ts");
   await untilHost(selectedViewerIs(CODE_VIEWER), "the Code tab for app.ts");
-  const code = await codeShowing(`${CODE_TEXT}.includes("function   add")`, "app.ts in Code");
+  // 上一步打开 Settings 时 view 关闭，Code 在这里新建；快捷键要等 Monaco 获得焦点且 Prettier 注册完成（Format 按钮可用）后再按下。Opening Settings in the previous
+  // step closed the views, so Code is created here; the shortcut waits until Monaco has focus and Prettier is registered
+  // (the Format button is enabled once it is).
+  const code = await codeShowing(
+    `${CODE_TEXT}.includes("function   add") && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement)) && [...document.querySelectorAll(".code-toolbar button")].some((button) => button.textContent === "Format" && !button.disabled)`,
+    "app.ts in Code",
+  );
   const formatted =
     "function add(a: number, b: number) {\n    return a + b;\n}\nconst total = add(1, 2);\n";
   pressKey(code, "F", ["shift", "alt"]);
@@ -3623,6 +4701,10 @@ function round(value: number): number {
 }
 
 async function performancePhase(): Promise<void> {
+  assert.equal(
+    await evalHost<string>(`getComputedStyle(document.documentElement).fontSize`),
+    "16px",
+  );
   const inputs = config.performance!;
   const results: Record<string, unknown>[] = [];
   const failures: string[] = [];
@@ -3907,6 +4989,52 @@ async function uninstallBundled(): Promise<void> {
 }
 
 async function restartPhase(): Promise<void> {
+  // 重新启动后保存的字号仍然生效，Reset all 之后恢复默认。The saved sizes still apply after the restart; Reset all restores the defaults.
+  assert.equal(
+    await evalHost<string>(`getComputedStyle(document.documentElement).fontSize`),
+    "18px",
+  );
+  assert.equal(await chatParagraphSize(), "15px");
+  await openSettingsPage("/settings/appearance/");
+  await untilHost(`Boolean(document.getElementById("appearance-base-font-size"))`, "Appearance");
+  assert.equal(await eyebrowSize(), "14px");
+  await saveAppearance(DEFAULT_APPEARANCE, () => clickText("Reset all"));
+  pass("after restarting Desktop, the saved sizes {18, 15} apply and Reset all restores 16px");
+
+  // Text Editor 设置在重新启动后保持：文档字号 20 与基础字号 16（重置后）和重启前的基础字号 18 都不同；最后恢复默认，
+  // 供 performance 阶段使用。
+  // The Text Editor settings persist across the restart: document size 20 differs from the base size 16 (after the
+  // reset) and from the base size 18 saved before the restart; the defaults are restored at the end for the
+  // performance phase.
+  assert.deepEqual(await readJson<unknown>(TEXT_EDITOR_SETTINGS_FILE), {
+    schemaVersion: 1,
+    documentFontSize: 20,
+    codeFontSize: null,
+  });
+  const restored = await openedViewSizes();
+  assert.equal(restored.edit, "20px");
+  assert.equal(restored.preview, "20px");
+  assert.equal(restored.code, "17.5px");
+  const page = await openTextEditorSettings();
+  assert.equal(
+    await evalFrame<string>(
+      page,
+      `document.getElementById(${JSON.stringify(DOCUMENT_SIZE_SELECT)}).value`,
+    ),
+    "20",
+  );
+  await clickInFrame(page, settingsButton("Reset all"));
+  await untilTextEditorSettings(
+    TEXT_EDITOR_DEFAULTS,
+    "Reset all in settings.json after the restart",
+  );
+  const defaults = await openedViewSizes();
+  assert.equal(defaults.edit, "16px");
+  assert.equal(defaults.code, "14px");
+  pass(
+    "after restarting Desktop, the Text Editor document size 20 applies to Edit and Preview, and Reset all restores 16px and 14px",
+  );
+
   await goToExtensions();
   await untilStatus("text-editor", "Active", 30_000);
   assert.equal(
@@ -3997,6 +5125,11 @@ async function run(): Promise<void> {
   await viewerOrderAndDefaults();
   await textEditorMarkdown();
   await editInteractions();
+  await textEditorTypography();
+  await dragHandleFirstLine();
+  await hostScaling();
+  await appearanceSettings();
+  await textEditorSettings();
   await textEditorCode();
   await conflictsAndRefresh();
   await excalidrawEditor();

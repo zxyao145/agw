@@ -188,7 +188,7 @@ export function ToolsPanel({
                         {item.description}
                       </p>
                       {item.memberToolNames.length > 0 ? (
-                        <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+                        <p className="mt-2 font-mono text-11 text-muted-foreground">
                           {item.memberToolNames.join(", ")}
                         </p>
                       ) : null}

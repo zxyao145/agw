@@ -12,6 +12,10 @@ import {
 } from "../shared/editor-chrome";
 import { errorMessage, notifyFailure } from "../shared/errors";
 import type { CodeDocument } from "./code-document";
+import {
+  resolveTextEditorFontSizes,
+  type TextEditorSettings,
+} from "../shared/text-editor-settings";
 import { monaco } from "./monaco";
 
 type Prettier = {
@@ -60,7 +64,15 @@ function readStatus(editor: monaco.editor.IStandaloneCodeEditor): EditorStatus |
  * The Code viewer (section 6): the toolbar (save status, Format, word wrap, Save), the Monaco editor and the status
  * bar; a Failed document session shows the explanation panel.
  */
-export function CodeView({ api, codeDocument }: { api: ExtensionApi; codeDocument: CodeDocument }) {
+export function CodeView({
+  api,
+  codeDocument,
+  settings,
+}: {
+  api: ExtensionApi;
+  codeDocument: CodeDocument;
+  settings: TextEditorSettings;
+}) {
   const { session } = codeDocument;
   const view = useDocumentSession(session);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -90,12 +102,19 @@ export function CodeView({ api, codeDocument }: { api: ExtensionApi; codeDocumen
       automaticLayout: true,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
-      fontSize: 14,
+      fontSize: resolveTextEditorFontSizes(settings, api.theme.get().tokens).code,
       fontFamily,
       wordWrap: "off",
     });
+    // 基础字号或最小字号变化时更新编辑器。Updates the editor when the base or minimum size changes.
+    const themeSubscription = api.theme.onDidChange((theme) =>
+      created.updateOptions({ fontSize: resolveTextEditorFontSizes(settings, theme.tokens).code }),
+    );
     setEditor(created);
-    return () => created.dispose();
+    return () => {
+      themeSubscription.dispose();
+      created.dispose();
+    };
   }, []);
 
   // 文档换了模型（打开另一个文件）时交给编辑器，滚动位置与光标不保留。

@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@agw/components";
+import { buildSettingsHref, getDesktopChatReturnHref } from "./components/app-shell-routing";
 import { ExtensionView } from "./components/workspace/extension-view";
 import { settingsViewId } from "./extensions/extension-host";
 import { useExtensionRuntime } from "./extensions/extension-host-provider";
@@ -13,7 +14,9 @@ import { useExtensionRuntime } from "./extensions/extension-host-provider";
 /** 用 view frame 显示 extension 的设置页。Shows an extension's settings page in a view frame. */
 export function DesktopExtensionSettingsPage() {
   const runtime = useExtensionRuntime();
-  const extensionId = useSearchParams().get("id") ?? "";
+  const searchParams = useSearchParams();
+  const extensionId = searchParams.get("id") ?? "";
+  const returnTo = searchParams.get("returnTo");
   const snapshot = React.useSyncExternalStore(
     runtime?.host.subscribe ?? (() => () => undefined),
     () => runtime?.host.getSnapshot() ?? null,
@@ -27,7 +30,7 @@ export function DesktopExtensionSettingsPage() {
     <div className="flex h-full min-h-0 flex-col gap-3 p-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/extensions/">
+          <Link href={buildSettingsHref("/extensions/", getDesktopChatReturnHref(returnTo))}>
             <ArrowLeft /> Extensions
           </Link>
         </Button>
@@ -40,7 +43,9 @@ export function DesktopExtensionSettingsPage() {
           Enable {manifest.name} to change its settings.
         </p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border">
+        // extension 页面是矩形的原生视图，会盖住圆角；内边距让它留在圆角以内。The extension page is a rectangular native
+        // view that covers rounded corners; the padding keeps it inside them.
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border p-1">
           <ExtensionView
             host={runtime.host}
             tracker={runtime.tracker}
@@ -58,6 +63,7 @@ export function DesktopExtensionSettingsPage() {
               priority: "default",
             }}
             openRequest={undefined}
+            showHeader={false}
           />
         </div>
       )}

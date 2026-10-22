@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ChevronDown,
@@ -44,6 +45,7 @@ import {
   isUnencryptedHostPermission,
   parseHostPermission,
 } from "@desktop/shared/extension-host-permissions";
+import { buildSettingsHref, getDesktopChatReturnHref } from "./components/app-shell-routing";
 import { extensionIcon } from "./extensions/extension-contributions";
 import type { ExtensionHost, ExtensionState } from "./extensions/extension-host";
 import { useExtensionRuntime } from "./extensions/extension-host-provider";
@@ -309,6 +311,7 @@ function ExtensionCard({
   const { installed } = extension;
   const manifest = installed.manifest;
   const bridge = window.agwDesktop!;
+  const returnTo = useSearchParams().get("returnTo");
   // 激活期间可以停用（立即完成）；停用期间等待完成。Disabling is allowed while activating; wait while deactivating.
   const busy = extension.status === "deactivating";
   const canEnable = installed.validation === "valid";
@@ -376,7 +379,12 @@ function ExtensionCard({
         </Button>
         {manifest?.contributes?.settings ? (
           <Button size="sm" variant="outline" asChild>
-            <Link href={`/extensions/settings/?id=${encodeURIComponent(extension.id)}`}>
+            <Link
+              href={buildSettingsHref(
+                `/extensions/settings/?id=${encodeURIComponent(extension.id)}`,
+                getDesktopChatReturnHref(returnTo),
+              )}
+            >
               <Settings /> Settings
             </Link>
           </Button>

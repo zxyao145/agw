@@ -1,6 +1,6 @@
 // 构建 extension 内置 SDK：单文件 ES module、单文件类型定义与 manifest 的 JSON Schema。
 // Builds the built-in extension SDK: a single ES module, a single type definition file and the manifest JSON Schema.
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { generateDtsBundle } from "dts-bundle-generator";
@@ -21,6 +21,22 @@ const sdkEntry = resolve(
 const manifestVersion = 1;
 
 export const extensionSdkDirectory = join(desktopDirectory, "resources", "extension-sdk");
+
+// 排版样式只有一份源文件，extension 通过 `/__agw/typography.css` 使用它的副本。
+// Typography has a single source file; extensions use its copy through `/__agw/typography.css`.
+const typographyStylesheet = resolve(
+  desktopDirectory,
+  "..",
+  "packages",
+  "components",
+  "src",
+  "ui-tokens",
+  "typography.css",
+);
+
+export async function copyTypographyStylesheet(outputDirectory) {
+  await copyFile(typographyStylesheet, join(outputDirectory, "typography.css"));
+}
 
 export async function buildExtensionSdk() {
   const outputDirectory = join(extensionSdkDirectory, `v${manifestVersion}`);
@@ -44,6 +60,7 @@ export async function buildExtensionSdk() {
     { preferredConfigPath: join(desktopDirectory, "scripts", "extension-sdk-dts.tsconfig.json") },
   );
   await writeFile(join(outputDirectory, "sdk.d.ts"), declarations, "utf8");
+  await copyTypographyStylesheet(outputDirectory);
 
   const schemaModule = join(
     desktopDirectory,

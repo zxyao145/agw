@@ -347,9 +347,7 @@ function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
             </div>
             <div className="min-w-0">
               <CardTitle className="truncate text-sm">{data.title}</CardTitle>
-              <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-70">
-                {meta.label}
-              </div>
+              <div className="mt-0.5 text-2xs uppercase tracking-wide opacity-70">{meta.label}</div>
             </div>
           </div>
         </CardHeader>
@@ -387,18 +385,18 @@ function BlockParticipantSummary({
       <span>{fallback}</span>
       <div className="flex flex-wrap gap-1">
         {member.isManager ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-2xs text-blue-700">
             <Crown className="h-3 w-3" />
             Manager
           </span>
         ) : null}
         {member.isExternallyLinked ? (
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs text-amber-800">
             On Canvas
           </span>
         ) : null}
         {member.isShared ? (
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs text-amber-800">
             Shared
           </span>
         ) : null}
@@ -436,7 +434,7 @@ function BlockNodeSummary({
           {members.length} {members.length === 1 ? "member" : "members"}
         </span>
         {warningCount > 0 ? (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800">
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-2xs text-amber-800">
             {warningCount} on canvas
           </span>
         ) : null}
@@ -445,7 +443,7 @@ function BlockNodeSummary({
         {visibleMembers.map((member) => (
           <span
             key={member.nodeId}
-            className={`max-w-[92px] truncate rounded-full border px-2 py-0.5 text-[10px] ${
+            className={`max-w-[92px] truncate rounded-full border px-2 py-0.5 text-2xs ${
               member.isExternallyLinked || member.isShared || member.isMissing
                 ? "border-amber-200 bg-amber-50 text-amber-800"
                 : "border-teal-200 bg-teal-50 text-teal-800"
@@ -456,13 +454,13 @@ function BlockNodeSummary({
           </span>
         ))}
         {hiddenCount > 0 ? (
-          <span className="rounded-full border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+          <span className="rounded-full border bg-muted px-2 py-0.5 text-2xs text-muted-foreground">
             +{hiddenCount}
           </span>
         ) : null}
       </div>
       {manager ? (
-        <div className="flex min-w-0 items-center gap-1 text-[10px] text-blue-700">
+        <div className="flex min-w-0 items-center gap-1 text-2xs text-blue-700">
           <span>Manager</span>
           <span className="truncate rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5">
             {manager.title}
@@ -2436,12 +2434,12 @@ function EdgeInspector({
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">{EDGE_LABELS[data.kind]}</p>
               {routingLabel ? (
-                <Badge variant="outline" className="font-mono text-[10px] tracking-wider">
+                <Badge variant="outline" className="font-mono text-2xs tracking-wider">
                   {routingLabel}
                 </Badge>
               ) : null}
             </div>
-            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+            <p className="mt-1 truncate font-mono text-11 text-muted-foreground">
               {edge.source} {"->"} {edge.target}
             </p>
           </div>
@@ -2491,7 +2489,7 @@ function EdgeInspector({
               <p className="text-xs font-medium text-violet-950 dark:text-violet-100">
                 Branch {switchPosition.index + 1} of {switchPosition.count}
               </p>
-              <p className="mt-1 text-[11px] text-violet-700 dark:text-violet-300">
+              <p className="mt-1 text-11 text-violet-700 dark:text-violet-300">
                 Cases are evaluated from top to bottom.
               </p>
             </div>

@@ -1,7 +1,7 @@
-import { defineView, type ExtensionApi, type FileViewerParams } from "@agw/extension-sdk";
+import { defineView, type FileViewerParams } from "@agw/extension-sdk";
 import { createRoot } from "react-dom/client";
 
-import { notifyFailure } from "../shared/errors";
+import { createSettingsGate } from "../shared/settings-gate";
 import { CodeDocument } from "./code-document";
 import { applyCodeTheme } from "./code-theme";
 import { CodeView } from "./code-view";
@@ -12,27 +12,28 @@ import "./code.css";
 const container = document.getElementById("root");
 if (!container) throw new Error("The #root element is missing.");
 const root = createRoot(container);
-let opened: { api: ExtensionApi; codeDocument: CodeDocument } | null = null;
+
+const gate = createSettingsGate(root, (api, settings, params) => {
+  const { file } = params as FileViewerParams;
+  const codeDocument = new CodeDocument(api, file);
+  root.render(<CodeView api={api} codeDocument={codeDocument} settings={settings} />);
+  return {
+    // 每次显示都交给文档：同一个文件刷新，另一个文件切换。Every show goes to the document: refresh or switch.
+    show: (next) => codeDocument.show((next as FileViewerParams).file),
+    dispose() {
+      root.unmount();
+      codeDocument.dispose();
+    },
+  };
+});
 
 defineView({
-  onLoad(api, params) {
+  async onLoad(api, params) {
     api.theme.apply();
     applyCodeTheme(api.theme.get());
     api.theme.onDidChange(applyCodeTheme);
-    const { file } = params as FileViewerParams;
-    const codeDocument = new CodeDocument(api, file);
-    opened = { api, codeDocument };
-    root.render(<CodeView api={api} codeDocument={codeDocument} />);
+    await gate.onLoad(api, params);
   },
-  // 每次显示都交给文档：同一个文件刷新，另一个文件切换。Every show goes to the document: refresh or switch.
-  onShow(params) {
-    if (!opened) throw new Error("The view received a file before onLoad.");
-    const { file } = params as FileViewerParams;
-    notifyFailure(opened.api, opened.codeDocument.show(file));
-  },
-  onUnload() {
-    root.unmount();
-    opened?.codeDocument.dispose();
-    opened = null;
-  },
+  onShow: gate.onShow,
+  onUnload: gate.onUnload,
 });

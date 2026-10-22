@@ -5,6 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { writeFile } from "node:fs/promises";
+import { DEFAULT_APPEARANCE } from "../../shared/appearance";
+import type { AppearanceSettings } from "../../shared/contracts";
 import { createScratchDirectory } from "../scratch-directory.test-helper";
 import { DesktopSettingsStore, type SecretCodec } from "./settings-store";
 
@@ -514,6 +516,104 @@ test("uninstalling a bundled extension records it and keeps it from coming back"
     const saved = await store.load();
     assert.deepEqual(saved.extensions, {});
     assert.deepEqual(saved.removedBundledExtensions, ["viewer"]);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+async function loadWithStoredAppearance(appearance: unknown): Promise<AppearanceSettings> {
+  const scratch = await createScratchDirectory("settings-appearance");
+  try {
+    if (appearance !== undefined) {
+      await writeFile(join(scratch.path, "settings.json"), JSON.stringify({ appearance }));
+    }
+    return (await new DesktopSettingsStore(scratch.path, "client", codec).load()).appearance;
+  } finally {
+    await scratch.dispose();
+  }
+}
+
+async function rejectsStoredAppearance(appearance: unknown): Promise<void> {
+  const scratch = await createScratchDirectory("settings-appearance");
+  try {
+    await writeFile(join(scratch.path, "settings.json"), JSON.stringify({ appearance }));
+    await assert.rejects(new DesktopSettingsStore(scratch.path, "client", codec).load());
+  } finally {
+    await scratch.dispose();
+  }
+}
+
+test("load returns the default appearance when the file has none", async () => {
+  assert.deepEqual(await loadWithStoredAppearance(undefined), DEFAULT_APPEARANCE);
+});
+
+test("load accepts the appearance range boundaries", async () => {
+  const small = { baseFontSize: 14, chatFontSize: 14 };
+  const large = { baseFontSize: 20, chatFontSize: 24 };
+  assert.deepEqual(await loadWithStoredAppearance(small), small);
+  assert.deepEqual(await loadWithStoredAppearance(large), large);
+});
+
+test("load rejects an appearance outside the allowed values", async () => {
+  const valid = { baseFontSize: 16, chatFontSize: null };
+  for (const invalid of [
+    { ...valid, baseFontSize: 21 },
+    { ...valid, baseFontSize: 13 },
+    { ...valid, chatFontSize: 25 },
+    { ...valid, chatFontSize: 13 },
+    { ...valid, documentFontSize: null },
+    { ...valid, documentFontSize: 18 },
+    { ...valid, minFontSize: 14 },
+    { ...valid, minFontSize: 12 },
+    { ...valid, baseFontSize: 16.5 },
+  ]) {
+    await rejectsStoredAppearance(invalid);
+  }
+});
+
+test("save stores the appearance and keeps the other settings", async () => {
+  const scratch = await createScratchDirectory("settings-appearance");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    await store.save({ closeBehavior: "quit-desktop" });
+    const before = await store.load();
+    await store.save({
+      appearance: { baseFontSize: 18, chatFontSize: 15 },
+    });
+    const saved = await store.load();
+    assert.deepEqual(saved.appearance, {
+      baseFontSize: 18,
+      chatFontSize: 15,
+    });
+    assert.equal(saved.closeBehavior, "quit-desktop");
+    assert.deepEqual(saved.profiles, before.profiles);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("save without an appearance keeps the stored appearance", async () => {
+  const scratch = await createScratchDirectory("settings-appearance");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    const appearance = { baseFontSize: 18, chatFontSize: 15 } as const;
+    await store.save({ appearance });
+    await store.save({ closeBehavior: "quit-desktop" });
+    assert.deepEqual((await store.load()).appearance, appearance);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("save rejects sizes below 14 and keeps the stored appearance", async () => {
+  const scratch = await createScratchDirectory("settings-appearance");
+  try {
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    const stored = { baseFontSize: 18, chatFontSize: null };
+    await store.save({ appearance: stored });
+    await assert.rejects(store.save({ appearance: { baseFontSize: 13, chatFontSize: null } }));
+    await assert.rejects(store.save({ appearance: { baseFontSize: 16, chatFontSize: 13 } }));
+    assert.deepEqual((await store.load()).appearance, stored);
   } finally {
     await scratch.dispose();
   }

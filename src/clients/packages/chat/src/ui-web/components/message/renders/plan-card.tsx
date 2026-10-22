@@ -75,7 +75,10 @@ export default function PlanCard({
             )}
           </Button>
         </header>
-        <div className="msg-content pt-3 pb-5 text-[15px] leading-7 sm:pt-4 sm:pb-6">
+        <div
+          className="msg-content pt-3 pb-5 sm:pt-4 sm:pb-6"
+          style={{ "--agw-prose-font-size": "var(--text-15)" } as React.CSSProperties}
+        >
           <MarkdownView markdown={markdown} />
         </div>
       </section>

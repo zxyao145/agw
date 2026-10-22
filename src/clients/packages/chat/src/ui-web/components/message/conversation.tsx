@@ -539,14 +539,14 @@ function ConversationItem({
             <span className="shrink-0 text-muted-foreground/60">/</span>
           ) : null}
           {message.meta.author ? (
-            <span className="min-w-0 truncate font-mono text-[11px]">{message.meta.author}</span>
+            <span className="min-w-0 truncate font-mono text-11">{message.meta.author}</span>
           ) : null}
           {(message.meta.name || message.meta.author) && message.meta.model ? (
             <span className="shrink-0 text-muted-foreground/60">/</span>
           ) : null}
           {message.meta.model ? (
             <span
-              className="min-w-0 truncate font-mono text-[11px] text-muted-foreground/80"
+              className="min-w-0 truncate font-mono text-11 text-muted-foreground/80"
               title={message.meta.model}
             >
               {message.meta.model}

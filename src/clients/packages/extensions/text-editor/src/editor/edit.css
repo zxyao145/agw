@@ -1,11 +1,13 @@
 /* Edit 查看器（设计 5.7）：固定的顶部条、居中的内容列（最大宽度 760 px，左侧留出拖动手柄的位置）、Notion 风格的块与菜单。
-   颜色与等宽字体来自宿主主题变量（theme.apply），深色模式随之变化。
+   颜色与等宽字体来自宿主主题变量（theme.apply），深色模式随之变化。Markdown 内容的字号、行高与间距来自 /__agw/typography.css
+   （.agw-prose，document 密度），这里只保留 node view、菜单与浮层的样式。
    The Edit viewer (design section 5.7): a fixed top bar, a centered content column (at most 760 px, with room for
    the drag handle on its left), Notion-style blocks and menus. Colors and the monospace font come from the host theme
-   variables (theme.apply), so dark mode follows. */
+   variables (theme.apply), so dark mode follows. Font sizes, line heights and spacing of the Markdown content come
+   from /__agw/typography.css (.agw-prose, document density); this file keeps only the styles of node views, menus and
+   popovers. */
 
 :root {
-  --link: var(--sidebar-primary);
   --code-background: var(--muted);
   scrollbar-color: var(--border) transparent;
 }
@@ -24,7 +26,7 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji";
-  font-size: 14px;
+  font-size: var(--agw-font-size-base);
 }
 
 [hidden] {
@@ -47,6 +49,7 @@ body {
   height: 32px;
   padding: 0 8px;
   border-bottom: 1px solid var(--border);
+  font-size: max(var(--agw-font-size-min), 0.875em);
 }
 
 .edit-toolbar .save-status {
@@ -56,7 +59,7 @@ body {
 .status {
   margin: 0;
   padding: 24px 32px;
-  font-size: 14px;
+  font-size: max(var(--agw-font-size-min), 0.875em);
   color: var(--muted-foreground);
 }
 
@@ -77,83 +80,26 @@ body {
 /* 编辑区与块。The editing area and blocks. */
 .edit-content .ProseMirror {
   outline: none;
-  font-size: 16px;
-  line-height: 1.6;
   overflow-wrap: break-word;
   white-space: pre-wrap;
 }
 
-.edit-content .ProseMirror > * + * {
-  margin-top: 0.5em;
-}
-
-.edit-content :is(p, ul, ol, blockquote, pre, table) {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.edit-content :is(h1, h2, h3, h4, h5, h6) {
-  margin: 1.2em 0 0.3em;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.edit-content h1 {
-  font-size: 30px;
-}
-
-.edit-content h2 {
-  font-size: 24px;
-}
-
-.edit-content h3 {
-  font-size: 20px;
-}
-
-.edit-content h4 {
-  font-size: 16px;
-}
-
-.edit-content :is(h5, h6) {
-  font-size: 14px;
-}
-
-.edit-content .ProseMirror > :first-child {
-  margin-top: 0;
-}
-
 .edit-content a {
-  color: var(--link);
   text-decoration: underline;
-  text-underline-offset: 2px;
   cursor: text;
+}
+
+/* 任务项与表格单元格中的 paragraph 不加块间距。Paragraphs in task items and table cells carry no block gap. */
+.edit-content :is(.task-content, th, td) > p {
+  margin-block: 0;
+}
+
+.edit-content .task-content > :is(ul, ol) {
+  margin-block: calc(var(--agw-prose-size) * 0.25);
 }
 
 .edit-content strong {
   font-weight: 600;
-}
-
-.edit-content code {
-  font-family: var(--font-mono);
-}
-
-.edit-content :not(pre) > code {
-  padding: 0.15em 0.35em;
-  border-radius: var(--radius-sm);
-  background: var(--code-background);
-  font-size: max(14px, 0.875em);
-}
-
-.edit-content blockquote {
-  padding-left: 1em;
-  border-left: 3px solid var(--foreground);
-}
-
-.edit-content hr {
-  height: 1px;
-  margin: 1em 0;
-  border: 0;
-  background: var(--border);
 }
 
 .edit-content hr.ProseMirror-selectednode {
@@ -161,14 +107,6 @@ body {
 }
 
 /* 列表与任务项。Lists and task items. */
-.edit-content :is(ul, ol) {
-  padding-left: 1.6em;
-}
-
-.edit-content li > p {
-  margin: 0;
-}
-
 .edit-content li.task-item {
   display: flex;
   gap: 0.4em;
@@ -180,7 +118,7 @@ body {
   display: flex;
   flex: none;
   align-items: center;
-  height: 1.6em;
+  height: calc(1em * var(--agw-prose-line-height));
   user-select: none;
 }
 
@@ -202,6 +140,20 @@ body {
   text-decoration: line-through;
 }
 
+/* node view 的外间距取块间距，容器中第一个与最后一个块不留外间距。
+   Node views take the block gap as outer margin; the first and last blocks in the container carry none. */
+.edit-content :is(.code-block, .raw-block, .tableWrapper) {
+  margin-block: var(--agw-prose-block-gap);
+}
+
+.edit-content :is(.code-block, .raw-block, .tableWrapper):first-child {
+  margin-top: 0;
+}
+
+.edit-content :is(.code-block, .raw-block, .tableWrapper):last-child {
+  margin-bottom: 0;
+}
+
 /* 代码块：标题栏有语言选择与 Copy。Code blocks: a header with the language choice and Copy. */
 .edit-content .code-block {
   border-radius: var(--radius-md);
@@ -213,7 +165,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px 0;
-  font-size: 14px;
+  font-size: max(var(--agw-font-size-min), 0.875em);
   user-select: none;
 }
 
@@ -233,17 +185,10 @@ body {
   color: var(--accent-foreground);
 }
 
-.edit-content pre {
+.edit-content :is(.code-block, .raw-block) pre {
   margin: 0;
-  padding: 8px 16px 12px;
-  overflow-x: auto;
-  font-size: 14px;
-  line-height: 1.5;
+  padding: 0.5em 1em 0.75em;
   white-space: pre;
-}
-
-.edit-content pre code {
-  background: transparent;
 }
 
 /* 原文块与 front matter：等宽字体，左上角的标签。Raw blocks and front matter: monospace with a top-left label. */
@@ -256,13 +201,15 @@ body {
 .edit-content .raw-block-label {
   display: block;
   padding: 4px 8px 0;
-  font-size: 14px;
+  font-size: max(var(--agw-font-size-min), 0.875em);
   color: var(--muted-foreground);
   user-select: none;
 }
 
 .edit-content .raw-block pre {
   padding: 4px 8px 8px;
+  border-radius: 0;
+  background: transparent;
   white-space: pre-wrap;
 }
 
@@ -272,8 +219,7 @@ body {
 
 /* 脚注引用、缺少定义的引用、图片。Footnote references, references without definitions, images. */
 .edit-content .footnote-reference {
-  color: var(--link);
-  font-size: max(14px, 0.75em);
+  color: var(--agw-prose-link);
 }
 
 .edit-content .missing-link-definition {
@@ -282,7 +228,6 @@ body {
 }
 
 .edit-content .edit-image img {
-  max-width: 100%;
   vertical-align: bottom;
 }
 
@@ -296,7 +241,7 @@ body {
   padding: 0.1em 0.5em;
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
-  font-size: max(14px, 0.875em);
+  font-size: max(var(--agw-font-size-min), 0.875em);
   color: var(--muted-foreground);
 }
 
@@ -310,18 +255,15 @@ body {
 }
 
 .edit-content table {
-  border-collapse: collapse;
+  margin: 0;
 }
 
 .edit-content :is(th, td) {
   min-width: 4em;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
   vertical-align: top;
 }
 
 .edit-content th {
-  font-weight: 600;
   background: var(--muted);
 }
 
@@ -359,7 +301,7 @@ body {
   background: var(--popover);
   color: var(--popover-foreground);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.16);
-  font-size: 14px;
+  font-size: max(var(--agw-font-size-min), 0.875em);
 }
 
 .slash-menu {
@@ -450,8 +392,8 @@ body {
   padding-right: 4px;
 }
 
-.drag-handle .popup{
-  margin-top: .5em;
+.drag-handle .popup {
+  margin-top: 0.5em;
 }
 
 .drag-handle .chrome-button {
@@ -465,4 +407,5 @@ body {
 .drag-handle .popup-menu {
   left: 0;
   right: auto;
+  font-size: max(var(--agw-font-size-min), 0.875em);
 }

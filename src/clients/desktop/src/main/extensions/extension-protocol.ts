@@ -99,7 +99,12 @@ export function createExtensionProtocolHandler(
           "background.html",
         );
       }
-      if (name !== "sdk.js" && name !== "sdk.d.ts" && name !== "manifest.schema.json") {
+      if (
+        name !== "sdk.js" &&
+        name !== "sdk.d.ts" &&
+        name !== "manifest.schema.json" &&
+        name !== "typography.css"
+      ) {
         return notFound();
       }
       const file = join(options.sdkDirectory, `v${state.manifest.manifestVersion}`, name);

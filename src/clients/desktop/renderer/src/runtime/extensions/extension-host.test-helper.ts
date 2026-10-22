@@ -113,6 +113,7 @@ export function createMainProcess(
       extensions: {},
       removedBundledExtensions: [],
       fileViewerDefaults: {},
+      appearance: { baseFontSize: 16, chatFontSize: null },
     },
     activeToken: null,
     localServerRuntime: null,

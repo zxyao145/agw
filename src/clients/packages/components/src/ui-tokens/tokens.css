@@ -5,6 +5,16 @@
   --font-geist-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
 }
 
+/* 字号 token 使用 static，保证 :root 中始终输出变量，后续可以在运行时缩放。 */
+/* Font-size tokens are static so the variables are always emitted on :root and can be scaled at runtime. */
+@theme static {
+  --text-3xs: 0.5625rem;
+  --text-2xs: 0.625rem;
+  --text-11: 0.6875rem;
+  --text-13: 0.8125rem;
+  --text-15: 0.9375rem;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -214,7 +224,7 @@ div[role="option"]:hover {
 
   .agw-titlebar {
     -webkit-app-region: drag;
-    @apply flex h-12 min-h-12 select-none items-center gap-2 border-b bg-card/92 px-3 backdrop-blur-xl;
+    @apply flex h-[48px] min-h-[48px] select-none items-center gap-2 border-b bg-card/92 px-3 backdrop-blur-xl;
   }
 
   .agw-titlebar.platform-darwin {
@@ -460,7 +470,7 @@ div[role="option"]:hover {
   }
 
   .agw-settings-nav h2 {
-    @apply mb-1.5 px-2.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70;
+    @apply mb-1.5 px-2.5 text-3xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70;
   }
 
   .agw-settings-nav section > a {
@@ -508,6 +518,17 @@ div[role="option"]:hover {
   .prose-sm {
     font-size: 0.875rem;
     line-height: 1.5;
+  }
+
+  /* Desktop 最小字号：仅 Desktop 生效，Web 保持原字号。Desktop-only minimum size; Web keeps its sizes. */
+  :root[data-agw-desktop="true"] .prose-sm {
+    font-size: max(var(--agw-font-size-min), 0.875rem);
+  }
+
+  :root[data-agw-desktop="true"]
+    .prose
+    :where(code, pre, table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    font-size: max(var(--agw-font-size-min), 0.875em);
   }
 
   .prose :where(p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
@@ -655,11 +676,11 @@ div[role="option"]:hover {
   @apply relative mx-auto w-full max-w-225;
 }
 
-.agw-conversation-list h1 {
+.agw-conversation-list h1:not(.agw-prose *) {
   @apply text-lg font-semibold;
 }
 
-.agw-conversation-list h2 {
+.agw-conversation-list h2:not(.agw-prose *) {
   @apply text-base font-semibold mt-2;
 }
 
@@ -694,38 +715,48 @@ div[role="option"]:hover {
 
 .agw-msg-result .agw-msg-body,
 .agw-msg-result .agw-msg-body > p,
-.agw-msg-result .msg-content,
-.agw-msg-result .msg-content-md-ol,
-.agw-msg-result .msg-content-md-ul {
+.agw-msg-result .msg-content {
   @apply text-sm leading-relaxed;
-}
-
-.agw-msg-result :not(pre) > code.msg-content-md-code {
-  @apply text-sm;
 }
 
 .msg-content {
   @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-2;
 }
 
-.msg-content-md-code {
-  @apply max-w-full whitespace-pre-wrap wrap-anywhere rounded bg-[#f4f4f4] px-1 py-0.5 text-[#17191d];
+/* 排版容器内的块级内容不保留源码换行，只有段落内的软换行可见。
+   Block containers inside the prose wrapper ignore source newlines; only soft breaks inside paragraphs show. */
+.msg-content .agw-prose {
+  white-space: normal;
 }
 
-p > code.msg-content-md-code {
-  @apply text-xs;
+.msg-content-md-p {
+  white-space: pre-wrap;
+}
+
+.msg-content-md-code {
+  @apply max-w-full whitespace-pre-wrap wrap-anywhere;
 }
 
 .msg-content-md-code-block {
-  @apply max-w-full overflow-hidden rounded-lg bg-[#f4f4f4] text-[#17191d] shadow-xs whitespace-normal dark:bg-[#202124] dark:text-[#f1f3f4] my-1.5;
+  @apply max-w-full overflow-hidden rounded-lg bg-[#f4f4f4] text-[#17191d] shadow-xs whitespace-normal dark:bg-[#202124] dark:text-[#f1f3f4];
 }
 
 .msg-content-md-code-header {
-  @apply flex min-h-11 items-center justify-between gap-3 border-b border-black/10 px-3 text-sm text-[#5f6368] dark:border-white/10 dark:text-[#bdc1c6];
+  @apply flex min-h-11 items-center justify-between gap-3 border-b border-black/10 px-3 text-[#5f6368] dark:border-white/10 dark:text-[#bdc1c6];
+  font-size: max(var(--agw-font-size-min), 0.875em);
+}
+
+/* 外间距放在 components 层，首尾块的重置规则才能覆盖它。
+   Outer margins live in the components layer so the first/last block reset can override them. */
+@layer components {
+  .msg-content-md-code-block,
+  .msg-content-md-table-wrap {
+    margin-block: var(--agw-prose-block-gap);
+  }
 }
 
 pre.msg-content-md-code-block-body {
-  @apply m-0 max-w-full overflow-x-auto bg-transparent p-3 font-mono text-[13px] leading-5;
+  @apply m-0 max-w-full overflow-x-auto rounded-none bg-transparent font-mono;
   overflow-wrap: normal;
   tab-size: 2;
   white-space: pre;
@@ -745,15 +776,15 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 }
 
 .msg-content-md-ol {
-  @apply list-decimal list-outside pl-5 leading-normal whitespace-normal;
+  @apply list-decimal list-outside whitespace-normal;
 }
 
 .msg-content-md-ul {
-  @apply list-disc list-outside pl-5 leading-normal whitespace-normal;
+  @apply list-disc list-outside whitespace-normal;
 }
 
 .msg-content-md-li {
-  @apply my-1 whitespace-normal;
+  @apply whitespace-normal;
 }
 
 .msg-content-md-li > .msg-content-md-p:first-child {
@@ -761,11 +792,11 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 }
 
 .msg-content-md-table-wrap {
-  @apply my-3 max-w-full overflow-x-auto rounded-lg border border-border bg-background shadow-xs whitespace-normal outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px];
+  @apply max-w-full overflow-x-auto rounded-lg border border-border bg-background shadow-xs whitespace-normal outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px];
 }
 
 .msg-content-md-table {
-  @apply w-full min-w-[36rem] border-collapse text-left text-sm whitespace-normal;
+  @apply m-0 w-full min-w-[36rem] border-collapse text-left whitespace-normal;
 }
 
 .msg-content-md-table thead {
@@ -773,19 +804,38 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 }
 
 .msg-content-md-table th {
-  @apply border-b border-border px-3 py-2.5 align-middle text-xs font-semibold tracking-wide text-muted-foreground whitespace-nowrap;
+  @apply align-middle tracking-wide text-muted-foreground whitespace-nowrap;
 }
 
 .msg-content-md-table tbody tr {
-  @apply border-b border-border/70 transition-colors last:border-b-0 even:bg-muted/20 hover:bg-muted/40;
+  @apply transition-colors even:bg-muted/20 hover:bg-muted/40;
 }
 
 .msg-content-md-table td {
-  @apply px-3 py-2.5 align-top leading-relaxed text-foreground whitespace-normal wrap-break-word;
+  @apply align-top text-foreground whitespace-normal wrap-break-word;
+}
+
+/* 表格外框由 table wrap 绘制，去掉会与它重叠的单元格外边。
+   The table wrap draws the outer frame, so drop the cell edges that would double it. */
+.msg-content-md-table :is(th, td):first-child {
+  border-left-width: 0;
+}
+
+.msg-content-md-table :is(th, td):last-child {
+  border-right-width: 0;
+}
+
+.msg-content-md-table thead tr:first-child > * {
+  border-top-width: 0;
+}
+
+.msg-content-md-table tbody tr:last-child > * {
+  border-bottom-width: 0;
 }
 
 .msg-content .katex-display {
-  @apply my-3 overflow-x-auto py-1;
+  @apply overflow-x-auto py-1;
+  margin-block: var(--agw-prose-block-gap);
 }
 
 .msg-content .katex-display > .katex {
@@ -797,11 +847,11 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 }
 
 .msg-content-md-footnotes {
-  @apply mt-2 border-t border-border pt-2 text-xs text-muted-foreground whitespace-normal;
+  @apply whitespace-normal;
 }
 
 .msg-content-md-footnotes ol {
-  @apply list-decimal list-outside pl-5;
+  @apply list-decimal list-outside;
 }
 
 .msg-content-md-footnotes li:focus-visible {
