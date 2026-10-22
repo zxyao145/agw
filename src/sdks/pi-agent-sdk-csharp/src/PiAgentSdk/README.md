@@ -147,7 +147,7 @@ Notification, status, widget, title, and editor-text requests are fire-and-forge
 | `PiAgent` | Validates global options and creates lazy new or resumed sessions. |
 | `PiSession` | Owns the run gate, handshake, prompt lifecycle, authoritative turn collection, abort/drain, and fault state. |
 | `PiRpcConnection` | Starts the transport, correlates command responses by ID, dispatches events, handles Extension UI, and completes pending operations on every terminal path. |
-| `PiProcessTransport` | Owns `Process`, serialized stdin writes, the stdout reader, the bounded stderr pump, process-tree kill, and asynchronous disposal. |
+| `PiProcessTransport` | Resolves the Pi CLI in the child environment, then owns `Process`, serialized stdin writes, the stdout reader, the bounded stderr pump, process-tree kill, and asynchronous disposal. |
 | `PiJsonlReader` | Reads strict LF-framed JSONL with UTF-8 validation and a bounded record size. |
 | `PiProtocolJson` | Deserializes polymorphic messages, content, deltas, and events while preserving unknown variants as raw JSON. |
 | `PiProcessEnvironment` | Builds a sanitized environment and applies explicit global/session overrides. |
@@ -270,6 +270,8 @@ Caller cancellation or early stream disposal follows this cleanup path:
 
 The child process does not inherit the complete host environment. The safe base includes process essentials, locale (`LC_` prefix matching), Windows process variables, proxy variables, and common certificate trust variables. Explicit `PiAgentOptions.EnvironmentVariables` values overlay that base, followed by `PiSessionOptions.EnvironmentVariables`.
 
+Each process start builds this environment once and uses it for both Pi CLI lookup and the child process; caller collections remain unchanged. On Unix, when lookup finds Pi through the login shell named by this environment's `SHELL`, the child receives that shell's complete `PATH`, with relative entries resolved against the shell's working directory. `ZDOTDIR` is not part of the safe base, so pass it explicitly when the login shell must read startup files outside `HOME`.
+
 Provider API keys, `NODE_OPTIONS`, SSH-agent variables, and cloud credentials are not inherited implicitly. Supply required credentials explicitly or through Pi's configured `~/.pi/agent` files. The SDK does not log raw prompts, reasoning, Tool payloads, stdout, or environment-variable values.
 
 `PiProjectTrust.Deny` is the default and emits `--no-approve`. This prevents implicit project trust but is not an operating-system sandbox. Run untrusted or unattended workloads inside an external container, VM, or equivalent policy boundary.
@@ -288,9 +290,10 @@ Caller cancellation remains `OperationCanceledException` and is not converted in
 
 ## Verification
 
-From the repository root, default tests use fake transports plus short-lived generated helper processes for transport lifecycle coverage. They never start a real Pi CLI:
+From the repository root, default tests use fake transports plus short-lived generated helper processes for transport lifecycle coverage. The CLI startup component tests additionally start the pinned npm Pi with `--version` through real Node.js and Unix login-shell environments; they never start an RPC session. Install the fixture first:
 
 ```bash
+npm ci --prefix src/sdks/pi-agent-sdk-csharp/tests/fixtures/pi-cli --ignore-scripts --no-audit --no-fund
 dotnet test src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.Tests
 dotnet csharpier check src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk
 ```
