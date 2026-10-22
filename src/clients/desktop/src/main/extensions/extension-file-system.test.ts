@@ -821,6 +821,25 @@ test("directory watches report every Agw replacement as changed", async () => {
   }
 });
 
+test("directory watches report created before changed for new files", async () => {
+  const { storage, replacedFiles, dispose } = await createHarness();
+  const events: FileChange[] = [];
+  const watcher = new ExtensionFileWatcher((event) => events.push(event), replacedFiles);
+  try {
+    await watcher.add(WATCH_OWNER, "w1", storage, false);
+    await settle(100);
+    const files = Array.from({ length: 32 }, (_, index) => join(storage, `created-${index}.txt`));
+    await Promise.all(files.map((file) => writeFile(file, "new")));
+    for (const file of files) {
+      await untilEvent(events, 0, "created", file);
+      assert.equal(events.find((event) => event.event.uri === uri(file))?.event.type, "created");
+    }
+  } finally {
+    watcher.releaseAll();
+    await dispose();
+  }
+});
+
 test("replacements by other programs, and a delete and create after an Agw replacement, still report created", async () => {
   const { storage, fileSystem, context, replacedFiles, dispose } = await createHarness();
   const events: FileChange[] = [];
