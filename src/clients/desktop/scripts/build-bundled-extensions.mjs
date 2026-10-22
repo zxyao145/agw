@@ -12,7 +12,8 @@ import { build } from "esbuild";
 const desktopDirectory = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const clientsDirectory = resolve(desktopDirectory, "..");
 const sourcesDirectory = join(clientsDirectory, "packages", "extensions");
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const pnpmCommand = process.platform === "win32" ? "cmd.exe" : "pnpm";
+const pnpmArguments = process.platform === "win32" ? ["/d", "/s", "/c", "pnpm.cmd"] : [];
 const SDK_SPECIFIER = "/__agw/sdk.js";
 // 宿主 `/__agw/sdk.js` 导出的名称。Names exported by the host's `/__agw/sdk.js`.
 const SDK_EXPORTS = new Set(["connect", "defineBackground", "defineView"]);
@@ -111,7 +112,11 @@ export async function buildBundledExtensions() {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
-  await run(pnpmCommand, ["--filter", "./packages/extensions/*", "run", "build"], clientsDirectory);
+  await run(
+    pnpmCommand,
+    [...pnpmArguments, "--filter", "./packages/extensions/*", "run", "build"],
+    clientsDirectory,
+  );
 
   const tools = await loadManifestTools();
   const { version } = JSON.parse(await readFile(join(desktopDirectory, "package.json"), "utf8"));
