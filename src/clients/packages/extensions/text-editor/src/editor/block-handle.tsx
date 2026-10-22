@@ -3,7 +3,7 @@ import type { Editor } from "@tiptap/core";
 import type { NestedOptions } from "@tiptap/extension-drag-handle";
 import { DragHandle } from "@tiptap/extension-drag-handle-react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { useMemo, useState } from "react";
+import { type RefObject, useMemo, useRef, useState } from "react";
 
 import { PopupButton } from "../shared/editor-chrome";
 import {
@@ -15,12 +15,14 @@ import {
   TURN_INTO_ITEMS,
   turnInto,
 } from "./block-commands";
+import { firstLineRect } from "./first-line";
 
-// 块拖动手柄（设计 5.7）：鼠标悬停时内容列的左侧显示 `⋮⋮` 手柄，与块的第一行对齐，拖动可以移动块；点击打开块菜单：
-// Turn into、Duplicate、Delete。顶层列表中的列表项也有手柄，手柄不随列表的缩进移动。
-// The block drag handle (design section 5.7): hovering a block shows a `⋮⋮` handle left of the content column, level
-// with the block's first line, that drags the block; clicking it opens the block menu: Turn into, Duplicate, Delete.
-// Items of lists get handles too, and the handle does not follow the list's indentation.
+// 块拖动手柄（设计 5.7）：鼠标悬停时内容列的左侧显示 `⋮⋮` 手柄，垂直居中在块的第一行上（Markdown 排版设计第 5 节），
+// 拖动可以移动块；点击打开块菜单：Turn into、Duplicate、Delete。顶层列表中的列表项也有手柄，手柄不随列表的缩进移动。
+// The block drag handle (design section 5.7): hovering a block shows a `⋮⋮` handle left of the content column,
+// vertically centered on the block's first line (Markdown typography design, section 5), that drags the block;
+// clicking it opens the block menu: Turn into, Duplicate, Delete. Items of lists get handles too, and the handle does
+// not follow the list's indentation.
 
 const LIST_TYPES = new Set(["bulletList", "orderedList"]);
 
@@ -60,12 +62,36 @@ function alignToContentLeft(editor: Editor): Middleware {
   };
 }
 
+// left-start 使手柄顶部与块外框顶部对齐，这个 middleware 把手柄移到第一行的中心。插件先调用 onNodeChange 再计算位置，
+// position 中已是悬停块的位置。
+// left-start aligns the handle's top with the block box's top; this middleware moves the handle to the first line's
+// center. The plugin calls onNodeChange before computing the position, so position holds the hovered block's position.
+function centerOnFirstLine(editor: Editor, position: RefObject<number>): Middleware {
+  return {
+    name: "centerOnFirstLine",
+    fn: ({ y, rects }) => {
+      const block = editor.view.nodeDOM(position.current);
+      if (!(block instanceof HTMLElement)) {
+        throw new Error(`The block at ${position.current} has no element.`);
+      }
+      const line = firstLineRect(block);
+      return {
+        y:
+          y +
+          (line.top + line.height / 2 - block.getBoundingClientRect().top) -
+          rects.floating.height / 2,
+      };
+    },
+  };
+}
+
 export function BlockHandle({ editor }: { editor: Editor }) {
   const [block, setBlock] = useState<{ node: ProseMirrorNode; pos: number } | null>(null);
   const [open, setOpen] = useState(false);
+  const position = useRef(-1);
   // 配置对象保持不变，DragHandle 才不会重建插件。A stable config keeps DragHandle from recreating its plugin.
   const positionConfig = useMemo<Partial<ComputePositionConfig>>(
-    () => ({ middleware: [alignToContentLeft(editor)] }),
+    () => ({ middleware: [alignToContentLeft(editor), centerOnFirstLine(editor, position)] }),
     [editor],
   );
 
@@ -87,7 +113,10 @@ export function BlockHandle({ editor }: { editor: Editor }) {
       editor={editor}
       nested={NESTED}
       computePositionConfig={positionConfig}
-      onNodeChange={({ node, pos }) => setBlock(node === null ? null : { node, pos })}
+      onNodeChange={({ node, pos }) => {
+        position.current = pos;
+        setBlock(node === null ? null : { node, pos });
+      }}
     >
       <PopupButton
         label="⋮⋮"

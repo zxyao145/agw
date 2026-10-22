@@ -1,7 +1,8 @@
-import { defineView, type ExtensionApi, type FileViewerParams } from "@agw/extension-sdk";
+import { defineView, type FileViewerParams } from "@agw/extension-sdk";
 import { createRoot } from "react-dom/client";
 
-import { notifyFailure } from "../shared/errors";
+import { applyDocumentFontSize } from "../shared/apply-font-sizes";
+import { createSettingsGate } from "../shared/settings-gate";
 import { applyHighlightTheme } from "../shared/theme";
 import { EditDocument } from "./edit-document";
 import { EditView, unmountEditView } from "./edit-view";
@@ -12,26 +13,28 @@ import "./edit.css";
 const container = document.getElementById("root");
 if (!container) throw new Error("The #root element is missing.");
 const root = createRoot(container);
-let opened: { api: ExtensionApi; editDocument: EditDocument } | null = null;
+
+const gate = createSettingsGate(root, (api, settings, params) => {
+  const fontSize = applyDocumentFontSize(api, settings);
+  const { file } = params as FileViewerParams;
+  const editDocument = new EditDocument(api, file);
+  root.render(<EditView api={api} editDocument={editDocument} />);
+  return {
+    // 每次显示都交给文档会话：同一个文件刷新，另一个文件切换。Every show goes to the session: refresh or switch.
+    show: (next) => editDocument.show((next as FileViewerParams).file),
+    dispose() {
+      fontSize.dispose();
+      unmountEditView(root, editDocument);
+    },
+  };
+});
 
 defineView({
-  onLoad(api, params) {
+  async onLoad(api, params) {
     api.theme.apply();
     applyHighlightTheme(api);
-    const { file } = params as FileViewerParams;
-    const editDocument = new EditDocument(api, file);
-    opened = { api, editDocument };
-    root.render(<EditView api={api} editDocument={editDocument} />);
+    await gate.onLoad(api, params);
   },
-  // 每次显示都交给文档会话：同一个文件刷新，另一个文件切换。Every show goes to the session: refresh or switch.
-  onShow(params) {
-    if (!opened) throw new Error("The view received a file before onLoad.");
-    const { file } = params as FileViewerParams;
-    notifyFailure(opened.api, opened.editDocument.show(file));
-  },
-  onUnload() {
-    if (opened) unmountEditView(root, opened.editDocument);
-    else root.unmount();
-    opened = null;
-  },
+  onShow: gate.onShow,
+  onUnload: gate.onUnload,
 });

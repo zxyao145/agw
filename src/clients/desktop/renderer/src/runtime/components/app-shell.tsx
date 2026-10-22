@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@agw/components/query";
 import {
+  ALargeSmall,
+  AppWindow,
   ArrowLeft,
   Check,
   ChevronDown,
@@ -79,7 +81,10 @@ const SETTINGS_GROUPS: ReadonlyArray<{
 }> = [
   {
     label: "Desktop",
-    items: [{ href: "/extensions/", label: "Extensions", icon: Puzzle }],
+    items: [
+      { href: "/settings/appearance/", label: "Appearance", icon: ALargeSmall },
+      { href: "/extensions/", label: "Extensions", icon: Puzzle },
+    ],
   },
   {
     label: "Operations",
@@ -109,11 +114,7 @@ const SETTINGS_GROUPS: ReadonlyArray<{
     items: [
       settingsItem(APP_ROUTES.quickPrompts, { icon: Sparkles }),
       settingsItem(APP_ROUTES.settings, { label: "Servers", icon: Server }),
-      {
-        href: "/settings/#appearance",
-        label: "Appearance & close",
-        icon: Moon,
-      },
+      { href: "/settings/#window", label: "Window", icon: AppWindow },
       { href: "/settings/#about", label: "About", icon: Info },
     ],
   },
@@ -169,7 +170,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     projectId: activeProjectId,
     conversationId: searchParams.get("conversationId"),
   });
-  const settingsHref = buildSettingsHref("/dashboard/", chatReturnHref);
+  const settingsHref = buildSettingsHref("/settings/appearance/", chatReturnHref);
   const serverId = desktop.activeProfile?.id ?? "browser";
   const runtimeSettings = desktop.runtimeState?.settings;
   const serverProfiles = runtimeSettings?.profiles ?? [];
@@ -293,7 +294,10 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     persistTabs(nextTabs);
     if (activeProjectId === projectId) {
       router.push(
-        buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, conversationId: null }),
+        buildChatHref("/desktop/chat", {
+          projectId: DEFAULT_PROJECT_ID,
+          conversationId: null,
+        }),
       );
     }
   };
@@ -335,7 +339,10 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     setServerPickerOpen(false);
     if (!runtimeSettings || nextServerId === runtimeSettings.activeServerId) return;
     router.replace(
-      buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, conversationId: null }),
+      buildChatHref("/desktop/chat", {
+        projectId: DEFAULT_PROJECT_ID,
+        conversationId: null,
+      }),
     );
     void desktop.saveSettings({ activeServerId: nextServerId });
   };
@@ -367,7 +374,12 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                   key={projectId}
                   className={cn("agw-project-tab", activeProjectId === projectId && "is-active")}
                 >
-                  <Link href={buildChatHref("/desktop/chat", { projectId, conversationId: null })}>
+                  <Link
+                    href={buildChatHref("/desktop/chat", {
+                      projectId,
+                      conversationId: null,
+                    })}
+                  >
                     <StatusDot status={status} />
                     <span>{projectById.get(projectId)?.name ?? projectId}</span>
                   </Link>

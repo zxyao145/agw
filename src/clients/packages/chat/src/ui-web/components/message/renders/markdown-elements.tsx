@@ -109,7 +109,7 @@ export function MarkdownLink({
       title={title ?? undefined}
       target="_blank"
       rel="noreferrer"
-      className="text-[#2e82d2] underline-offset-2 hover:underline focus-visible:underline dark:text-[#74b8f7]"
+      className="hover:underline focus-visible:underline"
     >
       {children}
       <ExternalLink
@@ -118,7 +118,7 @@ export function MarkdownLink({
       />
     </a>
   ) : (
-    <span title={title ?? href} className="text-[#2e82d2] dark:text-[#74b8f7]">
+    <span title={title ?? href} className="text-(color:--agw-prose-link)">
       <FileText aria-hidden="true" className="mr-1 inline-block size-[0.9em] align-[-0.08em]" />
       {children}
     </span>

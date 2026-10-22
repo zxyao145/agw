@@ -26,6 +26,7 @@ async function createHandler(enabled = true) {
   await writeFile(join(sdk, "v1", "sdk.js"), "export const sdkVersion = 1;");
   await writeFile(join(sdk, "v1", "sdk.d.ts"), "export declare const sdkVersion: 1;");
   await writeFile(join(sdk, "v1", "manifest.schema.json"), "{}");
+  await writeFile(join(sdk, "v1", "typography.css"), ".agw-prose { color: inherit; }");
   await writeFile(join(scratch.path, "secret.txt"), "outside");
   await symlink(join(scratch.path, "secret.txt"), join(root, "leak.txt"));
 
@@ -81,6 +82,7 @@ test("paths outside the package and symbolic links leaving it are not found", as
       "/missing.html",
       "/index.html/child",
       "/__agw/other.js",
+      "/__agw/other.css",
       "/",
     ]) {
       assert.equal((await handler(get(`agw-extension://sample${path}`))).status, 404, path);
@@ -100,6 +102,18 @@ test("the SDK, its types and the schema are served for the manifest's API versio
     assert.equal(await types.text(), "export declare const sdkVersion: 1;");
     const schema = await handler(get("agw-extension://sample/__agw/manifest.schema.json"));
     assert.equal(schema.headers.get("Content-Type"), "application/json");
+  } finally {
+    await dispose();
+  }
+});
+
+test("the shared typography stylesheet is served as CSS", async () => {
+  const { handler, dispose } = await createHandler();
+  try {
+    const response = await handler(get("agw-extension://sample/__agw/typography.css"));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Content-Type"), "text/css");
+    assert.equal(await response.text(), ".agw-prose { color: inherit; }");
   } finally {
     await dispose();
   }

@@ -118,6 +118,64 @@ const x = 1;
 [^note]: The footnote text.
 `;
 
+// 检查 Edit 与 Preview 排版的文档：任务列表（含嵌套列表）、表格、带定义的引用链接、行内代码、引用块中的代码块。
+// The document for the Edit and Preview typography checks: a task list with a nested list, a table, a reference link
+// with its definition, inline code, and a fenced code block inside a blockquote.
+const TYPOGRAPHY_MARKDOWN = `# Typography sample
+
+Top paragraph with a [typography link][typo] and \`inline code\`.
+
+- [ ] first task
+- [ ] second task
+  - nested item
+
+| Name | Value |
+| --- | --- |
+| alpha | 1 |
+
+> \`\`\`ts
+> const quoted = 1;
+> \`\`\`
+
+[typo]: https://example.com/typography
+`;
+
+// 检查拖动手柄与第一行对齐的文档：每种块各一个；图片文件不存在，Edit 显示占位。
+// The document for the drag handle first-line checks: one block of each kind; the image file does not exist, so Edit
+// shows a placeholder.
+const FIRST_LINE_MARKDOWN = `---
+title: First line
+---
+
+Paragraph line for the handle.
+
+# Level one heading
+
+### Level three heading
+
+* Bullet item
+
+- [ ] Task item
+
+> Quoted line
+
+\`\`\`ts
+const line = 1;
+\`\`\`
+
+| Cell name | Value |
+| --- | --- |
+| alpha | 1 |
+
+![Missing picture](images/missing.png)
+
+---
+
+<div class="first-line">
+HTML block
+</div>
+`;
+
 // 缩进不规范的 TypeScript：唯一缩进的一行为 4 个空格，Monaco 按 4 个空格缩进格式化。
 // TypeScript with irregular indentation: the only indented line uses 4 spaces, so Monaco formats with 4 spaces.
 const APP_TS = `function   add(a:number,b:number){
@@ -385,6 +443,8 @@ async function prepareServerData(baseUrl, echoPort) {
   // Text Editor 与 todo-editor 使用的文件。Files for Text Editor and todo-editor.
   await mkdir(join(projectDirectory, "notes"), { recursive: true });
   await writeFile(join(projectDirectory, "notes", "edit.md"), EDIT_MARKDOWN);
+  await writeFile(join(projectDirectory, "notes", "typography.md"), TYPOGRAPHY_MARKDOWN);
+  await writeFile(join(projectDirectory, "first-line.md"), FIRST_LINE_MARKDOWN);
   await mkdir(join(projectDirectory, "src"), { recursive: true });
   await writeFile(join(projectDirectory, "src", "app.ts"), APP_TS);
   await writeFile(join(projectDirectory, "config.json"), CONFIG_JSON);

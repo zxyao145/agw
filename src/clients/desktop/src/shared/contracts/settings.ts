@@ -4,6 +4,15 @@ import type { ServerProfile } from "./server-profile";
 export type PackageFlavor = "full" | "client";
 export type CloseBehavior = "minimize-to-tray" | "quit-desktop";
 
+/**
+ * 字号设置，单位 px。`null` 表示按基础字号推导。
+ * Font size settings in px. `null` derives the size from the base font size.
+ */
+export type AppearanceSettings = {
+  baseFontSize: number;
+  chatFontSize: number | null;
+};
+
 export type DesktopSettings = {
   schemaVersion: 1;
   packageFlavor: PackageFlavor;
@@ -20,9 +29,13 @@ export type DesktopSettings = {
    * File type (`*.md`, `dockerfile`) → the user's default viewer id (`<extensionId>:<viewerId>` or `"source"`).
    */
   fileViewerDefaults: Record<string, string>;
+  appearance: AppearanceSettings;
 };
 
 /** Only fields changed by the caller; tab entries merge per Server. */
 export type DesktopSettingsUpdate = Partial<
-  Pick<DesktopSettings, "closeBehavior" | "profiles" | "activeServerId" | "projectTabsByServer">
+  Pick<
+    DesktopSettings,
+    "closeBehavior" | "profiles" | "activeServerId" | "projectTabsByServer" | "appearance"
+  >
 >;

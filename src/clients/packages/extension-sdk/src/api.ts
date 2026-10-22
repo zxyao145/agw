@@ -130,7 +130,10 @@ export interface ExtensionErrorData {
 
 export interface ThemeInfo {
   kind: "light" | "dark";
-  /** tokens.css 中的颜色、圆角与字体变量。Color, radius and font variables from tokens.css. */
+  /**
+   * tokens.css 中的颜色、圆角、字体与字号变量。字号变量为计算后的 px 值，宿主只提供 `--agw-font-size-base` 与 `--agw-font-size-min`，最小字号固定为 14px。
+   * Color, radius, font and font-size variables from tokens.css. The font-size variables hold computed px values, and the host provides only `--agw-font-size-base` and `--agw-font-size-min`; the minimum size is fixed at 14px.
+   */
   tokens: Record<string, string>;
 }
 
@@ -180,7 +183,10 @@ export interface ExtensionApi {
   readonly theme: {
     get(): ThemeInfo;
     onDidChange(listener: (theme: ThemeInfo) => void): Disposable;
-    /** 把主题变量与 dark class 写到 document 上并保持同步。Applies theme variables and the dark class to the document and keeps them in sync. */
+    /**
+     * 把主题变量与 dark class 写到 document 上并保持同步，同时加入 `/__agw/typography.css`。元素加上 `agw-prose` 与 `data-density="document"` 或 `"compact"` 即使用排版规范。宿主只推送 base 与 minimum 字号，extension frame 中 `compact` 的字号为 base × 0.875；`document` 密度使用页面设置的 `--agw-font-size-document`，默认值为 base 字号。
+     * Applies theme variables and the dark class to the document and keeps them in sync, and also links `/__agw/typography.css`. Elements with `agw-prose` and `data-density="document"` or `"compact"` use the typography. The host pushes only the base and minimum sizes, so in extension frames `compact` uses base × 0.875; the `document` density uses `--agw-font-size-document` set by the page, which defaults to the base size.
+     */
     apply(): Disposable;
   };
 }

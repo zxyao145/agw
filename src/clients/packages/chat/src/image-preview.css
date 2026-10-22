@@ -51,6 +51,6 @@
 .agw-image-zoom output {
   min-width: 56px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--text-13);
   font-variant-numeric: tabular-nums;
 }

@@ -9,6 +9,7 @@ import type {
   ExtensionSettings,
   PackageFlavor,
 } from "../../shared/contracts";
+import { DEFAULT_APPEARANCE, MIN_FONT_SIZE } from "../../shared/appearance";
 import { HOST_PERMISSION_PATTERN } from "../../shared/extension-host-permissions";
 import { EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import { writeJsonFile } from "./json-file";
@@ -23,6 +24,11 @@ const extensionSettingsSchema = z.record(
     lastActivatedVersion: z.string().nullable(),
   }),
 );
+
+const appearanceSchema = z.strictObject({
+  baseFontSize: z.number().int().min(MIN_FONT_SIZE).max(20),
+  chatFontSize: z.number().int().min(MIN_FONT_SIZE).max(24).nullable(),
+});
 
 const fileTypeSchema = z.string().min(1);
 const fileViewerIdSchema = z.string().min(1);
@@ -83,6 +89,7 @@ export class DesktopSettingsStore {
         extensions: extensionSettingsSchema.parse(parsed.extensions ?? {}),
         removedBundledExtensions: z.array(z.string()).parse(parsed.removedBundledExtensions ?? []),
         fileViewerDefaults: fileViewerDefaultsSchema.parse(parsed.fileViewerDefaults ?? {}),
+        appearance: appearanceSchema.parse(parsed.appearance ?? DEFAULT_APPEARANCE),
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -129,6 +136,9 @@ export class DesktopSettingsStore {
         profiles,
         activeServerId,
         projectTabsByServer,
+        appearance: update.appearance
+          ? appearanceSchema.parse(update.appearance)
+          : current.appearance,
       });
     });
   }
@@ -340,6 +350,7 @@ export class DesktopSettingsStore {
       extensions: {},
       removedBundledExtensions: [],
       fileViewerDefaults: {},
+      appearance: DEFAULT_APPEARANCE,
     };
   }
 

@@ -18,6 +18,7 @@
     "@agw/execution-core": "workspace:*"
   },
   "devDependencies": {
+    "@agw/test-harness": "workspace:*",
     "tsx": "catalog:"
   }
 }

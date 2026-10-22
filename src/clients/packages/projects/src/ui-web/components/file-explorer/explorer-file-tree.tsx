@@ -324,7 +324,7 @@ function FileTreeNode({
             {item.gitStatus && (
               <span
                 className={cn(
-                  "text-[10px] font-medium px-1.5 py-0.5 rounded",
+                  "text-2xs font-medium px-1.5 py-0.5 rounded",
                   item.gitStatus === GitStatus.Added &&
                     "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
                   item.gitStatus === GitStatus.Modified &&

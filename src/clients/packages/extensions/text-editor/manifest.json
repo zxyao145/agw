@@ -29,7 +29,8 @@
         "priority": "option",
         "entry": "code.html"
       }
-    ]
+    ],
+    "settings": { "entry": "settings.html" }
   },
   "permissions": ["fs.cloud.read", "fs.cloud.write"]
 }

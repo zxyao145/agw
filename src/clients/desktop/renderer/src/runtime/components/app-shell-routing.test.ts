@@ -11,8 +11,8 @@ test("Desktop Settings preserves the selected Chat project and conversation", ()
     "/dashboard/?returnTo=%2Fdesktop%2Fchat%2F%3FprojectId%3Dproject-2%26conversationId%3Dconversation-3",
   );
   assert.equal(
-    buildSettingsHref("/settings/#appearance", chatHref),
-    "/settings/?returnTo=%2Fdesktop%2Fchat%2F%3FprojectId%3Dproject-2%26conversationId%3Dconversation-3#appearance",
+    buildSettingsHref("/settings/#window", chatHref),
+    "/settings/?returnTo=%2Fdesktop%2Fchat%2F%3FprojectId%3Dproject-2%26conversationId%3Dconversation-3#window",
   );
 });
 

@@ -7,7 +7,7 @@ const { default: MdCard } = await import("./md-card.tsx");
 const { default: TextContent } = await import("./text-content.tsx");
 const { default: Reasoning } = await import("./reasoning.tsx");
 const { default: PlanCard } = await import("./plan-card.tsx");
-const { MarkdownRendererProvider } = await import("./markdown-renderer.tsx");
+const { MarkdownRendererProvider, MarkdownView } = await import("./markdown-renderer.tsx");
 const { TiptapMarkdown } = await import("../../../markdown-tiptap/index.ts");
 
 const MARKDOWN = [
@@ -28,13 +28,55 @@ function mdCardHtml(markdown: string): string {
   return html;
 }
 
+const BLOCK_MARKDOWN = "# A\n\n> q\n\n---\n\n### C";
+
+function assertProseRoot(container: Element) {
+  const root = container.querySelector(".agw-prose");
+  assert.ok(root);
+  assert.equal(root.getAttribute("data-density"), "compact");
+  for (const selector of ["h1", "blockquote", "hr", "h3"]) {
+    assert.ok(root.querySelector(selector), selector);
+  }
+}
+
+test("the default renderer wraps Markdown in a compact agw-prose root", () => {
+  const view = render(React.createElement(MarkdownView, { markdown: BLOCK_MARKDOWN }));
+
+  assertProseRoot(view.container);
+});
+
+test("the Tiptap renderer wraps Markdown in a compact agw-prose root", () => {
+  const view = render(
+    React.createElement(
+      MarkdownRendererProvider,
+      { renderer: TiptapMarkdown },
+      React.createElement(MarkdownView, { markdown: BLOCK_MARKDOWN }),
+    ),
+  );
+
+  assertProseRoot(view.container);
+});
+
+test("the Tiptap renderer puts task checkboxes where the typography selector finds them", () => {
+  const view = render(
+    React.createElement(
+      MarkdownRendererProvider,
+      { renderer: TiptapMarkdown },
+      React.createElement(MarkdownView, { markdown: "- [x] done\n- [ ] todo" }),
+    ),
+  );
+
+  const selector = 'li > input[type="checkbox"], li > p:first-child > input[type="checkbox"]';
+  assert.equal(view.container.querySelectorAll(selector).length, 2);
+});
+
 test("without a provider, text content renders through MdCard", () => {
   const expected = mdCardHtml(MARKDOWN);
   const view = render(
     React.createElement(TextContent, { node: { type: "text", content: MARKDOWN } }),
   );
 
-  assert.equal(view.container.querySelector(".msg-content")?.innerHTML, expected);
+  assert.equal(view.container.querySelector(".msg-content > .agw-prose")?.innerHTML, expected);
 });
 
 test("without a provider, reasoning renders through MdCard", () => {
@@ -43,7 +85,7 @@ test("without a provider, reasoning renders through MdCard", () => {
     React.createElement(Reasoning, { node: { type: "reasoning", content: ONE_LINE } }),
   );
 
-  assert.equal(view.container.querySelector(".flex-1")?.innerHTML, expected);
+  assert.equal(view.container.querySelector(".flex-1 .agw-prose")?.innerHTML, expected);
 });
 
 test("without a provider, every plan part renders through MdCard", () => {
@@ -57,7 +99,7 @@ test("without a provider, every plan part renders through MdCard", () => {
     }),
   );
 
-  const parts = [...view.container.querySelectorAll(":scope > .msg-content, section .msg-content")];
+  const parts = [...view.container.querySelectorAll(".msg-content > .agw-prose")];
   assert.equal(parts.length, 3);
   for (const part of parts) assert.equal(part.innerHTML, expected);
 });

@@ -49,7 +49,7 @@ export function HumanGateApproval({
                 ? request.source.toolName || "Tool approval"
                 : request.source.nodeName || "HumanGate"}
             </div>
-            <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[11px]">
+            <Badge variant="secondary" className="min-h-5 rounded-md px-1.5 text-11 leading-none">
               {mode}
             </Badge>
           </div>
@@ -62,7 +62,7 @@ export function HumanGateApproval({
             </div>
           ) : null}
           {request.kind === "tool-approval" && request.arguments != null ? (
-            <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-2 font-mono text-11 leading-relaxed text-muted-foreground">
               {JSON.stringify(request.arguments, null, 2)}
             </pre>
           ) : null}

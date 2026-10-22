@@ -205,7 +205,7 @@ export function ServerProfilesPanel() {
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate text-sm font-medium">{profile.name}</span>
                       {active ? (
-                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                           Active
                         </span>
                       ) : null}

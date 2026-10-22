@@ -108,7 +108,7 @@ function SummaryCards({
             >
               <div className={`absolute inset-y-0 left-0 w-1 ${c.bar}`} />
               <div className="pl-3">
-                <div className="text-[0.7rem] font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="text-11 font-medium uppercase tracking-wider text-muted-foreground">
                   {c.label}
                 </div>
                 <div className={`mt-2 text-3xl font-semibold tabular-nums ${c.color}`}>

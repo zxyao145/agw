@@ -76,7 +76,7 @@ export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDia
                       <div className="mb-1 flex items-center gap-2 font-medium text-sm">
                         <span>{option.label}</span>
                         {option.kind ? (
-                          <Badge variant="outline" className="px-1.5 py-0 text-[10px] uppercase">
+                          <Badge variant="outline" className="px-1.5 py-0 text-2xs uppercase">
                             {option.kind}
                           </Badge>
                         ) : null}

@@ -231,7 +231,7 @@ function SessionStatus({ active }: { active: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-11 font-medium",
         active
           ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
           : "bg-muted text-muted-foreground",

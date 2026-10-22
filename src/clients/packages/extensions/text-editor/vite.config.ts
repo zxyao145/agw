@@ -34,6 +34,7 @@ export default defineConfig({
         markdown: fileURLToPath(new URL("./markdown.html", import.meta.url)),
         preview: fileURLToPath(new URL("./preview.html", import.meta.url)),
         code: fileURLToPath(new URL("./code.html", import.meta.url)),
+        settings: fileURLToPath(new URL("./settings.html", import.meta.url)),
       },
       // SDK 由 Desktop 在运行时提供。Desktop serves the SDK at runtime.
       external: [SDK_PACKAGE],

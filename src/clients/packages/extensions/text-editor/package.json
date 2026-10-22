@@ -62,6 +62,7 @@
     "vfile-matter": "catalog:",
     "vite": "catalog:",
     "y-protocols": "catalog:",
-    "yjs": "catalog:"
+    "yjs": "catalog:",
+    "zod": "catalog:"
   }
 }

@@ -69,7 +69,9 @@ export function MarkdownDocument({
   }
   return (
     <MarkdownContext value={context}>
-      <article className="markdown-body">{content}</article>
+      <article className="markdown-body agw-prose" data-density="document">
+        {content}
+      </article>
     </MarkdownContext>
   );
 }

@@ -62,6 +62,22 @@ function EncodingPicker({
 }
 
 /**
+ * 设置不能读取或不合法时显示的说明面板，查看器与设置页共用；`hint` 是第二行的操作提示，两处各自传入。
+ * The panel shown when the Text Editor settings cannot be read or are invalid, shared by the viewers and the settings
+ * page; `hint` is the second-line instruction, passed by each of the two.
+ */
+export function SettingsError({ error, hint }: { error: Error; hint: string }) {
+  return (
+    <div className="document-error">
+      <div role="alert">
+        <p className="document-error-title">Text Editor settings are invalid: {error.message}</p>
+        <p>{hint}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
  * 文本文档读取失败时的说明面板，Preview、Code 与 Edit 共用。编码不能识别时显示 "Reopen with Encoding…"，
  * 用户从 `listEncodings` 的结果中选择编码后调用 `onReopenWithEncoding`。
  * The panel shown when reading a text document fails, shared by Preview, Code and Edit. When the encoding cannot be

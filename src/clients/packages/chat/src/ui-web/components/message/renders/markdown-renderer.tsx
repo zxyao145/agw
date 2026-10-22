@@ -22,5 +22,9 @@ export function MarkdownRendererProvider({
 
 export function MarkdownView({ markdown }: MarkdownRendererProps) {
   const Renderer = React.useContext(MarkdownRendererContext);
-  return <Renderer markdown={markdown} />;
+  return (
+    <div className="agw-prose" data-density="compact">
+      <Renderer markdown={markdown} />
+    </div>
+  );
 }

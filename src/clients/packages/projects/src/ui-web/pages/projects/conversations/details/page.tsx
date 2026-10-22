@@ -357,7 +357,7 @@ function HistoryMessage({ message }: { message: AiMessage }) {
         ) : (
           message.contents.map((content, index) => (
             <div key={`${message.messageId}:${index}`} className="space-y-1">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              <div className="text-11 uppercase tracking-wide text-muted-foreground">
                 {content.type}
               </div>
               <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-sm">

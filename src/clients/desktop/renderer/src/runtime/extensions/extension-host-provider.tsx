@@ -13,8 +13,8 @@ import { ExtensionHost } from "./extension-host";
 import { HostOverlayTracker } from "./host-overlay-tracker";
 
 /**
- * 提供给 extension 的 tokens.css 颜色、圆角与字体变量；读取的是计算值，其中的 `var()` 已经替换。
- * tokens.css color, radius and font variables offered to extensions; their computed values have `var()` substituted.
+ * 提供给 extension 的 tokens.css 颜色、圆角、字体与字号变量；读取的是计算值，其中的 `var()` 已经替换。
+ * tokens.css color, radius, font and font-size variables offered to extensions; their computed values have `var()` substituted.
  */
 export const THEME_TOKEN_NAMES = [
   "--background",
@@ -54,6 +54,8 @@ export const THEME_TOKEN_NAMES = [
   "--radius-lg",
   "--radius-xl",
   "--font-mono",
+  "--agw-font-size-base",
+  "--agw-font-size-min",
 ] as const;
 
 type ExtensionRuntime = { host: ExtensionHost; tracker: HostOverlayTracker };
@@ -82,7 +84,7 @@ function getExtensionRuntime(): ExtensionRuntime {
   return runtime;
 }
 
-function readTheme(kind: "light" | "dark"): { theme: ThemeInfo; background: string } {
+export function readTheme(kind: "light" | "dark"): { theme: ThemeInfo; background: string } {
   const style = getComputedStyle(document.documentElement);
   const tokens = Object.fromEntries(
     THEME_TOKEN_NAMES.map((name) => [name, style.getPropertyValue(name).trim()]).filter(
@@ -166,6 +168,9 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
     );
   }, [host, authUser, profile, token]);
 
+  // 字号设置变化时同样推送主题。Font size setting changes push the theme as well.
+  const baseFontSize = runtimeState?.settings.appearance.baseFontSize;
+  const chatFontSize = runtimeState?.settings.appearance.chatFontSize;
   React.useEffect(() => {
     if (!host || !resolvedTheme) return;
     // 等 next-themes 把 class 写到 document 后再读取变量。Read variables after next-themes applies the class.
@@ -174,7 +179,7 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
       host.setTheme(theme, background);
     });
     return () => cancelAnimationFrame(frame);
-  }, [host, resolvedTheme]);
+  }, [host, resolvedTheme, baseFontSize, chatFontSize]);
 
   return (
     <ExtensionHostContext value={value}>

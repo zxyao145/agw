@@ -21,15 +21,15 @@
     "@agw/tools": "workspace:*",
     "@tanstack/react-virtual": "catalog:"
   },
+  "devDependencies": {
+    "@agw/test-harness": "workspace:*",
+    "@types/jsdom": "catalog:",
+    "jsdom": "catalog:"
+  },
   "peerDependencies": {
     "lucide-react": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "sonner": "catalog:"
-  },
-  "devDependencies": {
-    "@agw/test-harness": "workspace:*",
-    "@types/jsdom": "catalog:",
-    "jsdom": "catalog:"
   }
 }

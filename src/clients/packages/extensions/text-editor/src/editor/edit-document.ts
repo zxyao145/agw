@@ -65,6 +65,8 @@ export class EditDocument {
         slashMenu: this.slashMenu,
         fileUri: () => this.session.file.uri,
       }),
+      // 共用的 Markdown 排版，document 密度。The shared Markdown typography in document density.
+      editorProps: { attributes: { class: "agw-prose", "data-density": "document" } },
       enableContentCheck: true,
       onContentError: ({ error }) => {
         throw error;
