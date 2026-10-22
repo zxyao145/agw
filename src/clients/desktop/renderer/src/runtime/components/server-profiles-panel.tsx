@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Cloud, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Circle, CircleDot, Cloud, LoaderCircle, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { ServerProfile } from "@desktop/shared/contracts";
@@ -19,6 +20,8 @@ import {
   Label,
 } from "@agw/components";
 import { OidcServerLogin } from "./oidc-server-login";
+import { buildSettingsHref } from "./app-shell-routing";
+import { useExtensionRuntime } from "../extensions/extension-host-provider";
 import { useDesktopRuntime } from "../runtime-provider";
 
 type ProfileDraft = {
@@ -52,10 +55,38 @@ function normalizeHttpUrl(value: string): string {
 
 export function ServerProfilesPanel() {
   const desktop = useDesktopRuntime();
+  const router = useRouter();
+  const extensionHost = useExtensionRuntime()?.host ?? null;
   const settings = desktop.runtimeState?.settings;
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<ProfileDraft>({ ...NEW_REMOTE_DRAFT });
   const [busy, setBusy] = React.useState(false);
+  const [activatingId, setActivatingId] = React.useState<string | null>(null);
+  const activationPending = React.useRef(false);
+
+  const activateProfile = async (profile: ServerProfile) => {
+    if (!settings || busy || activationPending.current || profile.id === settings.activeServerId)
+      return;
+
+    activationPending.current = true;
+    setBusy(true);
+    try {
+      if (extensionHost && !(await extensionHost.confirmDiscardUnsaved())) return;
+
+      setActivatingId(profile.id);
+      await desktop.saveSettings({ activeServerId: profile.id });
+      const { pathname, search, hash } = window.location;
+      router.replace(buildSettingsHref(`${pathname}${search}${hash}`, "/desktop/chat/"), {
+        scroll: false,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to activate Server");
+    } finally {
+      activationPending.current = false;
+      setActivatingId(null);
+      setBusy(false);
+    }
+  };
 
   const openAddRemote = () => {
     setDraft({ ...NEW_REMOTE_DRAFT });
@@ -189,7 +220,27 @@ export function ServerProfilesPanel() {
                     >
                       {profile.baseUrl}
                     </span>
-                    <div className="flex items-center justify-end gap-1 w-17">
+                    <div className="grid w-26 grid-cols-3 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={
+                          active ? `${profile.name} is active` : `Activate ${profile.name}`
+                        }
+                        title={active ? `${profile.name} is active` : `Activate ${profile.name}`}
+                        aria-busy={activatingId === profile.id}
+                        disabled={active || busy}
+                        onClick={() => void activateProfile(profile)}
+                      >
+                        {activatingId === profile.id ? (
+                          <LoaderCircle className="size-4 animate-spin" />
+                        ) : active ? (
+                          <CircleDot className="size-4" />
+                        ) : (
+                          <Circle className="size-4" />
+                        )}
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"

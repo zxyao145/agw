@@ -7,6 +7,7 @@ import type { ExtensionEvent } from "../../shared/contracts";
 import { TEMPORARY_FILE_PATTERN } from "./extension-file-system";
 import { ExtensionOperationError } from "./extension-ipc-result";
 import { ExtensionResourceTracker, type ResourceOwner } from "./extension-resource-tracker";
+import { ReadWriteLock } from "./read-write-lock";
 import type { ReplacedFileRegistry } from "./replaced-file-registry";
 
 export const MAX_WATCHERS_PER_EXTENSION = 32;
@@ -19,6 +20,8 @@ function isTemporaryFile(filename: string | null): boolean {
 /** 一个监听的状态，键都是 realpath 解析后的路径。One watch's state, keyed by resolved paths. */
 type WatchState = {
   startedAt: number;
+  /** 按接收顺序处理监听事件。Processes watch events in arrival order. */
+  events: ReadWriteLock;
   /** 已知存在的路径。Paths known to exist. */
   existing: Set<string>;
   /** 这个监听已经用过的替换记录编号。Replacement record numbers this watch already used. */
@@ -52,6 +55,7 @@ export class ExtensionFileWatcher {
     const isDirectory = (await stat(path)).isDirectory();
     const state: WatchState = {
       startedAt: Date.now(),
+      events: new ReadWriteLock(),
       existing: new Set(),
       usedReplacements: new Map(),
     };
@@ -64,7 +68,9 @@ export class ExtensionFileWatcher {
         if (isTemporaryFile(filename)) return;
         const statPath = filename ? join(realDirectory, filename) : realDirectory;
         const uriPath = filename ? join(path, filename) : path;
-        void this.translate(owner, watchId, eventType, statPath, uriPath, state);
+        void state.events.write(() =>
+          this.translate(owner, watchId, eventType, statPath, uriPath, state),
+        );
       });
     } else {
       // 单个文件通过 realpath 解析后所在的目录监听，只取它的事件：原子写入用 rename 替换文件，直接监听文件会停留在旧的 inode 上。
@@ -77,7 +83,7 @@ export class ExtensionFileWatcher {
       state.existing.add(real);
       watcher = watch(dirname(real), (eventType, filename) => {
         if (isTemporaryFile(filename) || (filename && filename !== name)) return;
-        void this.translate(owner, watchId, eventType, real, path, state);
+        void state.events.write(() => this.translate(owner, watchId, eventType, real, path, state));
       });
     }
     watcher.on("error", () => this.watchers.remove(this.key(owner.extensionId, watchId)));
@@ -114,12 +120,12 @@ export class ExtensionFileWatcher {
 
   /**
    * Agw 在时间窗内用 rename 替换了这个文件、并且这个监听还没有用过这条记录时返回 true，每条记录对每个监听只用一次。
-   * 必须在 lstat 返回之后调用：那时提交方已经记录了替换。
+   * 等待进行中的提交完成后读取记录。
    * True when Agw replaced this file with a rename within the window and this watch has not used that record yet; each
-   * record is used once per watch. Call it after lstat returns, when the committer has already recorded the replacement.
+   * record is used once per watch. Reads records after any pending commit completes.
    */
-  private takeReplacement(statPath: string, state: WatchState): boolean {
-    const replacement = this.replacedFiles.latest(statPath);
+  private async takeReplacement(statPath: string, state: WatchState): Promise<boolean> {
+    const replacement = await this.replacedFiles.latest(statPath);
     if (replacement === null) {
       state.usedReplacements.delete(statPath);
       return false;
@@ -149,7 +155,7 @@ export class ExtensionFileWatcher {
     let type: "created" | "changed" | "deleted";
     try {
       const info = await lstat(statPath);
-      const replaced = this.takeReplacement(statPath, state);
+      const replaced = await this.takeReplacement(statPath, state);
       const createdAt = info.birthtimeMs > 0 ? info.birthtimeMs : info.ctimeMs;
       type =
         eventType === "change" ||
@@ -160,7 +166,7 @@ export class ExtensionFileWatcher {
           : "created";
       state.existing.add(statPath);
     } catch {
-      this.takeReplacement(statPath, state);
+      await this.takeReplacement(statPath, state);
       type = "deleted";
       state.existing.delete(statPath);
     }

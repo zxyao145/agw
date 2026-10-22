@@ -799,6 +799,47 @@ test("a non-recursive directory watch reports changed when Agw replaces an exist
   }
 });
 
+test("directory watches report every Agw replacement as changed", async () => {
+  const { storage, fileSystem, context, replacedFiles, dispose } = await createHarness();
+  const events: FileChange[] = [];
+  const watcher = new ExtensionFileWatcher((event) => events.push(event), replacedFiles);
+  try {
+    const files = Array.from({ length: 32 }, (_, index) => join(storage, `existing-${index}.txt`));
+    await Promise.all(files.map((file) => writeFile(file, "before")));
+    await settle(200);
+    await watcher.add(WATCH_OWNER, "w1", storage, false);
+    await settle(100);
+
+    await Promise.all(
+      files.map((file) => fileSystem.execute(context, writeRequest(file, text("after")))),
+    );
+    for (const file of files) await untilEvent(events, 0, "changed", file);
+    assert.ok(events.every((event) => event.event.type === "changed"));
+  } finally {
+    watcher.releaseAll();
+    await dispose();
+  }
+});
+
+test("directory watches report created before changed for new files", async () => {
+  const { storage, replacedFiles, dispose } = await createHarness();
+  const events: FileChange[] = [];
+  const watcher = new ExtensionFileWatcher((event) => events.push(event), replacedFiles);
+  try {
+    await watcher.add(WATCH_OWNER, "w1", storage, false);
+    await settle(100);
+    const files = Array.from({ length: 32 }, (_, index) => join(storage, `created-${index}.txt`));
+    await Promise.all(files.map((file) => writeFile(file, "new")));
+    for (const file of files) {
+      await untilEvent(events, 0, "created", file);
+      assert.equal(events.find((event) => event.event.uri === uri(file))?.event.type, "created");
+    }
+  } finally {
+    watcher.releaseAll();
+    await dispose();
+  }
+});
+
 test("replacements by other programs, and a delete and create after an Agw replacement, still report created", async () => {
   const { storage, fileSystem, context, replacedFiles, dispose } = await createHarness();
   const events: FileChange[] = [];

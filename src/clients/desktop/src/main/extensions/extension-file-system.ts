@@ -295,13 +295,13 @@ async function linkWithoutReplacing(temporary: string, target: string): Promise<
  * 提交之前的任何失败都删除临时文件，目标文件保持原样。
  * Atomic commit (section 9.7): the content is written to a temporary file in the same directory and flushed, then committed
  * with one rename or link; any failure before that removes the temporary file and leaves the target unchanged.
- * 返回值说明这次提交是否替换了已有文件。The result tells whether the commit replaced an existing file.
  */
 async function commitFile(
   target: string,
   data: Uint8Array,
   options: CommitOptions,
-): Promise<boolean> {
+  replacedFiles: ReplacedFileRegistry,
+): Promise<void> {
   const verified =
     options.expectedSha256 === undefined
       ? null
@@ -342,15 +342,17 @@ async function commitFile(
       if (!sameFile(verified, current)) throw fileChanged("The file was changed during the write.");
     }
     // 复核与提交之间没有其他异步操作。Nothing asynchronous runs between the re-check and the commit.
-    if (options.overwrite) await rename(temporary, target);
-    else await linkWithoutReplacing(temporary, target);
+    if (options.overwrite) {
+      const commit = rename(temporary, target);
+      if (existing) await replacedFiles.record(target, commit);
+      else await commit;
+    } else await linkWithoutReplacing(temporary, target);
   } catch (error) {
     await cleanUp(`Unable to delete the temporary file ${temporary}.`, () =>
       rm(temporary, { force: true }),
     );
     throw error;
   }
-  return existing !== null;
 }
 
 /**
@@ -452,16 +454,16 @@ export class ExtensionFileSystem {
           const target = await judgementPath(path);
           await this.check(context, target, "write");
           return this.identityLocks.run([target], async () => {
-            const replaced = await commitFile(target, request.data, {
-              overwrite: request.overwrite,
-              createParents: request.createParents,
-              expectedSha256: request.expectedSha256,
-            });
-            // 在 rename 完成后的同一轮微任务中记录，监听对事件的 lstat 通常在这之后返回；lstat 更早返回的少数情况下，
-            // 这次替换可能报告为 created。
-            // Recorded in the microtasks right after the rename completes; a watcher's lstat for the event usually returns
-            // later, and in the narrow race where it returns first this replacement may be reported as created.
-            if (replaced) this.replacedFiles.record(target);
+            await commitFile(
+              target,
+              request.data,
+              {
+                overwrite: request.overwrite,
+                createParents: request.createParents,
+                expectedSha256: request.expectedSha256,
+              },
+              this.replacedFiles,
+            );
             return null;
           });
         });
