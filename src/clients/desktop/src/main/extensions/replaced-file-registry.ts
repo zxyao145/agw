@@ -9,19 +9,32 @@ export const REPLACED_FILE_WINDOW_MS = 2_000;
  */
 export class ReplacedFileRegistry {
   private sequence = 0;
+  private readonly pending = new Map<string, Promise<void>>();
   /** 按 realpath 解析后的路径记录最近一次替换的编号与时间。The latest replacement's number and time, by resolved path. */
   private readonly entries = new Map<string, { id: number; at: number }>();
 
-  /** 提交替换了已有文件后记录目标。Records the target after a commit replaced an existing file. */
-  public record(path: string): void {
-    const now = Date.now();
-    this.prune(now);
-    this.sequence += 1;
-    this.entries.set(path, { id: this.sequence, at: now });
+  /** 跟踪进行中的替换，提交成功后记录目标。Tracks a pending replacement and records its target after a successful commit. */
+  public async record(path: string, commit: Promise<void>): Promise<void> {
+    let resolvePending!: () => void;
+    const promise = new Promise<void>((resolve) => {
+      resolvePending = resolve;
+    });
+    this.pending.set(path, promise);
+    try {
+      await commit;
+      const now = Date.now();
+      this.prune(now);
+      this.sequence += 1;
+      this.entries.set(path, { id: this.sequence, at: now });
+    } finally {
+      this.pending.delete(path);
+      resolvePending();
+    }
   }
 
-  /** 时间窗内最近一次替换的编号，没有时为 null。The latest replacement's number within the window, or null. */
-  public latest(path: string): number | null {
+  /** 等待进行中的提交，返回时间窗内最近一次替换的编号。Waits for a pending commit and returns the latest replacement's number within the window. */
+  public async latest(path: string): Promise<number | null> {
+    await this.pending.get(path);
     this.prune(Date.now());
     return this.entries.get(path)?.id ?? null;
   }
