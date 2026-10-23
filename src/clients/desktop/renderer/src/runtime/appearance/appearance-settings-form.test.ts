@@ -3,6 +3,7 @@ import test, { afterEach, before } from "node:test";
 
 import type { AppearanceSettings } from "@desktop/shared/contracts";
 import { DEFAULT_APPEARANCE } from "@desktop/shared/appearance";
+import type { AvailableTheme } from "./resolve-theme";
 
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
 type FormModule = typeof import("./appearance-settings-form");
@@ -24,11 +25,41 @@ afterEach(() => environment.cleanup());
 
 type Save = (next: AppearanceSettings) => Promise<void>;
 
+/** 迁移后的默认外观，`mode` 为有效 Mode。The default appearance after migration, with the effective mode. */
+const INITIAL: AppearanceSettings = { ...DEFAULT_APPEARANCE, mode: "system" };
+
+const THEMES: AvailableTheme[] = [
+  {
+    id: "soft-theme:soft",
+    title: "Soft",
+    extensionName: "Soft Theme",
+    label: "Soft",
+    theme: {
+      id: "soft",
+      title: "Soft",
+      common: {},
+      light: { "--background": "#ffffff" },
+      dark: {},
+    },
+  },
+  {
+    id: "night-themes:night",
+    title: "Night",
+    extensionName: "Night Themes",
+    label: "Night",
+    theme: { id: "night", title: "Night", common: {}, light: {}, dark: { "--background": "#000" } },
+  },
+];
+
+const MANAGE_HREF = "/extensions/?category=themes&returnTo=%2Fdesktop%2Fchat%2F";
+
 function renderForm(appearance: AppearanceSettings, save: Save) {
   const { React } = environment;
   const element = (value: AppearanceSettings) =>
     React.createElement(forms.AppearanceSettingsForm, {
       appearance: value,
+      themes: THEMES,
+      manageThemesHref: MANAGE_HREF,
       save,
     }) as Parameters<DomEnvironment["render"]>[0];
   const result = environment.render(element(appearance));
@@ -43,6 +74,8 @@ function select(id: string): HTMLSelectElement {
 
 const baseSelect = () => select("appearance-base-font-size");
 const chatSelect = () => select("appearance-chat-font-size");
+const themeSelect = () => select("appearance-theme");
+const modeButton = (name: string) => environment.screen.getByRole("button", { name });
 
 function optionText(element: HTMLSelectElement, value: string): string {
   const option = Array.from(element.options).find((candidate) => candidate.value === value);
@@ -67,14 +100,14 @@ function recordingSave() {
 }
 
 test("defaults show base 16 and follow for chat", () => {
-  renderForm(DEFAULT_APPEARANCE, recordingSave().save);
+  renderForm(INITIAL, recordingSave().save);
   assert.equal(baseSelect().value, "16");
   assert.equal(chatSelect().value, "follow");
   assert.equal(optionText(chatSelect(), "follow"), "Follow base size (14 px)");
 });
 
 test("the size selects offer 14 to 20 for base and 14 to 24 for chat, all enabled", () => {
-  renderForm(DEFAULT_APPEARANCE, recordingSave().save);
+  renderForm(INITIAL, recordingSave().save);
   assert.deepEqual(optionValues(baseSelect()), ["14", "15", "16", "17", "18", "19", "20"]);
   assert.deepEqual(optionValues(chatSelect()), [
     "follow",
@@ -99,42 +132,46 @@ test("the size selects offer 14 to 20 for base and 14 to 24 for chat, all enable
 });
 
 test("the form has no minimum font size select", () => {
-  renderForm(DEFAULT_APPEARANCE, recordingSave().save);
+  renderForm(INITIAL, recordingSave().save);
   assert.equal(document.getElementById("appearance-min-font-size"), null);
   assert.equal(document.body.textContent?.includes("Minimum font size"), false);
 });
 
-test("choosing a base size saves it and updates the follow text", async () => {
+test("choosing a base size saves it with the theme and mode and updates the follow text", async () => {
   const { calls, save } = recordingSave();
-  renderForm(DEFAULT_APPEARANCE, save);
+  renderForm({ ...INITIAL, theme: "soft-theme:soft", mode: "dark" }, save);
   choose(baseSelect(), "18");
   await environment.waitFor(() => assert.equal(calls.length, 1));
   assert.deepEqual(calls[0], {
     baseFontSize: 18,
     chatFontSize: null,
+    theme: "soft-theme:soft",
+    mode: "dark",
   });
   assert.equal(optionText(chatSelect(), "follow"), "Follow base size (15.75 px)");
 });
 
 test("the reset button of a field saves that field's default", async () => {
   const { calls, save } = recordingSave();
-  renderForm({ baseFontSize: 18, chatFontSize: 20 }, save);
+  renderForm({ ...INITIAL, baseFontSize: 18, chatFontSize: 20 }, save);
   environment.fireEvent.click(
     environment.screen.getByRole("button", { name: "Reset chat font size" }),
   );
   await environment.waitFor(() => assert.equal(calls.length, 1));
-  assert.deepEqual(calls[0], {
-    baseFontSize: 18,
-    chatFontSize: null,
-  });
+  assert.deepEqual(calls[0], { ...INITIAL, baseFontSize: 18, chatFontSize: null });
 });
 
-test("Reset all saves the default appearance", async () => {
+test("Reset all saves the default sizes, the Default theme and the System mode", async () => {
   const { calls, save } = recordingSave();
-  renderForm({ baseFontSize: 18, chatFontSize: 20 }, save);
+  renderForm({ baseFontSize: 18, chatFontSize: 20, theme: "soft-theme:soft", mode: "dark" }, save);
   environment.fireEvent.click(environment.screen.getByRole("button", { name: "Reset all" }));
   await environment.waitFor(() => assert.equal(calls.length, 1));
-  assert.deepEqual(calls[0], DEFAULT_APPEARANCE);
+  assert.deepEqual(calls[0], {
+    baseFontSize: 16,
+    chatFontSize: null,
+    theme: "default",
+    mode: "system",
+  });
 });
 
 test("a rejected save returns the select to the last saved value", async () => {
@@ -145,10 +182,10 @@ test("a rejected save returns the select to the last saved value", async () => {
     attempt += 1;
     if (attempt === 2) throw new Error("Unable to save");
   };
-  const view = renderForm(DEFAULT_APPEARANCE, save);
+  const view = renderForm(INITIAL, save);
   choose(baseSelect(), "17");
   await environment.waitFor(() => assert.deepEqual(attempts, [17]));
-  view.rerender({ ...DEFAULT_APPEARANCE, baseFontSize: 17 });
+  view.rerender({ ...INITIAL, baseFontSize: 17 });
   assert.equal(baseSelect().value, "17");
 
   choose(baseSelect(), "19");
@@ -166,37 +203,127 @@ test("a rejected save returns to the prop that arrived while the save was pendin
     attempts.push(next.baseFontSize);
     return pending;
   };
-  const view = renderForm(DEFAULT_APPEARANCE, save);
+  const view = renderForm(INITIAL, save);
   choose(baseSelect(), "19");
   await environment.waitFor(() => assert.deepEqual(attempts, [19]));
-  view.rerender({ ...DEFAULT_APPEARANCE, baseFontSize: 17 });
+  view.rerender({ ...INITIAL, baseFontSize: 17 });
   reject(new Error("Unable to save"));
   await environment.waitFor(() => assert.equal(baseSelect().value, "17"));
 });
 
 test("an external appearance change updates the selects", () => {
-  const view = renderForm(DEFAULT_APPEARANCE, recordingSave().save);
-  view.rerender({ baseFontSize: 18, chatFontSize: 15 });
+  const view = renderForm(INITIAL, recordingSave().save);
+  view.rerender({ ...INITIAL, baseFontSize: 18, chatFontSize: 15, theme: "soft-theme:soft" });
   assert.equal(chatSelect().value, "15");
   assert.equal(baseSelect().value, "18");
+  assert.equal(themeSelect().value, "soft-theme:soft");
 });
 
 test("a stored value at 14 is selected", () => {
-  renderForm({ baseFontSize: 14, chatFontSize: 14 }, recordingSave().save);
+  renderForm({ ...INITIAL, baseFontSize: 14, chatFontSize: 14 }, recordingSave().save);
   assert.equal(baseSelect().value, "14");
   assert.equal(chatSelect().value, "14");
 });
 
 test("the form has no document font size select and no document preview", () => {
-  renderForm(DEFAULT_APPEARANCE, recordingSave().save);
+  renderForm(INITIAL, recordingSave().save);
   assert.equal(document.getElementById("appearance-document-font-size"), null);
   assert.equal(document.querySelector('[data-appearance-preview="document"]'), null);
 });
 
 test("the chat preview is an agw-prose container with the compact density", () => {
-  renderForm(DEFAULT_APPEARANCE, recordingSave().save);
+  renderForm(INITIAL, recordingSave().save);
   const preview = document.querySelector('[data-appearance-preview="compact"]');
   assert.ok(preview);
   assert.ok(preview.classList.contains("agw-prose"));
   assert.equal(preview.getAttribute("data-density"), "compact");
+});
+
+test("Visual style comes before the font sizes", () => {
+  renderForm(INITIAL, recordingSave().save);
+  const headings = Array.from(document.querySelectorAll("h2")).map(
+    (heading) => heading.textContent,
+  );
+  assert.deepEqual(headings, ["Visual style", "Font sizes"]);
+});
+
+test("the three mode thumbnails mark the selected mode", () => {
+  renderForm({ ...INITIAL, mode: "dark" }, recordingSave().save);
+  const buttons = ["System mode", "Light mode", "Dark mode"].map(modeButton);
+  assert.deepEqual(
+    buttons.map((button) => button.getAttribute("aria-pressed")),
+    ["false", "false", "true"],
+  );
+  const frame = (button: HTMLElement) => button.firstElementChild as HTMLElement;
+  assert.ok(frame(buttons[2]).classList.contains("border-primary"));
+  assert.equal(frame(buttons[0]).classList.contains("border-primary"), false);
+  // System 左半浅色、右半深色。System shows light on the left and dark on the right.
+  assert.deepEqual(
+    Array.from(frame(buttons[0]).children).map((half) =>
+      half.classList.contains("bg-white") ? "light" : "dark",
+    ),
+    ["light", "dark"],
+  );
+  assert.equal(frame(buttons[1]).children.length, 1);
+  assert.ok(frame(buttons[1]).children[0].classList.contains("bg-white"));
+  assert.ok(frame(buttons[2]).children[0].classList.contains("bg-zinc-900"));
+});
+
+test("choosing a mode saves it", async () => {
+  const { calls, save } = recordingSave();
+  renderForm(INITIAL, save);
+  environment.fireEvent.click(modeButton("Light mode"));
+  await environment.waitFor(() => assert.equal(calls.length, 1));
+  assert.deepEqual(calls[0], { ...INITIAL, mode: "light" });
+  assert.equal(modeButton("Light mode").getAttribute("aria-pressed"), "true");
+});
+
+test("the Theme select lists Default and the available themes", () => {
+  renderForm(INITIAL, recordingSave().save);
+  assert.deepEqual(optionValues(themeSelect()), [
+    "default",
+    "soft-theme:soft",
+    "night-themes:night",
+  ]);
+  assert.deepEqual(
+    Array.from(themeSelect().options).map((option) => option.textContent),
+    ["Default", "Soft", "Night"],
+  );
+  assert.equal(themeSelect().value, "default");
+});
+
+test("choosing a theme saves it with the mode", async () => {
+  const { calls, save } = recordingSave();
+  renderForm({ ...INITIAL, mode: "light" }, save);
+  choose(themeSelect(), "night-themes:night");
+  await environment.waitFor(() => assert.equal(calls.length, 1));
+  assert.deepEqual(calls[0], { ...INITIAL, mode: "light", theme: "night-themes:night" });
+});
+
+test("a rejected theme or mode save returns to the saved value", async () => {
+  const save: Save = async () => {
+    throw new Error("Unable to save");
+  };
+  renderForm(INITIAL, save);
+  choose(themeSelect(), "soft-theme:soft");
+  await environment.waitFor(() => assert.equal(themeSelect().value, "default"));
+  environment.fireEvent.click(modeButton("Dark mode"));
+  await environment.waitFor(() =>
+    assert.equal(modeButton("System mode").getAttribute("aria-pressed"), "true"),
+  );
+});
+
+test("a selected theme that is not listed is shown by its id", () => {
+  renderForm({ ...INITIAL, theme: "gone:theme" }, recordingSave().save);
+  assert.equal(themeSelect().value, "gone:theme");
+  assert.equal(optionText(themeSelect(), "gone:theme"), "gone:theme");
+});
+
+test("Manage opens the theme extensions", () => {
+  renderForm(INITIAL, recordingSave().save);
+  const manage = environment.screen.getByRole("link", { name: "Manage" });
+  // 测试环境没有 Next 的 trailingSlash 配置，Link 去掉结尾斜杠。Without Next's trailingSlash config, Link drops the slash.
+  const href = new URL(manage.getAttribute("href")!, "http://localhost");
+  assert.equal(href.pathname.replace(/\/$/u, ""), "/extensions");
+  assert.equal(href.search, new URL(MANAGE_HREF, "http://localhost").search);
 });

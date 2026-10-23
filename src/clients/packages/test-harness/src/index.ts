@@ -6,7 +6,7 @@ import type * as TestingLibrary from "@testing-library/react";
 import { installBrowserApis, type ObserverRegistry } from "./browser-apis";
 
 export { installLayoutMetrics } from "./browser-apis";
-export type { LayoutMetrics, ObserverRegistry } from "./browser-apis";
+export type { LayoutMetrics, MediaQueryRegistry, ObserverRegistry } from "./browser-apis";
 export { RawApiResponse, rawApiResponse, startApiServer } from "./api-server";
 export type {
   ApiRequestRecord,

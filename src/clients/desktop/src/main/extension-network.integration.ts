@@ -172,7 +172,7 @@ async function run(): Promise<void> {
     `ws://127.0.0.1:${allowedWsPort}`,
     `https://127.0.0.1:${allowedTcp.port}`,
   ];
-  const root = join(userData, "extensions", EXTENSION);
+  const root = join(userData, "extensions", "packages", EXTENSION);
   await mkdir(root, { recursive: true });
   await writeFile(
     join(root, "manifest.json"),

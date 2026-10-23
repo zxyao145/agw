@@ -1,89 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { useTheme } from "next-themes";
 import { usePathname, useRouter } from "next/navigation";
-import { toast } from "sonner";
 
 import type { ThemeInfo } from "@agw/extension-sdk";
+import { THEME_TOKEN_NAMES } from "@desktop/shared/theme-tokens";
+import { useDesktopTheme } from "../appearance/theme-provider";
 import { HostConfirmationDialog } from "../components/workspace/host-confirmation-dialog";
 import { useDesktopRuntime } from "../runtime-provider";
 import { normalizeBaseUrl } from "./context-service";
-import { ExtensionHost } from "./extension-host";
-import { HostOverlayTracker } from "./host-overlay-tracker";
-
-/**
- * 提供给 extension 的 tokens.css 颜色、圆角、字体与字号变量；读取的是计算值，其中的 `var()` 已经替换。
- * tokens.css color, radius, font and font-size variables offered to extensions; their computed values have `var()` substituted.
- */
-export const THEME_TOKEN_NAMES = [
-  "--background",
-  "--foreground",
-  "--card",
-  "--card-foreground",
-  "--popover",
-  "--popover-foreground",
-  "--primary",
-  "--primary-foreground",
-  "--secondary",
-  "--secondary-foreground",
-  "--muted",
-  "--muted-foreground",
-  "--accent",
-  "--accent-foreground",
-  "--destructive",
-  "--border",
-  "--input",
-  "--ring",
-  "--chart-1",
-  "--chart-2",
-  "--chart-3",
-  "--chart-4",
-  "--chart-5",
-  "--sidebar",
-  "--sidebar-foreground",
-  "--sidebar-primary",
-  "--sidebar-primary-foreground",
-  "--sidebar-accent",
-  "--sidebar-accent-foreground",
-  "--sidebar-border",
-  "--sidebar-ring",
-  "--radius",
-  "--radius-sm",
-  "--radius-md",
-  "--radius-lg",
-  "--radius-xl",
-  "--font-mono",
-  "--agw-font-size-base",
-  "--agw-font-size-min",
-] as const;
-
-type ExtensionRuntime = { host: ExtensionHost; tracker: HostOverlayTracker };
+import { type ExtensionRuntime, getExtensionRuntime } from "./extension-runtime";
 
 const ExtensionHostContext = React.createContext<ExtensionRuntime | null>(null);
 
-// 模块级单例：生命周期不绑定 effect 的清理，宿主外壳卸载不会关闭 frame。
-// Module-level singletons: their lifetime is not bound to effect cleanup, so shell unmounts never close frames.
-let runtime: ExtensionRuntime | null = null;
-
-function getExtensionRuntime(): ExtensionRuntime {
-  if (runtime) return runtime;
-  const host = new ExtensionHost({
-    // 普通浏览器中没有 bridge，布局照常工作且不加载 extension。Without a bridge the layout works and no extension loads.
-    bridge: window.agwDesktop ?? null,
-    app: { version: "", platform: "darwin", architecture: "" },
-    notify: (extensionName, notification) => {
-      const message = `${extensionName}: ${notification.message}`;
-      if (notification.type === "error") toast.error(message);
-      else if (notification.type === "success") toast.success(message);
-      else toast(message);
-    },
-  });
-  const tracker = new HostOverlayTracker(document, (frameIds) => host.setObscuredFrames(frameIds));
-  runtime = { host, tracker };
-  return runtime;
-}
-
+/**
+ * 读取推送给 extension 的变量；读取的是计算值，其中的 `var()` 已经替换。
+ * Reads the variables pushed to extensions; their computed values have `var()` substituted.
+ */
 export function readTheme(kind: "light" | "dark"): { theme: ThemeInfo; background: string } {
   const style = getComputedStyle(document.documentElement);
   const tokens = Object.fromEntries(
@@ -113,7 +46,7 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const pathnameRef = React.useRef(pathname);
   pathnameRef.current = pathname;
-  const { resolvedTheme } = useTheme();
+  const { kind, appliedTokens } = useDesktopTheme();
 
   React.useEffect(() => {
     if (!value) return;
@@ -168,18 +101,18 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
     );
   }, [host, authUser, profile, token]);
 
-  // 字号设置变化时同样推送主题。Font size setting changes push the theme as well.
+  // 主题、实际深浅色与字号设置变化时推送主题。Theme, light/dark and font size changes push the theme.
   const baseFontSize = runtimeState?.settings.appearance.baseFontSize;
   const chatFontSize = runtimeState?.settings.appearance.chatFontSize;
   React.useEffect(() => {
-    if (!host || !resolvedTheme) return;
-    // 等 next-themes 把 class 写到 document 后再读取变量。Read variables after next-themes applies the class.
+    if (!host || !kind) return;
+    // 等 class 与主题变量写到 document 后再读取变量。Read variables after the class and theme variables are applied.
     const frame = requestAnimationFrame(() => {
-      const { theme, background } = readTheme(resolvedTheme === "dark" ? "dark" : "light");
+      const { theme, background } = readTheme(kind);
       host.setTheme(theme, background);
     });
     return () => cancelAnimationFrame(frame);
-  }, [host, resolvedTheme, baseFontSize, chatFontSize]);
+  }, [host, kind, appliedTokens, baseFontSize, chatFontSize]);
 
   return (
     <ExtensionHostContext value={value}>

@@ -548,10 +548,23 @@ test("load returns the default appearance when the file has none", async () => {
 });
 
 test("load accepts the appearance range boundaries", async () => {
-  const small = { baseFontSize: 14, chatFontSize: 14 };
-  const large = { baseFontSize: 20, chatFontSize: 24 };
+  const small = { baseFontSize: 14, chatFontSize: 14, theme: "default" };
+  const large = { baseFontSize: 20, chatFontSize: 24, theme: "default" };
   assert.deepEqual(await loadWithStoredAppearance(small), small);
   assert.deepEqual(await loadWithStoredAppearance(large), large);
+});
+
+test("load reads a missing theme as default and keeps a missing mode missing", async () => {
+  const appearance = await loadWithStoredAppearance({ baseFontSize: 18, chatFontSize: null });
+  assert.deepEqual(appearance, { baseFontSize: 18, chatFontSize: null, theme: "default" });
+  assert.equal("mode" in appearance, false);
+});
+
+test("load accepts extension theme ids and the three modes", async () => {
+  for (const mode of ["system", "light", "dark"] as const) {
+    const stored = { baseFontSize: 16, chatFontSize: null, theme: "soft-theme:soft", mode };
+    assert.deepEqual(await loadWithStoredAppearance(stored), stored);
+  }
 });
 
 test("load rejects an appearance outside the allowed values", async () => {
@@ -566,6 +579,13 @@ test("load rejects an appearance outside the allowed values", async () => {
     { ...valid, minFontSize: 14 },
     { ...valid, minFontSize: 12 },
     { ...valid, baseFontSize: 16.5 },
+    { ...valid, theme: "soft" },
+    { ...valid, theme: "Soft-Theme:soft" },
+    { ...valid, theme: "soft-theme:soft:x" },
+    { ...valid, theme: "" },
+    { ...valid, theme: null },
+    { ...valid, mode: "auto" },
+    { ...valid, mode: null },
   ]) {
     await rejectsStoredAppearance(invalid);
   }
@@ -577,14 +597,15 @@ test("save stores the appearance and keeps the other settings", async () => {
     const store = new DesktopSettingsStore(scratch.path, "client", codec);
     await store.save({ closeBehavior: "quit-desktop" });
     const before = await store.load();
-    await store.save({
-      appearance: { baseFontSize: 18, chatFontSize: 15 },
-    });
-    const saved = await store.load();
-    assert.deepEqual(saved.appearance, {
+    const appearance = {
       baseFontSize: 18,
       chatFontSize: 15,
-    });
+      theme: "soft-theme:soft",
+      mode: "dark",
+    } as const;
+    await store.save({ appearance });
+    const saved = await store.load();
+    assert.deepEqual(saved.appearance, appearance);
     assert.equal(saved.closeBehavior, "quit-desktop");
     assert.deepEqual(saved.profiles, before.profiles);
   } finally {
@@ -596,7 +617,12 @@ test("save without an appearance keeps the stored appearance", async () => {
   const scratch = await createScratchDirectory("settings-appearance");
   try {
     const store = new DesktopSettingsStore(scratch.path, "client", codec);
-    const appearance = { baseFontSize: 18, chatFontSize: 15 } as const;
+    const appearance = {
+      baseFontSize: 18,
+      chatFontSize: 15,
+      theme: "soft-theme:soft",
+      mode: "light",
+    } as const;
     await store.save({ appearance });
     await store.save({ closeBehavior: "quit-desktop" });
     assert.deepEqual((await store.load()).appearance, appearance);
@@ -605,14 +631,46 @@ test("save without an appearance keeps the stored appearance", async () => {
   }
 });
 
-test("save rejects sizes below 14 and keeps the stored appearance", async () => {
+test("writes that do not change the appearance keep a missing mode missing", async () => {
+  const scratch = await createScratchDirectory("settings-appearance");
+  try {
+    await writeFile(
+      join(scratch.path, "settings.json"),
+      JSON.stringify({ appearance: { baseFontSize: 17, chatFontSize: null } }),
+    );
+    const store = new DesktopSettingsStore(scratch.path, "client", codec);
+    await store.applyBundledExtensions(
+      new Map([["viewer", { permissions: [], hostPermissions: [] }]]),
+    );
+    await store.setFileViewerDefault("*.md", "viewer:preview");
+    await store.save({ closeBehavior: "quit-desktop" });
+
+    const file = JSON.parse(await readFile(join(scratch.path, "settings.json"), "utf8"));
+    assert.deepEqual(file.appearance, { baseFontSize: 17, chatFontSize: null, theme: "default" });
+    assert.equal(file.extensions.viewer.enabled, true);
+    assert.deepEqual(file.fileViewerDefaults, { "*.md": "viewer:preview" });
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("save rejects sizes below 14 and invalid themes or modes, keeping the stored appearance", async () => {
   const scratch = await createScratchDirectory("settings-appearance");
   try {
     const store = new DesktopSettingsStore(scratch.path, "client", codec);
-    const stored = { baseFontSize: 18, chatFontSize: null };
+    const stored = {
+      baseFontSize: 18,
+      chatFontSize: null,
+      theme: "default",
+      mode: "system",
+    } as const;
     await store.save({ appearance: stored });
-    await assert.rejects(store.save({ appearance: { baseFontSize: 13, chatFontSize: null } }));
-    await assert.rejects(store.save({ appearance: { baseFontSize: 16, chatFontSize: 13 } }));
+    await assert.rejects(store.save({ appearance: { ...stored, baseFontSize: 13 } }));
+    await assert.rejects(store.save({ appearance: { ...stored, chatFontSize: 13 } }));
+    await assert.rejects(store.save({ appearance: { ...stored, theme: "soft" } }));
+    await assert.rejects(
+      store.save({ appearance: { ...stored, mode: "auto" as unknown as "system" } }),
+    );
     assert.deepEqual((await store.load()).appearance, stored);
   } finally {
     await scratch.dispose();

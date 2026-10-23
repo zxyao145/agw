@@ -42,6 +42,7 @@ catalog:
   "@tiptap/static-renderer": 3.32.0
   "@tiptap/suggestion": 3.32.0
   "@tiptap/y-tiptap": 3.0.10
+  "@types/css-tree": 3.2.0
   "@types/jsdom": 30.0.0
   "@types/mdast": 4.0.4
   "@types/mime-types": 3.0.1
@@ -59,6 +60,7 @@ catalog:
   ajv: 8.20.0
   chardet: 2.2.0
   code-inspector-plugin: 2.0.9
+  css-tree: 3.2.1
   diff: 9.0.0
   dts-bundle-generator: 9.5.1
   esbuild: 0.28.2

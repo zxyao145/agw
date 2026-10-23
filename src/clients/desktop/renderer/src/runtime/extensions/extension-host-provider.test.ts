@@ -1,22 +1,49 @@
 import assert from "node:assert/strict";
 import test, { afterEach, before } from "node:test";
 
+import { THEME_TOKEN_KINDS, THEME_TOKEN_NAMES } from "@desktop/shared/theme-tokens";
+
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
 let environment: DomEnvironment;
-let THEME_TOKEN_NAMES: typeof import("./extension-host-provider").THEME_TOKEN_NAMES;
 let readTheme: typeof import("./extension-host-provider").readTheme;
 let AppearanceProvider: typeof import("../appearance/appearance-provider").AppearanceProvider;
 
 before(async () => {
   const { setupDomEnvironment } = await import("@agw/test-harness");
   environment = await setupDomEnvironment();
-  ({ THEME_TOKEN_NAMES, readTheme } = await import("./extension-host-provider"));
+  ({ readTheme } = await import("./extension-host-provider"));
   ({ AppearanceProvider } = await import("../appearance/appearance-provider"));
 });
 afterEach(() => environment.cleanup());
 
-test("the theme offered to extensions includes the host's monospace font variable", () => {
-  assert.ok(THEME_TOKEN_NAMES.includes("--font-mono"));
+test("the theme offered to extensions includes every variable a theme may set", () => {
+  for (const name of THEME_TOKEN_KINDS.keys()) assert.ok(THEME_TOKEN_NAMES.includes(name), name);
+  for (const name of [
+    "--background",
+    "--agw-sidebar-muted-foreground",
+    "--agw-code-block-button-hover",
+    "--agw-image-toolbar-shadow",
+    "--agw-agentflow-edge-switch-default",
+    "--color-blue-950",
+    "--color-black",
+    "--radius",
+    "--agw-font-sans",
+  ]) {
+    assert.ok(THEME_TOKEN_NAMES.includes(name), name);
+  }
+});
+
+test("the theme offered to extensions includes the computed radius and font variables", () => {
+  for (const name of [
+    "--radius-sm",
+    "--radius-md",
+    "--radius-lg",
+    "--radius-xl",
+    "--font-sans",
+    "--font-mono",
+  ]) {
+    assert.ok(THEME_TOKEN_NAMES.includes(name), name);
+  }
 });
 
 test("the theme offered to extensions includes the font size variables", () => {
@@ -26,10 +53,7 @@ test("the theme offered to extensions includes the font size variables", () => {
 });
 
 test("the theme offered to extensions excludes the document font size variable", () => {
-  assert.equal(
-    (THEME_TOKEN_NAMES as readonly string[]).includes("--agw-font-size-document"),
-    false,
-  );
+  assert.equal(THEME_TOKEN_NAMES.includes("--agw-font-size-document"), false);
 });
 
 test("readTheme reads the font size variables written by AppearanceProvider", () => {

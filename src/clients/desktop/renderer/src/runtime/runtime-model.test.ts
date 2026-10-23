@@ -17,7 +17,7 @@ const settings: DesktopSettings = {
   extensions: {},
   removedBundledExtensions: [],
   fileViewerDefaults: {},
-  appearance: { baseFontSize: 16, chatFontSize: null },
+  appearance: { baseFontSize: 16, chatFontSize: null, theme: "default" },
   profiles: [
     {
       id: "local",

@@ -25,7 +25,6 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 import { apiGet, apiPost } from "@agw/api";
@@ -46,6 +45,7 @@ import { buildChatHref, useExecutionActivity } from "@agw/chat";
 import type { ExecutionStatus } from "@agw/chat-runtime";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
+import { useDesktopTheme } from "../appearance/theme-provider";
 import { useExtensionRuntime } from "../extensions/extension-host-provider";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../extensions/workspace-layout-store";
 import { useDesktopRuntime } from "../runtime-provider";
@@ -129,15 +129,22 @@ const STATUS_LABEL: Record<ExecutionStatus, string> = {
   detached: "Detached",
 };
 
+/** 在浅色与深色之间切换并保存 Mode；System 在 Appearance 页面选择。Toggles light and dark; System is on the Appearance page. */
 function ThemeButton() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+  const { kind, setMode } = useDesktopTheme();
+  const isDark = kind === "dark";
   return (
     <button
       type="button"
       className="agw-titlebar-button"
       aria-label={isDark ? "Use light theme" : "Use dark theme"}
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      onClick={() =>
+        setMode(isDark ? "light" : "dark").catch((error: unknown) =>
+          toast.error(
+            error instanceof Error ? error.message : "Unable to save appearance settings",
+          ),
+        )
+      }
     >
       {isDark ? <Sun /> : <Moon />}
     </button>
@@ -415,7 +422,9 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           <DropdownMenuTrigger asChild>
             <button type="button" className="agw-task-button agw-titlebar-control">
               <LoaderCircle
-                className={cn(hasBackgroundConversations && "animate-spin text-sidebar-ring")}
+                className={cn(
+                  hasBackgroundConversations && "animate-spin text-(--agw-status-running)",
+                )}
               />
               <span>Conversations</span>
               {activity.activeCount > 0 ? <span>{activity.activeCount}</span> : null}

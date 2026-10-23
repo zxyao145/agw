@@ -46,6 +46,11 @@ import {
   parseHostPermission,
 } from "@desktop/shared/extension-host-permissions";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./components/app-shell-routing";
+import {
+  EXTENSION_CATEGORIES,
+  extensionsInCategory,
+  themeTitles,
+} from "./extensions/extension-categories";
 import { extensionIcon } from "./extensions/extension-contributions";
 import type { ExtensionHost, ExtensionState } from "./extensions/extension-host";
 import { useExtensionRuntime } from "./extensions/extension-host-provider";
@@ -315,6 +320,7 @@ function ExtensionCard({
   // 激活期间可以停用（立即完成）；停用期间等待完成。Disabling is allowed while activating; wait while deactivating.
   const busy = extension.status === "deactivating";
   const canEnable = installed.validation === "valid";
+  const themes = themeTitles(manifest);
   return (
     <section className="rounded-xl border bg-card p-4" data-extension-id={extension.id}>
       <div className="flex items-start gap-3">
@@ -335,6 +341,7 @@ function ExtensionCard({
             {installed.permissionApprovalRequired ? (
               <Badge variant="outline">Permission approval required</Badge>
             ) : null}
+            {themes.length > 0 ? <Badge variant="outline">Theme</Badge> : null}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {extension.id}
@@ -342,6 +349,11 @@ function ExtensionCard({
             {manifest ? ` · Extension API ${manifest.manifestVersion}` : ""}
           </p>
           {manifest?.description ? <p className="mt-2 text-sm">{manifest.description}</p> : null}
+          {themes.length > 0 ? (
+            <p className="mt-2 text-sm" data-testid="extension-themes">
+              Themes: {themes.join(", ")}
+            </p>
+          ) : null}
           {extension.error ? (
             <p className="mt-2 text-sm text-destructive">
               {extension.error.code}: {extension.error.message}
@@ -454,6 +466,13 @@ function ExtensionCard({
 function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
   const snapshot = useHostSnapshot(host);
   const bridge = window.agwDesktop!;
+  const searchParams = useSearchParams();
+  const categoryName = searchParams.get("category");
+  const extensions = extensionsInCategory(snapshot.extensions, categoryName);
+  const showAllHref = buildSettingsHref(
+    "/extensions/",
+    getDesktopChatReturnHref(searchParams.get("returnTo")),
+  );
   const [approval, setApproval] = React.useState<ExtensionState | null>(null);
   const [uninstalling, setUninstalling] = React.useState<ExtensionState | null>(null);
   const [preview, setPreview] = React.useState<Extract<
@@ -533,18 +552,39 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
         </p>
       ))}
 
-      {snapshot.extensions.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No extensions are installed.</p>
+      {categoryName !== null ? (
+        <div className="flex items-center gap-3 text-sm" data-testid="extension-category">
+          <span className="font-medium">
+            {extensions
+              ? EXTENSION_CATEGORIES[categoryName].label
+              : `Unknown category: ${categoryName}`}
+          </span>
+          <Button size="sm" variant="outline" asChild>
+            <Link href={showAllHref}>Show all</Link>
+          </Button>
+        </div>
       ) : null}
-      {snapshot.extensions.map((extension) => (
-        <ExtensionCard
-          key={extension.id}
-          host={host}
-          extension={extension}
-          onEnable={setApproval}
-          onUninstall={setUninstalling}
-        />
-      ))}
+
+      {extensions ? (
+        <>
+          {extensions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {categoryName === null
+                ? "No extensions are installed."
+                : `No ${EXTENSION_CATEGORIES[categoryName].label.toLowerCase()} are installed.`}
+            </p>
+          ) : null}
+          {extensions.map((extension) => (
+            <ExtensionCard
+              key={extension.id}
+              host={host}
+              extension={extension}
+              onEnable={setApproval}
+              onUninstall={setUninstalling}
+            />
+          ))}
+        </>
+      ) : null}
 
       <ApprovalDialog
         extension={approval}

@@ -26,7 +26,19 @@ export type ExtensionSettings = {
   lastActivatedVersion: string | null;
 };
 
-/** 内置 extension 来自应用资源目录，用户 extension 来自 `<userData>/extensions`。Bundled from the app resources, user from `<userData>/extensions`. */
+/**
+ * 校验后的主题：`common` 用于浅色与深色，`light`、`dark` 中的同名变量覆盖它。
+ * A validated theme: `common` applies to light and dark, and same-named variables in `light` and `dark` override it.
+ */
+export type ExtensionTheme = {
+  id: string;
+  title: string;
+  common: Record<string, string>;
+  light: Record<string, string>;
+  dark: Record<string, string>;
+};
+
+/** 内置 extension 来自应用资源目录，用户 extension 来自 `<userData>/extensions/packages`。Bundled from the app resources, user from `<userData>/extensions/packages`. */
 export type ExtensionSource = "bundled" | "user";
 
 export type InstalledExtension = {
@@ -43,6 +55,8 @@ export type InstalledExtension = {
   lastActivatedVersion: string | null;
   /** manifest 中作为图标声明的包路径 → data URL。Package icon path declared in the manifest → data URL. */
   icons: Record<string, string>;
+  /** `contributes.themes` 校验后的主题，extension 不合法时为空。The validated `contributes.themes`; empty when the extension is not valid. */
+  themes: ExtensionTheme[];
 };
 
 export type ExtensionGrants = {

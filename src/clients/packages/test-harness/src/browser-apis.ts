@@ -14,9 +14,18 @@ export type ObservedElement = {
   callback: (entries: unknown[], observer: unknown) => void;
 };
 
+export type MediaQueryRegistry = {
+  /**
+   * 改变媒体查询的结果，并像浏览器一样通知 `matchMedia` 的监听器；默认结果为 false。
+   * Changes a media query result and notifies the `matchMedia` listeners the way a browser does; results start false.
+   */
+  setMatches(query: string, matches: boolean): void;
+};
+
 export type ObserverRegistry = {
   resize: ObservedElement[];
   intersection: ObservedElement[];
+  media: MediaQueryRegistry;
 };
 
 export type Clipboard = {
@@ -30,12 +39,26 @@ export type Clipboard = {
  * 在 jsdom window 上安装缺失的 API，并返回观察者登记表，供测试自行投递尺寸与可见性通知。
  */
 export function installBrowserApis(window: JsdomWindow): ObserverRegistry {
-  const registry: ObserverRegistry = { resize: [], intersection: [] };
+  const mediaMatches = new Map<string, boolean>();
+  const mediaListeners = new Map<string, Set<(event: unknown) => void>>();
+  const registry: ObserverRegistry = {
+    resize: [],
+    intersection: [],
+    media: {
+      setMatches(query, matches) {
+        mediaMatches.set(query, matches);
+        for (const listener of mediaListeners.get(query) ?? []) listener({ matches, media: query });
+      },
+    },
+  };
 
   window.matchMedia = (query: string) => {
-    const listeners = new Set<(event: unknown) => void>();
+    const listeners = mediaListeners.get(query) ?? new Set<(event: unknown) => void>();
+    mediaListeners.set(query, listeners);
     return {
-      matches: false,
+      get matches() {
+        return mediaMatches.get(query) ?? false;
+      },
       media: query,
       onchange: null,
       addEventListener: (_type: string, listener: (event: unknown) => void) =>

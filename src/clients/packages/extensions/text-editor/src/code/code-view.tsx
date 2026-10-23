@@ -106,10 +106,16 @@ export function CodeView({
       fontFamily,
       wordWrap: "off",
     });
-    // 基础字号或最小字号变化时更新编辑器。Updates the editor when the base or minimum size changes.
-    const themeSubscription = api.theme.onDidChange((theme) =>
-      created.updateOptions({ fontSize: resolveTextEditorFontSizes(settings, theme.tokens).code }),
-    );
+    // 字号或主题字体变化时更新编辑器；Monaco 不随 CSS 变量变化。
+    // Updates the editor when the sizes or the theme font change; Monaco does not follow CSS variables.
+    const themeSubscription = api.theme.onDidChange((theme) => {
+      const nextFontFamily = theme.tokens["--font-mono"];
+      if (!nextFontFamily) throw new Error("The host theme has no --font-mono.");
+      created.updateOptions({
+        fontSize: resolveTextEditorFontSizes(settings, theme.tokens).code,
+        fontFamily: nextFontFamily,
+      });
+    });
     setEditor(created);
     return () => {
       themeSubscription.dispose();

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "bad-theme",
+  "name": "Bad Theme",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture whose theme file is invalid.",
+  "contributes": {
+    "themes": [{ "id": "bad", "title": "Bad", "path": "themes/bad.json" }]
+  }
+}

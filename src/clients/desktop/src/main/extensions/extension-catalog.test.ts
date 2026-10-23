@@ -136,6 +136,107 @@ test("icons larger than 256 KB are errors", async () => {
   }
 });
 
+const THEME_MANIFEST = {
+  manifestVersion: 1,
+  id: "themes",
+  name: "Themes",
+  version: "1.0.0",
+  contributes: {
+    themes: [
+      { id: "night", title: "Night", path: "themes/night.json" },
+      { id: "day", title: "Day", path: "themes/day.json" },
+    ],
+  },
+};
+
+test("theme files are read after the package checks and merged into the entry", async () => {
+  const scratch = await createScratchDirectory("catalog");
+  try {
+    await writeTestExtension(join(scratch.path, "themes"), THEME_MANIFEST, {
+      "themes/night.json": JSON.stringify({
+        common: { "--radius": "0.75rem" },
+        dark: { "--background": "#212121" },
+      }),
+      "themes/day.json": JSON.stringify({ light: { "--background": "#ffffff" } }),
+    });
+    const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+    assert.deepEqual(entry.errors, []);
+    assert.equal(entry.validation, "valid");
+    assert.deepEqual(entry.themes, [
+      {
+        id: "night",
+        title: "Night",
+        common: { "--radius": "0.75rem" },
+        light: {},
+        dark: { "--background": "#212121" },
+      },
+      { id: "day", title: "Day", common: {}, light: { "--background": "#ffffff" }, dark: {} },
+    ]);
+    assert.deepEqual(toInstalledExtension(entry, undefined).themes, entry.themes);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("invalid or missing theme files make the extension invalid without themes", async () => {
+  const scratch = await createScratchDirectory("catalog");
+  try {
+    await writeTestExtension(join(scratch.path, "themes"), THEME_MANIFEST, {
+      "themes/night.json": JSON.stringify({ light: { "--background": "nope", "--bg": "#fff" } }),
+    });
+    const [missing] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+    assert.equal(missing.validation, "invalid");
+    assert.deepEqual(missing.themes, []);
+    assert.deepEqual(
+      missing.errors.map((error) => [error.code, error.path]),
+      [
+        ["PACKAGE_FILE_NOT_FOUND", "contributes.themes[1].path"],
+        ["INVALID_THEME_VALUE", "contributes.themes[0].light.--background"],
+        ["UNKNOWN_THEME_VARIABLE", "contributes.themes[0].light.--bg"],
+      ],
+    );
+
+    await writeFile(join(scratch.path, "themes", "themes", "day.json"), "{ not json");
+    const [broken] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+    assert.deepEqual(
+      broken.errors.map((error) => [error.code, error.path]),
+      [
+        ["INVALID_THEME_VALUE", "contributes.themes[0].light.--background"],
+        ["UNKNOWN_THEME_VARIABLE", "contributes.themes[0].light.--bg"],
+        ["THEME_PARSE_FAILED", "contributes.themes[1].path"],
+      ],
+    );
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("theme paths that resolve outside the root are errors", async () => {
+  const scratch = await createScratchDirectory("catalog");
+  try {
+    await writeFile(join(scratch.path, "outside.json"), '{"light":{"--background":"#fff"}}');
+    const directory = join(scratch.path, "extensions", "themes");
+    await writeTestExtension(directory, {
+      ...THEME_MANIFEST,
+      contributes: { themes: [THEME_MANIFEST.contributes.themes[0]] },
+    });
+    await mkdir(join(directory, "themes"));
+    await symlink(join(scratch.path, "outside.json"), join(directory, "themes", "night.json"));
+    const [entry] = await scanExtensionDirectory(
+      join(scratch.path, "extensions"),
+      APP_VERSION,
+      "user",
+    );
+    assert.deepEqual(
+      entry.errors.map((error) => [error.code, error.path]),
+      [["PACKAGE_PATH_OUTSIDE_ROOT", "contributes.themes[0].path"]],
+    );
+    assert.deepEqual(entry.themes, []);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
 test("incompatible versions keep the manifest and report the reason", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {

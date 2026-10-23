@@ -5,6 +5,7 @@ import type {
   ExtensionGrants,
   ExtensionSettings,
   ExtensionSource,
+  ExtensionTheme,
   ExtensionValidation,
   ExtensionValidationError,
   InstalledExtension,
@@ -12,6 +13,7 @@ import type {
 import type { ExtensionManifest } from "@agw/extension-sdk";
 import { evaluateExtensionManifest, manifestPackagePaths } from "../../shared/extension-manifest";
 import { isGrantCovered } from "../settings/settings-store";
+import { readExtensionThemes } from "./extension-theme-file";
 
 export const MAX_ICON_BYTES = 256 * 1024;
 
@@ -23,6 +25,7 @@ export type CatalogEntry = {
   validation: ExtensionValidation;
   errors: ExtensionValidationError[];
   icons: Record<string, string>;
+  themes: ExtensionTheme[];
 };
 
 export function isPathInside(root: string, target: string): boolean {
@@ -54,6 +57,7 @@ function errorEntry(directory: string, errors: ExtensionValidationError[]): Cata
     validation: "invalid",
     errors,
     icons: {},
+    themes: [],
   };
 }
 
@@ -102,7 +106,9 @@ export async function readExtensionDirectory(
   const manifest = evaluation.manifest;
   const errors = [...evaluation.errors];
   const icons: Record<string, string> = {};
+  let themes: ExtensionTheme[] = [];
   if (manifest) {
+    const themeFiles = new Map<string, string>();
     if (expectedId !== null && manifest.id !== expectedId) {
       errors.push({
         code: "DIRECTORY_NAME_MISMATCH",
@@ -138,6 +144,7 @@ export async function readExtensionDirectory(
         });
         continue;
       }
+      if (reference.kind === "theme") themeFiles.set(reference.path, fileRealPath);
       if (reference.kind !== "icon" || reference.path in icons) continue;
       if (info.size > MAX_ICON_BYTES) {
         errors.push({
@@ -151,6 +158,10 @@ export async function readExtensionDirectory(
       icons[reference.path] =
         `data:${mimeType};base64,${(await readFile(fileRealPath)).toString("base64")}`;
     }
+    // 主题文件在包内路径检查之后读取与校验。Theme files are read and validated after the package path checks.
+    const result = await readExtensionThemes(manifest.contributes?.themes ?? [], themeFiles);
+    themes = result.themes;
+    errors.push(...result.errors);
   }
 
   const validation: ExtensionValidation =
@@ -162,6 +173,7 @@ export async function readExtensionDirectory(
     validation,
     errors,
     icons: validation === "valid" ? icons : {},
+    themes: validation === "valid" ? themes : [],
   };
 }
 
@@ -230,5 +242,6 @@ export function toInstalledExtension(
     grantedHostPermissions: settings?.grantedHostPermissions ?? [],
     lastActivatedVersion: settings?.lastActivatedVersion ?? null,
     icons: entry.icons,
+    themes: entry.themes,
   };
 }

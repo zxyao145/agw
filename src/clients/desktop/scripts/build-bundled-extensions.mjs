@@ -32,11 +32,22 @@ function run(command, args, cwd) {
   });
 }
 
-/** 与 build-extension-sdk.mjs 相同地打包 manifest 校验模块。Bundles the manifest module as build-extension-sdk.mjs does. */
+/**
+ * 与 build-extension-sdk.mjs 相同地打包 manifest 校验模块，以及 Desktop 读取 extension 时使用的主题文件校验。
+ * Bundles the manifest module as build-extension-sdk.mjs does, plus the theme file validation Desktop runs when it
+ * reads an extension.
+ */
 async function loadManifestTools() {
   const moduleFile = join(desktopDirectory, ".scratch", "bundled-extensions-build", "manifest.mjs");
   await build({
-    entryPoints: [join(desktopDirectory, "src", "shared", "extension-manifest.ts")],
+    stdin: {
+      contents: [
+        'export * from "./src/shared/extension-manifest.ts";',
+        'export { readExtensionThemes } from "./src/main/extensions/extension-theme-file.ts";',
+      ].join("\n"),
+      resolveDir: desktopDirectory,
+      loader: "ts",
+    },
     outfile: moduleFile,
     bundle: true,
     format: "esm",
@@ -99,10 +110,20 @@ async function validatePackage(tools, appVersion, name, distDirectory) {
       `${name}: the manifest id "${result.manifest.id}" must equal the package directory name.`,
     );
   }
-  for (const { path, field } of tools.manifestPackagePaths(result.manifest)) {
-    await access(join(distDirectory, ...path.split("/"))).catch(() => {
+  const themeFiles = new Map();
+  for (const { path, field, kind } of tools.manifestPackagePaths(result.manifest)) {
+    const file = join(distDirectory, ...path.split("/"));
+    await access(file).catch(() => {
       throw new Error(`${name}: ${field} refers to ${path}, which is not in dist/.`);
     });
+    if (kind === "theme") themeFiles.set(path, file);
+  }
+  const themes = await tools.readExtensionThemes(
+    result.manifest.contributes?.themes ?? [],
+    themeFiles,
+  );
+  if (themes.errors.length > 0) {
+    throw new Error(`${name}: the theme files are invalid: ${JSON.stringify(themes.errors)}`);
   }
   await checkSdkImports(name, distDirectory);
 }

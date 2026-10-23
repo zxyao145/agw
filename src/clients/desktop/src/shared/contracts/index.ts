@@ -32,6 +32,7 @@ export type {
   ExtensionSaveDialogOptions,
   ExtensionSettings,
   ExtensionSource,
+  ExtensionTheme,
   ExtensionValidation,
   ExtensionValidationError,
   ExtensionWatchRequest,
@@ -43,10 +44,12 @@ export type { DesktopRuntimeState, LocalServerRuntime } from "./runtime";
 export type { ImageContextMenuRequest } from "./image";
 export type { DesktopPlatform, ServerProfile } from "./server-profile";
 export type {
+  AppearanceMode,
   AppearanceSettings,
   CloseBehavior,
   DesktopSettings,
   DesktopSettingsUpdate,
+  FontSizeSettings,
   PackageFlavor,
 } from "./settings";
 export type {

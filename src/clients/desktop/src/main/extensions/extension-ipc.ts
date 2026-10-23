@@ -107,7 +107,7 @@ export function registerExtensionIpc({
     runtime.safeMode.resume();
     return runtimeState();
   });
-  handle("agw:open-extensions-directory", () => runtime.openDirectory(runtime.extensionsDirectory));
+  handle("agw:open-extensions-directory", () => runtime.openDirectory(runtime.packagesDirectory));
   handle("agw:open-extension-data-directory", (extensionId: string) => {
     assertExtensionId(extensionId);
     return runtime.openDirectory(join(runtime.dataDirectory, extensionId));

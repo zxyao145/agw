@@ -73,7 +73,9 @@ function sameMembers(left: readonly string[], right: readonly string[]): boolean
 
 /** Electron 主进程中的 extension 运行时。The extension runtime in the Electron main process. */
 export class ExtensionRuntime {
-  public readonly extensionsDirectory: string;
+  /** 用户安装的 extension 包：`<userData>/extensions/packages/<id>`。User-installed packages. */
+  public readonly packagesDirectory: string;
+  /** extension 的持久数据：`<userData>/extensions/data/<id>`。Persistent extension data. */
   public readonly dataDirectory: string;
   public readonly safeMode = new ExtensionSafeModeGuard();
   public readonly registry = new ExtensionFrameRegistry();
@@ -93,8 +95,9 @@ export class ExtensionRuntime {
   private readonly installer: ExtensionInstaller;
 
   public constructor(private readonly options: ExtensionRuntimeOptions) {
-    this.extensionsDirectory = join(options.userDataDirectory, "extensions");
-    this.dataDirectory = join(options.userDataDirectory, "extension-data");
+    const extensionsDirectory = join(options.userDataDirectory, "extensions");
+    this.packagesDirectory = join(extensionsDirectory, "packages");
+    this.dataDirectory = join(extensionsDirectory, "data");
     this.watcher = new ExtensionFileWatcher((event) => this.emit(event), this.replacedFiles);
     this.sessions = new ExtensionSessionFactory({
       sdkDirectory: options.sdkDirectory,
@@ -106,7 +109,7 @@ export class ExtensionRuntime {
     });
     this.http = new ExtensionHttpClient((id) => this.sessions.httpTransportFor(id));
     this.installer = new ExtensionInstaller({
-      extensionsDirectory: this.extensionsDirectory,
+      packagesDirectory: this.packagesDirectory,
       dataDirectory: this.dataDirectory,
       appVersion: options.appVersion,
       settings: options.settings,
@@ -573,7 +576,7 @@ export class ExtensionRuntime {
         this.options.appVersion,
         "bundled",
       ),
-      scanExtensionDirectory(this.extensionsDirectory, this.options.appVersion, "user"),
+      scanExtensionDirectory(this.packagesDirectory, this.options.appVersion, "user"),
       this.options.settings.load(),
     ]);
     const entries = mergeExtensionCatalogs(bundled, user, settings.removedBundledExtensions);

@@ -58,6 +58,7 @@ const sample: InstalledExtension = {
   grantedHostPermissions: [],
   lastActivatedVersion: null,
   icons: { "icon.svg": "data:image/svg+xml;base64,PHN2Zy8+" },
+  themes: [],
   manifest: {
     manifestVersion: 1,
     id: "sample",

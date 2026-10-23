@@ -21,8 +21,11 @@ const PACKAGE_PATH_PATTERN = new RegExp(`^${PACKAGE_PATH}$`, "u");
 const PACKAGE_ICON_PATTERN = new RegExp(`^${ICON_FILE}$`, "u");
 const ENTRY_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.html$`, "u");
 const BACKGROUND_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.m?js$`, "u");
+const THEME_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.json$`, "u");
 const ICON_PATTERN = new RegExp(`^(?:${LUCIDE_ICON}|${ICON_FILE})$`, "u");
-const EXTENSION_ID_PATTERN = /^(?!agw)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+// `data` 与 `packages` 是 `<userData>/extensions` 下的目录名，不能作为 id。
+// `data` and `packages` name the directories under `<userData>/extensions` and cannot be ids.
+const EXTENSION_ID_PATTERN = /^(?!agw)(?!(?:data|packages)$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const LOCAL_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 export function isValidPackagePath(value: string): boolean {
@@ -123,6 +126,15 @@ export const extensionManifestSchema = z
             }),
           )
           .optional(),
+        themes: z
+          .array(
+            z.strictObject({
+              id: localIdSchema,
+              title: titleSchema,
+              path: z.string().regex(THEME_PATTERN),
+            }),
+          )
+          .optional(),
       })
       .optional(),
     permissions: z.array(z.enum(EXTENSION_PERMISSIONS)).optional(),
@@ -148,6 +160,7 @@ export const extensionManifestSchema = z
     unique(contributes.chat?.conversationActions, ["contributes", "chat", "conversationActions"]);
     unique(contributes.explorerActions, ["contributes", "explorerActions"]);
     unique(contributes.fileViewers, ["contributes", "fileViewers"]);
+    unique(contributes.themes, ["contributes", "themes"]);
 
     // 侧栏视图、主区视图与文件查看器共用 `<extensionId>:<id>` 视图 id。
     // Sidebar views, main views and file viewers share the `<extensionId>:<id>` view id.
@@ -248,20 +261,24 @@ function formatPath(path: readonly PropertyKey[]): string | null {
   }, "");
 }
 
-function toValidationErrors(issues: readonly z.core.$ZodIssue[]): ExtensionValidationError[] {
+/** zod 问题转换为校验错误，`prefix` 加在每个字段路径之前。Converts zod issues; `prefix` goes before every field path. */
+export function toValidationErrors(
+  issues: readonly z.core.$ZodIssue[],
+  prefix: readonly PropertyKey[] = [],
+): ExtensionValidationError[] {
   return issues.flatMap((issue): ExtensionValidationError[] => {
     if (issue.code === "unrecognized_keys") {
       return issue.keys.map((key) => ({
         code: "UNKNOWN_FIELD",
         message: `Unknown field "${key}".`,
-        path: formatPath([...issue.path, key]),
+        path: formatPath([...prefix, ...issue.path, key]),
       }));
     }
     const code =
       issue.code === "custom" && typeof issue.params?.code === "string"
         ? issue.params.code
         : "INVALID_FIELD";
-    return [{ code, message: issue.message, path: formatPath(issue.path) }];
+    return [{ code, message: issue.message, path: formatPath([...prefix, ...issue.path]) }];
   });
 }
 
@@ -333,7 +350,7 @@ export type ManifestPackagePath = {
   path: string;
   /** manifest 中的字段路径。Field path in the manifest. */
   field: string;
-  kind: "entry" | "background" | "icon";
+  kind: "entry" | "background" | "icon" | "theme";
 };
 
 /** manifest 引用的全部包路径。Every package path the manifest references. */
@@ -377,6 +394,9 @@ export function manifestPackagePaths(manifest: ExtensionManifest): ManifestPacka
       kind: "entry",
     });
   }
+  contributes.themes?.forEach((theme, index) =>
+    paths.push({ path: theme.path, field: `contributes.themes[${index}].path`, kind: "theme" }),
+  );
   const actions = (items: readonly { icon: string }[] | undefined, field: string) =>
     items?.forEach((item, index) => icon(item.icon, `${field}[${index}].icon`));
   actions(contributes.chat?.composerActions, "contributes.chat.composerActions");
