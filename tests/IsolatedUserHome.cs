@@ -1,5 +1,3 @@
-using Xunit;
-
 namespace Agw.Testing;
 
 /// <summary>
