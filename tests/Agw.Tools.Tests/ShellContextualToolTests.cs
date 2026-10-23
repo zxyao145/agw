@@ -87,7 +87,9 @@ public sealed class ShellContextualToolTests
         }
     }
 
-    [Fact]
+    public static bool UsesPosixShell => !OperatingSystem.IsWindows();
+
+    [Fact(SkipUnless = nameof(UsesPosixShell), Skip = "The commands use POSIX shell syntax.")]
     public async Task RunShell_DirectoriesMovedBetweenCalls_RecreatesDirectoriesAndRestartsShell()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -125,9 +127,10 @@ public sealed class ShellContextualToolTests
         }
     }
 
-    public static bool DockerAvailable => DockerShellExecutor.IsAvailableAsync().GetAwaiter().GetResult();
+    public static bool DockerAvailable =>
+        !OperatingSystem.IsWindows() && DockerShellExecutor.IsAvailableAsync().GetAwaiter().GetResult();
 
-    [Fact(SkipUnless = nameof(DockerAvailable), Skip = "Requires a reachable docker command.")]
+    [Fact(SkipUnless = nameof(DockerAvailable), Skip = "Requires a docker command that runs Linux containers.")]
     public async Task RunShell_DockerDirectoriesRecreated_MountsCurrentDirectories()
     {
         var ct = TestContext.Current.CancellationToken;
