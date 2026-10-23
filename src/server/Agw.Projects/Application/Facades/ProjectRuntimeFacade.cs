@@ -1,5 +1,6 @@
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 
 namespace Agw.Projects.Application.Facades;
 
@@ -22,11 +23,20 @@ public sealed class ProjectRuntimeFacade : IProjectRuntimeFacade
         return project == null ? null : Map(project);
     }
 
+    /// <summary>
+    /// <para>返回当前用户可见项目的有效主目录规范化绝对路径，返回前创建缺失的目录。</para>
+    /// <para>Returns the normalized absolute effective primary directory of a Project visible to the current user,
+    /// creating the directory when it is missing.</para>
+    /// </summary>
     public async Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var project = await _projectService.GetAsync(projectId).ConfigureAwait(false);
-        return project?.Workspace;
+        return project == null
+            ? null
+            : ProjectWorkspacePaths.EnsureCreated(
+                ProjectWorkspacePaths.CreateSnapshot(project.Id, project.Workspace).Workspace
+            );
     }
 
     private static ProjectRuntimeSnapshot Map(Agw.Shared.Data.Entities.Projects.Project project) =>

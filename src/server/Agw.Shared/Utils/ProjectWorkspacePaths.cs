@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
 namespace Agw.Shared.Utils;
@@ -42,21 +41,28 @@ public static class ProjectWorkspacePaths
         );
     }
 
-    public static void EnsureAvailable(Guid projectId, ProjectWorkspaceSnapshot snapshot)
+    /// <summary>
+    /// <para>规范化目录路径并创建缺失的目录及其上级目录；已有目录及其内容保持不变，创建失败时异常直接抛出。</para>
+    /// <para>Normalizes the directory path and creates the directory and its missing parents; an existing directory and
+    /// its contents stay unchanged, and a creation failure propagates.</para>
+    /// </summary>
+    public static string EnsureCreated(string directoryPath)
     {
-        // The legacy default root is created on demand; explicit additional roots are never created.
-        if (Comparer.Equals(snapshot.Workspace, Normalize($"~/.agw/projects/{projectId:N}")))
+        var path = Normalize(directoryPath);
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    /// <summary>
+    /// <para>为一次执行准备快照中的主目录和每个附加目录。</para>
+    /// <para>Prepares the primary directory and every additional directory of the snapshot for one execution.</para>
+    /// </summary>
+    public static void EnsureAvailable(ProjectWorkspaceSnapshot snapshot)
+    {
+        EnsureCreated(snapshot.Workspace);
+        foreach (var directory in snapshot.AdditionalDirectories)
         {
-            Directory.CreateDirectory(snapshot.Workspace);
-        }
-        foreach (
-            var path in snapshot.AdditionalDirectories.Select(directory => directory.Path).Prepend(snapshot.Workspace)
-        )
-        {
-            if (!Directory.Exists(path))
-            {
-                throw new AgwException(ErrorCodes.ResourceNotFound, $"Project directory is unavailable: '{path}'.");
-            }
+            EnsureCreated(directory.Path);
         }
     }
 }

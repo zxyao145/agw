@@ -567,7 +567,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 ownershipLost
             )
             .ConfigureAwait(false);
-        ProjectWorkspacePaths.EnsureAvailable(manifest.Task.ProjectId, manifest.WorkspaceSnapshot!);
+        ProjectWorkspacePaths.EnsureAvailable(manifest.WorkspaceSnapshot!);
         await using var sink = new DurableEventSink(
             guard,
             lease,

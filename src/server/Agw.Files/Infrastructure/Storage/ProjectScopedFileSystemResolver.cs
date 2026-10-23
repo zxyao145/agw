@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using Agw.Files.Abstracts;
-using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Microsoft.Extensions.DependencyInjection;
@@ -79,26 +78,24 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
         {
             return null;
         }
-        if (string.IsNullOrWhiteSpace(rootPath))
-        {
-            rootPath = $"~/.agw/projects/{projectId:N}";
-            Directory.CreateDirectory(PathUtil.ExpandTilde(rootPath));
-        }
-        rootPath = ProjectWorkspacePaths.Normalize(rootPath);
-        if (!Directory.Exists(rootPath))
-        {
-            throw new AgwException(ErrorCodes.ResourceNotFound, $"Project directory is unavailable: '{rootPath}'.");
-        }
+        // 每次解析都准备实际选中的目录；目录重新创建后物理身份改变，缓存的文件系统随之重建。
+        // Every resolution prepares the selected directory; a recreated directory has a new physical identity, so the
+        // cached file system is rebuilt.
+        rootPath = ProjectWorkspacePaths.EnsureCreated(
+            string.IsNullOrWhiteSpace(rootPath) ? $"~/.agw/projects/{projectId:N}" : rootPath
+        );
 
         var key = (projectId, directoryId, rootPath);
         if (
             _cache.TryGetValue(key, out var cached)
             && string.Equals(cached.OwnerUserId, ownerUserId, StringComparison.Ordinal)
+            && cached.Directory.IsCurrent()
         )
         {
             return cached.FileSystem;
         }
 
+        var directory = DirectoryIdentitySnapshot.Capture([rootPath]);
         var fileSystem = new LocalFileSystem(rootPath, _pathLocks, _fileSystemLogger);
         _logger.LogDebug(
             "Project {ProjectId} directory {DirectoryId} resolved to {Path}",
@@ -106,7 +103,7 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
             directoryId,
             rootPath
         );
-        _cache[key] = new CachedEntry(fileSystem, ownerUserId, _timeProvider.GetUtcNow());
+        _cache[key] = new CachedEntry(fileSystem, ownerUserId, directory, _timeProvider.GetUtcNow());
         return fileSystem;
     }
 
@@ -118,5 +115,10 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
         }
     }
 
-    private sealed record CachedEntry(IAgwFileSystem FileSystem, string OwnerUserId, DateTimeOffset CreatedAt);
+    private sealed record CachedEntry(
+        IAgwFileSystem FileSystem,
+        string OwnerUserId,
+        DirectoryIdentitySnapshot Directory,
+        DateTimeOffset CreatedAt
+    );
 }

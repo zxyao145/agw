@@ -257,9 +257,9 @@ Codex 的 `Agent.Extra` 保留 `codexOptions`、`threadOptions` 和 `turnOptions
 
 ### Project 目录快照
 
-每轮执行入口捕获主目录、附加目录和配置指纹，保存在 `RuntimeTurnContext.WorkspaceSnapshot`，并通过 `ProjectWorkspaceContext` 传到 Agent、Agentflow、工具和后台子执行。目录设置保存后文件面板立即刷新，本轮不变，下一轮按新指纹重建 runtime；conversation ID、provider session ID 与持久化历史沿用原值。
+每轮执行入口捕获主目录、附加目录和配置指纹，保存在 `RuntimeTurnContext.WorkspaceSnapshot`，并通过 `ProjectWorkspaceContext` 传到 Agent、Agentflow、工具和后台子执行。目录设置保存后文件面板立即刷新，本轮不变，下一轮按新指纹重建 runtime；conversation ID、provider session ID 与持久化历史沿用原值。InProcess runtime 创建前记录快照目录的物理身份，目录被移走后重新创建时下一轮同样重建 runtime，外部 Agent 进程随之绑定到当前目录；persistent shell 在每次调用前核对被绑定目录，身份改变时重新创建执行器与 Docker 挂载。
 
-Durable manifest 保存同一快照，重复注册相同 turnId、恢复 segment 和人工交互续跑均复用它。旧清单缺少快照时在 execution lease 内补齐单主目录配置并持久化，不把新增附加目录带入旧执行。目录无法访问时报告该目录错误，不切回主目录。
+Durable manifest 保存同一快照，重复注册相同 turnId、恢复 segment 和人工交互续跑均复用它。旧清单缺少快照时在 execution lease 内补齐单主目录配置并持久化，不把新增附加目录带入旧执行。每轮和每个 segment 执行前按快照创建缺失的主目录与附加目录；目录无法创建时报告该目录错误，不切回主目录。
 
 Claude Code 的 `AddDirectories` 和 Codex 的 `ThreadOptions.AdditionalDirectories` 合并项目附加目录与 SDK 显式配置，再按规范化路径去重。Pi 通过每轮上下文获取目录清单；三种 Agent 的默认 cwd 均保持主目录。`file_access_*` 的可选 `directoryId` 绑定本轮目录，聊天文件引用在没有附加目录时使用 `@<relativePath>`，配置附加目录后使用 `@<absolutePath>`，含空格时为路径加双引号；调用相对路径文件工具时，Agent 将完整路径转换为对应目录的 `directoryId` 和相对路径，主目录省略 `directoryId`。Docker Shell 把附加目录挂载到 `/project-directories/{id}`，默认 cwd 为 `/workspace`。目录关联沿用现有权限模式，不增加逐目录授权或 OS 沙箱。
 

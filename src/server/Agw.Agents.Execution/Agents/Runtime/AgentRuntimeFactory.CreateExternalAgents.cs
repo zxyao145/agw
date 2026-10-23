@@ -46,6 +46,15 @@ public partial class AgentRuntimeFactory
         bool isBackground = false
     )
     {
+        // 外部 Agent 进程使用 WorkingDirectory 和附加目录前，创建本次执行中缺失的目录。
+        // Missing directories of this execution are created before the external Agent process uses WorkingDirectory
+        // and the additional directories.
+        ProjectWorkspacePaths.EnsureCreated(project.Workspace!);
+        foreach (var directory in project.AdditionalDirectories)
+        {
+            ProjectWorkspacePaths.EnsureCreated(directory.Path);
+        }
+
         var modelConfiguration = await _agentAppService
             .GetExternalModelRuntimeConfigurationAsync(request.Agent.ExternalAgentKind, request.Agent.ModelProviderId)
             .ConfigureAwait(false);

@@ -17,6 +17,7 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
+using Agw.Shared.Utils;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.EntityFrameworkCore;
@@ -233,7 +234,9 @@ public class DbSeeder
             if (existingProject == null)
             {
                 _logger.LogInformation("Seeding built-in project {ProjectName}", definition.Name);
-                _context.Projects.Add(CreateBuiltInProject(definition));
+                var project = CreateBuiltInProject(definition);
+                EnsureBuiltInProjectDirectories(project);
+                _context.Projects.Add(project);
                 continue;
             }
 
@@ -263,6 +266,20 @@ public class DbSeeder
             UpdateBy = Constants.AdminUserId,
             UpdateTime = now,
         };
+    }
+
+    /// <summary>
+    /// <para>用本实例的用户目录展开内置项目保存的 <c>~</c> 路径，在保存前创建有效主目录和配置中的附加目录。</para>
+    /// <para>Expands the saved <c>~</c> paths of a built-in Project with this instance's user home and creates the
+    /// effective primary directory and the configured additional directories before saving.</para>
+    /// </summary>
+    private void EnsureBuiltInProjectDirectories(Project project)
+    {
+        ProjectWorkspacePaths.EnsureCreated(PathUtil.ExpandTilde(project.Workspace, _dataPaths.UserHomeDirectory));
+        foreach (var directory in project.AdditionalDirectories)
+        {
+            ProjectWorkspacePaths.EnsureCreated(PathUtil.ExpandTilde(directory.Path, _dataPaths.UserHomeDirectory));
+        }
     }
 
     private async Task SeedExternalAgentsAsync()
