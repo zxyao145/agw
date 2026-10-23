@@ -6,8 +6,8 @@ using Microsoft.Win32.SafeHandles;
 namespace Agw.Files.Infrastructure.Storage.Confined;
 
 /// <summary>
-/// Windows 文件系统实现用到的 Native API 调用：打开句柄、读取句柄的最终物理路径与文件信息、按句柄删除与重命名。
-/// Native API calls used by the Windows file system implementations: opening handles, reading a handle's final
+/// Windows 文件系统实现用到的 Win32 与 ntdll 调用：打开句柄、读取句柄的最终物理路径与文件信息、按句柄删除与重命名。
+/// Win32 and ntdll calls used by the Windows file system implementations: opening handles, reading a handle's final
 /// physical path and file information, and deleting and renaming by handle.
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -42,8 +42,13 @@ internal static partial class WindowsNative
     public const int ERROR_DIR_NOT_EMPTY = 145;
     public const int ERROR_ALREADY_EXISTS = 183;
 
-    private const int FileRenameInformationClass = 10;
     private const int FileDispositionInfoClass = 4;
+
+    /// <summary>
+    /// ntdll FILE_INFORMATION_CLASS 中的 FileRenameInformation。
+    /// FileRenameInformation in the ntdll FILE_INFORMATION_CLASS.
+    /// </summary>
+    private const int FileRenameInformationClass = 10;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct FileDispositionInfo
@@ -231,11 +236,14 @@ internal static partial class WindowsNative
     /// <summary>
     /// 通过句柄重命名：对象移动到 <paramref name="directory"/> 句柄所指目录下的 <paramref name="name"/>，目标位置相对已打开
     /// 的目录句柄解析，不再经过路径。<paramref name="replace"/> 为 false 时目标已存在会失败（ERROR_ALREADY_EXISTS），返回
-    /// Win32 错误码，成功时返回 0。
+    /// Win32 错误码，成功时返回 0。重命名调用 ntdll 的 NtSetInformationFile(FileRenameInformation)，FileName 作为相对
+    /// RootDirectory 的名称直接交给文件系统。
     /// Renames through a handle: the object moves to <paramref name="name"/> under the directory behind the
     /// <paramref name="directory"/> handle, so the destination is resolved relative to the opened directory handle
     /// instead of a path. When <paramref name="replace"/> is false an existing destination fails
-    /// (ERROR_ALREADY_EXISTS). Returns the Win32 error code, or 0 on success.
+    /// (ERROR_ALREADY_EXISTS). Returns the Win32 error code, or 0 on success. The rename calls ntdll
+    /// NtSetInformationFile(FileRenameInformation), which passes FileName to the file system as a name relative to
+    /// RootDirectory.
     /// </summary>
     public static int Rename(SafeFileHandle handle, SafeFileHandle directory, string name, bool replace)
     {

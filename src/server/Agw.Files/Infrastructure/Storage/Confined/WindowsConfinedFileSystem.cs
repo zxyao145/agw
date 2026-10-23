@@ -738,12 +738,12 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
 
     /// <summary>
     /// 复核并提交：调用方已取消或租约已丢失时抛出 <see cref="OperationCanceledException"/>；有写入前提时重新打开目标并对比
-    /// 文件标识、大小与修改时间；随后对临时文件句柄调用 SetFileInformationByHandle(FileRenameInfo)，RootDirectory 为持有的
+    /// 文件标识、大小与修改时间；随后对临时文件句柄调用 NtSetInformationFile(FileRenameInformation)，RootDirectory 为持有的
     /// 目录句柄，不按路径重新解析。复核与重命名之间没有 await；不替换时目标已存在由重命名本身失败。目标是只读文件时重命名以
     /// ERROR_ACCESS_DENIED 失败，只读文件不被替换，抛出 <c>FileNotWritable</c>。
     /// Re-checks and commits: throws <see cref="OperationCanceledException"/> when the caller has canceled or the lease
     /// is lost; with a write precondition the target is reopened and its identity, size and modification time are
-    /// compared; then SetFileInformationByHandle(FileRenameInfo) runs on the temporary file handle with the held
+    /// compared; then NtSetInformationFile(FileRenameInformation) runs on the temporary file handle with the held
     /// directory handle as RootDirectory, resolving no path again. There is no await between the re-check and the
     /// rename, and without overwrite an existing target makes the rename itself fail. A read-only target makes the
     /// rename fail with ERROR_ACCESS_DENIED, so a read-only file is never replaced and <c>FileNotWritable</c> is
@@ -927,6 +927,13 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
     /// </summary>
     private string RootRelativePath(string path) => Combine(_prefix, RelativePath(path));
 
+    /// <summary>
+    /// 打开已有的普通文件；不存在或是目录时抛出 <c>FileNotFound</c>。带 FILE_FLAG_BACKUP_SEMANTICS 打开，目录也能得到句柄，
+    /// 再按句柄判断是否为目录。
+    /// Opens an existing regular file; throws <c>FileNotFound</c> when it is missing or is a directory. It is opened
+    /// with FILE_FLAG_BACKUP_SEMANTICS so a directory also yields a handle, which is then checked for being a
+    /// directory.
+    /// </summary>
     private VerifiedHandle OpenExistingFile(string path, uint access)
     {
         ResolveFilePath(path);
