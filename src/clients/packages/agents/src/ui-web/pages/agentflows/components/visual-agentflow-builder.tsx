@@ -2662,23 +2662,24 @@ function getEdgeVisual(kind: AgentflowEdgeKind): {
   width: number;
   animated: boolean;
 } {
+  // 边线与箭头都以 style 着色，主题变量变化时一起更新。Edges and arrowheads are colored through style, so theme changes update both.
   if (kind === AgentflowEdgeKind.FanOut) {
-    return { color: "#2563eb", width: 2, animated: true };
+    return { color: "var(--agw-agentflow-edge-fan-out)", width: 2, animated: true };
   }
 
   if (kind === AgentflowEdgeKind.FanInBarrier) {
-    return { color: "#d97706", width: 2, animated: false };
+    return { color: "var(--agw-agentflow-edge-fan-in)", width: 2, animated: false };
   }
 
   if (kind === AgentflowEdgeKind.SwitchCase) {
-    return { color: "#7c3aed", width: 2, animated: false };
+    return { color: "var(--agw-agentflow-edge-switch-case)", width: 2, animated: false };
   }
 
   if (kind === AgentflowEdgeKind.SwitchDefault) {
-    return { color: "#db2777", width: 2, animated: false };
+    return { color: "var(--agw-agentflow-edge-switch-default)", width: 2, animated: false };
   }
 
-  return { color: "#475569", width: 1.75, animated: false };
+  return { color: "var(--agw-agentflow-edge)", width: 1.75, animated: false };
 }
 
 function parsePosition(positionJson: string | null, index: number) {

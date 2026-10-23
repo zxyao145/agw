@@ -1,8 +1,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-geist-sans: "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-geist-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --agw-font-sans: "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --agw-font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
 }
 
 /* 字号 token 使用 static，保证 :root 中始终输出变量，后续可以在运行时缩放。 */
@@ -15,11 +15,15 @@
   --text-15: 0.9375rem;
 }
 
+/* 字体变量始终输出，extension 可以读取 --font-sans 与 --font-mono。The font variables are always emitted so extensions can read --font-sans and --font-mono. */
+@theme inline static {
+  --font-sans: var(--agw-font-sans);
+  --font-mono: var(--agw-font-mono);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -134,6 +138,27 @@
   --sidebar-accent-foreground: #17191d;
   --sidebar-border: #e4e7ec;
   --sidebar-ring: #006fee;
+  --agw-sidebar-muted-foreground: var(--muted-foreground);
+
+  /* 聊天与 Markdown。Chat and Markdown. */
+  --agw-user-message: #f3f5fc;
+  --agw-user-message-foreground: #17191d;
+  --agw-code-block: #f4f4f4;
+  --agw-code-block-foreground: #17191d;
+  --agw-code-block-muted: #5f6368;
+  --agw-code-block-border: color-mix(in oklab, var(--color-black) 10%, transparent);
+  --agw-code-block-button: #71757a;
+  --agw-code-block-button-hover: #17191d;
+  --agw-prose-code-background: oklch(0.95 0 0);
+
+  /* 其他宿主颜色；Server 光环与 Agentflow 边线在两个 Mode 下相同。Other host colors; the Server halo and Agentflow edges are the same in both modes. */
+  --agw-status-running: #006fee;
+  --agw-server-online-halo: #10b981;
+  --agw-agentflow-edge: #475569;
+  --agw-agentflow-edge-fan-out: #2563eb;
+  --agw-agentflow-edge-fan-in: #d97706;
+  --agw-agentflow-edge-switch-case: #7c3aed;
+  --agw-agentflow-edge-switch-default: #db2777;
 }
 
 .dark {
@@ -168,6 +193,18 @@
   --sidebar-accent-foreground: #f3f4f6;
   --sidebar-border: #272a31;
   --sidebar-ring: #338ef7;
+
+  --agw-user-message: #f3f5fc;
+  --agw-user-message-foreground: #17191d;
+  --agw-code-block: #202124;
+  --agw-code-block-foreground: #f1f3f4;
+  --agw-code-block-muted: #bdc1c6;
+  --agw-code-block-border: color-mix(in oklab, var(--color-white) 10%, transparent);
+  --agw-code-block-button: #aeb2b8;
+  --agw-code-block-button-hover: #ffffff;
+  --agw-prose-code-background: oklch(0.2 0 0);
+
+  --agw-status-running: #338ef7;
 }
 
 @layer base {
@@ -335,11 +372,11 @@ div[role="option"]:hover {
   }
 
   .agw-status-dot.is-running {
-    @apply bg-sidebar-ring shadow-[0_0_0_3px_color-mix(in_srgb,var(--sidebar-ring)_14%,transparent)];
+    @apply bg-(--agw-status-running) shadow-[0_0_0_3px_color-mix(in_srgb,var(--agw-status-running)_14%,transparent)];
   }
 
   .dark .agw-status-dot.is-running {
-    @apply shadow-[0_0_0_3px_color-mix(in_srgb,var(--sidebar-ring)_28%,transparent)];
+    @apply shadow-[0_0_0_3px_color-mix(in_srgb,var(--agw-status-running)_28%,transparent)];
   }
 
   .agw-status-dot.is-waiting-approval {
@@ -376,17 +413,41 @@ div[role="option"]:hover {
   }
 
   .agw-server-state.is-online {
-    @apply bg-emerald-500 shadow-[0_0_0_3px_color-mix(in_srgb,#10b981_14%,transparent)];
+    @apply bg-emerald-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--agw-server-online-halo)_14%,transparent)];
   }
 
   .agw-chat-workspace {
     @apply min-h-0 flex-1 overflow-hidden bg-card pb-2;
   }
 
+  /* Desktop 侧栏：侧栏变量连接到容器内共享组件使用的界面变量；挂在 body 下的弹出层不受影响。
+     Desktop sidebars: the sidebar variables feed the interface variables used by shared components inside the
+     containers; overlays under body are not affected. */
+  .agw-ribbon,
+  .agw-left-sidebar,
+  .agw-settings-nav {
+    --foreground: var(--sidebar-foreground);
+    --muted-foreground: var(--agw-sidebar-muted-foreground);
+    --muted: var(--sidebar-accent);
+    --accent: var(--sidebar-accent);
+    --accent-foreground: var(--sidebar-accent-foreground);
+    --border: var(--sidebar-border);
+    --ring: var(--sidebar-ring);
+    @apply border-sidebar-border bg-sidebar text-sidebar-foreground;
+  }
+
+  /* 悬停或选中的项：普通文字使用侧栏强调色的前景。Hovered or selected items: plain text uses the sidebar accent foreground. */
+  .agw-ribbon-item:hover,
+  .agw-ribbon-item.is-active,
+  .agw-settings-nav section > a:hover,
+  .agw-settings-nav section > a.is-active {
+    --foreground: var(--sidebar-accent-foreground);
+  }
+
   /* Desktop 工作区：Ribbon、Left Sidebar、Main Workspace 与 extension 视图。
      Desktop workspace: Ribbon, Left Sidebar, Main Workspace and extension views. */
   .agw-ribbon {
-    @apply flex w-11 shrink-0 flex-col items-center gap-1 border-r bg-card py-2;
+    @apply flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2;
   }
 
   .agw-ribbon-item {
@@ -408,7 +469,7 @@ div[role="option"]:hover {
   }
 
   .agw-left-sidebar {
-    @apply flex h-full min-h-0 w-full flex-col overflow-hidden bg-card;
+    @apply flex h-full min-h-0 w-full flex-col overflow-hidden;
   }
 
   .agw-main-workspace {
@@ -458,7 +519,7 @@ div[role="option"]:hover {
   }
 
   .agw-settings-nav {
-    @apply w-61 shrink-0 border-r bg-card px-2.5 py-4;
+    @apply w-61 shrink-0 border-r px-2.5 py-4;
   }
 
   .agw-settings-nav-heading {
@@ -583,13 +644,8 @@ div[role="option"]:hover {
     font-family: var(--font-mono);
     font-size: 0.875em;
     padding: 0.125em 0.25em;
-    background-color: oklch(0.95 0 0);
+    background-color: var(--agw-prose-code-background);
     border-radius: 0.25rem;
-  }
-
-  .prose.dark :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)),
-  .dark .prose :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    background-color: oklch(0.2 0 0);
   }
 
   .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
@@ -600,13 +656,8 @@ div[role="option"]:hover {
     margin-bottom: 1em;
     padding: 0.75em 1em;
     overflow-x: auto;
-    background-color: oklch(0.95 0 0);
+    background-color: var(--agw-prose-code-background);
     border-radius: 0.375rem;
-  }
-
-  .prose.dark :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)),
-  .dark .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    background-color: oklch(0.2 0 0);
   }
 
   .prose :where(pre code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
@@ -689,7 +740,7 @@ div[role="option"]:hover {
 }
 
 .agw-msg-user {
-  @apply max-w-[80%] rounded-lg bg-[#f3f5fc] px-3 py-3 text-[#17191d];
+  @apply max-w-[80%] rounded-lg bg-(--agw-user-message) px-3 py-3 text-(--agw-user-message-foreground);
 }
 
 .agw-msg-user .agw-msg-body > * {
@@ -738,11 +789,11 @@ div[role="option"]:hover {
 }
 
 .msg-content-md-code-block {
-  @apply max-w-full overflow-hidden rounded-lg bg-[#f4f4f4] text-[#17191d] shadow-xs whitespace-normal dark:bg-[#202124] dark:text-[#f1f3f4];
+  @apply max-w-full overflow-hidden rounded-lg bg-(--agw-code-block) text-(--agw-code-block-foreground) shadow-xs whitespace-normal;
 }
 
 .msg-content-md-code-header {
-  @apply flex min-h-11 items-center justify-between gap-3 border-b border-black/10 px-3 text-[#5f6368] dark:border-white/10 dark:text-[#bdc1c6];
+  @apply flex min-h-11 items-center justify-between gap-3 border-b border-(--agw-code-block-border) px-3 text-(--agw-code-block-muted);
   font-size: max(var(--agw-font-size-min), 0.875em);
 }
 

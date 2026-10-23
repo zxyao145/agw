@@ -1,0 +1,13 @@
+{
+  "manifestVersion": 1,
+  "id": "contrast-theme",
+  "name": "Contrast Themes",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture with two themes and no views.",
+  "contributes": {
+    "themes": [
+      { "id": "contrast", "title": "Contrast", "path": "themes/contrast.json" },
+      { "id": "ring", "title": "Ring only", "path": "themes/ring.json" }
+    ]
+  }
+}

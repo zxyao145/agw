@@ -257,6 +257,9 @@ catalogs:
     '@tiptap/y-tiptap':
       specifier: 3.0.10
       version: 3.0.10
+    '@types/css-tree':
+      specifier: 3.2.0
+      version: 3.2.0
     '@types/jsdom':
       specifier: 30.0.0
       version: 30.0.0
@@ -308,6 +311,9 @@ catalogs:
     code-inspector-plugin:
       specifier: 2.0.9
       version: 2.0.9
+    css-tree:
+      specifier: 3.2.1
+      version: 3.2.1
     diff:
       specifier: 9.0.0
       version: 9.0.0
@@ -606,6 +612,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.3.3
+      '@types/css-tree':
+        specifier: 'catalog:'
+        version: 3.2.0
       '@types/jsdom':
         specifier: 'catalog:'
         version: 30.0.0
@@ -642,6 +651,9 @@ importers:
       code-inspector-plugin:
         specifier: 'catalog:'
         version: 2.0.9(supports-color@10.2.2)
+      css-tree:
+        specifier: 'catalog:'
+        version: 3.2.1
       dts-bundle-generator:
         specifier: 'catalog:'
         version: 9.5.1
@@ -5302,6 +5314,9 @@ packages:
 
   '@types/cacheable-request@6.0.3':
     resolution: {integrity: sha512-IQ3EbTzGxIigb1I3qPZc1rWJnH0BmSKv5QYTalEwweFvyBDLSAe24zP0le/hyi7ecGfZVlIVAg4BZqb8WBwKqw==}
+
+  '@types/css-tree@3.2.0':
+    resolution: {integrity: sha512-J5KXmk6BFIepOT7280FdFyNs4c5fh0Uee0otjKEvzchrRs38Ii9qminqc4ds0L19X8Zd/rT+brR9jkBthygjWw==}
 
   '@types/d3-array@3.2.2':
     resolution: {integrity: sha512-hOLWVbm7uRza0BYXpIIW5pxfrKe0W+D5lrFiAEYR+pb6w3N2SwSMaJbXdUfSEv+dT4MfHBLtn5js0LAWaO6otw==}
@@ -15577,6 +15592,8 @@ snapshots:
       '@types/node': 26.6.2
       '@types/responselike': 1.0.3
 
+  '@types/css-tree@3.2.0': {}
+
   '@types/d3-array@3.2.2': {}
 
   '@types/d3-axis@3.0.6':
@@ -16938,7 +16955,7 @@ snapshots:
   css-tree@3.2.1:
     dependencies:
       mdn-data: 2.27.1
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
 
   css-what@6.2.2: {}
 

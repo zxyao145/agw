@@ -1,7 +1,18 @@
 @import "yet-another-react-lightbox/styles.css";
 
+/* 图片预览颜色，两个 Mode 相同；主题可以覆盖。Image preview colors, the same in both modes; themes may override them. */
+:root {
+  --agw-image-backdrop: rgb(9 11 15 / 96%);
+  --agw-image-toolbar: #202329;
+  --agw-image-toolbar-foreground: #f5f6f7;
+  --agw-image-toolbar-border: rgb(255 255 255 / 16%);
+  --agw-image-toolbar-hover: rgb(255 255 255 / 12%);
+  --agw-image-toolbar-focus: #ffffff;
+  --agw-image-toolbar-shadow: rgb(0 0 0 / 24%);
+}
+
 .agw-image-preview {
-  --yarl__color_backdrop: rgb(9 11 15 / 96%);
+  --yarl__color_backdrop: var(--agw-image-backdrop);
   --yarl__toolbar_padding: 16px;
 }
 
@@ -18,11 +29,11 @@
   gap: 8px;
   padding: 6px;
   transform: translateX(-50%);
-  border: 1px solid rgb(255 255 255 / 16%);
+  border: 1px solid var(--agw-image-toolbar-border);
   border-radius: 999px;
-  background: #202329;
-  color: #f5f6f7;
-  box-shadow: 0 4px 24px rgb(0 0 0 / 24%);
+  background: var(--agw-image-toolbar);
+  color: var(--agw-image-toolbar-foreground);
+  box-shadow: 0 4px 24px var(--agw-image-toolbar-shadow);
 }
 
 .agw-image-zoom button {
@@ -35,11 +46,11 @@
 }
 
 .agw-image-zoom button:hover:enabled {
-  background: rgb(255 255 255 / 12%);
+  background: var(--agw-image-toolbar-hover);
 }
 
 .agw-image-zoom button:focus-visible {
-  outline: 2px solid white;
+  outline: 2px solid var(--agw-image-toolbar-focus);
   outline-offset: 2px;
 }
 

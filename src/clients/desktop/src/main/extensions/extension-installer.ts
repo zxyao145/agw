@@ -49,8 +49,9 @@ type InstallJournal =
   | { operation: "uninstall"; extensionId: string; deleteData: boolean; phase: "removing" };
 
 export type ExtensionInstallerOptions = {
-  extensionsDirectory: string;
-  /** `<userData>/extension-data`。 */
+  /** `<userData>/extensions/packages`，暂存目录 `.staging` 也在这里。Also holds the `.staging` directory. */
+  packagesDirectory: string;
+  /** `<userData>/extensions/data`。 */
   dataDirectory: string;
   appVersion: string;
   settings: {
@@ -93,7 +94,7 @@ export class ExtensionInstaller {
   private pending: Promise<unknown> = Promise.resolve();
 
   public constructor(private readonly options: ExtensionInstallerOptions) {
-    this.stagingDirectory = join(options.extensionsDirectory, ".staging");
+    this.stagingDirectory = join(options.packagesDirectory, ".staging");
   }
 
   public prepareFromDirectory(source: string): Promise<PreparedExtensionInstall> {
@@ -166,7 +167,7 @@ export class ExtensionInstaller {
         throw new Error("An install with errors cannot be committed.");
       }
       const extensionId = staged.manifest.id;
-      const target = join(this.options.extensionsDirectory, extensionId);
+      const target = join(this.options.packagesDirectory, extensionId);
       const hasPrevious = await exists(target);
       const journalFile = this.journalFile(installId);
 
@@ -201,7 +202,7 @@ export class ExtensionInstaller {
 
   public uninstall(extensionId: string, deleteData: boolean): Promise<void> {
     return this.serialize(async () => {
-      const target = join(this.options.extensionsDirectory, extensionId);
+      const target = join(this.options.packagesDirectory, extensionId);
       if (!(await exists(target))) throw new Error(`Extension ${extensionId} is not installed.`);
       const uninstallId = randomUUID();
       await writeJsonFile(this.journalFile(uninstallId), {
@@ -256,7 +257,7 @@ export class ExtensionInstaller {
       return null;
     }
 
-    const target = join(this.options.extensionsDirectory, journal.extensionId);
+    const target = join(this.options.packagesDirectory, journal.extensionId);
     const previous = join(directory, "previous");
     if (journal.operation === "install") {
       if (journal.phase === "committed") {
@@ -319,7 +320,7 @@ export class ExtensionInstaller {
     );
     let installedVersion: string | null = null;
     if (staged.manifest) {
-      const installed = join(this.options.extensionsDirectory, staged.manifest.id);
+      const installed = join(this.options.packagesDirectory, staged.manifest.id);
       if (await exists(installed)) {
         installedVersion =
           (await readExtensionDirectory(installed, this.options.appVersion)).manifest?.version ??

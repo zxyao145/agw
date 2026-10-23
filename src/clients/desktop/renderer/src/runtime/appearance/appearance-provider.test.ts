@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test, { afterEach, before } from "node:test";
 
-import type { AppearanceSettings } from "@desktop/shared/contracts";
+import type { FontSizeSettings } from "@desktop/shared/contracts";
 
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
 let environment: DomEnvironment;
@@ -15,7 +15,7 @@ before(async () => {
 afterEach(() => environment.cleanup());
 
 const root = () => document.documentElement.style;
-const providerElement = (appearance: AppearanceSettings) =>
+const providerElement = (appearance: FontSizeSettings) =>
   environment.React.createElement(AppearanceProvider, { appearance, children: null });
 
 test("AppearanceProvider writes the font size properties to the document root", () => {

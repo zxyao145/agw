@@ -48,6 +48,8 @@ const PLAIN_FIXTURES = [
   "no-background",
   "undeclared",
   "wasm",
+  "contrast-theme",
+  "bad-theme",
 ];
 // 只在构建时使用、不进入 fixture 的源文件。Source files used by the build only and left out of the fixture.
 const BUILD_ONLY_EXTENSIONS = [".wat"];

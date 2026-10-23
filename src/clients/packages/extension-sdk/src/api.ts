@@ -59,6 +59,21 @@ export interface ExtensionFileViewerContribution {
   priority?: "default" | "option";
 }
 
+/**
+ * 主题：Appearance 页面的 Theme 下拉框列出启用且合法的 extension 提供的主题。
+ * A theme; the Theme select on the Appearance page lists the themes of enabled, valid extensions.
+ */
+export interface ExtensionThemeContribution {
+  id: string;
+  title: string;
+  /**
+   * 包内的 JSON 文件：`{ common?, light?, dark? }`，每项是主题变量名 → 值，`light`、`dark` 中的同名变量覆盖 `common`。
+   * A package JSON file `{ common?, light?, dark? }`, each mapping theme variable names to values; `light` and `dark`
+   * override `common`.
+   */
+  path: string;
+}
+
 export interface ExtensionContributes {
   commands?: ExtensionCommandContribution[];
   ribbon?: ExtensionActionContribution[];
@@ -72,6 +87,7 @@ export interface ExtensionContributes {
   };
   explorerActions?: ExtensionActionContribution[];
   fileViewers?: ExtensionFileViewerContribution[];
+  themes?: ExtensionThemeContribution[];
 }
 
 export interface ExtensionManifest {
@@ -131,8 +147,38 @@ export interface ExtensionErrorData {
 export interface ThemeInfo {
   kind: "light" | "dark";
   /**
-   * tokens.css 中的颜色、圆角、字体与字号变量。字号变量为计算后的 px 值，宿主只提供 `--agw-font-size-base` 与 `--agw-font-size-min`，最小字号固定为 14px。
-   * Color, radius, font and font-size variables from tokens.css. The font-size variables hold computed px values, and the host provides only `--agw-font-size-base` and `--agw-font-size-min`; the minimum size is fixed at 14px.
+   * 宿主当前主题的变量，值为计算后的字符串，引用其他变量的值已经替换。使用这些变量是可选的：需要与宿主一致的 extension 调用
+   * `theme.apply()`，然后在样式中使用 `var(--background)`、`var(--primary)`、`var(--radius)`、`var(--font-sans)` 等；不调用的
+   * extension 不受主题影响，宿主不向 extension 页面注入任何样式。
+   * The variables of the host's current theme as computed strings, with references to other variables substituted.
+   * Using them is optional: an extension that wants to match the host calls `theme.apply()` and then uses
+   * `var(--background)`, `var(--primary)`, `var(--radius)`, `var(--font-sans)` and so on in its styles; an extension
+   * that does not call it is not affected by themes, and the host injects no styles into extension pages.
+   *
+   * - 界面颜色 Interface colors：`--background`、`--foreground`、`--card`、`--card-foreground`、`--popover`、
+   *   `--popover-foreground`、`--primary`、`--primary-foreground`、`--secondary`、`--secondary-foreground`、`--muted`、
+   *   `--muted-foreground`、`--accent`、`--accent-foreground`、`--destructive`、`--border`、`--input`、`--ring`、
+   *   `--chart-1` … `--chart-5`、`--sidebar`、`--sidebar-foreground`、`--sidebar-primary`、
+   *   `--sidebar-primary-foreground`、`--sidebar-accent`、`--sidebar-accent-foreground`、`--sidebar-border`、
+   *   `--sidebar-ring`、`--agw-sidebar-muted-foreground`、`--agw-prose-link`。
+   * - 聊天与 Markdown 颜色 Chat and Markdown colors：`--agw-user-message`、`--agw-user-message-foreground`、
+   *   `--agw-code-block`、`--agw-code-block-foreground`、`--agw-code-block-muted`、`--agw-code-block-border`、
+   *   `--agw-code-block-button`、`--agw-code-block-button-hover`、`--agw-prose-code-background`。
+   * - 图片预览颜色 Image preview colors：`--agw-image-backdrop`、`--agw-image-toolbar`、
+   *   `--agw-image-toolbar-foreground`、`--agw-image-toolbar-border`、`--agw-image-toolbar-hover`、
+   *   `--agw-image-toolbar-focus`、`--agw-image-toolbar-shadow`。
+   * - 其他宿主颜色 Other host colors：`--agw-status-running`、`--agw-server-online-halo`、`--agw-agentflow-edge`、
+   *   `--agw-agentflow-edge-fan-out`、`--agw-agentflow-edge-fan-in`、`--agw-agentflow-edge-switch-case`、
+   *   `--agw-agentflow-edge-switch-default`。
+   * - Tailwind 基础色阶 Tailwind palette：`--color-{name}-{step}`（slate 400；zinc 50、200、800、900；red 50、100、200、400、
+   *   700、800、900、950；orange 50、100、200、400、600、900、950；amber 50–950；yellow 100、400、700、900；green 50、100、200、
+   *   300、400、600、700、800、900、950；emerald 50、200、300、500、600、700、800；teal 50、200、800；sky 50、200、600、800；
+   *   blue 50–950；indigo 50、200、900；violet 50、100、200、300、700、900、950；rose 50、200、300、500、800），以及
+   *   `--color-black`、`--color-white`。
+   * - 圆角 Radius：`--radius`，以及由它计算的 `--radius-sm`、`--radius-md`、`--radius-lg`、`--radius-xl`。
+   * - 字体 Fonts：`--agw-font-sans`、`--agw-font-mono`，以及引用它们的 `--font-sans`、`--font-mono`。
+   * - 字号 Font sizes：`--agw-font-size-base`、`--agw-font-size-min`，为计算后的 px 值，最小字号固定为 14px。The computed
+   *   px values; the minimum size is fixed at 14px.
    */
   tokens: Record<string, string>;
 }

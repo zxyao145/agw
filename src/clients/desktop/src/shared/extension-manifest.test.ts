@@ -117,6 +117,24 @@ test("extension ids must match the format and must not start with agw", () => {
   }
 });
 
+test("the directory names data and packages are not extension ids, but ids containing them are", () => {
+  for (const id of ["data", "packages"]) {
+    const result = evaluateExtensionManifest(
+      withChange((manifest) => (manifest.id = id)),
+      APP_VERSION,
+    );
+    assert.equal(result.validation, "invalid", id);
+    assert.deepEqual(
+      result.errors.map((error) => error.path),
+      ["id"],
+      id,
+    );
+  }
+  for (const id of ["data-viewer", "my-packages", "datasets"]) {
+    assert.deepEqual(errorCodes(withChange((manifest) => (manifest.id = id))), [], id);
+  }
+});
+
 test("unknown top-level and contributes fields are rejected with their paths", () => {
   const result = evaluateExtensionManifest(
     withChange((manifest) => {
@@ -411,6 +429,50 @@ test("version must be a semantic version", () => {
   assert.deepEqual(errorCodes(withChange((manifest) => (manifest.version = "1.2.0-beta.1"))), []);
 });
 
+test("a manifest that contributes only themes is valid without a background or views", () => {
+  const result = evaluateExtensionManifest(
+    {
+      manifestVersion: 1,
+      id: "only-themes",
+      name: "Only themes",
+      version: "1.0.0",
+      contributes: { themes: [{ id: "soft", title: "Soft", path: "themes/soft.json" }] },
+    },
+    APP_VERSION,
+  );
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.validation, "valid");
+  assert.deepEqual(manifestPackagePaths(result.manifest!), [
+    { path: "themes/soft.json", field: "contributes.themes[0].path", kind: "theme" },
+  ]);
+});
+
+test("theme paths are package JSON files and theme ids are unique", () => {
+  const withThemes = (themes: unknown[]) =>
+    withChange((manifest) => (contributes(manifest).themes = themes));
+  const pathErrors = (path: string) =>
+    evaluateExtensionManifest(withThemes([{ id: "soft", title: "Soft", path }]), APP_VERSION)
+      .errors;
+  assert.deepEqual(pathErrors("themes/soft.json"), []);
+  for (const path of ["themes/soft.css", "../soft.json", "/soft.json", "__agw/soft.json"]) {
+    assert.deepEqual(
+      pathErrors(path).map((error) => [error.code, error.path]),
+      [["INVALID_FIELD", "contributes.themes[0].path"]],
+      path,
+    );
+  }
+  assert.deepEqual(
+    evaluateExtensionManifest(
+      withThemes([
+        { id: "soft", title: "Soft", path: "a.json" },
+        { id: "soft", title: "Soft 2", path: "b.json" },
+      ]),
+      APP_VERSION,
+    ).errors.map((error) => [error.code, error.path]),
+    [["DUPLICATE_ID", "contributes.themes[1].id"]],
+  );
+});
+
 test("package paths referenced by the manifest are listed with their fields", () => {
   const manifest = evaluateExtensionManifest(sampleManifest(), APP_VERSION).manifest!;
   assert.deepEqual(manifestPackagePaths(manifest), [
@@ -439,6 +501,8 @@ test("the generated JSON Schema validates the same samples", () => {
     ],
     ["id format", withChange((manifest) => (manifest.id = "Hello")), false],
     ["agw prefix", withChange((manifest) => (manifest.id = "agw-tools")), false],
+    ["reserved id data", withChange((manifest) => (manifest.id = "data")), false],
+    ["reserved id packages", withChange((manifest) => (manifest.id = "packages")), false],
     [
       "file viewer pattern with a path",
       withChange(

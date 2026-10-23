@@ -7,3 +7,11 @@
 
 @source "../../../../packages";
 @source "../runtime";
+
+/* Desktop 侧栏的边框与焦点颜色默认与界面相同；引用在根元素计算，侧栏继承计算后的值。主题写在 html 上的值优先。
+   Desktop sidebars default to the interface border and focus colors; the references compute on the root element and
+   the sidebars inherit the computed values. Values a theme writes on html take precedence. */
+:root {
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}

@@ -63,8 +63,10 @@ export function MarkdownCodeBlock({
             variant="ghost"
             size="icon-sm"
             className={
-              "size-6 rounded-md text-[#71757a] hover:bg-black/5 hover:text-[#17191d] dark:text-[#aeb2b8] dark:hover:bg-white/10 dark:hover:text-white" +
-              (isWrapped ? " bg-black/5 text-[#17191d] dark:bg-white/10 dark:text-white" : "")
+              "size-6 rounded-md hover:bg-black/5 hover:text-(--agw-code-block-button-hover) dark:hover:bg-white/10" +
+              (isWrapped
+                ? " bg-black/5 text-(--agw-code-block-button-hover) dark:bg-white/10"
+                : " text-(--agw-code-block-button)")
             }
             aria-label={wrapLabel}
             aria-pressed={isWrapped}
@@ -77,7 +79,7 @@ export function MarkdownCodeBlock({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="size-6 rounded-md text-[#71757a] hover:bg-black/5 hover:text-[#17191d] dark:text-[#aeb2b8] dark:hover:bg-white/10 dark:hover:text-white"
+            className="size-6 rounded-md text-(--agw-code-block-button) hover:bg-black/5 hover:text-(--agw-code-block-button-hover) dark:hover:bg-white/10"
             aria-label={copyLabel}
             title={copyLabel}
             disabled={!code}

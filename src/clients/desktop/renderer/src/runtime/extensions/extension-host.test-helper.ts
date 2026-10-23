@@ -44,6 +44,7 @@ export function sampleExtension(
     grantedHostPermissions: [],
     lastActivatedVersion: "1.0.0",
     icons: {},
+    themes: [],
   };
 }
 
@@ -113,7 +114,7 @@ export function createMainProcess(
       extensions: {},
       removedBundledExtensions: [],
       fileViewerDefaults: {},
-      appearance: { baseFontSize: 16, chatFontSize: null },
+      appearance: { baseFontSize: 16, chatFontSize: null, theme: "default" },
     },
     activeToken: null,
     localServerRuntime: null,

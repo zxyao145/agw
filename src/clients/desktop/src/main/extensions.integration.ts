@@ -14,6 +14,7 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
+  nativeImage,
   session,
   type WebContents,
   type WebContentsView,
@@ -22,6 +23,7 @@ import iconv from "iconv-lite";
 
 import { DEFAULT_APPEARANCE } from "../shared/appearance";
 import type { AppearanceSettings } from "../shared/contracts";
+import { THEME_TOKEN_KINDS, THEME_TOKEN_NAMES } from "../shared/theme-tokens";
 import { config } from "./extensions-integration-setup";
 import { extensionPartition } from "./extensions/extension-session";
 
@@ -35,7 +37,7 @@ const host = (): WebContents => {
   if (!window || window.isDestroyed()) throw new Error("The main window is not available.");
   return window.webContents;
 };
-const storage = (extensionId: string) => join(config.userData, "extension-data", extensionId);
+const storage = (extensionId: string) => join(config.userData, "extensions", "data", extensionId);
 // 保存与撤销等快捷键的修饰键。The modifier of shortcuts such as save and undo.
 const MOD = process.platform === "darwin" ? "meta" : "control";
 
@@ -270,6 +272,22 @@ async function hostApi<T>(path: string): Promise<T> {
   return body.data;
 }
 
+/** 用第一个 token 向 Host 发送请求。Sends a request to the Host with the first token. */
+async function hostSend<T>(method: "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${config.hostUrl}${path}`, {
+    method,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      authorization: `Bearer ${config.firstToken}`,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  assert.equal(response.ok, true, `${method} ${path} -> ${response.status} ${text}`);
+  return (JSON.parse(text) as { data: T }).data;
+}
+
 async function readJson<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, "utf8")) as T;
 }
@@ -469,8 +487,17 @@ async function bundledDefaults(): Promise<void> {
     "fs.cloud.write",
   ]);
   assert.deepEqual(settings.removedBundledExtensions, []);
+  // 用户安装的包在 extensions/packages，数据在 extensions/data。Installed packages and data live side by side.
+  assert.equal(
+    existsSync(join(config.userData, "extensions", "packages", "sample", "manifest.json")),
+    true,
+  );
+  assert.equal(existsSync(storage("text-editor")), true);
+  assert.equal(existsSync(join(config.userData, "extension-data")), false);
   await goToChat();
-  pass("bundled extensions are active on first launch with their permissions approved");
+  pass(
+    "bundled extensions are active on first launch with their permissions approved, with data in extensions/data",
+  );
 }
 
 async function enableSample(): Promise<void> {
@@ -3184,23 +3211,35 @@ async function checkFirstLineHandles(frame: FrameHandle, size: string): Promise<
   }
 }
 
+/** settings.json 中的外观设置。The appearance settings in settings.json. */
+async function storedAppearance(): Promise<AppearanceSettings> {
+  return (
+    await readJson<{ appearance: AppearanceSettings }>(join(config.userData, "settings.json"))
+  ).appearance;
+}
+
 /**
- * 在 Appearance 页面保存字号设置，等待 settings.json 与宿主字号更新。
- * Saves font sizes on the Appearance page and waits for settings.json and the host font size to update.
+ * 在 Appearance 页面保存外观设置，等待 settings.json 中给出的字段与宿主字号更新。
+ * Saves appearance settings on the Appearance page and waits for the given fields in settings.json and the host font
+ * size to update.
  */
-async function saveAppearance(appearance: AppearanceSettings, action: () => Promise<void>) {
+async function saveAppearance(
+  appearance: Partial<AppearanceSettings> & { baseFontSize: number },
+  action: () => Promise<void>,
+) {
   await openSettingsPage("/settings/appearance/");
   await untilHost(
     `Boolean(document.getElementById("appearance-base-font-size"))`,
     "the Appearance page",
   );
   await action();
-  const settingsPath = join(config.userData, "settings.json");
   await until(
-    async () =>
-      JSON.stringify(
-        (await readJson<{ appearance: AppearanceSettings }>(settingsPath)).appearance,
-      ) === JSON.stringify(appearance),
+    async () => {
+      const stored = await storedAppearance();
+      return Object.entries(appearance).every(
+        ([name, value]) => stored[name as keyof AppearanceSettings] === value,
+      );
+    },
     `the appearance ${JSON.stringify(appearance)} in settings.json`,
   );
   await untilHost(
@@ -3208,6 +3247,9 @@ async function saveAppearance(appearance: AppearanceSettings, action: () => Prom
     `the ${appearance.baseFontSize}px host font size`,
   );
 }
+
+/** Reset all 保存的外观。The appearance Reset all saves. */
+const RESET_APPEARANCE: AppearanceSettings = { ...DEFAULT_APPEARANCE, mode: "system" };
 
 async function openFirstLine(): Promise<FrameHandle> {
   await openFileInTree("first-line.md");
@@ -3254,7 +3296,7 @@ async function dragHandleFirstLine(): Promise<void> {
   );
   await checkFirstLineHandles(largerEdit, "base size 20");
 
-  await saveAppearance(DEFAULT_APPEARANCE, () => clickText("Reset all"));
+  await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
   await goToChat();
   pass(
     "the drag handle is centered on the first line of every block kind, in one column, at the default sizes and at base size 20",
@@ -3472,7 +3514,7 @@ async function hostScaling(): Promise<void> {
     assert.deepEqual(window.getWindowButtonPosition(), { x: 18, y: 18 });
   }
 
-  await saveAppearance(DEFAULT_APPEARANCE, () => clickText("Reset all"));
+  await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
   assert.equal(await quickPromptBadgeHeight(), 20, "the Quick prompts badge height at base 16");
   await goToChat();
   const reported = scanResults.flatMap((result) =>
@@ -3688,6 +3730,1313 @@ async function appearanceSettings(): Promise<void> {
     "the Appearance page has no minimum font size",
   );
   pass("the fixed minimum font size 14 limits text-xs and Edit inline code");
+}
+
+/* ---------- 主题 Themes ---------- */
+
+const SOFT_THEME = "soft-theme:soft";
+const CONTRAST_THEME = "contrast-theme:contrast";
+const RING_THEME = "contrast-theme:ring";
+const THEME_SELECT = `document.getElementById("appearance-theme")`;
+
+/** 等待 settings.json 中的外观包含给出的字段。Waits for the appearance in settings.json to contain the given fields. */
+async function untilAppearance(expected: Partial<AppearanceSettings>): Promise<void> {
+  await until(
+    async () => {
+      const stored = await storedAppearance();
+      return Object.entries(expected).every(
+        ([name, value]) => stored[name as keyof AppearanceSettings] === value,
+      );
+    },
+    `the appearance ${JSON.stringify(expected)} in settings.json`,
+  );
+}
+
+/** 宿主根元素上变量的计算值。The computed value of a variable on the host root. */
+function hostVariable(name: string): Promise<string> {
+  return evalHost<string>(
+    `getComputedStyle(document.documentElement).getPropertyValue(${JSON.stringify(name)}).trim()`,
+  );
+}
+
+/** 宿主页面中元素的计算样式。A computed style of a host page element. */
+function hostStyle(element: string, property: string): Promise<string> {
+  return evalHost<string>(
+    `getComputedStyle(${element}).getPropertyValue(${JSON.stringify(property)})`,
+  );
+}
+
+/** CSS 颜色值在宿主页面中的计算颜色。The computed color the host page gives a CSS color value. */
+function hostColor(value: string): Promise<string> {
+  return evalHost<string>(`(() => {
+    const probe = document.createElement("span");
+    probe.style.color = ${JSON.stringify(value)};
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  })()`);
+}
+
+/** 把鼠标移到宿主页面元素的中心。Moves the mouse to the center of a host page element. */
+async function hoverHost(element: string): Promise<void> {
+  const point = await evalHost<{ x: number; y: number }>(`(() => {
+    const rect = ${element}.getBoundingClientRect();
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+  })()`);
+  host().sendInputEvent({ type: "mouseMove", x: point.x, y: point.y });
+  await untilHost(`${element}.matches(":hover")`, `the pointer over ${element}`);
+  await untilTransitionsEnd();
+}
+
+/** 用键盘方式聚焦宿主页面元素：先按一次 Shift，脚本聚焦随后显示焦点指示。Focuses a host element the keyboard way. */
+async function focusVisibleHost(element: string): Promise<void> {
+  host().focus();
+  host().sendInputEvent({ type: "keyDown", keyCode: "Shift" });
+  host().sendInputEvent({ type: "keyUp", keyCode: "Shift" });
+  await evalHost(`${element}.focus(); true`);
+  await untilHost(`${element}.matches(":focus-visible")`, `keyboard focus on ${element}`);
+  await untilTransitionsEnd();
+}
+
+/** 显示左侧栏视图；Ribbon 项会切换视图，所以已显示时不点击。Shows a sidebar view; Ribbon items toggle, so a shown view is not clicked. */
+async function showSidebarView(viewId: string, entryId = viewId): Promise<void> {
+  const shown = `Boolean(document.querySelector('.agw-left-sidebar[data-view-id="${viewId}"]'))`;
+  if (!(await evalHost<boolean>(shown)))
+    await clickHost(`.agw-ribbon [data-entry-id="${entryId}"]`);
+  await untilHost(shown, `the ${viewId} sidebar view`);
+  await untilTransitionsEnd();
+}
+
+/** 等待宿主页面的 CSS 过渡结束，读取的是最终颜色。Waits for the host's CSS transitions to end so reads see final colors. */
+async function untilTransitionsEnd(): Promise<void> {
+  await untilHost(
+    `document.getAnimations().every((animation) => !(animation instanceof CSSTransition) || animation.playState === "finished")`,
+    "CSS transitions to end",
+  );
+}
+
+async function openAppearancePage(): Promise<void> {
+  await openSettingsPage("/settings/appearance/");
+  await untilHost(`Boolean(${THEME_SELECT})`, "the Appearance page");
+}
+
+/** 在 Appearance 页面选择主题。Chooses a theme on the Appearance page. */
+async function chooseTheme(themeId: string): Promise<void> {
+  await openAppearancePage();
+  await untilHost(
+    `[...${THEME_SELECT}.options].some((option) => option.value === ${JSON.stringify(themeId)})`,
+    `${themeId} in the Theme select`,
+  );
+  await chooseSize("appearance-theme", themeId)();
+  await untilAppearanceApplied({ theme: themeId });
+}
+
+/** 在 Appearance 页面选择 Mode。Chooses a mode on the Appearance page. */
+async function chooseMode(mode: "system" | "light" | "dark"): Promise<void> {
+  await openAppearancePage();
+  await clickHost(`[data-appearance-mode="${mode}"]`);
+  await untilAppearanceApplied({ mode });
+}
+
+/** 宿主页面中 ThemeProvider 提供的值。The value ThemeProvider provides in the host page. */
+const THEME_CONTEXT = `(() => {
+  const start = document.querySelector(".agw-app-shell");
+  let fiber = start[Object.keys(start).find((key) => key.startsWith("__reactFiber$"))];
+  while (fiber && typeof fiber.memoizedProps?.value?.saveAppearance !== "function") fiber = fiber.return;
+  if (!fiber) throw new Error("The theme context was not found.");
+  return fiber.memoizedProps.value;
+})()`;
+
+/**
+ * 等待 settings.json 与 ThemeProvider 都使用给出的外观，并且 `<html>` 上正好是它的主题变量与深浅色。
+ * Waits until settings.json and ThemeProvider both use the given appearance and `<html>` carries exactly its theme
+ * variables and light or dark class.
+ */
+async function untilAppearanceApplied(expected: Partial<AppearanceSettings>): Promise<void> {
+  await untilAppearance(expected);
+  await untilHost(
+    `(() => {
+      const theme = ${THEME_CONTEXT};
+      const expected = ${JSON.stringify(expected)};
+      const root = document.documentElement;
+      const names = ${JSON.stringify([...THEME_TOKEN_KINDS.keys()])};
+      const mode = expected.mode ?? theme.appearance?.mode;
+      return Object.entries(expected).every(([name, value]) => theme.appearance?.[name] === value)
+        && names.every((name) => root.style.getPropertyValue(name) === (theme.appliedTokens[name] ?? ""))
+        && theme.kind !== null
+        && root.classList.contains("dark") === (theme.kind === "dark")
+        && (mode === "system" || theme.kind === mode);
+    })()`,
+    `the appearance ${JSON.stringify(expected)} to apply`,
+  );
+}
+
+/**
+ * 不离开当前页面修改外观：调用 ThemeProvider 提供的 saveAppearance，与 Appearance 页面保存时的路径相同。用于必须保持打开的
+ * 视图（图片预览、对话框、extension 视图），Appearance 页面在另一个路由中。
+ * Changes the appearance without leaving the page: calls the saveAppearance ThemeProvider provides, the same path the
+ * Appearance page saves through. Used for views that must stay open (the image preview, dialogs, extension views),
+ * since the Appearance page is another route.
+ */
+async function applyAppearanceInPlace(changes: Partial<AppearanceSettings>): Promise<void> {
+  await evalHost(`(async () => {
+    const theme = ${THEME_CONTEXT};
+    await theme.saveAppearance({ ...theme.appearance, ...${JSON.stringify(changes)} });
+    return true;
+  })()`);
+  await untilAppearanceApplied(changes);
+}
+
+/**
+ * 主题选择：不合法的主题文件显示校验错误且不出现在下拉框中；Manage 只显示主题 extension；目录安装的主题 extension 启用后
+ * 出现在下拉框中；Soft 与 Light 下宿主与侧栏的颜色、Edit 页面的变量；切换主题时没有过渡动画。
+ * Theme selection: an invalid theme file shows its validation error and stays out of the select; Manage shows only
+ * theme extensions; a theme extension installed from a folder appears once enabled; Soft with Light colors the host,
+ * the sidebars and the Edit page variables; switching themes runs no transitions.
+ */
+async function themeSelection(): Promise<void> {
+  // 首次启动时把 next-themes 的值（没有值时为 system）迁移到 settings.json。The first launch migrates next-themes' value.
+  const migrated = await storedAppearance();
+  assert.equal(migrated.theme, "default");
+  assert.equal(migrated.mode, "system");
+  pass("the first launch stores the Default theme and the migrated System mode");
+
+  await goToExtensions();
+  const badTheme = `document.querySelector('[data-extension-id="bad-theme"]')`;
+  await untilHost(`Boolean(${badTheme})`, "the bad-theme card");
+  assert.equal(await extensionStatus("bad-theme"), "Invalid");
+  const badText = await evalHost<string>(`${badTheme}.textContent`);
+  assert.ok(
+    badText.includes("INVALID_THEME_VALUE (contributes.themes[0].light.--background)"),
+    badText,
+  );
+  assert.ok(
+    badText.includes("UNKNOWN_THEME_VARIABLE (contributes.themes[0].light.--page-background)"),
+    badText,
+  );
+  assert.ok(badText.includes("Themes: Bad"), badText);
+  await openAppearancePage();
+  assert.equal(
+    await evalHost<boolean>(
+      `[...${THEME_SELECT}.options].some((option) => option.value.startsWith("bad-theme:"))`,
+    ),
+    false,
+  );
+  pass("an invalid theme file shows its validation error and the theme stays out of the select");
+
+  await clickText("Manage");
+  await untilHost(
+    `new URLSearchParams(location.search).get("category") === "themes"`,
+    "the theme extensions",
+  );
+  const listed = () =>
+    evalHost<string[]>(
+      `[...document.querySelectorAll("[data-extension-id]")].map((card) => card.dataset.extensionId)`,
+    );
+  await until(async () => (await listed()).length > 0, "theme extension cards");
+  assert.deepEqual(await listed(), ["bad-theme", "soft-theme"]);
+  assert.ok(
+    (
+      await evalHost<string>(
+        `document.querySelector('[data-testid="extension-category"]').textContent`,
+      )
+    ).includes("Theme extensions"),
+  );
+  assert.ok(
+    (
+      await evalHost<string>(
+        `document.querySelector('[data-extension-id="soft-theme"]').textContent`,
+      )
+    ).includes("Themes: Soft"),
+  );
+  await clickText("Show all", `document.querySelector('[data-testid="extension-category"]')`);
+  await untilHost(`!new URLSearchParams(location.search).has("category")`, "every extension");
+  await until(async () => (await listed()).includes("sample"), "the full extension list");
+  pass(
+    "Manage opens the Extensions page with only theme extensions, and Show all lists every extension",
+  );
+
+  await installFromFolder(join(config.fixtures, "contrast-theme"), "Contrast Themes");
+  await untilStatus("contrast-theme", "Disabled");
+  const approval = await enable("contrast-theme", "Contrast Themes");
+  assert.ok(approval.includes("This extension requests no permissions."), approval);
+  await untilStatus("contrast-theme", "Active");
+  await openAppearancePage();
+  assert.deepEqual(
+    await evalHost<[string, string][]>(
+      `[...${THEME_SELECT}.options].map((option) => [option.value, option.textContent])`,
+    ),
+    [
+      ["default", "Default"],
+      [CONTRAST_THEME, "Contrast"],
+      [RING_THEME, "Ring only"],
+      [SOFT_THEME, "Soft"],
+    ],
+  );
+  pass("a theme extension installed from a folder lists its themes in the select once enabled");
+
+  await chooseMode("light");
+  // 推送给 extension 的变量：Default 下全部有值；Soft 没有设置的变量与 Default 相同。
+  // Variables pushed to extensions: all have values under Default; those Soft leaves unset equal Default's.
+  const background = await untilFrame("sample", "background");
+  const pushed = () => api<Record<string, string>>(background, "return api.theme.get().tokens;");
+  const defaultTokens = await pushed();
+  assert.deepEqual(
+    THEME_TOKEN_NAMES.filter((name) => !defaultTokens[name]),
+    [],
+    "pushed variables without a Default value",
+  );
+  await chooseTheme(SOFT_THEME);
+  const softFile = await readJson<Record<"common" | "light", Record<string, string>>>(
+    resolve("../packages/extensions/soft-theme/themes/soft.json"),
+  );
+  const softNames = new Set([...Object.keys(softFile.common), ...Object.keys(softFile.light)]);
+  const derived = [
+    "--radius-sm",
+    "--radius-md",
+    "--radius-lg",
+    "--radius-xl",
+    "--font-sans",
+    "--font-mono",
+  ];
+  const softTokens = await until(async () => {
+    const tokens = await pushed();
+    return tokens["--foreground"] === "#0d0d0d" ? tokens : null;
+  }, "the Soft variables in the background frame");
+  assert.deepEqual(
+    THEME_TOKEN_NAMES.filter(
+      (name) =>
+        !softNames.has(name) && !derived.includes(name) && softTokens[name] !== defaultTokens[name],
+    ),
+    [],
+    "variables Soft leaves unset that differ from Default",
+  );
+  assert.equal(softTokens["--radius-lg"], "0.75rem");
+  pass(
+    "every pushed variable has a Default value, and the ones Soft leaves unset keep their Default values",
+  );
+  await untilHost(
+    `getComputedStyle(document.body).backgroundColor === "rgb(255, 255, 255)" && getComputedStyle(document.querySelector(".agw-settings-nav")).backgroundColor === "rgb(249, 249, 249)"`,
+    "the Soft host and settings navigation colors",
+  );
+  await goToChat();
+  assert.equal(
+    await hostStyle(`document.querySelector(".agw-ribbon")`, "background-color"),
+    "rgb(249, 249, 249)",
+  );
+  assert.equal(
+    await hostStyle(`document.querySelector(".agw-left-sidebar")`, "background-color"),
+    "rgb(249, 249, 249)",
+  );
+  await openFileInTree("readme.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
+  const edit = await editShowing(EDITOR, "readme.md in Edit");
+  await until(
+    async () =>
+      (await evalFrame<string>(
+        edit,
+        `getComputedStyle(document.documentElement).getPropertyValue("--background").trim()`,
+      )) === "#ffffff",
+    "the Soft background variable in Edit",
+  );
+  pass(
+    "Soft with Light colors the host white, the Ribbon, Left Sidebar and Settings navigation #f9f9f9, and Edit gets --background #ffffff",
+  );
+
+  // 同一 Mode 下从 Default 切换到 Soft：下一帧没有 CSS 过渡，选中的设置项已经是 Soft 的颜色。
+  // Default to Soft in the same mode: the next frame runs no CSS transition and the selected item already shows Soft.
+  await chooseTheme("default");
+  await untilHost(
+    `!document.documentElement.style.getPropertyValue("--sidebar-accent")`,
+    "Default",
+  );
+  const switched = await evalHost<{
+    transitions: string[];
+    background: string;
+  }>(`new Promise((resolve) => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      if (root.style.getPropertyValue("--sidebar-accent") !== "#ececec") return;
+      observer.disconnect();
+      requestAnimationFrame(() => resolve({
+        transitions: document.getAnimations().filter((animation) => animation instanceof CSSTransition).map((animation) => animation.transitionProperty),
+        background: getComputedStyle(document.querySelector(".agw-settings-nav section > a.is-active")).backgroundColor,
+      }));
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["style"] });
+    const select = ${THEME_SELECT};
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, ${JSON.stringify(SOFT_THEME)});
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  })`);
+  assert.deepEqual(switched, { transitions: [], background: "rgb(236, 236, 236)" });
+  await untilAppearance({ theme: SOFT_THEME });
+  pass(
+    "switching from Default to Soft in Light runs no CSS transition and the selected navigation item shows Soft at once",
+  );
+}
+
+/**
+ * 侧栏变量：测试主题只把侧栏设为深色，主界面保持浅色；侧栏中共享组件的普通、悬停、选中与焦点状态和边框使用侧栏变量，
+ * 主区域与 body 下的对话框使用界面变量。
+ * Sidebar variables: the test theme darkens only the sidebars and the main interface stays light; shared components in
+ * the sidebars use the sidebar variables for normal, hover, selected and focus states and borders, while the main area
+ * and dialogs under body use the interface variables.
+ */
+async function sidebarThemes(): Promise<void> {
+  await chooseMode("light");
+  await chooseTheme(CONTRAST_THEME);
+  const expected: Record<string, string> = {
+    "--sidebar": "#17191d",
+    "--sidebar-foreground": "#ffffff",
+    "--agw-sidebar-muted-foreground": "#d1d5db",
+    "--sidebar-accent": "#303030",
+    "--sidebar-accent-foreground": "#ffffff",
+    "--sidebar-border": "#525252",
+    "--sidebar-ring": "#48aaff",
+  };
+  for (const [name, value] of Object.entries(expected)) {
+    assert.equal(await hostVariable(name), value, name);
+  }
+  assert.equal(
+    await evalHost<boolean>(`document.documentElement.classList.contains("dark")`),
+    false,
+  );
+  assert.equal(await hostStyle("document.body", "background-color"), "rgb(255, 255, 255)");
+
+  const sidebar = "rgb(23, 25, 29)";
+  const white = "rgb(255, 255, 255)";
+  const muted = "rgb(209, 213, 219)";
+  const accent = "rgb(48, 48, 48)";
+  const border = "rgb(82, 82, 82)";
+  const focusRing = await hostColor("color-mix(in oklab, #48aaff 50%, transparent)");
+
+  // 设置导航。The settings navigation.
+  const nav = `document.querySelector(".agw-settings-nav")`;
+  const navLink = (active: boolean) =>
+    `[...document.querySelectorAll(".agw-settings-nav section > a")].find((link) => link.classList.contains("is-active") === ${active})`;
+  assert.equal(await hostStyle(nav, "background-color"), sidebar);
+  assert.equal(await hostStyle(nav, "border-right-color"), border);
+  assert.equal(
+    await hostStyle(`${nav}.querySelector(".agw-settings-nav-heading")`, "color"),
+    white,
+  );
+  assert.equal(
+    await hostStyle(`${nav}.querySelector("h2")`, "color"),
+    await hostColor("color-mix(in oklab, #d1d5db 70%, transparent)"),
+  );
+  assert.equal(await hostStyle(navLink(true), "background-color"), accent);
+  assert.equal(await hostStyle(navLink(true), "color"), white);
+  assert.equal(await hostStyle(navLink(false), "color"), muted);
+  await hoverHost(navLink(false));
+  assert.equal(
+    await hostStyle(navLink(false), "background-color"),
+    await hostColor("color-mix(in oklab, #303030 70%, transparent)"),
+  );
+  assert.equal(await hostStyle(navLink(false), "color"), white);
+  await focusVisibleHost(navLink(false));
+  assert.equal(await hostStyle(navLink(false), "outline-color"), focusRing);
+
+  // body 下的对话框与主区域使用界面变量。Dialogs under body and the main area use the interface variables.
+  await goToExtensions();
+  await clickText("Uninstall", `document.querySelector('[data-extension-id="contrast-theme"]')`);
+  await untilHost(`Boolean(${OPEN_DIALOG})`, "the uninstall dialog");
+  assert.equal(await hostStyle(OPEN_DIALOG, "background-color"), "rgb(255, 247, 237)");
+  assert.equal(await hostStyle(OPEN_DIALOG, "color"), "rgb(23, 25, 29)");
+  assert.equal(
+    await hostStyle(`document.querySelector(".agw-settings-main")`, "color"),
+    "rgb(23, 25, 29)",
+  );
+  await clickText("Cancel", OPEN_DIALOG);
+  await untilHost(`!${OPEN_DIALOG}`, "the uninstall dialog to close");
+
+  // Ribbon 与对话列表。The Ribbon and the conversation list.
+  await goToChat();
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+  const ribbon = `document.querySelector(".agw-ribbon")`;
+  const ribbonItem = (id: string) =>
+    `document.querySelector('.agw-ribbon [data-entry-id="${id}"]')`;
+  assert.equal(await hostStyle(ribbon, "background-color"), sidebar);
+  assert.equal(await hostStyle(ribbon, "border-right-color"), border);
+  assert.equal(
+    await hostStyle(`${ribbon}.querySelector(".agw-ribbon-separator")`, "background-color"),
+    border,
+  );
+  assert.equal(await hostStyle(ribbonItem("agw.ribbon.conversations"), "background-color"), accent);
+  assert.equal(await hostStyle(ribbonItem("agw.ribbon.conversations"), "color"), white);
+  assert.equal(await hostStyle(ribbonItem("agw.ribbon.files"), "color"), muted);
+  await hoverHost(ribbonItem("agw.ribbon.files"));
+  assert.equal(await hostStyle(ribbonItem("agw.ribbon.files"), "background-color"), accent);
+  assert.equal(await hostStyle(ribbonItem("agw.ribbon.files"), "color"), white);
+  await focusVisibleHost(ribbonItem("agw.ribbon.files"));
+  assert.equal(await hostStyle(ribbonItem("agw.ribbon.files"), "outline-color"), focusRing);
+
+  const leftSidebar = `document.querySelector(".agw-left-sidebar")`;
+  assert.equal(await hostStyle(leftSidebar, "background-color"), sidebar);
+  const title = `[...${leftSidebar}.querySelectorAll("h2")].find((heading) => heading.textContent === "Conversations")`;
+  assert.equal(await hostStyle(title, "color"), white);
+  await untilHost(`${CONVERSATION_ITEMS}.length >= 2`, "two conversations");
+  const activeConversation = `${CONVERSATION_ITEMS}.find((item) => item.classList.contains("bg-accent"))`;
+  const idleConversation = `${CONVERSATION_ITEMS}.find((item) => !item.classList.contains("bg-accent"))`;
+  await evalHost(`${MARKDOWN_CONVERSATION}.click(); true`);
+  await untilHost(
+    `${MARKDOWN_CONVERSATION}?.classList.contains("bg-accent")`,
+    "the open conversation in the list",
+  );
+  await untilTransitionsEnd();
+  assert.equal(await hostStyle(activeConversation, "background-color"), accent);
+  assert.equal(await hostStyle(activeConversation, "color"), white);
+  assert.equal(await hostStyle(idleConversation, "color"), white);
+  await hoverHost(idleConversation);
+  assert.equal(
+    await hostStyle(idleConversation, "background-color"),
+    await hostColor("color-mix(in oklab, #303030 80%, transparent)"),
+  );
+  assert.equal(await hostStyle(idleConversation, "color"), white);
+  assert.equal(
+    await hostStyle(`document.querySelector(".agw-main-workspace")`, "color"),
+    "rgb(23, 25, 29)",
+  );
+
+  // 文件树。The file tree.
+  await showSidebarView("agw.files", "agw.ribbon.files");
+  const fileRow = `${treeItem("readme.md")}?.closest(".cursor-pointer")`;
+  await untilHost(`Boolean(${fileRow})`, "readme.md in the file tree");
+  assert.equal(await hostStyle(fileRow, "color"), white);
+  await hoverHost(fileRow);
+  assert.equal(await hostStyle(fileRow, "background-color"), accent);
+  assert.equal(await hostStyle(fileRow, "color"), white);
+  const chevron = `${leftSidebar}.querySelector(".file-tree .lucide-chevron-right, .file-tree .lucide-chevron-down")`;
+  await untilHost(`Boolean(${chevron})`, "a folder chevron");
+  assert.equal(await hostStyle(chevron, "color"), muted);
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+  pass(
+    "the sidebar variables color the Ribbon, Settings navigation, conversation list and file tree in every state while the main area and dialogs keep the interface colors",
+  );
+}
+
+/** 128×96 的两色 PNG。A two-color 128×96 PNG. */
+function testImageDataUrl(): string {
+  const width = 128;
+  const height = 96;
+  const bitmap = Buffer.alloc(width * height * 4);
+  for (let index = 0; index < width * height; index += 1) {
+    const left = index % width < width / 2;
+    // BGRA
+    bitmap.set(left ? [200, 80, 20, 255] : [20, 160, 60, 255], index * 4);
+  }
+  return nativeImage.createFromBitmap(bitmap, { width, height }).toDataURL();
+}
+
+const IMAGE_REPLY = `[...document.querySelectorAll(".agw-main-workspace .msg-content")].find((element) => element.textContent.includes("Echo: Image check"))`;
+
+/** 图片预览中受主题影响的颜色。The image preview colors themes affect. */
+async function imagePreviewColors(): Promise<Record<string, string>> {
+  const zoomIn = `document.querySelector('.agw-image-zoom button[aria-label="Zoom in"]')`;
+  await hoverHost(zoomIn);
+  await focusVisibleHost(zoomIn);
+  return evalHost<Record<string, string>>(`(() => {
+    const container = getComputedStyle(document.querySelector(".agw-image-preview .yarl__container"));
+    const zoom = getComputedStyle(document.querySelector(".agw-image-zoom"));
+    const button = getComputedStyle(${zoomIn});
+    return {
+      backdrop: container.backgroundColor,
+      toolbar: zoom.backgroundColor,
+      text: zoom.color,
+      border: zoom.borderTopColor,
+      shadow: zoom.boxShadow,
+      hover: button.backgroundColor,
+      focus: button.outlineColor,
+    };
+  })()`);
+}
+
+/** 状态指示器、运行图标、警告提示与 Server 光环的颜色；没有实际状态的项用相同 class 的探针。Status colors; probes reuse the classes. */
+async function statusColors(): Promise<Record<string, string>> {
+  return evalHost<Record<string, string>>(`(() => {
+    const titlebar = document.querySelector(".agw-titlebar");
+    const probes = document.createElement("div");
+    probes.innerHTML = '<span class="agw-status-dot is-running"></span><span class="agw-status-dot is-waiting-approval"></span><span class="agw-status-dot is-completed-unread"></span><svg class="animate-spin text-(--agw-status-running)"></svg><div class="border border-amber-500/40 bg-amber-500/10"></div>';
+    titlebar.append(probes);
+    const style = (element) => getComputedStyle(element);
+    const [running, waiting, completed, icon, warning] = probes.children;
+    const online = document.querySelector(".agw-server-state.is-online");
+    const result = {
+      idle: style(document.querySelector(".agw-project-tab .agw-status-dot")).backgroundColor,
+      running: style(running).backgroundColor,
+      runningHalo: style(running).boxShadow,
+      waiting: style(waiting).backgroundColor,
+      completed: style(completed).backgroundColor,
+      runningIcon: style(icon).color,
+      warningBorder: style(warning).borderTopColor,
+      warningBackground: style(warning).backgroundColor,
+      online: style(online).backgroundColor,
+      onlineHalo: style(online).boxShadow,
+    };
+    probes.remove();
+    return result;
+  })()`);
+}
+
+/**
+ * 图片预览、状态指示器与聊天链接：打开预览后切换 Default、Soft 与测试主题，颜色立即更新，图片与缩放比例保持；只修改
+ * --sidebar-ring 时运行图标颜色不变；回到 Default 后恢复默认值。
+ * The image preview, status indicators and chat links: switching Default, Soft and the test theme with the preview open
+ * updates its colors at once while the image and zoom stay; changing only --sidebar-ring keeps the running icon color;
+ * Default restores the default values.
+ */
+async function imagePreviewThemes(): Promise<void> {
+  await chooseMode("light");
+  await chooseTheme("default");
+  await goToChat();
+  await openMainView("sample:app");
+  const main = await untilFrame("sample", "mainView");
+  const text = `Image check [docs](https://example.com/docs)\n\n![Pixel](${testImageDataUrl()})`;
+  const conversationId = await api<string>(
+    main,
+    `
+    const session = await api.execution.createSession({ projectId: ${JSON.stringify(config.projectId)} });
+    const finished = new Promise((resolve) => {
+      session.onMessage((message) => {
+        if (message.additionalProperties?.type === "agw-turn-finished") resolve();
+      });
+    });
+    await session.send({ target: { type: "agent", id: ${JSON.stringify(config.agentId)} }, text: ${JSON.stringify(text)} });
+    await finished;
+    await session.dispose();
+    return session.conversationId;`,
+  );
+  await openMainView("agw.chat");
+  const conversation = `${CONVERSATION_ITEMS}.find((item) => item.textContent.includes("Image check"))`;
+  await untilHost(`Boolean(${conversation})`, "the image conversation in the list");
+  await evalHost(`${conversation}.click(); true`);
+  await untilHost(
+    `new URLSearchParams(location.search).get("conversationId") === ${JSON.stringify(conversationId)}`,
+    "the image conversation to open",
+  );
+  const link = `${IMAGE_REPLY}?.querySelector('.agw-prose a[href="https://example.com/docs"]')`;
+  const image = `${IMAGE_REPLY}?.querySelector('img[aria-label="Preview image: Pixel"]')`;
+  await untilHost(
+    `Boolean(${link}) && ${image}?.complete && ${image}.naturalWidth === 128`,
+    "the image reply",
+  );
+
+  await chooseTheme(SOFT_THEME);
+  await goToChat();
+  await untilHost(`Boolean(${link})`, "the image reply after Soft");
+  assert.equal(await hostStyle(link, "color"), "rgb(1, 105, 204)");
+  pass("chat links use the Soft link color rgb(1, 105, 204)");
+  await chooseTheme("default");
+  await goToChat();
+  await untilHost(`Boolean(${image}?.complete)`, "the image reply after Default");
+  const defaultStatus = await statusColors();
+
+  await evalHost(`${image}.click(); true`);
+  const preview = `document.querySelector('.agw-image-preview [aria-label="Zoom level"]')`;
+  await untilHost(`Boolean(${preview})`, "the image preview");
+  await clickHost('.agw-image-zoom button[aria-label="Zoom in"]');
+  await untilHost(`${preview}.textContent !== "100%"`, "the zoomed image");
+  const zoomLevel = await evalHost<string>(`${preview}.textContent`);
+  const shownImage = `document.querySelector(".agw-image-preview .yarl__slide_image")`;
+  const source = await evalHost<string>(`${shownImage}.currentSrc`);
+  const defaultColors = await imagePreviewColors();
+  assert.deepEqual(defaultColors, {
+    backdrop: await hostColor("rgb(9 11 15 / 96%)"),
+    toolbar: "rgb(32, 35, 41)",
+    text: "rgb(245, 246, 247)",
+    border: await hostColor("rgb(255 255 255 / 16%)"),
+    shadow: `${await hostColor("rgb(0 0 0 / 24%)")} 0px 4px 24px 0px`,
+    hover: await hostColor("rgb(255 255 255 / 12%)"),
+    focus: "rgb(255, 255, 255)",
+  });
+
+  const unchangedPreview = async (label: string) => {
+    assert.equal(
+      await evalHost<string>(`${preview}.textContent`),
+      zoomLevel,
+      `${label} keeps the zoom`,
+    );
+    assert.equal(
+      await evalHost<string>(`${shownImage}.currentSrc`),
+      source,
+      `${label} keeps the image`,
+    );
+  };
+  await applyAppearanceInPlace({ theme: SOFT_THEME });
+  await untilHost(
+    `getComputedStyle(document.querySelector(".agw-image-zoom")).backgroundColor === "rgb(48, 48, 48)"`,
+    "the Soft image toolbar",
+  );
+  assert.deepEqual(await imagePreviewColors(), {
+    backdrop: await hostColor("rgb(13 13 13 / 96%)"),
+    toolbar: "rgb(48, 48, 48)",
+    text: "rgb(236, 236, 236)",
+    border: "rgb(66, 66, 66)",
+    shadow: `${await hostColor("rgb(0 0 0 / 24%)")} 0px 4px 24px 0px`,
+    hover: "rgb(66, 66, 66)",
+    focus: "rgb(72, 170, 255)",
+  });
+  await unchangedPreview("Soft");
+
+  await applyAppearanceInPlace({ theme: CONTRAST_THEME });
+  await untilHost(
+    `getComputedStyle(document.querySelector(".agw-image-zoom")).backgroundColor === "rgb(17, 34, 51)"`,
+    "the test theme image toolbar",
+  );
+  assert.deepEqual(await imagePreviewColors(), {
+    backdrop: await hostColor("rgb(10 20 30 / 90%)"),
+    toolbar: "rgb(17, 34, 51)",
+    text: "rgb(250, 250, 250)",
+    border: "rgb(68, 85, 102)",
+    shadow: `${await hostColor("rgb(1 2 3 / 50%)")} 0px 4px 24px 0px`,
+    hover: "rgb(51, 68, 85)",
+    focus: "rgb(255, 136, 0)",
+  });
+  await unchangedPreview("the test theme");
+  pass(
+    "with the image preview open, Default, Soft and the test theme recolor its backdrop, toolbar, border, hover, focus and shadow at once while the image and zoom stay",
+  );
+
+  // 测试主题的色阶与状态变量；Tailwind 组合多个阴影，光环是最后一个。The test theme's palette and status variables;
+  // Tailwind composes several shadows and the halo is the last one.
+  const { runningHalo, onlineHalo, ...contrastStatus } = await statusColors();
+  assert.deepEqual(contrastStatus, {
+    idle: "rgb(17, 17, 17)",
+    running: "rgb(68, 68, 68)",
+    waiting: "rgb(34, 34, 34)",
+    completed: "rgb(51, 51, 51)",
+    runningIcon: "rgb(68, 68, 68)",
+    warningBorder: await hostColor("color-mix(in oklab, #222222 40%, transparent)"),
+    warningBackground: await hostColor("color-mix(in oklab, #222222 10%, transparent)"),
+    online: "rgb(51, 51, 51)",
+  });
+  const halo = async (color: string) =>
+    `${await hostColor(`color-mix(in srgb, ${color} 14%, transparent)`)} 0px 0px 0px 3px`;
+  assert.ok(runningHalo.endsWith(await halo("#444444")), runningHalo);
+  assert.ok(onlineHalo.endsWith(await halo("#555555")), onlineHalo);
+  await applyAppearanceInPlace({ theme: RING_THEME });
+  await until(
+    async () => (await hostVariable("--sidebar-ring")) === "#ff00ff",
+    "the ring-only theme",
+  );
+  const ringStatus = await statusColors();
+  assert.equal(ringStatus.runningIcon, defaultStatus.runningIcon);
+  assert.equal(ringStatus.running, defaultStatus.running);
+  assert.equal(defaultStatus.runningIcon, "rgb(0, 111, 238)");
+  await applyAppearanceInPlace({ theme: "default" });
+  await until(async () => (await hostVariable("--sidebar-ring")) !== "#ff00ff", "Default");
+  assert.deepEqual(await statusColors(), defaultStatus);
+  assert.deepEqual(await imagePreviewColors(), defaultColors);
+  await unchangedPreview("Default");
+  pass(
+    "the test theme recolors the status indicators, running icon, warning and Server halo; --sidebar-ring alone keeps the running icon; Default restores every default color",
+  );
+  await pressEscape();
+  await untilHost(`!document.querySelector(".agw-image-preview")`, "the image preview to close");
+}
+
+/**
+ * Memory 的 Markdown 预览：两种 Mode 下切换 Default、Soft 与测试主题，inline code 与 fenced code 的背景立即更新，
+ * pre code 保持透明，内容与排版不变。
+ * The Memory Markdown preview: switching Default, Soft and the test theme in both modes updates the inline and fenced
+ * code backgrounds at once; pre code stays transparent and the content and typography stay.
+ */
+async function memoryPreviewThemes(): Promise<void> {
+  await openSettingsPage("/user-memory/");
+  await clickText("Add Memory");
+  await untilHost(`Boolean(${OPEN_DIALOG})`, "the memory dialog");
+  await setInput(
+    'textarea[aria-label="Memory content"]',
+    "Use `inline code` here.\n\n```\nfenced code\n```\n",
+  );
+  await evalHost(`(() => {
+    const tab = [...${OPEN_DIALOG}.querySelectorAll('[role="tab"]')].find((element) => element.textContent === "Preview");
+    tab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    return true;
+  })()`);
+  const article = `${OPEN_DIALOG}?.querySelector("article.prose")`;
+  await untilHost(`Boolean(${article}?.querySelector("pre code"))`, "the memory preview");
+  const read = () =>
+    evalHost<Record<string, string>>(`(() => {
+      const article = ${article};
+      const inline = getComputedStyle(article.querySelector("p code"));
+      const pre = getComputedStyle(article.querySelector("pre"));
+      const preCode = getComputedStyle(article.querySelector("pre code"));
+      return {
+        inline: inline.backgroundColor,
+        pre: pre.backgroundColor,
+        preCode: preCode.backgroundColor,
+        text: article.textContent,
+        typography: [inline.fontSize, inline.padding, inline.borderRadius, pre.fontSize, pre.padding, pre.margin, pre.borderRadius].join(" "),
+      };
+    })()`);
+  const initial = await read();
+  const expect = async (mode: "light" | "dark", themeId: string, background: string) => {
+    await applyAppearanceInPlace({ mode, theme: themeId });
+    await untilHost(
+      `document.documentElement.classList.contains("dark") === ${mode === "dark"}`,
+      `the ${mode} mode`,
+    );
+    const color = await hostColor(background);
+    await until(async () => (await read()).pre === color, `${themeId} ${mode} code background`);
+    const values = await read();
+    assert.deepEqual(
+      values,
+      {
+        inline: color,
+        pre: color,
+        preCode: "rgba(0, 0, 0, 0)",
+        text: initial.text,
+        typography: initial.typography,
+      },
+      `${themeId} ${mode}`,
+    );
+  };
+  for (const mode of ["light", "dark"] as const) {
+    await expect(mode, "default", mode === "light" ? "oklch(0.95 0 0)" : "oklch(0.2 0 0)");
+    await expect(mode, SOFT_THEME, mode === "light" ? "#f9f9f9" : "#181818");
+    await expect(mode, CONTRAST_THEME, mode === "light" ? "#fde68a" : "#3f3f46");
+  }
+  await pressEscape();
+  await untilHost(`!${OPEN_DIALOG}`, "the memory dialog to close");
+  await applyAppearanceInPlace({ mode: "light", theme: "default" });
+  pass(
+    "in both modes Default, Soft and the test theme update the Memory preview's inline and fenced code backgrounds at once while pre code stays transparent and the content and typography stay",
+  );
+}
+
+/**
+ * 深色 Mode 与 extension 视图：Soft 深色的宿主背景；调用 theme.apply() 的视图在原 frame 中收到新值，不调用的页面没有主题
+ * 变量且样式不变；标题栏按钮修改 Mode 后 Appearance 页面与 settings.json 同步。
+ * Dark mode and extension views: Soft's dark host background; a view that calls theme.apply() receives the new values in
+ * the same frame, a page that does not has no theme variables and keeps its style; the title bar button's mode change
+ * reaches the Appearance page and settings.json.
+ */
+async function darkModeAndExtensionViews(): Promise<void> {
+  await chooseMode("light");
+  await chooseTheme(SOFT_THEME);
+  await goToChat();
+  await openFileInTree("readme.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
+  const edit = await editShowing(EDITOR, "readme.md in Edit");
+  await evalFrame(edit, `window.__themeMarker = "kept"; true`);
+  // sample 的侧栏视图不调用 theme.apply()，与 Edit 同时显示。Sample's sidebar view does not call theme.apply() and shows
+  // next to Edit.
+  await showSidebarView("sample:list");
+  const sample = await untilFrame("sample", "sidebarView");
+  const sampleStyle = () =>
+    evalFrame<{ variables: string[]; background: string; color: string; font: string }>(
+      sample,
+      `(() => {
+        const root = document.documentElement;
+        const body = getComputedStyle(document.body);
+        return {
+          variables: [...root.style].filter((name) => name.startsWith("--")),
+          background: body.backgroundColor,
+          color: body.color,
+          font: body.fontFamily,
+        };
+      })()`,
+    );
+  const sampleBefore = await sampleStyle();
+  assert.deepEqual(sampleBefore.variables, []);
+
+  await applyAppearanceInPlace({ mode: "dark" });
+  await untilHost(
+    `getComputedStyle(document.body).backgroundColor === "rgb(33, 33, 33)"`,
+    "the Soft dark host background",
+  );
+  await until(
+    async () =>
+      (await evalFrame<string>(
+        edit,
+        `getComputedStyle(document.documentElement).getPropertyValue("--background").trim()`,
+      )) === "#212121",
+    "the dark Soft background in the open Edit frame",
+  );
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, edit.frameId);
+  assert.equal(await evalFrame<string>(edit, "window.__themeMarker"), "kept");
+  assert.deepEqual(await sampleStyle(), sampleBefore);
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+  pass(
+    "Soft with Dark colors the host rgb(33, 33, 33), the open Edit frame receives the new variables without being rebuilt, and a page without theme.apply() has no theme variables and keeps its style",
+  );
+
+  // 标题栏按钮在浅色与深色之间切换并保存 Mode。The title bar button toggles light and dark and saves the mode.
+  await clickHost('[aria-label="Use light theme"]');
+  await untilAppearance({ mode: "light" });
+  await untilHost(`!document.documentElement.classList.contains("dark")`, "the light mode");
+  await openAppearancePage();
+  assert.equal(
+    await evalHost<string | null>(
+      `document.querySelector('[data-appearance-mode="light"]').getAttribute("aria-pressed")`,
+    ),
+    "true",
+  );
+  await clickHost('[aria-label="Use dark theme"]');
+  await untilAppearance({ mode: "dark" });
+  await untilHost(
+    `document.querySelector('[data-appearance-mode="dark"]').getAttribute("aria-pressed") === "true"`,
+    "Dark mode on the Appearance page",
+  );
+  pass("the title bar button saves the light and dark modes and the Appearance page follows");
+  await chooseMode("light");
+  await chooseTheme("default");
+}
+
+/** 包含五种边线的最小 Agentflow。The smallest Agentflow with all five edge kinds. */
+function themeEdgesAgentflow(): Record<string, unknown> {
+  const node = (nodeId: string, kind: number, relateId: string | null, x: number, y: number) => ({
+    nodeId,
+    kind,
+    relateId,
+    name: nodeId,
+    positionJson: JSON.stringify({ x, y }),
+    instructions: null,
+    configJson: null,
+  });
+  const edge = (edgeId: string, sourceNodeId: string, targetNodeId: string, kind: number) => ({
+    edgeId,
+    sourceNodeId,
+    targetNodeId,
+    kind,
+    label: null,
+    conditionJson: kind === 3 ? JSON.stringify({ contains: "urgent" }) : null,
+    configJson: kind === 3 ? JSON.stringify({ switchCaseOrder: 0 }) : null,
+  });
+  return {
+    name: "Theme edges",
+    description: "Desktop theme integration test graph",
+    nodes: [
+      node("input", 10, null, 0, 120),
+      node("agent-a", 0, config.agentId, 320, 0),
+      node("agent-b", 0, config.agentId, 640, 240),
+      node("output", 9, null, 960, 120),
+    ],
+    edges: [
+      edge("e-switch-case", "input", "agent-a", 3),
+      edge("e-switch-default", "input", "agent-b", 4),
+      edge("e-fan-out", "agent-a", "agent-b", 1),
+      edge("e-fan-in", "agent-a", "output", 2),
+      edge("e-direct", "agent-b", "output", 0),
+    ],
+  };
+}
+
+/** 构建器中每条边线与它箭头的颜色，以及图的状态。The color of every edge and its arrowhead, and the graph state. */
+const AGENTFLOW_GRAPH = `(() => {
+  const dialog = ${OPEN_DIALOG};
+  const markers = [...dialog.querySelectorAll("marker")];
+  const edges = Object.fromEntries([...dialog.querySelectorAll(".react-flow__edge")].map((edge) => {
+    const path = edge.querySelector("path.react-flow__edge-path");
+    const marker = markers.find((item) => path.getAttribute("marker-end") === "url('#" + item.id + "')");
+    const arrow = getComputedStyle(marker.querySelector("polyline"));
+    return [edge.dataset.testid, [getComputedStyle(path).stroke, arrow.stroke, arrow.fill]];
+  }));
+  const nodes = [...dialog.querySelectorAll(".react-flow__node")].map((node) => [node.dataset.id, node.style.transform, Boolean(node.querySelector(".border-primary"))]);
+  const labels = [...dialog.querySelectorAll(".react-flow__edge-textwrapper")].map((label) => label.textContent);
+  return { edges, nodes, labels, unsaved: dialog.textContent.includes("Unsaved changes") };
+})()`;
+
+/**
+ * Agentflow 边线：构建器中五种边线与 SVG 箭头使用主题变量，切换主题时一起变化，节点、边线数据、选中状态与未保存修改保持。
+ * Agentflow edges: the builder's five edge kinds and their SVG arrowheads use the theme variables and change together
+ * with the theme, while nodes, edge data, the selection and unsaved changes stay.
+ */
+async function agentflowEdgeThemes(): Promise<void> {
+  const created = await hostSend<{ id: string }>("POST", "/api/agentflows", themeEdgesAgentflow());
+  await openSettingsPage("/agentflows/");
+  const row = `[...document.querySelectorAll("tr")].find((item) => item.textContent.includes("Theme edges"))`;
+  await untilHost(
+    `Boolean(${row}?.querySelector('[title="Edit agentflow"]'))`,
+    "the Theme edges row",
+  );
+  await evalHost(`${row}.querySelector('[title="Edit agentflow"]').click(); true`);
+  await untilHost(
+    `${OPEN_DIALOG}?.querySelectorAll(".react-flow__edge").length === 5 && ${OPEN_DIALOG}.querySelectorAll("marker polyline").length === 5`,
+    "the five edges in the builder",
+  );
+  // 拖动 agent-b：选中它并产生未保存修改。Dragging agent-b selects it and makes an unsaved change.
+  const node = `${OPEN_DIALOG}.querySelector('.react-flow__node[data-id="agent-b"]')`;
+  const start = await evalHost<{ x: number; y: number }>(`(() => {
+    const rect = ${node}.getBoundingClientRect();
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + 12) };
+  })()`);
+  host().sendInputEvent({ type: "mouseMove", ...start });
+  host().sendInputEvent({ type: "mouseDown", ...start, button: "left", clickCount: 1 });
+  for (let step = 1; step <= 5; step += 1) {
+    host().sendInputEvent({
+      type: "mouseMove",
+      x: start.x + step * 8,
+      y: start.y + step * 6,
+      modifiers: ["leftbuttondown"],
+    });
+  }
+  host().sendInputEvent({
+    type: "mouseUp",
+    x: start.x + 40,
+    y: start.y + 30,
+    button: "left",
+    clickCount: 1,
+  });
+  await untilHost(`${OPEN_DIALOG}.textContent.includes("Unsaved changes")`, "the moved agent-b");
+  // 拖动不会选中节点，点击才会。A drag does not select a node; a click does.
+  const end = { x: start.x + 40, y: start.y + 30 };
+  host().sendInputEvent({ type: "mouseDown", ...end, button: "left", clickCount: 1 });
+  host().sendInputEvent({ type: "mouseUp", ...end, button: "left", clickCount: 1 });
+  await untilHost(`Boolean(${node}.querySelector(".border-primary"))`, "the selected agent-b");
+  type Graph = {
+    edges: Record<string, [string, string, string]>;
+    nodes: [string, string, boolean][];
+    labels: string[];
+    unsaved: boolean;
+  };
+  const before = await evalHost<Graph>(AGENTFLOW_GRAPH);
+  const colors = (values: Record<string, string>) =>
+    Object.fromEntries(
+      Object.entries(values).map(([id, color]) => [`rf__edge-${id}`, [color, color, color]]),
+    );
+  assert.deepEqual(
+    before.edges,
+    colors({
+      "e-direct": "rgb(71, 85, 105)",
+      "e-fan-out": "rgb(37, 99, 235)",
+      "e-fan-in": "rgb(217, 119, 6)",
+      "e-switch-case": "rgb(124, 58, 237)",
+      "e-switch-default": "rgb(219, 39, 119)",
+    }),
+  );
+
+  await applyAppearanceInPlace({ theme: CONTRAST_THEME });
+  const contrast = colors({
+    "e-direct": "rgb(1, 2, 3)",
+    "e-fan-out": "rgb(4, 5, 6)",
+    "e-fan-in": "rgb(7, 8, 9)",
+    "e-switch-case": "rgb(10, 11, 12)",
+    "e-switch-default": "rgb(13, 14, 15)",
+  });
+  await until(
+    async () => isDeepStrictEqual((await evalHost<Graph>(AGENTFLOW_GRAPH)).edges, contrast),
+    "the test theme edge colors",
+  );
+  const after = await evalHost<Graph>(AGENTFLOW_GRAPH);
+  assert.deepEqual({ ...after, edges: before.edges }, before);
+  await applyAppearanceInPlace({ theme: "default" });
+  await until(
+    async () => isDeepStrictEqual((await evalHost<Graph>(AGENTFLOW_GRAPH)).edges, before.edges),
+    "the Default edge colors",
+  );
+  assert.deepEqual(await evalHost<Graph>(AGENTFLOW_GRAPH), before);
+  pass(
+    "the test theme recolors the five Agentflow edges and their arrowheads together while nodes, edge data, the selection and unsaved changes stay",
+  );
+
+  await pressEscape();
+  await untilHost(
+    `[...document.querySelectorAll('[role="alertdialog"]')].some((element) => element.textContent.includes("Discard unsaved changes?"))`,
+    "the discard confirmation",
+  );
+  await clickText("Discard", `[...document.querySelectorAll('[role="alertdialog"]')].at(-1)`);
+  await untilHost(`!${OPEN_DIALOG}`, "the builder to close");
+  await hostSend("DELETE", `/api/agentflows/${created.id}`);
+}
+
+/**
+ * Code 视图的字体：已打开的 Code 中切换到 Soft，同一个 frame 的编辑器换成 Soft 的等宽字体。
+ * The Code view font: switching to Soft with Code open changes the editor in the same frame to Soft's monospace font.
+ */
+async function codeViewThemeFont(): Promise<void> {
+  await goToChat();
+  await openFileInTree("readme.md");
+  await selectViewer(CODE_VIEWER);
+  const code = await codeShowing(
+    `document.querySelectorAll(".code-editor .view-line").length > 0`,
+    "readme.md in Code",
+  );
+  const font = () =>
+    evalFrame<string>(
+      code,
+      `getComputedStyle(document.querySelector(".code-editor .view-lines")).fontFamily`,
+    );
+  const defaultFont = await font();
+  assert.ok(defaultFont.startsWith('"JetBrains Mono"'), defaultFont);
+  await applyAppearanceInPlace({ theme: SOFT_THEME });
+  await until(
+    async () => (await font()).startsWith('ui-monospace, "SF Mono", Menlo, Consolas, monospace'),
+    "Soft's monospace font in Code",
+  );
+  assert.equal(viewerFrameOf("text-editor", "code")?.frameId, code.frameId);
+  await applyAppearanceInPlace({ theme: "default" });
+  await until(async () => (await font()) === defaultFont, "the Default monospace font in Code");
+  pass(
+    "switching to Soft with Code open changes the editor font in the same frame, and Default restores it",
+  );
+}
+
+/** Excalidraw 界面引用的宿主变量。The host variables the Excalidraw interface references. */
+const EXCALIDRAW_VARIABLES: Record<string, string> = {
+  "--island-bg-color": "--popover",
+  "--popup-bg-color": "--popover",
+  "--sidebar-bg-color": "--popover",
+  "--default-bg-color": "--background",
+  "--input-bg-color": "--background",
+  "--color-surface-lowest": "--background",
+  "--popup-secondary-bg-color": "--muted",
+  "--color-surface-low": "--muted",
+  "--color-surface-mid": "--muted",
+  "--color-on-surface": "--foreground",
+  "--text-primary-color": "--foreground",
+  "--popup-text-color": "--foreground",
+  "--icon-fill-color": "--foreground",
+  "--input-label-color": "--muted-foreground",
+  "--keybinding-color": "--muted-foreground",
+  "--color-disabled": "--muted-foreground",
+  "--default-border-color": "--border",
+  "--dialog-border-color": "--border",
+  "--sidebar-border-color": "--border",
+  "--color-border-outline": "--border",
+  "--color-border-outline-variant": "--border",
+  "--input-border-color": "--input",
+  "--button-hover-bg": "--accent",
+  "--button-active-bg": "--accent",
+  "--input-hover-bg-color": "--accent",
+  "--color-surface-high": "--accent",
+  "--color-primary-light": "--accent",
+  "--color-primary-light-darker": "--accent",
+  "--color-surface-primary-container": "--accent",
+  "--color-on-primary-container": "--accent-foreground",
+  "--color-primary": "--primary",
+  "--color-primary-darker": "--primary",
+  "--color-primary-darkest": "--primary",
+  "--color-primary-hover": "--primary",
+  "--color-brand-hover": "--primary",
+  "--color-brand-active": "--primary",
+  "--button-active-border": "--primary",
+  "--popup-text-inverted-color": "--primary-foreground",
+  "--focus-highlight-color": "--ring",
+  "--select-highlight-color": "--ring",
+  "--link-color": "--agw-prose-link",
+};
+
+/**
+ * Excalidraw 界面的颜色：映射的变量与宿主变量不同的名称，以及工具栏、菜单、属性面板、选中与悬停的工具、Save 按钮和弹窗的
+ * [实际, 期望] 颜色。
+ * The Excalidraw interface colors: the mapped variables that differ from the host variables, and [actual, expected]
+ * colors of the toolbar, menu, properties panel, selected and hovered tools, the Save button and dialogs.
+ */
+const EXCALIDRAW_COLORS = `(() => {
+  const mapping = ${JSON.stringify(EXCALIDRAW_VARIABLES)};
+  const host = getComputedStyle(document.documentElement);
+  const token = (name) => host.getPropertyValue(name).trim();
+  const probe = document.createElement("span");
+  document.body.append(probe);
+  const color = (value) => {
+    probe.style.color = value;
+    return getComputedStyle(probe).color;
+  };
+  const differing = (element) =>
+    element ? Object.entries(mapping).filter(([name, source]) => getComputedStyle(element).getPropertyValue(name).trim() !== token(source)).map(([name]) => name) : null;
+  const pair = (selector, property, source) => {
+    const element = document.querySelector(selector);
+    return element ? [getComputedStyle(element).getPropertyValue(property), color(token(source))] : [selector, "missing"];
+  };
+  const result = {
+    root: differing(document.querySelector(".editor .excalidraw")),
+    modal: differing(document.querySelector(".excalidraw.excalidraw-modal-container")),
+    toolbar: pair(".Island.App-toolbar", "background-color", "--popover"),
+    panel: pair(".App-menu__left .Island, .App-menu__left.Island", "background-color", "--popover"),
+    selectedTool: pair(".ToolIcon_type_radio:checked + .ToolIcon__icon", "background-color", "--accent"),
+    saveBorder: pair(".save-button", "border-top-color", "--border"),
+    saveText: pair(".save-button", "color", "--foreground"),
+  };
+  const hovered = document.querySelector(".ToolIcon__icon:hover");
+  if (hovered) result.hoveredTool = [getComputedStyle(hovered).backgroundColor, color(token("--accent"))];
+  const menu = document.querySelector(".dropdown-menu .dropdown-menu-container");
+  if (menu) result.menu = [getComputedStyle(menu).backgroundColor, color(token("--popover"))];
+  const dialog = document.querySelector(".excalidraw-modal-container .Island");
+  if (dialog) result.dialog = [getComputedStyle(dialog).backgroundColor, color(token("--popover"))];
+  probe.remove();
+  return result;
+})()`;
+
+/**
+ * Excalidraw 的工具栏与菜单：同一 Mode 下切换 Default、Soft 与测试主题，两种 Mode 都检查；界面颜色引用宿主变量，frame、
+ * 文档会话、画布与未保存修改保持。
+ * Excalidraw's toolbar and menus: switching Default, Soft and the test theme in the same mode, in both modes; the
+ * interface colors reference the host variables while the frame, the document session, the canvas and unsaved changes
+ * stay.
+ */
+async function excalidrawThemes(): Promise<void> {
+  await chooseMode("light");
+  await goToChat();
+  await openFileInTree("diagram.excalidraw");
+  await untilHost(
+    `${viewerTab(EXCALIDRAW_VIEWER)}?.getAttribute("aria-selected") === "true"`,
+    "the Excalidraw tab",
+  );
+  const editor = await untilFrame("excalidraw", "fileViewer");
+  await until(async () => (await evalFrame<number>(editor, DRAWN_PIXELS)) > 0, "the diagram");
+  pressKey(editor, "r");
+  const { width, height } = editor.view.getBounds();
+  const start = { x: Math.round(width * 0.6), y: Math.round(height * 0.6) };
+  drag(editor, start, { x: start.x + 90, y: start.y + 60 });
+  await untilHost(UNSAVED_MARKER, "the unsaved marker");
+  const drawn = await evalFrame<number>(editor, DRAWN_PIXELS);
+  // 悬停一个工具按钮，打开主菜单。Hover a tool button and open the main menu.
+  const toolPoint = await evalFrame<{ x: number; y: number }>(
+    editor,
+    `(() => { const rect = document.querySelector('[data-testid="toolbar-ellipse"]').closest("label").getBoundingClientRect(); return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }; })()`,
+  );
+  editor.view.webContents.sendInputEvent({ type: "mouseMove", ...toolPoint });
+  await evalFrame(
+    editor,
+    `document.querySelector('[data-testid="main-menu-trigger"]').click(); true`,
+  );
+  await until(
+    () =>
+      evalFrame<boolean>(
+        editor,
+        `Boolean(document.querySelector(".dropdown-menu .dropdown-menu-container")) && Boolean(document.querySelector(".ToolIcon__icon:hover"))`,
+      ),
+    "the open main menu and a hovered tool",
+  );
+
+  type Colors = Record<string, string[] | null>;
+  const check = async (label: string) => {
+    const colors = await evalFrame<Colors>(editor, EXCALIDRAW_COLORS);
+    const { root, modal, ...pairs } = colors;
+    assert.deepEqual(root, [], `${label}: variables of the Excalidraw root`);
+    if (modal !== null) assert.deepEqual(modal, [], `${label}: variables of the dialog container`);
+    for (const [name, [actual, expected]] of Object.entries(pairs) as [string, string[]][]) {
+      assert.equal(actual, expected, `${label}: ${name}`);
+    }
+    assert.equal(await evalFrame<number>(editor, DRAWN_PIXELS), drawn, `${label}: the canvas`);
+    assert.equal(await evalHost<boolean>(UNSAVED_MARKER), true, `${label}: the unsaved marker`);
+    assert.equal(
+      frameOf("excalidraw", "fileViewer")?.frameId,
+      editor.frameId,
+      `${label}: the frame`,
+    );
+    return pairs;
+  };
+  // 各主题的 --accent，用来确认 frame 已经收到这个主题的变量。Each theme's --accent, to confirm the frame received it.
+  const accents: Record<"light" | "dark", Record<string, string>> = {
+    light: { default: "#f0f1f3", [SOFT_THEME]: "#ececec", [CONTRAST_THEME]: "#fed7aa" },
+    dark: { default: "#202329", [SOFT_THEME]: "#2f2f2f", [CONTRAST_THEME]: "#44403c" },
+  };
+  const untilFrameTheme = async (mode: "light" | "dark", themeId: string) => {
+    await until(
+      async () => (await evalFrame<string>(editor, EXCALIDRAW_THEME)) === mode,
+      `the ${mode} Excalidraw`,
+    );
+    await until(
+      async () =>
+        (await evalFrame<string>(
+          editor,
+          `getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()`,
+        )) === accents[mode][themeId],
+      `${themeId} ${mode} variables in the Excalidraw frame`,
+    );
+  };
+  for (const mode of ["light", "dark"] as const) {
+    const seen: string[] = [];
+    for (const themeId of ["default", SOFT_THEME, CONTRAST_THEME, "default"]) {
+      await applyAppearanceInPlace({ mode, theme: themeId });
+      await untilFrameTheme(mode, themeId);
+      await until(async () => {
+        const colors = await evalFrame<Colors>(editor, EXCALIDRAW_COLORS);
+        return colors.root?.length === 0 && colors.toolbar?.[0] === colors.toolbar?.[1];
+      }, `${themeId} ${mode} in Excalidraw`);
+      const pairs = await check(`${themeId} ${mode} with the menu open`);
+      assert.ok(
+        pairs.menu && pairs.hoveredTool,
+        `${themeId} ${mode}: the open menu and the hovered tool`,
+      );
+      seen.push(pairs.selectedTool![0]);
+    }
+    // Default、Soft 与测试主题的选中工具颜色各不相同，回到 Default 后恢复。The three themes differ and Default comes back.
+    assert.equal(new Set(seen.slice(0, 3)).size, 3, `${mode}: ${seen.join(", ")}`);
+    assert.equal(seen[3], seen[0]);
+  }
+
+  // 主菜单的 Help 打开弹窗，弹窗渲染在 body 下的容器中。Help in the main menu opens a dialog in a container under body.
+  await evalFrame(editor, `document.querySelector('[data-testid="help-menu-item"]').click(); true`);
+  await until(
+    () =>
+      evalFrame<boolean>(
+        editor,
+        `Boolean(document.querySelector(".excalidraw-modal-container .Island"))`,
+      ),
+    "the help dialog",
+  );
+  for (const themeId of [CONTRAST_THEME, "default"]) {
+    await applyAppearanceInPlace({ mode: "light", theme: themeId });
+    await untilFrameTheme("light", themeId);
+    await until(async () => {
+      const colors = await evalFrame<Colors>(editor, EXCALIDRAW_COLORS);
+      return colors.modal?.length === 0 && colors.dialog?.[0] === colors.dialog?.[1];
+    }, `${themeId} in the Excalidraw dialog`);
+    await check(`${themeId} light with the help dialog open`);
+  }
+  pressKey(editor, "Escape");
+  pressKey(editor, "s", [MOD]);
+  await untilHost(`!${UNSAVED_MARKER}`, "the saved diagram");
+  pass(
+    "in both modes Default, Soft and the test theme recolor Excalidraw's toolbar, menu, properties panel, tools, Save button and dialogs through the host variables, while the frame, canvas and unsaved changes stay",
+  );
+}
+
+/**
+ * 主题不可用：停用 Soft 所属的 extension 或删除测试主题的 extension 后，主题恢复为 Default 并显示提示。
+ * Unavailable themes: disabling Soft's extension or uninstalling the test themes' extension returns to Default with a
+ * notice.
+ */
+async function themeExtensionRemoval(): Promise<void> {
+  await chooseTheme(SOFT_THEME);
+  await disable("soft-theme");
+  await untilStatus("soft-theme", "Disabled");
+  await untilAppearance({ theme: "default" });
+  await untilHost(
+    `[...document.querySelectorAll("[data-sonner-toast]")].some((toast) => toast.textContent.includes("Soft is no longer available. Using Default."))`,
+    "the Soft notice",
+  );
+  await untilHost(
+    `!document.documentElement.style.getPropertyValue("--sidebar")`,
+    "the theme variables to be removed",
+  );
+  pass("disabling Soft's extension returns to Default with a notice and saves default");
+  await enable("soft-theme", "Soft Theme");
+  await untilStatus("soft-theme", "Active");
+
+  await chooseTheme(CONTRAST_THEME);
+  await goToExtensions();
+  await clickText("Uninstall", `document.querySelector('[data-extension-id="contrast-theme"]')`);
+  await clickText("Uninstall", OPEN_DIALOG);
+  await untilHost(
+    `!document.querySelector('[data-extension-id="contrast-theme"]')`,
+    "the test themes to leave the list",
+  );
+  await untilAppearance({ theme: "default" });
+  await untilHost(
+    `[...document.querySelectorAll("[data-sonner-toast]")].some((toast) => toast.textContent.includes("Contrast is no longer available. Using Default."))`,
+    "the Contrast notice",
+  );
+  await untilHost(
+    `!document.documentElement.style.getPropertyValue("--sidebar")`,
+    "the theme variables to be removed",
+  );
+  pass("uninstalling the test themes' extension returns to Default with a notice");
+}
+
+/** 为重新启动的检查保存 Soft 与 Dark。Saves Soft and Dark for the restart check. */
+async function themeBeforeRestart(): Promise<void> {
+  await chooseMode("dark");
+  await chooseTheme(SOFT_THEME);
+  await untilHost(
+    `getComputedStyle(document.body).backgroundColor === "rgb(33, 33, 33)"`,
+    "Soft dark",
+  );
+  pass("Soft and Dark are saved for the restart check");
 }
 
 const TEXT_EDITOR_SETTINGS_FILE = join(storage("text-editor"), "settings.json");
@@ -4989,6 +6338,25 @@ async function uninstallBundled(): Promise<void> {
 }
 
 async function restartPhase(): Promise<void> {
+  // 重新启动后主题与 Mode 保持。The theme and mode persist across the restart.
+  const restoredAppearance = await storedAppearance();
+  assert.equal(restoredAppearance.theme, SOFT_THEME);
+  assert.equal(restoredAppearance.mode, "dark");
+  await untilHost(
+    `document.documentElement.classList.contains("dark") && getComputedStyle(document.body).backgroundColor === "rgb(33, 33, 33)"`,
+    "Soft dark after the restart",
+  );
+  await openAppearancePage();
+  assert.equal(await evalHost<string>(`${THEME_SELECT}.value`), SOFT_THEME);
+  assert.equal(
+    await evalHost<string | null>(
+      `document.querySelector('[data-appearance-mode="dark"]').getAttribute("aria-pressed")`,
+    ),
+    "true",
+  );
+  await goToChat();
+  pass("after restarting Desktop, Soft and Dark stay applied and selected");
+
   // 重新启动后保存的字号仍然生效，Reset all 之后恢复默认。The saved sizes still apply after the restart; Reset all restores the defaults.
   assert.equal(
     await evalHost<string>(`getComputedStyle(document.documentElement).fontSize`),
@@ -4998,7 +6366,7 @@ async function restartPhase(): Promise<void> {
   await openSettingsPage("/settings/appearance/");
   await untilHost(`Boolean(document.getElementById("appearance-base-font-size"))`, "Appearance");
   assert.equal(await eyebrowSize(), "14px");
-  await saveAppearance(DEFAULT_APPEARANCE, () => clickText("Reset all"));
+  await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
   pass("after restarting Desktop, the saved sizes {18, 15} apply and Reset all restores 16px");
 
   // Text Editor 设置在重新启动后保持：文档字号 20 与基础字号 16（重置后）和重启前的基础字号 18 都不同；最后恢复默认，
@@ -5081,7 +6449,7 @@ async function restartPhase(): Promise<void> {
   await clickHost("#extension-delete-data");
   await clickText("Uninstall", OPEN_DIALOG);
   await until(
-    () => !existsSync(join(config.userData, "extensions", "sample")),
+    () => !existsSync(join(config.userData, "extensions", "packages", "sample")),
     "the install directory to be removed",
   );
   assert.equal(existsSync(storage("sample")), false);
@@ -5129,16 +6497,26 @@ async function run(): Promise<void> {
   await dragHandleFirstLine();
   await hostScaling();
   await appearanceSettings();
+  await themeSelection();
+  await sidebarThemes();
+  await imagePreviewThemes();
+  await memoryPreviewThemes();
+  await darkModeAndExtensionViews();
+  await agentflowEdgeThemes();
   await textEditorSettings();
   await textEditorCode();
+  await codeViewThemeFont();
   await conflictsAndRefresh();
   await excalidrawEditor();
+  await excalidrawThemes();
   await todoEditorFixture();
   await viewReloads();
   await hostReloads();
   await rejectedNavigation();
   await safeMode();
   await uninstallBundled();
+  await themeExtensionRemoval();
+  await themeBeforeRestart();
 }
 
 void run().then(

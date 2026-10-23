@@ -1,0 +1,11 @@
+{
+  "manifestVersion": 1,
+  "id": "soft-theme",
+  "name": "Soft Theme",
+  "version": "1.0.0",
+  "description": "A soft light and dark theme for Agw Desktop.",
+  "author": "Agw",
+  "contributes": {
+    "themes": [{ "id": "soft", "title": "Soft", "path": "themes/soft.json" }]
+  }
+}

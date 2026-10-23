@@ -20,7 +20,7 @@ const codec: SecretCodec = {
 
 type Harness = {
   root: string;
-  extensions: string;
+  packages: string;
   data: string;
   sources: string;
   settings: DesktopSettingsStore;
@@ -31,15 +31,15 @@ type Harness = {
 
 async function createHarness(archiveLimits?: ArchiveLimits): Promise<Harness> {
   const scratch = await createScratchDirectory("installer");
-  const extensions = join(scratch.path, "extensions");
-  const data = join(scratch.path, "extension-data");
+  const packages = join(scratch.path, "extensions", "packages");
+  const data = join(scratch.path, "extensions", "data");
   const sources = join(scratch.path, "sources");
-  await mkdir(extensions, { recursive: true });
+  await mkdir(packages, { recursive: true });
   await mkdir(sources, { recursive: true });
   const settings = new DesktopSettingsStore(scratch.path, "client", codec);
   const clearedSessions: string[] = [];
   const installer = new ExtensionInstaller({
-    extensionsDirectory: extensions,
+    packagesDirectory: packages,
     dataDirectory: data,
     appVersion: "0.5.0",
     settings,
@@ -50,7 +50,7 @@ async function createHarness(archiveLimits?: ArchiveLimits): Promise<Harness> {
   });
   return {
     root: scratch.path,
-    extensions,
+    packages,
     data,
     sources,
     settings,
@@ -100,16 +100,14 @@ function extensionEntries(prefix: string, id: string): { name: string; content: 
 
 async function stagingEntries(harness: Harness): Promise<string[]> {
   try {
-    return await readdir(join(harness.extensions, ".staging"));
+    return await readdir(join(harness.packages, ".staging"));
   } catch {
     return [];
   }
 }
 
 async function installedVersion(harness: Harness, id: string): Promise<string> {
-  const manifest = JSON.parse(
-    await readFile(join(harness.extensions, id, "manifest.json"), "utf8"),
-  );
+  const manifest = JSON.parse(await readFile(join(harness.packages, id, "manifest.json"), "utf8"));
   return manifest.version as string;
 }
 
@@ -132,7 +130,7 @@ test("installing from a folder copies the package and commits it", async () => {
     const installed = await harness.installer.commit(preview.installId);
     assert.equal(installed.validation, "valid");
     assert.equal(
-      await readFile(join(harness.extensions, "hello", "assets", "app.js"), "utf8"),
+      await readFile(join(harness.packages, "hello", "assets", "app.js"), "utf8"),
       "export {};",
     );
     assert.deepEqual(await stagingEntries(harness), []);
@@ -310,6 +308,46 @@ test("replacing keeps the enabled state when grants cover the new declaration an
   }
 });
 
+test("an update replaces only packages/<id> and keeps data/<id>", async () => {
+  const harness = await createHarness();
+  try {
+    await writeTestExtension(
+      join(harness.sources, "v1"),
+      testManifest("keep", { version: "1.0.0" }),
+      { "old.js": "export {};" },
+    );
+    await harness.installer.commit(
+      (await harness.installer.prepareFromDirectory(join(harness.sources, "v1"))).installId,
+    );
+    await mkdir(join(harness.data, "keep"), { recursive: true });
+    await writeFile(join(harness.data, "keep", "config.json"), '{"theme":"dark"}');
+
+    // 包自己的 data/ 目录只是包文件，与数据目录无关。A package's own data/ folder is a package file, not the data directory.
+    await writeTestExtension(
+      join(harness.sources, "v2"),
+      testManifest("keep", { version: "2.0.0" }),
+      { "data/defaults.json": "{}" },
+    );
+    await harness.installer.commit(
+      (await harness.installer.prepareFromDirectory(join(harness.sources, "v2"))).installId,
+    );
+
+    assert.equal(await installedVersion(harness, "keep"), "2.0.0");
+    await assert.rejects(readFile(join(harness.packages, "keep", "old.js"), "utf8"));
+    assert.equal(
+      await readFile(join(harness.packages, "keep", "data", "defaults.json"), "utf8"),
+      "{}",
+    );
+    assert.equal(
+      await readFile(join(harness.data, "keep", "config.json"), "utf8"),
+      '{"theme":"dark"}',
+    );
+    assert.deepEqual((await readdir(harness.packages)).sort(), [".staging", "keep"]);
+  } finally {
+    await harness.dispose();
+  }
+});
+
 test("canceling removes the staging directory", async () => {
   const harness = await createHarness();
   try {
@@ -318,7 +356,7 @@ test("canceling removes the staging directory", async () => {
     assert.equal((await stagingEntries(harness)).length, 1);
     await harness.installer.cancel(preview.installId);
     assert.deepEqual(await stagingEntries(harness), []);
-    await assert.rejects(readdir(join(harness.extensions, "cancel")));
+    await assert.rejects(readdir(join(harness.packages, "cancel")));
   } finally {
     await harness.dispose();
   }
@@ -328,7 +366,7 @@ test("uninstalling removes the package and optionally the data", async () => {
   const harness = await createHarness();
   try {
     for (const id of ["keep-data", "drop-data"]) {
-      await writeTestExtension(join(harness.extensions, id), testManifest(id));
+      await writeTestExtension(join(harness.packages, id), testManifest(id));
       await harness.settings.setExtensionEnabled(id, true, grants(testManifest(id)));
       await mkdir(join(harness.data, id), { recursive: true });
       await writeFile(join(harness.data, id, "config.json"), "{}");
@@ -336,7 +374,7 @@ test("uninstalling removes the package and optionally the data", async () => {
     await harness.installer.uninstall("keep-data", false);
     await harness.installer.uninstall("drop-data", true);
 
-    assert.deepEqual(await readdir(harness.extensions), [".staging"]);
+    assert.deepEqual(await readdir(harness.packages), [".staging"]);
     assert.deepEqual(await stagingEntries(harness), []);
     assert.deepEqual((await harness.settings.load()).extensions, {});
     assert.equal(await readFile(join(harness.data, "keep-data", "config.json"), "utf8"), "{}");
@@ -351,10 +389,10 @@ test("uninstalling removes the package and optionally the data", async () => {
 async function interruptedReplacement(harness: Harness, step: number): Promise<void> {
   const oldManifest = testManifest("crash", { version: "1.0.0", permissions: ["context.project"] });
   const newManifest = testManifest("crash", { version: "2.0.0", permissions: [] });
-  await writeTestExtension(join(harness.extensions, "crash"), oldManifest);
+  await writeTestExtension(join(harness.packages, "crash"), oldManifest);
   await harness.settings.setExtensionEnabled("crash", true, grants(oldManifest));
   const installId = "00000000-0000-4000-8000-000000000001";
-  const staging = join(harness.extensions, ".staging", installId);
+  const staging = join(harness.packages, ".staging", installId);
   await writeTestExtension(join(staging, "package"), newManifest);
   if (step >= 1) {
     await writeJsonFile(join(staging, "journal.json"), {
@@ -364,8 +402,8 @@ async function interruptedReplacement(harness: Harness, step: number): Promise<v
       hasPrevious: true,
     });
   }
-  if (step >= 2) await rename(join(harness.extensions, "crash"), join(staging, "previous"));
-  if (step >= 3) await rename(join(staging, "package"), join(harness.extensions, "crash"));
+  if (step >= 2) await rename(join(harness.packages, "crash"), join(staging, "previous"));
+  if (step >= 3) await rename(join(staging, "package"), join(harness.packages, "crash"));
   if (step >= 4) await harness.settings.applyInstalledExtension("crash", grants(newManifest));
   if (step >= 5) {
     await writeJsonFile(join(staging, "journal.json"), {
@@ -397,7 +435,7 @@ test("startup recovery restores the old version or completes the new one after a
         outcome ? [outcome] : [],
         `step ${step}`,
       );
-      assert.deepEqual(await readdir(harness.extensions).then((names) => names.sort()), [
+      assert.deepEqual(await readdir(harness.packages).then((names) => names.sort()), [
         ".staging",
         "crash",
       ]);
@@ -416,23 +454,23 @@ test("startup recovery keeps or finishes an interrupted uninstall", async () => 
   for (const step of [1, 2]) {
     const harness = await createHarness();
     try {
-      await writeTestExtension(join(harness.extensions, "gone"), testManifest("gone"));
+      await writeTestExtension(join(harness.packages, "gone"), testManifest("gone"));
       await harness.settings.setExtensionEnabled("gone", true, grants(testManifest("gone")));
       await mkdir(join(harness.data, "gone"), { recursive: true });
       const uninstallId = "00000000-0000-4000-8000-000000000002";
-      const staging = join(harness.extensions, ".staging", uninstallId);
+      const staging = join(harness.packages, ".staging", uninstallId);
       await writeJsonFile(join(staging, "journal.json"), {
         operation: "uninstall",
         extensionId: "gone",
         deleteData: true,
         phase: "removing",
       });
-      if (step >= 2) await rename(join(harness.extensions, "gone"), join(staging, "previous"));
+      if (step >= 2) await rename(join(harness.packages, "gone"), join(staging, "previous"));
 
       await harness.installer.recover();
 
       assert.deepEqual(await stagingEntries(harness), [], `step ${step}`);
-      const names = await readdir(harness.extensions);
+      const names = await readdir(harness.packages);
       if (step === 1) {
         assert.deepEqual(names.sort(), [".staging", "gone"]);
         assert.equal((await harness.settings.load()).extensions.gone.enabled, true);

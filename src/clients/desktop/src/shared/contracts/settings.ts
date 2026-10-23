@@ -4,13 +4,27 @@ import type { ServerProfile } from "./server-profile";
 export type PackageFlavor = "full" | "client";
 export type CloseBehavior = "minimize-to-tray" | "quit-desktop";
 
+/** 浅色、深色或跟随系统。Light, dark or following the system. */
+export type AppearanceMode = "system" | "light" | "dark";
+
 /**
  * 字号设置，单位 px。`null` 表示按基础字号推导。
  * Font size settings in px. `null` derives the size from the base font size.
  */
-export type AppearanceSettings = {
+export type FontSizeSettings = {
   baseFontSize: number;
   chatFontSize: number | null;
+};
+
+/** 外观设置：字号、主题与 Mode。Appearance settings: font sizes, theme and mode. */
+export type AppearanceSettings = FontSizeSettings & {
+  /** `"default"` 或 `"{extensionId}:{themeId}"`。`"default"` or `"{extensionId}:{themeId}"`. */
+  theme: string;
+  /**
+   * 缺失表示还没有从 next-themes 迁移（旧版本的设置或全新安装），renderer 收到设置后写入。
+   * Missing until the renderer migrates it from next-themes (older settings or a fresh install).
+   */
+  mode?: AppearanceMode;
 };
 
 export type DesktopSettings = {

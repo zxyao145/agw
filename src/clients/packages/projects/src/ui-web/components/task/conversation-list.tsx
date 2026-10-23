@@ -86,7 +86,7 @@ const CONVERSATION_STATUS_DISPLAY: Record<
   running: {
     icon: LoaderCircle,
     label: "Running",
-    className: "animate-spin text-sidebar-ring",
+    className: "animate-spin text-(--agw-status-running)",
   },
   failed: { icon: CircleAlert, label: "Last turn failed", className: "text-destructive" },
   interrupted: {
@@ -426,7 +426,9 @@ export function ConversationList({
                 onClick={() => onConversationSelect(conversation)}
                 className={cn(
                   "group relative py-2.5 pl-4 pr-2 rounded-md cursor-pointer transition-colors",
-                  isActive ? "bg-accent" : "hover:bg-accent/80",
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent/80 hover:text-accent-foreground",
                 )}
               >
                 <div className="flex items-center">

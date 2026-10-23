@@ -9,7 +9,12 @@ import type {
   ExtensionSettings,
   PackageFlavor,
 } from "../../shared/contracts";
-import { DEFAULT_APPEARANCE, MIN_FONT_SIZE } from "../../shared/appearance";
+import {
+  APPEARANCE_MODES,
+  DEFAULT_APPEARANCE,
+  DEFAULT_THEME_ID,
+  MIN_FONT_SIZE,
+} from "../../shared/appearance";
 import { HOST_PERMISSION_PATTERN } from "../../shared/extension-host-permissions";
 import { EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import { writeJsonFile } from "./json-file";
@@ -25,9 +30,15 @@ const extensionSettingsSchema = z.record(
   }),
 );
 
+// 主题 id：`default` 或 `{extensionId}:{themeId}`。A theme id: `default` or `{extensionId}:{themeId}`.
+const THEME_ID_PATTERN = /^(?:default|[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*)$/u;
+
+// `mode` 缺失时保持缺失，由 renderer 迁移。A missing `mode` stays missing until the renderer migrates it.
 const appearanceSchema = z.strictObject({
   baseFontSize: z.number().int().min(MIN_FONT_SIZE).max(20),
   chatFontSize: z.number().int().min(MIN_FONT_SIZE).max(24).nullable(),
+  theme: z.string().regex(THEME_ID_PATTERN).default(DEFAULT_THEME_ID),
+  mode: z.enum(APPEARANCE_MODES).optional(),
 });
 
 const fileTypeSchema = z.string().min(1);

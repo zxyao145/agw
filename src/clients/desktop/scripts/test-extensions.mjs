@@ -597,7 +597,7 @@ async function writePerformanceInputs() {
 
 /** 把 fixture 复制到安装目录，替换本地服务端口。Copies fixtures into the install directory with the service port. */
 async function installFixtures(httpPort) {
-  const extensions = join(userData, "extensions");
+  const extensions = join(userData, "extensions", "packages");
   await mkdir(extensions, { recursive: true });
   for (const id of [
     "sample",
@@ -612,6 +612,7 @@ async function installFixtures(httpPort) {
     "wasm",
     "vue",
     "blazor",
+    "bad-theme",
   ]) {
     await cp(join(fixtures, id), join(extensions, id), { recursive: true });
     const manifestFile = join(extensions, id, "manifest.json");

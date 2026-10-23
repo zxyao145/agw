@@ -4,6 +4,7 @@ import * as React from "react";
 
 import type {
   AgwDesktopBridge,
+  AppearanceSettings,
   DesktopRuntimeState,
   DesktopSettingsUpdate,
   ServerProfile,
@@ -31,6 +32,8 @@ import {
 } from "./runtime-model";
 import { ServerQueryClientRegistry } from "./query-client-registry";
 import { AppearanceProvider } from "./appearance/appearance-provider";
+import { ThemeProvider } from "./appearance/theme-provider";
+import { getExtensionRuntime } from "./extensions/extension-runtime";
 
 declare global {
   interface Window {
@@ -348,6 +351,17 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
     [connect, runtimeState],
   );
 
+  const saveAppearance = React.useCallback(
+    (appearance: AppearanceSettings) => saveSettings({ appearance }),
+    [saveSettings],
+  );
+  // ThemeProvider 从 extension 状态读取主题；静态导出预渲染阶段没有 window。
+  // ThemeProvider reads themes from the extension state; prerendering has no window.
+  const extensionHost = React.useMemo(
+    () => (typeof window === "undefined" ? null : getExtensionRuntime().host),
+    [],
+  );
+
   const saveToken = React.useCallback(
     async (profileId: string, token: string) => {
       const bridge = window.agwDesktop;
@@ -401,20 +415,26 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
   return (
     <DesktopRuntimeContext.Provider value={value}>
       <AppearanceProvider appearance={runtimeState?.settings.appearance ?? DEFAULT_APPEARANCE}>
-        <QueryClientProvider client={queryClient}>
-          <ExecutionPlatformProvider
-            serverId={activeProfile?.id ?? "browser"}
-            onActiveCountChange={handleActiveCountChange}
-          >
-            <ConversationImagePlatformProvider
-              onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+        <ThemeProvider
+          appearance={runtimeState?.settings.appearance ?? null}
+          save={saveAppearance}
+          host={extensionHost}
+        >
+          <QueryClientProvider client={queryClient}>
+            <ExecutionPlatformProvider
+              serverId={activeProfile?.id ?? "browser"}
+              onActiveCountChange={handleActiveCountChange}
             >
-              <MarkdownRendererProvider renderer={TiptapMarkdown}>
-                {children}
-              </MarkdownRendererProvider>
-            </ConversationImagePlatformProvider>
-          </ExecutionPlatformProvider>
-        </QueryClientProvider>
+              <ConversationImagePlatformProvider
+                onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+              >
+                <MarkdownRendererProvider renderer={TiptapMarkdown}>
+                  {children}
+                </MarkdownRendererProvider>
+              </ConversationImagePlatformProvider>
+            </ExecutionPlatformProvider>
+          </QueryClientProvider>
+        </ThemeProvider>
       </AppearanceProvider>
     </DesktopRuntimeContext.Provider>
   );

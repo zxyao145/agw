@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { AppearanceSettings } from "@desktop/shared/contracts";
+import type { FontSizeSettings } from "@desktop/shared/contracts";
 import { resolveAppearance } from "./resolve-appearance";
 
-const appearance = (baseFontSize: number, chatFontSize: number | null): AppearanceSettings => ({
+const appearance = (baseFontSize: number, chatFontSize: number | null): FontSizeSettings => ({
   baseFontSize,
   chatFontSize,
 });
 
-function sizes(value: AppearanceSettings) {
+function sizes(value: FontSizeSettings) {
   const properties = resolveAppearance(value);
   return [properties["--agw-font-size-base"], properties["--agw-font-size-chat"]];
 }

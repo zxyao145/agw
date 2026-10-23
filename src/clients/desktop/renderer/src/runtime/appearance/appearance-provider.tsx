@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import type { AppearanceSettings } from "@desktop/shared/contracts";
+import type { FontSizeSettings } from "@desktop/shared/contracts";
 import { resolveAppearance } from "./resolve-appearance";
 
 /**
@@ -14,7 +14,7 @@ export function AppearanceProvider({
   appearance,
   children,
 }: {
-  appearance: AppearanceSettings;
+  appearance: FontSizeSettings;
   children: React.ReactNode;
 }) {
   const { baseFontSize, chatFontSize } = appearance;
