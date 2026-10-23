@@ -278,6 +278,7 @@ public sealed class OAuth2FlowIntegrationTests
             builder.Services.AddScoped<Agw.Projects.Application.Persistence.IProjectsDbContext>(sp =>
                 sp.GetRequiredService<AgwDbContext>()
             );
+            builder.Services.AddSingleton(database.Paths);
             builder.Services.AddScoped<IUserProjectInitializer, UserProjectInitializer>();
             builder.Services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AgwDbContext>());
             builder.Services.AddScoped<IApiTokenCredentialReader, EfApiTokenCredentialReader>();

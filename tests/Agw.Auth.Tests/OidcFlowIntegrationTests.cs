@@ -253,8 +253,11 @@ public sealed class OidcFlowIntegrationTests
             );
             builder.Services.AddScoped<IUserProjectInitializer>(sp =>
                 failProvisioning
-                    ? new OidcIdentityStoreTests.FailingProjectInitializer(sp.GetRequiredService<AgwDbContext>())
-                    : new UserProjectInitializer(sp.GetRequiredService<AgwDbContext>())
+                    ? new OidcIdentityStoreTests.FailingProjectInitializer(
+                        sp.GetRequiredService<AgwDbContext>(),
+                        database.Paths
+                    )
+                    : new UserProjectInitializer(sp.GetRequiredService<AgwDbContext>(), database.Paths)
             );
             builder.Services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AgwDbContext>());
             builder.Services.AddScoped<IApiTokenCredentialReader, EfApiTokenCredentialReader>();

@@ -5,6 +5,7 @@ using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Behaviors;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 
@@ -102,8 +103,7 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
-        behavior.EnsureAdditionalDirectoriesExist(ResolveExistingAdditionalDirectoryPaths(project));
-        EnsureWorkspaceDirectory(project.Workspace);
+        EnsureDirectoriesCreated(project);
         await _dbContext.Projects.AddAsync(project);
         await SyncProjectMcpToolServerRelationsAsync(project.Id, mcpToolServerIds);
         await SyncProjectSkillRelationsAsync(project.Id, skillIds);
@@ -137,11 +137,7 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
-        behavior.EnsureAdditionalDirectoriesExist(
-            ResolveExistingAdditionalDirectoryPaths(existing),
-            originalDirectories
-        );
-        EnsureWorkspaceDirectory(existing.Workspace);
+        EnsureDirectoriesCreated(existing);
         // Preserve audit stamping even when only bindings change or the update is a no-op.
         _dbContext.Projects.Entry(existing).Property(project => project.Name).IsModified = true;
         if (mcpToolServerIds != null)
@@ -197,24 +193,21 @@ public class ProjectAppService : IProjectAppService
     }
 
     /// <summary>
-    /// <para>返回项目附加目录中在本机文件系统上真实存在的规范化路径。</para>
-    /// <para>Returns the normalized additional directory paths that exist on the local file system.</para>
+    /// <para>在保存目录配置前创建项目有效主目录和全部附加目录中缺失的目录，任一目录创建失败时不保存配置。</para>
+    /// <para>Creates the missing directories among the Project's effective primary directory and all additional
+    /// directories before the configuration is saved; any creation failure leaves the configuration unsaved.</para>
     /// </summary>
-    private static IReadOnlySet<string> ResolveExistingAdditionalDirectoryPaths(Project project) =>
-        project
-            .AdditionalDirectories.Select(directory => directory.Path)
-            .Where(Directory.Exists)
-            .ToHashSet(ProjectWorkspacePaths.Comparer);
-
-    private static void EnsureWorkspaceDirectory(string? workspace)
-    {
-        if (string.IsNullOrWhiteSpace(workspace))
-        {
-            return;
-        }
-
-        Directory.CreateDirectory(PathUtil.ExpandTilde(workspace.Trim()));
-    }
+    private static void EnsureDirectoriesCreated(Project project) =>
+        ProjectWorkspacePaths.EnsureAvailable(
+            ProjectWorkspacePaths.CreateSnapshot(
+                project.Id,
+                project.Workspace,
+                project.AdditionalDirectories.Select(directory => new ProjectWorkspaceDirectory(
+                    directory.Id,
+                    directory.Path
+                ))
+            )
+        );
 
     private async Task SyncProjectMcpToolServerRelationsAsync(Guid projectId, IEnumerable<Guid>? mcpToolServerIds)
     {

@@ -27,7 +27,7 @@ internal sealed class FakeExternalAgentCli
           const threadId = resumed ?? crypto.randomUUID();
           if (!resumed || control.threadStartedOnResume) emit({ type: 'thread.started', thread_id: threadId });
           emit({ type: 'turn.started' });
-          fs.appendFileSync(path.join(__dirname, 'codex-invocations.jsonl'), JSON.stringify({ args, threadId, resumed, input }) + '\n');
+          fs.appendFileSync(path.join(__dirname, 'codex-invocations.jsonl'), JSON.stringify({ args, threadId, resumed, input, cwd: fs.realpathSync(process.cwd()) }) + '\n');
           if (control.holdFile) {
             while (!fs.existsSync(control.holdFile)) await new Promise(resolve => setTimeout(resolve, 20));
           }
@@ -47,7 +47,7 @@ internal sealed class FakeExternalAgentCli
         const sessionIndex = args.indexOf('--session');
         const resumed = sessionIndex >= 0 ? args[sessionIndex + 1] : null;
         const sessionId = resumed ?? crypto.randomUUID();
-        fs.appendFileSync(path.join(__dirname, 'pi-invocations.jsonl'), JSON.stringify({ args, sessionId, resumed }) + '\n');
+        fs.appendFileSync(path.join(__dirname, 'pi-invocations.jsonl'), JSON.stringify({ args, sessionId, resumed, cwd: fs.realpathSync(process.cwd()) }) + '\n');
         const emit = event => process.stdout.write(JSON.stringify(event) + '\n');
         readline.createInterface({ input: process.stdin }).on('line', line => {
           const command = JSON.parse(line);
@@ -142,7 +142,8 @@ internal sealed class FakeExternalAgentCli
                     root.GetProperty(idProperty).GetString()!,
                     root.GetProperty("resumed").GetString(),
                     root.GetProperty("args").EnumerateArray().Select(arg => arg.GetString()!).ToArray(),
-                    root.TryGetProperty("input", out var input) ? input.GetString() : null
+                    root.TryGetProperty("input", out var input) ? input.GetString() : null,
+                    root.GetProperty("cwd").GetString()!
                 );
             })
             .ToList();
@@ -162,12 +163,13 @@ internal sealed class FakeExternalAgentCli
 }
 
 /// <summary>
-/// 一次命令行调用：Codex 的 Input 为标准输入收到的提示词，Pi 的提示词经 RPC 发送，Input 为空。
-/// One command-line invocation: Codex's Input is the prompt read from standard input; Pi receives prompts over RPC, so its Input is null.
+/// 一次命令行调用：Codex 的 Input 为标准输入收到的提示词，Pi 的提示词经 RPC 发送，Input 为空；WorkingDirectory 为进程启动后工作目录的物理路径。
+/// One command-line invocation: Codex's Input is the prompt read from standard input; Pi receives prompts over RPC, so its Input is null; WorkingDirectory is the physical path of the process working directory after start.
 /// </summary>
 internal sealed record FakeInvocation(
     string SessionId,
     string? Resumed,
     IReadOnlyList<string> Arguments,
-    string? Input
+    string? Input,
+    string WorkingDirectory
 );

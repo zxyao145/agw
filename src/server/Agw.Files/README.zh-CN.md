@@ -52,11 +52,11 @@ var fileSystem = await resolver.ResolveAsync(projectId, cancellationToken);
 
 ## Project 文件系统解析
 
-`Project.Workspace` 保留主目录语义，为空时沿用 `~/.agw/projects/{projectId:N}` 并按需创建。`AdditionalDirectories` 是 Project 自有 JSON 配置，每项为 `{ "id": "UUID", "path": "~/source/docs" }`，默认 `[]`。新增目录必须存在，接受宿主机绝对路径和 `~` 路径；规范化后的重复目录会被拒绝，嵌套目录允许关联。路径改变时分配新 ID。创建响应返回服务端分配的 ID；更新时省略该字段保留配置，传 `[]` 清空关联，不移动或删除磁盘文件。
+`Project.Workspace` 保留主目录语义，为空时沿用 `~/.agw/projects/{projectId:N}` 并按需创建。`AdditionalDirectories` 是 Project 自有 JSON 配置，每项为 `{ "id": "UUID", "path": "~/source/docs" }`，默认 `[]`。接受宿主机绝对路径和 `~` 路径，保存配置前创建缺失的主目录和附加目录；规范化后的重复目录会被拒绝，嵌套目录允许关联。路径改变时分配新 ID。创建响应返回服务端分配的 ID；更新时省略该字段保留配置，传 `[]` 清空关联，不移动或删除磁盘文件。
 
-resolver 每次校验 Project 归属，再按明确的 directoryId 选根目录。Project 不存在、缺少 owner 或 directoryId 不属于 Project 时返回未找到；目录不可用时报告包含该路径的错误，不回退到主目录或临时目录。
+resolver 每次校验 Project 归属，再按明确的 directoryId 选根目录。Project 不存在、缺少 owner 或 directoryId 不属于 Project 时返回未找到，不创建任何目录；归属校验通过后，每次解析都在返回文件系统前创建所选目录。目录无法创建（权限不足或路径被普通文件占用）时直接报告错误，不回退到主目录或临时目录。
 
-缓存以 `(projectId, directoryId, normalizedPath)` 为键，保留 owner 和创建时间，没有 TTL。Project 更新或删除主动失效本机缓存；其他执行节点在解析时比较配置，不复用另一目录的文件系统。
+缓存以 `(projectId, directoryId, normalizedPath)` 为键，保留 owner、目录的物理身份（Unix 为 device/inode，Windows 为卷序列号与文件索引）和创建时间，没有 TTL。目录被移走后重新创建时物理身份改变，resolver 建立新的 `LocalFileSystem`；`ProjectAgentFileStore` 同样核对允许目录集合的物理身份，任一目录重新创建后重建受限文件系统。Project 更新或删除主动失效本机缓存；其他执行节点在解析时比较配置，不复用另一目录的文件系统。
 
 文件界面保存后立即刷新。Agent 每轮开始捕获 `ProjectWorkspaceSnapshot`，包含规范化后的主目录、附加目录及配置指纹。文件工具调用 `ResolveSnapshotAsync`，使用快照中的路径并继续校验 Project 归属。即使关联在本轮被移除，本轮与后台子执行仍使用原快照；下一轮重建工具和 runtime。durable manifest 保存同一快照，恢复和重试不加载新附加目录；旧 manifest 首次恢复时补齐单主目录快照并持久化。
 

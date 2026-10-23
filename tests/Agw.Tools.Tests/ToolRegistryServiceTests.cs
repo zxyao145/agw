@@ -365,9 +365,9 @@ public class ToolRegistryServiceTests
         return Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("diff"));
     }
 
-    private static ToolMaterializationContext CreateMaterializationContext()
+    private static ToolMaterializationContext CreateMaterializationContext(string workspace = "/workspace")
     {
-        var project = new Project { Id = Guid.CreateVersion7(), Workspace = "/workspace" };
+        var project = new Project { Id = Guid.CreateVersion7(), Workspace = workspace };
         return new ToolMaterializationContext
         {
             Agent = new Agent { Id = Guid.CreateVersion7() },
@@ -405,19 +405,31 @@ public class ToolRegistryServiceTests
             serviceProvider,
             [new ShellContextualTool(new ConfigurationBuilder().Build())]
         );
-        var context = CreateMaterializationContext();
-
-        // Act
-        await using var contribution = await registry.MaterializeAsync(
-            [new RunShellToolDefinition()],
-            context,
-            TestContext.Current.CancellationToken
+        var workspace = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "tool-registry",
+            Guid.CreateVersion7().ToString("N")
         );
+        var context = CreateMaterializationContext(workspace);
+        try
+        {
+            // Act
+            await using var contribution = await registry.MaterializeAsync(
+                [new RunShellToolDefinition()],
+                context,
+                TestContext.Current.CancellationToken
+            );
 
-        // Assert
-        var function = Assert.IsAssignableFrom<AIFunction>(Assert.Single(contribution.Tools));
-        Assert.NotNull(function.GetService<ApprovalRequiredAIFunction>());
-        Assert.Equal(AgwToolPermission.Execute, function.GetService<AgwToolMetadata>()?.RequiredPermission);
+            // Assert
+            var function = Assert.IsAssignableFrom<AIFunction>(Assert.Single(contribution.Tools));
+            Assert.NotNull(function.GetService<ApprovalRequiredAIFunction>());
+            Assert.Equal(AgwToolPermission.Execute, function.GetService<AgwToolMetadata>()?.RequiredPermission);
+        }
+        finally
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
     }
 
     private sealed class MutableTool : IAgwTool

@@ -92,7 +92,7 @@ public sealed class ConfinedFileSystemTests
         {
             var workspace = CreateDirectory(root, "workspace");
             await File.WriteAllTextAsync(Path.Combine(root, "secret.txt"), "secret", ct);
-            File.CreateSymbolicLink(Path.Combine(workspace, "link.txt"), "../secret.txt");
+            File.CreateSymbolicLink(Path.Combine(workspace, "link.txt"), Path.Combine("..", "secret.txt"));
             var fileSystem = Confine(workspace);
 
             var exception = await Assert.ThrowsAsync<AgwException>(() => fileSystem.ReadAllTextAsync("link.txt", ct));

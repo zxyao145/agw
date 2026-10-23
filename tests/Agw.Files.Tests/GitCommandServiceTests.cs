@@ -204,7 +204,7 @@ public class GitCommandServiceTests
         string? unstagedStatus
     )
     {
-        var status = changedFiles.FileStatuses[repository.GetPath(relativePath)];
+        var status = changedFiles.FileStatuses[Path.GetFullPath(repository.GetPath(relativePath))];
         Assert.Equal(stagedStatus, status.StagedStatus);
         Assert.Equal(unstagedStatus, status.UnstagedStatus);
     }
@@ -274,7 +274,7 @@ public class GitCommandServiceTests
         {
             if (Directory.Exists(Path))
             {
-                Directory.Delete(Path, recursive: true);
+                TestDirectories.Delete(Path);
             }
         }
     }

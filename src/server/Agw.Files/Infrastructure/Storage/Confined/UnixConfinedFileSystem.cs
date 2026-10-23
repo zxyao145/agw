@@ -52,29 +52,8 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     /// 打开每个允许的根目录并记录其身份；不存在的目录无法被进入，直接略过。
     /// Opens every allowed root and records its identity; a missing directory cannot be entered and is skipped.
     /// </summary>
-    internal static FileIdentity[] ResolveAllowedRoots(IReadOnlyList<string> allowedRoots)
-    {
-        var identities = new List<FileIdentity>(allowedRoots.Count);
-        foreach (var root in allowedRoots)
-        {
-            var fd = UnixNative.Open(root, UnixNative.O_RDONLY | UnixNative.O_DIRECTORY | UnixNative.O_CLOEXEC);
-            if (fd < 0)
-            {
-                var errno = UnixNative.LastError;
-                if (errno is UnixNative.ENOENT or UnixNative.ENOTDIR)
-                {
-                    continue;
-                }
-
-                throw UnixNative.CreateException(errno, $"Cannot open Project directory '{root}'");
-            }
-
-            using var handle = UnixNative.WrapFd(fd);
-            identities.Add(UnixNative.Stat(handle).Identity);
-        }
-
-        return identities.ToArray();
-    }
+    internal static FileIdentity[] ResolveAllowedRoots(IReadOnlyList<string> allowedRoots) =>
+        allowedRoots.Select(DirectoryIdentities.TryRead).OfType<FileIdentity>().ToArray();
 
     public Task<bool> ExistsFileAsync(string path, CancellationToken ct)
     {

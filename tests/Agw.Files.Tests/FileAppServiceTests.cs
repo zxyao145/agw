@@ -459,7 +459,7 @@ public class FileAppServiceTests
         Assert.Equal(FileOperationStatus.Success, result.Status);
         Assert.True(result.Value!.Success);
         Assert.False(git.LastStaged);
-        Assert.Equal(Path.Combine(scope.Path, "src/features"), git.LastIndexPath);
+        Assert.Equal(Path.Combine(scope.Path, "src", "features"), git.LastIndexPath);
     }
 
     [Theory]
