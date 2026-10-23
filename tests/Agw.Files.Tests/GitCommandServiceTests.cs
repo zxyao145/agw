@@ -274,7 +274,7 @@ public class GitCommandServiceTests
         {
             if (Directory.Exists(Path))
             {
-                Directory.Delete(Path, recursive: true);
+                TestDirectories.Delete(Path);
             }
         }
     }

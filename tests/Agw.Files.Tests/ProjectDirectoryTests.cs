@@ -219,7 +219,7 @@ public sealed class ProjectDirectoryTests : IDisposable
     public void Dispose()
     {
         _services.Dispose();
-        Directory.Delete(_root, recursive: true);
+        TestDirectories.Delete(_root);
     }
 
     private sealed class ConfigurationProvider : IProjectFileSystemConfigurationProvider
