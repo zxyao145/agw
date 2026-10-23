@@ -8,6 +8,7 @@ using Agw.Projects.Application;
 using Agw.Projects.Contracts;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
@@ -75,7 +76,7 @@ public sealed class OidcIdentityStoreTests
         {
             var failing = new EfOidcIdentityStore(
                 context,
-                new FailingProjectInitializer(context),
+                new FailingProjectInitializer(context, database.Paths),
                 TestApiTokenStore.Create(context),
                 database.Clock,
                 database.Options
@@ -107,15 +108,17 @@ public sealed class OidcIdentityStoreTests
     internal sealed class FailingProjectInitializer : IUserProjectInitializer
     {
         private readonly AgwDbContext _context;
+        private readonly AgwDataPaths _paths;
 
-        public FailingProjectInitializer(AgwDbContext context)
+        public FailingProjectInitializer(AgwDbContext context, AgwDataPaths paths)
         {
             _context = context;
+            _paths = paths;
         }
 
         public async Task EnsureDefaultsAsync(CancellationToken cancellationToken = default)
         {
-            await new UserProjectInitializer(_context).EnsureDefaultsAsync(cancellationToken);
+            await new UserProjectInitializer(_context, _paths).EnsureDefaultsAsync(cancellationToken);
             Assert.Equal(2, await _context.Projects.CountAsync(cancellationToken));
             throw new AgwException(ErrorCodes.InvalidParam);
         }
@@ -318,9 +321,27 @@ public sealed class OidcIdentityStoreTests
     internal sealed class TestDatabase : IAsyncDisposable
     {
         private readonly string _path = Path.Combine(Path.GetTempPath(), $"agw-oidc-{Guid.NewGuid():N}.db");
+        private readonly string _root = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "oidc-identity-store",
+            Guid.NewGuid().ToString("N")
+        );
         private string? _postgresConnection;
         private string? _postgresAdmin;
         private string? _databaseName;
+
+        private TestDatabase()
+        {
+            Paths = AgwDataPaths.Resolve(Path.Combine(_root, "data"), Path.Combine(_root, "home"));
+        }
+
+        /// <summary>
+        /// 隔离的数据目录与用户目录，用户默认项目的目录创建在其中。
+        /// Isolated data and home directories that receive the user's default Project directories.
+        /// </summary>
+        public AgwDataPaths Paths { get; }
+
         public MutableClock Clock { get; } = new();
         public OidcOptions Options { get; } =
             new() { Providers = new() { ["company"] = new OidcProviderOptions { Enabled = true } } };
@@ -377,7 +398,7 @@ public sealed class OidcIdentityStoreTests
         public EfOidcIdentityStore Store(AgwDbContext context, IApiTokenStore? tokens = null) =>
             new(
                 context,
-                new UserProjectInitializer(context),
+                new UserProjectInitializer(context, Paths),
                 tokens ?? TestApiTokenStore.Create(context),
                 Clock,
                 Options
@@ -398,6 +419,10 @@ public sealed class OidcIdentityStoreTests
             File.Delete(_path);
             File.Delete(_path + "-wal");
             File.Delete(_path + "-shm");
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, recursive: true);
+            }
         }
     }
 

@@ -33,7 +33,7 @@ public class ProjectAppServiceTests : IDisposable
     public async Task UpdateAsync_AdditionalDirectories_PreserveIdentityUntilPathChanges()
     {
         var token = TestContext.Current.CancellationToken;
-        var root = Directory.CreateTempSubdirectory("agw-project-directories-").FullName;
+        var root = CreateScratchRoot("project-directories");
         try
         {
             var first = Directory.CreateDirectory(Path.Combine(root, "first")).FullName;
@@ -83,7 +83,35 @@ public class ProjectAppServiceTests : IDisposable
                     null
                 )
             )!;
-            Assert.NotEqual(original.Id, Assert.Single(replaced.AdditionalDirectories).Id);
+            var replacedDirectory = Assert.Single(replaced.AdditionalDirectories);
+            Assert.NotEqual(original.Id, replacedDirectory.Id);
+            var added = Path.Combine(root, "added");
+            var extended = (
+                await scope.Service.UpdateAsync(
+                    created.Id,
+                    item => item.AdditionalDirectories = [replacedDirectory, new ProjectDirectory { Path = added }],
+                    null,
+                    null,
+                    null
+                )
+            )!;
+            Assert.Equal(replacedDirectory, extended.AdditionalDirectories[0]);
+            Assert.NotEqual(Guid.Empty, extended.AdditionalDirectories[1].Id);
+            Assert.True(Directory.Exists(added));
+            Directory.Delete(second, recursive: true);
+            Directory.Delete(added, recursive: true);
+            var recreated = (
+                await scope.Service.UpdateAsync(
+                    created.Id,
+                    item => item.AdditionalDirectories = extended.AdditionalDirectories.ToList(),
+                    null,
+                    null,
+                    null
+                )
+            )!;
+            Assert.Equal(extended.AdditionalDirectories, recreated.AdditionalDirectories);
+            Assert.True(Directory.Exists(second));
+            Assert.True(Directory.Exists(added));
             var cleared = (
                 await scope.Service.UpdateAsync(created.Id, item => item.AdditionalDirectories = [], null, null, null)
             )!;
@@ -97,15 +125,38 @@ public class ProjectAppServiceTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task CreateAsync_MissingAdditionalDirectory_CreatesDirectory()
+    {
+        var root = CreateScratchRoot("project-validation");
+        try
+        {
+            await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);
+            var missing = Path.Combine(root, "missing");
+            var project = CreateProject("Directories");
+            project.Workspace = root;
+            project.AdditionalDirectories = [new ProjectDirectory { Path = missing }];
+
+            var created = await scope.Service.CreateAsync(project, null, null, null);
+
+            Assert.NotNull(created);
+            Assert.Equal(missing, Assert.Single(created.AdditionalDirectories).Path);
+            Assert.True(Directory.Exists(missing));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("primary")]
     [InlineData("duplicate")]
     [InlineData("relative")]
-    [InlineData("missing")]
     [InlineData("invalid")]
     public async Task CreateAsync_InvalidAdditionalDirectory_RejectsConfiguration(string scenario)
     {
-        var root = Directory.CreateTempSubdirectory("agw-project-validation-").FullName;
+        var root = CreateScratchRoot("project-validation");
         try
         {
             await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);
@@ -117,8 +168,7 @@ public class ProjectAppServiceTests : IDisposable
                 "primary" => [new ProjectDirectory { Path = root + "/." }],
                 "duplicate" => [new ProjectDirectory { Path = extra }, new ProjectDirectory { Path = extra + "/." }],
                 "relative" => [new ProjectDirectory { Path = "relative/path" }],
-                "invalid" => [new ProjectDirectory { Path = root + "\0" }],
-                _ => [new ProjectDirectory { Path = Path.Combine(root, "missing") }],
+                _ => [new ProjectDirectory { Path = root + "\0" }],
             };
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
                 scope.Service.CreateAsync(project, null, null, null)
@@ -743,6 +793,13 @@ public class ProjectAppServiceTests : IDisposable
             Type = ProjectType.UserDefined,
             Workspace = Path.GetTempPath(),
         };
+
+    private static string CreateScratchRoot(string name) =>
+        Directory
+            .CreateDirectory(
+                Path.Combine(AppContext.BaseDirectory, ".scratch", name, Guid.CreateVersion7().ToString("N"))
+            )
+            .FullName;
 
     private static void AssertProjectRelations(Project project, Guid mcpToolServerId, Guid skillId, Guid connectionId)
     {

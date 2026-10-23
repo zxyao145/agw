@@ -49,15 +49,23 @@ public sealed class ShellContextualTool : IContextualTool
 
         var workspace = Path.GetFullPath(PathUtil.ExpandTilde(context.Workspace));
         var backend = _configuration["Agents:Shell:Backend"]?.Trim().ToLowerInvariant() ?? "local";
-        ShellExecutor executor = backend switch
+        Func<ShellExecutor> createExecutor = backend switch
         {
-            "local" => CreateLocalExecutor(context, workspace),
-            "docker" => CreateDockerExecutor(context, workspace),
+            "local" => () => CreateLocalExecutor(context, workspace),
+            "docker" => () => CreateDockerExecutor(context, workspace),
             _ => throw new AgwException(
                 ErrorCodes.InvalidParam,
                 "Agents:Shell:Backend must be either 'docker' or 'local'."
             ),
         };
+        var executor = new ProjectDirectoryShellExecutor(
+            [
+                workspace,
+                .. GetAdditionalDirectories(context)
+                    .Select(static directory => ProjectWorkspacePaths.Normalize(directory.Path)),
+            ],
+            createExecutor
+        );
 
         var contribution = new ToolContribution();
         // 文件访问约束在函数层与执行器策略两处生效：函数层给模型带错误码的说明，执行器策略拦住其他任何调用路径。
@@ -101,21 +109,26 @@ public sealed class ShellContextualTool : IContextualTool
         );
     }
 
+    /// <summary>
+    /// 生成附加目录的 Docker 挂载参数；挂载前创建缺失的目录。
+    /// Builds the Docker mount arguments of the additional directories, creating missing directories before mounting.
+    /// </summary>
     internal static IReadOnlyList<string> CreateAdditionalDirectoryMounts(ToolMaterializationContext context)
     {
         var args = new List<string>();
-        var directories =
-            context.WorkspaceSnapshot == null
-                ? context.Project.AdditionalDirectories.Select(directory => (directory.Id, directory.Path))
-                : context.WorkspaceSnapshot.AdditionalDirectories.Select(directory => (directory.Id, directory.Path));
-        foreach (var (id, directoryPath) in directories)
+        foreach (var (id, directoryPath) in GetAdditionalDirectories(context))
         {
-            var path = ProjectWorkspacePaths.Normalize(directoryPath);
+            var path = ProjectWorkspacePaths.EnsureCreated(directoryPath);
             args.Add("--volume");
             args.Add($"{path}:/project-directories/{id:D}:rw");
         }
         return args;
     }
+
+    private static IEnumerable<(Guid Id, string Path)> GetAdditionalDirectories(ToolMaterializationContext context) =>
+        context.WorkspaceSnapshot == null
+            ? context.Project.AdditionalDirectories.Select(directory => (directory.Id, directory.Path))
+            : context.WorkspaceSnapshot.AdditionalDirectories.Select(directory => (directory.Id, directory.Path));
 
     private sealed class DockerDirectoryProvider : AIContextProvider
     {

@@ -316,6 +316,33 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
     }
 
     /// <summary>
+    /// 通过项目应用服务把 Project 的主目录与一个附加目录改为本测试目录下的新路径，返回两者的绝对路径；保存时创建这两个目录。
+    /// Points the Project's primary directory and one additional directory at new paths under this test directory through
+    /// the Project application service and returns their absolute paths; saving creates both directories.
+    /// </summary>
+    public async Task<(string Workspace, string Additional)> UseProjectDirectoriesAsync()
+    {
+        var workspace = Path.Combine(_root, "project-workspace");
+        var additional = Path.Combine(_root, "project-additional");
+        await using var scope = _services.CreateAsyncScope();
+        var updated = await scope
+            .ServiceProvider.GetRequiredService<IProjectAppService>()
+            .UpdateAsync(
+                ProjectId,
+                project =>
+                {
+                    project.Workspace = workspace;
+                    project.AdditionalDirectories = [new ProjectDirectory { Path = additional }];
+                },
+                null,
+                null,
+                null
+            );
+        Assert.NotNull(updated);
+        return (workspace, additional);
+    }
+
+    /// <summary>
     /// 执行一条真实的 SQL 语句，用来制造数据库层的失败并在之后恢复。
     /// Runs a real SQL statement, used to cause database-level failures and to restore afterwards.
     /// </summary>

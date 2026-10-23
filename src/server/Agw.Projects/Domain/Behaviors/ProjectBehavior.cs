@@ -126,40 +126,6 @@ public sealed class ProjectBehavior
 
     public bool TryDelete() => _project.Type != ProjectType.DefaultBuiltIn;
 
-    /// <summary>
-    /// <para>校验本次更新新增或改动的附加目录在外部文件系统中真实存在。</para>
-    /// <para>Validates that additional directories added or changed by this update exist in the external file system.</para>
-    /// </summary>
-    /// <param name="existingDirectoryPaths">
-    /// <para>由 Application 解析得到的真实存在的规范化目录路径集合。</para>
-    /// <para>Normalized paths of directories that exist, resolved by Application code.</para>
-    /// </param>
-    /// <param name="previousDirectories">
-    /// <para>更新前的附加目录集合，用于识别未改动因而无需校验的目录。</para>
-    /// <para>Additional directories captured before the update, used to skip unchanged entries.</para>
-    /// </param>
-    public void EnsureAdditionalDirectoriesExist(
-        IReadOnlySet<string> existingDirectoryPaths,
-        IReadOnlyList<ProjectDirectory>? previousDirectories = null
-    )
-    {
-        foreach (var directory in _project.AdditionalDirectories ?? [])
-        {
-            if (
-                IsUnchangedDirectory(directory.Id, directory.Path, previousDirectories ?? [])
-                || existingDirectoryPaths.Contains(directory.Path)
-            )
-            {
-                continue;
-            }
-
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"Additional directory does not exist: '{directory.Path}'."
-            );
-        }
-    }
-
     public void RetainVisibleRelations(
         IReadOnlySet<Guid> visibleMcpToolServerIds,
         IReadOnlySet<Guid> visibleSkillIds,

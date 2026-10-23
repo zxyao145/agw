@@ -41,7 +41,7 @@ public sealed class FilesEndpointErrorEnvelopeTests : IDisposable
     }
 
     [Fact]
-    public async Task Read_UnavailableProjectDirectory_ReturnsNotFoundEnvelopeWithSharedCode()
+    public async Task Read_DeletedProjectDirectory_RecreatesDirectoryAndReturnsNotFoundEnvelope()
     {
         await using var app = await StartAsync();
         using var client = app.GetTestClient();
@@ -55,6 +55,7 @@ public sealed class FilesEndpointErrorEnvelopeTests : IDisposable
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var payload = await ReadJsonAsync(response);
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, payload.GetProperty("code").GetInt32());
+        Assert.True(Directory.Exists(_workspace));
     }
 
     private async Task<WebApplication> StartAsync()
