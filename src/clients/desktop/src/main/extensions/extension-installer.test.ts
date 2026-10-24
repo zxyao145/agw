@@ -18,6 +18,9 @@ const codec: SecretCodec = {
   decrypt: (value) => value.toString("utf8"),
 };
 
+/** 批准核对通过。The approval check passes. */
+const approved = async () => undefined;
+
 type Harness = {
   root: string;
   packages: string;
@@ -127,7 +130,7 @@ test("installing from a folder copies the package and commits it", async () => {
     assert.equal(preview.manifest?.id, "hello");
     assert.equal(preview.installedVersion, null);
 
-    const installed = await harness.installer.commit(preview.installId);
+    const installed = await harness.installer.commit(preview.installId, approved);
     assert.equal(installed.validation, "valid");
     assert.equal(
       await readFile(join(harness.packages, "hello", "assets", "app.js"), "utf8"),
@@ -135,6 +138,34 @@ test("installing from a folder copies the package and commits it", async () => {
     );
     assert.deepEqual(await stagingEntries(harness), []);
     assert.deepEqual((await harness.settings.load()).extensions, {});
+  } finally {
+    await harness.dispose();
+  }
+});
+
+test("a failed approval check commits nothing and keeps the staged package", async () => {
+  const harness = await createHarness();
+  try {
+    const source = join(harness.sources, "hello");
+    await writeTestExtension(source, testManifest("hello"));
+    const preview = await harness.installer.prepareFromDirectory(source);
+    const { directory, entry } = await harness.installer.inspect(preview.installId);
+    assert.equal(entry.manifest?.id, "hello");
+    await writeFile(join(directory, "added.js"), "export {};");
+
+    await assert.rejects(
+      harness.installer.commit(preview.installId, async () => {
+        throw new Error("The extension package changed after it was approved.");
+      }),
+      /changed after it was approved/u,
+    );
+    assert.deepEqual(
+      await readdir(harness.packages).then((names) =>
+        names.filter((name) => !name.startsWith(".")),
+      ),
+      [],
+    );
+    assert.deepEqual(await stagingEntries(harness), [preview.installId]);
   } finally {
     await harness.dispose();
   }
@@ -165,7 +196,7 @@ test("archives install from the root or from the only top-level folder", async (
     await writeZip(atRoot, extensionEntries("", "zipped"));
     const rootPreview = await harness.installer.prepareFromArchive(atRoot);
     assert.deepEqual(rootPreview.errors, []);
-    await harness.installer.commit(rootPreview.installId);
+    await harness.installer.commit(rootPreview.installId, approved);
     assert.equal(await installedVersion(harness, "zipped"), "1.0.0");
 
     const nested = join(harness.sources, "nested.zip");
@@ -175,7 +206,7 @@ test("archives install from the root or from the only top-level folder", async (
     ]);
     const nestedPreview = await harness.installer.prepareFromArchive(nested);
     assert.deepEqual(nestedPreview.errors, []);
-    await harness.installer.commit(nestedPreview.installId);
+    await harness.installer.commit(nestedPreview.installId, approved);
     assert.equal(await installedVersion(harness, "nested-ext"), "1.0.0");
 
     const twoFolders = join(harness.sources, "two.zip");
@@ -276,6 +307,7 @@ test("replacing keeps the enabled state when grants cover the new declaration an
     await writeTestExtension(join(harness.sources, "v1"), first);
     await harness.installer.commit(
       (await harness.installer.prepareFromDirectory(join(harness.sources, "v1"))).installId,
+      approved,
     );
     await harness.settings.setExtensionEnabled("swap", true, grants(first));
 
@@ -283,7 +315,7 @@ test("replacing keeps the enabled state when grants cover the new declaration an
     await writeTestExtension(join(harness.sources, "v2"), second);
     const preview = await harness.installer.prepareFromDirectory(join(harness.sources, "v2"));
     assert.equal(preview.installedVersion, "1.0.0");
-    await harness.installer.commit(preview.installId);
+    await harness.installer.commit(preview.installId, approved);
     assert.deepEqual((await harness.settings.load()).extensions.swap, {
       enabled: true,
       grantedPermissions: ["context.project"],
@@ -298,6 +330,7 @@ test("replacing keeps the enabled state when grants cover the new declaration an
     await writeTestExtension(join(harness.sources, "v3"), third);
     await harness.installer.commit(
       (await harness.installer.prepareFromDirectory(join(harness.sources, "v3"))).installId,
+      approved,
     );
     const saved = (await harness.settings.load()).extensions.swap;
     assert.equal(saved.enabled, false);
@@ -318,6 +351,7 @@ test("an update replaces only packages/<id> and keeps data/<id>", async () => {
     );
     await harness.installer.commit(
       (await harness.installer.prepareFromDirectory(join(harness.sources, "v1"))).installId,
+      approved,
     );
     await mkdir(join(harness.data, "keep"), { recursive: true });
     await writeFile(join(harness.data, "keep", "config.json"), '{"theme":"dark"}');
@@ -330,6 +364,7 @@ test("an update replaces only packages/<id> and keeps data/<id>", async () => {
     );
     await harness.installer.commit(
       (await harness.installer.prepareFromDirectory(join(harness.sources, "v2"))).installId,
+      approved,
     );
 
     assert.equal(await installedVersion(harness, "keep"), "2.0.0");

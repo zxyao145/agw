@@ -103,7 +103,8 @@ export function createExtensionProtocolHandler(
         name !== "sdk.js" &&
         name !== "sdk.d.ts" &&
         name !== "manifest.schema.json" &&
-        name !== "typography.css"
+        name !== "typography.css" &&
+        name !== "theme-defaults.css"
       ) {
         return notFound();
       }

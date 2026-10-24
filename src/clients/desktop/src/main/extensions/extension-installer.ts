@@ -156,7 +156,26 @@ export class ExtensionInstaller {
     });
   }
 
-  public commit(installId: string): Promise<CatalogEntry> {
+  /** 暂存包的目录与校验结果，供权限批准使用。The staged package directory and validation, for the permission approval. */
+  public inspect(installId: string): Promise<{ directory: string; entry: CatalogEntry }> {
+    return this.serialize(async () => {
+      const directory = this.packageDirectory(installId);
+      return {
+        directory,
+        entry: await readExtensionDirectory(directory, this.options.appVersion, null),
+      };
+    });
+  }
+
+  /**
+   * 提交暂存包。`verify` 在替换之前核对暂存包仍是批准时的内容，失败时不提交。
+   * Commits the staged package. `verify` checks that the staged package is still what was approved before anything is
+   * replaced; on failure nothing is committed.
+   */
+  public commit(
+    installId: string,
+    verify: (directory: string, entry: CatalogEntry) => Promise<void>,
+  ): Promise<CatalogEntry> {
     return this.serialize(async () => {
       const staged = await readExtensionDirectory(
         this.packageDirectory(installId),
@@ -166,6 +185,7 @@ export class ExtensionInstaller {
       if (staged.errors.length > 0 || !staged.manifest) {
         throw new Error("An install with errors cannot be committed.");
       }
+      await verify(this.packageDirectory(installId), staged);
       const extensionId = staged.manifest.id;
       const target = join(this.options.packagesDirectory, extensionId);
       const hasPrevious = await exists(target);

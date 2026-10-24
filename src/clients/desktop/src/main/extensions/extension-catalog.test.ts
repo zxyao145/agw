@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
@@ -164,15 +165,71 @@ test("theme files are read after the package checks and merged into the entry", 
     assert.equal(entry.validation, "valid");
     assert.deepEqual(entry.themes, [
       {
+        format: "json",
         id: "night",
         title: "Night",
         common: { "--radius": "0.75rem" },
         light: {},
         dark: { "--background": "#212121" },
       },
-      { id: "day", title: "Day", common: {}, light: { "--background": "#ffffff" }, dark: {} },
+      {
+        format: "json",
+        id: "day",
+        title: "Day",
+        common: {},
+        light: { "--background": "#ffffff" },
+        dark: {},
+      },
     ]);
     assert.deepEqual(toInstalledExtension(entry, undefined).themes, entry.themes);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+const CSS_THEME_MANIFEST = {
+  ...THEME_MANIFEST,
+  contributes: { themes: [{ id: "paper", title: "Paper", path: "themes/paper.css" }] },
+};
+
+test("CSS themes carry only a descriptor of the processed style", async () => {
+  const scratch = await createScratchDirectory("catalog");
+  try {
+    const css = ":root.dark { --background: #24211d; }";
+    await writeTestExtension(join(scratch.path, "themes"), CSS_THEME_MANIFEST, {
+      "themes/paper.css": '@import "parts/base.css";',
+      "themes/parts/base.css": css,
+    });
+    const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+    assert.deepEqual(entry.errors, []);
+    assert.deepEqual(entry.themes, [
+      {
+        format: "css",
+        id: "paper",
+        title: "Paper",
+        styleId: createHash("sha256").update(css).digest("hex"),
+        byteLength: Buffer.byteLength(css),
+      },
+    ]);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("a CSS theme that fails its checks makes the extension invalid with the theme path", async () => {
+  const scratch = await createScratchDirectory("catalog");
+  try {
+    await writeTestExtension(join(scratch.path, "themes"), CSS_THEME_MANIFEST, {
+      "themes/paper.css": ".hero { background: url(https://example.com/hero.png); }",
+    });
+    const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+    assert.equal(entry.validation, "invalid");
+    assert.deepEqual(entry.themes, []);
+    assert.deepEqual(
+      entry.errors.map((error) => [error.code, error.path]),
+      [["THEME_RESOURCE_INVALID", "contributes.themes[0].path"]],
+    );
+    assert.match(entry.errors[0].message, /^themes\/paper\.css:1:9: /u);
   } finally {
     await scratch.dispose();
   }

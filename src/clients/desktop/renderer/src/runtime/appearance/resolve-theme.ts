@@ -7,11 +7,8 @@ export const DEFAULT_THEME_TITLE = "Default";
 /** 主题提供工作区背景时 `<html>` 上的属性。The `<html>` attribute set while the theme provides a workspace backdrop. */
 export const WORKSPACE_BACKDROP_ATTRIBUTE = "data-workspace-backdrop";
 
-/** 主题变量中是否有工作区背景（值不为 none）。Whether the theme variables carry a workspace backdrop other than none. */
-export function hasWorkspaceBackdrop(tokens: Readonly<Record<string, string>>): boolean {
-  const backdrop = tokens["--agw-workspace-backdrop"];
-  return backdrop !== undefined && backdrop !== "none";
-}
+/** JSON 主题。A JSON theme. */
+export type JsonExtensionTheme = Extract<ExtensionTheme, { format: "json" }>;
 
 /** Theme 下拉框中的一个 extension 主题。An extension theme in the Theme select. */
 export type AvailableTheme = {
@@ -61,8 +58,11 @@ export function declaredThemeTitles(extensions: readonly ExtensionState[]): Map<
   );
 }
 
-/** 主题在浅色或深色下的变量：`light`、`dark` 覆盖 `common`。The variables for light or dark; the side overrides `common`. */
-export function themeTokens(theme: ExtensionTheme, kind: "light" | "dark"): Record<string, string> {
+/** JSON 主题在浅色或深色下的变量：`light`、`dark` 覆盖 `common`。A JSON theme's variables for light or dark; the side overrides `common`. */
+export function themeTokens(
+  theme: JsonExtensionTheme,
+  kind: "light" | "dark",
+): Record<string, string> {
   return { ...theme.common, ...theme[kind] };
 }
 

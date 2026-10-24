@@ -1,3 +1,4 @@
+import type { ConfirmationAnswer, HostConfirmationRequest } from "./confirmation";
 import type { DesktopRuntimeState } from "./runtime";
 import type { DesktopSettingsUpdate } from "./settings";
 import type { DesktopUpdateCheckResult } from "./update";
@@ -13,7 +14,6 @@ import type {
   ExtensionFrameLayoutUpdate,
   ExtensionFrameObscureRequest,
   ExtensionFrameSnapshot,
-  ExtensionGrants,
   ExtensionHttpRequest,
   ExtensionHttpResult,
   ExtensionInstallPreview,
@@ -25,6 +25,8 @@ import type {
   ExtensionWatchRequest,
   InstalledExtension,
   SaveExtensionSdkTypesResult,
+  ThemeStyleRequest,
+  ThemeStyleText,
   UninstallExtensionOptions,
 } from "./extension";
 
@@ -77,17 +79,25 @@ export type AgwDesktopBridge = {
   prepareExtensionInstall(request: {
     source: ExtensionInstallSource;
   }): Promise<ExtensionInstallPreview>;
+  /**
+   * 在主进程的确认窗口中批准安装；批准绑定暂存包的摘要、版本与权限，返回用户是否批准。
+   * Approves an install in the main process's confirmation window; the approval binds the staged package's digest,
+   * version and permissions. Returns whether the user approved.
+   */
+  approveExtensionInstall(installId: string): Promise<boolean>;
+  /** 提交已经批准的安装；暂存包变化或没有批准时失败。Commits an approved install; fails without an approval or when the staged package changed. */
   commitExtensionInstall(installId: string): Promise<InstalledExtension>;
   cancelExtensionInstall(installId: string): Promise<void>;
   uninstallExtension(
     extensionId: string,
     options: UninstallExtensionOptions,
   ): Promise<DesktopRuntimeState>;
-  setExtensionEnabled(
-    extensionId: string,
-    enabled: boolean,
-    grants?: ExtensionGrants,
-  ): Promise<DesktopRuntimeState>;
+  /**
+   * 启用时由主进程的确认窗口批准 manifest 声明的权限并保存；返回之后是否为启用状态（用户取消时为 false）。
+   * Enabling has the main process's confirmation window approve and save the permissions the manifest declares;
+   * returns whether the extension is enabled afterwards (false when the user canceled).
+   */
+  setExtensionEnabled(extensionId: string, enabled: boolean): Promise<boolean>;
   beginExtensionActivation(
     hostInstanceId: string,
     extensionId: string,
@@ -109,6 +119,18 @@ export type AgwDesktopBridge = {
   openExtensionDataDirectory(extensionId: string): Promise<void>;
   cancelExtensionHttpRequest(requestId: string): Promise<void>;
   saveExtensionSdkTypes(): Promise<SaveExtensionSdkTypesResult>;
+  /** 显式 reload：主进程重新读取 extension 的全部主题依赖。An explicit reload: main re-reads every theme dependency of the extension. */
+  reloadExtension(extensionId: string): Promise<void>;
+  /** 当前选中的 CSS 主题的完整样式文本。The complete style text of the selected CSS theme. */
+  getThemeStyle(request: ThemeStyleRequest): Promise<ThemeStyleText>;
+  /**
+   * 在主进程的独立确认窗口中显示确认；关闭窗口时 `message` 回答 `cancelId`，其他回答 false。
+   * Shows a confirmation in the main process's separate confirmation window; closing it answers `cancelId` for
+   * `message` and false for the others.
+   */
+  confirmHostAction(request: HostConfirmationRequest): Promise<ConfirmationAnswer>;
+  /** 撤回宿主页面请求的消息框，按取消回答。Withdraws a message box the host page requested, answering it as canceled. */
+  dismissHostConfirmation(clientId: string): Promise<void>;
   createExtensionFrame(hostInstanceId: string, request: CreateExtensionFrameRequest): Promise<void>;
   updateExtensionFrameLayout(
     hostInstanceId: string,

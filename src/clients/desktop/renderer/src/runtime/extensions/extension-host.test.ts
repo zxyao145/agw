@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test, { afterEach, before } from "node:test";
 
 import type { FileViewerFile } from "@agw/extension-sdk";
-import type { ExtensionHost, HostConfirmation } from "./extension-host";
+import type { ExtensionHost } from "./extension-host";
 import {
   createMainProcess,
   type ExtensionPage,
@@ -63,11 +63,13 @@ function acquire(viewId: string): () => void {
 
 afterEach(async () => {
   for (
-    let confirmation = host.getSnapshot().confirmation;
+    let confirmation = main.confirmations.current();
     confirmation !== null;
-    confirmation = host.getSnapshot().confirmation
+    confirmation = main.confirmations.current()
   ) {
-    host.resolveConfirmation(confirmation.kind === "message" ? confirmation.cancelId : false);
+    await main.confirmations.answer(
+      confirmation.kind === "message" ? confirmation.cancelId : false,
+    );
   }
   for (const release of acquired) release();
   host.retainFileViewers([]);
@@ -100,20 +102,14 @@ function hooks(page: ExtensionPage): string[] {
   return page.calls.map((call) => call.method);
 }
 
-/** 当前消息框的 id。The id of the current message box. */
-function messageId(): number {
-  const confirmation = host.getSnapshot().confirmation;
-  assert.equal(confirmation?.kind, "message");
-  return (confirmation as Extract<HostConfirmation, { kind: "message" }>).id;
+/** 确认窗口中显示的内容。What the confirmation window shows. */
+function currentConfirmation() {
+  return main.confirmations.current();
 }
 
-/** 当前的确认对话框；`message` 的 id 每次不同，检查后去掉。The current confirmation, without the per-box id of `message`. */
-function currentConfirmation() {
-  const confirmation = host.getSnapshot().confirmation;
-  if (confirmation?.kind !== "message") return confirmation;
-  const { id, ...rest } = confirmation;
-  assert.ok(Number.isInteger(id));
-  return rest;
+/** 以确认窗口的身份回答。Answers as the confirmation window. */
+function answer(value: unknown): Promise<void> {
+  return main.confirmations.answer(value);
 }
 
 /**
@@ -161,26 +157,55 @@ test("confirmDiscardUnsaved lists only the unsaved changes of the given viewers"
   assert.deepEqual(host.getSnapshot().unsavedViewIds, [VIEWER, OUTLINE]);
 
   const onlyOutline = host.confirmDiscardUnsaved([OUTLINE]);
-  assert.deepEqual(host.getSnapshot().confirmation, {
+  assert.deepEqual(currentConfirmation(), {
     kind: "discard-unsaved",
-    items: [{ fileName: "notes.md", viewerTitle: "Outline", extensionName: "Sample" }],
+    items: [
+      {
+        fileName: "notes.md",
+        viewerTitle: "Outline",
+        extensionId: "sample",
+        extensionName: "Sample",
+      },
+    ],
   });
-  host.resolveConfirmation(false);
+  await answer(false);
   assert.equal(await onlyOutline, false);
 
   const every = host.confirmDiscardUnsaved();
-  assert.deepEqual(host.getSnapshot().confirmation, {
+  assert.deepEqual(currentConfirmation(), {
     kind: "discard-unsaved",
     items: [
-      { fileName: "notes.md", viewerTitle: "Viewer", extensionName: "Sample" },
-      { fileName: "notes.md", viewerTitle: "Outline", extensionName: "Sample" },
+      {
+        fileName: "notes.md",
+        viewerTitle: "Viewer",
+        extensionId: "sample",
+        extensionName: "Sample",
+      },
+      {
+        fileName: "notes.md",
+        viewerTitle: "Outline",
+        extensionId: "sample",
+        extensionName: "Sample",
+      },
     ],
   });
-  host.resolveConfirmation(true);
+  await answer(true);
   assert.equal(await every, true);
 
   assert.equal(await host.confirmDiscardUnsaved(["sample:other"]), true);
-  assert.equal(host.getSnapshot().confirmation, null);
+  assert.equal(currentConfirmation(), null);
+});
+
+test("closing the confirmation window answers as canceled", async () => {
+  const file = fileNamed("notes.md");
+  const viewer = await showLoaded(VIEWER, file);
+  await reportUnsaved(viewer.page, true);
+
+  const closed = host.confirmDiscardUnsaved([VIEWER]);
+  assert.equal(currentConfirmation()?.kind, "discard-unsaved");
+  main.confirmations.close();
+  assert.equal(await closed, false);
+  assert.equal(currentConfirmation(), null);
 });
 
 test("Reload view asks before discarding unsaved changes and reloads only after Discard", async () => {
@@ -194,11 +219,18 @@ test("Reload view asks before discarding unsaved changes and reloads only after 
   const created = main.frames.length;
 
   const canceled = views.reloadExtensionView(host, view);
-  assert.deepEqual(host.getSnapshot().confirmation, {
+  assert.deepEqual(currentConfirmation(), {
     kind: "discard-unsaved",
-    items: [{ fileName: "notes.md", viewerTitle: "Viewer", extensionName: "Sample" }],
+    items: [
+      {
+        fileName: "notes.md",
+        viewerTitle: "Viewer",
+        extensionId: "sample",
+        extensionName: "Sample",
+      },
+    ],
   });
-  host.resolveConfirmation(false);
+  await answer(false);
   await canceled;
   assert.equal(host.frameIdOfView(VIEWER), frameId);
   assert.equal(main.frames.length, created);
@@ -206,7 +238,7 @@ test("Reload view asks before discarding unsaved changes and reloads only after 
   assert.deepEqual(host.getSnapshot().unsavedViewIds, [VIEWER, OUTLINE]);
 
   const discarded = views.reloadExtensionView(host, view);
-  host.resolveConfirmation(true);
+  await answer(true);
   await discarded;
   assert.equal(main.destroyed.includes(frameId), true);
   assert.equal(main.frames.length, created + 1);
@@ -217,7 +249,7 @@ test("Reload view asks before discarding unsaved changes and reloads only after 
 
   // 没有未保存修改时直接重新加载。Without unsaved changes the view reloads at once.
   await views.reloadExtensionView(host, view);
-  assert.equal(host.getSnapshot().confirmation, null);
+  assert.equal(currentConfirmation(), null);
   assert.equal(main.frames.length, created + 2);
 });
 
@@ -248,6 +280,7 @@ test("message boxes from views join the confirmation queue in order and resolve 
 
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
+    extensionId: "sample",
     extensionName: "Sample",
     type: "warning",
     message: "notes.md was changed on disk after it was opened.",
@@ -256,17 +289,18 @@ test("message boxes from views join the confirmation queue in order and resolve 
     defaultId: 2,
     cancelId: 2,
   });
-  // 回答的类型与下标必须符合当前对话框。The answer must fit the current dialog.
-  assert.throws(() => host.resolveConfirmation(true));
-  assert.throws(() => host.resolveConfirmation(3));
-  const conflictId = messageId();
-  host.resolveConfirmation(1);
+  // 回答的类型与下标必须符合当前确认。The answer must fit the current confirmation.
+  await assert.rejects(answer(true));
+  await assert.rejects(answer(3));
+  const conflictId = main.confirmations.requestId();
+  await answer(1);
   assert.equal(await conflict, 1);
-  assert.notEqual(messageId(), conflictId);
+  assert.notEqual(main.confirmations.requestId(), conflictId);
 
   // 缺省的 cancelId 为最后一个按钮。cancelId defaults to the last button.
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
+    extensionId: "sample",
     extensionName: "Sample",
     type: null,
     message: "m".repeat(500),
@@ -275,18 +309,25 @@ test("message boxes from views join the confirmation queue in order and resolve 
     defaultId: null,
     cancelId: 3,
   });
-  host.resolveConfirmation(3);
+  await answer(3);
   assert.equal(await longest, 3);
 
   // 布尔确认排在后面，照常以 true/false 回答。The boolean confirmation queued after them still answers true or false.
-  assert.deepEqual(host.getSnapshot().confirmation, {
+  assert.deepEqual(currentConfirmation(), {
     kind: "discard-unsaved",
-    items: [{ fileName: "notes.md", viewerTitle: "Viewer", extensionName: "Sample" }],
+    items: [
+      {
+        fileName: "notes.md",
+        viewerTitle: "Viewer",
+        extensionId: "sample",
+        extensionName: "Sample",
+      },
+    ],
   });
-  assert.throws(() => host.resolveConfirmation(0));
-  host.resolveConfirmation(true);
+  await assert.rejects(answer(0));
+  await answer(true);
   assert.equal(await discard, true);
-  assert.equal(host.getSnapshot().confirmation, null);
+  assert.equal(currentConfirmation(), null);
 });
 
 test("closing a frame removes its queued and shown message boxes and the calls fail with ERR_FRAME_GONE", async () => {
@@ -306,6 +347,7 @@ test("closing a frame removes its queued and shown message boxes and the calls f
   await reportUnsaved(viewer.page, false);
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
+    extensionId: "sample",
     extensionName: "Sample",
     type: null,
     message: "First",
@@ -320,6 +362,7 @@ test("closing a frame removes its queued and shown message boxes and the calls f
   await queuedFailure;
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
+    extensionId: "sample",
     extensionName: "Sample",
     type: null,
     message: "Second",
@@ -328,7 +371,7 @@ test("closing a frame removes its queued and shown message boxes and the calls f
     defaultId: null,
     cancelId: 1,
   });
-  host.resolveConfirmation(0);
+  await answer(0);
   assert.equal(await other, 0);
 });
 
@@ -360,6 +403,7 @@ test("a replaced page's message boxes leave the queue while the frame stays", as
   assert.equal(host.frameIdOfView(VIEWER), frameId);
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
+    extensionId: "sample",
     extensionName: "Sample",
     type: null,
     message: "Second",
@@ -368,6 +412,6 @@ test("a replaced page's message boxes leave the queue while the frame stays", as
     defaultId: null,
     cancelId: 1,
   });
-  host.resolveConfirmation(0);
+  await answer(0);
   assert.equal(await other, 0);
 });

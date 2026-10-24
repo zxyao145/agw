@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createWriteStream } from "node:fs";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { connect, createServer as createTcpServer } from "node:net";
 import { join, resolve } from "node:path";
@@ -22,7 +22,7 @@ import {
 } from "./build-extension-fixtures.mjs";
 import { buildBundledExtensions } from "./build-bundled-extensions.mjs";
 import { buildExtensionSdk } from "./build-extension-sdk.mjs";
-import { mainBuildOptions } from "./build-main.mjs";
+import { buildDesktopMain } from "./build-main.mjs";
 
 const desktopDirectory = resolve(".");
 const repositoryRoot = resolve(desktopDirectory, "..", "..", "..");
@@ -269,6 +269,17 @@ async function startEchoService() {
           })}\n\n`;
         response.write(chunk({ role: "assistant", content: text }, null));
         response.write(chunk({}, "stop"));
+        // 流式响应的用量在 [DONE] 之前单独发送。The streaming usage is sent on its own before [DONE].
+        response.write(
+          `data: ${JSON.stringify({
+            id: "chatcmpl-echo",
+            object: "chat.completion.chunk",
+            created,
+            model: body.model,
+            choices: [],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          })}\n\n`,
+        );
         response.end("data: [DONE]\n\n");
         return;
       }
@@ -425,6 +436,17 @@ async function prepareServerData(baseUrl, echoPort) {
     systemPrompt: "You echo the user.",
     modelProviderId: relation.id,
   });
+  // 启用 summary 的 Agent：summary 的模型调用也由回显服务回答，它的用量不推送给客户端。
+  // An Agent with summary enabled: the echo service also answers the summary model call, whose usage is not pushed.
+  const summaryAgent = await api(baseUrl, session, "POST", "/api/agents", {
+    displayName: "Echo with summary",
+    name: "echo-summary",
+    description: "Echoes the user message and summarizes the turn.",
+    systemPrompt: "You echo the user.",
+    modelProviderId: relation.id,
+    enableSummary: true,
+    summaryModelProviderId: relation.id,
+  });
   await mkdir(join(projectDirectory, "docs"), { recursive: true });
   await writeFile(join(projectDirectory, "readme.md"), "hello cloud\n");
   await writeFile(join(projectDirectory, "docs", "notes.md"), "project notes\n");
@@ -495,7 +517,14 @@ async function prepareServerData(baseUrl, echoPort) {
     workspace: a2aWorkspace,
     extraSetting: a2aProject.extraSetting ?? null,
   });
-  return { firstToken, secondToken, agentId: agent.id, agentName: "echo", projectId: project.id };
+  return {
+    firstToken,
+    secondToken,
+    agentId: agent.id,
+    agentName: "echo",
+    summaryAgentId: summaryAgent.id,
+    projectId: project.id,
+  };
 }
 
 const FENCE = "```";
@@ -596,9 +625,30 @@ async function writePerformanceInputs() {
 }
 
 /** 把 fixture 复制到安装目录，替换本地服务端口。Copies fixtures into the install directory with the service port. */
+/**
+ * 把主题文件（CSS 与 SVG）中的端口占位符替换为本地 HTTP 服务端口，外部资源的检查据此确认没有请求。
+ * Replaces the port placeholder in theme files (CSS and SVG) with the local HTTP service port, so the external
+ * resource checks can confirm that no request was made.
+ */
+async function replacePortInThemes(directory, httpPort) {
+  const themes = join(directory, "themes");
+  const entries = await readdir(themes, { recursive: true, withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.(?:css|svg)$/u.test(entry.name)) continue;
+    const file = join(entry.parentPath, entry.name);
+    const text = await readFile(file, "utf8");
+    await writeFile(file, text.replaceAll(HTTP_PORT_PLACEHOLDER, String(httpPort)));
+  }
+}
+
 async function installFixtures(httpPort) {
   const extensions = join(userData, "extensions", "packages");
   await mkdir(extensions, { recursive: true });
+  // css-theme 在测试中从 fixture 目录安装。css-theme installs from the fixture directory during the test.
+  await replacePortInThemes(join(fixtures, "css-theme"), httpPort);
   for (const id of [
     "sample",
     "broken",
@@ -618,6 +668,7 @@ async function installFixtures(httpPort) {
     const manifestFile = join(extensions, id, "manifest.json");
     const manifest = await readFile(manifestFile, "utf8");
     await writeFile(manifestFile, manifest.replaceAll(HTTP_PORT_PLACEHOLDER, String(httpPort)));
+    await replacePortInThemes(join(extensions, id), httpPort);
   }
   // sample-v2.zip 由替换端口后的 sample 生成。sample-v2.zip is generated from the port-substituted sample.
   await writeSampleV2Zip(join(extensions, "sample"), join(fixtures, "sample-v2.zip"));
@@ -634,7 +685,7 @@ async function main() {
     join(desktopDirectory, "resources", "renderer"),
     { recursive: true },
   );
-  await build(mainBuildOptions);
+  await buildDesktopMain();
   await buildExtensionSdk();
   await buildBundledExtensions();
   await buildExtensionFixtures(fixtures);

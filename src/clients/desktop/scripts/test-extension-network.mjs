@@ -6,12 +6,12 @@ import { resolve } from "node:path";
 import electron from "electron";
 import { build } from "esbuild";
 
-import { mainBuildOptions } from "./build-main.mjs";
+import { buildDesktopMain } from "./build-main.mjs";
 import { buildExtensionSdk } from "./build-extension-sdk.mjs";
 
 const directory = resolve(".scratch/extension-network-build");
 await mkdir(directory, { recursive: true });
-await build(mainBuildOptions);
+await buildDesktopMain();
 await buildExtensionSdk();
 const entry = resolve(directory, "main.cjs");
 await build({

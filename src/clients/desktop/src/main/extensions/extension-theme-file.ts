@@ -9,6 +9,8 @@ import type { ExtensionThemeContribution } from "@agw/extension-sdk";
 import type { ExtensionTheme, ExtensionValidationError } from "../../shared/contracts";
 import { toValidationErrors } from "../../shared/extension-manifest";
 import { THEME_TOKEN_KINDS, type ThemeTokenKind } from "../../shared/theme-tokens";
+import { ThemeCompileError } from "./extension-theme-resources";
+import type { ThemeStyleCompiler } from "./extension-theme-style-cache";
 
 export const MAX_THEME_VALUE_LENGTH = 200;
 /** 渐变背景由多层渐变组成，长度上限单独设置。Gradient backdrops stack several gradients, so they have their own limit. */
@@ -133,18 +135,43 @@ export const themeFileSchema = z
 
 /**
  * 读取并校验 `contributes.themes` 的主题文件。`files` 为通过包内路径检查的主题文件：包路径 → 真实路径；不在其中的主题已经报告了路径错误。
+ * JSON 入口按变量清单校验；CSS 入口由 `compiler` 展开包内依赖、内嵌资源并检查，结果只保留描述。
  * Reads and validates the theme files of `contributes.themes`. `files` holds the theme files that passed the package
- * path checks (package path → real path); themes missing from it already reported a path error.
+ * path checks (package path → real path); themes missing from it already reported a path error. JSON entries are
+ * validated against the variable list; `compiler` expands, inlines and checks CSS entries, and only their descriptors
+ * are kept.
  */
 export async function readExtensionThemes(
   contributions: readonly ExtensionThemeContribution[],
   files: ReadonlyMap<string, string>,
+  rootDirectory: string,
+  compiler: ThemeStyleCompiler,
 ): Promise<{ themes: ExtensionTheme[]; errors: ExtensionValidationError[] }> {
   const themes: ExtensionTheme[] = [];
   const errors: ExtensionValidationError[] = [];
   for (const [index, contribution] of contributions.entries()) {
     const file = files.get(contribution.path);
     if (file === undefined) continue;
+    if (contribution.path.endsWith(".css")) {
+      try {
+        const style = await compiler.compile(rootDirectory, contribution.path);
+        themes.push({
+          format: "css",
+          id: contribution.id,
+          title: contribution.title,
+          styleId: style.styleId,
+          byteLength: style.byteLength,
+        });
+      } catch (error) {
+        if (!(error instanceof ThemeCompileError)) throw error;
+        errors.push({
+          code: error.code,
+          message: error.message,
+          path: `contributes.themes[${index}].path`,
+        });
+      }
+      continue;
+    }
     let raw: unknown;
     try {
       raw = JSON.parse(await readFile(file, "utf8"));
@@ -163,6 +190,7 @@ export async function readExtensionThemes(
       continue;
     }
     themes.push({
+      format: "json",
       id: contribution.id,
       title: contribution.title,
       common: parsed.data.common ?? {},

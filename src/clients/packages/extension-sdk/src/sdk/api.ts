@@ -1,4 +1,5 @@
 import type {
+  ChatEvent,
   DirectoryEntry,
   Disposable,
   ExecutionCloseReason,
@@ -12,11 +13,12 @@ import type {
   HostContext,
   HttpResponse,
   TextDocument,
+  ThemeChangedNotification,
   ThemeInfo,
 } from "../api";
 import { createExtensionError, type RpcEndpoint } from "../rpc";
 import { openBinaryDocument, openTextDocument } from "./documents";
-import { applyTheme } from "./theme";
+import { applyTheme, mergeThemeChange, type ThemeState } from "./theme";
 
 export type EventRouter = Map<string, Set<(data: unknown) => void>>;
 
@@ -48,11 +50,35 @@ export function createExtensionApi(
   endpoint: RpcEndpoint,
   welcome: ExtensionWelcome,
   router: EventRouter,
+  /** `/__agw/theme-defaults.css` 的文本。The text of `/__agw/theme-defaults.css`. */
+  themeDefaults: string,
 ): ExtensionApi {
   let context: HostContext = welcome.context;
-  let theme: ThemeInfo = welcome.theme;
+  let themeState: ThemeState = { theme: welcome.theme, styleId: welcome.themeStyleId };
+  const themeListeners = new Set<(theme: ThemeInfo) => void>();
   subscribe(router, "context.changed", (data) => (context = data as HostContext));
-  subscribe(router, "theme.changed", (data) => (theme = data as ThemeInfo));
+  // 公开事件之前完成状态合并；协议错误报告给宿主，状态保持不变。The state merges before public events; protocol errors
+  // are reported to the host and the state stays.
+  subscribe(router, "theme.changed", (data) => {
+    try {
+      themeState = mergeThemeChange(themeState, data as ThemeChangedNotification);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      void endpoint.request("log.error", { message, stack: null }).catch(() => undefined);
+      return;
+    }
+    for (const listener of themeListeners) listener(themeState.theme);
+  });
+  const onThemeChange = (listener: (theme: ThemeInfo) => void): Disposable => {
+    themeListeners.add(listener);
+    return { dispose: () => themeListeners.delete(listener) };
+  };
+  const applyCurrentTheme = () =>
+    applyTheme(themeState, document, {
+      extensionId: welcome.manifest.id,
+      defaultsText: themeDefaults,
+    });
 
   const call = <T>(method: string, params: unknown = {}, signal?: AbortSignal) =>
     endpoint.request<T>(method, params, { signal });
@@ -221,6 +247,27 @@ export function createExtensionApi(
     },
     chat: {
       composer: { insertText: (text) => call("chat.composer.insertText", { text }) },
+      observe: async (filter, listener) => {
+        const subscriptionId = crypto.randomUUID();
+        const subscription = subscribe(router, "chat.event", (data) => {
+          const event = data as { subscriptionId: string; event: ChatEvent };
+          if (event.subscriptionId === subscriptionId) listener(event.event);
+        });
+        try {
+          await call("chat.observe", { subscriptionId, filter });
+        } catch (error) {
+          subscription.dispose();
+          throw error;
+        }
+        return {
+          dispose: () => {
+            subscription.dispose();
+            void call("chat.unobserve", { subscriptionId }).catch((error: unknown) =>
+              console.error(error),
+            );
+          },
+        };
+      },
     },
     ui: {
       notify: (notification) => {
@@ -229,14 +276,11 @@ export function createExtensionApi(
       openExternal: (url) => call("ui.openExternal", { url }),
     },
     theme: {
-      get: () => theme,
-      onDidChange: (listener) =>
-        subscribe(router, "theme.changed", (data) => listener(data as ThemeInfo)),
+      get: () => themeState.theme,
+      onDidChange: onThemeChange,
       apply: () => {
-        applyTheme(theme, document);
-        return subscribe(router, "theme.changed", (data) =>
-          applyTheme(data as ThemeInfo, document),
-        );
+        applyCurrentTheme();
+        return onThemeChange(applyCurrentTheme);
       },
     },
   };

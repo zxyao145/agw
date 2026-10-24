@@ -27,16 +27,35 @@ export type ExtensionSettings = {
 };
 
 /**
- * 校验后的主题：`common` 用于浅色与深色，`light`、`dark` 中的同名变量覆盖它。
- * A validated theme: `common` applies to light and dark, and same-named variables in `light` and `dark` override it.
+ * 校验后的主题。JSON 主题：`common` 用于浅色与深色，`light`、`dark` 中的同名变量覆盖它。CSS 主题只带描述，完整样式文本由
+ * `getThemeStyle` 按 `styleId` 获取。
+ * A validated theme. JSON themes: `common` applies to light and dark, and same-named variables in `light` and `dark`
+ * override it. CSS themes carry only a descriptor; `getThemeStyle` fetches the complete style text by `styleId`.
  */
-export type ExtensionTheme = {
-  id: string;
-  title: string;
-  common: Record<string, string>;
-  light: Record<string, string>;
-  dark: Record<string, string>;
-};
+export type ExtensionTheme =
+  | {
+      format: "json";
+      id: string;
+      title: string;
+      common: Record<string, string>;
+      light: Record<string, string>;
+      dark: Record<string, string>;
+    }
+  | {
+      format: "css";
+      id: string;
+      title: string;
+      /** 主题样式文本 UTF-8 内容的 SHA-256。The SHA-256 of the theme style text's UTF-8 content. */
+      styleId: string;
+      /** 主题样式文本的 UTF-8 字节数。The UTF-8 byte length of the theme style text. */
+      byteLength: number;
+    };
+
+/** `getThemeStyle` 的请求：`themeId` 为 `"{extensionId}:{themeId}"`。A `getThemeStyle` request; `themeId` is `"{extensionId}:{themeId}"`. */
+export type ThemeStyleRequest = { themeId: string; styleId: string };
+
+/** 已校验的主题样式文本。A validated theme style text. */
+export type ThemeStyleText = { styleId: string; cssText: string };
 
 /** 内置 extension 来自应用资源目录，用户 extension 来自 `<userData>/extensions/packages`。Bundled from the app resources, user from `<userData>/extensions/packages`. */
 export type ExtensionSource = "bundled" | "user";

@@ -4,7 +4,7 @@ import { ChatConversationSidebar, ChatFilesSidebar, type ExtensionMenuItem } fro
 import type { ConversationItemActionArgs, ExplorerContextMenuArgs } from "@agw/projects";
 
 import type { ExtensionHost, ExtensionHostSnapshot } from "../../extensions/extension-host";
-import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
+import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
 import type { ViewOpenRequest } from "../../extensions/workspace-layout-store";
 import type { WorkspaceView } from "../../extensions/workspace-registry";
@@ -12,7 +12,7 @@ import { ExtensionView } from "./extension-view";
 
 export type LeftSidebarProps = {
   host: ExtensionHost;
-  tracker: HostOverlayTracker;
+  layout: ExtensionLayoutSampler;
   snapshot: ExtensionHostSnapshot;
   view: WorkspaceView;
   openRequest: ViewOpenRequest | undefined;
@@ -41,7 +41,7 @@ export function LeftSidebar(props: LeftSidebarProps) {
         <ExtensionView
           key={view.id}
           host={props.host}
-          tracker={props.tracker}
+          layout={props.layout}
           snapshot={props.snapshot}
           view={view}
           openRequest={props.openRequest}

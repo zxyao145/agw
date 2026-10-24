@@ -22,6 +22,7 @@ import { fileBaseName } from "../../extensions/file-viewer-patterns";
 import { toContextProject, toContextTarget } from "../../extensions/extension-bridge-broker";
 import type { ExtensionHost } from "../../extensions/extension-host";
 import { useExtensionRuntime } from "../../extensions/extension-host-provider";
+import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
 import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
 import {
@@ -51,9 +52,11 @@ function useStore<T>(
 function DesktopWorkspaceLayout({
   host,
   tracker,
+  viewLayout,
 }: {
   host: ExtensionHost;
   tracker: HostOverlayTracker;
+  viewLayout: ExtensionLayoutSampler;
 }) {
   const workspace = useChatWorkspace();
   const layout = useStore(
@@ -293,7 +296,7 @@ function DesktopWorkspaceLayout({
           <ColResizeSplit.Left defaultPanelWidth={320} minWidth={268} maxWidth={420}>
             <LeftSidebar
               host={host}
-              tracker={tracker}
+              layout={viewLayout}
               snapshot={snapshot}
               view={sidebarView}
               openRequest={layout.openRequests[sidebarView.id]}
@@ -307,7 +310,7 @@ function DesktopWorkspaceLayout({
         <ColResizeSplit.Right>
           <MainWorkspace
             host={host}
-            tracker={tracker}
+            layout={viewLayout}
             snapshot={snapshot}
             activeView={mainView}
             retainedViews={retainedViews}
@@ -335,7 +338,11 @@ export function DesktopWorkspace() {
         routeBasePath="/desktop/chat"
         confirmFileChange={() => runtime.host.confirmDiscardUnsaved()}
       >
-        <DesktopWorkspaceLayout host={runtime.host} tracker={runtime.tracker} />
+        <DesktopWorkspaceLayout
+          host={runtime.host}
+          tracker={runtime.tracker}
+          viewLayout={runtime.layout}
+        />
       </ChatWorkspaceProvider>
     </div>
   );

@@ -1,0 +1,145 @@
+/* 确认窗口的固定样式：系统字体与系统颜色，不使用主题。Fixed confirmation window styles: system fonts and colors, no theme. */
+:root {
+  color-scheme: light dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  background: Canvas;
+  color: CanvasText;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+p,
+ul {
+  margin: 0;
+}
+
+.source,
+.muted {
+  color: GrayText;
+}
+
+.source {
+  margin-top: 2px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 18px;
+}
+
+code,
+.url {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.message,
+.detail {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.section-title,
+.message-type {
+  font-weight: 600;
+}
+
+.warning,
+.high-risk,
+.message-type.warning {
+  color: #b45309;
+}
+
+.message-type.error {
+  color: #dc2626;
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+button {
+  min-height: 28px;
+  max-width: 100%;
+  padding: 4px 14px;
+  border: 1px solid ButtonBorder;
+  border-radius: 6px;
+  background: ButtonFace;
+  color: ButtonText;
+  font: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+button.primary {
+  border-color: AccentColor;
+  background: AccentColor;
+  color: AccentColorText;
+}
+
+button.danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+button:focus-visible {
+  outline: 2px solid AccentColor;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  .warning,
+  .high-risk,
+  .message-type.warning {
+    color: #fbbf24;
+  }
+
+  .message-type.error {
+    color: #f87171;
+  }
+}

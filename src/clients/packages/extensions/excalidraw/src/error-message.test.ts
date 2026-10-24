@@ -38,8 +38,10 @@ function connectHost(notifications: unknown[]) {
         },
       },
       theme: { id: "default", title: "Default", kind: "light", tokens: {} },
+      themeStyleId: null,
     },
     new Map(),
+    ":root { --spacing: 0.25rem; }",
   );
   return {
     api,

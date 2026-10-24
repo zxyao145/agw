@@ -33,6 +33,13 @@ import type {
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
+import { CONFIRMATION_SCHEME_PRIVILEGES } from "./confirmation/confirmation-protocol";
+import { ConfirmationService } from "./confirmation/confirmation-service";
+import {
+  createConfirmationWindowFactory,
+  prepareConfirmationSession,
+  registerConfirmationIpc,
+} from "./confirmation/confirmation-window";
 import { DaemonManager } from "./daemon/daemon-manager";
 import { registerExtensionIpc } from "./extensions/extension-ipc";
 import { EXTENSION_SCHEME_PRIVILEGES } from "./extensions/extension-protocol";
@@ -65,6 +72,7 @@ protocol.registerSchemesAsPrivileged([
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
   },
   EXTENSION_SCHEME_PRIVILEGES,
+  CONFIRMATION_SCHEME_PRIVILEGES,
 ]);
 
 if (started) app.quit();
@@ -90,6 +98,7 @@ let rendererRecoveryInProgress = false;
 let rendererRecoveryAttempt: Promise<boolean> | null = null;
 const rendererRecoveryGuard = new RendererRecoveryGuard();
 let extensionRuntime: ExtensionRuntime;
+let confirmationService: ConfirmationService;
 
 function reportMainProcessError(title: string, error: unknown): void {
   console.error(title, error);
@@ -875,6 +884,16 @@ void app
       deleteToken: (profileId) => settingsStore.deleteToken(profileId),
     });
     daemonManager = new DaemonManager(process.platform, serverExecutablePath());
+    // 用户确认与权限批准在独立的 modal 窗口中显示，主题不会作用于它们。Confirmations and permission approvals
+    // show in separate modal windows that themes never reach.
+    confirmationService = new ConfirmationService({
+      openWindow: createConfirmationWindowFactory({
+        parent: () => mainWindow,
+        preloadPath: resolve(__dirname, "..", "preload", "confirmation.js"),
+        session: prepareConfirmationSession(resolve(__dirname, "..", "confirmation")),
+      }),
+    });
+    registerConfirmationIpc(confirmationService);
     extensionRuntime = new ExtensionRuntime({
       userDataDirectory: app.getPath("userData"),
       appVersion: packageMetadata.appVersion,
@@ -882,6 +901,7 @@ void app
       bundledExtensionsDirectory: bundledExtensionsRoot(),
       extensionPreloadPath: resolve(__dirname, "..", "preload", "extension.js"),
       settings: settingsStore,
+      confirmations: confirmationService,
       getMainWindow: () => mainWindow,
       onSettingsChanged: async () => {
         currentSettings = await settingsStore.load();
@@ -895,6 +915,7 @@ void app
     registerIpc();
     registerExtensionIpc({
       runtime: extensionRuntime,
+      confirmations: confirmationService,
       assertTrusted: (event) => assertTrustedSender(senderUrl(event)),
       runtimeState,
     });

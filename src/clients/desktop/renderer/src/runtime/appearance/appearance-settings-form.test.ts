@@ -35,6 +35,7 @@ const THEMES: AvailableTheme[] = [
     extensionName: "Soft Theme",
     label: "Soft",
     theme: {
+      format: "json",
       id: "soft",
       title: "Soft",
       common: {},
@@ -47,7 +48,13 @@ const THEMES: AvailableTheme[] = [
     title: "Night",
     extensionName: "Night Themes",
     label: "Night",
-    theme: { id: "night", title: "Night", common: {}, light: {}, dark: { "--background": "#000" } },
+    theme: {
+      format: "css",
+      id: "night",
+      title: "Night",
+      styleId: "c".repeat(64),
+      byteLength: 32,
+    },
   },
 ];
 

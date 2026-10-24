@@ -27,6 +27,7 @@ async function createHandler(enabled = true) {
   await writeFile(join(sdk, "v1", "sdk.d.ts"), "export declare const sdkVersion: 1;");
   await writeFile(join(sdk, "v1", "manifest.schema.json"), "{}");
   await writeFile(join(sdk, "v1", "typography.css"), ".agw-prose { color: inherit; }");
+  await writeFile(join(sdk, "v1", "theme-defaults.css"), ":root { --spacing: 0.25rem; }");
   await writeFile(join(scratch.path, "secret.txt"), "outside");
   await symlink(join(scratch.path, "secret.txt"), join(root, "leak.txt"));
 
@@ -114,6 +115,18 @@ test("the shared typography stylesheet is served as CSS", async () => {
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("Content-Type"), "text/css");
     assert.equal(await response.text(), ".agw-prose { color: inherit; }");
+  } finally {
+    await dispose();
+  }
+});
+
+test("the default variable stylesheet is served as CSS", async () => {
+  const { handler, dispose } = await createHandler();
+  try {
+    const response = await handler(get("agw-extension://sample/__agw/theme-defaults.css"));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Content-Type"), "text/css");
+    assert.equal(await response.text(), ":root { --spacing: 0.25rem; }");
   } finally {
     await dispose();
   }

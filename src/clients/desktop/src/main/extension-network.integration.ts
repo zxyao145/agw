@@ -12,6 +12,14 @@ import { app, BrowserWindow, protocol, session } from "electron";
 import { WebSocketServer } from "ws";
 
 import type { ExtensionEvent } from "../shared/contracts";
+import { answerConfirmation } from "./confirmation/confirmation.integration-helper";
+import { CONFIRMATION_SCHEME_PRIVILEGES } from "./confirmation/confirmation-protocol";
+import { ConfirmationService } from "./confirmation/confirmation-service";
+import {
+  createConfirmationWindowFactory,
+  prepareConfirmationSession,
+  registerConfirmationIpc,
+} from "./confirmation/confirmation-window";
 import { registerExtensionIpc } from "./extensions/extension-ipc";
 import { EXTENSION_SCHEME_PRIVILEGES } from "./extensions/extension-protocol";
 import { ExtensionRuntime } from "./extensions/extension-runtime";
@@ -23,7 +31,7 @@ const userData = join(directory, "user-data");
 const HOST = "host-network-test";
 const EXTENSION = "net-test";
 
-protocol.registerSchemesAsPrivileged([EXTENSION_SCHEME_PRIVILEGES]);
+protocol.registerSchemesAsPrivileged([EXTENSION_SCHEME_PRIVILEGES, CONFIRMATION_SCHEME_PRIVILEGES]);
 app.setPath("userData", userData);
 app.setName("Agw extension network tests");
 
@@ -211,6 +219,14 @@ async function run(): Promise<void> {
     encrypt: (value) => Buffer.from(value, "utf8"),
     decrypt: (value) => value.toString("utf8"),
   });
+  const confirmations = new ConfirmationService({
+    openWindow: createConfirmationWindowFactory({
+      parent: () => window,
+      preloadPath: resolve("dist/preload/confirmation.js"),
+      session: prepareConfirmationSession(resolve("dist/confirmation")),
+    }),
+  });
+  registerConfirmationIpc(confirmations);
   const runtime = new ExtensionRuntime({
     userDataDirectory: userData,
     appVersion: "0.5.0",
@@ -219,6 +235,7 @@ async function run(): Promise<void> {
     bundledExtensionsDirectory: join(directory, "bundled-extensions"),
     extensionPreloadPath: resolve("dist/preload/extension.js"),
     settings,
+    confirmations,
     getMainWindow: () => window,
     onSettingsChanged: async () => undefined,
     log: (message) => console.info(message),
@@ -227,12 +244,17 @@ async function run(): Promise<void> {
   // 与 index.ts 相同地注册 extension 通道；测试窗口是唯一的宿主。Register the channels as index.ts does; the test window is the only host.
   registerExtensionIpc({
     runtime,
+    confirmations,
     assertTrusted: (event) => assert.equal(event.sender, window.webContents),
     runtimeState: async () => {
       throw new Error("The runtime state is not used by this test.");
     },
   });
-  await runtime.setEnabled(EXTENSION, true, { permissions: [], hostPermissions });
+  // 启用的权限由确认窗口批准。The confirmation window approves the permissions for enabling.
+  const enabled = runtime.setEnabled(EXTENSION, true);
+  const approval = await answerConfirmation("Enable");
+  assert.ok(approval.includes(hostPermissions[0]), approval);
+  assert.equal(await enabled, true);
   await runtime.attachHost(HOST);
   await runtime.beginActivation(HOST, EXTENSION);
   const extensionSession = session.fromPartition(extensionPartition(EXTENSION));

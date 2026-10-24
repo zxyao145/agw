@@ -1,12 +1,15 @@
+import { chatHttpClient } from "@agw/chat-runtime";
 import type {
   AgwDesktopBridge,
   ExtensionEvent,
   ExtensionFrameBounds,
-  ExtensionGrants,
   ExtensionPortMessage,
   ExtensionRecoveryNotice,
   ExtensionSafeModeState,
+  HostConfirmationRequest,
   InstalledExtension,
+  ThemeStyleRequest,
+  ThemeStyleText,
 } from "@desktop/shared/contracts";
 import {
   createExtensionError,
@@ -16,7 +19,6 @@ import {
   type FileViewerFile,
   type FileViewerParams,
   type HostContext,
-  type ThemeInfo,
 } from "@agw/extension-sdk";
 import { DEFAULT_THEME_ID } from "@desktop/shared/appearance";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
@@ -33,6 +35,7 @@ import { extensionRegistration } from "./extension-contributions";
 import {
   type BrokerExtension,
   ExtensionBridgeBroker,
+  type HostTheme,
   type MessageBoxRequest,
 } from "./extension-bridge-broker";
 import { ExecutionService, type SessionOwner } from "./execution-service";
@@ -79,30 +82,11 @@ export type ExtensionState = {
   frames: readonly HostFrameState[];
 };
 
-/**
- * 宿主显示的确认对话框；`message` 以按钮下标回答，其他以 true/false 回答。
- * A confirmation dialog shown by the host; `message` is answered with a button index, the others with true or false.
- */
-export type HostConfirmation =
-  | {
-      kind: "discard-unsaved";
-      items: readonly { fileName: string; viewerTitle: string; extensionName: string }[];
-    }
-  | { kind: "open-link"; extensionName: string; url: string }
-  | ({
-      kind: "message";
-      /** 每个消息框不同。Unique per message box. */
-      id: number;
-      extensionName: string;
-    } & MessageBoxRequest);
-
-/** 排队中的确认对话框。A queued confirmation. */
-type PendingConfirmation = {
-  request: HostConfirmation;
-  /** 显示消息框的页面，页面不在时移除；其他对话框为 null。The page that asked for a message box; null for the others. */
-  page: { frameId: string; pageId: string } | null;
-  answer(value: boolean | number): void;
-  dismiss(error: Error): void;
+/** 等待回答的消息框及发出它的页面；页面离开时撤回。A message box awaiting its answer and the page that asked; withdrawn when the page goes away. */
+type PendingMessageBox = {
+  frameId: string;
+  pageId: string;
+  reject(error: Error): void;
 };
 
 /** 文件视图打开文件的位置。Where the Files view opens a file. */
@@ -117,8 +101,6 @@ export type ExtensionHostSnapshot = {
   viewErrors: Readonly<Record<string, ExtensionFailure>>;
   /** 有未保存修改的文件查看器。File viewers with unsaved changes. */
   unsavedViewIds: readonly string[];
-  /** 等待用户回答的确认对话框。The confirmation waiting for the user. */
-  confirmation: HostConfirmation | null;
 };
 
 type Deferred = {
@@ -280,11 +262,9 @@ export class ExtensionHost {
   private workspaceReleaseTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pingSequence = 0;
-  private theme: ThemeInfo = {
-    id: DEFAULT_THEME_ID,
-    title: DEFAULT_THEME_TITLE,
-    kind: "light",
-    tokens: {},
+  private theme: HostTheme = {
+    theme: { id: DEFAULT_THEME_ID, title: DEFAULT_THEME_TITLE, kind: "light", tokens: {} },
+    style: null,
   };
   private themeBackground = "#ffffff";
   private composer: { insertText(text: string): void } | null = null;
@@ -295,7 +275,8 @@ export class ExtensionHost {
   private readonly fileViewerFiles = new Map<string, FileViewerFile>();
   /** 报告了未保存修改的 frame。Frames that reported unsaved changes. */
   private readonly unsavedFrames = new Set<string>();
-  private readonly confirmations: PendingConfirmation[] = [];
+  /** 等待回答的消息框：clientId → 发出它的页面。Message boxes awaiting answers: clientId → the page that asked. */
+  private readonly messageBoxes = new Map<string, PendingMessageBox>();
   private nextMessageBoxId = 1;
   private readonly listeners = new Set<() => void>();
   private snapshot: ExtensionHostSnapshot = {
@@ -305,7 +286,6 @@ export class ExtensionHost {
     extensions: [],
     viewErrors: {},
     unsavedViewIds: [],
-    confirmation: null,
   };
 
   public constructor(private readonly options: ExtensionHostOptions) {
@@ -349,6 +329,7 @@ export class ExtensionHost {
       context: this.context,
       deliver: (owner, event, data) => this.broker.deliverExecution(owner, event, data),
       refreshConversations: (projectId) => this.refreshConversations?.(projectId),
+      chat: chatHttpClient,
     });
     this.broker = new ExtensionBridgeBroker({
       bridge: () => this.bridge,
@@ -359,6 +340,7 @@ export class ExtensionHost {
       cloud,
       execution: this.execution,
       a2a: new A2AService(this.context),
+      chat: chatHttpClient,
       extension: (extensionId) => this.brokerExtension(extensionId),
       theme: () => this.theme,
       isFrameClosing: (frameId) => this.frames.get(frameId)?.closing !== null,
@@ -386,6 +368,7 @@ export class ExtensionHost {
       confirmOpenExternal: (extensionId, url) =>
         this.confirm({
           kind: "open-link",
+          extensionId,
           extensionName: this.records.get(extensionId)?.installed.manifest?.name ?? extensionId,
           url,
         }),
@@ -455,10 +438,16 @@ export class ExtensionHost {
     await this.refreshList();
   }
 
-  public async enable(extensionId: string, grants: ExtensionGrants): Promise<void> {
-    await this.bridge.setExtensionEnabled(extensionId, true, grants);
+  /**
+   * 启用：主进程在确认窗口中批准权限；用户取消时不激活。返回是否已经启用。
+   * Enables: main approves the permissions in the confirmation window; nothing activates when the user cancels.
+   * Returns whether the extension is enabled.
+   */
+  public async enable(extensionId: string): Promise<boolean> {
+    const enabled = await this.bridge.setExtensionEnabled(extensionId, true);
     await this.refreshList();
-    await this.activate(extensionId);
+    if (enabled) await this.activate(extensionId);
+    return enabled;
   }
 
   public async disable(extensionId: string): Promise<void> {
@@ -478,6 +467,7 @@ export class ExtensionHost {
         this.viewErrors.delete(viewId);
       }
     }
+    await this.bridge.reloadExtension(extensionId);
     await this.refreshList();
     await this.activate(extensionId);
   }
@@ -501,7 +491,13 @@ export class ExtensionHost {
 
   /* ---------- 工作区 Workspace ---------- */
 
-  public setTheme(theme: ThemeInfo, background: string): void {
+  /** 当前选中的 CSS 主题的完整样式文本。The complete style text of the selected CSS theme. */
+  public getThemeStyle(request: ThemeStyleRequest): Promise<ThemeStyleText> {
+    return this.bridge.getThemeStyle(request);
+  }
+
+  /** 宿主的主题与页面背景色；CSS 主题带有样式文本。The host theme and page background; CSS themes carry their style text. */
+  public setTheme(theme: HostTheme, background: string): void {
     this.theme = theme;
     this.themeBackground = background;
     this.broker.broadcastTheme(theme);
@@ -612,6 +608,7 @@ export class ExtensionHost {
         {
           fileName: (frame.params as FileViewerParams).file.name,
           viewerTitle: view.title,
+          extensionId: frame.extensionId,
           extensionName: view.extensionName ?? frame.extensionId,
         },
       ];
@@ -619,29 +616,6 @@ export class ExtensionHost {
     return items.length === 0
       ? Promise.resolve(true)
       : this.confirm({ kind: "discard-unsaved", items });
-  }
-
-  /**
-   * 用户回答当前的确认对话框：`message` 为按钮下标，其他为 true/false。
-   * The user answers the current confirmation: a button index for `message`, true or false for the others.
-   */
-  public resolveConfirmation(answer: boolean | number): void {
-    const current = this.confirmations[0];
-    if (!current) return;
-    const { request } = current;
-    if (
-      request.kind === "message"
-        ? typeof answer !== "number" ||
-          !Number.isInteger(answer) ||
-          answer < 0 ||
-          answer >= request.buttons.length
-        : typeof answer !== "boolean"
-    ) {
-      throw new Error(`${String(answer)} does not answer a ${request.kind} confirmation.`);
-    }
-    this.confirmations.shift();
-    current.answer(answer);
-    this.publish();
   }
 
   /** 外壳挂载；卸载时关闭全部视图 frame（下一轮执行，StrictMode 重新挂载会取消）。Shell mount; unmount closes every view frame. */
@@ -1273,60 +1247,75 @@ export class ExtensionHost {
     }
   }
 
-  /** 确认对话框排进队列，得到用户是否同意。Queues a confirmation that resolves with whether the user agreed. */
-  private confirm(request: Exclude<HostConfirmation, { kind: "message" }>): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      this.confirmations.push({
-        request,
-        page: null,
-        answer: (value) => resolve(value === true),
-        dismiss: reject,
-      });
-      this.publish();
-    });
+  /**
+   * 在主进程的独立确认窗口中确认，得到用户是否同意；主题不会作用于这个窗口。
+   * Confirms in the main process's separate confirmation window and resolves with whether the user agreed; themes
+   * never reach that window.
+   */
+  private async confirm(
+    request: Exclude<HostConfirmationRequest, { kind: "message" }>,
+  ): Promise<boolean> {
+    return (await this.bridge.confirmHostAction(request)) === true;
   }
 
-  /** 视图页面的消息框排进确认队列（9.5 节）。A view page's message box joins the confirmation queue (section 9.5). */
+  /** 视图页面的消息框在确认窗口中显示（9.5 节）。A view page's message box shows in the confirmation window (section 9.5). */
   private showMessageBox(owner: SessionOwner, request: MessageBoxRequest): Promise<number> {
     const frame = this.frames.get(owner.frameId);
     if (!frame || frame.closing !== null || frame.pageId !== owner.pageId) {
       return Promise.reject(createExtensionError("ERR_FRAME_GONE", "The frame is gone."));
     }
+    const clientId = `${this.hostInstanceId}:${this.nextMessageBoxId++}`;
     return new Promise((resolve, reject) => {
-      this.confirmations.push({
-        request: {
+      const pending: PendingMessageBox = {
+        frameId: owner.frameId,
+        pageId: owner.pageId,
+        reject,
+      };
+      this.messageBoxes.set(clientId, pending);
+      this.bridge
+        .confirmHostAction({
           kind: "message",
-          id: this.nextMessageBoxId++,
+          clientId,
+          extensionId: owner.extensionId,
           extensionName:
             this.records.get(owner.extensionId)?.installed.manifest?.name ?? owner.extensionId,
-          ...request,
-        },
-        page: { frameId: owner.frameId, pageId: owner.pageId },
-        answer: (value) => resolve(value as number),
-        dismiss: reject,
-      });
-      this.publish();
+          type: request.type,
+          message: request.message,
+          detail: request.detail,
+          buttons: [...request.buttons],
+          defaultId: request.defaultId,
+          cancelId: request.cancelId,
+        })
+        .then(
+          (answer) => {
+            if (this.messageBoxes.get(clientId) !== pending) return;
+            this.messageBoxes.delete(clientId);
+            resolve(answer as number);
+          },
+          (error: unknown) => {
+            if (this.messageBoxes.get(clientId) !== pending) return;
+            this.messageBoxes.delete(clientId);
+            reject(error instanceof Error ? error : new Error(String(error)));
+          },
+        );
     });
   }
 
   /**
-   * 移除 frame（指定 `pageId` 时只限该页面）排队中与显示中的消息框，调用以 `ERR_FRAME_GONE` 结束。
-   * Removes the queued and shown message boxes of a frame (of one page when `pageId` is given); the calls fail with
+   * 撤回 frame（指定 `pageId` 时只限该页面）等待回答的消息框，调用以 `ERR_FRAME_GONE` 结束。
+   * Withdraws the message boxes of a frame (of one page when `pageId` is given) awaiting answers; the calls fail with
    * `ERR_FRAME_GONE`.
    */
   private dismissMessageBoxes(frameId: string, pageId?: string): void {
-    const dismissed = this.confirmations.filter(
-      ({ page }) =>
-        page !== null &&
-        page.frameId === frameId &&
-        (pageId === undefined || page.pageId === pageId),
-    );
-    if (dismissed.length === 0) return;
-    for (const confirmation of dismissed) {
-      this.confirmations.splice(this.confirmations.indexOf(confirmation), 1);
-      confirmation.dismiss(createExtensionError("ERR_FRAME_GONE", "The frame is gone."));
+    for (const [clientId, pending] of this.messageBoxes) {
+      if (pending.frameId !== frameId || (pageId !== undefined && pending.pageId !== pageId))
+        continue;
+      this.messageBoxes.delete(clientId);
+      pending.reject(createExtensionError("ERR_FRAME_GONE", "The frame is gone."));
+      this.bridge
+        .dismissHostConfirmation(clientId)
+        .catch((error: unknown) => console.error("Unable to withdraw a message box.", error));
     }
-    this.publish();
   }
 
   private setUnsaved(frameId: string, unsaved: boolean): void {
@@ -1492,7 +1481,6 @@ export class ExtensionHost {
         const viewId = this.frames.get(frameId)?.viewId;
         return viewId ? [viewId] : [];
       }),
-      confirmation: this.confirmations[0]?.request ?? null,
       extensions: [...this.records.values()]
         .sort((left, right) => left.installed.id.localeCompare(right.installed.id))
         .map((record) => ({

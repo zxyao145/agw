@@ -241,6 +241,17 @@ test("duplicate ids and permissions are rejected", () => {
   );
 });
 
+test("chat.observe is a valid permission", () => {
+  const result = evaluateExtensionManifest(
+    withChange((manifest) => {
+      manifest.permissions = ["chat.composer", "chat.observe"];
+    }),
+    APP_VERSION,
+  );
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.manifest?.permissions, ["chat.composer", "chat.observe"]);
+});
+
 test("file viewers need name patterns without path separators", () => {
   const viewer = (manifest: Record<string, unknown>) =>
     (contributes(manifest).fileViewers as Record<string, unknown>[])[0];
@@ -447,14 +458,21 @@ test("a manifest that contributes only themes is valid without a background or v
   ]);
 });
 
-test("theme paths are package JSON files and theme ids are unique", () => {
+test("theme paths are package JSON or CSS files and theme ids are unique", () => {
   const withThemes = (themes: unknown[]) =>
     withChange((manifest) => (contributes(manifest).themes = themes));
   const pathErrors = (path: string) =>
     evaluateExtensionManifest(withThemes([{ id: "soft", title: "Soft", path }]), APP_VERSION)
       .errors;
   assert.deepEqual(pathErrors("themes/soft.json"), []);
-  for (const path of ["themes/soft.css", "../soft.json", "/soft.json", "__agw/soft.json"]) {
+  assert.deepEqual(pathErrors("themes/soft.css"), []);
+  for (const path of [
+    "themes/soft.scss",
+    "themes/soft.html",
+    "../soft.json",
+    "/soft.css",
+    "__agw/soft.css",
+  ]) {
     assert.deepEqual(
       pathErrors(path).map((error) => [error.code, error.path]),
       [["INVALID_FIELD", "contributes.themes[0].path"]],

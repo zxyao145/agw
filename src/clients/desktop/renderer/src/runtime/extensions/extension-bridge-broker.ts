@@ -1,9 +1,17 @@
 import { apiGet } from "@agw/api";
+import type { ChatHttpClient } from "@agw/chat-runtime";
+import {
+  type ChatEvent,
+  type ChatEventFilter,
+  snapshotChatEvent,
+  validateChatEventFilter,
+} from "@agw/execution-core";
 import { getProjectDirectories } from "@agw/projects-core";
 import type {
   AgwDesktopBridge,
   ExtensionCaller,
   ExtensionIpcResult,
+  ThemeStyleText,
 } from "@desktop/shared/contracts";
 import {
   type ContextProject,
@@ -17,7 +25,9 @@ import {
   type HostContext,
   RpcEndpoint,
   type RpcPort,
+  type ThemeChangedNotification,
   type ThemeInfo,
+  type ThemeStyleUpdate,
 } from "@agw/extension-sdk";
 import {
   type HostPermission,
@@ -29,6 +39,8 @@ import { type ContextService, filterContextForPermissions } from "./context-serv
 import type { ExecutionService, SessionOwner } from "./execution-service";
 import type { WorkspaceLayoutStore } from "./workspace-layout-store";
 import { resolveViewId } from "./workspace-ids";
+
+export const MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION = 16;
 
 /** broker 需要的 extension 当前状态。The extension state the broker needs. */
 export type BrokerExtension = {
@@ -50,7 +62,21 @@ export type FrameConnectionInfo = {
 type FrameConnection = FrameConnectionInfo & {
   endpoint: RpcEndpoint;
   controllers: Set<AbortController>;
+  /** `chat.observe` 的 subscriptionId 与取消订阅的函数。`chat.observe` subscription ids and their unsubscribe functions. */
+  chatSubscriptions: Map<string, () => void>;
   disposeContext: () => void;
+  /** 这个连接已经收到的主题样式文本标识。The theme style text id this connection already received. */
+  themeStyleId: string | null;
+};
+
+/**
+ * 宿主当前的主题：不含样式文本的 `ThemeInfo`，以及 CSS 主题的样式文本（JSON 主题与 Default 为 null）。
+ * The host's current theme: the `ThemeInfo` without style text, plus the CSS theme style text (null for JSON themes
+ * and Default).
+ */
+export type HostTheme = {
+  theme: Omit<ThemeInfo, "cssText">;
+  style: ThemeStyleText | null;
 };
 
 /** broker 使用的编码识别与转换，形状与 Desktop bridge 的同名方法相同。The codec the broker uses, shaped like the Desktop bridge methods. */
@@ -82,8 +108,10 @@ export type ExtensionBridgeBrokerOptions = {
   cloud: CloudFileSystem;
   execution: ExecutionService;
   a2a: A2AService;
+  /** `chat.observe` 订阅的通信入口。The traffic entry point `chat.observe` subscribes to. */
+  chat: Pick<ChatHttpClient, "subscribe">;
   extension(extensionId: string): BrokerExtension | null;
-  theme(): ThemeInfo;
+  theme(): HostTheme;
   isFrameClosing(frameId: string): boolean;
   insertComposerText(text: string): void;
   notify(
@@ -189,6 +217,27 @@ function frameClosing(): Error {
   return createExtensionError("ERR_FRAME_CLOSING", "The frame is closing.");
 }
 
+/**
+ * extension 收到的 SettingCommand request 与 response 事件不含命令的 `environmentVariables`，其他事件原样返回。
+ * SettingCommand request and response events reach extensions without the command's `environmentVariables`; other
+ * events are returned unchanged.
+ */
+function redactChatEventForExtension(event: ChatEvent): ChatEvent {
+  if (event.kind === "message" || event.channel !== "execution") return event;
+  const [command, ...rest] = event.request.args;
+  if (
+    event.request.method !== "DispatchCommand" ||
+    typeof command !== "object" ||
+    command === null ||
+    (command as { type?: unknown }).type !== "SettingCommand"
+  ) {
+    return event;
+  }
+  const redacted: Record<string, unknown> = { ...command };
+  delete redacted.environmentVariables;
+  return snapshotChatEvent({ ...event, request: { ...event.request, args: [redacted, ...rest] } });
+}
+
 const ENGINE_KINDS: Record<number, ContextTarget["externalAgentKind"]> = {
   0: "maf",
   1: "claudeCode",
@@ -269,7 +318,13 @@ export class ExtensionBridgeBroker {
   public connect(info: FrameConnectionInfo, port: MessagePort): void {
     this.disconnect(info.frameId);
     const controllers = new Set<AbortController>();
-    const connection = { ...info, controllers } as FrameConnection;
+    const current = this.options.theme();
+    const connection = {
+      ...info,
+      controllers,
+      chatSubscriptions: new Map(),
+      themeStyleId: current.style?.styleId ?? null,
+    } as FrameConnection;
     connection.endpoint = new RpcEndpoint(port as unknown as RpcPort, {
       request: (method, params, signal) => this.handle(connection, method, params, signal),
       pong: () => this.options.onPong(info.frameId, info.pageId),
@@ -281,7 +336,8 @@ export class ExtensionBridgeBroker {
       frame: { frameId: info.frameId, kind: info.kind, viewId: info.viewId, params: info.params },
       manifest: extension.manifest,
       context: this.contextFor(info.extensionId),
-      theme: this.options.theme(),
+      theme: current.style ? { ...current.theme, cssText: current.style.cssText } : current.theme,
+      themeStyleId: connection.themeStyleId,
     };
     connection.endpoint.emit("welcome", welcome);
   }
@@ -291,12 +347,17 @@ export class ExtensionBridgeBroker {
     return connection !== undefined && (pageId === undefined || connection.pageId === pageId);
   }
 
-  /** 关闭端口并中止它进行中的云端文件、A2A、HTTP 请求。Closes the port and aborts its in-flight requests. */
+  /**
+   * 关闭端口，中止它进行中的云端文件、A2A、HTTP 请求，并取消它的通信事件订阅。
+   * Closes the port, aborts its in-flight requests and cancels its traffic event subscriptions.
+   */
   public disconnect(frameId: string, pageId?: string): void {
     const connection = this.connections.get(frameId);
     if (!connection || (pageId !== undefined && connection.pageId !== pageId)) return;
     this.connections.delete(frameId);
     connection.disposeContext();
+    for (const unsubscribe of connection.chatSubscriptions.values()) unsubscribe();
+    connection.chatSubscriptions.clear();
     for (const controller of connection.controllers) controller.abort(frameClosing());
     connection.endpoint.close("ERR_FRAME_GONE", "The frame is gone.");
   }
@@ -319,9 +380,28 @@ export class ExtensionBridgeBroker {
     connection.endpoint.emit(name, data);
   }
 
-  public broadcastTheme(theme: ThemeInfo): void {
-    for (const connection of this.connections.values())
-      connection.endpoint.emit("theme.changed", theme);
+  /**
+   * 推送主题：按连接比较已发送的样式标识，相同时为 `unchanged`，内容变化时 `replace` 携带完整文本，转入 JSON 或 Default 时 `clear`。
+   * Pushes the theme: compares the style id each connection received; equal ids send `unchanged`, changed content
+   * sends `replace` with the complete text, and moving to JSON or Default sends `clear`.
+   */
+  public broadcastTheme(current: HostTheme): void {
+    const styleId = current.style?.styleId ?? null;
+    for (const connection of this.connections.values()) {
+      const style: ThemeStyleUpdate =
+        connection.themeStyleId === styleId
+          ? { operation: "unchanged", styleId }
+          : current.style
+            ? {
+                operation: "replace",
+                styleId: current.style.styleId,
+                cssText: current.style.cssText,
+              }
+            : { operation: "clear", styleId: null };
+      connection.themeStyleId = styleId;
+      const notification: ThemeChangedNotification = { theme: current.theme, style };
+      connection.endpoint.emit("theme.changed", notification);
+    }
   }
 
   public deliverExecution(owner: SessionOwner, event: string, data: unknown): void {
@@ -388,6 +468,15 @@ export class ExtensionBridgeBroker {
       );
     }
     return extension;
+  }
+
+  /** 该 extension 全部连接上的通信事件订阅数。The extension's traffic event subscriptions across all its connections. */
+  private chatSubscriptionCount(extensionId: string): number {
+    let count = 0;
+    for (const connection of this.connections.values()) {
+      if (connection.extensionId === extensionId) count += connection.chatSubscriptions.size;
+    }
+    return count;
   }
 
   private cloudAccess(connection: FrameConnection): CloudAccess {
@@ -839,6 +928,51 @@ export class ExtensionBridgeBroker {
       "chat.composer.insertText": (connection, params: { text: string }) => {
         this.requirePermission(connection, "chat.composer");
         this.options.insertComposerText(String(params.text));
+        return null;
+      },
+      "chat.observe": (connection, params: { subscriptionId: unknown; filter: unknown }) => {
+        if (this.options.isFrameClosing(connection.frameId)) throw frameClosing();
+        this.requirePermission(connection, "chat.observe");
+        const { subscriptionId, filter } = params;
+        if (!isText(subscriptionId, 1, 64) || connection.chatSubscriptions.has(subscriptionId)) {
+          throw invalidArgument("subscriptionId must be an unused string of 1 to 64 characters.");
+        }
+        const problem = validateChatEventFilter(filter);
+        if (problem !== null) throw invalidArgument(problem);
+        if (
+          this.chatSubscriptionCount(connection.extensionId) >= MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION
+        ) {
+          throw createExtensionError(
+            "ERR_TOO_MANY_SUBSCRIPTIONS",
+            `An extension can hold at most ${MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION} chat subscriptions.`,
+          );
+        }
+        const unsubscribe = this.options.chat.subscribe(
+          filter as ChatEventFilter,
+          (event, identity) => {
+            // 只发送属于当前连接的事件：profile、地址与 token 都相同。
+            // Only events of the current connection are sent: the same profile, address and token.
+            const current = context.connection;
+            if (
+              !current ||
+              event.scope.serverId !== current.profileId ||
+              identity.baseUrl !== current.baseUrl ||
+              identity.token !== current.token
+            ) {
+              return;
+            }
+            connection.endpoint.emit("chat.event", {
+              subscriptionId,
+              event: redactChatEventForExtension(event),
+            });
+          },
+        );
+        connection.chatSubscriptions.set(subscriptionId, unsubscribe);
+        return null;
+      },
+      "chat.unobserve": (connection, params: { subscriptionId: string }) => {
+        connection.chatSubscriptions.get(params.subscriptionId)?.();
+        connection.chatSubscriptions.delete(params.subscriptionId);
         return null;
       },
 

@@ -8,15 +8,28 @@ import { pathToFileURL } from "node:url";
 import iconv from "iconv-lite";
 import { JSDOM } from "jsdom";
 
-import { configureApiRuntime } from "@agw/api";
+import {
+  type AiMessage,
+  apiDelete,
+  apiGet,
+  apiPut,
+  configureApiRuntime,
+  getApiRuntime,
+} from "@agw/api";
+import { ChatHttpClient } from "@agw/chat-runtime";
 import {
   type ApiRequestRecord,
   type ApiRoutes,
   rawApiResponse,
+  replaceExecutionHub,
   startApiServer,
 } from "@agw/test-harness";
 import {
   type BinaryDocumentAdapter,
+  type ChatEvent,
+  type ChatEventFilter,
+  type ChatRequestEvent,
+  type ChatResponseEvent,
   createExtensionApi,
   createExtensionError,
   type DocumentSession,
@@ -33,6 +46,8 @@ import {
   type RpcPort,
   type TextDocument,
   type TextDocumentAdapter,
+  type ThemeChangedNotification,
+  type ThemeInfo,
 } from "@agw/extension-sdk";
 import { ExtensionAccessGrants } from "@desktop/main/extensions/extension-access-grants";
 import { ExtensionFileSystem } from "@desktop/main/extensions/extension-file-system";
@@ -45,12 +60,17 @@ import { parseHostPermissions } from "@desktop/shared/extension-host-permissions
 import { A2AService } from "./a2a-service";
 import { CloudAccessGrants, CloudFileSystem, formatCloudUri } from "./cloud-file-system";
 import { ContextService, connectionKeyOf } from "./context-service";
-import { ExtensionBridgeBroker, type ExtensionTextCodec } from "./extension-bridge-broker";
-import { ExtensionHost, type HostConfirmation } from "./extension-host";
+import {
+  ExtensionBridgeBroker,
+  type ExtensionTextCodec,
+  type HostTheme,
+} from "./extension-bridge-broker";
+import { ExtensionHost } from "./extension-host";
 import {
   createMainProcess,
   sampleExtension,
   startExtensionHost,
+  TEST_THEME_DEFAULTS,
 } from "./extension-host.test-helper";
 import { ExecutionService } from "./execution-service";
 import { WorkspaceLayoutStore } from "./workspace-layout-store";
@@ -108,7 +128,7 @@ async function connectSdk(port: MessagePort): Promise<{
   const welcomeData = await welcome;
   router.delete("welcome");
   return {
-    api: createExtensionApi(endpoint, welcomeData, router),
+    api: createExtensionApi(endpoint, welcomeData, router, TEST_THEME_DEFAULTS),
     welcome: welcomeData,
     events,
     endpoint,
@@ -122,6 +142,15 @@ type HarnessOptions = {
   openFile?(extensionId: string, uri: string): Promise<void>;
   /** 替换默认的 Server 路由。Replaces default Server routes. */
   routes?: ApiRoutes;
+  /** 宿主报告 frame 正在关闭。The host reports the frame as closing. */
+  frameClosing?: boolean;
+  /** 连接时宿主的主题。The host theme at connect time. */
+  theme?: HostTheme;
+};
+
+const DEFAULT_HOST_THEME: HostTheme = {
+  theme: { id: "default", title: "Default", kind: "dark", tokens: { "--background": "#000" } },
+  style: null,
 };
 
 async function createHarness(permissions: ExtensionPermission[], options: HarnessOptions = {}) {
@@ -187,10 +216,49 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     conversation: { id: "conversation-1" },
     target: null,
   });
+  // broker 与 ExecutionService 共用的 ChatHttpClient，跟随全局的 API 配置；`holdHttp` 之后发出的 GET 请求等到释放才返回。
+  // The ChatHttpClient shared by the broker and ExecutionService follows the global API configuration; GET requests
+  // sent after `holdHttp` return only once released.
+  let httpHold: Promise<void> | null = null;
+  const chat = new ChatHttpClient({
+    api: {
+      apiGet: (async (...args: Parameters<typeof apiGet>) => {
+        const hold = httpHold;
+        const value = await apiGet(...args);
+        await hold;
+        return value;
+      }) as typeof apiGet,
+      apiPut,
+      apiDelete,
+    },
+    identity: () => {
+      const { baseUrl, token } = getApiRuntime();
+      return { baseUrl, token };
+    },
+    execution: () => {
+      const { baseUrl, token } = getApiRuntime();
+      return { baseUrl, token, attachmentStore: null };
+    },
+  });
+  // 统计 broker 尚未取消的订阅。Counts the broker's subscriptions that are not cancelled yet.
+  let activeChatSubscriptions = 0;
+  const brokerChat: Pick<ChatHttpClient, "subscribe"> = {
+    subscribe: (filter, listener) => {
+      const unsubscribe = chat.subscribe(filter, listener);
+      activeChatSubscriptions += 1;
+      let active = true;
+      return () => {
+        if (active) activeChatSubscriptions -= 1;
+        active = false;
+        unsubscribe();
+      };
+    },
+  };
   const execution = new ExecutionService({
     context,
     deliver: () => undefined,
     refreshConversations: () => undefined,
+    chat,
   });
   const broker = new ExtensionBridgeBroker({
     bridge: () => mainProcess as AgwDesktopBridge,
@@ -201,19 +269,15 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     cloud: new CloudFileSystem(context, new CloudAccessGrants(), () => undefined),
     execution,
     a2a: new A2AService(context),
+    chat: brokerChat,
     extension: () => ({
       manifest,
       permissions,
       hostPermissions: parseHostPermissions([]),
       storageUri: "file:///data/sample",
     }),
-    theme: () => ({
-      id: "default",
-      title: "Default",
-      kind: "dark",
-      tokens: { "--background": "#000" },
-    }),
-    isFrameClosing: () => false,
+    theme: () => options.theme ?? DEFAULT_HOST_THEME,
+    isFrameClosing: () => options.frameClosing === true,
     insertComposerText: () => undefined,
     notify: () => undefined,
     onPong: () => undefined,
@@ -256,8 +320,20 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     cloudFiles,
     storage: storage.path,
     context,
+    identity,
     key,
     broker,
+    chat,
+    activeChatSubscriptions: () => activeChatSubscriptions,
+    /** 之后发出的 GET 请求等到调用返回的函数才返回。Later GET requests return only once the returned function is called. */
+    holdHttp: () => {
+      let release!: () => void;
+      httpHold = new Promise<void>((resolve) => (release = resolve));
+      return () => {
+        httpHold = null;
+        release();
+      };
+    },
     linkRequests,
     unsaved,
     uri: (path: string) =>
@@ -322,6 +398,10 @@ test("failures are rebuilt as ExtensionError and missing permissions are denied"
   });
   await assert.rejects(api.context.listProjects(), { code: "ERR_PERMISSION_DENIED" });
   await assert.rejects(api.chat.composer.insertText("hi"), { code: "ERR_PERMISSION_DENIED" });
+  await assert.rejects(
+    api.chat.observe({}, () => undefined),
+    { code: "ERR_PERMISSION_DENIED" },
+  );
 });
 
 test("the context snapshot and change events only carry permitted fields", async () => {
@@ -347,6 +427,7 @@ test("the context snapshot and change events only carry permitted fields", async
     kind: "dark",
     tokens: { "--background": "#000" },
   });
+  assert.equal(withoutPermissions.welcome.themeStyleId, null);
 
   const withProject = await createHarness(["context.project", "context.user"]);
   assert.equal(withProject.api.context.get().project?.id, PROJECT);
@@ -372,6 +453,73 @@ test("the context snapshot and change events only carry permitted fields", async
   assert.equal("project" in restrictedChanges[0], false);
   assert.equal(projectChanges[0].project?.id, "next");
   assert.equal(withProject.api.context.get().project?.id, "next");
+});
+
+const CSS_THEME: HostTheme = {
+  theme: {
+    id: "css-theme:paper",
+    title: "Paper",
+    kind: "dark",
+    tokens: { "--background": "#111" },
+  },
+  style: { styleId: "a".repeat(64), cssText: ":root.dark { --background: #111; }" },
+};
+
+for (const kind of ["mainView", "background"] as const) {
+  test(`a ${kind} connection gets the complete theme snapshot and per-connection style operations`, async () => {
+    const harness = await createHarness([], { kind, theme: CSS_THEME });
+    assert.deepEqual(harness.welcome.theme, {
+      ...CSS_THEME.theme,
+      cssText: CSS_THEME.style!.cssText,
+    });
+    assert.equal(harness.welcome.themeStyleId, CSS_THEME.style!.styleId);
+    assert.equal(harness.api.theme.get().cssText, CSS_THEME.style!.cssText);
+    const received: ThemeInfo[] = [];
+    harness.api.theme.onDidChange((theme) => received.push(theme));
+    const operations = () =>
+      harness.events
+        .filter(([name]) => name === "theme.changed")
+        .map(([, data]) => (data as ThemeChangedNotification).style);
+
+    // Mode 变化、样式相同：unchanged，公开事件仍带完整文本。A mode change with the same style: unchanged, and the public
+    // event still carries the complete text.
+    const light = {
+      ...CSS_THEME.theme,
+      kind: "light" as const,
+      tokens: { "--background": "#fff" },
+    };
+    harness.broker.broadcastTheme({ theme: light, style: CSS_THEME.style });
+    await until(() => received.length === 1, "the unchanged push");
+    assert.deepEqual(operations(), [{ operation: "unchanged", styleId: CSS_THEME.style!.styleId }]);
+    assert.deepEqual(received[0], { ...light, cssText: CSS_THEME.style!.cssText });
+
+    // 同一主题 id 的内容更新：replace。A content update under the same theme id: replace.
+    const updated = { styleId: "b".repeat(64), cssText: ":root { --background: #222; }" };
+    harness.broker.broadcastTheme({ theme: light, style: updated });
+    await until(() => received.length === 2, "the replace push");
+    assert.deepEqual(operations()[1], { operation: "replace", ...updated });
+    assert.equal(harness.api.theme.get().cssText, updated.cssText);
+
+    // 转入 JSON 或 Default：clear，之后再次推送为 unchanged(null)。Moving to JSON or Default: clear, then unchanged(null).
+    const plain = { id: "default", title: "Default", kind: "light" as const, tokens: {} };
+    harness.broker.broadcastTheme({ theme: plain, style: null });
+    harness.broker.broadcastTheme({ theme: plain, style: null });
+    await until(() => received.length === 4, "the clear pushes");
+    assert.deepEqual(operations().slice(2), [
+      { operation: "clear", styleId: null },
+      { operation: "unchanged", styleId: null },
+    ]);
+    assert.deepEqual(received[3], plain);
+    assert.equal("cssText" in harness.api.theme.get(), false);
+  });
+}
+
+test("a reconnected page gets the current style again in its welcome", async () => {
+  const first = await createHarness([], { theme: CSS_THEME });
+  first.broker.broadcastTheme(DEFAULT_HOST_THEME);
+  const second = await createHarness([], { theme: CSS_THEME });
+  assert.equal(second.welcome.themeStyleId, CSS_THEME.style!.styleId);
+  assert.equal(second.welcome.theme.cssText, CSS_THEME.style!.cssText);
 });
 
 test("only file viewers report unsaved changes", async () => {
@@ -799,6 +947,288 @@ test("showMessageBox checks its options and refuses background frames", async ()
   });
 });
 
+/* ---------- 通信事件 chat.observe ---------- */
+
+type Harness = Awaited<ReturnType<typeof createHarness>>;
+
+const CHAT_SCOPE = { serverId: "local", projectId: PROJECT, conversationId: "conversation-1" };
+const MESSAGES_PATH = `/api/projects/${PROJECT}/conversations/conversation-1/messages`;
+const OLDER_PAGE = { direction: "older", pageSize: 50 } as const;
+
+function chatText(messageId: string): AiMessage {
+  return {
+    messageId,
+    role: "assistant",
+    author: "agent",
+    contents: [{ type: "TextContent", content: messageId }],
+  };
+}
+
+function messagePage(...messageIds: string[]) {
+  return { items: messageIds.map(chatText), nextCursor: null, hasMore: false, turns: [] };
+}
+
+/** 消息事件取消息 id，其他事件取 kind。A message event's message id, or the kind of any other event. */
+function eventNames(events: readonly ChatEvent[]): string[] {
+  return events.map((event) =>
+    event.kind === "message" ? String(event.message.messageId) : event.kind,
+  );
+}
+
+/**
+ * 页面的一次往返请求：回复到达时，宿主此前发出的事件都已送达页面。
+ * A page round trip: by the time its reply arrives, every event the host emitted earlier has reached the page.
+ */
+async function flushEvents(api: ExtensionApi): Promise<void> {
+  await api.fs.listTextEncodings();
+}
+
+/** 同一 profile 改用新的地址或 token。The same profile switches to another address or token. */
+function switchConnection(harness: Harness, next: { baseUrl?: string; token?: string }): void {
+  const identity = { ...harness.identity, ...next };
+  configureApiRuntime({ baseUrl: identity.baseUrl, token: identity.token });
+  harness.context.setConnection(identity, { id: "local", name: "Local", kind: "local" });
+}
+
+test("chat.observe rejects invalid filters and subscription ids", async () => {
+  const { api, endpoint } = await createHarness(["chat.observe"]);
+  await assert.rejects(
+    api.chat.observe({ kinds: [] } as unknown as ChatEventFilter, () => undefined),
+    { code: "ERR_INVALID_ARGUMENT", message: /kinds/ },
+  );
+  await assert.rejects(
+    api.chat.observe({ unknown: true } as unknown as ChatEventFilter, () => undefined),
+    { code: "ERR_INVALID_ARGUMENT", message: /unknown/ },
+  );
+  assert.equal(
+    await endpoint.request("chat.observe", { subscriptionId: "same", filter: {} }),
+    null,
+  );
+  for (const subscriptionId of ["same", "", "s".repeat(65), 7, undefined]) {
+    await assert.rejects(
+      endpoint.request("chat.observe", { subscriptionId, filter: {} }),
+      { code: "ERR_INVALID_ARGUMENT" },
+      String(subscriptionId),
+    );
+  }
+});
+
+test("a history subscription receives each history message in order and nothing else", async () => {
+  const harness = await createHarness(["chat.observe"], {
+    routes: { [`GET ${MESSAGES_PATH}`]: messagePage("history-1", "history-2") },
+  });
+  const history: ChatEvent[] = [];
+  const live: ChatEvent[] = [];
+  await harness.api.chat.observe({ sources: ["history"] }, (event) => history.push(event));
+  await harness.api.chat.observe({ sources: ["live"] }, (event) => live.push(event));
+
+  await harness.chat.getConversationMessages(CHAT_SCOPE, OLDER_PAGE);
+  await flushEvents(harness.api);
+
+  assert.deepEqual(eventNames(history), ["history-1", "history-2"]);
+  assert.deepEqual(
+    history.map((event) => event.scope),
+    [CHAT_SCOPE, CHAT_SCOPE],
+  );
+  assert.deepEqual(live, []);
+});
+
+test("events of another profile, or of an earlier address or token of the profile, are not sent", async (t) => {
+  const hubs = replaceExecutionHub(t, { provider: "InProcess" });
+  const second = await startApiServer({});
+  const harness = await createHarness(["chat.observe"], {
+    routes: { [`GET ${MESSAGES_PATH}`]: messagePage("history-1") },
+  });
+  const events: ChatEvent[] = [];
+  await harness.api.chat.observe({ kinds: ["message"] }, (event) => events.push(event));
+  const setting = { projectId: PROJECT, conversationId: "conversation-1" };
+  const sessions = [];
+
+  await harness.chat.getConversationMessages({ ...CHAT_SCOPE, serverId: "other" }, OLDER_PAGE);
+  sessions.push(harness.chat.createExecutionSession(CHAT_SCOPE, { onMessage: () => undefined }));
+  await sessions[0]!.configure(setting);
+  hubs[0]!.receive(chatText("before"));
+
+  switchConnection(harness, { baseUrl: second.baseUrl });
+  hubs[0]!.receive(chatText("old-address"));
+  sessions.push(harness.chat.createExecutionSession(CHAT_SCOPE, { onMessage: () => undefined }));
+  await sessions[1]!.configure(setting);
+  hubs[1]!.receive(chatText("new-address"));
+
+  switchConnection(harness, { baseUrl: second.baseUrl, token: "agw_rotated" });
+  hubs[1]!.receive(chatText("old-token"));
+  sessions.push(harness.chat.createExecutionSession(CHAT_SCOPE, { onMessage: () => undefined }));
+  await sessions[2]!.configure(setting);
+  hubs[2]!.receive(chatText("new-token"));
+  await flushEvents(harness.api);
+
+  assert.deepEqual(eventNames(events), ["before", "new-address", "new-token"]);
+  for (const session of sessions) await session.dispose();
+});
+
+test("the response and history messages of a request that returns after a connection change are not sent", async () => {
+  const harness = await createHarness(["chat.observe"], {
+    routes: { [`GET ${MESSAGES_PATH}`]: messagePage("history-1") },
+  });
+  const events: ChatEvent[] = [];
+  await harness.api.chat.observe({ channels: ["http"] }, (event) => events.push(event));
+
+  const release = harness.holdHttp();
+  const page = harness.chat.getConversationMessages(CHAT_SCOPE, OLDER_PAGE);
+  switchConnection(harness, { token: "agw_rotated" });
+  release();
+  await page;
+  await flushEvents(harness.api);
+
+  assert.deepEqual(eventNames(events), ["request"]);
+});
+
+test("SettingCommand requests and responses reach extensions without environmentVariables", async (t) => {
+  replaceExecutionHub(t, { provider: "InProcess" });
+  const harness = await createHarness(["chat.observe"]);
+  const filter: ChatEventFilter = { kinds: ["request", "response"], channels: ["execution"] };
+  const hostEvents: ChatEvent[] = [];
+  harness.chat.subscribe(filter, (event) => hostEvents.push(event));
+  const events: ChatEvent[] = [];
+  await harness.api.chat.observe(filter, (event) => events.push(event));
+
+  const session = harness.chat.createExecutionSession(CHAT_SCOPE, { onMessage: () => undefined });
+  await session.configure({
+    projectId: PROJECT,
+    conversationId: "conversation-1",
+    environmentVariables: { API_KEY: "secret" },
+    permissionMode: "fullAccess",
+  });
+  await session.dispose();
+  await flushEvents(harness.api);
+
+  const isSetting = (event: ChatEvent): event is ChatRequestEvent | ChatResponseEvent =>
+    event.kind !== "message" &&
+    event.channel === "execution" &&
+    event.request.method === "DispatchCommand" &&
+    (event.request.args[0] as { type?: unknown }).type === "SettingCommand";
+  const command = {
+    type: "SettingCommand",
+    projectId: PROJECT,
+    conversationId: "conversation-1",
+    permissionMode: "fullAccess",
+  };
+  assert.deepEqual(eventNames(events.filter(isSetting)), ["request", "response"]);
+  assert.deepEqual(
+    events.filter(isSetting),
+    hostEvents.filter(isSetting).map((event) => ({
+      ...event,
+      request: { ...event.request, args: [command] },
+    })),
+  );
+  assert.deepEqual(
+    events.filter((event) => !isSetting(event)),
+    hostEvents.filter((event) => !isSetting(event)),
+  );
+});
+
+test("a disposed chat subscription receives nothing more and can be disposed again", async (t) => {
+  const errors = t.mock.method(console, "error");
+  const harness = await createHarness(["chat.observe"], {
+    routes: { [`GET ${MESSAGES_PATH}`]: messagePage("history-1") },
+  });
+  const events: ChatEvent[] = [];
+  const subscription = await harness.api.chat.observe({ kinds: ["request"] }, (event) =>
+    events.push(event),
+  );
+  await harness.chat.getConversationMessages(CHAT_SCOPE, OLDER_PAGE);
+  await flushEvents(harness.api);
+  assert.deepEqual(eventNames(events), ["request"]);
+
+  subscription.dispose();
+  subscription.dispose();
+  await flushEvents(harness.api);
+  assert.equal(harness.activeChatSubscriptions(), 0);
+  await harness.chat.getConversationMessages(CHAT_SCOPE, OLDER_PAGE);
+  await flushEvents(harness.api);
+
+  assert.deepEqual(eventNames(events), ["request"]);
+  assert.equal(errors.mock.callCount(), 0);
+});
+
+test("an extension holds at most 16 chat subscriptions across its frames", async () => {
+  const harness = await createHarness(["chat.observe"]);
+  const channel = new MessageChannel();
+  harness.broker.connect(
+    {
+      extensionId: "sample",
+      frameId: "frame-2",
+      pageId: "page-2",
+      kind: "sidebarView",
+      viewId: "list",
+      params: {},
+    },
+    channel.port1,
+  );
+  const sidebar = await connectSdk(channel.port2);
+  after(() => {
+    harness.broker.disconnect("frame-2");
+    sidebar.endpoint.close();
+  });
+  const subscriptions = [];
+  for (let index = 0; index < 10; index++) {
+    subscriptions.push(await harness.api.chat.observe({}, () => undefined));
+  }
+  for (let index = 0; index < 6; index++) {
+    subscriptions.push(await sidebar.api.chat.observe({}, () => undefined));
+  }
+
+  await assert.rejects(
+    sidebar.api.chat.observe({}, () => undefined),
+    { code: "ERR_TOO_MANY_SUBSCRIPTIONS" },
+  );
+  subscriptions[0]!.dispose();
+  await flushEvents(harness.api);
+  await sidebar.api.chat.observe({}, () => undefined);
+  assert.equal(harness.activeChatSubscriptions(), 16);
+});
+
+test("disconnecting a frame cancels its chat subscriptions", async () => {
+  const harness = await createHarness(["chat.observe"]);
+  await harness.api.chat.observe({}, () => undefined);
+  await harness.api.chat.observe({ kinds: ["message"] }, () => undefined);
+  assert.equal(harness.activeChatSubscriptions(), 2);
+
+  harness.broker.disconnect("frame-1");
+
+  assert.equal(harness.activeChatSubscriptions(), 0);
+});
+
+test("chat.observe fails while the frame is closing", async () => {
+  const { api } = await createHarness(["chat.observe"], { frameClosing: true });
+  await assert.rejects(
+    api.chat.observe({}, () => undefined),
+    { code: "ERR_FRAME_CLOSING" },
+  );
+});
+
+test("hub calls of a session an extension creates carry the extension origin and the current profile", async (t) => {
+  replaceExecutionHub(t, { provider: "InProcess" });
+  const harness = await createHarness(["chat.observe", "execution"]);
+  const events: ChatEvent[] = [];
+  await harness.api.chat.observe({ kinds: ["request"], channels: ["execution"] }, (event) =>
+    events.push(event),
+  );
+
+  const session = await harness.api.execution.createSession({
+    projectId: PROJECT,
+    conversationId: "conversation-1",
+  });
+  await flushEvents(harness.api);
+  await session.dispose();
+
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.deepEqual(event.origin, { kind: "extension", extensionId: "sample" });
+    assert.deepEqual(event.scope, CHAT_SCOPE);
+  }
+});
+
 /* ---------- 文档会话 Document sessions ---------- */
 
 const EDITOR = "sample:editor";
@@ -1015,17 +1445,19 @@ async function createDocumentHost() {
     }),
     /** 宿主是否记录了编辑器的未保存修改。Whether the host recorded unsaved changes of the editor. */
     unsaved: () => host.getSnapshot().unsavedViewIds.includes(EDITOR),
-    /** 等到宿主显示消息框，返回去掉 id 的内容。Waits for the host's message box and returns it without its id. */
+    /** 等到确认窗口显示消息框，返回它的内容。Waits for the confirmation window's message box and returns it. */
     messageBox: async () => {
       const confirmation = await until(
-        () => host.getSnapshot().confirmation ?? undefined,
-        "the host's message box",
+        () => main.confirmations.current() ?? undefined,
+        "the confirmation window's message box",
       );
       assert.equal(confirmation.kind, "message");
-      const { id, ...rest } = confirmation as Extract<HostConfirmation, { kind: "message" }>;
-      assert.ok(Number.isInteger(id));
-      return rest;
+      return confirmation;
     },
+    /** 确认窗口中显示的内容。What the confirmation window shows. */
+    confirmation: () => main.confirmations.current(),
+    /** 以确认窗口的身份回答。Answers as the confirmation window. */
+    answer: (value: unknown) => main.confirmations.answer(value),
   };
 }
 
@@ -1044,6 +1476,7 @@ async function openText(
 
 const CONFLICT_BOX = {
   kind: "message",
+  extensionId: "sample",
   extensionName: "Sample",
   type: "warning",
   message: "notes.txt was changed on disk after it was opened.",
@@ -1108,7 +1541,7 @@ test(
     const canceled = session.save();
     assert.deepEqual(await harness.messageBox(), CONFLICT_BOX);
     assert.equal(session.state, "conflict");
-    harness.host.resolveConfirmation(2);
+    await harness.answer(2);
     await canceled;
     assert.equal(session.state, "dirty");
     assert.equal(await readFile(path, "utf8"), "theirs\n");
@@ -1118,7 +1551,7 @@ test(
     // Overwrite：以重新读取的内容哈希写入同一份内容。Overwrite writes the same content under the hash read again.
     const overwritten = session.save();
     assert.deepEqual(await harness.messageBox(), CONFLICT_BOX);
-    harness.host.resolveConfirmation(0);
+    await harness.answer(0);
     await overwritten;
     assert.equal(await readFile(path, "utf8"), "mine\n");
     assert.equal(session.state, "clean");
@@ -1128,7 +1561,7 @@ test(
     await rm(path);
     const recreated = session.save();
     assert.deepEqual(await harness.messageBox(), CONFLICT_BOX);
-    harness.host.resolveConfirmation(0);
+    await harness.answer(0);
     await recreated;
     assert.equal(await readFile(path, "utf8"), "mine again\n");
     assert.equal(session.state, "clean");
@@ -1138,13 +1571,13 @@ test(
     await writeFile(path, "from disk\n");
     const reloaded = session.save();
     assert.deepEqual(await harness.messageBox(), CONFLICT_BOX);
-    harness.host.resolveConfirmation(1);
+    await harness.answer(1);
     await reloaded;
     assert.equal(editor.text, "from disk\n");
     assert.equal(session.state, "clean");
     await harness.flush();
     assert.equal(harness.unsaved(), false);
-    assert.equal(harness.host.getSnapshot().confirmation, null);
+    assert.equal(harness.confirmation(), null);
     assert.deepEqual(harness.notifications, []);
   },
 );
@@ -1176,7 +1609,7 @@ test(
     // 之后保存时由写入前提发现冲突。A later save meets the conflict through the write precondition.
     const saving = session.save();
     assert.deepEqual(await harness.messageBox(), CONFLICT_BOX);
-    harness.host.resolveConfirmation(2);
+    await harness.answer(2);
     await saving;
     assert.equal(await readFile(path, "utf8"), "three\n");
     assert.equal(session.changedOnDisk, true);
@@ -1238,7 +1671,7 @@ test("binary documents hash the bytes before the write transfers them", DOCUMENT
   editor.type(new Uint8Array([5]));
   void session.save();
   await until(() => session.state !== "saving", "the second save");
-  assert.equal(harness.host.getSnapshot().confirmation, null);
+  assert.equal(harness.confirmation(), null);
   assert.equal(session.state, "clean");
   assert.deepEqual(await readFile(path), Buffer.from([5]));
   await assert.rejects(session.reopenWithEncoding("utf-8"), { code: "ERR_UNSUPPORTED_OPERATION" });
@@ -1259,6 +1692,7 @@ test(
     const canceled = session.reopenWithEncoding("gbk");
     assert.deepEqual(await harness.messageBox(), {
       kind: "message",
+      extensionId: "sample",
       extensionName: "Sample",
       type: "warning",
       message: "Discard unsaved changes to notes.txt?",
@@ -1267,13 +1701,13 @@ test(
       defaultId: 1,
       cancelId: 1,
     });
-    harness.host.resolveConfirmation(1);
+    await harness.answer(1);
     await canceled;
     assert.equal(editor.text, "unsaved\n");
     assert.equal(session.format?.encoding, "utf-8");
     const discarded = session.reopenWithEncoding("gbk");
     await harness.messageBox();
-    harness.host.resolveConfirmation(0);
+    await harness.answer(0);
     await discarded;
     assert.equal(editor.text, "abc\n");
     assert.deepEqual(session.format, { encoding: "gbk", bom: false, eol: "\n" });
@@ -1494,7 +1928,7 @@ test(
     asking.session.dispose();
     await conflicted;
     const operations = harness.fileOperations.length;
-    harness.host.resolveConfirmation(0);
+    await harness.answer(0);
     await harness.flush();
     assert.equal(asking.session.state, "conflict");
     assert.equal(asking.editor.text, "mine\n");

@@ -15,15 +15,21 @@ import {
   clipboard,
   dialog,
   nativeImage,
+  nativeTheme,
   session,
   type WebContents,
   type WebContentsView,
 } from "electron";
 import iconv from "iconv-lite";
 
+import { formatTokenCount } from "@agw/api";
 import { DEFAULT_APPEARANCE } from "../shared/appearance";
 import type { AppearanceSettings } from "../shared/contracts";
 import { THEME_TOKEN_KINDS, THEME_TOKEN_NAMES } from "../shared/theme-tokens";
+import {
+  answerConfirmation,
+  visibleConfirmationWindow,
+} from "./confirmation/confirmation.integration-helper";
 import { config } from "./extensions-integration-setup";
 import { extensionPartition } from "./extensions/extension-session";
 
@@ -341,18 +347,17 @@ async function untilStatus(id: string, status: string, timeoutMs = 20_000): Prom
   );
 }
 
-/** 在 Extensions 页面打开启用开关并批准。Turns on the enable switch on the Extensions page and approves. */
+/**
+ * 在 Extensions 页面打开启用开关，并在主进程的独立确认窗口中批准；返回批准窗口的文字。
+ * Turns on the enable switch on the Extensions page and approves in the main process's separate confirmation window;
+ * returns the approval window's text.
+ */
 async function enable(id: string, name: string): Promise<string> {
   await goToExtensions();
   await untilHost(`!${OPEN_DIALOG}`, "earlier dialogs to close");
   await clickHost(`[data-extension-id="${id}"] button[role="switch"]`);
-  const dialogText = await until(
-    () => evalHost<string | null>(`${OPEN_DIALOG}?.textContent ?? null`),
-    "the approval dialog",
-  );
-  assert.match(dialogText, new RegExp(`Enable ${name}`, "u"));
-  await clickText("Enable", OPEN_DIALOG);
-  return dialogText;
+  await expectConfirmation("enable", [`Enable ${name}?`, `(${id})`], `the ${name} approval`);
+  return answerConfirmation("Enable");
 }
 
 async function disable(id: string): Promise<void> {
@@ -511,6 +516,7 @@ async function enableSample(): Promise<void> {
     "execution",
     "a2a",
     "chat.composer",
+    "chat.observe",
     "clipboard.read",
     "clipboard.write",
   ]) {
@@ -525,7 +531,7 @@ async function enableSample(): Promise<void> {
     extensions: Record<string, { enabled: boolean; grantedPermissions: string[] }>;
   }>(join(config.userData, "settings.json"));
   assert.equal(settings.extensions.sample.enabled, true);
-  assert.equal(settings.extensions.sample.grantedPermissions.length, 10);
+  assert.equal(settings.extensions.sample.grantedPermissions.length, 11);
   await goToChat();
   await untilHost(
     `Boolean(document.querySelector('.agw-ribbon [data-entry-id="sample:open"]'))`,
@@ -1168,6 +1174,206 @@ async function chatMarkdown(): Promise<void> {
   pass("switching conversations keeps the Markdown reply rendering");
 }
 
+/** sample 主视图收到的通信事件。The traffic events the sample main view received. */
+type ObservedEvent = {
+  kind: string;
+  origin: { kind: string; extensionId?: string };
+  scope: { serverId: string; projectId: string | null; conversationId: string | null };
+  ok?: boolean;
+  request?: { path?: string; args?: { type?: string }[] };
+  value?: { usage?: { totalTokenCount: number } };
+  message?: { role?: string; contents: { type: string; content?: unknown }[] };
+};
+
+const CONVERSATION_DETAILS_PATH = "/api/projects/{projectId}/conversations/{conversationId}";
+const ASIDE_TOTAL_TERM = `[...(document.querySelector('aside[aria-label="Current conversation details"]')?.querySelectorAll("dt") ?? [])].find((term) => term.textContent === "Total")`;
+const COMPOSER = `.agw-main-workspace textarea[role="combobox"]`;
+const SEND_BUTTON = `.agw-main-workspace button[aria-label="Send message"]`;
+
+/** UsageContent 中 totalTokenCount 的合计。The sum of totalTokenCount over UsageContent contents. */
+function usageTotal(events: readonly ObservedEvent[]): number {
+  return events
+    .flatMap((event) => event.message?.contents ?? [])
+    .filter((content) => content.type === "UsageContent")
+    .reduce(
+      (sum, content) =>
+        sum + ((content.content as { totalTokenCount?: number } | null)?.totalTokenCount ?? 0),
+      0,
+    );
+}
+
+/** 等待 ChatAside 的 Total 显示 `total`。Waits until ChatAside's Total shows `total`. */
+async function untilAsideTotal(total: number, label: string): Promise<void> {
+  await until(
+    async () =>
+      (await evalHost<string | null>(
+        `${ASIDE_TOTAL_TERM}?.nextElementSibling?.textContent ?? null`,
+      )) === formatTokenCount(total),
+    label,
+    30_000,
+    async () =>
+      `Total ${await evalHost<string | null>(`${ASIDE_TOTAL_TERM}?.nextElementSibling?.textContent ?? null`)}`,
+  );
+}
+
+/**
+ * chat.observe：sample 订阅通信事件，看到打开对话时的详情与历史、宿主发出的执行请求与推送的用量，以及自己的会话产生的事件；
+ * ChatAside 的 Total 从详情基线开始，加上推送的用量，Turn 结算后再加上没有推送的 summary 用量。
+ * chat.observe: sample subscribes to traffic events and sees the details and history of an opened conversation, the
+ * host's execution requests and pushed usage, and the events of its own session; ChatAside's Total starts at the
+ * details baseline, adds the pushed usage, and once the turn settles also the summary usage that was never pushed.
+ */
+async function chatObserve(): Promise<void> {
+  const main = await untilFrame("sample", "mainView");
+  await api(
+    main,
+    `
+    window.__chat = { responses: [], usage: [], requests: [], history: [] };
+    const observe = (filter, name) => api.chat.observe(filter, (event) => window.__chat[name].push(event));
+    window.__chatSubscriptions = [
+      await observe({ kinds: ["response"], channels: ["http"] }, "responses"),
+      await observe({ sources: ["live"], contentTypes: ["UsageContent"] }, "usage"),
+      await observe({ kinds: ["request"], channels: ["execution"] }, "requests"),
+      await observe({ sources: ["history"] }, "history"),
+    ];`,
+  );
+  const observed = (name: "responses" | "usage" | "requests" | "history") =>
+    evalFrame<ObservedEvent[]>(main, `window.__chat.${name}`);
+
+  // 先开始新对话，再打开 execution() 创建的对话，使详情与历史请求都在订阅之后发出。
+  // Start a new chat first, then open the conversation execution() created, so the details and history requests
+  // are sent after the subscriptions.
+  await clickHost(
+    `.agw-left-sidebar[data-view-id="agw.conversations"] .tools button:has(svg.lucide-plus)`,
+  );
+  await untilHost(`!new URLSearchParams(location.search).get("conversationId")`, "a new chat");
+  const executionConversation = `${CONVERSATION_ITEMS}.find((item) => item.textContent.includes("integration hello"))`;
+  await untilHost(`Boolean(${executionConversation})`, "the execution conversation in the list");
+  await evalHost(`${executionConversation}.click(); true`);
+  const conversationId = await until(
+    () => evalHost<string | null>(`new URLSearchParams(location.search).get("conversationId")`),
+    "the execution conversation to open",
+  );
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes("Echo: integration hello")`,
+    "the execution conversation in the chat view",
+  );
+  const baseline = await until(async () => {
+    const details = (await observed("responses")).find(
+      (event) =>
+        event.ok === true &&
+        event.request?.path === CONVERSATION_DETAILS_PATH &&
+        event.scope.conversationId === conversationId,
+    );
+    return details?.value?.usage ? { total: details.value.usage.totalTokenCount } : null;
+  }, "the conversation details response in sample");
+  await until(
+    async () =>
+      (await observed("history")).some(
+        (event) =>
+          event.scope.conversationId === conversationId &&
+          event.message?.role === "user" &&
+          event.message.contents.some((content) => content.content === "integration hello"),
+      ),
+    "the history messages in sample",
+  );
+  assert.deepEqual(await observed("usage"), []);
+  pass(
+    "chat.observe receives the details response and the history messages of a conversation opened after subscribing",
+  );
+
+  // ChatAside 只在对话区域宽度不小于 64rem 时显示；宽度不足时由 sample 隐藏 Left Sidebar。
+  // ChatAside shows only when the conversation area is at least 64rem wide; otherwise sample hides the Left Sidebar.
+  const totalVisible = `(() => {
+    const term = ${ASIDE_TOTAL_TERM};
+    const rect = term?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return false;
+    return term.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
+  })()`;
+  const hidSidebar = !(await evalHost<boolean>(totalVisible));
+  if (hidSidebar) await api(main, "await api.workspace.setSidebarVisible(false);");
+  await untilHost(totalVisible, "the Total row of the conversation details");
+  await untilAsideTotal(baseline.total, "the details baseline in ChatAside");
+
+  await setInput(COMPOSER, "observe hello");
+  await untilHost(
+    `document.querySelector(${JSON.stringify(SEND_BUTTON)})?.disabled === false`,
+    "the send button",
+  );
+  await clickHost(SEND_BUTTON);
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes("Echo: observe hello")`,
+    "the reply to observe hello",
+  );
+  await until(
+    async () =>
+      (await observed("requests")).some(
+        (event) =>
+          event.origin.kind === "client" &&
+          event.scope.conversationId === conversationId &&
+          event.request?.args?.[0]?.type === "ExecCommand",
+      ),
+    "the host's ExecCommand request in sample",
+  );
+  await until(
+    async () => usageTotal(await observed("usage")) === 2,
+    "the pushed usage in sample",
+    20_000,
+    async () => JSON.stringify(await observed("usage")),
+  );
+  await untilAsideTotal(baseline.total + 2, "the baseline plus the pushed usage in ChatAside");
+  // 宿主的 Turn 结束后发送按钮恢复为 Send message。The send button returns once the host's turn finishes.
+  await untilHost(
+    `Boolean(document.querySelector(${JSON.stringify(SEND_BUTTON)})) && !document.querySelector('.agw-main-workspace button[aria-label="Stop execution"]')`,
+    "the host turn to finish",
+  );
+  pass(
+    "chat.observe receives the host's ExecCommand and pushed usage, and ChatAside adds the pushed usage to the baseline",
+  );
+
+  const summaryTurn = await api<{ text: string }>(
+    main,
+    `
+    const session = await api.execution.createSession({ projectId: ${JSON.stringify(config.projectId)}, conversationId: ${JSON.stringify(conversationId)} });
+    const finished = new Promise((resolve) => {
+      const texts = [];
+      session.onMessage((message) => {
+        if (message.role === "assistant") {
+          for (const content of message.contents ?? []) if (typeof content.content === "string") texts.push(content.content);
+        }
+        if (message.additionalProperties?.type === "agw-turn-finished") resolve(texts.join(""));
+      });
+    });
+    await session.send({ target: { type: "agent", id: ${JSON.stringify(config.summaryAgentId)} }, text: "summary hello" });
+    const text = await finished;
+    await session.dispose();
+    return { text };`,
+  );
+  assert.match(summaryTurn.text, /Echo: summary hello/u);
+  const fromSample = (event: ObservedEvent) =>
+    event.origin.kind === "extension" && event.origin.extensionId === "sample";
+  assert.ok(
+    (await observed("requests")).some(
+      (event) => fromSample(event) && event.scope.conversationId === conversationId,
+    ),
+    "sample sees the requests of its own session",
+  );
+  assert.equal(usageTotal((await observed("usage")).filter(fromSample)), 2);
+  await untilAsideTotal(
+    baseline.total + 2 + 4,
+    "the pushed usage and the summary usage in ChatAside after the turn settles",
+  );
+  pass(
+    "a session of sample carries the extension origin, and ChatAside counts the summary usage once the turn settles",
+  );
+
+  // 恢复此前的状态：取消订阅、显示 Left Sidebar，并重新打开 Markdown 对话。
+  // Restore the earlier state: cancel the subscriptions, show the Left Sidebar and reopen the Markdown conversation.
+  await api(main, "for (const subscription of window.__chatSubscriptions) subscription.dispose();");
+  if (hidSidebar) await api(main, "await api.workspace.setSidebarVisible(true);");
+  await showMarkdownReply();
+}
+
 async function undeclaredExtension(): Promise<void> {
   await enable("undeclared", "Undeclared");
   await untilStatus("undeclared", "Active");
@@ -1597,8 +1803,12 @@ async function zipInstall(): Promise<void> {
   await goToExtensions();
   await withPickedPath(join(config.fixtures, "sample-v2.zip"), async () => {
     await clickText("Install from .zip");
-    await untilHost(`${OPEN_DIALOG}?.textContent.includes("1.0.0 → 1.1.0")`, "the version change");
-    await clickText("Replace", OPEN_DIALOG);
+    await expectConfirmation(
+      "install",
+      ["Version 1.1.0 · Replaces version 1.0.0"],
+      "the version change",
+    );
+    await answerConfirmation("Replace");
   });
   await untilStatus("sample", "Disabled");
   await untilHost(
@@ -1748,7 +1958,30 @@ const FILE_HEADER_ACTIONS = `(() => {
   };
   return [...(actions?.children ?? [])].map((element) => [element.getAttribute("aria-label") ?? element.getAttribute("role"), clickable(element)]);
 })()`;
-const OPEN_CONFIRMATION = `document.querySelector('[data-host-confirmation][data-state="open"]')`;
+/**
+ * 等待独立确认窗口显示给定类型的确认，文字包含全部 `texts`。
+ * Waits for the separate confirmation window to show a confirmation of the given kind whose text holds every `texts`.
+ */
+async function expectConfirmation(
+  kind: string,
+  texts: readonly string[],
+  label: string,
+): Promise<BrowserWindow> {
+  return until(async () => {
+    const window = visibleConfirmationWindow();
+    if (!window) return null;
+    const state = (await window.webContents.executeJavaScript(
+      `(() => { const root = document.getElementById("confirmation"); return { kind: root?.dataset.kind ?? null, text: root?.innerText ?? "" }; })()`,
+      true,
+    )) as { kind: string | null; text: string };
+    return state.kind === kind && texts.every((text) => state.text.includes(text)) ? window : null;
+  }, label);
+}
+
+/** 没有显示中的确认窗口。No confirmation window is shown. */
+function noConfirmation(): boolean {
+  return visibleConfirmationWindow() === null;
+}
 
 function markdownText(includes: string): string {
   return `Boolean(document.querySelector("article.markdown-body")?.textContent.includes(${JSON.stringify(includes)}))`;
@@ -1951,16 +2184,14 @@ async function textEditorPreview(): Promise<void> {
     preview,
     `document.querySelector('a[href="https://example.com/docs"]').click(); true`,
   );
-  await untilHost(
-    `${OPEN_CONFIRMATION}?.getAttribute("data-host-confirmation") === "open-link"
-      && ${OPEN_CONFIRMATION}.textContent.includes("https://example.com/docs")
-      && ${OPEN_CONFIRMATION}.textContent.includes("Text Editor")`,
-    "the Open link dialog",
+  await expectConfirmation(
+    "open-link",
+    ["https://example.com/docs", "Text Editor (text-editor)"],
+    "the Open link confirmation",
   );
-  await clickText("Cancel", OPEN_CONFIRMATION);
-  await untilHost(`!${OPEN_CONFIRMATION}`, "the Open link dialog to close");
+  await answerConfirmation("Cancel");
   await untilHost(shownFileIs("guide.md"), "the guide to stay open");
-  pass("an external link asks before opening the browser");
+  pass("an external link asks in the separate confirmation window before opening the browser");
 
   await disable("text-editor");
   await untilStatus("text-editor", "Disabled", 10_000);
@@ -2000,7 +2231,6 @@ const DIAGRAM_ON_DISK = {
   files: {},
 };
 const UNSAVED_MARKER = `Boolean(${viewerTab(EXCALIDRAW_VIEWER)}?.querySelector('[aria-label="Unsaved changes"]'))`;
-const DISCARD_DIALOG = `document.querySelector('[data-host-confirmation="discard-unsaved"][data-state="open"]')`;
 // Excalidraw 根元素的主题，没有根元素时为 null。The theme of the Excalidraw root, or null without one.
 const EXCALIDRAW_THEME = `(() => {
   const root = document.querySelector(".excalidraw");
@@ -2092,19 +2322,22 @@ async function excalidrawEditor(): Promise<void> {
   await untilHost(UNSAVED_MARKER, "the unsaved marker");
 
   await clickFileInTree("guide.md");
-  await untilHost(
-    `${DISCARD_DIALOG}?.textContent.includes("diagram.excalidraw") && ${DISCARD_DIALOG}.textContent.includes("Excalidraw")`,
-    "the discard dialog",
+  await expectConfirmation(
+    "discard-unsaved",
+    ["diagram.excalidraw", "Excalidraw"],
+    "the discard confirmation",
   );
-  await clickText("Cancel", DISCARD_DIALOG);
-  await untilHost(`!${OPEN_CONFIRMATION}`, "the discard dialog to close");
+  await answerConfirmation("Cancel");
   assert.equal(await evalHost<boolean>(shownFileIs("diagram.excalidraw")), true);
   assert.equal(await evalHost<boolean>(UNSAVED_MARKER), true);
 
   await clickHost('a[aria-label="Settings"]');
-  await untilHost(`Boolean(${DISCARD_DIALOG})`, "the discard dialog before Settings");
-  await clickText("Cancel", DISCARD_DIALOG);
-  await untilHost(`!${OPEN_CONFIRMATION}`, "the discard dialog to close");
+  await expectConfirmation(
+    "discard-unsaved",
+    ["diagram.excalidraw"],
+    "the discard confirmation before Settings",
+  );
+  await answerConfirmation("Cancel");
   assert.equal(await evalHost<boolean>("location.pathname.startsWith('/desktop/chat')"), true);
   pass("unsaved changes show a marker and ask before another file or Settings replaces them");
 
@@ -2168,7 +2401,7 @@ async function excalidrawEditor(): Promise<void> {
         editor,
         `Boolean(document.querySelector(".excalidraw .Modal, .excalidraw .Dialog"))`,
       ),
-      hostDialog: await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`),
+      hostDialog: !noConfirmation(),
       unsaved: await evalHost<boolean>(UNSAVED_MARKER),
       sceneUnchanged: (await readFile(diagramPath, "utf8")) === sceneBeforeSaveAs,
     },
@@ -2192,9 +2425,9 @@ async function excalidrawEditor(): Promise<void> {
     return scene.elements.filter((element) => !element.isDeleted).length === 3;
   }, "the saved diagram");
   await untilHost(`!${UNSAVED_MARKER}`, "the unsaved marker to clear");
-  assert.equal(await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`), false);
+  assert.equal(noConfirmation(), true);
   await openFileInTree("guide.md");
-  assert.equal(await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`), false);
+  assert.equal(noConfirmation(), true);
   await until(() => frames("excalidraw").length === 0, "the Excalidraw frame to close");
   pass("saving writes the new element and later file changes need no confirmation");
 
@@ -2229,7 +2462,7 @@ async function excalidrawEditor(): Promise<void> {
   });
   pressKey(conflicted, "s", [MOD]);
   await expectConflictDialog("Excalidraw", "diagram.excalidraw", conflicted);
-  await clickText("Overwrite", OPEN_MESSAGE_BOX);
+  await answerConfirmation("Overwrite");
   await untilHost(`!${UNSAVED_MARKER}`, "the unsaved marker to clear");
   const overwritten = await readScene();
   assert.deepEqual(
@@ -2294,7 +2527,7 @@ async function excalidrawEditor(): Promise<void> {
   await writeScene(reloaded);
   pressKey(conflicted, "s", [MOD]);
   await expectConflictDialog("Excalidraw", "diagram.excalidraw", conflicted);
-  await clickText("Reload", OPEN_MESSAGE_BOX);
+  await answerConfirmation("Reload");
   await untilHost(`!${UNSAVED_MARKER}`, "the unsaved marker to clear after Reload");
   // 画布不再是 Reload 之前的绘制结果。The canvas no longer shows the drawing from before Reload.
   await until(
@@ -2313,7 +2546,7 @@ async function excalidrawEditor(): Promise<void> {
   pass("a scene loaded after a host theme change keeps the host theme");
 
   await openFileInTree("guide.md");
-  assert.equal(await evalHost<boolean>(`Boolean(${OPEN_CONFIRMATION})`), false);
+  assert.equal(noConfirmation(), true);
   await until(() => frames("excalidraw").length === 0, "the Excalidraw frame to close");
   pass("after an Overwrite or a Reload, other files open without confirmation");
 
@@ -2349,7 +2582,6 @@ async function excalidrawEditor(): Promise<void> {
 const EDIT_VIEWER = "text-editor:markdown";
 const CODE_VIEWER = "text-editor:code";
 const FILE_VIEWER_TABS = `[...document.querySelectorAll('[data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`;
-const OPEN_MESSAGE_BOX = `document.querySelector('[data-host-confirmation="message"][data-state="open"]')`;
 // 查看器顶部条或工具栏中的保存状态为 "Saved"。The save status in a viewer's top bar or toolbar reads "Saved".
 const SAVED = `document.querySelector(".save-status")?.textContent === "Saved"`;
 const EDITOR = `document.querySelector(".ProseMirror")`;
@@ -2573,24 +2805,23 @@ async function codeShowing(predicate: string, label: string): Promise<FrameHandl
 }
 
 /**
- * 宿主绘制的冲突对话框：标题为 extension 名称，文字与按钮符合文档会话的规定，默认焦点为 Cancel，按钮都在窗口内可以点到，
- * 被盖住的查看器换成已画出的截图。
- * The host-drawn conflict dialog: titled with the extension name, with the document session's text and buttons,
- * Cancel focused, every button clickable inside the window, and the covered viewer swapped for its painted snapshot.
+ * 独立确认窗口中的冲突消息框：标题为 extension 名称，文字与按钮符合文档会话的规定，默认焦点为 Cancel，按钮都在窗口内可以
+ * 点到；查看器不被宿主遮罩盖住，保持显示。
+ * The conflict message box in the separate confirmation window: titled with the extension name, with the document
+ * session's text and buttons, Cancel focused and every button clickable inside the window; no host overlay covers
+ * the viewer, which stays shown.
  */
 async function expectConflictDialog(
   title: string,
   fileName: string,
   frame: FrameHandle,
 ): Promise<void> {
-  await untilHost(
-    `${OPEN_MESSAGE_BOX}?.querySelector('[data-slot="dialog-title"]')?.textContent === ${JSON.stringify(title)}`,
-    `the ${title} conflict dialog`,
-  );
+  const window = await expectConfirmation("message", [title], `the ${title} conflict confirmation`);
   const readBox = () =>
-    evalHost<{ clickable: boolean[]; focused: string | null }>(`(() => {
-    const dialog = ${OPEN_MESSAGE_BOX};
-    const buttons = [...dialog.querySelectorAll("[data-message-button]")];
+    window.webContents.executeJavaScript(
+      `(() => {
+    const root = document.getElementById("confirmation");
+    const buttons = [...root.querySelectorAll("footer button")];
     const clickable = (element) => {
       const rect = element.getBoundingClientRect();
       const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -2598,40 +2829,34 @@ async function expectConflictDialog(
         && (hit === element || element.contains(hit));
     };
     return {
-      message: dialog.querySelector('[data-slot="dialog-description"]').textContent,
-      detail: dialog.textContent.includes("Overwrite it with your version, or reload it and discard your changes."),
+      title: root.querySelector("h1").textContent,
+      message: root.querySelector(".message").textContent,
+      detail: root.querySelector(".detail")?.textContent === "Overwrite it with your version, or reload it and discard your changes.",
       buttons: buttons.map((button) => button.textContent),
       clickable: buttons.map(clickable),
       focused: document.activeElement?.textContent ?? null,
     };
-  })()`);
-  // 打开动画结束、焦点移到默认按钮之后再检查。Checked once the opening animation ends and focus reaches the default
-  // button.
+  })()`,
+      true,
+    ) as Promise<{ clickable: boolean[]; focused: string | null }>;
   const box = await until(
     async () => {
       const current = await readBox();
       return current.clickable.every(Boolean) && current.focused === "Cancel" ? current : null;
     },
-    `the ${title} conflict dialog to settle`,
+    `the ${title} conflict confirmation to settle`,
     20_000,
-    async () =>
-      `${JSON.stringify(await readBox())}; ${await evalHost<string>(`(() => {
-        const button = ${OPEN_MESSAGE_BOX}.querySelector("[data-message-button]");
-        const rect = button.getBoundingClientRect();
-        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        const layers = [...document.querySelectorAll('[data-slot$="-overlay"], [data-slot$="-content"], [data-sonner-toast]')].map((element) => [element.dataset.slot ?? "toast", element.dataset.state, getComputedStyle(element).pointerEvents, getComputedStyle(element).opacity, element.getAttribute("data-host-confirmation")]);
-        return JSON.stringify({ rect, hit: hit?.outerHTML.slice(0, 200) ?? null, layers, bodyPointer: getComputedStyle(document.body).pointerEvents, hasFocus: document.hasFocus() });
-      })()`)}`,
+    async () => JSON.stringify(await readBox()),
   );
   assert.deepEqual(box, {
+    title,
     message: `${fileName} was changed on disk after it was opened.`,
     detail: true,
     buttons: ["Overwrite", "Reload", "Cancel"],
     clickable: [true, true, true],
     focused: "Cancel",
   });
-  await until(() => !frame.view.getVisible(), "the viewer to be replaced by its snapshot");
-  assert.equal(await evalHost<boolean>(snapshotLoaded(frame.frameId)), true);
+  assert.equal(frame.view.getVisible(), true);
 }
 
 /** frame 中运行的 worker 的脚本地址（通过 DevTools 协议）。Script URLs of the workers running in a frame (through CDP). */
@@ -3921,6 +4146,18 @@ async function themeSelection(): Promise<void> {
     badText,
   );
   assert.ok(badText.includes("Themes: Bad"), badText);
+  // CSS 主题中的外部资源与 SVG 图片内的外部引用在应用之前被拒绝，错误带有包内文件位置。External resources in CSS
+  // themes and external references inside SVG images are rejected before applying, with package file locations.
+  assert.ok(
+    badText.includes("THEME_RESOURCE_INVALID (contributes.themes[1].path)") &&
+      badText.includes("themes/remote.css:4:3"),
+    badText,
+  );
+  assert.ok(
+    badText.includes("THEME_RESOURCE_INVALID (contributes.themes[2].path)") &&
+      badText.includes("themes/images/remote.svg"),
+    badText,
+  );
   await openAppearancePage();
   assert.equal(
     await evalHost<boolean>(
@@ -4872,6 +5109,500 @@ const AGENTFLOW_GRAPH = `(() => {
   return { edges, nodes, labels, unsaved: dialog.textContent.includes("Unsaved changes") };
 })()`;
 
+const PAPER_THEME = "css-theme:paper";
+const NAMESPACE_THEME = "css-theme:namespace";
+const COVER_THEME = "css-theme:cover";
+
+/** 等待 CSS 主题的样式表应用并发布。Waits for a CSS theme's stylesheet to apply and publish. */
+async function untilCssThemeApplied(themeId: string): Promise<void> {
+  await untilHost(
+    `(() => {
+      const theme = ${THEME_CONTEXT};
+      return theme.appliedTheme.id === ${JSON.stringify(themeId)}
+        && theme.appliedStyleId !== null
+        && theme.publishedTheme?.theme.id === ${JSON.stringify(themeId)}
+        && theme.publishedTheme?.style?.styleId === theme.appliedStyleId;
+    })()`,
+    `${themeId} to apply`,
+  );
+}
+
+/** extension 页面中主题系统的状态。The theme system's state in an extension page. */
+type PageThemeState = {
+  document: string | null;
+  extension: string | null;
+  adopted: number;
+  inline: string[];
+  gap: string;
+  background: string;
+  defaults: string[];
+  dark: boolean;
+};
+
+function pageThemeState(frame: FrameHandle): Promise<PageThemeState> {
+  return evalFrame<PageThemeState>(
+    frame,
+    `(() => {
+      const root = document.documentElement;
+      const style = getComputedStyle(root);
+      return {
+        document: root.dataset.agwDocument ?? null,
+        extension: root.dataset.agwExtension ?? null,
+        adopted: document.adoptedStyleSheets.length,
+        inline: [...root.style].filter((name) => name.startsWith("--")).sort(),
+        gap: style.getPropertyValue("--css-theme-gap").trim(),
+        background: style.getPropertyValue("--background").trim(),
+        defaults: ["--spacing", "--text-sm", "--color-red-500", "--radius-xl"].map((name) => style.getPropertyValue(name).trim()),
+        dark: root.classList.contains("dark"),
+      };
+    })()`,
+  );
+}
+
+/** 设置或去掉宿主根元素上的位置探针属性。Sets or removes the position probe attribute on the host root. */
+function setSlotProbe(value: string | null): Promise<unknown> {
+  return evalHost(
+    value === null
+      ? `document.documentElement.removeAttribute("data-css-theme-probe"); true`
+      : `document.documentElement.setAttribute("data-css-theme-probe", ${JSON.stringify(value)}); true`,
+  );
+}
+
+/**
+ * CSS 主题：安装与启用经确认窗口批准；宿主与调用 theme.apply() 的 extension 页面应用同一份主题，包括自定义变量、组件样式、
+ * Grid/Flex 布局、包内图片与字体；级联遵循 CSS 规则；Mode 变化复用样式表；原生视图跟随占位区域的位置与可见性；CSS、JSON 与
+ * Default 之间切换以及停用、删除时清理；确认窗口不受主题影响；外部资源与 namespace URI 不产生请求。
+ * CSS themes: installing and enabling are approved in the confirmation window; the host and extension pages that call
+ * theme.apply() apply the same theme, with custom variables, component styles, Grid/Flex layout, package images and
+ * fonts; the cascade follows CSS; mode changes reuse the stylesheet; native views follow the slot's position and
+ * visibility; switching between CSS, JSON and Default and disabling or removing clean up; confirmation windows are
+ * unaffected by themes; external resources and the namespace URI make no requests.
+ */
+async function cssThemes(): Promise<void> {
+  await chooseMode("light");
+  await chooseTheme("default");
+  const adoptedBefore = await evalHost<number>("document.adoptedStyleSheets.length");
+
+  await installFromFolder(join(config.fixtures, "css-theme"), "CSS Themes");
+  await untilStatus("css-theme", "Disabled");
+  const approval = await enable("css-theme", "CSS Themes");
+  assert.ok(approval.includes("This extension requests no permissions."), approval);
+  await untilStatus("css-theme", "Active");
+  assert.ok(
+    (
+      await evalHost<string>(
+        `document.querySelector('[data-extension-id="css-theme"]').textContent`,
+      )
+    ).includes("Themes: Paper, Namespace, Cover"),
+  );
+  pass("a CSS theme extension installs and enables through approvals in the confirmation window");
+
+  // 宿主：自定义变量、组件样式、Grid/Flex 布局，图片与字体来自嵌套导入并离线加载。The host: custom variables,
+  // component styles and Grid/Flex layout, with images and fonts from nested imports loading offline.
+  await chooseTheme(PAPER_THEME);
+  await untilCssThemeApplied(PAPER_THEME);
+  assert.equal(await evalHost<number>("document.adoptedStyleSheets.length"), adoptedBefore + 1);
+  assert.equal(await hostVariable("--background"), "#fffdf8");
+  assert.equal(await hostVariable("--css-theme-gap"), "20px");
+  assert.equal(
+    await evalHost<string>(
+      `[...document.documentElement.style].filter((name) => name.startsWith("--") && name !== "--agw-font-size-base" && name !== "--agw-font-size-chat").join()`,
+    ),
+    "",
+  );
+  const font = await evalHost<{ faces: number; status: string }>(
+    `document.fonts.load('16px "CSS Theme Font"').then((faces) => ({ faces: faces.length, status: faces[0]?.status ?? "none" }))`,
+  );
+  assert.deepEqual(font, { faces: 1, status: "loaded" });
+  const cssText = await evalHost<string>(`${THEME_CONTEXT}.publishedTheme.style.cssText`);
+  assert.ok(
+    cssText.includes("data:image/svg+xml;base64,") && cssText.includes("data:font/woff2;base64,"),
+  );
+  assert.equal(/@import|images\/|fonts\//u.test(cssText), false);
+  await goToChat();
+  const ribbon = `document.querySelector(".agw-ribbon")`;
+  assert.equal(await hostStyle(ribbon, "display"), "grid");
+  assert.equal(await hostStyle(ribbon, "border-right-width"), "3px");
+  assert.match(await hostStyle(ribbon, "background-image"), /^url\("data:image\/png;base64,/u);
+  assert.equal(await hostStyle(`document.querySelector(".agw-main-workspace")`, "gap"), "20px");
+  pass(
+    "a CSS theme applies its custom variables, component styles and Grid/Flex layout to the host, with images and a font from nested imports loading offline",
+  );
+
+  // extension 页面：调用 theme.apply() 的 Edit 应用同一份主题与默认变量，sample 侧栏不调用，保持原样。Extension pages:
+  // Edit, which calls theme.apply(), applies the same theme and the default variables; sample's sidebar does not.
+  await openFileInTree("readme.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
+  const edit = await editShowing(EDITOR, "readme.md in Edit");
+  await evalFrame(edit, `window.__cssThemeMarker = "kept"; true`);
+  await until(
+    async () => (await pageThemeState(edit)).adopted === 2,
+    "the theme stylesheets in Edit",
+  );
+  const editState = await pageThemeState(edit);
+  // 主题系统只写 --agw-font-size-base；--agw-font-size-document 由 Text Editor 自己写入。The theme system writes only
+  // --agw-font-size-base; Text Editor writes --agw-font-size-document itself.
+  assert.deepEqual(
+    { ...editState, defaults: editState.defaults.map(Boolean) },
+    {
+      document: "extension",
+      extension: "text-editor",
+      adopted: 2,
+      inline: ["--agw-font-size-base", "--agw-font-size-document"],
+      gap: "20px",
+      background: "#fffdf8",
+      defaults: [true, true, true, true],
+      dark: false,
+    },
+  );
+  assert.equal(
+    await evalFrame<string>(edit, `getComputedStyle(document.body).color`),
+    "rgb(36, 33, 29)",
+  );
+  assert.equal(
+    await evalFrame<string>(
+      edit,
+      `getComputedStyle(document.querySelector(".edit-scroll")).outlineColor`,
+    ),
+    "rgb(11, 110, 79)",
+  );
+  await showSidebarView("sample:list");
+  const sample = await untilFrame("sample", "sidebarView");
+  const sampleState = await pageThemeState(sample);
+  assert.deepEqual(
+    {
+      document: sampleState.document,
+      adopted: sampleState.adopted,
+      inline: sampleState.inline,
+      gap: sampleState.gap,
+    },
+    { document: null, adopted: 0, inline: [], gap: "" },
+  );
+  await showSidebarView("agw.files", "agw.ribbon.files");
+  pass(
+    "Edit receives the same CSS theme with the default variables and the extension document markers, and a page without theme.apply() keeps its style",
+  );
+
+  // 级联：主题样式表排在页面样式表之后，特异性、inline、!important 与 layer 遵循 CSS 规则。The cascade: the theme
+  // stylesheet comes after page stylesheets, and specificity, inline styles, !important and layers follow CSS.
+  const cascade = await evalFrame<Record<string, string>>(
+    edit,
+    `(() => {
+      const probes = document.createElement("div");
+      probes.innerHTML = '<span class="css-theme-order" id="same"></span><span class="css-theme-order" id="specific"></span>'
+        + '<span class="css-theme-order" id="inline" style="color: rgb(13, 13, 13)"></span><span class="css-theme-order" id="important"></span>'
+        + '<span class="css-theme-layered" id="layered"></span><span class="css-theme-layered-important" id="layered-important"></span>'
+        + '<span class="css-theme-conditional" id="conditional"></span>';
+      document.body.append(probes);
+      const style = document.createElement("style");
+      style.textContent = ".css-theme-order { color: rgb(9, 9, 9); } #specific.css-theme-order { color: rgb(10, 10, 10); }"
+        + " #important { color: rgb(11, 11, 11) !important; } .css-theme-layered { color: rgb(12, 12, 12); }"
+        + " .css-theme-layered-important { color: rgb(14, 14, 14) !important; }";
+      document.head.append(style);
+      const color = (id) => getComputedStyle(document.getElementById(id)).color;
+      const result = Object.fromEntries(["same", "specific", "inline", "important", "layered", "layered-important", "conditional"].map((id) => [id, color(id)]));
+      probes.remove();
+      style.remove();
+      return result;
+    })()`,
+  );
+  assert.deepEqual(cascade, {
+    same: "rgb(1, 2, 3)",
+    specific: "rgb(10, 10, 10)",
+    inline: "rgb(13, 13, 13)",
+    important: "rgb(11, 11, 11)",
+    layered: "rgb(12, 12, 12)",
+    "layered-important": "rgb(7, 8, 9)",
+    conditional: "rgb(20, 30, 40)",
+  });
+  pass(
+    "the theme stylesheet wins over a style added later at equal specificity, while specificity, inline styles, !important and layers follow the CSS cascade",
+  );
+
+  // Mode：样式表复用，背景只在深色下定义时属性与公共变量随 Mode 一致。Modes reuse the stylesheet; with a backdrop
+  // defined only for dark, the attribute and the public variables follow the mode.
+  await evalFrame(edit, `window.__cssThemeSheet = document.adoptedStyleSheets.at(-1); true`);
+  const backdropAttribute = `document.documentElement.hasAttribute("data-workspace-backdrop")`;
+  assert.equal(await evalHost<boolean>(backdropAttribute), false);
+  await applyAppearanceInPlace({ mode: "dark" });
+  await untilHost(backdropAttribute, "the dark backdrop attribute");
+  assert.equal(await hostVariable("--background"), "#24211d");
+  await untilHost(
+    `${THEME_CONTEXT}.publishedTheme?.theme.kind === "dark" && ${THEME_CONTEXT}.publishedTheme.theme.tokens["--agw-workspace-backdrop"].startsWith("linear-gradient")`,
+    "the dark theme published",
+  );
+  await until(
+    async () => (await pageThemeState(edit)).background === "#24211d",
+    "the dark Edit background",
+  );
+  assert.equal(
+    await evalFrame<boolean>(edit, `window.__cssThemeSheet === document.adoptedStyleSheets.at(-1)`),
+    true,
+  );
+  assert.equal((await pageThemeState(edit)).dark, true);
+  nativeTheme.themeSource = "light";
+  await applyAppearanceInPlace({ mode: "system" });
+  await untilHost(
+    `!${backdropAttribute} && !document.documentElement.classList.contains("dark")`,
+    "the light System mode",
+  );
+  assert.equal(await hostVariable("--background"), "#fffdf8");
+  nativeTheme.themeSource = "dark";
+  await untilHost(
+    `${backdropAttribute} && document.documentElement.classList.contains("dark")`,
+    "the dark System mode",
+  );
+  nativeTheme.themeSource = "system";
+  await applyAppearanceInPlace({ mode: "light" });
+  await untilHost(`!${backdropAttribute}`, "the light mode without a backdrop");
+  assert.equal(
+    await evalFrame<boolean>(edit, `window.__cssThemeSheet === document.adoptedStyleSheets.at(-1)`),
+    true,
+  );
+  pass(
+    "Light, Dark and System reuse the CSS stylesheet, and the backdrop attribute, public variables and kind follow the mode when only dark rules define the backdrop",
+  );
+
+  // 原生视图跟随占位区域：仅位置变化、尺寸、visibility、透明度、动画与 :hover/:has()；没有变化时不发送视图更新。
+  // The native view follows its slot: position-only changes, size, visibility, opacity, animations and :hover/:has();
+  // nothing is sent without changes.
+  const views = runtime().views;
+  const updateLayout = views.updateLayout.bind(views);
+  let layoutUpdates = 0;
+  views.updateLayout = (updates) => {
+    layoutUpdates += updates.length;
+    return updateLayout(updates);
+  };
+  try {
+    await delay(500);
+    const idle = layoutUpdates;
+    await delay(1000);
+    assert.equal(layoutUpdates, idle, "no view updates while nothing changes");
+    const base = edit.view.getBounds();
+    const near = (value: number, expected: number) => Math.abs(value - expected) <= 1;
+    await setSlotProbe("shift");
+    await until(() => near(edit.view.getBounds().x, base.x + 40), "the shifted view");
+    assert.equal(edit.view.getBounds().width, base.width);
+    await setSlotProbe(null);
+    await until(() => near(edit.view.getBounds().x, base.x), "the view back in place");
+    await setSlotProbe("narrow");
+    await until(() => near(edit.view.getBounds().width, base.width - 100), "the narrower view");
+    await setSlotProbe(null);
+    await until(() => near(edit.view.getBounds().width, base.width), "the view at its width");
+    for (const probe of ["hidden", "transparent"]) {
+      await setSlotProbe(probe);
+      await until(() => !edit.view.getVisible(), `the view hidden by ${probe}`);
+      await setSlotProbe(null);
+      await until(() => edit.view.getVisible(), `the view shown again after ${probe}`);
+    }
+    const positions = new Set<number>();
+    await setSlotProbe("animate");
+    await until(() => {
+      positions.add(edit.view.getBounds().x);
+      return near(edit.view.getBounds().x, base.x + 30);
+    }, "the end of the animation");
+    assert.ok(positions.size > 2, `the view followed the animation: ${[...positions].join()}`);
+    await setSlotProbe(null);
+    await until(() => near(edit.view.getBounds().x, base.x), "the view back after the animation");
+    await hoverHost(ribbon);
+    await until(
+      () => near(edit.view.getBounds().y, base.y + 12),
+      "the view moved by :hover and :has()",
+    );
+    const workspace = await evalHost<{ x: number; y: number }>(
+      `(() => { const rect = document.querySelector(".agw-main-workspace").getBoundingClientRect(); return { x: Math.round(rect.left + 40), y: Math.round(rect.top + 10) }; })()`,
+    );
+    host().sendInputEvent({ type: "mouseMove", x: workspace.x, y: workspace.y });
+    await until(
+      () => near(edit.view.getBounds().y, base.y),
+      "the view back after the pointer leaves",
+    );
+  } finally {
+    views.updateLayout = updateLayout;
+  }
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, edit.frameId);
+  assert.equal(await evalFrame<string>(edit, "window.__cssThemeMarker"), "kept");
+  pass(
+    "the WebContentsView follows position-only moves, size changes, CSS hiding, opacity, animations and :hover/:has() while the CSS theme is active, without updates while nothing changes",
+  );
+
+  // 字号：CSS 主题下 Edit、Preview 与 Code 继续使用设置的字号。Font sizes: Edit, Preview and Code keep the set sizes.
+  await applyAppearanceInPlace({ baseFontSize: 20 });
+  const sizes = await openedViewSizes();
+  assert.deepEqual(
+    { edit: sizes.edit, preview: sizes.preview, code: sizes.code },
+    { edit: "20px", preview: "20px", code: "17.5px" },
+  );
+  await applyAppearanceInPlace({ baseFontSize: 16 });
+  pass("under a CSS theme, Edit, Preview and Code use the font sizes set on the Appearance page");
+
+  // CSS、JSON 与 Default 之间切换：只移除主题系统拥有的样式表与变量。Switching between CSS, JSON and Default removes
+  // only what the theme system owns.
+  await openFileInTree("readme.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md again");
+  const switching = await editShowing(EDITOR, "readme.md in Edit again");
+  await evalFrame(
+    switching,
+    `document.adoptedStyleSheets = [...document.adoptedStyleSheets, new CSSStyleSheet()]; window.__ownSheet = document.adoptedStyleSheets.at(-1); true`,
+  );
+  await evalHost(
+    `window.__ownSheet = new CSSStyleSheet(); document.adoptedStyleSheets = [...document.adoptedStyleSheets, window.__ownSheet]; true`,
+  );
+  await applyAppearanceInPlace({ theme: SOFT_THEME });
+  await untilHost(`${THEME_CONTEXT}.appliedStyleId === null`, "Soft to apply");
+  assert.equal(await hostVariable("--css-theme-gap"), "");
+  assert.equal(
+    await evalHost<string>(`document.documentElement.style.getPropertyValue("--background")`),
+    "#ffffff",
+  );
+  assert.equal(
+    await evalHost<boolean>(
+      `document.adoptedStyleSheets.includes(window.__ownSheet) && document.adoptedStyleSheets.length === ${adoptedBefore + 1}`,
+    ),
+    true,
+  );
+  await until(
+    async () => (await pageThemeState(switching)).gap === "",
+    "the CSS theme to leave Edit",
+  );
+  const softEdit = await pageThemeState(switching);
+  assert.equal(softEdit.background, "#ffffff");
+  assert.ok(softEdit.inline.includes("--background"));
+  assert.equal(
+    await evalFrame<boolean>(
+      switching,
+      `document.adoptedStyleSheets.length === 1 && document.adoptedStyleSheets[0] === window.__ownSheet`,
+    ),
+    true,
+  );
+  await applyAppearanceInPlace({ theme: "default" });
+  await untilHost(
+    `!document.documentElement.style.getPropertyValue("--background")`,
+    "Default to apply",
+  );
+  await applyAppearanceInPlace({ theme: PAPER_THEME });
+  await untilCssThemeApplied(PAPER_THEME);
+  await until(
+    async () => (await pageThemeState(switching)).gap === "20px",
+    "the CSS theme back in Edit",
+  );
+  assert.equal(
+    await evalFrame<boolean>(
+      switching,
+      `document.adoptedStyleSheets[0] === window.__ownSheet && document.adoptedStyleSheets.length === 3`,
+    ),
+    true,
+  );
+  await evalHost(
+    `document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== window.__ownSheet); true`,
+  );
+  pass(
+    "switching between CSS, JSON and Default replaces only the theme system's stylesheets and variables in the host and in Edit",
+  );
+
+  // namespace 入口：URI 只是标识符。The namespace entry: the URI is only a name.
+  await applyAppearanceInPlace({ theme: NAMESPACE_THEME });
+  await untilCssThemeApplied(NAMESPACE_THEME);
+  assert.equal(await hostVariable("--background"), "#f4f8ff");
+  pass("a CSS theme with @namespace passes validation and applies");
+
+  // 确认窗口：覆盖整个宿主、隐藏列表与按钮的主题不影响独立的批准窗口与实际批准结果。The confirmation window: a theme
+  // that covers the host and hides lists and buttons does not affect the separate approval window or its result.
+  await applyAppearanceInPlace({ theme: COVER_THEME });
+  await untilCssThemeApplied(COVER_THEME);
+  await disable("sample");
+  await untilStatus("sample", "Disabled");
+  await clickHost(`[data-extension-id="sample"] button[role="switch"]`);
+  const approvalWindow = await expectConfirmation(
+    "enable",
+    ["Enable Sample?", "(sample)"],
+    "the Sample approval",
+  );
+  const approvalState = await approvalWindow.webContents.executeJavaScript(
+    `({
+      footer: getComputedStyle(document.querySelector("footer")).display,
+      buttons: [...document.querySelectorAll("footer button")].map((button) => [button.textContent, getComputedStyle(button).visibility]),
+      permissions: document.querySelectorAll("ul.permissions li").length,
+      adopted: document.adoptedStyleSheets.length,
+      bridge: typeof window.agwDesktop,
+    })`,
+    true,
+  );
+  const samplePermissions = await evalHost<number>(
+    `window.agwDesktop.listExtensions().then((list) => list.find((item) => item.id === "sample").manifest.permissions.length)`,
+  );
+  assert.deepEqual(approvalState, {
+    footer: "flex",
+    buttons: [
+      ["Cancel", "visible"],
+      ["Enable", "visible"],
+    ],
+    permissions: samplePermissions,
+    adopted: 0,
+    bridge: "undefined",
+  });
+  assert.equal(approvalWindow.getParentWindow(), hooks.mainWindow());
+  assert.equal(approvalWindow.isModal(), true);
+  // 宿主页面不能产生批准结果。The host page cannot produce an approval.
+  assert.equal(await evalHost<string>("typeof window.agwConfirmation"), "undefined");
+  await answerConfirmation("Enable");
+  await untilStatus("sample", "Active");
+  assert.match(
+    await evalHost<string>(
+      `window.agwDesktop.commitExtensionInstall("00000000-0000-0000-0000-000000000000").then(() => "committed", (error) => error.message)`,
+    ),
+    /has not been approved/u,
+  );
+  pass(
+    "a theme covering the host does not reach the modal confirmation window, whose permissions and buttons stay intact, and only its answer approves",
+  );
+
+  // 停用与删除：主题不可用时回到 Default 并清除样式表。Disabling and removing: an unavailable theme falls back to
+  // Default and its stylesheet is removed.
+  await chooseTheme(PAPER_THEME);
+  await untilCssThemeApplied(PAPER_THEME);
+  await disable("css-theme");
+  await untilStatus("css-theme", "Disabled");
+  await untilAppearance({ theme: "default" });
+  await untilHost(
+    `[...document.querySelectorAll("[data-sonner-toast]")].some((toast) => toast.textContent.includes("Paper is no longer available. Using Default."))`,
+    "the Paper notice",
+  );
+  await untilHost(
+    `document.adoptedStyleSheets.length === ${adoptedBefore}`,
+    "the stylesheet to be removed",
+  );
+  await enable("css-theme", "CSS Themes");
+  await untilStatus("css-theme", "Active");
+  await chooseTheme(PAPER_THEME);
+  await untilCssThemeApplied(PAPER_THEME);
+  await goToExtensions();
+  await clickText("Uninstall", `document.querySelector('[data-extension-id="css-theme"]')`);
+  await clickText("Uninstall", OPEN_DIALOG);
+  await untilHost(
+    `!document.querySelector('[data-extension-id="css-theme"]')`,
+    "css-theme to leave the list",
+  );
+  await untilAppearance({ theme: "default" });
+  await untilHost(
+    `document.adoptedStyleSheets.length === ${adoptedBefore}`,
+    "the stylesheet to be removed after uninstall",
+  );
+  pass(
+    "disabling or uninstalling the CSS theme's extension returns to Default and removes its stylesheet",
+  );
+
+  // 外部资源、SVG 内的外部引用与 namespace URI 都没有产生请求。External resources, external references inside SVG and
+  // the namespace URI made no requests.
+  assert.deepEqual(
+    (await serviceState()).requests.filter((request) => request.includes("/css-theme/")),
+    [],
+  );
+  pass(
+    "rejected external resources, external references inside SVG images and the namespace URI make no requests",
+  );
+}
+
 /**
  * Agentflow 边线：构建器中五种边线与 SVG 箭头使用主题变量，切换主题时一起变化，节点、边线数据、选中状态与未保存修改保持。
  * Agentflow edges: the builder's five edge kinds and their SVG arrowheads use the theme variables and change together
@@ -5560,18 +6291,17 @@ async function editInteractions(): Promise<void> {
   const link = (text: string) =>
     `[...document.querySelectorAll(".ProseMirror a")].find((element) => element.textContent === ${JSON.stringify(text)})`;
   await clickInFrame(edit, link("example"), [MOD]);
-  await untilHost(
-    `${OPEN_CONFIRMATION}?.getAttribute("data-host-confirmation") === "open-link"
-      && ${OPEN_CONFIRMATION}.textContent.includes("https://example.com/related")
-      && ${OPEN_CONFIRMATION}.textContent.includes("Text Editor")`,
-    "the Open link dialog from Edit",
+  await expectConfirmation(
+    "open-link",
+    ["https://example.com/related", "Text Editor"],
+    "the Open link confirmation from Edit",
   );
-  await clickText("Cancel", OPEN_CONFIRMATION);
-  await untilHost(`!${OPEN_CONFIRMATION}`, "the Open link dialog to close");
+  await answerConfirmation("Cancel");
   await clickInFrame(edit, link("readme"), [MOD]);
   await untilHost(shownFileIs("readme.md"), "readme.md opened from the Edit link");
+  // 只有已经关闭的确认窗口新建过 WebContents。Only the confirmation window, now closed, created a WebContents.
   assert.equal(BrowserWindow.getAllWindows().length, windows);
-  assert.equal(createdWebContents, created);
+  assert.equal(createdWebContents, created + 1);
   assert.equal(edit.view.webContents.getURL(), editUrl);
   pass(
     "Mod+click on links asks before opening the browser or opens the project file, and opens no extra window",
@@ -5695,18 +6425,17 @@ async function editInteractions(): Promise<void> {
   // "Reload view" 在有未保存修改时先确认。"Reload view" asks first when there are unsaved changes.
   const reload = `.agw-main-workspace [aria-label="Reload view"]`;
   await clickHost(reload);
-  await untilHost(
-    `${DISCARD_DIALOG}?.textContent.includes("Discard unsaved changes?") && ${DISCARD_DIALOG}.textContent.includes("edit.md")`,
-    "the discard dialog for Reload view",
+  await expectConfirmation(
+    "discard-unsaved",
+    ["Discard unsaved changes?", "edit.md"],
+    "the discard confirmation for Reload view",
   );
-  await clickText("Cancel", DISCARD_DIALOG);
-  await untilHost(`!${OPEN_CONFIRMATION}`, "the discard dialog to close");
+  await answerConfirmation("Cancel");
   assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, edit.frameId);
   assert.equal(await evalFrame<boolean>(edit, `Boolean(${editBlock("Related:", "h3")})`), true);
   assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), true);
   await clickHost(reload);
-  await untilHost(`Boolean(${DISCARD_DIALOG})`, "the discard dialog for Reload view");
-  await clickText("Discard", DISCARD_DIALOG);
+  await answerConfirmation("Discard");
   const reloaded = await until(() => {
     const frame = viewerFrameOf("text-editor", "markdown");
     return frame && frame.frameId !== edit.frameId && runtime().registry.get(frame.frameId)?.pageId
@@ -5958,19 +6687,18 @@ async function conflictsAndRefresh(): Promise<void> {
   await writeFile(appPath, changedOnDisk);
   saveIn(code);
   await expectConflictDialog("Text Editor", "app.ts", code);
-  await clickText("Cancel", OPEN_MESSAGE_BOX);
-  await untilHost(`!${OPEN_CONFIRMATION}`, "the conflict dialog to close");
-  await until(() => code.view.getVisible(), "Code to show again");
+  await answerConfirmation("Cancel");
+  assert.equal(code.view.getVisible(), true);
   assert.equal(await readFile(appPath, "utf8"), changedOnDisk);
   assert.equal(await evalHost<boolean>(unsavedIn(CODE_VIEWER)), true);
   pass(
-    "saving a file changed on disk shows the Text Editor conflict dialog over a snapshot, and Cancel keeps the changes",
+    "saving a file changed on disk shows the Text Editor conflict in the confirmation window, and Cancel keeps the changes",
   );
 
   // 4：Overwrite 写入编辑器内容。Overwrite writes the editor content.
   saveIn(code);
   await expectConflictDialog("Text Editor", "app.ts", code);
-  await clickText("Overwrite", OPEN_MESSAGE_BOX);
+  await answerConfirmation("Overwrite");
   await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker to clear");
   const overwritten = `${saved}// editor change`;
   await untilFileText(appPath, overwritten, "the overwritten app.ts");
@@ -5993,7 +6721,7 @@ async function conflictsAndRefresh(): Promise<void> {
   await writeFile(appPath, reloadedText);
   saveIn(code);
   await expectConflictDialog("Text Editor", "app.ts", code);
-  await clickText("Reload", OPEN_MESSAGE_BOX);
+  await answerConfirmation("Reload");
   await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker to clear");
   await until(
     async () => (await evalFrame<string>(code, CODE_TEXT)) === reloadedText,
@@ -6021,11 +6749,8 @@ async function installFromFolder(directory: string, name: string): Promise<void>
   await goToExtensions();
   await withPickedPath(directory, async () => {
     await clickText("Install from folder");
-    await untilHost(
-      `${OPEN_DIALOG}?.textContent.includes(${JSON.stringify(name)})`,
-      "the install dialog",
-    );
-    await clickText("Install", OPEN_DIALOG);
+    await expectConfirmation("install", [`Install ${name}?`], `the ${name} install approval`);
+    await answerConfirmation("Install");
   });
 }
 
@@ -6083,7 +6808,7 @@ async function todoEditorFixture(): Promise<void> {
   await untilHost(unsavedIn(TODO_VIEWER), "the unsaved marker in todo-editor");
   saveIn(todo);
   await expectConflictDialog("Todo Editor", "list.todo", todo);
-  await clickText("Reload", OPEN_MESSAGE_BOX);
+  await answerConfirmation("Reload");
   await until(
     () => evalFrame<boolean>(todo, `${area}.value === "- changed on disk\\n"`),
     "the disk content in todo-editor",
@@ -6713,6 +7438,7 @@ async function run(): Promise<void> {
   await a2aAndHttp();
   await chatContributions();
   await chatMarkdown();
+  await chatObserve();
   await undeclaredExtension();
   await hookOrderAndReload();
   await failureModes();
@@ -6737,6 +7463,7 @@ async function run(): Promise<void> {
   await imagePreviewThemes();
   await memoryPreviewThemes();
   await darkModeAndExtensionViews();
+  await cssThemes();
   await agentflowEdgeThemes();
   await textEditorSettings();
   await textEditorCode();

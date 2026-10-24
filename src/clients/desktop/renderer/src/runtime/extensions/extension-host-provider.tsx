@@ -3,35 +3,12 @@
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import type { ThemeInfo } from "@agw/extension-sdk";
-import { THEME_TOKEN_NAMES } from "@desktop/shared/theme-tokens";
 import { useDesktopTheme } from "../appearance/theme-provider";
-import { HostConfirmationDialog } from "../components/workspace/host-confirmation-dialog";
 import { useDesktopRuntime } from "../runtime-provider";
 import { normalizeBaseUrl } from "./context-service";
 import { type ExtensionRuntime, getExtensionRuntime } from "./extension-runtime";
 
 const ExtensionHostContext = React.createContext<ExtensionRuntime | null>(null);
-
-/**
- * 读取推送给 extension 的主题：正在使用的主题的 id 与名称，以及变量的计算值，其中的 `var()` 已经替换。
- * Reads the theme pushed to extensions: the id and title of the theme in use, and the variables' computed values with
- * `var()` substituted.
- */
-export function readTheme(
-  kind: "light" | "dark",
-  applied: { id: string; title: string },
-): { theme: ThemeInfo; background: string } {
-  const style = getComputedStyle(document.documentElement);
-  const tokens = Object.fromEntries(
-    THEME_TOKEN_NAMES.map((name) => [name, style.getPropertyValue(name).trim()]).filter(
-      ([, value]) => value,
-    ),
-  );
-  const background =
-    getComputedStyle(document.body).backgroundColor || (kind === "dark" ? "#0b0c0f" : "#ffffff");
-  return { theme: { id: applied.id, title: applied.title, kind, tokens }, background };
-}
 
 function isChatPath(pathname: string | null): boolean {
   return (pathname ?? "").replace(/\/+$/u, "") === "/desktop/chat";
@@ -50,7 +27,7 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const pathnameRef = React.useRef(pathname);
   pathnameRef.current = pathname;
-  const { kind, appliedTokens, appliedTheme } = useDesktopTheme();
+  const { publishedTheme } = useDesktopTheme();
 
   React.useEffect(() => {
     if (!value) return;
@@ -105,25 +82,23 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
     );
   }, [host, authUser, profile, token]);
 
-  // 主题、实际深浅色与字号设置变化时推送主题。Theme, light/dark and font size changes push the theme.
-  const baseFontSize = runtimeState?.settings.appearance.baseFontSize;
-  const chatFontSize = runtimeState?.settings.appearance.chatFontSize;
+  // ThemeProvider 在实际的 dark class 与样式更新之后读取并发布主题，这里推送给 extension 并测量视图区域。
+  // ThemeProvider reads and publishes the theme after the actual dark class and styles update; push it to extensions
+  // here and measure the view areas.
+  // CSS 主题可以改变占位区域的位置与可见性，启用期间连续采样。A CSS theme can move and hide view slots, so sampling runs
+  // continuously while one is active.
   React.useEffect(() => {
-    if (!host || !kind) return;
-    // 等 class 与主题变量写到 document 后再读取变量。Read variables after the class and theme variables are applied.
-    const frame = requestAnimationFrame(() => {
-      const { theme, background } = readTheme(kind, appliedTheme);
-      host.setTheme(theme, background);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [host, kind, appliedTokens, appliedTheme, baseFontSize, chatFontSize]);
+    if (!value || !publishedTheme) return;
+    value.host.setTheme(
+      { theme: publishedTheme.theme, style: publishedTheme.style },
+      publishedTheme.background,
+    );
+    value.layout.setContinuous(publishedTheme.style !== null);
+    value.layout.schedule();
+  }, [value, publishedTheme]);
+  React.useEffect(() => () => value?.layout.setContinuous(false), [value]);
 
-  return (
-    <ExtensionHostContext value={value}>
-      {children}
-      {host ? <HostConfirmationDialog host={host} /> : null}
-    </ExtensionHostContext>
-  );
+  return <ExtensionHostContext value={value}>{children}</ExtensionHostContext>;
 }
 
 /** 宿主与遮挡跟踪器；预渲染阶段为 null。The host and overlay tracker; null while prerendering. */

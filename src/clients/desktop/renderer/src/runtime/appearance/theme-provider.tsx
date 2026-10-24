@@ -5,19 +5,24 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 import { DEFAULT_THEME_ID } from "@desktop/shared/appearance";
-import type { AppearanceMode, AppearanceSettings } from "@desktop/shared/contracts";
+import type { AppearanceMode, AppearanceSettings, ThemeStyleText } from "@desktop/shared/contracts";
 import type { ExtensionHost, ExtensionHostSnapshot } from "../extensions/extension-host";
 import {
   type AvailableTheme,
   DEFAULT_THEME_TITLE,
   declaredThemeTitles,
-  hasWorkspaceBackdrop,
   isDefaultTheme,
   listAvailableThemes,
   themeTokens,
   toAppearanceMode,
   WORKSPACE_BACKDROP_ATTRIBUTE,
 } from "./resolve-theme";
+import {
+  isWorkspaceBackdrop,
+  type PublishedTheme,
+  readTheme,
+  samePublishedTheme,
+} from "./theme-state";
 
 export type DesktopThemeState = {
   /** 有效 Mode：设置中的 `mode`，缺失时为 next-themes 保存的值。The effective mode: the stored one, else next-themes'. */
@@ -28,10 +33,14 @@ export type DesktopThemeState = {
   appearance: AppearanceSettings | null;
   /** 可用的 extension 主题。The available extension themes. */
   themes: readonly AvailableTheme[];
-  /** 写到 `<html>` 上的主题变量；Default 为空。The theme variables written to `<html>`; empty for Default. */
+  /** 写到 `<html>` 上的 JSON 主题变量；Default 与 CSS 主题为空。The JSON theme variables written to `<html>`; empty for Default and CSS themes. */
   appliedTokens: Readonly<Record<string, string>>;
-  /** 正在使用的主题：选中且可用的主题，否则为 Default。The theme in use: the selected available one, else Default. */
+  /** 正在使用的 CSS 主题样式文本的标识；JSON 主题与 Default 为 null。The style id of the CSS theme in use; null for JSON themes and Default. */
+  appliedStyleId: string | null;
+  /** 正在使用的主题：选中且已经应用的主题，否则为 Default。The theme in use: the selected theme once applied, else Default. */
   appliedTheme: { id: string; title: string };
+  /** 最近一次读取并发布给 extension 的主题；第一次读取之前为 null。The theme last read and published to extensions; null before the first read. */
+  publishedTheme: PublishedTheme | null;
   /** 保存外观，然后让 next-themes 使用其中的 Mode。Saves the appearance, then applies its mode through next-themes. */
   saveAppearance(next: AppearanceSettings): Promise<void>;
   /** 保存 Mode，然后调用 next-themes 的 setTheme。Saves the mode, then calls next-themes' setTheme. */
@@ -62,13 +71,39 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : "Unable to save appearance settings";
 }
 
+/** 正在使用的主题：JSON 变量或 CSS 样式文本。The theme in use: JSON variables or a CSS style text. */
+type AppliedTheme = {
+  id: string;
+  title: string;
+  tokens: Readonly<Record<string, string>>;
+  style: ThemeStyleText | null;
+};
+
+const DEFAULT_APPLIED: AppliedTheme = {
+  id: DEFAULT_THEME_ID,
+  title: DEFAULT_THEME_TITLE,
+  tokens: {},
+  style: null,
+};
+
+function sameApplied(left: AppliedTheme, right: AppliedTheme): boolean {
+  return (
+    left.id === right.id &&
+    left.title === right.title &&
+    left.style?.styleId === right.style?.styleId &&
+    JSON.stringify(left.tokens) === JSON.stringify(right.tokens)
+  );
+}
+
 const noSubscription = () => () => undefined;
 const noSnapshot = () => null;
 
 /**
- * 按选中的主题与 Mode 设置 `<html>` 的主题变量与 dark class，并迁移、校正设置中的 Mode 与主题。
- * Applies the selected theme's variables and the dark class to `<html>`, and migrates and corrects the stored mode and
- * theme.
+ * 按选中的主题与 Mode 管理 `<html>` 上主题系统拥有的部分：JSON 主题的 inline 变量与 CSS 主题的 constructed stylesheet；
+ * 每次变化之后在下一帧读取实际的深浅色、工作区背景与公共变量并发布；迁移、校正设置中的 Mode 与主题。
+ * Manages what the theme system owns on `<html>` for the selected theme and mode: JSON theme inline variables and the
+ * CSS theme constructed stylesheet; after every change it reads the actual light or dark, the workspace backdrop and
+ * the public variables on the next frame and publishes them; and it migrates and corrects the stored mode and theme.
  */
 export function ThemeProvider({
   appearance,
@@ -100,38 +135,160 @@ export function ThemeProvider({
   const extensions = snapshot?.extensions;
   const themes = React.useMemo(() => listAvailableThemes(extensions ?? []), [extensions]);
   const selected = themes.find((theme) => theme.id === appearance?.theme) ?? null;
-  // 内容相同的变量保持同一个对象，extension 状态的其他变化不会重写变量。
-  // Equal variables keep one object, so other extension state changes do not rewrite them.
-  const tokensKey = JSON.stringify(selected && kind ? themeTokens(selected.theme, kind) : {});
-  const appliedTokens = React.useMemo<Readonly<Record<string, string>>>(
-    () => JSON.parse(tokensKey),
-    [tokensKey],
-  );
-  const appliedId = selected?.id ?? DEFAULT_THEME_ID;
-  const appliedTitle = selected?.title ?? DEFAULT_THEME_TITLE;
-  const appliedTheme = React.useMemo(
-    () => ({ id: appliedId, title: appliedTitle }),
-    [appliedId, appliedTitle],
-  );
+  const selectedId = selected?.id ?? null;
+  const selectedTitle = selected?.title ?? null;
+  // 内容相同的变量保持同一个字符串，extension 状态的其他变化不会重写变量。
+  // Equal variables keep one string, so other extension state changes do not rewrite them.
+  const jsonTokensKey =
+    selected?.theme.format === "json" && kind
+      ? JSON.stringify(themeTokens(selected.theme, kind))
+      : null;
+  const cssStyleId = selected?.theme.format === "css" ? selected.theme.styleId : null;
 
-  // 变量与工作区背景属性在同一次修改中写入。The variables and the workspace backdrop attribute change together.
-  const writtenRef = React.useRef<readonly string[]>([]);
-  React.useLayoutEffect(() => {
-    const names = Object.keys(appliedTokens);
-    if (names.length === 0 && writtenRef.current.length === 0) return;
-    const root = document.documentElement;
-    withoutTransitions(() => {
-      for (const name of writtenRef.current) root.style.removeProperty(name);
-      for (const [name, value] of Object.entries(appliedTokens))
-        root.style.setProperty(name, value);
-      root.toggleAttribute(WORKSPACE_BACKDROP_ATTRIBUTE, hasWorkspaceBackdrop(appliedTokens));
+  // CSS 主题的样式文本：复用当前 styleId 的文本；递增序号使过期的获取结果不能覆盖新的选择。
+  // The CSS theme style text: the text of the current styleId is reused, and an increasing sequence keeps stale
+  // results from overriding a newer selection.
+  const [loadedStyle, setLoadedStyle] = React.useState<{
+    themeId: string;
+    style: ThemeStyleText;
+  } | null>(null);
+  const loadedRef = React.useRef(loadedStyle);
+  loadedRef.current = loadedStyle;
+  const requestRef = React.useRef(0);
+  const cssThemeId = cssStyleId === null ? null : selectedId;
+  React.useEffect(() => {
+    const sequence = ++requestRef.current;
+    if (!host || cssThemeId === null || cssStyleId === null) {
+      // 切换到 JSON 或 Default 之后释放不再使用的文本。Text no longer in use is released after switching away.
+      setLoadedStyle(null);
+      return;
+    }
+    const loaded = loadedRef.current;
+    if (loaded?.themeId === cssThemeId && loaded.style.styleId === cssStyleId) return;
+    host.getThemeStyle({ themeId: cssThemeId, styleId: cssStyleId }).then(
+      (style) => {
+        if (sequence === requestRef.current) setLoadedStyle({ themeId: cssThemeId, style });
+      },
+      (error: unknown) => {
+        if (sequence !== requestRef.current) return;
+        toast.error(error instanceof Error ? error.message : String(error));
+        // 主题在列表读取之后发生变化：重新读取列表，得到新的描述或不可用状态。The theme changed after the list
+        // was read, so read the list again for the new descriptor or its unavailability.
+        host.rescan().catch((rescanError: unknown) => toast.error(describeError(rescanError)));
+      },
+    );
+  }, [host, cssThemeId, cssStyleId]);
+
+  // 选中的主题准备完成后成为正在使用的主题；获取 CSS 期间继续使用当前主题。
+  // The selected theme becomes the theme in use once ready; while its CSS loads the current theme stays.
+  const resolved = React.useMemo<AppliedTheme | null>(() => {
+    if (selectedId === null || selectedTitle === null) return DEFAULT_APPLIED;
+    if (cssStyleId === null) {
+      return {
+        id: selectedId,
+        title: selectedTitle,
+        tokens: JSON.parse(jsonTokensKey ?? "{}"),
+        style: null,
+      };
+    }
+    return loadedStyle?.themeId === selectedId && loadedStyle.style.styleId === cssStyleId
+      ? { id: selectedId, title: selectedTitle, tokens: {}, style: loadedStyle.style }
+      : null;
+  }, [selectedId, selectedTitle, jsonTokensKey, cssStyleId, loadedStyle]);
+  const [applied, setApplied] = React.useState<AppliedTheme>(DEFAULT_APPLIED);
+  if (resolved !== null && !sameApplied(resolved, applied)) setApplied(resolved);
+
+  // 下一帧的状态读取，多个触发合并为一次。The next-frame state read; several triggers merge into one read.
+  const [publishedTheme, setPublishedTheme] = React.useState<PublishedTheme | null>(null);
+  const appliedRef = React.useRef(applied);
+  const kindRef = React.useRef(kind);
+  const frameRef = React.useRef(0);
+  const scheduleRead = React.useCallback(() => {
+    if (frameRef.current !== 0) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = 0;
+      const root = document.documentElement;
+      const rootKind = root.classList.contains("dark") ? "dark" : "light";
+      // 等待 next-themes 完成 class 更新：class 变化会再次调度读取。Wait for next-themes to update the class; the
+      // class change schedules another read.
+      if (kindRef.current !== rootKind) return;
+      const backdrop = getComputedStyle(root).getPropertyValue("--agw-workspace-backdrop");
+      root.toggleAttribute(WORKSPACE_BACKDROP_ATTRIBUTE, isWorkspaceBackdrop(backdrop));
+      const current = appliedRef.current;
+      const { theme, background } = readTheme(rootKind, current);
+      const next: PublishedTheme = { theme, background, style: current.style };
+      setPublishedTheme((previous) => (samePublishedTheme(previous, next) ? previous : next));
     });
+  }, []);
+  React.useLayoutEffect(() => {
+    kindRef.current = kind;
+    scheduleRead();
+  }, [kind, scheduleRead]);
+  const baseFontSize = appearance?.baseFontSize;
+  const chatFontSize = appearance?.chatFontSize;
+  React.useEffect(() => scheduleRead(), [baseFontSize, chatFontSize, scheduleRead]);
+  React.useEffect(() => {
+    const observer = new MutationObserver(scheduleRead);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    document.fonts.addEventListener("loadingdone", scheduleRead);
+    return () => {
+      observer.disconnect();
+      document.fonts.removeEventListener("loadingdone", scheduleRead);
+    };
+  }, [scheduleRead]);
+
+  // 在一次同步修改中更新主题系统拥有的 inline 变量与样式表，保留其他代码的样式表与属性。
+  // Updates the inline variables and stylesheet the theme system owns in one synchronous change, keeping the
+  // stylesheets and properties of other code.
+  const writtenRef = React.useRef<readonly string[]>([]);
+  const sheetRef = React.useRef<{ sheet: CSSStyleSheet; styleId: string } | null>(null);
+  React.useLayoutEffect(() => {
+    appliedRef.current = applied;
+    const names = Object.keys(applied.tokens);
+    if (
+      names.length > 0 ||
+      writtenRef.current.length > 0 ||
+      applied.style !== null ||
+      sheetRef.current !== null
+    ) {
+      const root = document.documentElement;
+      withoutTransitions(() => {
+        for (const name of writtenRef.current) root.style.removeProperty(name);
+        for (const [name, value] of Object.entries(applied.tokens))
+          root.style.setProperty(name, value);
+        if (applied.style) {
+          const owned = sheetRef.current ?? { sheet: new CSSStyleSheet(), styleId: "" };
+          if (owned.styleId !== applied.style.styleId) {
+            owned.sheet.replaceSync(applied.style.cssText);
+            owned.styleId = applied.style.styleId;
+          }
+          sheetRef.current = owned;
+          if (!document.adoptedStyleSheets.includes(owned.sheet)) {
+            document.adoptedStyleSheets = [...document.adoptedStyleSheets, owned.sheet];
+          }
+        } else if (sheetRef.current) {
+          const { sheet } = sheetRef.current;
+          document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+            (item) => item !== sheet,
+          );
+          sheetRef.current = null;
+        }
+      });
+    }
     writtenRef.current = names;
-  }, [appliedTokens]);
+    scheduleRead();
+  }, [applied, scheduleRead]);
   React.useLayoutEffect(
     () => () => {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = 0;
       const root = document.documentElement;
       for (const name of writtenRef.current) root.style.removeProperty(name);
+      if (sheetRef.current) {
+        const { sheet } = sheetRef.current;
+        document.adoptedStyleSheets = document.adoptedStyleSheets.filter((item) => item !== sheet);
+        sheetRef.current = null;
+      }
       root.removeAttribute(WORKSPACE_BACKDROP_ATTRIBUTE);
       writtenRef.current = [];
     },
@@ -199,18 +356,24 @@ export function ThemeProvider({
     );
   }, [started, current, themes, saveAppearance]);
 
+  const appliedTheme = React.useMemo(
+    () => ({ id: applied.id, title: applied.title }),
+    [applied.id, applied.title],
+  );
   const value = React.useMemo<DesktopThemeState>(
     () => ({
       mode,
       kind,
       appearance: current,
       themes,
-      appliedTokens,
+      appliedTokens: applied.tokens,
+      appliedStyleId: applied.style?.styleId ?? null,
       appliedTheme,
+      publishedTheme,
       saveAppearance,
       setMode,
     }),
-    [mode, kind, current, themes, appliedTokens, appliedTheme, saveAppearance, setMode],
+    [mode, kind, current, themes, applied, appliedTheme, publishedTheme, saveAppearance, setMode],
   );
   return <DesktopThemeContext value={value}>{children}</DesktopThemeContext>;
 }
