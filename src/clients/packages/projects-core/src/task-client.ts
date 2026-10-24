@@ -70,6 +70,9 @@ export async function getConversationActivity(
   });
 }
 
+/** 宿主创建的对话的 `extensionId`。The `extensionId` of a conversation the host created. */
+export const HOST_EXTENSION_ID = "host";
+
 export interface ConversationSummary {
   projectId: string;
   conversationId: string;
@@ -83,8 +86,8 @@ export interface ConversationSummary {
   updateTime?: string | null;
   errorMessage?: string | null;
   /**
-   * 创建方："host"（宿主）或 Desktop extension 的 id；Server 没有返回时（旧版 Server）为 null。
-   * The creator: "host" or a Desktop extension id; null when the Server does not return it (an older Server).
+   * 创建方：{@link HOST_EXTENSION_ID}（宿主）或 Desktop extension 的 id；Server 没有返回时（旧版 Server）为 null。
+   * The creator: {@link HOST_EXTENSION_ID} or a Desktop extension id; null when the Server does not return it (an older Server).
    */
   extensionId: string | null;
   /**

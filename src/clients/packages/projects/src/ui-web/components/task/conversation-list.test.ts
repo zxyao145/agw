@@ -13,7 +13,8 @@ const { ConversationList } = await import("./conversation-list.tsx");
 
 const PROJECT_ID = "project-1";
 
-function conversationRecord(conversationId: string, title: string) {
+/** 没有 `extensionId` 时与旧版 Server 的响应相同。Without `extensionId` it matches an older Server's response. */
+function conversationRecord(conversationId: string, title: string, extensionId?: string) {
   return {
     projectId: PROJECT_ID,
     conversationId,
@@ -22,16 +23,18 @@ function conversationRecord(conversationId: string, title: string) {
     executionCount: 1,
     messageCount: 2,
     createTime: "2026-10-17T00:00:00Z",
+    ...(extensionId === undefined ? {} : { extensionId }),
   };
 }
 
 const api = await startApiServer({
   [`GET /api/projects/${PROJECT_ID}/conversations`]: {
     items: [
-      conversationRecord("conversation-1", "First chat"),
-      conversationRecord("conversation-2", "Second chat"),
+      conversationRecord("conversation-1", "First chat", "host"),
+      conversationRecord("conversation-2", "Second chat", "sample"),
+      conversationRecord("conversation-3", "Third chat"),
     ],
-    total: 2,
+    total: 3,
     pageIndex: 1,
     pageSize: 20,
   },
@@ -133,4 +136,42 @@ test("an empty item action list shows no More menu", async () => {
 
   await screen.findByText("First chat");
   assert.equal(screen.queryByRole("button", { name: "More conversation actions" }), null);
+});
+
+/**
+ * 标题前的创建方图标：名称与 lucide 图标的类名；没有图标时为 null。
+ * The creator icon before a row's title: its name and lucide icon class; null without an icon.
+ */
+function creatorIcon(title: string): { name: string | null; icon: string | undefined } | null {
+  const titleElement = screen.getByText(title);
+  const row = titleElement.closest(".group") as HTMLElement;
+  const image = within(row).queryByRole("img");
+  if (image === null) return null;
+  assert.ok(
+    image.compareDocumentPosition(titleElement) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the creator icon comes before the title",
+  );
+  const svg = image.querySelector("svg");
+  assert.ok(svg !== null);
+  return {
+    name: image.getAttribute("aria-label"),
+    icon: [...svg.classList].find(
+      (name) => name === "lucide-message-circle-text" || name === "lucide-puzzle",
+    ),
+  };
+}
+
+test("each row shows its creator icon before the title", async () => {
+  renderList();
+
+  await screen.findByText("Third chat");
+  assert.deepEqual(creatorIcon("First chat"), {
+    name: "Created by Agw",
+    icon: "lucide-message-circle-text",
+  });
+  assert.deepEqual(creatorIcon("Second chat"), {
+    name: 'Created by extension "sample"',
+    icon: "lucide-puzzle",
+  });
+  assert.equal(creatorIcon("Third chat"), null, "an older Server reports no creator");
 });
