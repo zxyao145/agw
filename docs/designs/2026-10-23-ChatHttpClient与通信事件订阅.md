@@ -74,7 +74,7 @@
   - 每个 Turn 结束后多一次对话详情请求。Distributed 中断的 Turn 在结算之前，再按 1、2、4、8 秒、之后每 10 秒请求一次，持续时间不超过 `LeaseSeconds`（默认 30 秒）加最后一次请求的间隔。
   - Desktop 中 extension 的每个订阅对应 ChatHttpClient 中的一个订阅，事件在宿主中按条件匹配后才写入端口。
 - **稳定**：
-  - 订阅函数抛出的异常不被捕获，从派发的位置继续抛出（2.5 节）。`ExecutionSession` 在 `handlers.onMessage` 之后才派发 `message` 事件，订阅函数的异常不影响 Chat 处理消息。
+  - 订阅函数抛出的异常不被捕获，从派发的位置继续抛出（2.5 节）。`ExecutionSession` 在 `handlers.onMessage` 之后才派发 `message` 事件，当前消息已经交给 Chat；Distributed 模式下，后续消息按第 4 节的恢复规则处理。
   - extension 的订阅属于创建它的 frame 页面；端口关闭（frame 关闭、页面被替换、extension 停用）时一起取消。每个 extension 最多同时有 16 个订阅。
 - **准确**：
   - 每个 Turn 结束后的详情同步完成时，面板的值等于服务端该对话 `agent_usage` 的累计值，包括 summary、`resultOnly` 与非流式调用的用量。Turn 结束时仍在运行的后台 Agent 任务，其用量在完成之后的下一次详情读取时计入。
@@ -426,7 +426,7 @@ export type ChatEventKind = ChatEvent["kind"];
   - request 事件中抛出：请求不发出，方法以该异常拒绝；
   - response 事件或历史消息事件中抛出：方法以该异常拒绝；
   - hub 调用的 request、response 事件中抛出：该 hub 调用以该异常拒绝，按 `ExecutionSession` 现有的错误流程处理；
-  - `ReceiveMessage` 的 message 事件中抛出：异常在 SignalR 的回调中抛出，由 SignalR 记录为 error 日志；`handlers.onMessage` 已经处理过这条消息。
+  - `ReceiveMessage` 的 message 事件中抛出：异常在 SignalR 的回调中抛出，由 SignalR 记录为 error 日志；`handlers.onMessage` 已经处理过这条消息。Distributed 模式保留最后连续处理成功的 cursor，暂停后续 Turn 消息的处理，直到失败位置的消息补发并处理成功（第 4 节）。
 
 ### 3. 订阅条件
 
@@ -503,7 +503,13 @@ export type ExecutionTrafficObserver = {
 - `ExecutionSession` 的构造函数增加第三个参数 `observer: ExecutionTrafficObserver | null = null`。
 - 新增私有方法 `invoke<T>(method: ExecutionHubMethod, ...args: unknown[]): Promise<T>`：先调用 `this.observer?.request(method, args)`，再调用 `this.connection.invoke`；成功时以 `{ ok: true, value }` 调用返回的函数后返回 `value`，失败时以 `{ ok: false, error }` 调用后抛出原异常。现有的 7 处 `this.connection.invoke` 全部改为 `this.invoke`，分别在 `dispatch`、`listAgentflowCheckpoints`、`restoreAfterReconnect`、`discoverInProcessExecution`、`recoverInProcessExecution`、`restoreDurableSubscription`、`refreshExecutionProvider` 中。
 - `ReceiveMessage` 回调在 `this.handlers.onMessage(scopedMessage)` 之后调用 `this.observer?.message(message)`，传入服务端原始消息；与 `handlers.onMessage` 相同，会话 dispose 之后不再报告。
-- Distributed 模式下，`updateDurableProgress` 只在内存中更新 turnId 与 cursor，写入 attachment store 移到 `this.observer?.message(message)` 之后。订阅方（例如 `ConversationTokenUsageStore`）先保存自己的状态，`ExecutionSession` 再保存 cursor；页面在两次写入之间关闭时，这条消息在恢复后被补发，由订阅方按 `turnSequence` 去重。订阅函数抛出异常时 cursor 不前进，这条消息同样在恢复后被补发。
+- Distributed 模式下，恢复进度按以下规则更新：
+
+  1. `streamCursor` 与 attachment store 中的 cursor 都表示当前 Turn 最后连续处理成功的位置。开始或恢复 Turn 时建立 `activeTurnId` 与初始 cursor；`ReceiveMessage` 提取的 `turnSequence` 只作为待提交位置。`this.handlers.onMessage(scopedMessage)` 与 `this.observer?.message(message)` 都正常返回后，才调用 `updateDurableProgress` 更新内存 cursor 并写入 attachment store。`observer` 为 null 时，处理成功以 `handlers.onMessage` 正常返回为准。
+  2. 处理带有 `turnId`、`turnSequence` 的消息之前，记录待完成的位置；两个回调都成功后清除。任一回调抛出异常时，这个位置保留，异常继续抛出，内存与存储中的 cursor 保持不变。存在待完成位置时，只重新处理相同 `turnId`、`turnSequence` 的消息；其他带有 Turn 位置的消息不交给 `handlers.onMessage` 或 observer，也不推进 cursor，等待恢复订阅后由服务端补发。因此序号 N 失败后，收到 N+1 不会越过 N，订阅方记录的最大序号也不会提前增加。
+  3. `restoreAfterReconnect` 与手动重连使用内存中的已确认 cursor；刷新页面后的 `configure` 使用 attachment store 中的已确认 cursor。重新订阅不会清除待完成位置；失败位置处理成功后，才继续处理其后的消息。`reconcileStartFailure` 从空 cursor 订阅时同样遵守这条规则。存在待完成位置时，`hasRunningTurn()` 保持 true，`execute` 与 `resumeCheckpoint` 不能覆盖当前 Turn 的恢复状态。
+  4. 带有 Turn 位置的结束消息也必须完成两个回调，之后才调用 `finishActiveTurn` 清除 attachment、重置执行状态并完成等待结束的 Promise。结束消息处理失败时保留当前 Turn 与 cursor；无 Turn 位置的通知不能清除这份待恢复状态。`ExecutionSessionManager` 对每次收到的结束消息都在当前派发结束后检查发送队列，包括补发的结束消息；检查时仍由 `hasRunningTurn()` 阻止未处理成功的 Turn 继续发送。服务端明确返回 `DurableExecutionNotFound` 时，沿用现有的 attachment 清理流程。
+  5. 订阅方（例如 `ConversationTokenUsageStore`）先保存自己的状态，`ExecutionSession` 再提交 cursor；页面在两次写入之间关闭时，这条消息在恢复后被补发，已经处理过它的订阅方按 `turnSequence` 去重。消息派发中途失败时，已经成功处理的订阅方在补发时同样可能再次收到该消息。
 - 执行通道的事件只来自 hub 方法调用与 `ReceiveMessage`。`connection.start`、`connection.stop` 与自动重连本身没有事件；重连后恢复设置与订阅时发出的 `SettingCommand`、`SubscribeTurnCommand` 产生事件。
 - ChatHttpClient 的 observer 把 `request` 转换为 `execution` 通道的 request 与 response 事件：`request` 为 `{ method, args }`；hub 方法返回 `undefined` 时 `value` 为 null；hub 错误的 `status`、`body` 为 null。`message` 转换为 `source` 为 `live`、`channel` 为 `execution`、`requestId` 为 null 的 message 事件。
 
@@ -524,6 +530,8 @@ sequenceDiagram
   S->>M: handlers.onMessage(scopedMessage)
   S->>C: observer.message(message)
   C->>C: 派发 message 事件
+  C-->>S: 派发成功
+  S->>S: Distributed 提交 cursor；结束消息清除 attachment
 ```
 
 ### 5. Token usage
@@ -619,7 +627,7 @@ store 建立四个订阅：
    - 删除不满足第 7 条的 Turn 的记录，它们的用量已经包含在基线中；
    - 仍满足第 7 条、已经收到结束消息、并且列在 `unsettledTurnIds` 中的 Turn（Distributed 中断后 worker 尚未退出），在 1、2、4、8 秒后各发一次同步请求，之后每 10 秒一次，直到该对话没有这样的 Turn。服务端最迟在 `结束时间 + LeaseSeconds` 结算（5.1 节），所以这些请求的次数有上限。某次同步请求失败时停止，等待下一次读取详情。
 9. 同步请求：以触发它的事件的作用范围调用 `getConversation(scope)`，并且只在该对话记下的连接身份等于 `getConnectionIdentity()` 时发出。比较与发出在同一次同步调用中完成，中间不会改变。两者不同时（例如 Desktop 已切换到另一个 Server，原 Server 上的后台会话随后结束），请求不发出，该对话的记录保持不变，之后在它自己的连接下读取详情时更新（例如切换回原 Server 并打开该对话）。这样不会用其他 Server 的地址与凭据查询，也不会把其他 Server 的数据写入这条记录。
-10. 保存与恢复：storage 不为 null 时，每个对话未结算 Turn 的记录（推送用量、最大序号、是否收到结束消息）保存在键 `agw:turn-usage:v1:${JSON.stringify([serverId, projectId, conversationId])}` 下：第 4、5 条修改记录后写入，第 8 条删除记录后移除。store 第一次为某个对话建立记录时读取保存的内容；恢复的 Turn 没有开始序号，按第 7 条只在列入 `unsettledTurnIds` 时计入，没有基线时全部计入；恢复的已结束 Turn 在采用基线后按第 8 条继续同步。`ExecutionSession` 在订阅方处理完消息之后才保存 durable cursor（第 4 节），页面在两次写入之间关闭时，这条消息在恢复后被补发，由第 4 条去重。
+10. 保存与恢复：storage 不为 null 时，每个对话未结算 Turn 的记录（推送用量、最大序号、是否收到结束消息）保存在键 `agw:turn-usage:v1:${JSON.stringify([serverId, projectId, conversationId])}` 下：第 4、5 条修改记录后写入，第 8 条删除记录后移除。store 第一次为某个对话建立记录时读取保存的内容；恢复的 Turn 没有开始序号，按第 7 条只在列入 `unsettledTurnIds` 时计入，没有基线时全部计入；恢复的已结束 Turn 在采用基线后按第 8 条继续同步。`ExecutionSession` 在消息处理成功后才更新内存与存储中的 durable cursor，失败之后的消息等待恢复订阅（第 4 节）；页面在用量与 cursor 两次写入之间关闭时，这条消息在恢复后被补发，由第 4 条去重。
 
 各场景的结果：
 
@@ -1046,7 +1054,10 @@ session = this.options.chat.createExecutionSession(
 - `options.origin` 为 extension 时事件的 `origin` 为该值；`options.runtime` 的 `webSocket` 用于建立连接。
 - 执行通道事件的第二个参数为创建会话时 `runtime` 的 `baseUrl`（规范化后）与 `token`；之后全局执行配置改变，已创建会话的事件仍为原来的值。
 - 重连后恢复设置与 durable 订阅：`SettingCommand` 与 `SubscribeTurnCommand` 产生 request 事件。
-- Distributed 模式下，attachment store 中的 cursor 在 `observer.message` 之后写入；订阅函数抛出异常时，保存的 cursor 不变。
+- Distributed 模式下，`handlers.onMessage` 与 `observer.message` 都成功后，才更新内存 cursor 与 attachment store；没有 observer 时以 handler 成功为准。
+- Distributed 模式下，序号 N 的订阅函数抛出异常，随后收到 N+1：N+1 不交给 handler 或 observer，attachment store 保留 N 之前的 cursor；触发自动重连，断言实际发出的 `SubscribeTurnCommand.cursor` 同样是 N 之前的位置。订阅函数恢复正常后，补发 N、N+1，依次处理并提交 cursor。手动重连与重新创建会话的刷新场景检查相同的请求参数；首条消息失败时 cursor 为 null。
+- Distributed 模式下，`handlers.onMessage` 抛出异常：observer 不收到这条消息，内存与存储中的 cursor 不变，恢复订阅后从失败位置继续。
+- Distributed 模式下，结束消息的订阅函数抛出异常：attachment 保留，`hasRunningTurn()` 为 true，等待结束的 Promise 尚未完成，新执行不能覆盖恢复状态；补发结束消息并处理成功后，才清除 attachment 并完成等待。恢复期间再次处理失败时仍保留原 cursor；服务端明确返回 `DurableExecutionNotFound` 时按现有流程清理。
 
 `src/conversation-token-usage.test.ts` 直接使用 `ChatHttpClient`：详情响应来自 `startApiServer`，每次请求返回测试设定的 `usage` 与 `unsettledTurnIds`；推送消息来自执行会话的 `ReceiveMessage`（连接替换方式同上）：
 
@@ -1055,6 +1066,7 @@ session = this.options.chat.createExecutionSession(
 - 刷新场景：新的 store 先收到已包含 Turn R 的基线（R 不在 `unsettledTurnIds` 中），再收到 R 补发的 `UsageContent` 与结束消息：显示值一直等于基线，同步响应之后不变。
 - 补发包含 R 的开始消息：R 在补发期间计入，同步响应之后被删除，显示响应中的值。
 - `turnId` 与 `turnSequence` 相同的 `UsageContent` 只计入一次；一条消息中的多个 `UsageContent` 全部计入。
+- Distributed 模式下，分别在用量订阅之前、之后注册会抛出异常的订阅：序号 N 失败后收到 N+1，记录的最大序号不能越过 N；订阅恢复正常后重新连接，补发 N、N+1 后两条用量各计入一次。用量状态已保存、cursor 尚未提交时重新创建会话与 store，补发同一消息也只计入一次。
 - `resultOnly`：Turn 没有推送 `UsageContent`，结束后的同步把用量更新为响应中的值。
 - summary：同步响应的 `usage` 比推送合计多出 summary 的用量，显示响应中的值。
 - 两个详情请求的响应以相反的顺序到达：采用较晚请求的响应。
@@ -1074,6 +1086,7 @@ session = this.options.chat.createExecutionSession(
 `src/execution-session-manager.test.ts`：
 
 - 默认工厂经 `chatHttpClient` 创建会话：`attach` 后的 `configure` 产生以会话键为作用范围的事件。
+- Distributed 模式下，结束消息的订阅函数抛出异常时，等待发送的条目保留且不发送；自动重连后补发结束消息并处理成功，队列只继续发送下一条。补发的结束消息已经被 manager 处理过时，同样会再次检查队列。
 
 **`@agw/projects-core` 与 `@agw/projects`**
 
@@ -1133,7 +1146,7 @@ session = this.options.chat.createExecutionSession(
 
 1. 服务端（5.1 节）：先写“单元测试 · 服务端”中的测试，再修改 `AgentUsage`、`ProjectConversationTurn`、`IAgentUsageRecorder`、`AgentUsageRecorder`、`AgentTelemetryMiddleware`、`AgentTurnSummaryService`、`IConversationTurnStore`（`FinishAsync` 的结算时间、`SettleUsageAsync`）及其六个调用位置、`durable_execution` 实体的 `interrupted_lease_epoch`、`DurableExecutionStore.InterruptAsync`、`RunLeasedSegmentAsync` 中按租约代次确认结算、`ProjectConversationUsage` 与 `GetUsageAsync`；用户要求时按 `docs/1.Development.md` 生成 SQLite 与 PostgreSQL 迁移；运行 `pnpm gen:api` 更新 `openapi.d.ts`。检查：`dotnet build Agw.slnx`，`dotnet test tests/Agw.Agents.Tests`、`tests/Agw.Projects.Tests`、`tests/Agw.Architecture.Tests` 与 PostgreSQL 测试通过，`dotnet csharpier check` 只针对改动过的文件。
 2. `@agw/execution-core`：先写 `chat-events.test.ts`，再实现 `chat-events.ts` 并从入口导出。检查：`pnpm --filter @agw/execution-core test`、`typecheck`、`lint` 通过。
-3. `@agw/chat-runtime` 执行通道：先写观察点的测试，再给 `ExecutionSession` 增加 `observer` 参数与 `invoke`，把 durable cursor 的保存移到 `observer.message` 之后，增加 `getExecutionRuntime`。检查：`pnpm --filter @agw/chat-runtime test` 通过，`execution-hub.test.ts` 与 `execution-session-manager.test.ts` 的原有用例不需要修改。
+3. `@agw/chat-runtime` 执行通道：先写观察点、cursor 提交与失败恢复的测试，再给 `ExecutionSession` 增加 `observer` 参数与 `invoke`，按第 4 节实现内存与存储 cursor 的连续确认、失败位置保留和结束消息成功后的清理，并让 `ExecutionSessionManager` 在补发结束消息后检查队列；增加 `getExecutionRuntime`。检查：`pnpm --filter @agw/chat-runtime test` 通过，`execution-hub.test.ts` 与 `execution-session-manager.test.ts` 的原有用例继续通过。
 4. ChatHttpClient：projects-core 的 `getConversationTurnInputs` 增加 `client` 参数；`@agw/chat-runtime` 增加 `@agw/projects-core` 依赖与 `./chat-http-client` 导出，运行 `pnpm install`；先写 `chat-http-client.test.ts`，再实现 `ChatHttpClient`（包括 `getConnectionIdentity`）、`chatHttpClient` 与 `ExecutionSessionManager` 的默认工厂。检查：`pnpm test:boundaries`、`pnpm --filter @agw/chat-runtime test`、`pnpm --filter @agw/projects-core test` 通过。
 5. Token usage：先按 5.3 节的规则与场景写 `conversation-token-usage.test.ts`，再实现 `ConversationTokenUsageStore`（包括保存与恢复、结算之前的同步、同步请求的连接身份检查）、`conversationTokenUsage` 与 `useConversationTokenUsage`。检查：`pnpm --filter @agw/chat-runtime test`、`typecheck` 通过。
 6. Web 与 Desktop 的 Chat（第 6 节）：先写 `chat-token-usage.test.ts`，再修改 `chat.tsx`、`chat-workspace.tsx`、两个执行抽屉与相关测试，删除 `ConversationDetails.usage`。检查：`pnpm --filter @agw/chat test`、`pnpm --filter @agw/agents test`、`pnpm --filter @agw/projects test`、`pnpm --filter @agw/projects-core test` 与各包的 `typecheck` 通过。
