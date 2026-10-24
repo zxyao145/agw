@@ -83,8 +83,8 @@ catalog:
   postcss: 8.5.28
   postcss-import: 17.0.1
   lowlight: 3.3.0
-  lucide-react: 1.47.0
-  lucide-react-native: 1.47.0
+  lucide-react: 1.56.0
+  lucide-react-native: 1.56.0
   marked: 17.0.6
   marked-footnote: 1.4.0
   mdast-util-gfm: 3.1.0

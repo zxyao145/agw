@@ -6,9 +6,11 @@ import {
   CircleAlert,
   CircleSlash,
   LoaderCircle,
+  MessageCircleText,
   MoreHorizontal,
   Pencil,
   Plus,
+  Puzzle,
   RotateCw,
   Trash2,
   type LucideIcon,
@@ -27,6 +29,7 @@ import {
   deleteProjectConversation,
   getProjectConversationDetails,
   getProjectConversations,
+  HOST_EXTENSION_ID,
   updateProjectConversationTitle,
   type ConversationActivityStatus,
   type ConversationPage,
@@ -95,6 +98,17 @@ const CONVERSATION_STATUS_DISPLAY: Record<
     className: "text-muted-foreground",
   },
 };
+
+/**
+ * 标题前的创建方图标；旧版 Server 不返回创建方时没有图标。
+ * The creator icon before the title; there is none when an older Server does not return the creator.
+ */
+function getCreatorDisplay(extensionId: string | null): { icon: LucideIcon; label: string } | null {
+  if (extensionId === null) return null;
+  return extensionId === HOST_EXTENSION_ID
+    ? { icon: MessageCircleText, label: "Created by Agw" }
+    : { icon: Puzzle, label: `Created by extension "${extensionId}"` };
+}
 
 export function ConversationList({
   projectId,
@@ -419,6 +433,7 @@ export function ConversationList({
             const isActive = conversation.conversationId === currentConversationId;
             const status = conversationStatuses.get(conversation.conversationId) ?? "idle";
             const statusDisplay = status === "idle" ? null : CONVERSATION_STATUS_DISPLAY[status];
+            const creatorDisplay = getCreatorDisplay(conversation.extensionId);
 
             return (
               <div
@@ -432,6 +447,26 @@ export function ConversationList({
                 )}
               >
                 <div className="flex items-center">
+                  {/* 没有图标时保留位置，标题从同一位置开始。The slot stays without an icon so titles start at the same place. */}
+                  <div className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center">
+                    {creatorDisplay ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            role="img"
+                            aria-label={creatorDisplay.label}
+                            className="flex h-4 w-4 items-center justify-center"
+                          >
+                            <creatorDisplay.icon
+                              aria-hidden="true"
+                              className="h-4 w-4 text-muted-foreground"
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{creatorDisplay.label}</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="text-sm truncate">{conversation.title || "Untitled"}</div>
                   </div>

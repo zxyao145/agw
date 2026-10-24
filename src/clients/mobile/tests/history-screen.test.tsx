@@ -17,7 +17,9 @@ jest.mock("lucide-react-native", () => {
   const Icon = () => null;
   return {
     ChevronDown: Icon,
+    MessageCircleText: Icon,
     Pencil: Icon,
+    Puzzle: Icon,
     RefreshCw: Icon,
     Settings: Icon,
     Trash2: Icon,
@@ -40,6 +42,7 @@ const conversations = [
     executionCount: 1,
     messageCount: 2,
     createTime: "2026-08-21T00:00:00Z",
+    extensionId: "host",
   },
   {
     projectId: "project-1",
@@ -49,6 +52,18 @@ const conversations = [
     executionCount: 1,
     messageCount: 3,
     createTime: "2026-08-21T01:00:00Z",
+    extensionId: "sample",
+  },
+  {
+    projectId: "project-1",
+    conversationId: "11111111-1111-1111-1111-000000000003",
+    contextId: "context-3",
+    title: "Older Server conversation",
+    executionCount: 1,
+    messageCount: 1,
+    createTime: "2026-08-21T02:00:00Z",
+    // 旧版 Server 不返回创建方。An older Server returns no creator.
+    extensionId: null,
   },
 ];
 
@@ -158,5 +173,13 @@ describe("HistoryScreen conversation actions", () => {
 
     expect(view.getByText("Rename conversation")).toBeTruthy();
     expect(selectConversation).not.toHaveBeenCalled();
+  });
+
+  test("shows who created each conversation", async () => {
+    const view = await render(<HistoryScreen />);
+
+    expect(view.getByLabelText("Created by Agw")).toBeTruthy();
+    expect(view.getByLabelText('Created by extension "sample"')).toBeTruthy();
+    expect(view.queryAllByLabelText(/^Created by /u)).toHaveLength(2);
   });
 });
