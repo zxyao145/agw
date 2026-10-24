@@ -12,6 +12,8 @@ before(async () => {
 });
 
 const theme = (kind: "light" | "dark"): ThemeInfo => ({
+  id: "default",
+  title: "Default",
   kind,
   tokens: { "--agw-font-size-base": "18px" },
 });

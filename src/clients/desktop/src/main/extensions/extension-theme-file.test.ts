@@ -5,7 +5,12 @@ import test from "node:test";
 
 import { toValidationErrors } from "../../shared/extension-manifest";
 import { THEME_TOKEN_KINDS } from "../../shared/theme-tokens";
-import { isValidThemeValue, MAX_THEME_VALUE_LENGTH, themeFileSchema } from "./extension-theme-file";
+import {
+  isValidThemeValue,
+  MAX_THEME_IMAGE_VALUE_LENGTH,
+  MAX_THEME_VALUE_LENGTH,
+  themeFileSchema,
+} from "./extension-theme-file";
 
 function errors(raw: unknown): [string, string | null][] {
   const result = themeFileSchema.safeParse(raw);
@@ -18,6 +23,24 @@ test("the bundled Soft theme file passes validation", async () => {
   const raw = JSON.parse(
     await readFile(
       resolve(process.cwd(), "..", "packages", "extensions", "soft-theme", "themes", "soft.json"),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(errors(raw), []);
+});
+
+test("the bundled Warm Minimalism theme file passes validation", async () => {
+  const raw = JSON.parse(
+    await readFile(
+      resolve(
+        process.cwd(),
+        "..",
+        "packages",
+        "extensions",
+        "warm-minimalism-theme",
+        "themes",
+        "warm-minimalism.json",
+      ),
       "utf8",
     ),
   );
@@ -92,6 +115,54 @@ test("valid values of every kind are accepted", () => {
     isValidThemeValue("font-family", 'ui-monospace, "SF Mono", Menlo, Consolas, monospace'),
     true,
   );
+});
+
+test("gradient images accept none and layers of CSS gradients", () => {
+  for (const value of [
+    "none",
+    "linear-gradient(118deg, rgb(229 225 220 / 80%) 0 14%, transparent 14.2%)",
+    "radial-gradient(circle 32vmax at 22% 80%, #fbe3d4 0 98%, transparent 100%), linear-gradient(red, blue)",
+    "repeating-linear-gradient(45deg, red 0 10px, blue 10px 20px)",
+    "conic-gradient(from 90deg at 50% 50%, red, blue)",
+    "radial-gradient(28% 22% at 84% 96%, color-mix(in oklab, red 30%, transparent), transparent 70%)",
+  ]) {
+    assert.equal(isValidThemeValue("image", value), true, value);
+  }
+});
+
+test("gradient images reject image files, other image functions and non-gradient values", () => {
+  for (const value of [
+    'url("backdrop.png")',
+    "url(backdrop.png), linear-gradient(red, blue)",
+    'image-set("backdrop.png" 1x)',
+    "cross-fade(linear-gradient(red, blue), linear-gradient(blue, red))",
+    "element(#backdrop)",
+    "inherit",
+    "var(--agw-workspace-backdrop)",
+    "linear-gradient(var(--background), red)",
+    "#ffffff",
+    "linear-gradient(red, blue) no-repeat",
+  ]) {
+    assert.equal(isValidThemeValue("image", value), false, value);
+  }
+  assert.deepEqual(errors({ light: { "--agw-workspace-backdrop": 'url("backdrop.png")' } }), [
+    ["INVALID_THEME_VALUE", "light.--agw-workspace-backdrop"],
+  ]);
+});
+
+test("gradient images may be longer than other values up to their own limit", () => {
+  const gradient = (length: number) => {
+    const start = "linear-gradient(red";
+    return `${start}${", blue".repeat(Math.ceil((length - start.length - 1) / 6))})`;
+  };
+  const long = gradient(MAX_THEME_VALUE_LENGTH * 2);
+  assert.ok(long.length > MAX_THEME_VALUE_LENGTH && long.length <= MAX_THEME_IMAGE_VALUE_LENGTH);
+  assert.deepEqual(errors({ light: { "--agw-workspace-backdrop": long } }), []);
+  const tooLong = gradient(MAX_THEME_IMAGE_VALUE_LENGTH + 1);
+  assert.ok(tooLong.length > MAX_THEME_IMAGE_VALUE_LENGTH);
+  assert.deepEqual(errors({ light: { "--agw-workspace-backdrop": tooLong } }), [
+    ["INVALID_FIELD", "light.--agw-workspace-backdrop"],
+  ]);
 });
 
 test("every color variable, including the palette, accepts a color", () => {

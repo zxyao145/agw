@@ -77,6 +77,26 @@ body {
   padding: 32px 48px 120px 48px;
 }
 
+/* 主题提供工作区背景时（html 上有 data-workspace-backdrop，见 shared/workspace-backdrop.ts），背景图形铺在滚动区域上且不
+   随内容滚动，内容列显示为卡片，四周留出背景。
+   When the theme provides a workspace backdrop (html has data-workspace-backdrop, see shared/workspace-backdrop.ts), it
+   covers the scroll area without scrolling with the content, and the content column becomes a card with the backdrop
+   showing around it. */
+:root[data-workspace-backdrop] .edit-scroll {
+  background-image: var(--agw-workspace-backdrop);
+}
+
+:root[data-workspace-backdrop] .edit-column {
+  max-width: min(calc(760px + 96px), calc(100% - 32px));
+  margin: 32px auto 48px;
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
+    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+}
+
 /* 编辑区与块。The editing area and blocks. */
 .edit-content .ProseMirror {
   outline: none;

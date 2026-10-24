@@ -56,6 +56,8 @@ export function connectTestHost(request: RpcRequestHandler): TestHost {
         },
       },
       theme: {
+        id: "default",
+        title: "Default",
         kind: "light",
         tokens: {
           "--agw-font-size-base": "16px",

@@ -145,6 +145,19 @@ export interface ExtensionErrorData {
 }
 
 export interface ThemeInfo {
+  /**
+   * 宿主当前主题的 id：Default 为 `"default"`，extension 提供的主题为 `"{extensionId}:{themeId}"`。extension 可以按 id
+   * 为不同的主题使用自己的样式。
+   * The id of the host's current theme: `"default"` for Default, `"{extensionId}:{themeId}"` for a theme an extension
+   * provides. An extension can use its own styles for particular themes by id.
+   */
+  id: string;
+  /**
+   * 宿主当前主题的名称：Default 为 `"Default"`，extension 提供的主题为 manifest 中 `contributes.themes` 的 `title`。
+   * The name of the host's current theme: `"Default"` for Default, the `title` in the manifest's `contributes.themes`
+   * for a theme an extension provides.
+   */
+  title: string;
   kind: "light" | "dark";
   /**
    * 宿主当前主题的变量，值为计算后的字符串，引用其他变量的值已经替换。使用这些变量是可选的：需要与宿主一致的 extension 调用
@@ -177,6 +190,10 @@ export interface ThemeInfo {
    *   `--color-black`、`--color-white`。
    * - 圆角 Radius：`--radius`，以及由它计算的 `--radius-sm`、`--radius-md`、`--radius-lg`、`--radius-xl`。
    * - 字体 Fonts：`--agw-font-sans`、`--agw-font-mono`，以及引用它们的 `--font-sans`、`--font-mono`。
+   * - 工作区背景 Workspace backdrop：`--agw-workspace-backdrop`，为 `none` 或用逗号分隔的 CSS 渐变，可直接作为
+   *   `background-image` 的值；宿主把它画在 Main Workspace 上，extension 自行决定是否在自己的页面中使用。The value is
+   *   `none` or comma-separated CSS gradients, usable as a `background-image` value; the host draws it on the Main
+   *   Workspace, and each extension decides whether its own pages use it.
    * - 字号 Font size：`--agw-font-size-base`，为计算后的 px 值。The computed px value.
    */
   tokens: Record<string, string>;

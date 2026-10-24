@@ -103,6 +103,8 @@ test("unloading while the settings read is pending creates no session and no lis
   assert.deepEqual(events, []);
 
   host.changeTheme({
+    id: "default",
+    title: "Default",
     kind: "light",
     tokens: { "--agw-font-size-base": "20px" },
   });
@@ -119,6 +121,8 @@ test("onUnload disposes what was opened, including the font-size listener", asyn
   await act(async () => viewer.onUnload());
   assert.deepEqual(events, ["open a.md", "dispose"]);
   host.changeTheme({
+    id: "default",
+    title: "Default",
     kind: "light",
     tokens: { "--agw-font-size-base": "20px" },
   });

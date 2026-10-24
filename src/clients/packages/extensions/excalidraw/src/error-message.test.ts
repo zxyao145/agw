@@ -37,7 +37,7 @@ function connectHost(notifications: unknown[]) {
           activeMainViewId: "agw.chat",
         },
       },
-      theme: { kind: "light", tokens: {} },
+      theme: { id: "default", title: "Default", kind: "light", tokens: {} },
     },
     new Map(),
   );

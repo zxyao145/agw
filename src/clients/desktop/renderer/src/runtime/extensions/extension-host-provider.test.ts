@@ -62,7 +62,18 @@ test("readTheme reads the font size variables written by AppearanceProvider", ()
     }),
   );
 
-  const { tokens } = readTheme("light").theme;
+  const { tokens } = readTheme("light", { id: "default", title: "Default" }).theme;
 
   assert.equal(tokens["--agw-font-size-base"], "20px");
+});
+
+test("readTheme carries the id and title of the theme in use", () => {
+  const { theme } = readTheme("dark", {
+    id: "warm-minimalism-theme:warm-minimalism",
+    title: "Warm Minimalism",
+  });
+
+  assert.equal(theme.id, "warm-minimalism-theme:warm-minimalism");
+  assert.equal(theme.title, "Warm Minimalism");
+  assert.equal(theme.kind, "dark");
 });

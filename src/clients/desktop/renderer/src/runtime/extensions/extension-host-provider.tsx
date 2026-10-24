@@ -14,10 +14,14 @@ import { type ExtensionRuntime, getExtensionRuntime } from "./extension-runtime"
 const ExtensionHostContext = React.createContext<ExtensionRuntime | null>(null);
 
 /**
- * 读取推送给 extension 的变量；读取的是计算值，其中的 `var()` 已经替换。
- * Reads the variables pushed to extensions; their computed values have `var()` substituted.
+ * 读取推送给 extension 的主题：正在使用的主题的 id 与名称，以及变量的计算值，其中的 `var()` 已经替换。
+ * Reads the theme pushed to extensions: the id and title of the theme in use, and the variables' computed values with
+ * `var()` substituted.
  */
-export function readTheme(kind: "light" | "dark"): { theme: ThemeInfo; background: string } {
+export function readTheme(
+  kind: "light" | "dark",
+  applied: { id: string; title: string },
+): { theme: ThemeInfo; background: string } {
   const style = getComputedStyle(document.documentElement);
   const tokens = Object.fromEntries(
     THEME_TOKEN_NAMES.map((name) => [name, style.getPropertyValue(name).trim()]).filter(
@@ -26,7 +30,7 @@ export function readTheme(kind: "light" | "dark"): { theme: ThemeInfo; backgroun
   );
   const background =
     getComputedStyle(document.body).backgroundColor || (kind === "dark" ? "#0b0c0f" : "#ffffff");
-  return { theme: { kind, tokens }, background };
+  return { theme: { id: applied.id, title: applied.title, kind, tokens }, background };
 }
 
 function isChatPath(pathname: string | null): boolean {
@@ -46,7 +50,7 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const pathnameRef = React.useRef(pathname);
   pathnameRef.current = pathname;
-  const { kind, appliedTokens } = useDesktopTheme();
+  const { kind, appliedTokens, appliedTheme } = useDesktopTheme();
 
   React.useEffect(() => {
     if (!value) return;
@@ -108,11 +112,11 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
     if (!host || !kind) return;
     // 等 class 与主题变量写到 document 后再读取变量。Read variables after the class and theme variables are applied.
     const frame = requestAnimationFrame(() => {
-      const { theme, background } = readTheme(kind);
+      const { theme, background } = readTheme(kind, appliedTheme);
       host.setTheme(theme, background);
     });
     return () => cancelAnimationFrame(frame);
-  }, [host, kind, appliedTokens, baseFontSize, chatFontSize]);
+  }, [host, kind, appliedTokens, appliedTheme, baseFontSize, chatFontSize]);
 
   return (
     <ExtensionHostContext value={value}>

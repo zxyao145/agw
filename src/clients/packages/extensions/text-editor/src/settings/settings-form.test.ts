@@ -300,6 +300,8 @@ test("a theme change updates the follow texts", async () => {
 
   await act(async () => {
     host.changeTheme({
+      id: "default",
+      title: "Default",
       kind: "light",
       tokens: { "--agw-font-size-base": "20px" },
     });

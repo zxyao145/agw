@@ -3739,6 +3739,7 @@ async function appearanceSettings(): Promise<void> {
 /* ---------- 主题 Themes ---------- */
 
 const SOFT_THEME = "soft-theme:soft";
+const WARM_THEME = "warm-minimalism-theme:warm-minimalism";
 const CONTRAST_THEME = "contrast-theme:contrast";
 const RING_THEME = "contrast-theme:ring";
 const THEME_SELECT = `document.getElementById("appearance-theme")`;
@@ -3939,7 +3940,7 @@ async function themeSelection(): Promise<void> {
       `[...document.querySelectorAll("[data-extension-id]")].map((card) => card.dataset.extensionId)`,
     );
   await until(async () => (await listed()).length > 0, "theme extension cards");
-  assert.deepEqual(await listed(), ["bad-theme", "soft-theme"]);
+  assert.deepEqual(await listed(), ["bad-theme", "soft-theme", "warm-minimalism-theme"]);
   assert.ok(
     (
       await evalHost<string>(
@@ -3976,6 +3977,7 @@ async function themeSelection(): Promise<void> {
       [CONTRAST_THEME, "Contrast"],
       [RING_THEME, "Ring only"],
       [SOFT_THEME, "Soft"],
+      [WARM_THEME, "Warm Minimalism"],
     ],
   );
   pass("a theme extension installed from a folder lists its themes in the select once enabled");
@@ -4078,6 +4080,234 @@ async function themeSelection(): Promise<void> {
   pass(
     "switching from Default to Soft in Light runs no CSS transition and the selected navigation item shows Soft at once",
   );
+}
+
+type BackdropStyles = {
+  image: string;
+  attachment: string;
+  card: string;
+  radius: string;
+  margin: string;
+};
+
+/** Edit 与 Preview 中背景图形所在的元素与卡片元素。The backdrop element and the card in Edit and Preview. */
+const EDIT_BACKDROP = [
+  `document.querySelector(".edit-scroll")`,
+  `document.querySelector(".edit-column")`,
+] as const;
+const PREVIEW_BACKDROP = [`document.body`, `document.querySelector(".markdown-body")`] as const;
+
+/** 等待 frame 中背景元素与卡片的计算样式满足条件。Waits until the backdrop and card styles in a frame match. */
+function untilBackdrop(
+  frame: FrameHandle,
+  [backdrop, card]: readonly [string, string],
+  matches: (styles: BackdropStyles) => boolean,
+  label: string,
+): Promise<BackdropStyles> {
+  return until(async () => {
+    const styles = await evalFrame<BackdropStyles>(
+      frame,
+      `(() => {
+        const backdrop = getComputedStyle(${backdrop});
+        const card = getComputedStyle(${card});
+        return { image: backdrop.backgroundImage, attachment: backdrop.backgroundAttachment, card: card.backgroundColor, radius: card.borderTopLeftRadius, margin: card.marginTop };
+      })()`,
+    );
+    return matches(styles) ? styles : null;
+  }, label);
+}
+
+type WorkspaceStyles = {
+  /** `<html>` 上是否有 `data-workspace-backdrop`。Whether `<html>` has `data-workspace-backdrop`. */
+  marked: boolean;
+  image: string;
+  /** Chat 列的背景、圆角与其中的 `--background`。The Chat column's background, radius and `--background`. */
+  card: string;
+  radius: string;
+  cardBackground: string;
+  /** Chat 列四周的留白与输入框区域的下边角。The space around the Chat column and the composer's lower corner. */
+  padding: string;
+  composerRadius: string;
+  /** 文件 Source 区域的背景与外边距，没有显示时为 null。The file Source area's background and margin, or null. */
+  source: { card: string; margin: string } | null;
+};
+
+/** 等待宿主 Main Workspace 的计算样式满足条件。Waits until the host Main Workspace styles match. */
+function untilWorkspace(
+  matches: (styles: WorkspaceStyles) => boolean,
+  label: string,
+): Promise<WorkspaceStyles> {
+  return until(async () => {
+    const styles = await evalHost<WorkspaceStyles>(`(() => {
+      const style = (selector) => getComputedStyle(document.querySelector(".agw-main-workspace " + selector));
+      const column = style(".agw-chat-column");
+      const source = document.querySelector(".agw-main-workspace .agw-file-source");
+      return {
+        marked: document.documentElement.hasAttribute("data-workspace-backdrop"),
+        image: getComputedStyle(document.querySelector(".agw-main-workspace")).backgroundImage,
+        card: column.backgroundColor,
+        radius: column.borderTopLeftRadius,
+        cardBackground: column.getPropertyValue("--background").trim(),
+        padding: style(".agw-chat-column-area").paddingTop,
+        composerRadius: style(".agw-chat-composer").borderBottomLeftRadius,
+        source: source ? { card: getComputedStyle(source).backgroundColor, margin: getComputedStyle(source).marginTop } : null,
+      };
+    })()`);
+    return matches(styles) ? styles : null;
+  }, label);
+}
+
+/**
+ * Warm Minimalism：浅色与深色下宿主与侧栏的颜色，推送给 extension 的变量与主题名称，宿主 Main Workspace 的背景图形与
+ * 卡片，以及 Edit 与 Preview 自己绘制的背景图形与卡片。
+ * Warm Minimalism: the host and sidebar colors in Light and Dark, the variables and theme name pushed to extensions,
+ * the host Main Workspace backdrop and cards, and the backdrop and card Edit and Preview draw themselves.
+ */
+async function warmMinimalismTheme(): Promise<void> {
+  await chooseMode("light");
+  await chooseTheme(WARM_THEME);
+  await untilHost(
+    `getComputedStyle(document.body).backgroundColor === "rgb(247, 244, 240)" && getComputedStyle(document.querySelector(".agw-settings-nav")).backgroundColor === "rgb(241, 236, 229)"`,
+    "the Warm Minimalism host and settings navigation colors in Light",
+  );
+  const background = await untilFrame("sample", "background");
+  const pushedWith = (variable: string, value: string) =>
+    until(async () => {
+      const tokens = await api<Record<string, string>>(
+        background,
+        "return api.theme.get().tokens;",
+      );
+      return tokens[variable] === value ? tokens : null;
+    }, `${variable} ${value} in the background frame`);
+  const light = await pushedWith("--background", "#f7f4f0");
+  assert.equal(light["--ring"], "#e85a35");
+  assert.equal(light["--color-emerald-500"], "#4cc35a");
+  assert.equal(light["--radius-lg"], "0.875rem");
+  await goToChat();
+  assert.equal(
+    await hostStyle(`document.querySelector(".agw-ribbon")`, "background-color"),
+    "rgb(241, 236, 229)",
+  );
+  assert.equal(
+    await hostStyle(`document.querySelector(".agw-left-sidebar")`, "background-color"),
+    "rgb(241, 236, 229)",
+  );
+  pass(
+    "Warm Minimalism with Light colors the host #f7f4f0 and the sidebars #f1ece5, and extensions receive its coral ring, green palette and radius",
+  );
+
+  // 主题名称：extension 从 theme.get() 得到正在使用的主题的 id 与名称。Theme name: extensions get the id and title of
+  // the theme in use from theme.get().
+  const identity = () =>
+    api<[string, string]>(
+      background,
+      "const theme = api.theme.get(); return [theme.id, theme.title];",
+    );
+  assert.deepEqual(await identity(), [WARM_THEME, "Warm Minimalism"]);
+  // 工作区背景：宿主在 Main Workspace 上画背景图形，Chat 列显示为卡片，卡片内的 --background 为卡片颜色。
+  // Workspace backdrop: the host draws it on the Main Workspace, the Chat column becomes a card, and --background inside
+  // the card is the card color.
+  await untilWorkspace(
+    (styles) =>
+      styles.marked &&
+      styles.image.startsWith("radial-gradient(") &&
+      styles.card === "rgb(255, 254, 252)" &&
+      styles.radius === "18px" &&
+      styles.cardBackground === "#fffefc" &&
+      styles.padding === "16px" &&
+      styles.composerRadius === "18px",
+    "the Warm Minimalism backdrop and Chat card in the Main Workspace",
+  );
+  pass(
+    "Warm Minimalism draws its backdrop on the Main Workspace with the Chat column on a card, and extensions receive the theme id and title",
+  );
+
+  // Text Editor 自己绘制背景：Edit 与 Preview 在背景图形上用卡片显示文档；已打开的 frame 随主题切换立即更新，不重建。
+  // Text Editor draws its own backdrop: Edit and Preview show the document on a card over it; open frames follow theme
+  // changes at once without being rebuilt.
+  const lightCard = (styles: BackdropStyles) =>
+    styles.image.startsWith("radial-gradient(") &&
+    styles.card === "rgb(255, 254, 252)" &&
+    styles.radius === "18px";
+  const darkCard = (styles: BackdropStyles) =>
+    styles.image.includes("rgba(58, 40, 31, 0.7)") && styles.card === "rgb(35, 32, 29)";
+  const noCard = (styles: BackdropStyles) =>
+    styles.image === "none" &&
+    styles.card === "rgba(0, 0, 0, 0)" &&
+    styles.radius === "0px" &&
+    styles.margin === "0px";
+  await openFileInTree("readme.md");
+  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
+  const edit = await editShowing("true", "readme.md in Edit");
+  const editLight = await untilBackdrop(
+    edit,
+    EDIT_BACKDROP,
+    lightCard,
+    "the Warm Minimalism backdrop and card in Edit",
+  );
+  assert.equal(editLight.margin, "32px");
+  // 宿主绘制的 Source 区域同样显示为卡片。The Source area the host draws is a card as well.
+  await selectViewer("source");
+  await untilWorkspace(
+    (styles) => styles.source?.card === "rgb(255, 254, 252)" && styles.source.margin === "16px",
+    "the Source card in the Main Workspace",
+  );
+  await selectViewer(MARKDOWN_VIEWER);
+  const preview = await untilViewerFrame("text-editor", "preview");
+  const previewLight = await untilBackdrop(
+    preview,
+    PREVIEW_BACKDROP,
+    lightCard,
+    "the Warm Minimalism backdrop and card in Preview",
+  );
+  // 每一层渐变各有一个计算值。Each gradient layer has its own computed value.
+  assert.ok(
+    previewLight.attachment.split(", ").every((value) => value === "fixed"),
+    previewLight.attachment,
+  );
+  await applyAppearanceInPlace({ theme: WARM_THEME, mode: "dark" });
+  await untilBackdrop(preview, PREVIEW_BACKDROP, darkCard, "the dark backdrop in Preview");
+  await applyAppearanceInPlace({ theme: "default" });
+  await untilBackdrop(preview, PREVIEW_BACKDROP, noCard, "no backdrop in Preview under Default");
+  assert.equal(viewerFrameOf("text-editor", "preview")?.frameId, preview.frameId);
+  await untilWorkspace(
+    (styles) =>
+      !styles.marked &&
+      styles.image === "none" &&
+      styles.card === "rgba(0, 0, 0, 0)" &&
+      styles.radius === "0px" &&
+      styles.padding === "0px",
+    "no backdrop or Chat card in the Main Workspace under Default",
+  );
+  await until(
+    async () => (await identity()).join() === "default,Default",
+    "the Default theme id and title in the background frame",
+  );
+  await selectViewer(EDIT_VIEWER);
+  const defaultEdit = await editShowing("true", "readme.md in Edit under Default");
+  await untilBackdrop(defaultEdit, EDIT_BACKDROP, noCard, "no backdrop in Edit under Default");
+  await applyAppearanceInPlace({ theme: WARM_THEME });
+  await untilBackdrop(defaultEdit, EDIT_BACKDROP, darkCard, "the dark backdrop in Edit");
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, defaultEdit.frameId);
+  await untilWorkspace(
+    (styles) =>
+      styles.marked &&
+      styles.image.includes("rgba(58, 40, 31, 0.7)") &&
+      styles.card === "rgb(35, 32, 29)",
+    "the dark backdrop and Chat card in the Main Workspace",
+  );
+  pass(
+    "Warm Minimalism shows its backdrop with the document on a card in the Main Workspace, Edit and Preview in both modes, and Default keeps the plain layout, without rebuilding the frames",
+  );
+
+  await chooseMode("dark");
+  await untilHost(
+    `getComputedStyle(document.body).backgroundColor === "rgb(27, 25, 23)" && getComputedStyle(document.querySelector(".agw-settings-nav")).backgroundColor === "rgb(21, 19, 17)"`,
+    "the Warm Minimalism host and settings navigation colors in Dark",
+  );
+  const dark = await pushedWith("--background", "#1b1917");
+  assert.equal(dark["--ring"], "#f27a58");
+  pass("Warm Minimalism with Dark colors the host #1b1917 and the sidebars #151311");
 }
 
 /**
@@ -6502,6 +6732,7 @@ async function run(): Promise<void> {
   await hostScaling();
   await appearanceSettings();
   await themeSelection();
+  await warmMinimalismTheme();
   await sidebarThemes();
   await imagePreviewThemes();
   await memoryPreviewThemes();
