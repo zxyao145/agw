@@ -247,7 +247,8 @@ export default function FileContent({
                   {renderFileViewer!(activeViewerId)}
                 </div>
               ) : (
-                <div className="flex-1 min-h-0 overflow-y-auto agw-scrollbar">
+                // agw-file-source 供 Desktop 的工作区背景样式使用。agw-file-source serves Desktop's workspace backdrop styles.
+                <div className="agw-file-source flex-1 min-h-0 overflow-y-auto agw-scrollbar">
                   {isLoadingContent ? (
                     <FileLoading />
                   ) : contentError ? (

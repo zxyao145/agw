@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { applyDocumentFontSize } from "../shared/apply-font-sizes";
 import { createSettingsGate } from "../shared/settings-gate";
 import { applyHighlightTheme } from "../shared/theme";
+import { applyWorkspaceBackdrop } from "../shared/workspace-backdrop";
 import { MarkdownDocument } from "./markdown-document";
 import "../shared/document-error.css";
 import "./markdown.css";
@@ -39,6 +40,7 @@ defineView({
   async onLoad(api, params) {
     api.theme.apply();
     applyHighlightTheme(api);
+    applyWorkspaceBackdrop(api);
     await gate.onLoad(api, params);
   },
   onShow: gate.onShow,

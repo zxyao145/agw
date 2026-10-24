@@ -1,5 +1,5 @@
-/** 主题变量值的类型。The kind of value a theme variable holds. */
-export type ThemeTokenKind = "color" | "length" | "font-family";
+/** 主题变量值的类型；`image` 只接受 CSS 渐变。The kind of value a theme variable holds; `image` takes CSS gradients only. */
+export type ThemeTokenKind = "color" | "length" | "font-family" | "image";
 
 const INTERFACE_COLOR_TOKENS = [
   "--background",
@@ -113,6 +113,9 @@ export const THEME_TOKEN_KINDS: ReadonlyMap<string, ThemeTokenKind> = new Map<
   ["--radius", "length"],
   ["--agw-font-sans", "font-family"],
   ["--agw-font-mono", "font-family"],
+  // Main Workspace 的背景图形，extension 自行决定是否在自己的页面中使用。
+  // The Main Workspace backdrop; each extension decides whether its own pages use it.
+  ["--agw-workspace-backdrop", "image"],
 ]);
 
 /**

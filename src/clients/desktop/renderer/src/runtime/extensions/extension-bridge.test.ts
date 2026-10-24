@@ -207,7 +207,12 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
       hostPermissions: parseHostPermissions([]),
       storageUri: "file:///data/sample",
     }),
-    theme: () => ({ kind: "dark", tokens: { "--background": "#000" } }),
+    theme: () => ({
+      id: "default",
+      title: "Default",
+      kind: "dark",
+      tokens: { "--background": "#000" },
+    }),
     isFrameClosing: () => false,
     insertComposerText: () => undefined,
     notify: () => undefined,
@@ -337,6 +342,8 @@ test("the context snapshot and change events only carry permitted fields", async
     params: { a: 1 },
   });
   assert.deepEqual(withoutPermissions.welcome.theme, {
+    id: "default",
+    title: "Default",
     kind: "dark",
     tokens: { "--background": "#000" },
   });

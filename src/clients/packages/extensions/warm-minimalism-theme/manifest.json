@@ -1,0 +1,13 @@
+{
+  "manifestVersion": 1,
+  "id": "warm-minimalism-theme",
+  "name": "Warm Minimalism Theme",
+  "version": "1.0.0",
+  "description": "A warm minimalist light and dark theme with coral accents for Agw Desktop.",
+  "author": "Agw",
+  "contributes": {
+    "themes": [
+      { "id": "warm-minimalism", "title": "Warm Minimalism", "path": "themes/warm-minimalism.json" }
+    ]
+  }
+}

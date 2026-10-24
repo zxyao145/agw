@@ -9,11 +9,14 @@ import type { AppearanceMode, AppearanceSettings } from "@desktop/shared/contrac
 import type { ExtensionHost, ExtensionHostSnapshot } from "../extensions/extension-host";
 import {
   type AvailableTheme,
+  DEFAULT_THEME_TITLE,
   declaredThemeTitles,
+  hasWorkspaceBackdrop,
   isDefaultTheme,
   listAvailableThemes,
   themeTokens,
   toAppearanceMode,
+  WORKSPACE_BACKDROP_ATTRIBUTE,
 } from "./resolve-theme";
 
 export type DesktopThemeState = {
@@ -27,6 +30,8 @@ export type DesktopThemeState = {
   themes: readonly AvailableTheme[];
   /** 写到 `<html>` 上的主题变量；Default 为空。The theme variables written to `<html>`; empty for Default. */
   appliedTokens: Readonly<Record<string, string>>;
+  /** 正在使用的主题：选中且可用的主题，否则为 Default。The theme in use: the selected available one, else Default. */
+  appliedTheme: { id: string; title: string };
   /** 保存外观，然后让 next-themes 使用其中的 Mode。Saves the appearance, then applies its mode through next-themes. */
   saveAppearance(next: AppearanceSettings): Promise<void>;
   /** 保存 Mode，然后调用 next-themes 的 setTheme。Saves the mode, then calls next-themes' setTheme. */
@@ -102,21 +107,32 @@ export function ThemeProvider({
     () => JSON.parse(tokensKey),
     [tokensKey],
   );
+  const appliedId = selected?.id ?? DEFAULT_THEME_ID;
+  const appliedTitle = selected?.title ?? DEFAULT_THEME_TITLE;
+  const appliedTheme = React.useMemo(
+    () => ({ id: appliedId, title: appliedTitle }),
+    [appliedId, appliedTitle],
+  );
 
+  // 变量与工作区背景属性在同一次修改中写入。The variables and the workspace backdrop attribute change together.
   const writtenRef = React.useRef<readonly string[]>([]);
   React.useLayoutEffect(() => {
     const names = Object.keys(appliedTokens);
     if (names.length === 0 && writtenRef.current.length === 0) return;
-    const style = document.documentElement.style;
+    const root = document.documentElement;
     withoutTransitions(() => {
-      for (const name of writtenRef.current) style.removeProperty(name);
-      for (const [name, value] of Object.entries(appliedTokens)) style.setProperty(name, value);
+      for (const name of writtenRef.current) root.style.removeProperty(name);
+      for (const [name, value] of Object.entries(appliedTokens))
+        root.style.setProperty(name, value);
+      root.toggleAttribute(WORKSPACE_BACKDROP_ATTRIBUTE, hasWorkspaceBackdrop(appliedTokens));
     });
     writtenRef.current = names;
   }, [appliedTokens]);
   React.useLayoutEffect(
     () => () => {
-      for (const name of writtenRef.current) document.documentElement.style.removeProperty(name);
+      const root = document.documentElement;
+      for (const name of writtenRef.current) root.style.removeProperty(name);
+      root.removeAttribute(WORKSPACE_BACKDROP_ATTRIBUTE);
       writtenRef.current = [];
     },
     [],
@@ -184,8 +200,17 @@ export function ThemeProvider({
   }, [started, current, themes, saveAppearance]);
 
   const value = React.useMemo<DesktopThemeState>(
-    () => ({ mode, kind, appearance: current, themes, appliedTokens, saveAppearance, setMode }),
-    [mode, kind, current, themes, appliedTokens, saveAppearance, setMode],
+    () => ({
+      mode,
+      kind,
+      appearance: current,
+      themes,
+      appliedTokens,
+      appliedTheme,
+      saveAppearance,
+      setMode,
+    }),
+    [mode, kind, current, themes, appliedTokens, appliedTheme, saveAppearance, setMode],
   );
   return <DesktopThemeContext value={value}>{children}</DesktopThemeContext>;
 }

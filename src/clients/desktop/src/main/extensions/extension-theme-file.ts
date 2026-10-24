@@ -11,18 +11,48 @@ import { toValidationErrors } from "../../shared/extension-manifest";
 import { THEME_TOKEN_KINDS, type ThemeTokenKind } from "../../shared/theme-tokens";
 
 export const MAX_THEME_VALUE_LENGTH = 200;
+/** 渐变背景由多层渐变组成，长度上限单独设置。Gradient backdrops stack several gradients, so they have their own limit. */
+export const MAX_THEME_IMAGE_VALUE_LENGTH = 4000;
 
-const fontFamilyProperty = lexer.getProperty("font-family");
-if (!fontFamilyProperty?.syntax) throw new Error("css-tree has no font-family syntax.");
+/** 属性的语法。Gets a property's syntax. */
+function propertySyntax(name: string) {
+  const property = lexer.getProperty(name);
+  if (!property?.syntax) throw new Error(`css-tree has no ${name} syntax.`);
+  return property.syntax;
+}
+
 // 属性语法不含 CSS-wide 关键字（`inherit` 等），它们作为自定义属性的值时作用于变量本身。
 // The property syntax leaves out CSS-wide keywords (`inherit` and so on), which would apply to the variable itself.
-const FONT_FAMILY_SYNTAX = fontFamilyProperty.syntax;
+const FONT_FAMILY_SYNTAX = propertySyntax("font-family");
+const BACKGROUND_IMAGE_SYNTAX = propertySyntax("background-image");
+
+// 背景只接受渐变：图片文件与其他图片函数会让主题加载外部资源，主题文件只是数据。
+// Backdrops take gradients only: image files and other image functions would make a theme load resources, and a theme
+// file is data only.
+const GRADIENT_FUNCTIONS = new Set([
+  "linear-gradient",
+  "radial-gradient",
+  "conic-gradient",
+  "repeating-linear-gradient",
+  "repeating-radial-gradient",
+  "repeating-conic-gradient",
+]);
 
 const KIND_LABELS: Record<ThemeTokenKind, string> = {
   color: "color",
   length: "length",
   "font-family": "font-family value",
+  image: "gradient image",
 };
+
+/** 渐变背景的一层或层之间的逗号。A layer of a gradient backdrop, or the comma between layers. */
+function isGradientLayer(node: CssNode): boolean {
+  return (
+    (node.type === "Function" && GRADIENT_FUNCTIONS.has(node.name.toLowerCase())) ||
+    (node.type === "Identifier" && node.name.toLowerCase() === "none") ||
+    (node.type === "Operator" && node.value === ",")
+  );
+}
 
 /**
  * 值是否是该类型的合法 CSS 值；CSS-wide 关键字与 `var()` 不合法。
@@ -36,12 +66,19 @@ export function isValidThemeValue(kind: ThemeTokenKind, value: string): boolean 
     if (!(error instanceof SyntaxError)) throw error;
     return false;
   }
+  if (kind === "image") {
+    return (
+      ast.type === "Value" &&
+      ast.children.toArray().every(isGradientLayer) &&
+      lexer.match(BACKGROUND_IMAGE_SYNTAX, ast).matched !== null
+    );
+  }
   const result =
     kind === "font-family" ? lexer.match(FONT_FAMILY_SYNTAX, ast) : lexer.matchType(kind, ast);
   return result.matched !== null;
 }
 
-const themeValueSchema = z.string().min(1).max(MAX_THEME_VALUE_LENGTH);
+const themeValueSchema = z.string().min(1);
 
 const themeTokensSchema = z.record(z.string(), themeValueSchema).superRefine((tokens, context) => {
   for (const [name, value] of Object.entries(tokens)) {
@@ -54,16 +91,24 @@ const themeTokensSchema = z.record(z.string(), themeValueSchema).superRefine((to
         params: { code: "UNKNOWN_THEME_VARIABLE" },
       });
     } else if (
-      // 长度不合法的值已经由 themeValueSchema 报告。Values of an invalid length were reported by themeValueSchema.
-      themeValueSchema.safeParse(value).success &&
-      !isValidThemeValue(kind, value)
+      // 不是非空字符串的值已经由 themeValueSchema 报告。Values that are not non-empty strings were reported by themeValueSchema.
+      themeValueSchema.safeParse(value).success
     ) {
-      context.addIssue({
-        code: "custom",
-        message: `"${value}" is not a valid CSS ${KIND_LABELS[kind]}.`,
-        path: [name],
-        params: { code: "INVALID_THEME_VALUE" },
-      });
+      const maxLength = kind === "image" ? MAX_THEME_IMAGE_VALUE_LENGTH : MAX_THEME_VALUE_LENGTH;
+      if (value.length > maxLength) {
+        context.addIssue({
+          code: "custom",
+          message: `Too big: expected string to have <=${maxLength} characters`,
+          path: [name],
+        });
+      } else if (!isValidThemeValue(kind, value)) {
+        context.addIssue({
+          code: "custom",
+          message: `"${value}" is not a valid CSS ${KIND_LABELS[kind]}.`,
+          path: [name],
+          params: { code: "INVALID_THEME_VALUE" },
+        });
+      }
     }
   }
 });

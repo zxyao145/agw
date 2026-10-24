@@ -4,6 +4,15 @@ import type { ExtensionState } from "../extensions/extension-host";
 
 export const DEFAULT_THEME_TITLE = "Default";
 
+/** 主题提供工作区背景时 `<html>` 上的属性。The `<html>` attribute set while the theme provides a workspace backdrop. */
+export const WORKSPACE_BACKDROP_ATTRIBUTE = "data-workspace-backdrop";
+
+/** 主题变量中是否有工作区背景（值不为 none）。Whether the theme variables carry a workspace backdrop other than none. */
+export function hasWorkspaceBackdrop(tokens: Readonly<Record<string, string>>): boolean {
+  const backdrop = tokens["--agw-workspace-backdrop"];
+  return backdrop !== undefined && backdrop !== "none";
+}
+
 /** Theme 下拉框中的一个 extension 主题。An extension theme in the Theme select. */
 export type AvailableTheme = {
   /** `"{extensionId}:{themeId}"`。 */

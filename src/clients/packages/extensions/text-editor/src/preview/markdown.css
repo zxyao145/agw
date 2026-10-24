@@ -38,6 +38,27 @@ body {
   padding: 32px 40px 48px;
 }
 
+/* 主题提供工作区背景时（html 上有 data-workspace-backdrop，见 shared/workspace-backdrop.ts），背景图形固定在窗口上不随
+   页面滚动，文档显示为卡片，四周留出背景。
+   When the theme provides a workspace backdrop (html has data-workspace-backdrop, see shared/workspace-backdrop.ts), it
+   stays fixed to the window as the page scrolls, and the document becomes a card with the backdrop showing around it. */
+:root[data-workspace-backdrop] body {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 32px 16px 48px;
+  background-image: var(--agw-workspace-backdrop);
+  background-attachment: fixed;
+}
+
+:root[data-workspace-backdrop] .markdown-body {
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
+    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+}
+
 .markdown-body :is(h1, h2, h3, h4, h5, h6) {
   scroll-margin-top: 16px;
 }

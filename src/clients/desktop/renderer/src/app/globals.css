@@ -15,3 +15,44 @@
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 }
+
+/* Main Workspace 的背景图形，默认没有。The Main Workspace backdrop, none by default. */
+:root {
+  --agw-workspace-backdrop: none;
+}
+
+/* 主题提供工作区背景时（ThemeProvider 在 html 上设置 data-workspace-backdrop），Main Workspace 画出背景图形，宿主自己绘制
+   的 Chat 列与文件 Source 区域显示为卡片，卡片内的 --background、--foreground 连接到卡片颜色；extension 视图由 extension
+   自己绘制。这些规则不在 cascade layer 中，因此覆盖 Tailwind utility 的尺寸与边距。
+   While the theme provides a workspace backdrop (ThemeProvider sets data-workspace-backdrop on html), the Main
+   Workspace draws it, and the Chat column and the file Source area the host draws become cards whose --background and
+   --foreground point to the card colors; extension views draw themselves. These rules sit outside cascade layers, so
+   they override the sizes and margins of Tailwind utilities. */
+:root[data-workspace-backdrop] .agw-main-workspace {
+  background-image: var(--agw-workspace-backdrop);
+}
+
+:root[data-workspace-backdrop] .agw-main-workspace :is(.agw-chat-column, .agw-file-source) {
+  --background: var(--card);
+  --foreground: var(--card-foreground);
+  border-radius: var(--radius-xl);
+  background-color: var(--card);
+  color: var(--card-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
+    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+}
+
+/* Chat 列四周留出背景；输入框区域的下边角与卡片一致。Backdrop shows around the Chat column; the composer area's lower
+   corners match the card. */
+:root[data-workspace-backdrop] .agw-main-workspace .agw-chat-column-area {
+  padding: 16px;
+}
+
+:root[data-workspace-backdrop] .agw-main-workspace .agw-chat-composer {
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+:root[data-workspace-backdrop] .agw-main-workspace .agw-file-source {
+  margin: 16px;
+}

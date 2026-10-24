@@ -18,7 +18,9 @@ import {
   type HostContext,
   type ThemeInfo,
 } from "@agw/extension-sdk";
+import { DEFAULT_THEME_ID } from "@desktop/shared/appearance";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
+import { DEFAULT_THEME_TITLE } from "../appearance/resolve-theme";
 import { A2AService } from "./a2a-service";
 import {
   CloudAccessGrants,
@@ -278,7 +280,12 @@ export class ExtensionHost {
   private workspaceReleaseTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pingSequence = 0;
-  private theme: ThemeInfo = { kind: "light", tokens: {} };
+  private theme: ThemeInfo = {
+    id: DEFAULT_THEME_ID,
+    title: DEFAULT_THEME_TITLE,
+    kind: "light",
+    tokens: {},
+  };
   private themeBackground = "#ffffff";
   private composer: { insertText(text: string): void } | null = null;
   private refreshConversations: ((projectId: string) => void) | null = null;

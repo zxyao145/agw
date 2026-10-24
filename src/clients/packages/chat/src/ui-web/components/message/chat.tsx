@@ -1884,9 +1884,10 @@ export function Chat({
             />
           ) : null}
 
-          <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
+          {/* agw-chat-* 类名供 Desktop 的工作区背景样式使用。The agw-chat-* classes serve Desktop's workspace backdrop styles. */}
+          <div className="agw-chat-column-area relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表和输入框共用同一个宽度容器，保证两者严格对齐 */}
-            <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col">
+            <div className="agw-chat-column mx-auto flex min-h-full w-full max-w-3xl flex-col">
               <ToolDirectoriesContext.Provider value={directories}>
                 {/* 对话列表 */}
                 <Conversation
@@ -1923,7 +1924,7 @@ export function Chat({
               <div
                 inert={showReconnect}
                 aria-hidden={showReconnect}
-                className="pointer-events-none sticky bottom-0 z-10 min-h-30 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-2"
+                className="agw-chat-composer pointer-events-none sticky bottom-0 z-10 min-h-30 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-2"
               >
                 {/* 输入框 */}
                 <div className="pointer-events-auto">

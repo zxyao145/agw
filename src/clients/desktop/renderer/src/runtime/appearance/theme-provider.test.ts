@@ -47,6 +47,7 @@ afterEach(() => {
   environment.observers.media.setMatches(DARK_QUERY, false);
   document.documentElement.removeAttribute("class");
   document.documentElement.removeAttribute("style");
+  document.documentElement.removeAttribute("data-workspace-backdrop");
 });
 
 const SOFT: ExtensionTheme = {
@@ -168,6 +169,55 @@ const transitionStyles = () =>
   );
 const notices = () =>
   sonner.toast.getHistory().map((item) => ("title" in item ? item.title : null));
+
+test("the applied theme is the selected theme's id and title, and Default without one", async () => {
+  const host = await startedHost(() => [themeExtension()]);
+  const view = renderTheme({ appearance: appearance(), host }, recordingSave().save);
+  await environment.waitFor(() => assert.equal(current?.themes.length, 2));
+  assert.deepEqual(current?.appliedTheme, { id: "default", title: "Default" });
+
+  view.rerender({ appearance: appearance({ theme: "soft-theme:soft" }) });
+  await environment.waitFor(() =>
+    assert.deepEqual(current?.appliedTheme, { id: "soft-theme:soft", title: "Soft" }),
+  );
+});
+
+test("only a theme with a workspace backdrop marks html, in the mode that sets it", async () => {
+  const backdrop = "linear-gradient(120deg, #e6e2dd 0 16%, transparent 16.1%)";
+  const extension: InstalledExtension = {
+    ...themeExtension(),
+    themes: [SOFT, { ...WARM, light: { ...WARM.light, "--agw-workspace-backdrop": backdrop } }],
+  };
+  const host = await startedHost(() => [extension]);
+  const marked = () => root().hasAttribute("data-workspace-backdrop");
+  const view = renderTheme(
+    { appearance: appearance({ theme: "soft-theme:warm" }), host },
+    recordingSave().save,
+  );
+  await environment.waitFor(() => assert.equal(variable("--agw-workspace-backdrop"), backdrop));
+  assert.equal(marked(), true);
+
+  view.rerender({ appearance: appearance({ theme: "soft-theme:warm", mode: "dark" }) });
+  await environment.waitFor(() => assert.equal(variable("--background"), "#2a2018"));
+  assert.equal(marked(), false);
+
+  view.rerender({ appearance: appearance({ theme: "soft-theme:warm" }) });
+  await environment.waitFor(() => assert.equal(marked(), true));
+  view.rerender({ appearance: appearance({ theme: "soft-theme:soft" }) });
+  await environment.waitFor(() => assert.equal(variable("--background"), "#ffffff"));
+  assert.equal(marked(), false);
+
+  view.rerender({ appearance: appearance({ theme: "soft-theme:warm" }) });
+  await environment.waitFor(() => assert.equal(marked(), true));
+  view.rerender({ appearance: appearance() });
+  await environment.waitFor(() => assert.deepEqual(writtenVariables(), []));
+  assert.equal(marked(), false);
+
+  view.rerender({ appearance: appearance({ theme: "soft-theme:warm" }) });
+  await environment.waitFor(() => assert.equal(marked(), true));
+  view.unmount();
+  assert.equal(marked(), false);
+});
 
 test("Default writes no theme variables", async () => {
   const host = await startedHost(() => [themeExtension()]);
