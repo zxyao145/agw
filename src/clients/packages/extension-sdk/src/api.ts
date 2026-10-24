@@ -1,9 +1,43 @@
 // Extension API 类型，只含类型声明；SDK 与宿主用 `import type` 引用，`sdk.d.ts` 由此生成。
 // Extension API types (declarations only); the SDK and the host import them with `import type`, and `sdk.d.ts` is generated from them.
-import type { ExecutionMessage, InteractionResponse, PermissionMode } from "@agw/execution-core";
+import type {
+  ChatChannel,
+  ChatEvent,
+  ChatEventError,
+  ChatEventFilter,
+  ChatEventKind,
+  ChatEventOrigin,
+  ChatExecutionRequest,
+  ChatHttpRequest,
+  ChatMessageEvent,
+  ChatMessageSource,
+  ChatRequestEvent,
+  ChatResponseEvent,
+  ChatScope,
+  ExecutionHubMethod,
+  ExecutionMessage,
+  InteractionResponse,
+  PermissionMode,
+} from "@agw/execution-core";
 import type { ExtensionPermission } from "./permissions";
 
 export type { ExecutionMessage, InteractionResponse, PermissionMode, ExtensionPermission };
+export type {
+  ChatChannel,
+  ChatEvent,
+  ChatEventError,
+  ChatEventFilter,
+  ChatEventKind,
+  ChatEventOrigin,
+  ChatExecutionRequest,
+  ChatHttpRequest,
+  ChatMessageEvent,
+  ChatMessageSource,
+  ChatRequestEvent,
+  ChatResponseEvent,
+  ChatScope,
+  ExecutionHubMethod,
+};
 
 /* ---------- manifest ---------- */
 
@@ -67,9 +101,17 @@ export interface ExtensionThemeContribution {
   id: string;
   title: string;
   /**
-   * 包内的 JSON 文件：`{ common?, light?, dark? }`，每项是主题变量名 → 值，`light`、`dark` 中的同名变量覆盖 `common`。
-   * A package JSON file `{ common?, light?, dark? }`, each mapping theme variable names to values; `light` and `dark`
-   * override `common`.
+   * 包内的 JSON 或 CSS 文件。JSON 文件为 `{ common?, light?, dark? }`，每项是主题变量名 → 值，`light`、`dark` 中的同名变量
+   * 覆盖 `common`。CSS 文件是标准 CSS，可以定义任意自定义变量、组件样式与布局，用 `:root:not(.dark)`、`:root.dark` 区分
+   * 深浅色，可以 `@import` 包内 CSS，并引用包内图片（PNG、JPEG、GIF、WebP、AVIF、SVG、ICO）与字体（WOFF、WOFF2、TTF、
+   * OTF）或 data URL；外部资源不合法。单个 CSS 文件最多 1 MiB，单个资源最多 4 MiB，输入合计最多 8 MiB，处理后的文本最多
+   * 16 MiB。
+   * A package JSON or CSS file. JSON files are `{ common?, light?, dark? }`, each mapping theme variable names to
+   * values; `light` and `dark` override `common`. CSS files are standard CSS that may define any custom variables,
+   * component styles and layout, tell modes apart with `:root:not(.dark)` and `:root.dark`, `@import` package CSS, and
+   * refer to package images (PNG, JPEG, GIF, WebP, AVIF, SVG, ICO), fonts (WOFF, WOFF2, TTF, OTF) or data URLs; external
+   * resources are invalid. One CSS file is at most 1 MiB, one resource at most 4 MiB, the inputs at most 8 MiB in
+   * total, and the processed text at most 16 MiB.
    */
   path: string;
 }
@@ -195,8 +237,24 @@ export interface ThemeInfo {
    *   `none` or comma-separated CSS gradients, usable as a `background-image` value; the host draws it on the Main
    *   Workspace, and each extension decides whether its own pages use it.
    * - 字号 Font size：`--agw-font-size-base`，为计算后的 px 值。The computed px value.
+   *
+   * CSS 主题下，这里仍是宿主页面中这些公共变量的计算值；`theme.apply()` 之后，extension 页面中的值由默认变量样式表与主题 CSS
+   * 在自己的 document 中计算。
+   * Under a CSS theme these are still the computed values of the public variables in the host page; after
+   * `theme.apply()`, the extension page computes its own values from the default variable stylesheet and the theme CSS.
    */
   tokens: Record<string, string>;
+  /**
+   * CSS 主题的完整样式文本：读取主题 CSS 入口、展开包内 `@import` 并内嵌图片与字体后的结果。JSON 主题与 Default 没有这个字段。
+   * `theme.apply()` 把它放进 extension 自己的 document；主题可以用 `:root[data-agw-document="extension"]`、
+   * `:root[data-agw-extension="<extensionId>"]` 限定作用于 extension 页面的规则，用 `:root.dark`、`:root:not(.dark)`
+   * 区分深浅色。
+   * The complete style text of a CSS theme: the theme CSS entry with package `@import` rules expanded and images and
+   * fonts inlined. JSON themes and Default have no such field. `theme.apply()` puts it into the extension's own
+   * document; themes can scope rules for extension pages with `:root[data-agw-document="extension"]` and
+   * `:root[data-agw-extension="<extensionId>"]`, and tell modes apart with `:root.dark` and `:root:not(.dark)`.
+   */
+  cssText?: string;
 }
 
 export interface ExtensionApi {
@@ -233,6 +291,12 @@ export interface ExtensionApi {
   readonly http: HttpApi;
   readonly chat: {
     composer: { insertText(text: string): Promise<void> };
+    /**
+     * 订阅当前 Server 上全部对话的通信事件；需要 chat.observe。宿主接受订阅后返回，`listener` 可能在返回之前收到事件。
+     * Subscribes to the traffic events of every conversation on the current Server; requires chat.observe.
+     * Resolves once the host accepts the subscription; `listener` may receive events before that.
+     */
+    observe(filter: ChatEventFilter, listener: (event: ChatEvent) => void): Promise<Disposable>;
   };
   readonly ui: {
     notify(notification: { type: "info" | "success" | "error"; message: string }): void;
@@ -243,11 +307,27 @@ export interface ExtensionApi {
     openExternal(url: string): Promise<void>;
   };
   readonly theme: {
+    /** 当前主题的完整状态，CSS 主题包含 `cssText`。The complete current theme; CSS themes include `cssText`. */
     get(): ThemeInfo;
+    /** 主题变化时收到完整状态。Receives the complete theme when it changes. */
     onDidChange(listener: (theme: ThemeInfo) => void): Disposable;
     /**
-     * 把主题变量与 dark class 写到 document 上并保持同步，同时加入 `/__agw/typography.css`。元素加上 `agw-prose` 与 `data-density="document"` 或 `"compact"` 即使用排版规范。宿主只推送 base 与 minimum 字号，extension frame 中 `compact` 的字号为 base × 0.875；`document` 密度使用页面设置的 `--agw-font-size-document`，默认值为 base 字号。
-     * Applies theme variables and the dark class to the document and keeps them in sync, and also links `/__agw/typography.css`. Elements with `agw-prose` and `data-density="document"` or `"compact"` use the typography. The host pushes only the base and minimum sizes, so in extension frames `compact` uses base × 0.875; the `document` density uses `--agw-font-size-document` set by the page, which defaults to the base size.
+     * 在当前 document 中应用主题并保持同步：设置 dark class，加入 `/__agw/typography.css`，在根元素上设置
+     * `data-agw-document="extension"` 与 `data-agw-extension`。JSON 主题与 Default 把变量写到根元素的 inline style；CSS
+     * 主题使用 constructed stylesheet，默认变量样式表（`/__agw/theme-defaults.css`）位于主题样式表之前，二者排在页面的
+     * `<style>`、`<link>` 之后并保留其他代码的 adopted stylesheet，只有 `--agw-font-size-base` 写为 inline 属性。元素加上
+     * `agw-prose` 与 `data-density="document"` 或 `"compact"` 即使用排版规范；extension frame 中 `compact` 的字号为
+     * base × 0.875，`document` 密度使用页面设置的 `--agw-font-size-document`，默认值为 base 字号。返回的 `Disposable` 只停止
+     * 同步，当前外观保留。
+     * Applies the theme to this document and keeps it in sync: sets the dark class, links `/__agw/typography.css` and
+     * sets `data-agw-document="extension"` and `data-agw-extension` on the root element. JSON themes and Default write
+     * variables to the root's inline style; CSS themes use constructed stylesheets, with the default variable
+     * stylesheet (`/__agw/theme-defaults.css`) before the theme stylesheet, both after the page's `<style>` and
+     * `<link>` sheets and keeping adopted stylesheets of other code, and only `--agw-font-size-base` is written as an
+     * inline property. Elements with `agw-prose` and `data-density="document"` or `"compact"` use the typography; in
+     * extension frames `compact` uses base × 0.875, and the `document` density uses `--agw-font-size-document` set by
+     * the page, which defaults to the base size. The returned `Disposable` only stops syncing; the current appearance
+     * stays.
      */
     apply(): Disposable;
   };
@@ -689,5 +769,24 @@ export interface ExtensionWelcome {
   };
   manifest: ExtensionManifest;
   context: HostContext;
+  /** 完整的主题快照，CSS 主题包含 `cssText`。The complete theme snapshot; CSS themes include `cssText`. */
   theme: ThemeInfo;
+  /** CSS 主题样式文本的标识；JSON 主题与 Default 为 null。The CSS theme style text id; null for JSON themes and Default. */
+  themeStyleId: string | null;
+}
+
+/**
+ * `theme.changed` 的样式操作：`unchanged` 沿用这个连接已经收到的文本，`replace` 携带新的完整文本，`clear` 删除已有 CSS。
+ * The style operation of `theme.changed`: `unchanged` keeps the text this connection already received, `replace`
+ * carries the new complete text, and `clear` removes the existing CSS.
+ */
+export type ThemeStyleUpdate =
+  | { operation: "unchanged"; styleId: string | null }
+  | { operation: "replace"; styleId: string; cssText: string }
+  | { operation: "clear"; styleId: null };
+
+/** `theme.changed` 事件的数据。Data of the `theme.changed` event. */
+export interface ThemeChangedNotification {
+  theme: Omit<ThemeInfo, "cssText">;
+  style: ThemeStyleUpdate;
 }

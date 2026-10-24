@@ -48,7 +48,7 @@ export function DesktopExtensionSettingsPage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border p-1">
           <ExtensionView
             host={runtime.host}
-            tracker={runtime.tracker}
+            layout={runtime.layout}
             snapshot={snapshot}
             view={{
               id: settingsViewId(extension.id),

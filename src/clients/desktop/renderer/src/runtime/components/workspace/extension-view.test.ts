@@ -12,7 +12,7 @@ let environment: DomEnvironment;
 let views: ViewModule;
 let slots: SlotModule;
 let host: import("../../extensions/extension-host").ExtensionHost;
-let tracker: import("../../extensions/host-overlay-tracker").HostOverlayTracker;
+let layout: import("../../extensions/extension-layout-sampler").ExtensionLayoutSampler;
 
 before(async () => {
   const { setupDomEnvironment } = await import("@agw/test-harness");
@@ -21,13 +21,14 @@ before(async () => {
   slots = await import("./extension-view-slot");
   const { ExtensionHost } = await import("../../extensions/extension-host");
   const { HostOverlayTracker } = await import("../../extensions/host-overlay-tracker");
+  const { createLayoutSampler } = await import("../../extensions/extension-runtime");
   // 普通浏览器模式的宿主：布局与视图组件照常工作，不连接主进程。A browser-mode host: layout and views work without main.
   host = new ExtensionHost({
     bridge: null,
     app: { version: "0.5.0", platform: "darwin", architecture: "arm64" },
     notify: () => undefined,
   });
-  tracker = new HostOverlayTracker(document, () => undefined);
+  layout = createLayoutSampler(host, new HostOverlayTracker(document, () => undefined));
 });
 afterEach(() => environment.cleanup());
 
@@ -52,7 +53,6 @@ function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHost
     extensions: [],
     viewErrors: {},
     unsavedViewIds: [],
-    confirmation: null,
     ...overrides,
   };
 }
@@ -102,7 +102,7 @@ test("the slot shows the snapshot while a host overlay covers the view", () => {
   const covered = render(
     createElement(slots.ExtensionViewSlot, {
       host,
-      tracker,
+      layout,
       frameId: "frame-1",
       snapshot: "data:image/jpeg;base64,AAAA",
     }),
@@ -113,7 +113,7 @@ test("the slot shows the snapshot while a host overlay covers the view", () => {
   covered.unmount();
 
   const shown = render(
-    createElement(slots.ExtensionViewSlot, { host, tracker, frameId: "frame-1", snapshot: null }),
+    createElement(slots.ExtensionViewSlot, { host, layout, frameId: "frame-1", snapshot: null }),
   );
   assert.equal(shown.container.querySelector(".agw-extension-view-slot img"), null);
 });
@@ -122,7 +122,7 @@ test("a view whose handshake failed shows an error panel with Reload view", () =
   render(
     environment.React.createElement(views.ExtensionView, {
       host,
-      tracker,
+      layout,
       snapshot: snapshot({
         viewErrors: {
           "sample:app": {
@@ -164,7 +164,7 @@ test("a failed view inside ExtensionView renders the failed-extension panel", ()
   render(
     environment.React.createElement(views.ExtensionView, {
       host,
-      tracker,
+      layout,
       snapshot: snapshot(),
       view: { ...view, failure: { code: "UNRESPONSIVE", message: "The page stopped responding." } },
       openRequest: undefined,

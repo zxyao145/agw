@@ -2,7 +2,7 @@
 // Builds the bundled extensions in src/clients/packages/extensions, validates them and copies them into
 // resources/extensions/<id>.
 import { spawn } from "node:child_process";
-import { access, cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "acorn";
@@ -33,18 +33,16 @@ function run(command, args, cwd) {
 }
 
 /**
- * 与 build-extension-sdk.mjs 相同地打包 manifest 校验模块，以及 Desktop 读取 extension 时使用的主题文件校验。
- * Bundles the manifest module as build-extension-sdk.mjs does, plus the theme file validation Desktop runs when it
- * reads an extension.
+ * 打包 Desktop 读取 extension 目录时使用的校验：manifest、包内路径、图标，以及 JSON 与 CSS 主题的加载。
+ * Bundles the validation Desktop runs when it reads an extension directory: the manifest, package paths, icons, and
+ * JSON and CSS theme loading.
  */
 async function loadManifestTools() {
   const moduleFile = join(desktopDirectory, ".scratch", "bundled-extensions-build", "manifest.mjs");
   await build({
     stdin: {
-      contents: [
-        'export * from "./src/shared/extension-manifest.ts";',
-        'export { readExtensionThemes } from "./src/main/extensions/extension-theme-file.ts";',
-      ].join("\n"),
+      contents:
+        'export { readExtensionDirectory } from "./src/main/extensions/extension-catalog.ts";',
       resolveDir: desktopDirectory,
       loader: "ts",
     },
@@ -53,6 +51,11 @@ async function loadManifestTools() {
     format: "esm",
     platform: "node",
     target: "node24",
+    // postcss 等 CommonJS 依赖在 ESM 产物中通过 require 读取 Node 内置模块。CommonJS dependencies such as postcss
+    // require Node built-in modules from the ESM output.
+    banner: {
+      js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
+    },
     logLevel: "warning",
   });
   return import(`${pathToFileURL(moduleFile).href}?t=${Date.now()}`);
@@ -98,32 +101,15 @@ async function checkSdkImports(id, distDirectory) {
 }
 
 async function validatePackage(tools, appVersion, name, distDirectory) {
-  const manifest = JSON.parse(await readFile(join(distDirectory, "manifest.json"), "utf8"));
-  const result = tools.evaluateExtensionManifest(manifest, appVersion);
-  if (result.validation !== "valid") {
+  // dist/ 的目录名不是 extension id，id 在下面单独比较。The dist/ directory name is not the id, which is compared below.
+  const entry = await tools.readExtensionDirectory(distDirectory, appVersion, null);
+  if (entry.validation !== "valid") {
+    throw new Error(`${name}: the package is ${entry.validation}: ${JSON.stringify(entry.errors)}`);
+  }
+  if (entry.manifest.id !== name) {
     throw new Error(
-      `${name}: the manifest is ${result.validation}: ${JSON.stringify(result.errors)}`,
+      `${name}: the manifest id "${entry.manifest.id}" must equal the package directory name.`,
     );
-  }
-  if (result.manifest.id !== name) {
-    throw new Error(
-      `${name}: the manifest id "${result.manifest.id}" must equal the package directory name.`,
-    );
-  }
-  const themeFiles = new Map();
-  for (const { path, field, kind } of tools.manifestPackagePaths(result.manifest)) {
-    const file = join(distDirectory, ...path.split("/"));
-    await access(file).catch(() => {
-      throw new Error(`${name}: ${field} refers to ${path}, which is not in dist/.`);
-    });
-    if (kind === "theme") themeFiles.set(path, file);
-  }
-  const themes = await tools.readExtensionThemes(
-    result.manifest.contributes?.themes ?? [],
-    themeFiles,
-  );
-  if (themes.errors.length > 0) {
-    throw new Error(`${name}: the theme files are invalid: ${JSON.stringify(themes.errors)}`);
   }
   await checkSdkImports(name, distDirectory);
 }

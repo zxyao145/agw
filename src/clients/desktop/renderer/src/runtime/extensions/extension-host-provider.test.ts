@@ -5,13 +5,13 @@ import { THEME_TOKEN_KINDS, THEME_TOKEN_NAMES } from "@desktop/shared/theme-toke
 
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
 let environment: DomEnvironment;
-let readTheme: typeof import("./extension-host-provider").readTheme;
+let readTheme: typeof import("../appearance/theme-state").readTheme;
 let AppearanceProvider: typeof import("../appearance/appearance-provider").AppearanceProvider;
 
 before(async () => {
   const { setupDomEnvironment } = await import("@agw/test-harness");
   environment = await setupDomEnvironment();
-  ({ readTheme } = await import("./extension-host-provider"));
+  ({ readTheme } = await import("../appearance/theme-state"));
   ({ AppearanceProvider } = await import("../appearance/appearance-provider"));
 });
 afterEach(() => environment.cleanup());

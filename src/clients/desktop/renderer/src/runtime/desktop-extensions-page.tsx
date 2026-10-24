@@ -15,7 +15,6 @@ import {
   Settings,
   Trash2,
 } from "lucide-react";
-import semver from "semver";
 import { toast } from "sonner";
 
 import {
@@ -36,15 +35,15 @@ import {
   Switch,
 } from "@agw/components";
 import type { ExtensionInstallPreview, ExtensionRecoveryNotice } from "@desktop/shared/contracts";
-import {
-  type ExtensionManifest,
-  type ExtensionPermission,
-  HIGH_RISK_EXTENSION_PERMISSIONS,
-} from "@agw/extension-sdk";
+import { type ExtensionManifest, HIGH_RISK_EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import {
   isUnencryptedHostPermission,
   parseHostPermission,
 } from "@desktop/shared/extension-host-permissions";
+import {
+  PERMISSION_DESCRIPTIONS,
+  READ_PERMISSIONS,
+} from "@desktop/shared/extension-permission-descriptions";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./components/app-shell-routing";
 import {
   EXTENSION_CATEGORIES,
@@ -55,31 +54,6 @@ import { extensionIcon } from "./extensions/extension-contributions";
 import type { ExtensionHost, ExtensionState } from "./extensions/extension-host";
 import { useExtensionRuntime } from "./extensions/extension-host-provider";
 import { WorkspaceIconView } from "./components/workspace/workspace-icon";
-
-const PERMISSION_DESCRIPTIONS: Record<ExtensionPermission, string> = {
-  "context.user": "Read your user information.",
-  "context.project": "Read the current Project and conversation, and list your Projects.",
-  "context.agent": "Read the current Agent or Agentflow, and list available Agents and Agentflows.",
-  "fs.local.read": "Read any file or folder on this computer.",
-  "fs.local.write": "Create, change, delete or move any file or folder on this computer.",
-  "fs.cloud.read": "Read files in your Projects on the current Server.",
-  "fs.cloud.write": "Write, delete or move files in your Projects on the current Server.",
-  execution:
-    "Run your Agents and Agentflows, and answer tool approvals and input requests for you.",
-  a2a: "Call the A2A endpoints of the current Server.",
-  "chat.composer": "Insert text into the chat composer.",
-  "clipboard.read": "Read the clipboard.",
-  "clipboard.write": "Write to the clipboard.",
-};
-
-const READ_PERMISSIONS: readonly ExtensionPermission[] = [
-  "fs.local.read",
-  "fs.cloud.read",
-  "clipboard.read",
-  "context.user",
-  "context.project",
-  "context.agent",
-];
 
 const STATUS_LABELS: Record<ExtensionState["status"], string> = {
   inactive: "Disabled",
@@ -171,90 +145,42 @@ function PermissionList({ manifest }: { manifest: ExtensionManifest }) {
   );
 }
 
-function ApprovalDialog({
-  extension,
-  onCancel,
-  onApprove,
-}: {
-  extension: ExtensionState | null;
-  onCancel(): void;
-  onApprove(extension: ExtensionState): void;
-}) {
-  const manifest = extension?.installed.manifest ?? null;
-  return (
-    <Dialog open={extension !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>Enable {manifest?.name ?? extension?.id}?</DialogTitle>
-          <DialogDescription>
-            The extension will receive the following permissions.
-          </DialogDescription>
-        </DialogHeader>
-        {manifest ? <PermissionList manifest={manifest} /> : null}
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button onClick={() => extension && onApprove(extension)}>Enable</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function InstallDialog({
+/**
+ * 不能安装的包：显示校验错误。可以安装的包由主进程的确认窗口批准，不在这里显示。
+ * A package that cannot be installed shows its validation errors. Installable packages are approved in the main
+ * process's confirmation window instead.
+ */
+function InstallErrorsDialog({
   preview,
-  onCancel,
-  onConfirm,
+  onClose,
 }: {
   preview: Extract<ExtensionInstallPreview, { canceled: false }> | null;
-  onCancel(): void;
-  onConfirm(): void;
+  onClose(): void;
 }) {
   const manifest = preview?.manifest ?? null;
-  const installed = preview?.installedVersion ?? null;
-  const hasErrors = (preview?.errors.length ?? 0) > 0 || !manifest;
-  const versionComparison =
-    manifest && installed ? semver.compare(manifest.version, installed) : null;
   return (
-    <Dialog open={preview !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
+    <Dialog open={preview !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{manifest ? `Install ${manifest.name}` : "Install extension"}</DialogTitle>
           <DialogDescription>
-            {manifest && installed
-              ? versionComparison === 0
-                ? `Reinstall version ${manifest.version}.`
-                : `${installed} → ${manifest.version}`
-              : manifest
-                ? `Version ${manifest.version}`
-                : "The package could not be read."}
+            {manifest
+              ? `Version ${manifest.version} cannot be installed.`
+              : "The package could not be read."}
           </DialogDescription>
         </DialogHeader>
-        {versionComparison !== null && versionComparison < 0 ? (
-          <p className="flex gap-2 text-sm text-amber-600 dark:text-amber-400">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            You are installing an older version than the one installed.
-          </p>
-        ) : null}
-        {preview && preview.errors.length > 0 ? (
-          <ul className="space-y-1 text-sm text-destructive">
-            {preview.errors.map((error, index) => (
-              <li key={index}>
-                {error.code}
-                {error.path ? ` (${error.path})` : ""}: {error.message}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {!hasErrors && manifest ? <PermissionList manifest={manifest} /> : null}
+        <ul className="space-y-1 text-sm text-destructive">
+          {preview?.errors.map((error, index) => (
+            <li key={index}>
+              {error.code}
+              {error.path ? ` (${error.path})` : ""}: {error.message}
+            </li>
+          ))}
+        </ul>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
-            Cancel
+          <Button variant="outline" onClick={onClose}>
+            Close
           </Button>
-          {!hasErrors ? (
-            <Button onClick={onConfirm}>{installed ? "Replace" : "Install"}</Button>
-          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -473,17 +399,31 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
     "/extensions/",
     getDesktopChatReturnHref(searchParams.get("returnTo")),
   );
-  const [approval, setApproval] = React.useState<ExtensionState | null>(null);
   const [uninstalling, setUninstalling] = React.useState<ExtensionState | null>(null);
-  const [preview, setPreview] = React.useState<Extract<
+  const [invalidPreview, setInvalidPreview] = React.useState<Extract<
     ExtensionInstallPreview,
     { canceled: false }
   > | null>(null);
 
+  // 可以安装的包由主进程的确认窗口批准，批准之后才停用已安装的版本并提交。
+  // The main process's confirmation window approves installable packages; only then is the installed version
+  // deactivated and the install committed.
   const install = (source: "directory" | "archive") =>
     run(async () => {
-      const result = await bridge.prepareExtensionInstall({ source });
-      if (!result.canceled) setPreview(result);
+      const preview = await bridge.prepareExtensionInstall({ source });
+      if (preview.canceled) return;
+      if (preview.errors.length > 0 || !preview.manifest) {
+        setInvalidPreview(preview);
+        return;
+      }
+      if (!(await bridge.approveExtensionInstall(preview.installId))) {
+        await bridge.cancelExtensionInstall(preview.installId);
+        return;
+      }
+      await host.prepareReplace(preview.manifest.id);
+      const installed = await bridge.commitExtensionInstall(preview.installId);
+      await host.afterInstall(installed.id);
+      toast.success(`${installed.manifest?.name ?? installed.id} installed.`);
     });
 
   return (
@@ -579,27 +519,13 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
               key={extension.id}
               host={host}
               extension={extension}
-              onEnable={setApproval}
+              onEnable={(item) => run(async () => void (await host.enable(item.id)))}
               onUninstall={setUninstalling}
             />
           ))}
         </>
       ) : null}
 
-      <ApprovalDialog
-        extension={approval}
-        onCancel={() => setApproval(null)}
-        onApprove={(extension) => {
-          setApproval(null);
-          const manifest = extension.installed.manifest!;
-          run(() =>
-            host.enable(extension.id, {
-              permissions: manifest.permissions ?? [],
-              hostPermissions: manifest.hostPermissions ?? [],
-            }),
-          );
-        }}
-      />
       <UninstallDialog
         extension={uninstalling}
         onCancel={() => setUninstalling(null)}
@@ -609,22 +535,12 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
           run(() => host.uninstall(extension.id, deleteData));
         }}
       />
-      <InstallDialog
-        preview={preview}
-        onCancel={() => {
-          const current = preview;
-          setPreview(null);
+      <InstallErrorsDialog
+        preview={invalidPreview}
+        onClose={() => {
+          const current = invalidPreview;
+          setInvalidPreview(null);
           if (current) run(() => bridge.cancelExtensionInstall(current.installId));
-        }}
-        onConfirm={() => {
-          const current = preview!;
-          setPreview(null);
-          run(async () => {
-            if (current.manifest) await host.prepareReplace(current.manifest.id);
-            const installed = await bridge.commitExtensionInstall(current.installId);
-            await host.afterInstall(installed.id);
-            toast.success(`${installed.manifest?.name ?? installed.id} installed.`);
-          });
         }}
       />
     </div>

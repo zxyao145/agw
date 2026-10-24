@@ -14,6 +14,7 @@ import type { ExtensionManifest } from "@agw/extension-sdk";
 import { evaluateExtensionManifest, manifestPackagePaths } from "../../shared/extension-manifest";
 import { isGrantCovered } from "../settings/settings-store";
 import { readExtensionThemes } from "./extension-theme-file";
+import { type ThemeStyleCompiler, themeStyleCompiler } from "./extension-theme-style-cache";
 
 export const MAX_ICON_BYTES = 256 * 1024;
 
@@ -62,13 +63,15 @@ function errorEntry(directory: string, errors: ExtensionValidationError[]): Cata
 }
 
 /**
- * 读取并校验一个 extension 根目录；`expectedId` 为 null 时（暂存目录）不检查目录名。
+ * 读取并校验一个 extension 根目录；`expectedId` 为 null 时（暂存目录）不检查目录名。CSS 主题由 `compiler` 编译与缓存。
  * Reads and validates one extension root directory; a null `expectedId` (staging) skips the directory-name check.
+ * `compiler` compiles and caches CSS themes.
  */
 export async function readExtensionDirectory(
   directory: string,
   appVersion: string,
   expectedId: string | null = basename(directory),
+  compiler: ThemeStyleCompiler = themeStyleCompiler,
 ): Promise<CatalogEntry> {
   const rootRealPath = await realpath(directory);
   const manifestFile = join(directory, "manifest.json");
@@ -159,7 +162,12 @@ export async function readExtensionDirectory(
         `data:${mimeType};base64,${(await readFile(fileRealPath)).toString("base64")}`;
     }
     // 主题文件在包内路径检查之后读取与校验。Theme files are read and validated after the package path checks.
-    const result = await readExtensionThemes(manifest.contributes?.themes ?? [], themeFiles);
+    const result = await readExtensionThemes(
+      manifest.contributes?.themes ?? [],
+      themeFiles,
+      rootRealPath,
+      compiler,
+    );
     themes = result.themes;
     errors.push(...result.errors);
   }

@@ -21,7 +21,7 @@ const PACKAGE_PATH_PATTERN = new RegExp(`^${PACKAGE_PATH}$`, "u");
 const PACKAGE_ICON_PATTERN = new RegExp(`^${ICON_FILE}$`, "u");
 const ENTRY_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.html$`, "u");
 const BACKGROUND_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.m?js$`, "u");
-const THEME_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.json$`, "u");
+const THEME_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.(?:json|css)$`, "u");
 const ICON_PATTERN = new RegExp(`^(?:${LUCIDE_ICON}|${ICON_FILE})$`, "u");
 // `data` 与 `packages` 是 `<userData>/extensions` 下的目录名，不能作为 id。
 // `data` and `packages` name the directories under `<userData>/extensions` and cannot be ids.

@@ -9,7 +9,7 @@ import {
 import type { FileViewerFile } from "@agw/extension-sdk";
 
 import type { ExtensionHost, ExtensionHostSnapshot } from "../../extensions/extension-host";
-import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
+import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
 import type { ViewOpenRequest } from "../../extensions/workspace-layout-store";
 import type { WorkspaceView } from "../../extensions/workspace-registry";
@@ -17,7 +17,7 @@ import { ExtensionView, ExtensionViewInfo, reloadExtensionView } from "./extensi
 
 export type MainWorkspaceProps = {
   host: ExtensionHost;
-  tracker: HostOverlayTracker;
+  layout: ExtensionLayoutSampler;
   snapshot: ExtensionHostSnapshot;
   activeView: WorkspaceView;
   /** 打开过且需要保留页面状态的 extension 主区视图。Opened extension main views that keep their page state. */
@@ -48,7 +48,7 @@ export function MainWorkspace(props: MainWorkspaceProps) {
     <div key={view.id} className="flex min-h-0 flex-1 flex-col" hidden={hidden}>
       <ExtensionView
         host={props.host}
-        tracker={props.tracker}
+        layout={props.layout}
         snapshot={props.snapshot}
         view={view}
         openRequest={props.openRequests[view.id]}
@@ -86,7 +86,7 @@ export function MainWorkspace(props: MainWorkspaceProps) {
               <ExtensionView
                 key={view.id}
                 host={props.host}
-                tracker={props.tracker}
+                layout={props.layout}
                 snapshot={props.snapshot}
                 view={view}
                 openRequest={undefined}

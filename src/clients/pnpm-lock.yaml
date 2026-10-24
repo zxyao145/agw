@@ -272,6 +272,9 @@ catalogs:
     '@types/node':
       specifier: 26.6.2
       version: 26.6.2
+    '@types/postcss-import':
+      specifier: 14.0.3
+      version: 14.0.3
     '@types/react':
       specifier: 19.3.0
       version: 19.3.0
@@ -296,6 +299,9 @@ catalogs:
     '@vitejs/plugin-vue':
       specifier: 6.0.10
       version: 6.0.10
+    '@xmldom/xmldom':
+      specifier: 0.9.12
+      version: 0.9.12
     acorn:
       specifier: 8.19.0
       version: 8.19.0
@@ -314,6 +320,9 @@ catalogs:
     css-tree:
       specifier: 3.2.1
       version: 3.2.1
+    data-urls:
+      specifier: 7.0.0
+      version: 7.0.0
     diff:
       specifier: 9.0.0
       version: 9.0.0
@@ -404,6 +413,12 @@ catalogs:
     playwright:
       specifier: 1.63.0
       version: 1.63.0
+    postcss:
+      specifier: 8.5.28
+      version: 8.5.28
+    postcss-import:
+      specifier: 17.0.1
+      version: 17.0.1
     prettier:
       specifier: 3.9.10
       version: 3.9.10
@@ -621,6 +636,9 @@ importers:
       '@types/mime-types':
         specifier: 'catalog:'
         version: 3.0.1
+      '@types/postcss-import':
+        specifier: 'catalog:'
+        version: 14.0.3
       '@types/semver':
         specifier: 'catalog:'
         version: 7.8.0
@@ -639,6 +657,9 @@ importers:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
         version: 6.0.10(vite@8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.44(typescript@7.0.2))
+      '@xmldom/xmldom':
+        specifier: 'catalog:'
+        version: 0.9.12
       acorn:
         specifier: 'catalog:'
         version: 8.19.0
@@ -654,6 +675,9 @@ importers:
       css-tree:
         specifier: 'catalog:'
         version: 3.2.1
+      data-urls:
+        specifier: 'catalog:'
+        version: 7.0.0
       dts-bundle-generator:
         specifier: 'catalog:'
         version: 9.5.1
@@ -693,6 +717,12 @@ importers:
       next-themes:
         specifier: 'catalog:'
         version: 0.4.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      postcss:
+        specifier: 'catalog:'
+        version: 8.5.28
+      postcss-import:
+        specifier: 'catalog:'
+        version: 17.0.1(postcss@8.5.28)
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -1058,6 +1088,9 @@ importers:
         specifier: 'catalog:'
         version: 1.47.0(react-native-svg@15.15.5(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2))(@react-native/metro-config@0.86.3(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0))(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2))(@react-native/metro-config@0.86.3(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)
     devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.103.2(react@19.3.0)
@@ -1091,9 +1124,16 @@ importers:
       '@agw/execution-core':
         specifier: workspace:*
         version: link:../execution-core
+      '@agw/projects-core':
+        specifier: workspace:*
+        version: link:../projects-core
       '@microsoft/signalr':
         specifier: 'catalog:'
         version: 10.0.11(encoding@0.1.13)
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
 
   packages/components:
     dependencies:
@@ -1203,6 +1243,8 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
+
+  packages/extensions/soft-theme: {}
 
   packages/extensions/text-editor:
     devDependencies:
@@ -1360,6 +1402,8 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
+  packages/extensions/warm-minimalism-theme: {}
+
   packages/http-client: {}
 
   packages/integrations:
@@ -1435,6 +1479,10 @@ importers:
       '@agw/api':
         specifier: workspace:*
         version: link:../api
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
 
   packages/providers:
     dependencies:
@@ -1475,6 +1523,9 @@ importers:
 
   packages/test-harness:
     dependencies:
+      '@microsoft/signalr':
+        specifier: 'catalog:'
+        version: 10.0.11(encoding@0.1.13)
       '@testing-library/dom':
         specifier: 10.4.2
         version: 10.4.2
@@ -5482,6 +5533,9 @@ packages:
 
   '@types/node@26.6.2':
     resolution: {integrity: sha512-X1P21scMv4zGKLYqjdGjaKa7COa0RKVYYZZN/NfvLQ1JegxFhdhpZG/Lyn8AXx6CDUavKAd11v6BvfpkDByK8g==}
+
+  '@types/postcss-import@14.0.3':
+    resolution: {integrity: sha512-raZhRVTf6Vw5+QbmQ7LOHSDML71A5rj4+EqDzAbrZPfxfoGzFxMHRCq16VlddGIZpHELw0BG4G0YE2ANkdZiIQ==}
 
   '@types/react-dom@19.3.0':
     resolution: {integrity: sha512-ZI7bU42mZXXKHn/qNLEw2IrbiINU7X5+vfgdixBHkCNpYWXjKgfQ/P+uyGb5CjOLB9UcnTeg3rylQtV2hym44Q==}
@@ -9592,6 +9646,15 @@ packages:
     resolution: {integrity: sha512-rEwq/ZHlJIKw++XtLAO8PPuOQA/zaPJOZJ37BVuN97nLpMJeuDVLVGRwbFoBgLudgdTMP2hdRJP++H+8QOA3vg==}
     engines: {node: '>= 10.12'}
 
+  postcss-import@17.0.1:
+    resolution: {integrity: sha512-lthLZRa+sMc/xo+lG7TMUvOviwP9ngR0VULnvfXTyOE3JIc0mFrbjcubI6Jx52X+B3IKt9yfp6wwVWE768JezA==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      postcss: ^8.0.0
+
+  postcss-value-parser@4.2.0:
+    resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
+
   postcss@8.5.23:
     resolution: {integrity: sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg==}
     engines: {node: ^10 || ^12 || >=14}
@@ -9932,6 +9995,9 @@ packages:
   read-binary-file-arch@1.0.6:
     resolution: {integrity: sha512-BNg9EN3DD3GsDXX7Aa8O4p92sryjkmzYYgmgTAc6CA4uGLEDzFfxOxugu21akOxpcXHiEgsYkC6nPsQvLLLmEg==}
     hasBin: true
+
+  read-cache@1.0.2:
+    resolution: {integrity: sha512-/peqiBB/n07gQGLsWaHho3WfvUyRscw0gYTsEFMhrIe/nWLkYaf5SbKYjGYqtRV3aPwykJgF2VEMo1ac4bnsGA==}
 
   read-pkg-up@2.0.0:
     resolution: {integrity: sha512-1orxQfbWGUiTn9XsPlChs6rLie/AV9jwZTGmu2NZw/CUDJQchXJFYE0Fq5j7+n558T1JhDWLdhyd1Zj+wLY//w==}
@@ -15798,6 +15864,10 @@ snapshots:
     dependencies:
       undici-types: 8.9.0
 
+  '@types/postcss-import@14.0.3':
+    dependencies:
+      postcss: 8.5.28
+
   '@types/react-dom@19.3.0(@types/react@19.3.0)':
     dependencies:
       '@types/react': 19.3.0
@@ -20712,6 +20782,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  postcss-import@17.0.1(postcss@8.5.28):
+    dependencies:
+      postcss: 8.5.28
+      postcss-value-parser: 4.2.0
+      read-cache: 1.0.2
+      resolve: 1.22.12
+
+  postcss-value-parser@4.2.0: {}
+
   postcss@8.5.23:
     dependencies:
       nanoid: 3.3.19
@@ -21196,6 +21275,8 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
+
+  read-cache@1.0.2: {}
 
   read-pkg-up@2.0.0:
     dependencies:

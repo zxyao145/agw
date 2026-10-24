@@ -10,7 +10,7 @@ import type {
   ExtensionHost,
   ExtensionHostSnapshot,
 } from "../../extensions/extension-host";
-import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
+import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
 import type { WorkspaceView } from "../../extensions/workspace-registry";
 import { ExtensionViewSlot } from "./extension-view-slot";
 import { WorkspaceIconView } from "./workspace-icon";
@@ -135,7 +135,7 @@ export function ExtensionErrorView({
 
 export type ExtensionViewProps = {
   host: ExtensionHost;
-  tracker: HostOverlayTracker;
+  layout: ExtensionLayoutSampler;
   snapshot: ExtensionHostSnapshot;
   view: WorkspaceView;
   /** 最近一次打开请求的序号与参数。The latest open request's sequence and params. */
@@ -154,7 +154,7 @@ export type ExtensionViewProps = {
 /** 一个 extension 视图：标题条 + 占位组件或错误面板。One extension view: the title bar plus the slot or an error panel. */
 export function ExtensionView({
   host,
-  tracker,
+  layout,
   snapshot,
   view,
   openRequest,
@@ -213,7 +213,7 @@ export function ExtensionView({
       ) : frameId ? (
         <ExtensionViewSlot
           host={host}
-          tracker={tracker}
+          layout={layout}
           frameId={frameId}
           snapshot={frame?.snapshot ?? null}
         />

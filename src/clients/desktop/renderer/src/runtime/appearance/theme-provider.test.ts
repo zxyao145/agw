@@ -8,6 +8,7 @@ import type {
   InstalledExtension,
 } from "@desktop/shared/contracts";
 import type { ExtensionHost } from "../extensions/extension-host";
+import type { JsonExtensionTheme } from "./resolve-theme";
 import type { DesktopThemeState } from "./theme-provider";
 
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
@@ -50,7 +51,8 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-workspace-backdrop");
 });
 
-const SOFT: ExtensionTheme = {
+const SOFT: JsonExtensionTheme = {
+  format: "json",
   id: "soft",
   title: "Soft",
   common: { "--radius": "0.75rem" },
@@ -58,12 +60,29 @@ const SOFT: ExtensionTheme = {
   dark: { "--background": "#212121" },
 };
 
-const WARM: ExtensionTheme = {
+const WARM: JsonExtensionTheme = {
+  format: "json",
   id: "warm",
   title: "Warm",
   common: {},
   light: { "--background": "#fff8f0" },
   dark: { "--background": "#2a2018", "--card": "#30241c" },
+};
+
+const PAPER: ExtensionTheme = {
+  format: "css",
+  id: "paper",
+  title: "Paper",
+  styleId: "a".repeat(64),
+  byteLength: 40,
+};
+
+const INK: ExtensionTheme = {
+  format: "css",
+  id: "ink",
+  title: "Ink",
+  styleId: "b".repeat(64),
+  byteLength: 40,
 };
 
 function themeExtension(enabled = true): InstalledExtension {
@@ -103,14 +122,37 @@ const appearance = (overrides: Partial<AppearanceSettings> = {}): AppearanceSett
   ...overrides,
 });
 
+/** 主进程收到的样式文本请求，测试决定何时回复。Style text requests main received; the test decides when they reply. */
+type StyleRequest = {
+  themeId: string;
+  styleId: string;
+  resolve(cssText: string): void;
+  reject(error: Error): void;
+};
+
 /** 返回的宿主读取 `list()` 作为 extension 清单。The host reads `list()` as the extension list. */
-function createHost(list: () => InstalledExtension[]): ExtensionHost {
+function createHost(
+  list: () => InstalledExtension[],
+  styleRequests: StyleRequest[] = [],
+  rescans: { count: number } = { count: 0 },
+): ExtensionHost {
   const main = helper.createMainProcess(environment.window, {
     installed: themeExtension(),
     storageDirectory: "/data/soft-theme",
     channels: {
-      listExtensions: async () => list(),
+      listExtensions: async () => {
+        rescans.count += 1;
+        return list();
+      },
       releaseExtensionResources: async () => undefined,
+      getThemeStyle: (request) =>
+        new Promise((resolve, reject) =>
+          styleRequests.push({
+            ...request,
+            resolve: (cssText) => resolve({ styleId: request.styleId, cssText }),
+            reject,
+          }),
+        ),
     },
   });
   return new hosts.ExtensionHost({
@@ -120,8 +162,12 @@ function createHost(list: () => InstalledExtension[]): ExtensionHost {
   });
 }
 
-async function startedHost(list: () => InstalledExtension[]): Promise<ExtensionHost> {
-  const host = createHost(list);
+async function startedHost(
+  list: () => InstalledExtension[],
+  styleRequests: StyleRequest[] = [],
+  rescans: { count: number } = { count: 0 },
+): Promise<ExtensionHost> {
+  const host = createHost(list, styleRequests, rescans);
   await helper.startExtensionHost(host, environment.window);
   return host;
 }
@@ -195,23 +241,24 @@ test("only a theme with a workspace backdrop marks html, in the mode that sets i
     recordingSave().save,
   );
   await environment.waitFor(() => assert.equal(variable("--agw-workspace-backdrop"), backdrop));
-  assert.equal(marked(), true);
+  // 下一帧的状态读取按计算值设置属性。The next-frame state read sets the attribute from the computed value.
+  await environment.waitFor(() => assert.equal(marked(), true));
 
   view.rerender({ appearance: appearance({ theme: "soft-theme:warm", mode: "dark" }) });
   await environment.waitFor(() => assert.equal(variable("--background"), "#2a2018"));
-  assert.equal(marked(), false);
+  await environment.waitFor(() => assert.equal(marked(), false));
 
   view.rerender({ appearance: appearance({ theme: "soft-theme:warm" }) });
   await environment.waitFor(() => assert.equal(marked(), true));
   view.rerender({ appearance: appearance({ theme: "soft-theme:soft" }) });
   await environment.waitFor(() => assert.equal(variable("--background"), "#ffffff"));
-  assert.equal(marked(), false);
+  await environment.waitFor(() => assert.equal(marked(), false));
 
   view.rerender({ appearance: appearance({ theme: "soft-theme:warm" }) });
   await environment.waitFor(() => assert.equal(marked(), true));
   view.rerender({ appearance: appearance() });
   await environment.waitFor(() => assert.deepEqual(writtenVariables(), []));
-  assert.equal(marked(), false);
+  await environment.waitFor(() => assert.equal(marked(), false));
 
   view.rerender({ appearance: appearance({ theme: "soft-theme:warm" }) });
   await environment.waitFor(() => assert.equal(marked(), true));
@@ -433,4 +480,103 @@ test("without settings setMode only changes next-themes", async () => {
   await environment.act(() => current!.setMode("dark"));
   await environment.waitFor(() => assert.ok(root().classList.contains("dark")));
   assert.deepEqual(calls, []);
+});
+
+/** 同时提供 JSON 与 CSS 主题的 extension。An extension providing JSON and CSS themes. */
+function cssThemeExtension(): InstalledExtension {
+  return { ...themeExtension(), themes: [SOFT, PAPER, INK] };
+}
+
+test("a CSS theme keeps the current theme while its style loads, and stale responses never apply", async () => {
+  const styleRequests: StyleRequest[] = [];
+  const host = await startedHost(() => [cssThemeExtension()], styleRequests);
+  const view = renderTheme(
+    { appearance: appearance({ theme: "soft-theme:soft" }), host },
+    recordingSave().save,
+  );
+  await environment.waitFor(() => assert.equal(variable("--background"), "#ffffff"));
+
+  view.rerender({ appearance: appearance({ theme: "soft-theme:paper" }) });
+  await environment.waitFor(() => assert.equal(styleRequests.length, 1));
+  assert.deepEqual(
+    { themeId: styleRequests[0].themeId, styleId: styleRequests[0].styleId },
+    { themeId: "soft-theme:paper", styleId: PAPER.styleId },
+  );
+  // 获取期间继续显示当前主题。The current theme stays while the style loads.
+  assert.deepEqual(current?.appliedTheme, { id: "soft-theme:soft", title: "Soft" });
+  assert.equal(variable("--background"), "#ffffff");
+
+  view.rerender({ appearance: appearance({ theme: "soft-theme:ink" }) });
+  await environment.waitFor(() => assert.equal(styleRequests.length, 2));
+  assert.equal(styleRequests[1].styleId, INK.styleId);
+
+  // 过期的结果不能覆盖新的选择。A stale result cannot override the newer selection.
+  await environment.act(async () => styleRequests[0].resolve(":root { --paper: 1; }"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(current?.appliedTheme, { id: "soft-theme:soft", title: "Soft" });
+  assert.equal(current?.appliedStyleId, null);
+
+  // 改回 JSON 主题后，仍在进行的获取同样过期。After switching back to the JSON theme, the pending request is stale too.
+  view.rerender({ appearance: appearance({ theme: "soft-theme:soft", mode: "dark" }) });
+  await environment.waitFor(() => assert.equal(variable("--background"), "#212121"));
+  await environment.act(async () => styleRequests[1].resolve(":root { --ink: 1; }"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(current?.appliedStyleId, null);
+  assert.deepEqual(current?.appliedTheme, { id: "soft-theme:soft", title: "Soft" });
+});
+
+test("a failed style request reports the error and reads the extension list again", async () => {
+  const styleRequests: StyleRequest[] = [];
+  const rescans = { count: 0 };
+  const host = await startedHost(() => [cssThemeExtension()], styleRequests, rescans);
+  renderTheme(
+    { appearance: appearance({ theme: "soft-theme:paper" }), host },
+    recordingSave().save,
+  );
+  await environment.waitFor(() => assert.equal(styleRequests.length, 1));
+  const before = rescans.count;
+
+  await environment.act(async () =>
+    styleRequests[0].reject(
+      new Error("Theme soft-theme:paper changed after the extension list was read."),
+    ),
+  );
+  await environment.waitFor(() =>
+    assert.ok(
+      notices().includes("Theme soft-theme:paper changed after the extension list was read."),
+    ),
+  );
+  await environment.waitFor(() => assert.ok(rescans.count > before));
+  assert.deepEqual(current?.appliedTheme, { id: "default", title: "Default" });
+});
+
+test("the next-frame read publishes computed variables again after class changes and font loads", async () => {
+  const host = await startedHost(() => [themeExtension()]);
+  renderTheme({ appearance: appearance({ theme: "soft-theme:soft" }), host }, recordingSave().save);
+  await environment.waitFor(() =>
+    assert.equal(current?.publishedTheme?.theme.tokens["--background"], "#ffffff"),
+  );
+  assert.deepEqual(
+    {
+      id: current?.publishedTheme?.theme.id,
+      title: current?.publishedTheme?.theme.title,
+      kind: current?.publishedTheme?.theme.kind,
+      style: current?.publishedTheme?.style,
+    },
+    { id: "soft-theme:soft", title: "Soft", kind: "light", style: null },
+  );
+
+  // 字体加载完成后重新读取。Fonts finishing to load trigger another read.
+  root().style.setProperty("--agw-prose-link", "#123456");
+  environment.observers.fonts.loadingDone();
+  await environment.waitFor(() =>
+    assert.equal(current?.publishedTheme?.theme.tokens["--agw-prose-link"], "#123456"),
+  );
+
+  // 根元素的 class 变化后重新读取。A class change on the root triggers another read.
+  root().style.setProperty("--agw-prose-link", "#654321");
+  root().classList.add("probe");
+  await environment.waitFor(() =>
+    assert.equal(current?.publishedTheme?.theme.tokens["--agw-prose-link"], "#654321"),
+  );
 });

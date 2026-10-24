@@ -6,6 +6,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { generateDtsBundle } from "dts-bundle-generator";
 import { build } from "esbuild";
 
+import {
+  checkThemeTokenNames,
+  compileHostCss,
+  extractThemeDefaults,
+  loadThemeTokenNames,
+} from "./host-theme-css.mjs";
+
 const desktopDirectory = resolve(fileURLToPath(new URL("..", import.meta.url)));
 // 只导出 connect、defineBackground、defineView 的浏览器入口。The browser entry exporting only connect, defineBackground and defineView.
 const sdkEntry = resolve(
@@ -38,6 +45,22 @@ export async function copyTypographyStylesheet(outputDirectory) {
   await copyFile(typographyStylesheet, join(outputDirectory, "typography.css"));
 }
 
+/**
+ * 从宿主 CSS 提取默认变量样式表：extension 调用 `theme.apply()` 且宿主使用 CSS 主题时，SDK 把它放在主题样式表之前。
+ * Extracts the default variable stylesheet from the host CSS; when an extension calls `theme.apply()` under a CSS theme,
+ * the SDK places it before the theme stylesheet.
+ */
+export async function writeThemeDefaults(outputDirectory) {
+  const stylesheets = await compileHostCss();
+  const names = await loadThemeTokenNames();
+  checkThemeTokenNames(stylesheets, names, "The host CSS");
+  await writeFile(
+    join(outputDirectory, "theme-defaults.css"),
+    extractThemeDefaults(stylesheets, names),
+    "utf8",
+  );
+}
+
 export async function buildExtensionSdk() {
   const outputDirectory = join(extensionSdkDirectory, `v${manifestVersion}`);
   await rm(outputDirectory, { recursive: true, force: true });
@@ -61,6 +84,7 @@ export async function buildExtensionSdk() {
   );
   await writeFile(join(outputDirectory, "sdk.d.ts"), declarations, "utf8");
   await copyTypographyStylesheet(outputDirectory);
+  await writeThemeDefaults(outputDirectory);
 
   const schemaModule = join(
     desktopDirectory,

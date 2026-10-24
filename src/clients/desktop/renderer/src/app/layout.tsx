@@ -12,7 +12,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    // data-agw-document 让 CSS 主题限定只作用于宿主的规则。data-agw-document lets CSS themes scope rules to the host.
+    <html lang="en" suppressHydrationWarning data-agw-document="desktop">
       <body className="antialiased">
         <ThemeProvider
           attribute="class"

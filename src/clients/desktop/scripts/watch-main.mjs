@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { context } from "esbuild";
+import { build, context } from "esbuild";
 
-import { mainBuildOptions } from "./build-main.mjs";
+import { confirmationBuildOptions, mainBuildOptions } from "./build-main.mjs";
 
 export async function watchMain(launch) {
   let electron;
@@ -20,6 +20,8 @@ export async function watchMain(launch) {
     await exited;
   }
 
+  // 确认页面在启动 Electron 之前构建一次。The confirmation page builds once before Electron starts.
+  await build(confirmationBuildOptions);
   const buildContext = await context({
     ...mainBuildOptions,
     plugins: [

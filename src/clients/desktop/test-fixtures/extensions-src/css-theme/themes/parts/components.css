@@ -1,0 +1,6 @@
+@import "nested/badge.css";
+
+.agw-ribbon,
+.css-theme-stripe {
+  background-image: url("../../images/stripe.png");
+}

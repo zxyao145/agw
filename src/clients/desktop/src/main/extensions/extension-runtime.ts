@@ -24,10 +24,14 @@ import type {
   ExtensionWatchRequest,
   InstalledExtension,
   SaveExtensionSdkTypesResult,
+  ThemeStyleRequest,
+  ThemeStyleText,
 } from "../../shared/contracts";
 import { EXTENSION_MANIFEST_VERSION_CURRENT } from "../../shared/extension-manifest";
 import { type HostPermission, parseHostPermissions } from "../../shared/extension-host-permissions";
 import type { ExtensionPermission } from "@agw/extension-sdk";
+import type { ConfirmationService } from "../confirmation/confirmation-service";
+import { permissionApprovalView } from "../confirmation/permission-approval";
 import type { DesktopSettingsStore } from "../settings/settings-store";
 import { ExtensionAccessGrants } from "./extension-access-grants";
 import {
@@ -45,11 +49,13 @@ import { ExtensionFrameRegistry } from "./extension-frame-registry";
 import { ExtensionHttpClient } from "./extension-http";
 import { ExtensionInstaller } from "./extension-installer";
 import { ExtensionOperationError } from "./extension-ipc-result";
+import { packageDigest } from "./extension-package-digest";
 import { serviceWorkerRegistrationOutcome } from "./extension-network-rules";
 import type { ExtensionProtocolState } from "./extension-protocol";
 import { ExtensionRuntimeReset } from "./extension-runtime-reset";
 import { ExtensionSafeModeGuard } from "./extension-safe-mode";
 import { ExtensionSessionFactory } from "./extension-session";
+import { themeStyleCompiler } from "./extension-theme-style-cache";
 import { ExtensionViewManager } from "./extension-view-manager";
 import { ReplacedFileRegistry } from "./replaced-file-registry";
 
@@ -61,6 +67,8 @@ export type ExtensionRuntimeOptions = {
   bundledExtensionsDirectory: string;
   extensionPreloadPath: string;
   settings: DesktopSettingsStore;
+  /** 安装与启用的权限批准使用的确认服务。The confirmation service for install and enable approvals. */
+  confirmations: ConfirmationService;
   getMainWindow(): BrowserWindow | null;
   /** extension 设置写入后通知 index.ts 重新读取设置。Tells index.ts to reload settings after an extension settings write. */
   onSettingsChanged(): Promise<void>;
@@ -85,6 +93,11 @@ export class ExtensionRuntime {
   private catalog = new Map<string, SourcedCatalogEntry>();
   private extensionSettings: Record<string, ExtensionSettings> = {};
   private recoveryNotices: ExtensionRecoveryNotice[] = [];
+  /** 已经批准、尚未提交的安装：installId → 批准绑定的包摘要、版本与权限。Approved installs not yet committed: installId → the bound digest, version and grants. */
+  private readonly installApprovals = new Map<
+    string,
+    { digest: string; version: string; grants: ExtensionGrants }
+  >();
   private readonly grants = new ExtensionAccessGrants();
   private readonly replacedFiles = new ReplacedFileRegistry();
   private readonly files = new ExtensionFileSystem(this.grants, this.replacedFiles);
@@ -168,6 +181,12 @@ export class ExtensionRuntime {
     return this.recoveryNotices;
   }
 
+  /** 已经安装的版本；只有内置副本时为内置版本。The installed version; the bundled version when only a bundled copy exists. */
+  private async installedVersion(extensionId: string): Promise<string | null> {
+    await this.refresh();
+    return this.catalog.get(extensionId)?.manifest?.version ?? null;
+  }
+
   public async prepareInstall(source: ExtensionInstallSource): Promise<ExtensionInstallPreview> {
     const window = this.options.getMainWindow();
     const options: Electron.OpenDialogOptions =
@@ -194,8 +213,51 @@ export class ExtensionRuntime {
     return { canceled: false, ...prepared, installedVersion };
   }
 
+  /**
+   * 在确认窗口中批准安装：批准绑定暂存包的摘要、版本与权限集合，批准之前复核摘要。
+   * Approves an install in the confirmation window: the approval binds the staged package's digest, version and
+   * permission set, and the digest is checked again before approval.
+   */
+  public async approveInstall(installId: string): Promise<boolean> {
+    this.installApprovals.delete(installId);
+    const { directory, entry } = await this.installer.inspect(installId);
+    if (entry.errors.length > 0 || !entry.manifest) {
+      throw new Error("An install with errors cannot be approved.");
+    }
+    const manifest = entry.manifest;
+    const digest = await packageDigest(directory);
+    const answer = await this.options.confirmations.request(
+      permissionApprovalView("install", manifest, await this.installedVersion(manifest.id)),
+      {
+        owner: this.options.getMainWindow()?.webContents,
+        verify: async () => (await packageDigest(directory)) === digest,
+      },
+    );
+    if (answer !== true) return false;
+    this.installApprovals.set(installId, {
+      digest,
+      version: manifest.version,
+      grants: declaredGrants(manifest),
+    });
+    return true;
+  }
+
   public async commitInstall(installId: string): Promise<InstalledExtension> {
-    const entry = await this.installer.commit(installId);
+    const approval = this.installApprovals.get(installId);
+    if (!approval) throw new Error("The install has not been approved.");
+    this.installApprovals.delete(installId);
+    const entry = await this.installer.commit(installId, async (directory, staged) => {
+      const grants = declaredGrants(staged.manifest!);
+      if (
+        staged.manifest!.version !== approval.version ||
+        !sameMembers(grants.permissions, approval.grants.permissions) ||
+        !sameMembers(grants.hostPermissions, approval.grants.hostPermissions) ||
+        (await packageDigest(directory)) !== approval.digest
+      ) {
+        throw new Error("The extension package changed after it was approved.");
+      }
+    });
+    await themeStyleCompiler.invalidate(entry.directory);
     await this.refresh();
     return toInstalledExtension(
       this.catalog.get(entry.id) ?? { ...entry, source: "user" },
@@ -204,6 +266,7 @@ export class ExtensionRuntime {
   }
 
   public cancelInstall(installId: string): Promise<void> {
+    this.installApprovals.delete(installId);
     return this.installer.cancel(installId);
   }
 
@@ -211,33 +274,89 @@ export class ExtensionRuntime {
     const entry = this.catalog.get(extensionId);
     if (!entry) throw new Error(`Extension ${extensionId} is not installed.`);
     this.releaseExtension(extensionId);
+    await themeStyleCompiler.invalidate(entry.directory);
     if (entry.source === "bundled") await this.installer.removeBundled(extensionId, deleteData);
     else await this.installer.uninstall(extensionId, deleteData);
     await this.refresh();
   }
 
-  public async setEnabled(
-    extensionId: string,
-    enabled: boolean,
-    grants?: ExtensionGrants,
-  ): Promise<void> {
-    if (enabled) {
-      const entry = this.validEntry(extensionId);
-      const declared = declaredGrants(entry.manifest);
-      if (
-        !grants ||
-        !sameMembers(grants.permissions, declared.permissions) ||
-        !sameMembers(grants.hostPermissions, declared.hostPermissions)
-      ) {
-        throw new Error("The approved grants must equal the manifest declaration.");
-      }
-      await this.options.settings.setExtensionEnabled(extensionId, true, declared);
-    } else {
+  /** 显式 reload：重新读取全部依赖后再校验。An explicit reload: re-reads every dependency before validating. */
+  public async reloadExtension(extensionId: string): Promise<void> {
+    const entry = this.catalog.get(extensionId);
+    if (entry) await themeStyleCompiler.invalidate(entry.directory);
+    await this.refresh();
+  }
+
+  /**
+   * 当前选中的 CSS 主题的完整样式文本：主题必须仍然启用、校验通过，且内容标识与描述一致。
+   * The complete style text of the selected CSS theme: the theme must still be enabled and valid, and its content id
+   * must match the descriptor.
+   */
+  public async getThemeStyle(request: ThemeStyleRequest): Promise<ThemeStyleText> {
+    const separator = request.themeId.indexOf(":");
+    const extensionId = request.themeId.slice(0, separator);
+    const localId = request.themeId.slice(separator + 1);
+    const entry = separator > 0 ? this.catalog.get(extensionId) : undefined;
+    if (
+      !entry?.manifest ||
+      entry.validation !== "valid" ||
+      !this.extensionSettings[extensionId]?.enabled
+    ) {
+      throw new Error(`Theme ${request.themeId} is not available.`);
+    }
+    const theme = entry.themes.find((item) => item.id === localId);
+    const contribution = entry.manifest.contributes?.themes?.find((item) => item.id === localId);
+    if (theme?.format !== "css" || !contribution) {
+      throw new Error(`Theme ${request.themeId} is not a CSS theme.`);
+    }
+    const changed = () =>
+      new Error(`Theme ${request.themeId} changed after the extension list was read.`);
+    if (theme.styleId !== request.styleId) throw changed();
+    const style = await themeStyleCompiler.compile(entry.directory, contribution.path);
+    if (style.styleId !== request.styleId) throw changed();
+    await themeStyleCompiler.pin(entry.directory, contribution.path);
+    return { styleId: style.styleId, cssText: style.cssText };
+  }
+
+  /**
+   * 启用时在确认窗口中批准 manifest 声明的权限，批准绑定包摘要、版本与权限集合；只有批准结果能保存权限。返回之后是否为启用状态。
+   * Enabling approves the permissions the manifest declares in the confirmation window; the approval binds the
+   * package digest, version and permission set, and only an approval saves permissions. Returns whether the extension
+   * is enabled afterwards.
+   */
+  public async setEnabled(extensionId: string, enabled: boolean): Promise<boolean> {
+    if (!enabled) {
       this.http.releaseExtension(extensionId);
       this.watcher.releaseExtension(extensionId);
       await this.options.settings.setExtensionEnabled(extensionId, false);
+      await this.reloadSettings();
+      return false;
     }
+    const entry = this.validEntry(extensionId);
+    const declared = declaredGrants(entry.manifest);
+    const digest = await packageDigest(entry.directory);
+    const answer = await this.options.confirmations.request(
+      permissionApprovalView("enable", entry.manifest, null),
+      {
+        owner: this.options.getMainWindow()?.webContents,
+        verify: async () => {
+          const current = this.catalog.get(extensionId);
+          if (!current?.manifest || current.validation !== "valid") return false;
+          const grants = declaredGrants(current.manifest);
+          return (
+            current.directory === entry.directory &&
+            current.manifest.version === entry.manifest.version &&
+            sameMembers(grants.permissions, declared.permissions) &&
+            sameMembers(grants.hostPermissions, declared.hostPermissions) &&
+            (await packageDigest(entry.directory)) === digest
+          );
+        },
+      },
+    );
+    if (answer !== true) return false;
+    await this.options.settings.setExtensionEnabled(extensionId, true, declared);
     await this.reloadSettings();
+    return true;
   }
 
   public async beginActivation(

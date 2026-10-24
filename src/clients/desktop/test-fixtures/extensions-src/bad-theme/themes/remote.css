@@ -1,0 +1,5 @@
+/* 外部资源在应用之前被拒绝；端口占位符在测试中替换。External resources are rejected before applying; the port
+   placeholder is replaced in the test. */
+:root {
+  --remote-hero: url("http://127.0.0.1:__HTTP_PORT__/css-theme/remote.png");
+}

@@ -1,0 +1,26 @@
+/* 覆盖整个宿主页面、隐藏按钮与列表并改变按钮文字的主题：确认与权限批准在独立窗口中，不受影响。
+   A theme that covers the whole host page, hides buttons and lists and changes button text; confirmations and
+   permission approvals live in a separate window and stay unaffected. */
+:root[data-agw-document="desktop"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  background: rgb(0 0 0 / 50%);
+}
+
+ul,
+footer,
+[role="dialog"] {
+  display: none !important;
+}
+
+button {
+  flex-direction: row-reverse;
+  order: -1;
+  visibility: hidden !important;
+}
+
+button::before {
+  content: "Approve";
+}

@@ -9,14 +9,17 @@ import type {
   ExtensionFileSystemRequest,
   ExtensionFrameLayoutUpdate,
   ExtensionFrameObscureRequest,
-  ExtensionGrants,
   ExtensionHttpRequest,
+  HostConfirmationRequest,
   ExtensionInstallSource,
   ExtensionOpenDialogOptions,
   ExtensionSaveDialogOptions,
   ExtensionWatchRequest,
+  ThemeStyleRequest,
   UninstallExtensionOptions,
 } from "../../shared/contracts";
+import type { ConfirmationService } from "../confirmation/confirmation-service";
+import { canceledAnswer, hostConfirmationView } from "../confirmation/host-confirmation";
 import { toExtensionIpcResult } from "./extension-ipc-result";
 import type { ExtensionRuntime } from "./extension-runtime";
 import { decodeText, encodeText, listTextEncodings } from "./text-codec";
@@ -25,6 +28,7 @@ const EXTENSION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 export type ExtensionIpcOptions = {
   runtime: ExtensionRuntime;
+  confirmations: ConfirmationService;
   assertTrusted(event: IpcMainInvokeEvent): void;
   runtimeState(): Promise<DesktopRuntimeState>;
 };
@@ -36,6 +40,7 @@ function assertExtensionId(extensionId: string): void {
 /** 注册 extension 的管理、frame、能力通道与 extension preload 通道。Registers the extension IPC channels. */
 export function registerExtensionIpc({
   runtime,
+  confirmations,
   assertTrusted,
   runtimeState,
 }: ExtensionIpcOptions): void {
@@ -47,6 +52,22 @@ export function registerExtensionIpc({
       assertTrusted(event);
       return handler(...(args as A));
     });
+
+  /* 确认通道：在独立的确认窗口中显示，宿主页面只得到回答 Confirmation channels: shown in the separate confirmation window; the host page only gets the answer */
+  ipcMain.handle("agw:confirm-host-action", async (event, request: HostConfirmationRequest) => {
+    assertTrusted(event);
+    const { view, clientId } = hostConfirmationView(request);
+    const answer = await confirmations.request(view, {
+      owner: event.sender,
+      ...(clientId === null ? {} : { clientId }),
+    });
+    return answer ?? canceledAnswer(view);
+  });
+  ipcMain.handle("agw:dismiss-host-confirmation", (event, clientId: string) => {
+    assertTrusted(event);
+    confirmations.dismiss(event.sender, String(clientId));
+  });
+  handle("agw:approve-extension-install", (installId: string) => runtime.approveInstall(installId));
   const capability = <A extends unknown[], R>(
     channel: string,
     handler: (...args: A) => Promise<R> | R,
@@ -75,13 +96,10 @@ export function registerExtensionIpc({
       return runtimeState();
     },
   );
-  handle(
-    "agw:set-extension-enabled",
-    async (extensionId: string, enabled: boolean, grants?: ExtensionGrants) => {
-      await runtime.setEnabled(extensionId, enabled, grants);
-      return runtimeState();
-    },
-  );
+  handle("agw:set-extension-enabled", (extensionId: string, enabled: boolean) => {
+    assertExtensionId(extensionId);
+    return runtime.setEnabled(extensionId, enabled === true);
+  });
   handle("agw:begin-extension-activation", (hostInstanceId: string, extensionId: string) =>
     runtime.beginActivation(hostInstanceId, extensionId),
   );
@@ -116,6 +134,11 @@ export function registerExtensionIpc({
     runtime.cancelHttpRequest(requestId),
   );
   handle("agw:save-extension-sdk-types", () => runtime.saveSdkTypes());
+  handle("agw:reload-extension", (extensionId: string) => {
+    assertExtensionId(extensionId);
+    return runtime.reloadExtension(extensionId);
+  });
+  handle("agw:get-theme-style", (request: ThemeStyleRequest) => runtime.getThemeStyle(request));
 
   /* frame 通道 Frame channels */
   handle(

@@ -63,14 +63,16 @@ const bridge: AgwDesktopBridge = {
   listExtensionRecoveryNotices: () => ipcRenderer.invoke("agw:list-extension-recovery-notices"),
   prepareExtensionInstall: (request) =>
     ipcRenderer.invoke("agw:prepare-extension-install", request),
+  approveExtensionInstall: (installId) =>
+    ipcRenderer.invoke("agw:approve-extension-install", installId),
   commitExtensionInstall: (installId) =>
     ipcRenderer.invoke("agw:commit-extension-install", installId),
   cancelExtensionInstall: (installId) =>
     ipcRenderer.invoke("agw:cancel-extension-install", installId),
   uninstallExtension: (extensionId, options) =>
     ipcRenderer.invoke("agw:uninstall-extension", extensionId, options),
-  setExtensionEnabled: (extensionId, enabled, grants) =>
-    ipcRenderer.invoke("agw:set-extension-enabled", extensionId, enabled, grants),
+  setExtensionEnabled: (extensionId, enabled) =>
+    ipcRenderer.invoke("agw:set-extension-enabled", extensionId, enabled),
   beginExtensionActivation: (hostInstanceId, extensionId) =>
     ipcRenderer.invoke("agw:begin-extension-activation", hostInstanceId, extensionId),
   endExtensionActivation: (hostInstanceId, extensionId) =>
@@ -93,6 +95,11 @@ const bridge: AgwDesktopBridge = {
   cancelExtensionHttpRequest: (requestId) =>
     ipcRenderer.invoke("agw:cancel-extension-http-request", requestId),
   saveExtensionSdkTypes: () => ipcRenderer.invoke("agw:save-extension-sdk-types"),
+  reloadExtension: (extensionId) => ipcRenderer.invoke("agw:reload-extension", extensionId),
+  getThemeStyle: (request) => ipcRenderer.invoke("agw:get-theme-style", request),
+  confirmHostAction: (request) => ipcRenderer.invoke("agw:confirm-host-action", request),
+  dismissHostConfirmation: (clientId) =>
+    ipcRenderer.invoke("agw:dismiss-host-confirmation", clientId),
   createExtensionFrame: (hostInstanceId, request) =>
     ipcRenderer.invoke("agw:create-extension-frame", hostInstanceId, request),
   updateExtensionFrameLayout: (hostInstanceId, updates) =>

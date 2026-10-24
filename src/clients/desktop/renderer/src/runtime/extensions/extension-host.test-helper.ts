@@ -10,8 +10,11 @@ import {
   RpcEndpoint,
   type RpcPort,
 } from "@agw/extension-sdk";
+import { ConfirmationService } from "@desktop/main/confirmation/confirmation-service";
+import { canceledAnswer, hostConfirmationView } from "@desktop/main/confirmation/host-confirmation";
 import type {
   AgwDesktopBridge,
+  ConfirmationView,
   CreateExtensionFrameRequest,
   DesktopRuntimeState,
   ExtensionEvent,
@@ -72,9 +75,62 @@ function openExtensionPage(port: MessagePort): ExtensionPage {
   });
   const api = welcome.then((data) => {
     router.delete("welcome");
-    return createExtensionApi(endpoint, data, router);
+    return createExtensionApi(endpoint, data, router, TEST_THEME_DEFAULTS);
   });
   return { calls, api, endpoint };
+}
+
+/** 测试页面使用的默认变量样式表文本。The default variable stylesheet text the test pages use. */
+export const TEST_THEME_DEFAULTS = ":root { --spacing: 0.25rem; }";
+
+/**
+ * 主进程的确认服务，确认窗口由测试代替用户回答：`current()` 读取显示中的内容，`answer()` 以确认窗口的身份回答。
+ * The main-process confirmation service with the test answering for the user: `current()` reads what is shown and
+ * `answer()` answers as the confirmation window.
+ */
+function createConfirmations() {
+  let shown: { contents: object; closed: boolean; onClosed: () => void } | null = null;
+  const service = new ConfirmationService({
+    openWindow: (_view, onClosed) => {
+      const window = { contents: {}, closed: false, onClosed };
+      shown = window;
+      return {
+        contents: window.contents,
+        show: () => undefined,
+        close: () => {
+          window.closed = true;
+        },
+      };
+    },
+  });
+  const active = () => (shown && !shown.closed ? shown : null);
+  return {
+    service,
+    /** 显示中的确认内容。The confirmation shown. */
+    current: (): ConfirmationView | null => {
+      const window = active();
+      return window ? service.requestFor(window.contents).view : null;
+    },
+    /** 显示中的确认的一次性标识。The one-time id of the confirmation shown. */
+    requestId: (): string => {
+      const window = active();
+      if (!window) throw new Error("No confirmation is shown.");
+      return service.requestFor(window.contents).requestId;
+    },
+    /** 以确认窗口的身份回答显示中的确认。Answers the shown confirmation as its window. */
+    answer: async (answer: unknown): Promise<void> => {
+      const window = active();
+      if (!window) throw new Error("No confirmation is shown.");
+      await service.answer(window.contents, service.requestFor(window.contents).requestId, answer);
+    },
+    /** 像用户关闭窗口那样取消。Cancels the way the user closes the window. */
+    close: (): void => {
+      const window = active();
+      if (!window) throw new Error("No confirmation is shown.");
+      window.closed = true;
+      window.onClosed();
+    },
+  };
 }
 
 /**
@@ -98,6 +154,9 @@ export function createMainProcess(
   const pageIds = new Map<string, string>();
   const destroyed: string[] = [];
   let eventListener: ((event: ExtensionEvent) => void) | null = null;
+  const confirmations = createConfirmations();
+  // 宿主页面的 WebContents 身份，用于撤回它发起的确认。The host page's WebContents identity, for withdrawing its requests.
+  const hostContents = {};
   const state: DesktopRuntimeState = {
     isDesktop: true,
     platform: "darwin",
@@ -160,10 +219,22 @@ export function createMainProcess(
       pages.get(frameId)?.endpoint.close();
     },
     releaseExtensionFrameResources: async () => undefined,
+    // 与主进程的 agw:confirm-host-action、agw:dismiss-host-confirmation 相同。The same as main's channels.
+    confirmHostAction: async (request) => {
+      const { view, clientId } = hostConfirmationView(request);
+      const answer = await confirmations.service.request(view, {
+        owner: hostContents,
+        ...(clientId === null ? {} : { clientId }),
+      });
+      return answer ?? canceledAnswer(view);
+    },
+    dismissHostConfirmation: async (clientId) =>
+      confirmations.service.dismiss(hostContents, clientId),
     ...options.channels,
   };
   return {
     bridge: bridge as AgwDesktopBridge,
+    confirmations,
     frames,
     pages,
     pageIds,
