@@ -145,9 +145,18 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     .ConfigureAwait(false)
             )
                 return [];
+            // 执行没有开始，用量从结束时间起结算。
+            // Execution never started, so usage settles at the finish time.
             await services
                 .GetRequiredService<IConversationTurnStore>()
-                .FinishAsync(request.TurnId, ConversationTurnStatus.Failed, 0, errorCode, token)
+                .FinishAsync(
+                    request.TurnId,
+                    ConversationTurnStatus.Failed,
+                    0,
+                    errorCode,
+                    _timeProvider.GetUtcNow(),
+                    token
+                )
                 .ConfigureAwait(false);
             return await DurableExecutionEvents
                 .AppendAsync(
@@ -230,7 +239,9 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
 
     /// <summary>
     /// 在锁定执行行的事务中写入 Interrupted、Turn 结局与结束事件；运行中的实例之后的写入都会被租约检查拒绝，本实例的执行立即取消。
+    /// 持有租约的执行此时可能还在运行，Turn 的用量按 Store 返回的结算时间结算。
     /// Writes Interrupted, the turn outcome and the finish event in a transaction that locks the execution row; later writes of a running instance fail the lease check, and a local execution is cancelled at once.
+    /// An execution holding the lease may still be running, so the turn's usage settles at the time the store returns.
     /// </summary>
     public async Task<bool> InterruptAsync(
         Guid turnId,
@@ -249,15 +260,16 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 async (services, token) =>
                 {
                     if (
-                        !await services
+                        await services
                             .GetRequiredService<DurableExecutionStore>()
-                            .InterruptAsync(turnId, userId, token)
+                            .InterruptAsync(turnId, userId, LeaseDuration, token)
                             .ConfigureAwait(false)
+                        is not { } usageSettlesAt
                     )
                         return (false, (IReadOnlyList<TurnBroadcastEntry>)[]);
                     await services
                         .GetRequiredService<IConversationTurnStore>()
-                        .FinishAsync(turnId, ConversationTurnStatus.Interrupted, 0, null, token)
+                        .FinishAsync(turnId, ConversationTurnStatus.Interrupted, 0, null, usageSettlesAt, token)
                         .ConfigureAwait(false);
                     return (
                         true,
@@ -460,6 +472,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         ErrorCode = TurnMessageFactory.GetErrorCode(AgwTurnStatus.Failed, exception),
                     };
                 }
+                finally
+                {
+                    // Agent 的流已经释放，telemetry 已经写入用量；本租约被中断时提前结算。
+                    // The Agent stream is released and telemetry has written its usage; an interrupted lease settles now.
+                    await SettleInterruptedUsageAsync(lease, CancellationToken.None).ConfigureAwait(false);
+                }
                 await CommitResultAsync(snapshot, lease, guard, result, reportedFailure, ownership.Token)
                     .ConfigureAwait(false);
             }
@@ -473,6 +491,47 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         {
             _localTurns.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(lease.TurnId, ownership));
         }
+    }
+
+    /// <summary>
+    /// 这份租约的执行已经退出：中断时记下的正是这份租约时，在锁定执行行的事务中清空记录并让 Turn 从现在起结算；其他租约不修改。
+    /// This lease's execution has exited: when the interrupt recorded this very lease, the record is cleared and the turn settles now in a transaction that locks the execution row; other leases change nothing.
+    /// </summary>
+    internal async Task SettleInterruptedUsageAsync(DurableLease lease, CancellationToken cancellationToken)
+    {
+        // 大多数 Segment 没有被中断，先读一次，不必锁定执行行；执行行已经删除时同样没有需要结算的用量。
+        // Most segments are not interrupted, so one read avoids locking the execution row; a deleted execution row has nothing to settle either.
+        await using (var scope = _scopeFactory.CreateAsyncScope())
+        {
+            if (
+                !await scope
+                    .ServiceProvider.GetRequiredService<DurableExecutionStore>()
+                    .IsInterruptedLeaseAsync(lease.TurnId, lease.Epoch, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+                return;
+        }
+
+        await _leases
+            .RunLockedAsync(
+                lease.TurnId,
+                async (services, token) =>
+                {
+                    if (
+                        await services
+                            .GetRequiredService<DurableExecutionStore>()
+                            .ReleaseInterruptedLeaseAsync(lease.TurnId, lease.Epoch, token)
+                            .ConfigureAwait(false)
+                    )
+                        await services
+                            .GetRequiredService<IConversationTurnStore>()
+                            .SettleUsageAsync(lease.TurnId, token)
+                            .ConfigureAwait(false);
+                    return true;
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -902,6 +961,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         .GetRequiredService<DurableExecutionStore>()
                         .ApplySegmentResultAsync(result, token)
                         .ConfigureAwait(false);
+                    // Segment 的执行已经返回，用量从结束时间起结算。
+                    // The segment's execution has returned, so usage settles at the finish time.
                     if (terminalStatus != null)
                         await services
                             .GetRequiredService<IConversationTurnStore>()
@@ -910,6 +971,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                                 TurnRecord.ToTerminalStatus(terminalStatus),
                                 result.StepCount,
                                 result.ErrorCode,
+                                _timeProvider.GetUtcNow(),
                                 token
                             )
                             .ConfigureAwait(false);

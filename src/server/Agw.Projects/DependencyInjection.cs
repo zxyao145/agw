@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskSessionBindingService, TaskSessionBindingService>();
         services.AddScoped<TaskExecutionAppService>();
         services.AddScoped<IProjectTaskFacade, ProjectTaskFacade>();
+        services.AddScoped<IProjectConversationAccessFacade, ProjectConversationAccessFacade>();
         services.AddScoped<IProjectProviderSessionFacade, ProjectProviderSessionFacade>();
         services.AddScoped<IExternalTaskSnapshotStore, ExternalTaskSnapshotStore>();
         services.AddScoped<IProjectRuntimeFacade, ProjectRuntimeFacade>();

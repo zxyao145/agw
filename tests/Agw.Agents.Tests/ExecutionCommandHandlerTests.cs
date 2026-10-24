@@ -504,6 +504,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
                 projects ?? new FakeProjectRuntimeFacade(AppContext.BaseDirectory)
             ),
             projectTasks,
+            _persistence.CreateConversationAccess(),
             _kit.CreateFactory(_agents.ContextFactory, _persistence),
             durableCoordinator: null,
             checkpointStore

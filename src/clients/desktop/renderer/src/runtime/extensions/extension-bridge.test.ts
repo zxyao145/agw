@@ -256,7 +256,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   };
   const execution = new ExecutionService({
     context,
-    deliver: () => undefined,
+    deliver: (owner, event, data) => broker.deliverExecution(owner, event, data),
     refreshConversations: () => undefined,
     chat,
   });
@@ -952,6 +952,9 @@ test("showMessageBox checks its options and refuses background frames", async ()
 type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 const CHAT_SCOPE = { serverId: "local", projectId: PROJECT, conversationId: "conversation-1" };
+/** extension 会话使用的对话；broker 只接受 UUID。The conversation extension sessions use; the broker accepts only UUIDs. */
+const SESSION_CONVERSATION = "0192f0c5-4b1d-7a10-8f2e-1c2d3e4f5a6b";
+const SESSION_SCOPE = { ...CHAT_SCOPE, conversationId: SESSION_CONVERSATION };
 const MESSAGES_PATH = `/api/projects/${PROJECT}/conversations/conversation-1/messages`;
 const OLDER_PAGE = { direction: "older", pageSize: 50 } as const;
 
@@ -1209,7 +1212,9 @@ test("chat.observe fails while the frame is closing", async () => {
 
 test("hub calls of a session an extension creates carry the extension origin and the current profile", async (t) => {
   replaceExecutionHub(t, { provider: "InProcess" });
-  const harness = await createHarness(["chat.observe", "execution"]);
+  const harness = await createHarness(["chat.observe", "execution"], {
+    routes: { [CONVERSATION_ROUTE]: conversationDetails("sample", false) },
+  });
   const events: ChatEvent[] = [];
   await harness.api.chat.observe({ kinds: ["request"], channels: ["execution"] }, (event) =>
     events.push(event),
@@ -1217,7 +1222,7 @@ test("hub calls of a session an extension creates carry the extension origin and
 
   const session = await harness.api.execution.createSession({
     projectId: PROJECT,
-    conversationId: "conversation-1",
+    conversationId: SESSION_CONVERSATION,
   });
   await flushEvents(harness.api);
   await session.dispose();
@@ -1225,7 +1230,268 @@ test("hub calls of a session an extension creates carry the extension origin and
   assert.ok(events.length > 0);
   for (const event of events) {
     assert.deepEqual(event.origin, { kind: "extension", extensionId: "sample" });
-    assert.deepEqual(event.scope, CHAT_SCOPE);
+    assert.deepEqual(event.scope, SESSION_SCOPE);
+  }
+});
+
+/* ---------- 执行会话的只读规则 Read-only execution sessions ---------- */
+
+const CONVERSATION_ROUTE = `GET /api/projects/${PROJECT}/conversations/${SESSION_CONVERSATION}`;
+const READ_ONLY_HUB_ERROR =
+  "HubException: 4030008: The conversation is read-only for this extension.";
+
+function conversationDetails(extensionId: string, openToExtensions: boolean) {
+  return {
+    projectId: PROJECT,
+    conversationId: SESSION_CONVERSATION,
+    contextId: "context-1",
+    title: "Chat",
+    executionCount: 1,
+    messageCount: 1,
+    createTime: "2026-10-24T00:00:00Z",
+    extensionId,
+    openToExtensions,
+    usage: {
+      inputTokenCount: 0,
+      outputTokenCount: 0,
+      totalTokenCount: 0,
+      cachedInputTokenCount: 0,
+      reasoningTokenCount: 0,
+      unsettledTurnIds: [],
+    },
+    resumeState: null,
+  };
+}
+
+/**
+ * 服务端以只读请求方收到的错误拒绝写入命令；Distributed 模式下随后确认这一轮的 Turn 不存在。
+ * The server refuses write commands with the error a read-only requester gets; in Distributed mode it then confirms the turn of this send does not exist.
+ */
+function refuseWrites({ method, args }: { method: string; args: unknown[] }): unknown {
+  if (method === "DispatchCommand") {
+    const type = (args[0] as { type?: string }).type;
+    if (type === "SubscribeTurnCommand")
+      throw new Error("HubException: 4040011: Durable execution was not found.");
+    if (type !== "SettingCommand") throw new Error(READ_ONLY_HUB_ERROR);
+  }
+  if (method === "RecoverInProcessExecution" && args[1] === true)
+    throw new Error(READ_ONLY_HUB_ERROR);
+  return undefined;
+}
+
+/** 以另一个 frame 连接，可以是另一个 extension。Connects another frame, possibly of another extension. */
+async function connectFrame(harness: Harness, extensionId: string, frameId: string) {
+  const channel = new MessageChannel();
+  harness.broker.connect(
+    {
+      extensionId,
+      frameId,
+      pageId: `${frameId}-page`,
+      kind: "mainView",
+      viewId: "app",
+      params: {},
+    },
+    channel.port1,
+  );
+  const sdk = await connectSdk(channel.port2);
+  after(() => {
+    harness.broker.disconnect(frameId);
+    sdk.endpoint.close();
+  });
+  return sdk;
+}
+
+for (const provider of ["InProcess", "Distributed"] as const) {
+  test(`a session on a host conversation is read-only and every write fails with ERR_CONVERSATION_READ_ONLY (${provider})`, async (t) => {
+    replaceExecutionHub(t, { provider, onInvoke: refuseWrites });
+    const harness = await createHarness(["execution"], {
+      routes: { [CONVERSATION_ROUTE]: conversationDetails("host", false) },
+    });
+
+    const session = await harness.api.execution.createSession({
+      projectId: PROJECT,
+      conversationId: SESSION_CONVERSATION,
+    });
+    try {
+      assert.equal(session.readOnly, true);
+      for (const write of [
+        () => session.send({ target: { type: "agent", id: "agent-1" }, text: "hi" }),
+        () => session.interrupt(),
+        () => session.respond({ kind: "workflow-gate", interactionId: "gate", approved: true }),
+        () => session.setPermissionMode("fullAccess"),
+      ]) {
+        await assert.rejects(write(), { code: "ERR_CONVERSATION_READ_ONLY" });
+      }
+    } finally {
+      await session.dispose();
+    }
+  });
+}
+
+test("sessions on their own, open, draft and new conversations are not read-only", async (t) => {
+  replaceExecutionHub(t, { provider: "InProcess" });
+  let details: unknown = null;
+  const harness = await createHarness(["execution"], {
+    routes: { [CONVERSATION_ROUTE]: () => details },
+  });
+  for (const [label, value] of [
+    ["own", conversationDetails("sample", false)],
+    ["open", conversationDetails("host", true)],
+    ["draft", failure(404, 4040007, "Resource was not found.")],
+  ] as const) {
+    details = value;
+    const session = await harness.api.execution.createSession({
+      projectId: PROJECT,
+      conversationId: SESSION_CONVERSATION,
+    });
+    assert.equal(session.readOnly, false, label);
+    await session.dispose();
+  }
+  const requests = harness.server.requests.length;
+
+  const created = await harness.api.execution.createSession({ projectId: PROJECT });
+
+  assert.equal(created.readOnly, false);
+  assert.equal(harness.server.requests.length, requests, "a new conversation needs no request");
+  await created.dispose();
+});
+
+test("another extension's session on an extension's conversation is read-only", async (t) => {
+  replaceExecutionHub(t, { provider: "InProcess" });
+  const harness = await createHarness(["execution"], {
+    routes: { [CONVERSATION_ROUTE]: conversationDetails("sample", false) },
+  });
+  const other = await connectFrame(harness, "other", "frame-2");
+
+  const mine = await harness.api.execution.createSession({
+    projectId: PROJECT,
+    conversationId: SESSION_CONVERSATION,
+  });
+  const theirs = await other.api.execution.createSession({
+    projectId: PROJECT,
+    conversationId: SESSION_CONVERSATION,
+  });
+
+  assert.equal(mine.readOnly, false);
+  assert.equal(theirs.readOnly, true);
+  await mine.dispose();
+  await theirs.dispose();
+});
+
+test("a failed details request fails createSession before any hub connection", async (t) => {
+  const hubs = replaceExecutionHub(t, { provider: "InProcess" });
+  const harness = await createHarness(["execution"], {
+    routes: { [CONVERSATION_ROUTE]: failure(500, 5000000, "Internal error.") },
+  });
+
+  await assert.rejects(
+    harness.api.execution.createSession({
+      projectId: PROJECT,
+      conversationId: SESSION_CONVERSATION,
+    }),
+  );
+
+  assert.equal(hubs.length, 0);
+});
+
+test("createSession rejects ids that are not UUIDs before any request is sent", async (t) => {
+  const hubs = replaceExecutionHub(t, { provider: "InProcess" });
+  const harness = await createHarness(["execution", "chat.observe"]);
+  const events: ChatEvent[] = [];
+  await harness.api.chat.observe({}, (event) => events.push(event));
+  const requests = harness.server.requests.length;
+
+  // 点段会被 URL 解析去掉，详情请求会变成其他接口。Dot segments are removed by URL parsing, which would turn the details request into another endpoint.
+  for (const ids of [
+    { projectId: ".", conversationId: ".." },
+    { projectId: PROJECT, conversationId: ".." },
+    { projectId: ".." },
+  ]) {
+    await assert.rejects(harness.api.execution.createSession(ids), {
+      code: "ERR_INVALID_ARGUMENT",
+    });
+  }
+  await flushEvents(harness.api);
+
+  assert.equal(harness.server.requests.length, requests);
+  assert.deepEqual(events, []);
+  assert.equal(hubs.length, 0);
+});
+
+test("the details request carries the extension origin and the SettingCommand its extension id", async (t) => {
+  const hubs = replaceExecutionHub(t, { provider: "InProcess" });
+  const harness = await createHarness(["execution"], {
+    routes: { [CONVERSATION_ROUTE]: conversationDetails("sample", false) },
+  });
+  const requests: ChatRequestEvent[] = [];
+  harness.chat.subscribe({ kinds: ["request"], channels: ["http"] }, (event) => {
+    if (event.kind === "request") requests.push(event as ChatRequestEvent);
+  });
+
+  const session = await harness.api.execution.createSession({
+    projectId: PROJECT,
+    conversationId: SESSION_CONVERSATION,
+  });
+  await session.dispose();
+
+  const details = requests.find(
+    (event) => event.channel === "http" && event.request.path.endsWith("{conversationId}"),
+  );
+  assert.deepEqual(details?.origin, { kind: "extension", extensionId: "sample" });
+  assert.equal(hubs[0]!.commands("SettingCommand")[0]?.extensionId, "sample");
+});
+
+test("live messages of the conversation from the host and other extensions reach the session", async (t) => {
+  const hubs = replaceExecutionHub(t, { provider: "InProcess" });
+  const harness = await createHarness(["execution"], {
+    routes: { [CONVERSATION_ROUTE]: conversationDetails("host", false) },
+  });
+  const other = await connectFrame(harness, "other", "frame-2");
+  const received: string[] = [];
+  const session = await harness.api.execution.createSession({
+    projectId: PROJECT,
+    conversationId: SESSION_CONVERSATION,
+  });
+  session.onMessage((message) => received.push(message.messageId));
+  const theirs = await other.api.execution.createSession({
+    projectId: PROJECT,
+    conversationId: SESSION_CONVERSATION,
+  });
+  const runtime = getApiRuntime();
+  const host = harness.chat.createExecutionSession(SESSION_SCOPE, { onMessage() {} });
+  const elsewhere = harness.chat.createExecutionSession(
+    { ...SESSION_SCOPE, conversationId: "conversation-2" },
+    { onMessage() {} },
+  );
+  const stale = harness.chat.createExecutionSession(
+    SESSION_SCOPE,
+    { onMessage() {} },
+    { runtime: { baseUrl: runtime.baseUrl, token: "old-token", attachmentStore: null } },
+  );
+  try {
+    await host.configure({ projectId: PROJECT, conversationId: SESSION_CONVERSATION });
+    await elsewhere.configure({ projectId: PROJECT, conversationId: "conversation-2" });
+    await stale.configure({ projectId: PROJECT, conversationId: SESSION_CONVERSATION });
+    const [mineHub, theirsHub, hostHub, elsewhereHub, staleHub] = hubs;
+
+    hostHub!.receive(chatText("from-host"));
+    theirsHub!.receive(chatText("from-other-extension"));
+    mineHub!.receive(chatText("own"));
+    elsewhereHub!.receive(chatText("other-conversation"));
+    staleHub!.receive(chatText("old-connection"));
+    await flushEvents(harness.api);
+
+    assert.deepEqual(received, ["from-host", "from-other-extension", "own"]);
+
+    await session.dispose();
+    hostHub!.receive(chatText("after-dispose"));
+    await flushEvents(harness.api);
+    assert.deepEqual(received, ["from-host", "from-other-extension", "own"]);
+  } finally {
+    await theirs.dispose();
+    await host.dispose();
+    await elsewhere.dispose();
+    await stale.dispose();
   }
 });
 

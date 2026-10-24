@@ -1,12 +1,15 @@
-import { createUuidV7 } from "@agw/api";
+import { ApiError, createUuidV7 } from "@agw/api";
 import {
+  type ChatConversationScope,
+  type ChatHttpClient,
   createUserTextMessage,
-  ExecutionSession,
   type ExecutionHubHandlers,
   type ExecutionRuntimeConfig,
+  type ExecutionSession,
   toExecutionUserInput,
 } from "@agw/chat-runtime";
 import {
+  type ChatEventOrigin,
   getTurnFinishedStatus,
   isTurnStartMessage,
   type ExecutionMessage,
@@ -14,7 +17,7 @@ import {
   type PermissionMode,
 } from "@agw/execution-core";
 import { createExtensionError, type ExecutionCloseReason } from "@agw/extension-sdk";
-import type { ContextService } from "./context-service";
+import type { ConnectionIdentity, ContextService } from "./context-service";
 
 export const MAX_SESSIONS_PER_EXTENSION = 4;
 
@@ -37,10 +40,11 @@ export type ExecutionServiceOptions = {
   ): void;
   /** 会话的 Project 是当前 Project 时刷新对话列表。Refreshes the conversation list for the current Project. */
   refreshConversations(projectId: string): void;
-  createSession?(
-    handlers: ExecutionHubHandlers,
-    runtime: ExecutionRuntimeConfig,
-  ): ExecutionSessionLike;
+  /**
+   * 创建会话、读取对话详情与订阅对话实时消息的通信入口。
+   * The traffic entry point that creates sessions, reads conversation details and subscribes to the conversation's live messages.
+   */
+  chat: Pick<ChatHttpClient, "createExecutionSession" | "getConversation" | "subscribe">;
 };
 
 type SessionRecord = {
@@ -49,9 +53,43 @@ type SessionRecord = {
   projectId: string;
   conversationId: string;
   session: ExecutionSessionLike;
+  /** 取消转发对话实时消息。Stops forwarding the conversation's live messages. */
+  unsubscribe(): void;
 };
 
 type PendingCreation = { owner: SessionOwner; controller: AbortController };
+
+/** 服务端对只读请求方的写入操作返回 ConversationReadOnly（4030008）。The server answers a read-only requester's writes with ConversationReadOnly (4030008). */
+function isConversationReadOnly(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("HubException: 4030008:");
+}
+
+function conversationReadOnly(): Error {
+  return createExtensionError(
+    "ERR_CONVERSATION_READ_ONLY",
+    "The conversation is read-only for this extension.",
+  );
+}
+
+/** 只读的写入失败转换为 ERR_CONVERSATION_READ_ONLY。Turns a read-only write failure into ERR_CONVERSATION_READ_ONLY. */
+async function mapReadOnly<T>(write: Promise<T>): Promise<T> {
+  try {
+    return await write;
+  } catch (error) {
+    if (isConversationReadOnly(error)) throw conversationReadOnly();
+    throw error;
+  }
+}
+
+/** 对话不存在（草稿对话）时详情接口返回 404 与 ResourceNotFound（4040007）。The details endpoint answers a missing (draft) conversation with 404 and ResourceNotFound (4040007). */
+function isDraftConversation(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 404 &&
+    (error.body as { code?: unknown } | null)?.code === 4040007
+  );
+}
 
 function isExecutionBusy(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -86,7 +124,7 @@ export class ExecutionService {
       permissionMode?: PermissionMode;
     },
     signal: AbortSignal,
-  ): Promise<{ sessionId: string; conversationId: string }> {
+  ): Promise<{ sessionId: string; conversationId: string; readOnly: boolean }> {
     const open =
       this.count((item) => item.extensionId === owner.extensionId) +
       [...this.pending].filter((item) => item.owner.extensionId === owner.extensionId).length;
@@ -107,6 +145,17 @@ export class ExecutionService {
     let session: ExecutionSessionLike | null = null;
     try {
       return await this.options.context.request(async (requestSignal, identity) => {
+        const scope: ChatConversationScope = {
+          serverId: identity.profileId,
+          projectId: options.projectId,
+          conversationId,
+        };
+        const origin: ChatEventOrigin = { kind: "extension", extensionId: owner.extensionId };
+        // 新对话不需要请求；已有对话在建立 SignalR 连接之前读取详情。
+        // A new conversation needs no request; an existing one reads its details before the SignalR connection is made.
+        const readOnly =
+          options.conversationId !== undefined &&
+          (await this.isReadOnly(scope, owner, requestSignal, origin));
         const handlers: ExecutionHubHandlers = {
           onMessage: (message) => this.receive(sessionId, message),
           onReconnectFailed: () => this.closeSession(sessionId, "connection-lost", true),
@@ -127,9 +176,7 @@ export class ExecutionService {
           attachmentStore: null,
           webSocket: TrackedWebSocket,
         };
-        session =
-          this.options.createSession?.(handlers, runtime) ??
-          new ExecutionSession(handlers, runtime);
+        session = this.options.chat.createExecutionSession(scope, handlers, { runtime, origin });
         const created = session;
         const stop = () => {
           for (const socket of sockets)
@@ -151,8 +198,9 @@ export class ExecutionService {
           projectId: options.projectId,
           conversationId,
           session: created,
+          unsubscribe: this.forwardLiveMessages(sessionId, owner, scope, identity),
         });
-        return { sessionId, conversationId };
+        return { sessionId, conversationId, readOnly };
       }, pending.controller.signal);
     } catch (error) {
       if (session && !this.sessions.has(sessionId))
@@ -180,6 +228,7 @@ export class ExecutionService {
         input: toExecutionUserInput(createUserTextMessage(input.text)),
       });
     } catch (error) {
+      if (isConversationReadOnly(error)) throw conversationReadOnly();
       if (isExecutionBusy(error)) {
         throw createExtensionError(
           "ERR_EXECUTION_BUSY",
@@ -192,7 +241,7 @@ export class ExecutionService {
   }
 
   public async interrupt(owner: SessionOwner, sessionId: string): Promise<null> {
-    await this.owned(owner, sessionId).session.interrupt();
+    await mapReadOnly(this.owned(owner, sessionId).session.interrupt());
     return null;
   }
 
@@ -201,7 +250,7 @@ export class ExecutionService {
     sessionId: string,
     response: InteractionResponse,
   ): Promise<null> {
-    await this.owned(owner, sessionId).session.submitHumanResponse({ response });
+    await mapReadOnly(this.owned(owner, sessionId).session.submitHumanResponse({ response }));
     return null;
   }
 
@@ -210,7 +259,7 @@ export class ExecutionService {
     sessionId: string,
     mode: PermissionMode,
   ): Promise<null> {
-    await this.owned(owner, sessionId).session.setPermissionMode(mode);
+    await mapReadOnly(this.owned(owner, sessionId).session.setPermissionMode(mode));
     return null;
   }
 
@@ -277,8 +326,57 @@ export class ExecutionService {
     const record = this.sessions.get(sessionId);
     if (!record) return;
     this.sessions.delete(sessionId);
+    record.unsubscribe();
     await record.session.dispose();
     if (notify) this.options.deliver(record.owner, "execution.closed", { sessionId, reason });
+  }
+
+  /**
+   * 已保存的对话不是开放对话、并且由其他一方创建时，会话只读；草稿对话可以写入，其他失败继续抛出。只读由服务端判定，这里只供 extension 提前显示。
+   * A session is read-only when the saved conversation is not open and another party created it; a draft conversation is writable and other failures are rethrown. The server decides; this only lets the extension show it early.
+   */
+  private async isReadOnly(
+    scope: ChatConversationScope,
+    owner: SessionOwner,
+    signal: AbortSignal,
+    origin: ChatEventOrigin,
+  ): Promise<boolean> {
+    try {
+      const details = await this.options.chat.getConversation(scope, signal, origin);
+      return !(details.openToExtensions || details.extensionId === owner.extensionId);
+    } catch (error) {
+      if (isDraftConversation(error)) return false;
+      throw error;
+    }
+  }
+
+  /**
+   * 把这台 Desktop 从其他方收到的该对话实时消息转发给会话：来自这个 extension 的消息经它自己的连接到达，其他连接身份的消息不转发。返回取消订阅的函数。
+   * Forwards the conversation's live messages this Desktop receives from other parties to the session: messages from this extension arrive over its own connection, and those of another connection identity are not forwarded. Returns the unsubscribe function.
+   */
+  private forwardLiveMessages(
+    sessionId: string,
+    owner: SessionOwner,
+    scope: ChatConversationScope,
+    identity: ConnectionIdentity,
+  ): () => void {
+    return this.options.chat.subscribe(
+      {
+        kinds: ["message"],
+        sources: ["live"],
+        serverId: scope.serverId,
+        projectId: scope.projectId,
+        conversationId: scope.conversationId,
+      },
+      (event, connection) => {
+        if (event.kind !== "message") return;
+        if (event.origin.kind === "extension" && event.origin.extensionId === owner.extensionId)
+          return;
+        if (connection.baseUrl !== identity.baseUrl || connection.token !== identity.token) return;
+        if (!this.sessions.has(sessionId)) return;
+        this.options.deliver(owner, "execution.message", { sessionId, message: event.message });
+      },
+    );
   }
 
   private receive(sessionId: string, message: ExecutionMessage): void {

@@ -42,6 +42,12 @@ internal sealed class ExecutionConnection : IAsyncDisposable
 
     internal bool IsAttached => _attached;
 
+    /// <summary>
+    /// 连接设置中的 extension 身份，宿主为 null。SignalR 对同一连接逐个调用 hub 方法，读取它的调用期间设置不会变化。
+    /// The extension identity in the connection's settings, null for the host. SignalR invokes hub methods one at a time per connection, so the settings do not change while an invocation reads them.
+    /// </summary>
+    internal string? RequesterExtensionId => _context.Settings?.ExtensionId;
+
     public async Task DispatchAsync(AgentRunCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -100,8 +106,15 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         }
     }
 
-    /// <summary>确认旧连接执行是否仍在运行，并允许同一用户在重连后请求停止。</summary>
-    internal async Task<bool> RecoverInProcessExecutionAsync(bool interrupt, CancellationToken cancellationToken)
+    /// <summary>
+    /// 确认旧连接执行是否仍在运行，并允许同一用户在重连后请求停止；停止按发出请求的连接的请求方检查。
+    /// Reports whether the old connection's execution is still running and lets the same user stop it after a reconnect; stopping is checked against the requester of the connection that asked.
+    /// </summary>
+    internal async Task<bool> RecoverInProcessExecutionAsync(
+        bool interrupt,
+        string? requesterExtensionId,
+        CancellationToken cancellationToken
+    )
     {
         if (Volatile.Read(ref _disposed) != 0)
             return !_disposeCompletion.Task.IsCompleted;
@@ -112,7 +125,7 @@ internal sealed class ExecutionConnection : IAsyncDisposable
             if (Volatile.Read(ref _disposed) != 0)
                 return !_disposeCompletion.Task.IsCompleted;
             if (interrupt && _context.HasActiveTurn)
-                await _context.InterruptTurnAsync(null, cancellationToken);
+                await _context.InterruptForRecoveryAsync(requesterExtensionId, cancellationToken);
             return !_context.WhenIdleAsync().IsCompleted;
         }
         finally

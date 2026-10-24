@@ -83,8 +83,13 @@ export function createExtensionApi(
   const call = <T>(method: string, params: unknown = {}, signal?: AbortSignal) =>
     endpoint.request<T>(method, params, { signal });
 
-  const createSession = (sessionId: string, conversationId: string): ExecutionSessionApi => ({
+  const createSession = (
+    sessionId: string,
+    conversationId: string,
+    readOnly: boolean,
+  ): ExecutionSessionApi => ({
     conversationId,
+    readOnly,
     send: (input) => call("execution.send", { sessionId, ...input }),
     interrupt: () => call("execution.interrupt", { sessionId }),
     respond: (response) => call("execution.respond", { sessionId, response }),
@@ -196,11 +201,12 @@ export function createExtensionApi(
     },
     execution: {
       createSession: async (options) => {
-        const { sessionId, conversationId } = await call<{
+        const { sessionId, conversationId, readOnly } = await call<{
           sessionId: string;
           conversationId: string;
+          readOnly: boolean;
         }>("execution.createSession", options);
-        return createSession(sessionId, conversationId);
+        return createSession(sessionId, conversationId, readOnly);
       },
     },
     a2a: {

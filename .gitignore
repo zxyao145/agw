@@ -385,3 +385,4 @@ appsettings.setup.json
 .agw/
 .wrangler
 .scratch/
+**/.superpowers/**/*

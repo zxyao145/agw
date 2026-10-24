@@ -1374,6 +1374,150 @@ async function chatObserve(): Promise<void> {
   await showMarkdownReply();
 }
 
+type ConversationSummaryDto = {
+  conversationId: string;
+  title: string;
+  extensionId: string;
+  openToExtensions: boolean;
+};
+
+/** 测试 Project 最近的 50 个对话。The test Project's newest 50 conversations. */
+async function listConversations(): Promise<ConversationSummaryDto[]> {
+  return (
+    await hostApi<{ items: ConversationSummaryDto[] }>(
+      `/api/projects/${config.projectId}/conversations?pageIndex=1&pageSize=50`,
+    )
+  ).items;
+}
+
+const READ_ONLY_CODES = Array<string>(4).fill("ERR_CONVERSATION_READ_ONLY");
+
+/**
+ * 在 frame 中为对话创建会话并逐个尝试写入操作，返回 readOnly 与每个操作的结果；`keep` 为 true 时会话留在 `window.__readOnly` 中收集回复文本。
+ * Creates a session on the conversation in the frame and tries every write, returning readOnly and each outcome; with `keep` the session stays in `window.__readOnly` collecting reply text.
+ */
+async function writeProbe(
+  frame: FrameHandle,
+  conversationId: string,
+  keep = false,
+): Promise<{ readOnly: boolean; codes: string[] }> {
+  return api<{ readOnly: boolean; codes: string[] }>(
+    frame,
+    `
+    const session = await api.execution.createSession({ projectId: ${JSON.stringify(config.projectId)}, conversationId: ${JSON.stringify(conversationId)} });
+    const outcome = async (write) => { try { await write(); return "ok"; } catch (error) { return error.code ?? error.message; } };
+    const codes = [
+      await outcome(() => session.send({ target: { type: "agent", id: ${JSON.stringify(config.agentId)} }, text: "read only" })),
+      await outcome(() => session.interrupt()),
+      await outcome(() => session.setPermissionMode("fullAccess")),
+      await outcome(() => session.respond({ kind: "workflow-gate", interactionId: "gate", approved: true })),
+    ];
+    if (${JSON.stringify(keep)}) {
+      const texts = [];
+      session.onMessage((message) => {
+        if (message.role !== "assistant") return;
+        for (const content of message.contents ?? []) if (typeof content.content === "string") texts.push(content.content);
+      });
+      window.__readOnly = { session, texts };
+    } else {
+      await session.dispose();
+    }
+    return { readOnly: session.readOnly, codes };`,
+  );
+}
+
+/** 在聊天输入框的目标选择中选中名为 title 的目标。Selects the target titled title in the chat composer's target select. */
+async function selectHostTarget(title: string): Promise<void> {
+  await clickHost("#chat-target-select");
+  const option = `[...document.querySelectorAll('[role="option"]')].find((item) => item.textContent.trim() === ${JSON.stringify(title)})`;
+  await untilHost(`Boolean(${option})`, `the ${title} target option`);
+  await evalHost(`${option}.click(); true`);
+  await untilHost(
+    `document.querySelector("#chat-target-select")?.textContent.trim() === ${JSON.stringify(title)}`,
+    `the ${title} target`,
+  );
+}
+
+/** 宿主在打开的对话中发送一条消息，等待回复与 Turn 结束。The host sends a message in the open conversation and waits for the reply and the end of the turn. */
+async function hostSendAndWait(text: string): Promise<void> {
+  await setInput(COMPOSER, text);
+  await untilHost(
+    `document.querySelector(${JSON.stringify(SEND_BUTTON)})?.disabled === false`,
+    "the send button",
+  );
+  await clickHost(SEND_BUTTON);
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes(${JSON.stringify(`Echo: ${text}`)})`,
+    `the reply to ${text}`,
+  );
+  await untilHost(
+    `Boolean(document.querySelector(${JSON.stringify(SEND_BUTTON)})) && !document.querySelector('.agw-main-workspace button[aria-label="Stop execution"]')`,
+    `the turn of ${text} to finish`,
+  );
+}
+
+/**
+ * 规则 1 与 2：宿主创建的对话对 sample 只读，只读会话收到宿主下一轮的回复；宿主继续 sample 的对话后创建方仍为 sample。
+ * Rules 1 and 2: a host conversation is read-only for sample and its read-only session gets the host's next reply; after the host continues sample's conversation, sample is still its creator.
+ */
+async function hostConversationReadOnly(): Promise<void> {
+  await goToChat();
+  await clickHost(
+    `.agw-left-sidebar[data-view-id="agw.conversations"] .tools button:has(svg.lucide-plus)`,
+  );
+  await untilHost(`!new URLSearchParams(location.search).get("conversationId")`, "a new chat");
+  // 新对话的默认目标是项目最近选择或默认 Agent，这里选中回显 Agent。A new chat defaults to the project's latest choice or the default Agent, so pick the echo Agent.
+  await selectHostTarget("Echo");
+  await hostSendAndWait("host hello");
+  const conversationId = await until(
+    () => evalHost<string | null>(`new URLSearchParams(location.search).get("conversationId")`),
+    "the host conversation id",
+  );
+  const conversations = await listConversations();
+  const hostConversation = conversations.find((item) => item.conversationId === conversationId);
+  assert.deepEqual(
+    hostConversation && {
+      extensionId: hostConversation.extensionId,
+      openToExtensions: hostConversation.openToExtensions,
+    },
+    { extensionId: "host", openToExtensions: false },
+  );
+  // chatObserve() 中宿主已在 sample 创建的对话里继续聊天。The host already continued sample's conversation in chatObserve().
+  assert.equal(
+    conversations.find((item) => item.title === "integration hello")?.extensionId,
+    "sample",
+  );
+  pass(
+    "the list reports the host as the creator of its conversation and keeps sample's after the host continued it",
+  );
+
+  const main = await untilFrame("sample", "mainView");
+  assert.deepEqual(await writeProbe(main, conversationId, true), {
+    readOnly: true,
+    codes: READ_ONLY_CODES,
+  });
+  pass(
+    "sample's session on a host conversation is read-only and every write fails with ERR_CONVERSATION_READ_ONLY",
+  );
+
+  await hostSendAndWait("host again");
+  await until(
+    () => evalFrame<boolean>(main, `window.__readOnly.texts.join("").includes("Echo: host again")`),
+    "the host's reply in sample's read-only session",
+  );
+  const turns = await hostApi<{ items: { inputSummary: string }[] }>(
+    `/api/projects/conversation-turns?conversationId=${conversationId}`,
+  );
+  assert.deepEqual(turns.items.map((item) => item.inputSummary).sort(), [
+    "host again",
+    "host hello",
+  ]);
+  pass("the read-only session receives the host's next reply, and only the host's two turns exist");
+
+  await api(main, "await window.__readOnly.session.dispose(); delete window.__readOnly;");
+  await showMarkdownReply();
+}
+
 async function undeclaredExtension(): Promise<void> {
   await enable("undeclared", "Undeclared");
   await untilStatus("undeclared", "Active");
@@ -1530,6 +1674,57 @@ async function failureModes(): Promise<void> {
   assert.ok(existsSync(join(storage("stuck-deactivate"), "view-unload.json")));
   assert.equal(frames("stuck-deactivate").length, 0);
   pass("a stuck deactivate ends after its timeout, after the view unloaded");
+}
+
+/**
+ * 规则 3：extension 创建的对话对其他 extension 只读；no-background 可以在新对话中写入并成为它的创建方。
+ * Rule 3: a conversation an extension created is read-only for other extensions; no-background may write in a new conversation and becomes its creator.
+ */
+async function otherExtensionReadOnly(): Promise<void> {
+  await goToChat();
+  await openMainView("no-background:app");
+  const other = await untilFrame("no-background", "mainView");
+  const samples = (await listConversations()).find((item) => item.title === "integration hello");
+  assert.ok(samples, "sample's conversation in the list");
+  assert.deepEqual(await writeProbe(other, samples.conversationId), {
+    readOnly: true,
+    codes: READ_ONLY_CODES,
+  });
+
+  const created = await api<{ conversationId: string; readOnly: boolean; text: string }>(
+    other,
+    `
+    const session = await api.execution.createSession({ projectId: ${JSON.stringify(config.projectId)} });
+    const finished = new Promise((resolve) => {
+      const texts = [];
+      session.onMessage((message) => {
+        if (message.role === "assistant") {
+          for (const content of message.contents ?? []) if (typeof content.content === "string") texts.push(content.content);
+        }
+        if (message.additionalProperties?.type === "agw-turn-finished") resolve(texts.join(""));
+      });
+    });
+    await session.send({ target: { type: "agent", id: ${JSON.stringify(config.agentId)} }, text: "no background hello" });
+    const text = await finished;
+    await session.dispose();
+    return { conversationId: session.conversationId, readOnly: session.readOnly, text };`,
+  );
+  assert.equal(created.readOnly, false);
+  assert.match(created.text, /Echo: no background hello/u);
+  const details = await hostApi<{ extensionId: string }>(
+    `/api/projects/${config.projectId}/conversations/${created.conversationId}`,
+  );
+  assert.equal(details.extensionId, "no-background");
+
+  const sample = await untilFrame("sample", "background");
+  assert.deepEqual(await writeProbe(sample, created.conversationId), {
+    readOnly: true,
+    codes: READ_ONLY_CODES,
+  });
+  pass(
+    "extensions are read-only on each other's conversations, and a new conversation records its extension",
+  );
+  await openMainView("agw.chat");
 }
 
 async function busyExtension(): Promise<void> {
@@ -7439,9 +7634,11 @@ async function run(): Promise<void> {
   await chatContributions();
   await chatMarkdown();
   await chatObserve();
+  await hostConversationReadOnly();
   await undeclaredExtension();
   await hookOrderAndReload();
   await failureModes();
+  await otherExtensionReadOnly();
   await busyExtension();
   await badView();
   await closeReasons();

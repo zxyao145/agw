@@ -16,7 +16,6 @@ import type { ChatProps } from "../../components/message/chat";
 import type { ChatWorkspaceContextValue } from "./chat-workspace";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@agw/components/query";
-import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import * as chatRuntime from "@agw/chat-runtime";
 import type { ExecutionHubHandlers, ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime";
 
@@ -28,7 +27,6 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const conversation = {
     conversationId: "conversation-1",
     contextId: "original-context",
-    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
     resumeState: { targetType: 0, targetId: "agent-1" },
   };
   const messages: import("@agw/api").AiMessage[] = [
@@ -108,6 +106,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
   let reconnectHandlers: ExecutionHubHandlers | undefined;
   let detailsRequests = 0;
   let messageRequests = 0;
+  const detailsScopes: chatRuntime.ChatConversationScope[] = [];
   const observed: {
     explorer?: {
       directoryId?: string | null;
@@ -302,24 +301,9 @@ async function checkConversationSession(kind: string, strictMode = false) {
         fileReads.push(args);
         return { diff: "", unchanged: true };
       },
-      clearProjectConversationRecords: async () => true,
       getConversationActivity: async () => {
         activityRequests += 1;
         return [];
-      },
-      getProjectConversationDetails: async (_project: string, id: string) => {
-        if (id !== "conversation-1") return pending.get(id)!.promise;
-        detailsRequests += 1;
-        await historyReady;
-        if (failHistory) throw new Error("History unavailable");
-        return conversation;
-      },
-      getProjectConversationMessages: async (_project: string, id: string) => {
-        if (id !== "conversation-1")
-          return { items: [], hasMore: false, nextCursor: null, turns: [] };
-        messageRequests += 1;
-        await historyReady;
-        return { items: messages, nextCursor: null, hasMore: false, turns: [] };
       },
       // A cached sidebar publishes its summary in the child's effect, before the
       // workspace's route hydration effect. A summary is not a hydrated session.
@@ -361,6 +345,26 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "./lib/session-routing": sessionRouting,
     "@agw/chat-runtime": {
       ...chatRuntime,
+      chatHttpClient: {
+        getConversation: async (scope: chatRuntime.ChatConversationScope) => {
+          detailsScopes.push(scope);
+          if (scope.conversationId !== "conversation-1") {
+            return pending.get(scope.conversationId)!.promise;
+          }
+          detailsRequests += 1;
+          await historyReady;
+          if (failHistory) throw new Error("History unavailable");
+          return conversation;
+        },
+        getConversationMessages: async (scope: chatRuntime.ChatConversationScope) => {
+          if (scope.conversationId !== "conversation-1")
+            return { items: [], hasMore: false, nextCursor: null, turns: [] };
+          messageRequests += 1;
+          await historyReady;
+          return { items: messages, nextCursor: null, hasMore: false, turns: [] };
+        },
+        clearConversationRecords: async () => true,
+      },
       executionSessionManager: {
         conversationStatuses,
         subscribe: manager.subscribe,
@@ -487,7 +491,6 @@ async function checkConversationSession(kind: string, strictMode = false) {
         conversationId: null,
         messages: [],
         historyTurns: [],
-        usage: EMPTY_TOKEN_USAGE,
         olderMessagesCursor: null,
         hasOlderMessages: false,
         agentMode: null,
@@ -728,6 +731,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => finishHistory());
 
       assert.equal(detailsRequests, 1);
+      // 作用范围在 vm 上下文中创建，复制到本上下文后再比较。The scope is created in the vm context, so it is copied into this one before comparing.
+      assert.deepEqual(
+        { ...detailsScopes[0] },
+        { serverId: "local", projectId: "project-1", conversationId: "conversation-1" },
+      );
+      assert.equal("usage" in observed.chat!.sessionSeed, false);
       assert.equal(workspace?.selectedProject?.id, "project-1");
       assert.equal(workspace?.conversationId, "conversation-1");
       assert.equal(workspace?.selectedTarget?.id, "agent-1", "the server's target is restored");
@@ -772,6 +781,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
           executionCount: 1,
           messageCount: 0,
           createTime: "2026-10-17T00:00:00Z",
+          extensionId: "host",
+          openToExtensions: false,
         }),
       );
       assert.equal(conversationsOpened, 0, "the conversation opens once its history loads");

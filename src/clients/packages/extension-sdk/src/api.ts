@@ -688,10 +688,14 @@ export type ExecutionCloseReason =
   | "connection-lost";
 
 export interface ExecutionApi {
-  /** 需要 execution。Requires execution. */
+  /**
+   * 需要 execution。extension 只能在自己创建的对话、开放对话（宿主创建、从未清空、没有已受理的 Turn）与新对话中写入；其他对话的会话只读，见 `ExecutionSessionApi.readOnly`。
+   * Requires execution. An extension may write only in conversations it created, open conversations (host-created, never cleared and without accepted turns) and new conversations; sessions on other conversations are read-only, see `ExecutionSessionApi.readOnly`.
+   */
   createSession(options: {
+    /** 小写 UUID，否则以 `ERR_INVALID_ARGUMENT` 失败。A lowercase UUID; otherwise fails with `ERR_INVALID_ARGUMENT`. */
     projectId: string;
-    /** 省略时新建对话。Omit to start a new conversation. */
+    /** 省略时新建对话；提供时必须是小写 UUID。Omit to start a new conversation; when given it must be a lowercase UUID. */
     conversationId?: string;
     environmentVariables?: Record<string, string>;
     permissionMode?: PermissionMode;
@@ -700,13 +704,30 @@ export interface ExecutionApi {
 
 export interface ExecutionSessionApi {
   readonly conversationId: string;
+  /**
+   * 创建时确定：对话已经保存、不是开放对话、并且由其他一方（Desktop、Web、Mobile、Job、A2A 或其他 extension）创建时为 true。
+   * 只读会话的 `send`、`interrupt`、`respond`、`setPermissionMode` 以 `ERR_CONVERSATION_READ_ONLY` 失败；最终以 Server 的判定为准。
+   * Decided at creation: true when the conversation is saved, not open and created by another party (Desktop, Web, Mobile, a
+   * Job, A2A or another extension). On a read-only session `send`, `interrupt`, `respond` and `setPermissionMode` fail with
+   * `ERR_CONVERSATION_READ_ONLY`; the Server's decision is final.
+   */
+  readonly readOnly: boolean;
+  /** 只读对话上以 `ERR_CONVERSATION_READ_ONLY` 失败。Fails with `ERR_CONVERSATION_READ_ONLY` on a read-only conversation. */
   send(input: {
     target: { type: "agent" | "agentflow"; id: string };
     text: string;
   }): Promise<{ turnId: string }>;
+  /** 只读对话上以 `ERR_CONVERSATION_READ_ONLY` 失败。Fails with `ERR_CONVERSATION_READ_ONLY` on a read-only conversation. */
   interrupt(): Promise<void>;
+  /** 只读对话上以 `ERR_CONVERSATION_READ_ONLY` 失败。Fails with `ERR_CONVERSATION_READ_ONLY` on a read-only conversation. */
   respond(response: InteractionResponse): Promise<void>;
+  /** 只读对话上以 `ERR_CONVERSATION_READ_ONLY` 失败。Fails with `ERR_CONVERSATION_READ_ONLY` on a read-only conversation. */
   setPermissionMode(mode: PermissionMode): Promise<void>;
+  /**
+   * 会话自己的消息，以及这台 Desktop 从其他方（宿主与其他 extension 的会话）收到的该对话实时消息；不包括其他设备上运行的 Turn 与历史消息。
+   * The session's own messages and the conversation's live messages this Desktop receives from other parties (host and
+   * other extensions' sessions); turns running on other devices and history messages are not included.
+   */
   onMessage(listener: (message: ExecutionMessage) => void): Disposable;
   onClose(listener: (reason: ExecutionCloseReason) => void): Disposable;
   dispose(): Promise<void>;

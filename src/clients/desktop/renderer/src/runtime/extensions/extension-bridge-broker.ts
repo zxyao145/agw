@@ -150,6 +150,16 @@ function invalidArgument(message: string): Error {
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 
+/**
+ * 执行会话的 projectId 与 conversationId 会进入请求路径，只接受 Server 使用的小写 UUID。
+ * The projectId and conversationId of an execution session go into request paths, so only the Server's lowercase UUIDs are accepted.
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
 /** 检查写入前提（3.5 节）；只有 undefined 表示没有前提。Checks a write precondition (section 3.5); only undefined means none. */
 function checkExpectedSha256(expectedSha256: unknown, overwrite: unknown): void {
   if (expectedSha256 === undefined) return;
@@ -827,6 +837,10 @@ export class ExtensionBridgeBroker {
       ) => {
         this.requirePermission(connection, "execution");
         if (this.options.isFrameClosing(connection.frameId)) throw frameClosing();
+        if (!isUuid(params.projectId)) throw invalidArgument("projectId must be a lowercase UUID.");
+        if (params.conversationId !== undefined && !isUuid(params.conversationId)) {
+          throw invalidArgument("conversationId must be a lowercase UUID.");
+        }
         return execution.createSession(this.owner(connection), params, signal);
       },
       "execution.send": (

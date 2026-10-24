@@ -195,6 +195,7 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
                     projectId,
                     contextId,
                     SummaryAgentName,
+                    ExecutionScope.Current?.Context.TurnId,
                     new ProjectContextUsage
                     {
                         InputTokenCount = usage.InputTokenCount ?? 0,

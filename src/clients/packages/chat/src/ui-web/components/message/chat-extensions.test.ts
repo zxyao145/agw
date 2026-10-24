@@ -13,7 +13,6 @@ import type {
 const environment = await setupDomEnvironment();
 const { React, act, fireEvent, render, screen, waitFor } = environment;
 installLayoutMetrics(environment.window);
-const { EMPTY_TOKEN_USAGE } = await import("@agw/api");
 const { QueryClient, QueryClientProvider } = await import("@agw/components/query");
 const { Chat } = await import("./chat.tsx");
 
@@ -46,7 +45,6 @@ function renderChat(props: Partial<ChatProps> = {}, messages: AiMessage[] = []) 
           conversationId: null,
           messages,
           historyTurns: [],
-          usage: EMPTY_TOKEN_USAGE,
           olderMessagesCursor: null,
           hasOlderMessages: false,
           agentMode: null,

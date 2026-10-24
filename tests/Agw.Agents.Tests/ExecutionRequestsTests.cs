@@ -173,6 +173,116 @@ public class ExecutionRequestsTests
     }
 
     [Fact]
+    public void Deserialize_SettingCommand_ReturnsExtensionId()
+    {
+        var payload = $$"""
+            {
+              "type": "SettingCommand",
+              "projectId": "{{Guid.CreateVersion7()}}",
+              "conversationId": "{{Guid.CreateVersion7()}}",
+              "extensionId": "sample"
+            }
+            """;
+
+        var settingRequest = Assert.IsType<SettingCommand>(Deserialize(payload));
+
+        Assert.Equal("sample", settingRequest.ExtensionId);
+        Assert.Equal("sample", SettingCommandMapper.FromCommand(settingRequest).ExtensionId);
+    }
+
+    [Fact]
+    public void Deserialize_SettingCommandWithoutExtensionId_LeavesItNull()
+    {
+        var settingRequest = Assert.IsType<SettingCommand>(
+            Deserialize(
+                $$"""{"type":"SettingCommand","projectId":"{{Guid.CreateVersion7()}}","conversationId":"{{Guid.CreateVersion7()}}"}"""
+            )
+        );
+
+        Assert.Null(settingRequest.ExtensionId);
+        Assert.Null(SettingCommandMapper.FromCommand(settingRequest).ExtensionId);
+    }
+
+    [Fact]
+    public void Equals_WhenExtensionIdDiffers_ReturnsFalse()
+    {
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var sample = new SettingCommand(projectId, conversationId, extensionId: "sample");
+
+        Assert.NotEqual(sample, new SettingCommand(projectId, conversationId, extensionId: "other"));
+        Assert.NotEqual(sample, new SettingCommand(projectId, conversationId));
+        Assert.Equal(sample, new SettingCommand(projectId, conversationId, extensionId: "sample"));
+        Assert.Equal(
+            sample.GetHashCode(),
+            new SettingCommand(projectId, conversationId, extensionId: "sample").GetHashCode()
+        );
+    }
+
+    [Theory]
+    [InlineData("host")]
+    [InlineData("HOST")]
+    [InlineData("Host")]
+    public void FromCommand_HostExtensionId_ThrowsInvalidParam(string extensionId)
+    {
+        var command = new SettingCommand(Guid.CreateVersion7(), Guid.CreateVersion7(), extensionId: extensionId);
+
+        var exception = Assert.Throws<Agw.Shared.Exceptions.AgwException>(() =>
+            SettingCommandMapper.FromCommand(command)
+        );
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal("SettingCommand.extensionId cannot be \"host\".", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("ab")]
+    [InlineData("Sample")]
+    [InlineData("-a1")]
+    [InlineData("a1-")]
+    [InlineData("a--b")]
+    [InlineData("a_b")]
+    [InlineData(" sample")]
+    [InlineData("sample\n")]
+    public void FromCommand_InvalidExtensionId_ThrowsInvalidParam(string extensionId)
+    {
+        var command = new SettingCommand(Guid.CreateVersion7(), Guid.CreateVersion7(), extensionId: extensionId);
+
+        var exception = Assert.Throws<Agw.Shared.Exceptions.AgwException>(() =>
+            SettingCommandMapper.FromCommand(command)
+        );
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public void FromCommand_ExtensionIdLength_AcceptsUpTo64Characters()
+    {
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var longest = new string('a', 64);
+
+        Assert.Equal(
+            longest,
+            SettingCommandMapper
+                .FromCommand(new SettingCommand(projectId, conversationId, extensionId: longest))
+                .ExtensionId
+        );
+        Assert.Equal(
+            "my-ext-2",
+            SettingCommandMapper
+                .FromCommand(new SettingCommand(projectId, conversationId, extensionId: "my-ext-2"))
+                .ExtensionId
+        );
+        Assert.Throws<Agw.Shared.Exceptions.AgwException>(() =>
+            SettingCommandMapper.FromCommand(
+                new SettingCommand(projectId, conversationId, extensionId: new string('a', 65))
+            )
+        );
+    }
+
+    [Fact]
     public void Deserialize_ExecCommand_ReturnsExecutionCommand()
     {
         var agentId = Guid.CreateVersion7();

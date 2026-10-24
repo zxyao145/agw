@@ -1,4 +1,5 @@
-import type { AiMessage } from "@agw/api";
+import { createBearerApiClient, type AiMessage } from "@agw/api";
+import { ChatHttpClient } from "@agw/chat-native/execution";
 import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 
 import { buildMobileSettingCommand, MobileExecutionSession } from "@/features/chat/execution-ws";
@@ -66,8 +67,18 @@ function createSession(connection: ReturnType<typeof createConnection>) {
     .spyOn(HubConnectionBuilder.prototype, "build")
     .mockReturnValue(connection.connection as never);
   const session = new MobileExecutionSession({
-    serverUrl: "https://agw.example.test",
-    token: "token",
+    client: new ChatHttpClient({
+      api: createBearerApiClient({ baseUrl: "https://agw.example.test", token: "token" }),
+      identity: () => ({ baseUrl: "https://agw.example.test", token: "token" }),
+      execution: () => ({
+        baseUrl: "https://agw.example.test",
+        token: "token",
+        withCredentials: false,
+        webSocket: globalThis.WebSocket,
+        attachmentStore: null,
+      }),
+    }),
+    scope: { serverId: "profile-1", projectId: "project-1", conversationId: "conversation-1" },
     onMessage: (message) => messages.push(message),
     onClose: (error) => closeErrors.push(error),
     onReconnecting: (state) => reconnectStates.push(state),

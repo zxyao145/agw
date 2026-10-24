@@ -380,6 +380,11 @@ public static class ErrorCodes
         "File is read-only or not writable.",
         HttpStatusCode.Forbidden
     );
+    public static readonly ErrorCode ConversationReadOnly = new(
+        403_0008,
+        "The conversation is read-only for this extension.",
+        HttpStatusCode.Forbidden
+    );
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(

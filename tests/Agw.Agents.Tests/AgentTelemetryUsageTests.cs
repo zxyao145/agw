@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
+using Agw.Agents.Execution.Context;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -342,6 +343,99 @@ public class AgentTelemetryUsageTests
         );
     }
 
+    [Fact]
+    public async Task RunStreamingAsync_InsideTurnScope_RecordsTurnId()
+    {
+        var recorder = new CapturingUsageRecorder();
+        var middleware = CreateMiddleware(recorder);
+        var agent = CreateAgent(new UsageChatClient { StreamingUsage = [new UsageDetails { TotalTokenCount = 3 }] });
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var turn = ExecutionTestScopes.Scope();
+
+        using (turn.Push())
+        {
+            await foreach (
+                var _ in middleware.RunStreamingAsync([], session, null, agent, TestContext.Current.CancellationToken)
+            ) { }
+        }
+
+        Assert.Equal(turn.Context.TurnId, Assert.Single(recorder.Entries).TurnId);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithoutExecutionScope_RecordsNullTurnId()
+    {
+        var recorder = new CapturingUsageRecorder();
+        var middleware = CreateMiddleware(recorder);
+        var agent = CreateAgent(new UsageChatClient { ResponseUsage = new UsageDetails { TotalTokenCount = 3 } });
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        await middleware.RunAsync([], session, null, agent, TestContext.Current.CancellationToken);
+
+        Assert.Null(Assert.Single(recorder.Entries).TurnId);
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_ApprovalRoundsOfOneTurn_RecordsEachRoundWithTurnId()
+    {
+        // 审批的每一轮是一次独立的 Agent 运行。
+        // Every approval round is a separate Agent run.
+        var recorder = new CapturingUsageRecorder();
+        var middleware = CreateMiddleware(recorder);
+        var firstRound = CreateAgent(
+            new UsageChatClient { StreamingUsage = [new UsageDetails { TotalTokenCount = 3 }] }
+        );
+        var secondRound = CreateAgent(
+            new UsageChatClient { StreamingUsage = [new UsageDetails { TotalTokenCount = 7 }] }
+        );
+        var session = await firstRound.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var turn = ExecutionTestScopes.Scope();
+
+        using (turn.Push())
+        {
+            foreach (var round in new[] { firstRound, secondRound })
+            {
+                await foreach (
+                    var _ in middleware.RunStreamingAsync(
+                        [],
+                        session,
+                        null,
+                        round,
+                        TestContext.Current.CancellationToken
+                    )
+                ) { }
+            }
+        }
+
+        Assert.Equal([3L, 7L], recorder.Entries.Select(entry => entry.Usage.TotalTokenCount));
+        Assert.All(recorder.Entries, entry => Assert.Equal(turn.Context.TurnId, entry.TurnId));
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_BackgroundAgent_RecordsStartingTurnId()
+    {
+        var recorder = new CapturingUsageRecorder();
+        var middleware = CreateMiddleware(recorder);
+        var inner = CreateAgent(new UsageChatClient { StreamingUsage = [new UsageDetails { TotalTokenCount = 5 }] })
+            .AsBuilder()
+            .Use(runFunc: middleware.RunAsync, runStreamingFunc: middleware.RunStreamingAsync)
+            .Build();
+        var background = new BackgroundAgentScopeAgent(inner, Guid.CreateVersion7(), EngineKind.Maf);
+        var session = await background.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var turn = ExecutionTestScopes.Scope();
+
+        using (turn.Push())
+        {
+            await foreach (
+                var _ in background.RunStreamingAsync([], session, null, TestContext.Current.CancellationToken)
+            ) { }
+        }
+
+        var recorded = Assert.Single(recorder.Entries);
+        Assert.Equal(5, recorded.Usage.TotalTokenCount);
+        Assert.Equal(turn.Context.TurnId, recorded.TurnId);
+    }
+
     private sealed class RecordingLogger : ILogger<AgentTelemetryMiddleware>
     {
         public List<string> Messages { get; } = [];
@@ -403,6 +497,7 @@ public class AgentTelemetryUsageTests
             Guid projectId,
             string contextId,
             string agentName,
+            Guid? turnId,
             ProjectContextUsage usage,
             CancellationToken cancellationToken = default
         )
@@ -414,12 +509,18 @@ public class AgentTelemetryUsageTests
                 throw new InvalidOperationException("Recorder failed.");
             }
 
-            Entries.Add(new Entry(projectId, contextId, agentName, usage));
+            Entries.Add(new Entry(projectId, contextId, agentName, turnId, usage));
             return Task.CompletedTask;
         }
     }
 
-    private sealed record Entry(Guid ProjectId, string ContextId, string AgentName, ProjectContextUsage Usage);
+    private sealed record Entry(
+        Guid ProjectId,
+        string ContextId,
+        string AgentName,
+        Guid? TurnId,
+        ProjectContextUsage Usage
+    );
 
     private sealed class UsageChatClient : IChatClient
     {

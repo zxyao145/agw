@@ -54,6 +54,12 @@ public class ProjectConversationTurn
 
     public DateTimeOffset? FinishedAt { get; set; }
 
+    /// <summary>
+    /// 从这个时间起该 Turn 的执行不再写入用量；进入终态时写入。Distributed 中断时可能晚于结束时间，持有被中断租约的 worker 退出后提前到退出时间。
+    /// From this time on the turn's execution writes no more usage; written with the terminal state. A distributed interrupt may set it after the finish time, and the worker holding the interrupted lease moves it to its exit time.
+    /// </summary>
+    public DateTimeOffset? UsageSettlesAt { get; set; }
+
     public string? ErrorCode { get; set; }
 
     [JsonIgnore]

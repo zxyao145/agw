@@ -10,13 +10,19 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Turns;
+using Agw.Auth.Application;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
+using Agw.Projects.Application;
+using Agw.Projects.Application.Facades;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Configuration;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
@@ -136,7 +142,8 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
     /// </summary>
     public static async Task<TurnPersistenceTestKit> CreatePostgresAsync(
         string adminConnectionString,
-        ExecutionRuntimeOptions? executionOptions = null
+        ExecutionRuntimeOptions? executionOptions = null,
+        Action<IServiceCollection>? configure = null
     )
     {
         var token = TestContext.Current.CancellationToken;
@@ -163,12 +170,28 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             },
             TimeProvider.System,
             executionOptions ?? new ExecutionRuntimeOptions(),
-            configure: null
+            configure
         );
         await using var context = kit.CreateContext();
         await context.Database.MigrateAsync(token);
         return kit;
     }
+
+    /// <summary>
+    /// 与本环境共用数据库的另一个实例：服务、协调器、广播与实例身份都独立；释放时不删除数据库。
+    /// Another instance sharing this kit's database, with its own services, coordinator, broadcasts and instance identity; disposal keeps the database.
+    /// </summary>
+    public TurnPersistenceTestKit CreatePeer(
+        ExecutionRuntimeOptions? executionOptions = null,
+        Action<IServiceCollection>? configure = null
+    ) =>
+        new(
+            DbOptions,
+            () => ValueTask.CompletedTask,
+            Clock,
+            executionOptions ?? new ExecutionRuntimeOptions(),
+            configure
+        );
 
     public AgwDbContext CreateContext() => new(DbOptions);
 
@@ -209,22 +232,38 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
     }
 
     /// <summary>
+    /// 写入属于用户的项目；已经存在时保持不变。
+    /// Writes a project owned by the user; an existing project stays unchanged.
+    /// </summary>
+    public async Task SeedProjectAsync(Guid projectId, string userId = UserId)
+    {
+        await using var context = CreateContext();
+        if (await context.Projects.IgnoreQueryFilters().AnyAsync(project => project.Id == projectId))
+            return;
+        context.Projects.Add(
+            new Project
+            {
+                Id = projectId,
+                Name = $"Test-{projectId:N}",
+                Workspace = AppContext.BaseDirectory,
+                CreateBy = userId,
+            }
+        );
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// 写入测试已有任务对应的项目与对话；已经存在的行保持不变。
     /// Writes the project and conversation of a task a test already has; existing rows stay unchanged.
     /// </summary>
-    public async Task SeedConversationAsync(AgentExecutionTask task, string userId = UserId)
+    public async Task SeedConversationAsync(
+        AgentExecutionTask task,
+        string userId = UserId,
+        string extensionId = ConversationCreators.Host
+    )
     {
+        await SeedProjectAsync(task.ProjectId, userId);
         await using var context = CreateContext();
-        if (!await context.Projects.IgnoreQueryFilters().AnyAsync(project => project.Id == task.ProjectId))
-            context.Projects.Add(
-                new Project
-                {
-                    Id = task.ProjectId,
-                    Name = $"Test-{task.ProjectId:N}",
-                    Workspace = AppContext.BaseDirectory,
-                    CreateBy = userId,
-                }
-            );
         if (
             !await context
                 .ProjectConversations.IgnoreQueryFilters()
@@ -237,10 +276,88 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
                     ProjectId = task.ProjectId,
                     ContextId = task.ContextId,
                     Generation = task.Generation,
+                    ExtensionId = extensionId,
                     CreateBy = userId,
                 }
             );
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// 实际的 Projects 任务解析：解析任务时插入对话并按请求方记录或检查创建方。
+    /// The real Projects task resolution: resolving a task inserts the conversation and records or checks the creator for the requester.
+    /// </summary>
+    public IProjectTaskFacade CreateProjectTasks()
+    {
+        var scope = Services.CreateAsyncScope();
+        _scopes.Add(scope);
+        var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var userInfo = new UserInfoService();
+        var projectResolver = new ProjectResolver(dbContext, userInfo);
+        var taskExecution = new TaskExecutionAppService(
+            dbContext,
+            projectResolver,
+            new ConversationHistoryDomainService(),
+            Clock,
+            userInfo,
+            new ConversationCreatorStore(dbContext)
+        );
+        return new ProjectTaskFacade(
+            taskExecution,
+            dbContext,
+            new TaskAppService(dbContext, projectResolver, taskExecution, userInfo),
+            userInfo
+        );
+    }
+
+    /// <summary>
+    /// 实际的写入检查：extension 只能写入自己创建的对话、开放对话与草稿对话。
+    /// The real write check: an extension may write only its own, open and draft conversations.
+    /// </summary>
+    public IProjectConversationAccessFacade CreateConversationAccess()
+    {
+        var scope = Services.CreateAsyncScope();
+        _scopes.Add(scope);
+        return new ProjectConversationAccessFacade(scope.ServiceProvider.GetRequiredService<AgwDbContext>());
+    }
+
+    /// <summary>
+    /// 为对话写入一个已结束的 Turn 行，与一次已受理的 Turn 一致。
+    /// Writes a finished turn row for the conversation, matching one accepted turn.
+    /// </summary>
+    public async Task AddTurnAsync(Guid conversationId)
+    {
+        await using var context = CreateContext();
+        context.ProjectConversationTurns.Add(
+            new ProjectConversationTurn
+            {
+                Id = Guid.CreateVersion7(),
+                ProjectConversationId = conversationId,
+                TargetId = Guid.CreateVersion7(),
+                Status = ProjectConversationTurnStatus.Completed,
+                InputMessageId = Guid.CreateVersion7(),
+                StartedAt = Clock.GetUtcNow(),
+                FinishedAt = Clock.GetUtcNow(),
+            }
+        );
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    public async Task<ProjectConversation> ReadConversationAsync(Guid conversationId)
+    {
+        await using var context = CreateContext();
+        return await context
+            .ProjectConversations.IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleAsync(conversation => conversation.Id == conversationId, TestContext.Current.CancellationToken);
+    }
+
+    public async Task<int> CountTurnsAsync(Guid conversationId)
+    {
+        await using var context = CreateContext();
+        return await context
+            .ProjectConversationTurns.IgnoreQueryFilters()
+            .CountAsync(turn => turn.ProjectConversationId == conversationId, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -326,8 +443,8 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             Contents = [new AgwTextContent { Content = content }],
         };
 
-    public static ExecutionSettings CreateSettings(Guid projectId, Guid conversationId) =>
-        SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId));
+    public static ExecutionSettings CreateSettings(Guid projectId, Guid conversationId, string? extensionId = null) =>
+        SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId, extensionId: extensionId));
 
     public async Task<ProjectConversationTurn> ReadTurnAsync(Guid turnId)
     {

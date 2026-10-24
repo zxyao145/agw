@@ -167,6 +167,13 @@ test.each([false, true])(
       expect(mockExecutions).toHaveLength(1);
       expect(mockExecutions[0].conversationId).toBe(context.conversationId);
       expect(mockExecutions[0].configuredConversationId).toBe(context.conversationId);
+      expect(mockSessions.at(-1)).toMatchObject({
+        scope: {
+          serverId: "profile-1",
+          projectId: "project-1",
+          conversationId: context.conversationId,
+        },
+      });
     } finally {
       await unmount();
       queryClient.clear();

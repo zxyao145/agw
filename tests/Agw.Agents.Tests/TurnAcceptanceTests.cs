@@ -200,6 +200,111 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         Assert.Equal(0, turn.LastSequence);
     }
 
+    [Fact]
+    public async Task AcceptAsync_ExtensionFirstTurnRejected_KeepsCreatorAndAllowsRetry()
+    {
+        // Arrange: the extension's first turn names a missing Agent, so acceptance fails after the task resolves.
+        // 准备：extension 的第一个 Turn 指向不存在的 Agent，受理在解析任务之后失败。
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await _kit.SeedProjectAsync(projectId);
+        var acceptance = CreateResolvingAcceptance();
+        var rejected = await Assert.ThrowsAsync<AgwException>(() =>
+            AcceptForAsync(acceptance, projectId, conversationId, Guid.CreateVersion7(), "sample")
+        );
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, rejected.Code);
+        var agentId = await SeedAgentAsync();
+
+        // Act
+        var other = await Assert.ThrowsAsync<AgwException>(() =>
+            AcceptForAsync(acceptance, projectId, conversationId, agentId, "other")
+        );
+        var retried = await AcceptForAsync(acceptance, projectId, conversationId, agentId, "sample");
+
+        // Assert
+        Assert.Equal(ErrorCodes.ConversationReadOnly.Code, other.Code);
+        Assert.True(retried.Created);
+        Assert.Equal("sample", (await _kit.ReadConversationAsync(conversationId)).ExtensionId);
+        Assert.Equal(1, await _kit.CountTurnsAsync(conversationId));
+    }
+
+    [Fact]
+    public async Task AcceptAsync_HostFirstTurnRejected_LeavesOpenConversationForExtension()
+    {
+        // Arrange: the host's first turn fails after the task resolves, leaving a host conversation without turns.
+        // 准备：宿主的第一个 Turn 在解析任务之后失败，留下没有 Turn 的宿主对话。
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await _kit.SeedProjectAsync(projectId);
+        var acceptance = CreateResolvingAcceptance();
+        var rejected = await Assert.ThrowsAsync<AgwException>(() =>
+            AcceptForAsync(acceptance, projectId, conversationId, Guid.CreateVersion7(), extensionId: null)
+        );
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, rejected.Code);
+        Assert.Equal(
+            Agw.Shared.Contracts.Conversations.ConversationCreators.Host,
+            (await _kit.ReadConversationAsync(conversationId)).ExtensionId
+        );
+        var agentId = await SeedAgentAsync();
+
+        // Act
+        var accepted = await AcceptForAsync(acceptance, projectId, conversationId, agentId, "sample");
+
+        // Assert
+        Assert.True(accepted.Created);
+        Assert.Equal("sample", (await _kit.ReadConversationAsync(conversationId)).ExtensionId);
+        Assert.Equal(1, await _kit.CountTurnsAsync(conversationId));
+    }
+
+    /// <summary>
+    /// 受理服务使用实际的 Projects 任务解析与 Agent 权限检查。
+    /// An acceptance service over the real Projects task resolution and Agent permission check.
+    /// </summary>
+    private TurnAcceptanceService CreateResolvingAcceptance() =>
+        _kit.CreateAcceptance(
+            _kit.CreateProjectTasks(),
+            new AgentExecutionFacadeTests.WorkspaceProjects(),
+            permissions: new Agw.Agents.Definitions.Agents.ExecutionPermissionService(
+                _kit.ResolveScoped<Agw.Agents.Application.Persistence.IAgentsDbContext>()
+            )
+        );
+
+    private static Task<AcceptedTurn> AcceptForAsync(
+        TurnAcceptanceService acceptance,
+        Guid projectId,
+        Guid conversationId,
+        Guid agentId,
+        string? extensionId
+    ) =>
+        acceptance.AcceptAsync(
+            new TurnAcceptanceRequest(
+                UserId,
+                null,
+                new ExecutionTarget(agentId, AgentRuntimeType.Agent),
+                conversationId,
+                TurnPersistenceTestKit.CreateInput("hello"),
+                TurnPersistenceTestKit.CreateSettings(projectId, conversationId, extensionId),
+                Stream: true
+            ),
+            TestContext.Current.CancellationToken
+        );
+
+    private async Task<Guid> SeedAgentAsync()
+    {
+        var agentId = Guid.CreateVersion7();
+        await using var context = _kit.CreateContext();
+        context.Agents.Add(
+            new Agw.Shared.Data.Entities.Agents.Agent
+            {
+                Id = agentId,
+                Name = "test",
+                CreateBy = UserId,
+            }
+        );
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return agentId;
+    }
+
     private TurnAcceptanceService CreateAcceptance(DurableExecutionCoordinator? durable = null) =>
         _kit.CreateAcceptance(projectTasks: null, new AgentExecutionFacadeTests.WorkspaceProjects(), durable);
 

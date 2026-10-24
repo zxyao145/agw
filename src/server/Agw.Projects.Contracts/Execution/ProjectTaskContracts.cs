@@ -24,13 +24,18 @@ public sealed record ProjectTaskSnapshot(
     int Generation = 0
 );
 
+/// <summary>
+/// 解析执行任务的请求；RequesterExtensionId 是请求方 extension 的 id，宿主为 null。
+/// A request to resolve an execution task; RequesterExtensionId is the requesting extension id, null for the host.
+/// </summary>
 public sealed record ResolveProjectTaskRequest(
     Guid? TaskId,
     Guid ConversationId,
     Guid? ProjectId,
     string Input,
     bool Resume,
-    string OwnerUserId
+    string OwnerUserId,
+    string? RequesterExtensionId
 );
 
 public sealed record StartProjectTaskRequest(

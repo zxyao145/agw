@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,6 +40,27 @@ public class TaskProjectionModelTests
             .Single(index => index.Properties.SequenceEqual([projectIdProperty, contextIdProperty]));
 
         Assert.True(contextIdIndex.IsUnique);
+    }
+
+    [Fact]
+    public void ProjectConversation_ExtensionId_MapsToRequiredColumnWithHostDefault()
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite("DataSource=:memory:")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+
+        using var dbContext = new AgwDbContext(options);
+        var property = dbContext
+            .Model.FindEntityType(typeof(ProjectConversation))
+            ?.FindProperty(nameof(ProjectConversation.ExtensionId));
+
+        Assert.NotNull(property);
+        Assert.Equal("extension_id", property.GetColumnName());
+        Assert.False(property.IsNullable);
+        Assert.Equal(64, property.GetMaxLength());
+        Assert.Equal(ConversationCreators.Host, property.GetDefaultValue());
+        Assert.Equal(ConversationCreators.Host, new ProjectConversation().ExtensionId);
     }
 
     [Fact]

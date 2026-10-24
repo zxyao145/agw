@@ -33,9 +33,11 @@ import {
   isUserTurnMessage,
   scopeStreamingMessage,
   type AgentMode,
+  type ExecutionHubMethod,
   type ExecutionUserInput as CoreExecutionUserInput,
   type PermissionMode as CorePermissionMode,
   type TurnFinishedStatus,
+  type TurnPosition,
 } from "@agw/execution-core";
 import {
   getAgentflowCheckpointMessage,
@@ -108,6 +110,25 @@ export function isExecutionReconnectExhausted(state: ExecutionReconnectState | n
 export function configureExecutionRuntime(config: ExecutionRuntimeConfig): void {
   executionRuntime = config;
 }
+
+/** configureExecutionRuntime 的当前配置。The current configuration of configureExecutionRuntime. */
+export function getExecutionRuntime(): ExecutionRuntimeConfig {
+  return executionRuntime;
+}
+
+/** ExecutionSession 向 ChatHttpClient 报告通信。How ExecutionSession reports traffic to ChatHttpClient. */
+export type ExecutionTrafficObserver = {
+  /**
+   * hub 调用发出前调用；返回的函数在调用结束时接收结果。
+   * Called before a hub call; the returned function receives its outcome.
+   */
+  request(
+    method: ExecutionHubMethod,
+    args: readonly unknown[],
+  ): (outcome: { ok: true; value: unknown } | { ok: false; error: unknown }) => void;
+  /** handlers.onMessage 处理一条 ReceiveMessage 之后调用。Called after handlers.onMessage handles a ReceiveMessage. */
+  message(message: AiMessage): void;
+};
 
 export type ExecutionUserInput = CoreExecutionUserInput<AiMessage>;
 
@@ -378,8 +399,18 @@ export class ExecutionSession {
   private durableStorageKey: string | undefined;
   /** 当前启动或附着的 durable execution。 */
   private activeTurnId: string | null = null;
-  /** 当前客户端已经消费到的 Redis Stream cursor。 */
+  /**
+   * 当前 Turn 最后连续处理成功的位置，与 attachment store 中的 cursor 相同。
+   * The last position of the current turn processed successfully without gaps, the same as the cursor in the attachment store.
+   */
   private streamCursor: string | null = null;
+  /**
+   * 正在处理或处理失败、尚未确认的 Turn 位置；存在时只重新处理这个位置的消息。
+   * The turn position being processed, or failed and not confirmed; while it exists only that position is processed again.
+   */
+  private pendingPosition: TurnPosition | null = null;
+  private readonly observer: ExecutionTrafficObserver | null;
+  private readonly extensionId: string | null;
   /** 标记 turnId 已被 durable 服务端确认，断线时不得误判执行结束。 */
   private durableConfirmed = false;
   /** 服务端选择的执行提供程序能力。 */
@@ -404,12 +435,20 @@ export class ExecutionSession {
     resolve: (error: Error | null) => void;
   } | null = null;
 
+  /**
+   * @param extensionId 会话代表的 Desktop extension；每个 SettingCommand 都带上它，宿主的会话为 null。
+   * The Desktop extension the session represents; every SettingCommand carries it, and host sessions pass null.
+   */
   public constructor(
     handlers: ExecutionHubHandlers,
     runtime: ExecutionRuntimeConfig = executionRuntime,
+    observer: ExecutionTrafficObserver | null = null,
+    extensionId: string | null = null,
   ) {
     this.handlers = handlers;
     this.runtime = runtime;
+    this.observer = observer;
+    this.extensionId = extensionId;
     const hub = buildExecutionHubOptions(runtime);
     const reconnectPolicy: IRetryPolicy = {
       nextRetryDelayInMilliseconds: (context) => {
@@ -432,17 +471,7 @@ export class ExecutionSession {
       .withAutomaticReconnect(reconnectPolicy)
       .build();
 
-    this.connection.on("ReceiveMessage", (message: AiMessage) => {
-      const scopedMessage = this.scopeIncomingMessage(message);
-      this.updateDurableProgress(scopedMessage);
-      if (isTurnStartMessage(scopedMessage)) {
-        this.hasActiveTurn = true;
-      } else if (getTurnFinishedStatus(scopedMessage)) {
-        this.finishActiveTurn();
-      }
-
-      if (!this.disposed) this.handlers.onMessage(scopedMessage);
-    });
+    this.connection.on("ReceiveMessage", (message: AiMessage) => this.receiveMessage(message));
     this.connection.onreconnecting(() => {
       this.reconnecting = true;
       this.beginReconnect();
@@ -497,7 +526,7 @@ export class ExecutionSession {
     try {
       await this.ensureConnected();
       await this.refreshExecutionProvider();
-      await this.dispatch(buildSettingCommand(setting));
+      await this.dispatch(this.createSettingCommand(setting));
       if (persisted) {
         if (this.executionProvider === "in-process") {
           this.finishActiveTurn();
@@ -556,7 +585,7 @@ export class ExecutionSession {
   ): Promise<AgentflowCheckpointAvailability[]> {
     try {
       await this.ensureConnected();
-      return await this.connection.invoke<AgentflowCheckpointAvailability[]>(
+      return await this.invoke<AgentflowCheckpointAvailability[]>(
         "GetAgentflowCheckpoints",
         agentflowId,
       );
@@ -707,12 +736,29 @@ export class ExecutionSession {
   private async dispatch(command: unknown): Promise<void> {
     try {
       await this.ensureConnected();
-      await this.connection.invoke("DispatchCommand", command);
+      await this.invoke("DispatchCommand", command);
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
       this.handlers.onError?.(normalized);
       throw normalized;
     }
+  }
+
+  /**
+   * 调用 hub 方法，并在发出前、结束后报告给观察者；观察者抛出的异常让这次调用失败。
+   * Invokes a hub method, reporting it to the observer before sending and after it ends; an exception the observer throws fails the call.
+   */
+  private async invoke<T>(method: ExecutionHubMethod, ...args: unknown[]): Promise<T> {
+    const complete = this.observer?.request(method, args);
+    let value: T;
+    try {
+      value = await this.connection.invoke<T>(method, ...args);
+    } catch (error) {
+      complete?.({ ok: false, error });
+      throw error;
+    }
+    complete?.({ ok: true, value });
+    return value;
   }
 
   private async ensureConnected(): Promise<void> {
@@ -900,7 +946,7 @@ export class ExecutionSession {
   private async restoreAfterReconnect(): Promise<void> {
     if (this.disposed || !this.setting) return;
     await this.refreshExecutionProvider();
-    await this.connection.invoke("DispatchCommand", buildSettingCommand(this.setting));
+    await this.invoke("DispatchCommand", this.createSettingCommand(this.setting));
     if (!this.durableConfirmed && this.hasRunningTurn()) {
       this.recoveringInProcess = true;
       // skipNegotiation 的 WebSocket 连接没有客户端 connectionId，按会话发现原执行。
@@ -916,7 +962,7 @@ export class ExecutionSession {
   /** 重新加载页面后不再有旧连接 ID，必须从服务端发现原执行。 */
   private async discoverInProcessExecution(): Promise<void> {
     if (!this.setting?.projectId || !this.setting.conversationId) return;
-    const connectionId = await this.connection.invoke<string | null>(
+    const connectionId = await this.invoke<string | null>(
       "FindInProcessExecution",
       this.setting.projectId,
       this.setting.conversationId,
@@ -984,14 +1030,13 @@ export class ExecutionSession {
     const revision = ++this.recoveryRevision;
     let active: boolean;
     try {
-      active = await this.connection.invoke<boolean>(
-        "RecoverInProcessExecution",
-        connectionId,
-        interrupt,
-      );
+      active = await this.invoke<boolean>("RecoverInProcessExecution", connectionId, interrupt);
     } catch (error) {
       if (this.disposed || revision !== this.recoveryRevision || this.activeTurnId !== turnId)
         return;
+      // 服务端拒绝停止（例如只读的 extension 会话）时执行仍在运行，继续查询直到它结束。
+      // A stop the server refuses (such as from a read-only extension session) leaves the execution running, so polling continues until it ends.
+      if (interrupt && isServerRejection(error)) this.scheduleRecoveryPoll();
       throw error;
     }
     if (this.disposed || revision !== this.recoveryRevision || this.activeTurnId !== turnId) return;
@@ -1002,6 +1047,11 @@ export class ExecutionSession {
       if (!this.reconnecting) this.handlers.onReconnected?.();
       return;
     }
+    this.scheduleRecoveryPoll();
+  }
+
+  /** 一秒后再次查询旧连接的执行状态。Queries the old connection's execution state again after one second. */
+  private scheduleRecoveryPoll(): void {
     this.recoveryTimer = setTimeout(() => {
       this.recoveryTimer = null;
       if (
@@ -1017,6 +1067,14 @@ export class ExecutionSession {
     }, 1000);
   }
 
+  /**
+   * 本会话的 SettingCommand：extension 的会话带上它的身份，宿主的会话从不带；设置中多传的 extensionId 被覆盖。
+   * This session's SettingCommand: an extension session carries its identity and a host session never does; an extensionId passed in the settings is overridden.
+   */
+  private createSettingCommand(setting: ExecutionSetting) {
+    return buildCoreSettingCommand({ ...setting, extensionId: this.extensionId ?? undefined });
+  }
+
   private clearRecoveryTimer(): void {
     if (this.recoveryTimer !== null) clearTimeout(this.recoveryTimer);
     this.recoveryTimer = null;
@@ -1028,7 +1086,7 @@ export class ExecutionSession {
     cursor: string | null,
   ): Promise<DurableRestoreResult> {
     try {
-      await this.connection.invoke("DispatchCommand", buildSubscribeTurnCommand(turnId, cursor));
+      await this.invoke("DispatchCommand", buildSubscribeTurnCommand(turnId, cursor));
       return this.hasRunningTurn() ? "active" : "finished";
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
@@ -1044,7 +1102,7 @@ export class ExecutionSession {
 
   /** 读取当前服务端的执行提供程序；失败交由连接错误流程处理。 */
   private async refreshExecutionProvider(): Promise<void> {
-    const provider = await this.connection.invoke<string>("GetExecutionProvider");
+    const provider = await this.invoke<string>("GetExecutionProvider");
     switch (provider.toLowerCase()) {
       case "distributed":
         this.executionProvider = "distributed";
@@ -1057,24 +1115,65 @@ export class ExecutionSession {
     }
   }
 
-  /** Durable 模式下从服务端消息推进 turnId 与 turnSequence 游标，并持久化最新恢复位置。 */
-  private updateDurableProgress(message: AiMessage): void {
-    if (this.executionProvider !== "distributed") return;
-    const position = getTurnPosition(message);
+  /**
+   * 处理一条推送。Distributed 模式下带有 Turn 位置的消息在处理函数与观察者都正常返回后才确认：之前 cursor 不前进，失败时位置保留；
+   * 存在未确认的位置时只重新处理这个位置，其他带有位置的消息等待恢复订阅后由服务端补发。结束消息确认之后才结束 Turn。
+   * Handles one pushed message. In Distributed mode a message with a turn position is confirmed only after the handlers and the observer both return: the cursor does not move before that, and a failure keeps the position;
+   * while a position is unconfirmed only that position is processed again, and other positioned messages wait for the server to replay them after resubscribing. A finish message ends the turn only once confirmed.
+   */
+  private receiveMessage(message: AiMessage): void {
+    const position = this.executionProvider === "distributed" ? getTurnPosition(message) : null;
+    if (position) {
+      if (this.pendingPosition && !isSamePosition(this.pendingPosition, position)) return;
+      this.beginDurablePosition(position);
+    }
+    const scopedMessage = this.scopeIncomingMessage(message);
+    const finished = getTurnFinishedStatus(scopedMessage) !== null;
+    if (isTurnStartMessage(scopedMessage)) {
+      this.hasActiveTurn = true;
+    } else if (finished && !position && !this.pendingPosition) {
+      // 没有 Turn 位置的结束消息不能清除等待恢复的 Turn。A finish message without a turn position cannot clear a turn awaiting recovery.
+      this.finishActiveTurn();
+    }
+
+    if (!this.disposed) {
+      this.handlers.onMessage(scopedMessage);
+      this.observer?.message(message);
+    }
     if (!position) return;
-    const received =
-      this.activeTurnId === position.turnId && this.streamCursor !== null
-        ? Number(this.streamCursor)
-        : 0;
-    this.activeTurnId = position.turnId;
+    this.pendingPosition = null;
+    this.confirmDurablePosition(position);
+    if (finished) this.finishActiveTurn();
+  }
+
+  /**
+   * 开始处理一个 Turn 位置：属于另一个 Turn 时先建立它，cursor 为空；再记为待确认的位置。
+   * Starts processing a turn position: one of another turn establishes that turn first with an empty cursor, then it becomes the pending position.
+   */
+  private beginDurablePosition(position: TurnPosition): void {
+    if (this.activeTurnId !== position.turnId) {
+      this.activeTurnId = position.turnId;
+      this.streamCursor = null;
+      writePersistedDurableExecution(
+        this.durableStorageKey,
+        { turnId: position.turnId, cursor: null },
+        this.runtime,
+      );
+    }
     this.durableConfirmed = true;
-    if (position.turnSequence > received) this.streamCursor = String(position.turnSequence);
+    this.pendingPosition = position;
+  }
+
+  /**
+   * 处理函数与观察者都已正常返回：推进内存中的 cursor 并写入 attachment store。
+   * The handlers and the observer both returned: advances the in-memory cursor and writes the attachment store.
+   */
+  private confirmDurablePosition(position: TurnPosition): void {
+    const confirmed = this.streamCursor === null ? 0 : Number(this.streamCursor);
+    if (position.turnSequence > confirmed) this.streamCursor = String(position.turnSequence);
     writePersistedDurableExecution(
       this.durableStorageKey,
-      {
-        turnId: position.turnId,
-        cursor: this.streamCursor,
-      },
+      { turnId: position.turnId, cursor: this.streamCursor },
       this.runtime,
     );
   }
@@ -1097,6 +1196,7 @@ export class ExecutionSession {
     this.activeTurnId = null;
     this.activeStreamingScopeId = null;
     this.streamCursor = null;
+    this.pendingPosition = null;
     this.durableConfirmed = false;
     writePersistedDurableExecution(this.durableStorageKey, null, this.runtime);
     for (const resolve of this.turnFinishedWaiters) {
@@ -1104,6 +1204,10 @@ export class ExecutionSession {
     }
     this.turnFinishedWaiters.clear();
   }
+}
+
+function isSamePosition(left: TurnPosition, right: TurnPosition): boolean {
+  return left.turnId === right.turnId && left.turnSequence === right.turnSequence;
 }
 
 export { ExecutionSession as ExecutionHubClient };
