@@ -135,6 +135,36 @@ test("the directory names data and packages are not extension ids, but ids conta
   }
 });
 
+test("host is reserved for the host's conversations as an extension id and name", () => {
+  const id = evaluateExtensionManifest(
+    withChange((manifest) => (manifest.id = "host")),
+    APP_VERSION,
+  );
+  assert.equal(id.validation, "invalid");
+  assert.deepEqual(
+    id.errors.map((error) => error.path),
+    ["id"],
+  );
+  for (const name of ["host", "Host", " HOST "]) {
+    const result = evaluateExtensionManifest(
+      withChange((manifest) => (manifest.name = name)),
+      APP_VERSION,
+    );
+    assert.equal(result.validation, "invalid", name);
+    assert.deepEqual(
+      result.errors.map((error) => error.path),
+      ["name"],
+      name,
+    );
+  }
+  for (const id of ["host-tools", "my-host", "hosts"]) {
+    assert.deepEqual(errorCodes(withChange((manifest) => (manifest.id = id))), [], id);
+  }
+  for (const name of ["Host Tools", "My host", "hosts"]) {
+    assert.deepEqual(errorCodes(withChange((manifest) => (manifest.name = name))), [], name);
+  }
+});
+
 test("unknown top-level and contributes fields are rejected with their paths", () => {
   const result = evaluateExtensionManifest(
     withChange((manifest) => {
@@ -521,6 +551,10 @@ test("the generated JSON Schema validates the same samples", () => {
     ["agw prefix", withChange((manifest) => (manifest.id = "agw-tools")), false],
     ["reserved id data", withChange((manifest) => (manifest.id = "data")), false],
     ["reserved id packages", withChange((manifest) => (manifest.id = "packages")), false],
+    ["reserved id host", withChange((manifest) => (manifest.id = "host")), false],
+    ["id containing host", withChange((manifest) => (manifest.id = "host-tools")), true],
+    ["reserved name host", withChange((manifest) => (manifest.name = " HOST ")), false],
+    ["name containing host", withChange((manifest) => (manifest.name = "Host Tools")), true],
     [
       "file viewer pattern with a path",
       withChange(

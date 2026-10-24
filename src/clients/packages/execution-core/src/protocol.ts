@@ -18,6 +18,11 @@ export type ExecutionSettingCommandInput = {
   permissionMode?: PermissionMode | null;
   /** 只接收 result 消息，并拒绝本轮的人机交互。 */
   resultOnly?: boolean | null;
+  /**
+   * 连接代表的 Desktop extension；只由宿主为 extension 的会话写入，宿主自己的会话不带。
+   * The Desktop extension the connection represents; written only by the host for extension sessions and omitted by host sessions.
+   */
+  extensionId?: string;
 };
 
 export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
@@ -108,6 +113,7 @@ export function buildSettingCommand(setting: ExecutionSettingCommandInput) {
       : { environmentVariables: setting.environmentVariables }),
     ...(setting.permissionMode === undefined ? {} : { permissionMode: setting.permissionMode }),
     ...(setting.resultOnly === undefined ? {} : { resultOnly: setting.resultOnly }),
+    ...(setting.extensionId === undefined ? {} : { extensionId: setting.extensionId }),
   };
 }
 

@@ -1,5 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
+using Agw.Infrastructure.Projects;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
@@ -165,7 +166,8 @@ public class TaskExecutionAppServiceTests
             new ProjectResolver(dbContext, userInfo),
             new ConversationHistoryDomainService(),
             clock,
-            userInfo
+            userInfo,
+            new ConversationCreatorStore(dbContext)
         );
 
         // Act
@@ -420,7 +422,8 @@ public class TaskExecutionAppServiceTests
             projectResolver,
             new ConversationHistoryDomainService(),
             TimeProvider.System,
-            userInfo
+            userInfo,
+            new ConversationCreatorStore(dbContext)
         );
     }
 }

@@ -27,6 +27,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private readonly IExecutionMessageSink _messageSink;
     private readonly TurnAcceptanceService _acceptance;
     private readonly IProjectTaskFacade _projectTasks;
+    private readonly IProjectConversationAccessFacade _conversationAccess;
     private readonly IProjectDefaultResolver? _projectDefaults;
     private readonly IExecutionCoordinator _coordinator;
     private readonly InProcessExecutionCoordinator? _inProcess;
@@ -53,6 +54,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         CancellationToken hostToken,
         TurnAcceptanceService acceptance,
         IProjectTaskFacade projectTasks,
+        IProjectConversationAccessFacade conversationAccess,
         InProcessExecutionCoordinatorFactory? inProcessCoordinators,
         DurableExecutionCoordinator? durableCoordinator,
         AgentflowCheckpointStore? checkpointStore = null,
@@ -67,6 +69,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _messageSink = messageSink;
         _acceptance = acceptance;
         _projectTasks = projectTasks;
+        _conversationAccess = conversationAccess;
         _projectDefaults = projectDefaults;
         _checkpointStore = checkpointStore;
         if ((inProcessCoordinators == null) == (durableCoordinator == null))
@@ -205,6 +208,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 "ExecCommand.conversationId does not match the active conversation."
             );
         }
+        // 每个 ExecCommand 都检查，缓存的任务不会跳过它。Every ExecCommand is checked, so a cached task never skips it.
+        await _conversationAccess.EnsureWritableAsync(conversationId, Settings?.ExtensionId, cancellationToken);
 
         if (
             HasActiveTurn
@@ -345,6 +350,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async Task SetModeAsync(Guid agentId, string mode, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
+        await EnsureWritableAsync(Settings?.ExtensionId, cancellationToken);
         var change = new PendingModeChange(agentId, mode);
         _pendingModeChange = change;
         if (
@@ -373,6 +379,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async Task SetPermissionModeAsync(AgwPermissionMode permissionMode, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
+        await EnsureWritableAsync(Settings?.ExtensionId, cancellationToken);
         if (_permissions != null && HasActiveTurn && _target is { } target)
             ExecutionPermissionService.Validate(
                 await _permissions.GetAsync(target.AgentType, target.AgentId, cancellationToken),
@@ -385,17 +392,28 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     }
 
     /// <summary>
-    /// 中断当前连接内的活动执行；进程内模式无需显式 turnId。
-    /// </summary>
-    public Task InterruptTurnAsync(string? reason, CancellationToken cancellationToken) =>
-        InterruptTurnAsync(turnId: null, reason, cancellationToken);
-
-    /// <summary>
     /// 中断指定 durable Turn；进程内模式仍退化为中断当前 Turn。
     /// </summary>
     public async Task InterruptTurnAsync(Guid? turnId, string? reason, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
+        await EnsureWritableAsync(Settings?.ExtensionId, cancellationToken);
+        await InterruptCoreAsync(turnId, reason, cancellationToken);
+    }
+
+    /// <summary>
+    /// 其他连接重连后停止本连接的进程内 Turn：按发出请求的连接的请求方检查本连接的对话。
+    /// Stops this connection's in-process turn for another connection after a reconnect: this connection's conversation is checked against the requester of the connection that asked.
+    /// </summary>
+    internal async Task InterruptForRecoveryAsync(string? requesterExtensionId, CancellationToken cancellationToken)
+    {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
+        await EnsureWritableAsync(requesterExtensionId, cancellationToken);
+        await InterruptCoreAsync(turnId: null, reason: null, cancellationToken);
+    }
+
+    private async Task InterruptCoreAsync(Guid? turnId, string? reason, CancellationToken cancellationToken)
+    {
         if (_attachment != null)
         {
             await _attachment.InterruptAsync(turnId, reason, ConversationId, cancellationToken);
@@ -419,6 +437,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         ArgumentNullException.ThrowIfNull(command);
+        await EnsureWritableAsync(Settings?.ExtensionId, cancellationToken);
         if (_attachment != null)
         {
             await _attachment.RespondAsync(command, ConversationId, cancellationToken);
@@ -492,6 +511,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 "checkpointOccurrenceId, resumeTurnId and agentflowId are required."
             );
         }
+        // 恢复会截断历史并开始 Turn，检查在读取 checkpoint 之前。Resuming truncates history and starts a turn, so the check precedes any checkpoint access.
+        await EnsureWritableAsync(Settings?.ExtensionId, cancellationToken);
         if (
             _resolvedTask != null
             && await _projectTasks.GetGenerationAsync(_resolvedTask.ProjectConversationId, cancellationToken)
@@ -688,6 +709,15 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             }
         }
     }
+
+    /// <summary>
+    /// 写入操作之前检查请求方能否写入连接配置的对话；还没有配置对话时由各操作自己的校验处理。requesterExtensionId 为 null 表示宿主。
+    /// Checks before a write that the requester may write the configured conversation; without a configured conversation each operation's own validation applies. A null requesterExtensionId means the host.
+    /// </summary>
+    private Task EnsureWritableAsync(string? requesterExtensionId, CancellationToken cancellationToken) =>
+        ConversationId is { } conversationId
+            ? _conversationAccess.EnsureWritableAsync(conversationId, requesterExtensionId, cancellationToken)
+            : Task.CompletedTask;
 
     private static Guid RequireConversationId(ExecutionSettings settings) =>
         settings.ConversationId

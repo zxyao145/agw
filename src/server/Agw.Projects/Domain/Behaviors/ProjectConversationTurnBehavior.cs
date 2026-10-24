@@ -52,14 +52,15 @@ public sealed class ProjectConversationTurnBehavior
     }
 
     /// <summary>
-    /// <para>以结束状态结束 Turn，lastSequence 是该 Turn 写入的最后一条对话记录序号；已经结束的 Turn 保持第一次结束时的结果。</para>
-    /// <para>Finishes the turn with a terminal status, where lastSequence is the last record sequence the turn wrote; a finished turn keeps its first result.</para>
+    /// <para>以结束状态结束 Turn，lastSequence 是该 Turn 写入的最后一条对话记录序号，从 usageSettlesAt 起该 Turn 不再写入用量；已经结束的 Turn 保持第一次结束时的结果。</para>
+    /// <para>Finishes the turn with a terminal status, where lastSequence is the last record sequence the turn wrote and the turn writes no usage from usageSettlesAt on; a finished turn keeps its first result.</para>
     /// </summary>
     public bool TryFinish(
         ProjectConversationTurnStatus status,
         int stepCount,
         string? errorCode,
         DateTimeOffset finishedAt,
+        DateTimeOffset usageSettlesAt,
         long? lastSequence
     )
     {
@@ -77,7 +78,23 @@ public sealed class ProjectConversationTurnBehavior
         _turn.StepCount = Math.Max(_turn.StepCount, stepCount);
         _turn.ErrorCode = errorCode;
         _turn.FinishedAt = finishedAt;
+        _turn.UsageSettlesAt = usageSettlesAt;
         _turn.LastSequence = lastSequence;
+        return true;
+    }
+
+    /// <summary>
+    /// <para>执行已经退出：已结束、结算时间仍在 now 之后的 Turn 从 now 起结算；未结束或已经结算的 Turn 不变。</para>
+    /// <para>The execution has exited: a finished turn whose settlement time is still after now settles at now; an unfinished or settled turn is unchanged.</para>
+    /// </summary>
+    public bool TrySettleUsage(DateTimeOffset now)
+    {
+        if (!IsFinished() || _turn.UsageSettlesAt is not { } settlesAt || settlesAt <= now)
+        {
+            return false;
+        }
+
+        _turn.UsageSettlesAt = now;
         return true;
     }
 

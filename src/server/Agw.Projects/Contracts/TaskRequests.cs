@@ -56,7 +56,9 @@ public record ProjectConversationSummaryResponse(
     int MessageCount,
     DateTimeOffset CreateTime,
     DateTimeOffset? UpdateTime,
-    string? ErrorMessage
+    string? ErrorMessage,
+    string ExtensionId,
+    bool OpenToExtensions
 );
 
 public record ProjectConversationResponse(
@@ -71,6 +73,8 @@ public record ProjectConversationResponse(
     DateTimeOffset CreateTime,
     DateTimeOffset? UpdateTime,
     string? ErrorMessage,
+    string ExtensionId,
+    bool OpenToExtensions,
     ProjectConversationUsage Usage,
     ProjectConversationResumeStateResponse? ResumeState
 );
@@ -86,6 +90,12 @@ public sealed record ProjectConversationUsage
     public long CachedInputTokenCount { get; init; }
 
     public long ReasoningTokenCount { get; init; }
+
+    /// <summary>
+    /// 没有计入上面计数的未结算 Turn：运行中、已受理，以及已结束但用量尚未结算的 Turn。
+    /// The unsettled turns left out of the counts above: running and accepted turns, and finished turns whose usage has not settled yet.
+    /// </summary>
+    public IReadOnlyList<Guid> UnsettledTurnIds { get; init; } = [];
 }
 
 public sealed record ProjectConversationResumeStateResponse(string? TargetType, string? TargetId, string? AgentMode);

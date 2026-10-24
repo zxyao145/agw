@@ -23,6 +23,7 @@ using Agw.Auth.Application;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application;
+using Agw.Projects.Application.Facades;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
@@ -115,6 +116,7 @@ public class ExecutionConnectionTests
         services.AddScoped<ExecutionContextFactory>();
         services.AddScoped<InProcessExecutionCoordinatorFactory>();
         services.AddScoped<TurnAcceptanceService>();
+        services.AddScoped<IProjectConversationAccessFacade, ProjectConversationAccessFacade>();
         services.AddScoped<ExecutionConnectionContextFactory>();
         await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         await using (var seedScope = provider.CreateAsyncScope())
@@ -378,10 +380,17 @@ public class ExecutionConnectionTests
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await connection.DetachAsync(() => removed.TrySetResult());
 
-        Assert.True(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
+        Assert.True(
+            await connection.RecoverInProcessExecutionAsync(
+                false,
+                requesterExtensionId: null,
+                TestContext.Current.CancellationToken
+            )
+        );
         Assert.False(agent.Canceled);
         var activeAfterInterrupt = await connection.RecoverInProcessExecutionAsync(
             true,
+            requesterExtensionId: null,
             TestContext.Current.CancellationToken
         );
         if (!activeAfterInterrupt)
@@ -392,7 +401,13 @@ public class ExecutionConnectionTests
 
         await removed.Task.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         Assert.True(agent.Canceled);
-        Assert.False(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
+        Assert.False(
+            await connection.RecoverInProcessExecutionAsync(
+                false,
+                requesterExtensionId: null,
+                TestContext.Current.CancellationToken
+            )
+        );
     }
 
     [Fact]
@@ -409,17 +424,16 @@ public class ExecutionConnectionTests
             new TestLifetime(),
             NullLoggerFactory.Instance
         );
-        var connections =
-            (ConcurrentDictionary<string, ExecutionConnection>)
-                typeof(ExecutionConnectionRegistry)
-                    .GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .GetValue(registry)!;
+        await using var caller = await CreateCallerAsync(fixture, extensionId: null);
+        var connections = GetConnections(registry);
         connections["old-connection"] = connection;
+        connections["caller"] = caller;
 
         Assert.False(
             await registry.RecoverInProcessExecutionAsync(
                 "old-connection",
                 "another-user",
+                "caller",
                 true,
                 TestContext.Current.CancellationToken
             )
@@ -428,6 +442,7 @@ public class ExecutionConnectionTests
             await registry.RecoverInProcessExecutionAsync(
                 "missing",
                 "user-id",
+                "caller",
                 true,
                 TestContext.Current.CancellationToken
             )
@@ -436,6 +451,7 @@ public class ExecutionConnectionTests
         var activeAfterInterrupt = await registry.RecoverInProcessExecutionAsync(
             "old-connection",
             "user-id",
+            "caller",
             true,
             TestContext.Current.CancellationToken
         );
@@ -450,10 +466,142 @@ public class ExecutionConnectionTests
             await registry.RecoverInProcessExecutionAsync(
                 "old-connection",
                 "user-id",
+                "caller",
                 false,
                 TestContext.Current.CancellationToken
             )
         );
+    }
+
+    [Fact]
+    public async Task RecoverInProcessExecution_InterruptFromOtherExtension_ThrowsConversationReadOnlyAndKeepsTurn()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
+        await using var connection = fixture.Connection;
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
+        var agent = Assert.Single(fixture.Runtimes.Agents);
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        await using var caller = await CreateCallerAsync(fixture, "sample");
+        var connections = GetConnections(registry);
+        connections["old-connection"] = connection;
+        connections["caller"] = caller;
+
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            registry.RecoverInProcessExecutionAsync("old-connection", "user-id", "caller", true, token)
+        );
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.ConversationReadOnly.Code, exception.Code);
+        Assert.False(agent.Canceled);
+        Assert.True(fixture.Context.HasActiveTurn);
+        fixture.Runtimes.ReleaseHeldTurns();
+        await fixture.Context.WhenIdleAsync().WaitAsync(TurnTimeout, token);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("sample")]
+    public async Task RecoverInProcessExecution_InterruptFromHostOrCreator_StopsTurn(string? extensionId)
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
+        await using var connection = fixture.Connection;
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
+        var agent = Assert.Single(fixture.Runtimes.Agents);
+        await using (var db = fixture.Persistence.CreateContext())
+        {
+            await db
+                .ProjectConversations.IgnoreQueryFilters()
+                .Where(conversation => conversation.Id == fixture.Context.ProjectConversationId)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(conversation => conversation.ExtensionId, "sample"),
+                    token
+                );
+        }
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        await using var caller = await CreateCallerAsync(fixture, extensionId);
+        var connections = GetConnections(registry);
+        connections["old-connection"] = connection;
+        connections["caller"] = caller;
+
+        await registry.RecoverInProcessExecutionAsync("old-connection", "user-id", "caller", true, token);
+
+        await agent.Cancellation.WaitAsync(TurnTimeout, token);
+        await fixture.Context.WhenIdleAsync().WaitAsync(TurnTimeout, token);
+        Assert.True(agent.Canceled);
+    }
+
+    [Fact]
+    public async Task RecoverInProcessExecution_StatusFromOtherExtension_ReportsRunningTurn()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
+        await using var connection = fixture.Connection;
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
+        var agent = Assert.Single(fixture.Runtimes.Agents);
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        await using var caller = await CreateCallerAsync(fixture, "sample");
+        var connections = GetConnections(registry);
+        connections["old-connection"] = connection;
+        connections["caller"] = caller;
+
+        var running = await registry.RecoverInProcessExecutionAsync(
+            "old-connection",
+            "user-id",
+            "caller",
+            false,
+            token
+        );
+
+        Assert.True(running);
+        Assert.False(agent.Canceled);
+        fixture.Runtimes.ReleaseHeldTurns();
+        await fixture.Context.WhenIdleAsync().WaitAsync(TurnTimeout, token);
+    }
+
+    [Fact]
+    public async Task RecoverInProcessExecution_InterruptFromUnknownCaller_ThrowsInvalidParam()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var fixture = await CreateFixtureAsync(holdTurnOpen: true);
+        await using var connection = fixture.Connection;
+        await fixture.Context.StartTurnAsync(fixture.CreateExecCommand(), token);
+        await fixture.Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
+        var agent = Assert.Single(fixture.Runtimes.Agents);
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        GetConnections(registry)["old-connection"] = connection;
+
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            registry.RecoverInProcessExecutionAsync("old-connection", "user-id", "missing-caller", true, token)
+        );
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.False(agent.Canceled);
+        fixture.Runtimes.ReleaseHeldTurns();
+        await fixture.Context.WhenIdleAsync().WaitAsync(TurnTimeout, token);
     }
 
     [Fact]
@@ -642,6 +790,7 @@ public class ExecutionConnectionTests
             CancellationToken.None,
             persistence.CreateAcceptance(projectTasks, new FakeProjectRuntimeFacade()),
             projectTasks,
+            persistence.CreateConversationAccess(),
             kit.CreateFactory(agents.ContextFactory, persistence),
             durableCoordinator: null
         );
@@ -654,8 +803,58 @@ public class ExecutionConnectionTests
             NullLogger.Instance
         );
         Assert.Equal("user-id", connection.UserId);
-        return new ConnectionFixture(connection, context, kit.Runtimes, agents, sink, persistence);
+        return new ConnectionFixture(connection, context, kit, agents, sink, persistence);
     }
+
+    /// <summary>
+    /// 发出停止请求的另一条连接（重新加载的页面或 extension 的会话），设置中带它的请求方身份，配置为目标连接的对话。
+    /// Another connection that sends the stop request (a reloaded page or an extension session), with its requester identity in its settings and configured for the target connection's conversation.
+    /// </summary>
+    private static async Task<ExecutionConnection> CreateCallerAsync(ConnectionFixture fixture, string? extensionId)
+    {
+        var task = new AgentExecutionTask
+        {
+            TaskId = Guid.CreateVersion7(),
+            ProjectConversationId = fixture.Context.ProjectConversationId!.Value,
+            ProjectId = fixture.Context.ProjectId!.Value,
+            ContextId = "context",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
+        var projectTasks = new FakeProjectTaskFacade(
+            task,
+            resolved => fixture.Persistence.SeedConversationAsync(resolved)
+        );
+        var context = new ExecutionConnectionContext(
+            "user-id",
+            new RecordingSink(),
+            CancellationToken.None,
+            fixture.Persistence.CreateAcceptance(projectTasks, new FakeProjectRuntimeFacade()),
+            projectTasks,
+            fixture.Persistence.CreateConversationAccess(),
+            fixture.Kit.CreateFactory(fixture.Agents.ContextFactory, fixture.Persistence),
+            durableCoordinator: null
+        );
+        await context.ApplySettingsAsync(
+            TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId, extensionId),
+            TestContext.Current.CancellationToken
+        );
+        return new ExecutionConnection(
+            "caller",
+            "user-id",
+            new ServiceCollection().BuildServiceProvider().CreateAsyncScope(),
+            new ExecutionCommandDispatcher([]),
+            context,
+            NullLogger.Instance
+        );
+    }
+
+    private static ConcurrentDictionary<string, ExecutionConnection> GetConnections(
+        ExecutionConnectionRegistry registry
+    ) =>
+        (ConcurrentDictionary<string, ExecutionConnection>)
+            typeof(ExecutionConnectionRegistry)
+                .GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(registry)!;
 
     private static ExecCommand CreateExecCommand() =>
         new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [] })
@@ -671,12 +870,14 @@ public class ExecutionConnectionTests
     private sealed record ConnectionFixture(
         ExecutionConnection Connection,
         ExecutionConnectionContext Context,
-        TestAgentRuntimeFactory Runtimes,
+        InProcessCoordinatorTestKit Kit,
         TestExecutionAgents Agents,
         RecordingSink Sink,
         TurnPersistenceTestKit Persistence
     ) : IAsyncDisposable
     {
+        public TestAgentRuntimeFactory Runtimes => Kit.Runtimes;
+
         public ExecCommand CreateExecCommand()
         {
             var command = ExecutionConnectionTests.CreateExecCommand();

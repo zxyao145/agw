@@ -119,6 +119,55 @@ public class ExecutionSettingsTests
     }
 
     [Fact]
+    public void ExtensionId_IsPreservedAndParticipatesInEquality()
+    {
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+
+        var settings = SettingCommandMapper.FromCommand(
+            new SettingCommand(projectId, conversationId, extensionId: "sample")
+        );
+
+        Assert.Equal("sample", settings.ExtensionId);
+        Assert.NotEqual(settings, SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId)));
+        Assert.Equal(
+            settings,
+            SettingCommandMapper.FromCommand(new SettingCommand(projectId, conversationId, extensionId: "sample"))
+        );
+        Assert.Equal(
+            settings.GetHashCode(),
+            SettingCommandMapper
+                .FromCommand(new SettingCommand(projectId, conversationId, extensionId: "sample"))
+                .GetHashCode()
+        );
+    }
+
+    [Fact]
+    public void ExtensionId_SurvivesDerivedSettings()
+    {
+        var settings = new ExecutionSettings(Guid.CreateVersion7(), extensionId: "sample");
+
+        Assert.Equal("sample", settings.WithPermissionMode(AgwPermissionMode.FullAccess).ExtensionId);
+        Assert.Equal("sample", settings.WithPermissionSnapshot(AgwPermissionMode.AlwaysAsk, 3).ExtensionId);
+        Assert.Equal("sample", settings.WithHumanInteractionPolicy(HumanInteractionPolicy.Reject).ExtensionId);
+        Assert.Equal("sample", settings.WithResultOnly(true).ExtensionId);
+        Assert.Equal("sample", settings.WithConversationId(Guid.CreateVersion7()).ExtensionId);
+    }
+
+    [Fact]
+    public void DurableSettings_RoundTrip_LeavesExtensionIdOut()
+    {
+        var settings = new ExecutionSettings(Guid.CreateVersion7(), Guid.CreateVersion7(), extensionId: "sample");
+
+        var snapshot = DurableExecutionMapper.FromSettings(settings);
+        var json = JsonSerializer.Serialize(snapshot);
+        var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(json)!;
+
+        Assert.DoesNotContain("sample", json, StringComparison.Ordinal);
+        Assert.Null(restored.ToRuntimeSettings(Guid.CreateVersion7(), Guid.CreateVersion7()).ExtensionId);
+    }
+
+    [Fact]
     public void ResultOnly_SurvivesDerivedSettingsAndDurableRoundTrip()
     {
         var settings = ExecutionSettings.CreateDefault().WithResultOnly(true);

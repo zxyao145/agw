@@ -35,17 +35,34 @@ internal sealed class TurnRecord
     public Guid? InputMessageId { get; }
 
     public Task MarkRunningAsync(CancellationToken cancellationToken) =>
-        RunAsync((store, token) => store.MarkRunningAsync(TurnId, token), cancellationToken);
+        RunAsync((services, token) => Store(services).MarkRunningAsync(TurnId, token), cancellationToken);
 
     public Task CompleteStepAsync(int stepCount, CancellationToken cancellationToken) =>
-        RunAsync((store, token) => store.CompleteStepAsync(TurnId, stepCount, token), cancellationToken);
+        RunAsync((services, token) => Store(services).CompleteStepAsync(TurnId, stepCount, token), cancellationToken);
 
+    /// <summary>
+    /// 写入结局；调用时执行已经退出，用量从结束时间起结算。
+    /// Writes the outcome; the execution has exited by then, so usage settles at the finish time.
+    /// </summary>
     public Task FinishAsync(
         ConversationTurnStatus status,
         int stepCount,
         string? errorCode,
         CancellationToken cancellationToken
-    ) => RunAsync((store, token) => store.FinishAsync(TurnId, status, stepCount, errorCode, token), cancellationToken);
+    ) =>
+        RunAsync(
+            (services, token) =>
+                Store(services)
+                    .FinishAsync(
+                        TurnId,
+                        status,
+                        stepCount,
+                        errorCode,
+                        services.GetRequiredService<TimeProvider>().GetUtcNow(),
+                        token
+                    ),
+            cancellationToken
+        );
 
     /// <summary>
     /// 把结束消息的 status 映射为 Turn 行的终态。
@@ -59,8 +76,11 @@ internal sealed class TurnRecord
             _ => ConversationTurnStatus.Failed,
         };
 
+    private static IConversationTurnStore Store(IServiceProvider services) =>
+        services.GetRequiredService<IConversationTurnStore>();
+
     private async Task RunAsync(
-        Func<IConversationTurnStore, CancellationToken, Task> action,
+        Func<IServiceProvider, CancellationToken, Task> action,
         CancellationToken cancellationToken
     )
     {
@@ -70,8 +90,7 @@ internal sealed class TurnRecord
                 .RunAsync(
                     async (services, token) =>
                     {
-                        await action(services.GetRequiredService<IConversationTurnStore>(), token)
-                            .ConfigureAwait(false);
+                        await action(services, token).ConfigureAwait(false);
                         return true;
                     },
                     cancellationToken
@@ -81,7 +100,6 @@ internal sealed class TurnRecord
         }
 
         await using var scope = _scopeFactory.CreateAsyncScope();
-        await action(scope.ServiceProvider.GetRequiredService<IConversationTurnStore>(), cancellationToken)
-            .ConfigureAwait(false);
+        await action(scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
     }
 }

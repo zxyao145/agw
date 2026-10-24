@@ -1,4 +1,6 @@
+using System.Net;
 using Agw.Projects.Domain.Behaviors;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 
@@ -349,6 +351,126 @@ public class ProjectConversationBehaviorTests
         );
 
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, exception.Code);
+    }
+
+    [Theory]
+    [InlineData(ConversationCreators.Host, false)]
+    [InlineData(ConversationCreators.Host, true)]
+    [InlineData("sample", false)]
+    [InlineData("sample", true)]
+    public void EnsureWritableBy_RequesterWithoutExtension_AllowsAnyConversation(
+        string extensionId,
+        bool hasAcceptedTurns
+    )
+    {
+        var conversation = new ProjectConversation { ExtensionId = extensionId, Generation = 1 };
+
+        var exception = Record.Exception(() =>
+            new ProjectConversationBehavior(conversation).EnsureWritableBy(null, hasAcceptedTurns)
+        );
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void EnsureWritableBy_CreatorExtension_Allows()
+    {
+        var conversation = new ProjectConversation { ExtensionId = "sample", Generation = 1 };
+
+        var exception = Record.Exception(() =>
+            new ProjectConversationBehavior(conversation).EnsureWritableBy("sample", hasAcceptedTurns: true)
+        );
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void EnsureWritableBy_OpenConversation_AllowsAnyExtension()
+    {
+        var conversation = new ProjectConversation();
+
+        var exception = Record.Exception(() =>
+            new ProjectConversationBehavior(conversation).EnsureWritableBy("sample", hasAcceptedTurns: false)
+        );
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void EnsureWritableBy_HostConversationWithAcceptedTurn_ThrowsConversationReadOnly()
+    {
+        var conversation = new ProjectConversation();
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectConversationBehavior(conversation).EnsureWritableBy("sample", hasAcceptedTurns: true)
+        );
+
+        Assert.Equal(ErrorCodes.ConversationReadOnly.Code, exception.Code);
+    }
+
+    [Fact]
+    public void EnsureWritableBy_ClearedHostConversation_ThrowsConversationReadOnly()
+    {
+        var conversation = new ProjectConversation { Generation = 1 };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectConversationBehavior(conversation).EnsureWritableBy("sample", hasAcceptedTurns: false)
+        );
+
+        Assert.Equal(ErrorCodes.ConversationReadOnly.Code, exception.Code);
+    }
+
+    [Fact]
+    public void EnsureWritableBy_OtherExtension_ThrowsConversationReadOnly()
+    {
+        var conversation = new ProjectConversation { ExtensionId = "sample" };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectConversationBehavior(conversation).EnsureWritableBy("other", hasAcceptedTurns: false)
+        );
+
+        Assert.Equal(403_0008, exception.Code);
+        Assert.Equal(HttpStatusCode.Forbidden, exception.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("sample", true)]
+    [InlineData("Sample", false)]
+    [InlineData("other", false)]
+    public void IsCreatedBy_RequesterExtension_ComparesWithCreatorOrdinally(string requesterExtensionId, bool expected)
+    {
+        var conversation = new ProjectConversation { ExtensionId = "sample" };
+
+        Assert.Equal(expected, new ProjectConversationBehavior(conversation).IsCreatedBy(requesterExtensionId));
+    }
+
+    [Fact]
+    public void RecordCreatorIfOpen_ExtensionOnOpenConversation_RecordsCreator()
+    {
+        var conversation = new ProjectConversation();
+
+        new ProjectConversationBehavior(conversation).RecordCreatorIfOpen("sample", hasAcceptedTurns: false);
+
+        Assert.Equal("sample", conversation.ExtensionId);
+    }
+
+    [Theory]
+    [InlineData(null, ConversationCreators.Host, 0, false)]
+    [InlineData("sample", ConversationCreators.Host, 0, true)]
+    [InlineData("sample", ConversationCreators.Host, 1, false)]
+    [InlineData("sample", "other", 0, false)]
+    public void RecordCreatorIfOpen_HostOrNotOpen_KeepsCreator(
+        string? requesterExtensionId,
+        string extensionId,
+        int generation,
+        bool hasAcceptedTurns
+    )
+    {
+        var conversation = new ProjectConversation { ExtensionId = extensionId, Generation = generation };
+
+        new ProjectConversationBehavior(conversation).RecordCreatorIfOpen(requesterExtensionId, hasAcceptedTurns);
+
+        Assert.Equal(extensionId, conversation.ExtensionId);
     }
 
     private static ProjectConversation CreateConversation(params ProjectConversationBinding[] bindings)

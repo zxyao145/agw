@@ -42,6 +42,7 @@ public sealed class InitialMigrationTests
                 "protected_value",
                 "project_memory",
                 "project_conversation",
+                "extension_id",
                 "project_conversation_chat_history",
                 "project_conversation_binding",
                 "ux_project_conversation_binding_active",
@@ -195,6 +196,7 @@ public sealed class InitialMigrationTests
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_conversation", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "project_conversation", "generation", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "project_conversation", "extension_id", cancellationToken));
         Assert.False(
             await ColumnExistsAsync(connection, "project_conversation", "session_generation", cancellationToken)
         );

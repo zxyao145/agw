@@ -3,10 +3,16 @@ import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
 import { createUserMessage } from "@agw/chat-core";
+import { getTurnFinishedStatus, type ChatEvent } from "@agw/execution-core";
+import { replaceExecutionHub } from "@agw/test-harness";
+import { chatHttpClient } from "./chat-http-client";
 import type { ExecutionHubHandlers, ExecutionReconnectState } from "./execution-hub";
 import type { ExecutionSubmission } from "./execution-queue";
 import {
+  configureExecutionRuntime,
+  ExecutionSession,
   ExecutionStartRejectedError,
+  getExecutionRuntime,
   type ExecutionRequest,
   type ExecutionSetting,
 } from "./execution-session";
@@ -1477,6 +1483,95 @@ test("a failed settings change keeps the queue waiting until it is resumed", asy
   handle.resumeQueue();
   await settle();
   assert.deepEqual(harness.commands.slice(-2), ['configure:{"MODE":"new"}', "execute:second"]);
+});
+
+test("a failed finish keeps the next entry queued until its replayed finish succeeds", async (t) => {
+  // Arrange: a real durable session whose subscriber fails on the first finish message.
+  // 准备：真实的 durable 会话，订阅方处理第一条结束消息时失败。
+  let failFinish = true;
+  let replayFinish: (() => void) | null = null;
+  const hubs = replaceExecutionHub(t, {
+    provider: "Distributed",
+    onInvoke: ({ args }) => {
+      // 服务端在恢复订阅时补发结束消息。The server replays the finish message while resubscribing.
+      if ((args[0] as { type?: string } | undefined)?.type === "SubscribeTurnCommand")
+        replayFinish?.();
+    },
+  });
+  const manager = new ExecutionSessionManager(
+    (handlers) =>
+      new ExecutionSession(
+        handlers,
+        { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+        {
+          request: () => () => undefined,
+          message(message) {
+            if (failFinish && getTurnFinishedStatus(message)) throw new Error("subscriber failed");
+          },
+        },
+      ),
+  );
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure(baseSetting);
+  assert.equal(handle.submit(createSubmission("first")), "started");
+  assert.equal(handle.submit(createSubmission("second")), "queued");
+  await settle();
+  const hub = hubs[0]!;
+  const firstTurnId = hub.commands("ExecCommand")[0]!.turnId as string;
+  const withSequence = (message: AiMessage, turnSequence: number): AiMessage => ({
+    ...message,
+    additionalProperties: { ...message.additionalProperties, turnSequence },
+  });
+  const finished = withSequence(
+    createTurnLifecycleMessage("agw-turn-finished", firstTurnId, "completed"),
+    2,
+  );
+  hub.receive(withSequence(createTurnLifecycleMessage("agw-turn-start", firstTurnId), 1));
+
+  // Act: the finish fails, then the reconnect replays it.
+  // 执行：结束消息处理失败，之后重连补发它。
+  assert.throws(() => hub.receive(finished), /subscriber failed/);
+  await settle();
+  const sendsAfterFailure = hub.commands("ExecCommand").length;
+  const queueAfterFailure = handle.getQueue().items.map((item) => item.text);
+  failFinish = false;
+  replayFinish = () => hub.receive(finished);
+  hub.reconnect();
+  for (let attempt = 0; attempt < 50 && hub.commands("ExecCommand").length < 2; attempt++) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await settle();
+
+  // Assert
+  assert.equal(sendsAfterFailure, 1);
+  assert.deepEqual(queueAfterFailure, ["second"]);
+  assert.equal(hub.commands("ExecCommand").length, 2);
+  assert.deepEqual(handle.getQueue().items, []);
+});
+
+test("the default factory creates each session through chatHttpClient with the session key as scope", async (t) => {
+  replaceExecutionHub(t, { provider: "InProcess" });
+  const previousRuntime = getExecutionRuntime();
+  configureExecutionRuntime({ baseUrl: "https://agw.test", token: null, attachmentStore: null });
+  const events: ChatEvent[] = [];
+  const unsubscribe = chatHttpClient.subscribe({ channels: ["execution"] }, (event) =>
+    events.push(event),
+  );
+  const manager = new ExecutionSessionManager();
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+  try {
+    await handle.configure(baseSetting);
+
+    assert.ok(events.some((event) => event.kind === "request"));
+    assert.deepEqual(
+      new Set(events.map((event) => JSON.stringify(event.scope))),
+      new Set([JSON.stringify(sessionKey)]),
+    );
+  } finally {
+    unsubscribe();
+    await handle.dispose();
+    configureExecutionRuntime(previousRuntime);
+  }
 });
 
 test("a permission mode change keeps the recorded settings in step with the server", async () => {

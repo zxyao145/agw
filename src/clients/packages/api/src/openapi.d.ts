@@ -6746,6 +6746,8 @@ export interface components {
       /** Format: date-time */
       updateTime: null | string;
       errorMessage: null | string;
+      extensionId: string;
+      openToExtensions: boolean;
       usage: components["schemas"]["ProjectConversationUsage"];
       resumeState: null | components["schemas"]["ProjectConversationResumeStateResponse"];
     };
@@ -6772,6 +6774,8 @@ export interface components {
       /** Format: date-time */
       updateTime: null | string;
       errorMessage: null | string;
+      extensionId: string;
+      openToExtensions: boolean;
     };
     ProjectConversationTitleUpdateRequest: {
       title: string;
@@ -6787,6 +6791,11 @@ export interface components {
       cachedInputTokenCount: number | string;
       /** Format: int64 */
       reasoningTokenCount: number | string;
+      /**
+       * @description 没有计入上面计数的未结算 Turn：运行中、已受理，以及已结束但用量尚未结算的 Turn。
+       *     The unsettled turns left out of the counts above: running and accepted turns, and finished turns whose usage has not settled yet.
+       */
+      unsettledTurnIds?: string[];
     };
     ProjectCreateRequest: {
       name: string;

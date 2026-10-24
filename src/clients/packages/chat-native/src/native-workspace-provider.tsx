@@ -17,12 +17,12 @@ import {
   prepareClaudeHistory,
   toCommandSource,
   toExecutionUserInput,
-  type AgentSuggestionsResponse,
   type ChatImageAttachment,
   type CommandSource,
   type AgentflowCheckpointAvailability,
   type PendingInteraction,
 } from "@agw/chat-core";
+import { ChatHttpClient } from "@agw/chat-runtime/chat-http-client";
 import {
   DEFAULT_AGENT_MODE,
   createStreamingMessageBatcher,
@@ -185,6 +185,27 @@ function NativeWorkspaceSession({
     () => (client ? createProjectFilesService(client) : null),
     [client],
   );
+  const chatClient = React.useMemo(
+    () =>
+      verifiedServer
+        ? new ChatHttpClient({
+            api: verifiedServer.client,
+            identity: () => ({
+              baseUrl: verifiedServer.profile.serverUrl,
+              token: verifiedServer.token,
+            }),
+            execution: () => ({
+              baseUrl: verifiedServer.profile.serverUrl,
+              token: verifiedServer.token,
+              withCredentials: false,
+              webSocket: globalThis.WebSocket,
+              attachmentStore: null,
+            }),
+          })
+        : null,
+    [verifiedServer],
+  );
+  const serverId = verifiedServer?.profile.id ?? null;
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null);
   const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
@@ -294,13 +315,14 @@ function NativeWorkspaceSession({
   });
   const conversationDetailsQuery = useQuery({
     queryKey: ["mobile", workspaceScope, "conversation", selectedProjectId, selectedConversationId],
-    enabled: Boolean(
-      conversationService && selectedProjectId && selectedConversationId && !isExecuting,
-    ),
+    enabled: Boolean(chatClient && selectedProjectId && selectedConversationId && !isExecuting),
     queryFn: ({ signal }) =>
-      conversationService!.getProjectConversationHistory(
-        selectedProjectId!,
-        selectedConversationId!,
+      chatClient!.getConversationHistory(
+        {
+          serverId: serverId!,
+          projectId: selectedProjectId!,
+          conversationId: selectedConversationId!,
+        },
         signal,
       ),
   });
@@ -419,13 +441,12 @@ function NativeWorkspaceSession({
       selectedTarget?.type,
       selectedTarget?.id,
     ],
-    enabled: Boolean(client && selectedTarget),
+    enabled: Boolean(chatClient && selectedTarget),
     queryFn: () =>
-      client!.apiGet("/api/agents/permission-capabilities", {
-        params: {
-          query: { type: selectedTarget!.type === "agent" ? 0 : 1, id: selectedTarget!.id },
-        },
-      }),
+      chatClient!.getPermissionCapabilities(
+        { serverId: serverId!, projectId: selectedProjectId, conversationId: readyConversationId },
+        selectedTarget!,
+      ),
   });
   const supportedPermissionModes = permissionCapabilities.data?.supportedPermissionModes ?? [];
   const permissionReason = permissionCapabilities.data?.reason ?? null;
@@ -448,17 +469,16 @@ function NativeWorkspaceSession({
       suggestionQueryParams?.projectId,
       suggestionQueryParams?.agentId,
     ],
-    enabled: Boolean(client && suggestionQueryParams),
+    enabled: Boolean(chatClient && suggestionQueryParams),
     queryFn: async () => {
       if (!suggestionQueryParams) {
         throw new Error("Agent suggestion query requires an agent.");
       }
 
-      return (await client!.apiGet("/api/agents/suggestions", {
-        params: {
-          query: suggestionQueryParams,
-        },
-      })) as AgentSuggestionsResponse;
+      return await chatClient!.getAgentSuggestions(
+        { serverId: serverId!, projectId: selectedProjectId, conversationId: readyConversationId },
+        suggestionQueryParams,
+      );
     },
   });
   const commandSource = React.useMemo(
@@ -631,7 +651,7 @@ function NativeWorkspaceSession({
       session: MobileExecutionSession;
       configuredWithRequestedPermission: boolean;
     } | null> => {
-      if (!verifiedServer || !selectedProjectId) {
+      if (!chatClient || !serverId || !selectedProjectId) {
         throw new Error("Please select a project.");
       }
 
@@ -641,8 +661,8 @@ function NativeWorkspaceSession({
         disposeExecutionSession();
         let nextSession!: MobileExecutionSession;
         nextSession = new MobileExecutionSession({
-          serverUrl: verifiedServer.profile.serverUrl,
-          token: verifiedServer.token,
+          client: chatClient,
+          scope: { serverId, projectId: selectedProjectId, conversationId },
           onMessage: (incoming) => {
             if (executionSessionRef.current === nextSession) applyExecutionMessage(incoming);
           },
@@ -699,10 +719,11 @@ function NativeWorkspaceSession({
     },
     [
       applyExecutionMessage,
+      chatClient,
       disposeExecutionSession,
       workspaceScope,
       selectedProjectId,
-      verifiedServer,
+      serverId,
     ],
   );
 
@@ -1150,7 +1171,8 @@ function NativeWorkspaceSession({
 
   const clearCurrentConversation = React.useCallback(async () => {
     if (
-      !conversationService ||
+      !chatClient ||
+      !serverId ||
       !selectedProjectId ||
       !selectedConversationId ||
       readyConversationId !== selectedConversationId
@@ -1159,10 +1181,11 @@ function NativeWorkspaceSession({
     ensureIdle();
     const conversationToClear = selectedConversationId;
     // Clearing records keeps the conversation identity; only New Chat replaces it.
-    const cleared = await conversationService.clearProjectConversationRecords(
-      selectedProjectId,
-      conversationToClear,
-    );
+    const cleared = await chatClient.clearConversationRecords({
+      serverId,
+      projectId: selectedProjectId,
+      conversationId: conversationToClear,
+    });
     if (!cleared) throw new Error("Conversation not found.");
     const detailsQueryKey = [
       "mobile",
@@ -1193,7 +1216,7 @@ function NativeWorkspaceSession({
     setCheckpointAvailability([]);
     await refreshConversations();
   }, [
-    conversationService,
+    chatClient,
     disposeExecutionSession,
     ensureIdle,
     workspaceScope,
@@ -1202,6 +1225,7 @@ function NativeWorkspaceSession({
     refreshConversations,
     selectedConversationId,
     selectedProjectId,
+    serverId,
   ]);
 
   const renameConversation = React.useCallback(

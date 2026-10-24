@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Jobs;
+using Agw.Infrastructure.Projects;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Projects.Application;
@@ -90,7 +91,8 @@ public sealed class JobAttemptOutcomeRecorderTests
             projects,
             new ConversationHistoryDomainService(),
             new TestTimeProvider(FinishedAt),
-            user
+            user,
+            new ConversationCreatorStore(db)
         );
         var facade = new ProjectTaskFacade(tasks, db, new TaskAppService(db, projects, tasks, user), user);
         var recorder = new JobAttemptOutcomeRecorder(
@@ -181,7 +183,8 @@ public sealed class JobAttemptOutcomeRecorderTests
             projectResolver,
             new ConversationHistoryDomainService(),
             new TestTimeProvider(FinishedAt),
-            userInfo
+            userInfo,
+            new ConversationCreatorStore(dbContext)
         );
         var taskResolver = new TaskAppService(dbContext, projectResolver, taskExecution, userInfo);
         var recorder = new JobAttemptOutcomeRecorder(

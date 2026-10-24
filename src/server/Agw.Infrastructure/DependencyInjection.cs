@@ -137,6 +137,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
         services.AddScoped<IProviderModelDeletionCoordinator, ProviderModelDeletionCoordinator>();
         services.AddScoped<IProjectProviderSessionCoordinator, ProjectProviderSessionCoordinator>();
+        services.AddScoped<IConversationCreatorStore, ConversationCreatorStore>();
         services.AddScoped<IJobOutcomeTransaction, JobOutcomeTransaction>();
         services.AddScoped<IJobDeletionCoordinator, JobDeletionCoordinator>();
         services.AddScoped<Agw.Projects.Contracts.Execution.IConversationExecutionGate, ConversationExecutionGate>();

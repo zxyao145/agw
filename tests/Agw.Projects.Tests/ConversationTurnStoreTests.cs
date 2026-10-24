@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Testing;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Tests;
@@ -85,6 +87,128 @@ public sealed class ConversationTurnStoreTests : IAsyncLifetime
         Assert.False(missing);
     }
 
+    [Fact]
+    public async Task FinishAsync_RunningTurn_WritesUsageSettlementTime()
+    {
+        // Arrange: a running turn whose usage settles one lease duration after it finishes.
+        // 准备：运行中的 Turn，用量在结束后一个租约时长结算。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var conversationId = AddConversation(context, "tester");
+        var turnId = AddTurn(context, conversationId, 0, Guid.CreateVersion7(), ProjectConversationTurnStatus.Running);
+        await context.SaveChangesAsync(token);
+        using var user = EnterUser();
+        var store = new ConversationTurnStore(context, new TestTimeProvider(Now));
+
+        // Act
+        await store.FinishAsync(
+            turnId,
+            ConversationTurnStatus.Interrupted,
+            0,
+            null,
+            Now + TimeSpan.FromSeconds(30),
+            token
+        );
+
+        // Assert
+        var turn = await ReadTurnAsync(turnId);
+        Assert.Equal(ProjectConversationTurnStatus.Interrupted, turn.Status);
+        Assert.Equal(Now, turn.FinishedAt);
+        Assert.Equal(Now + TimeSpan.FromSeconds(30), turn.UsageSettlesAt);
+    }
+
+    [Fact]
+    public async Task SettleUsageAsync_TerminalTurnBeforeSettlement_SettlesNow()
+    {
+        // Arrange: an interrupted turn whose settlement time is still ahead.
+        // 准备：已中断、结算时间还没有到的 Turn。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        var conversationId = AddConversation(context, "tester");
+        var turnId = AddTurn(
+            context,
+            conversationId,
+            0,
+            Guid.CreateVersion7(),
+            ProjectConversationTurnStatus.Interrupted,
+            finishedAt: Now - TimeSpan.FromSeconds(5),
+            usageSettlesAt: Now + TimeSpan.FromSeconds(25)
+        );
+        await context.SaveChangesAsync(token);
+        using var user = EnterUser();
+        var store = new ConversationTurnStore(context, new TestTimeProvider(Now));
+
+        // Act
+        await store.SettleUsageAsync(turnId, token);
+
+        // Assert
+        var turn = await ReadTurnAsync(turnId);
+        Assert.Equal(Now, turn.UsageSettlesAt);
+        Assert.Equal(Now - TimeSpan.FromSeconds(5), turn.FinishedAt);
+    }
+
+    [Theory]
+    [InlineData(ProjectConversationTurnStatus.Running, null)]
+    [InlineData(ProjectConversationTurnStatus.Completed, -10)]
+    public async Task SettleUsageAsync_RunningOrSettledTurn_KeepsUsageSettlementTime(
+        ProjectConversationTurnStatus status,
+        int? settledSecondsFromNow
+    )
+    {
+        // Arrange: a turn that has not finished, or whose usage has already settled.
+        // 准备：尚未结束的 Turn，或者用量已经结算的 Turn。
+        var token = TestContext.Current.CancellationToken;
+        DateTimeOffset? usageSettlesAt = settledSecondsFromNow is { } seconds ? Now.AddSeconds(seconds) : null;
+        await using var context = new AgwDbContext(_options);
+        var conversationId = AddConversation(context, "tester");
+        var turnId = AddTurn(
+            context,
+            conversationId,
+            0,
+            Guid.CreateVersion7(),
+            status,
+            finishedAt: usageSettlesAt,
+            usageSettlesAt: usageSettlesAt
+        );
+        await context.SaveChangesAsync(token);
+        using var user = EnterUser();
+        var store = new ConversationTurnStore(context, new TestTimeProvider(Now));
+
+        // Act
+        await store.SettleUsageAsync(turnId, token);
+
+        // Assert
+        Assert.Equal(usageSettlesAt, (await ReadTurnAsync(turnId)).UsageSettlesAt);
+    }
+
+    [Fact]
+    public async Task SettleUsageAsync_DeletedTurn_ChangesNothing()
+    {
+        // Arrange: the turn row was deleted when the conversation records were cleared.
+        // 准备：清空对话记录时 Turn 行已经删除。
+        var token = TestContext.Current.CancellationToken;
+        await using var context = new AgwDbContext(_options);
+        using var user = EnterUser();
+        var store = new ConversationTurnStore(context, new TestTimeProvider(Now));
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => store.SettleUsageAsync(Guid.CreateVersion7(), token));
+
+        // Assert
+        Assert.Null(exception);
+    }
+
+    private static readonly DateTimeOffset Now = new(2026, 10, 24, 8, 0, 0, TimeSpan.Zero);
+
+    private async Task<ProjectConversationTurn> ReadTurnAsync(Guid turnId)
+    {
+        await using var context = new AgwDbContext(_options);
+        return await context
+            .ProjectConversationTurns.IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleAsync(turn => turn.Id == turnId, TestContext.Current.CancellationToken);
+    }
+
     private static IDisposable EnterUser() =>
         UserInfoUtil.Push(
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "Test"))
@@ -114,7 +238,26 @@ public sealed class ConversationTurnStoreTests : IAsyncLifetime
         return conversationId;
     }
 
-    private static Guid AddTurn(AgwDbContext context, Guid conversationId, long firstSequence, Guid turnId)
+    private static Guid AddTurn(AgwDbContext context, Guid conversationId, long firstSequence, Guid turnId) =>
+        AddTurn(
+            context,
+            conversationId,
+            firstSequence,
+            turnId,
+            ProjectConversationTurnStatus.Completed,
+            DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch
+        );
+
+    private static Guid AddTurn(
+        AgwDbContext context,
+        Guid conversationId,
+        long firstSequence,
+        Guid turnId,
+        ProjectConversationTurnStatus status,
+        DateTimeOffset? finishedAt = null,
+        DateTimeOffset? usageSettlesAt = null
+    )
     {
         context.ProjectConversationTurns.Add(
             new ProjectConversationTurn
@@ -123,10 +266,11 @@ public sealed class ConversationTurnStoreTests : IAsyncLifetime
                 ProjectConversationId = conversationId,
                 TargetId = Guid.CreateVersion7(),
                 RuntimeType = AgentRuntimeType.Agent,
-                Status = ProjectConversationTurnStatus.Completed,
+                Status = status,
                 FirstSequence = firstSequence,
                 StartedAt = DateTimeOffset.UnixEpoch,
-                FinishedAt = DateTimeOffset.UnixEpoch,
+                FinishedAt = finishedAt,
+                UsageSettlesAt = usageSettlesAt,
             }
         );
         return turnId;

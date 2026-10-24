@@ -1,8 +1,9 @@
 import type { HumanResponseCommandInput } from "@agw/execution-core";
 import type { AiMessage } from "@agw/api";
-import {
+import type { ChatConversationScope, ChatHttpClient } from "@agw/chat-runtime/chat-http-client";
+import type {
+  ExecutionReconnectState,
   ExecutionSession,
-  type ExecutionReconnectState,
 } from "@agw/chat-runtime/execution-session";
 import {
   buildSettingCommand,
@@ -29,8 +30,8 @@ export type NativeExecutionRequest = {
 };
 
 export type NativeExecutionSessionOptions = {
-  serverUrl: string;
-  token: string;
+  client: ChatHttpClient;
+  scope: ChatConversationScope;
   onMessage(message: AiMessage): void;
   onClose?(error: Error): void;
   onReconnecting?(state: ExecutionReconnectState | null): void;
@@ -54,36 +55,27 @@ export class NativeExecutionSession {
 
   public constructor(options: NativeExecutionSessionOptions) {
     this.options = options;
-    this.session = new ExecutionSession(
-      {
-        onMessage: (message) => this.handleMessage(message),
-        onClose: (error) => {
-          const normalized = error ?? new Error("Execution connection closed.");
-          this.finishTerminal(null, normalized);
-          this.options.onClose?.(normalized);
-        },
-        onReconnecting: (state) => this.options.onReconnecting?.(state),
-        onReconnectFailed: (state) => this.options.onReconnecting?.(state),
-        onReconnected: () => {
-          if (!this.session.hasRunningTurn()) {
-            this.finishTerminal(
-              null,
-              new Error(
-                "Execution stopped while disconnected; its outcome is unknown. Reload conversation history.",
-              ),
-            );
-          }
-          this.options.onReconnecting?.(null);
-        },
+    this.session = options.client.createExecutionSession(options.scope, {
+      onMessage: (message) => this.handleMessage(message),
+      onClose: (error) => {
+        const normalized = error ?? new Error("Execution connection closed.");
+        this.finishTerminal(null, normalized);
+        this.options.onClose?.(normalized);
       },
-      {
-        baseUrl: options.serverUrl,
-        token: options.token,
-        withCredentials: false,
-        webSocket: globalThis.WebSocket,
-        attachmentStore: null,
+      onReconnecting: (state) => this.options.onReconnecting?.(state),
+      onReconnectFailed: (state) => this.options.onReconnecting?.(state),
+      onReconnected: () => {
+        if (!this.session.hasRunningTurn()) {
+          this.finishTerminal(
+            null,
+            new Error(
+              "Execution stopped while disconnected; its outcome is unknown. Reload conversation history.",
+            ),
+          );
+        }
+        this.options.onReconnecting?.(null);
       },
-    );
+    });
   }
 
   public async configure(setting: NativeExecutionSetting): Promise<void> {
@@ -197,3 +189,4 @@ export type {
 export type { ExecutionReconnectState };
 
 export { getExecutionReconnectProgress } from "@agw/chat-runtime/execution-session";
+export { ChatHttpClient, type ChatConversationScope } from "@agw/chat-runtime/chat-http-client";

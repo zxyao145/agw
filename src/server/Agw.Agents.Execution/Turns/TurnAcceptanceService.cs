@@ -183,12 +183,15 @@ internal sealed class TurnAcceptanceService
             ?? throw new AgwException(ErrorCodes.AgentExecutionFailed, "The accepted turn has no output.");
         try
         {
+            // 执行没有开始，用量从结束时间起结算。
+            // Execution never started, so usage settles at the finish time.
             await _turns
                 .FinishAsync(
                     accepted.Request.TurnId,
                     ConversationTurnStatus.Failed,
                     0,
                     errorCode,
+                    _timeProvider.GetUtcNow(),
                     CancellationToken.None
                 )
                 .ConfigureAwait(false);
@@ -269,7 +272,8 @@ internal sealed class TurnAcceptanceService
                 ProjectId: request.Settings.ProjectId,
                 Input: AgwMessageUtil.ExtractInputText(request.Input),
                 Resume: request.Settings.Resume,
-                OwnerUserId: request.UserId
+                OwnerUserId: request.UserId,
+                RequesterExtensionId: request.Settings.ExtensionId
             ),
             cancellationToken
         );

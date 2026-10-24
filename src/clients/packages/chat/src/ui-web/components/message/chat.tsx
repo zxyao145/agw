@@ -10,7 +10,6 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@agw/components/query";
 import { toast } from "sonner";
 
-import { apiGet } from "@agw/api";
 import {
   buildConversationRenderModel,
   getCurrentTurnTodoItems,
@@ -41,20 +40,16 @@ import {
   replaceStreamingScope,
   scopeStreamingMessage,
   type StreamingMessageBatcher,
+  chatHttpClient,
   EMPTY_EXECUTION_QUEUE,
   executionSessionManager,
   isSubmittableInput,
+  useConversationTokenUsage,
   type ManagedExecutionHandle,
   type ManagedExecutionHandlers,
   type QueuedExecution,
 } from "@agw/chat-runtime";
-import {
-  clearProjectConversationRecords,
-  getProjectConversationMessages,
-  getConversationTurnInputs,
-  type LineComment,
-  type ProjectDirectoryOption,
-} from "@agw/projects";
+import { type LineComment, type ProjectDirectoryOption } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
@@ -67,10 +62,8 @@ import type {
 import {
   getAgentSuggestionQueryParams,
   toCommandSource,
-  type AgentSuggestionsResponse,
 } from "../../../lib/chat/agent-suggestions";
 import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/ai-message-handlers";
-import { addTokenUsage, EMPTY_TOKEN_USAGE, getMessageTokenUsage, type TokenUsage } from "@agw/api";
 import { createUuidV7 } from "@agw/api";
 import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
@@ -89,7 +82,6 @@ export interface ChatSessionSeed {
   conversationId: string | null;
   messages: AiMessage[];
   historyTurns: ConversationHistoryTurn[];
-  usage: TokenUsage;
   olderMessagesCursor: string | null;
   hasOlderMessages: boolean;
   agentMode: AgentMode | null;
@@ -152,13 +144,6 @@ const EMPTY_PROJECT_DIRECTORIES: readonly ProjectDirectoryOption[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
   return prepareConversationHistory(messages);
-}
-
-function calculateConversationUsage(messages: AiMessage[]): TokenUsage {
-  return messages.reduce((usage, message) => {
-    const messageUsage = getMessageTokenUsage(message);
-    return messageUsage ? addTokenUsage(usage, messageUsage) : usage;
-  }, EMPTY_TOKEN_USAGE);
 }
 
 function truncateAtCheckpoint(
@@ -245,7 +230,6 @@ export function Chat({
   const [messages, setMessages] = React.useState<AiMessage[]>(initialHistory.messages);
   const messagesRef = React.useRef<AiMessage[]>(initialHistory.messages);
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
-  const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
   // 新对话在首次配置或发送前分配的草稿 ID；它不代表对话已经保存到服务端。
   // The draft ID a new conversation gets before its first configuration or send; it does not mean the conversation is saved.
   const [draftConversationId, setDraftConversationId] = React.useState<string | null>(null);
@@ -260,10 +244,12 @@ export function Chat({
   const permissionCapabilities = useQuery({
     queryKey: ["execution-permissions", executionServerId, target?.type, target?.id],
     enabled: Boolean(target),
-    queryFn: () =>
-      apiGet("/api/agents/permission-capabilities", {
-        params: { query: { type: target!.type === "agent" ? 0 : 1, id: target!.id } },
-      }),
+    queryFn: ({ signal }) =>
+      chatHttpClient.getPermissionCapabilities(
+        { serverId: executionServerId, projectId, conversationId: executionConversationId },
+        target!,
+        signal,
+      ),
   });
   const supportedPermissionModes = permissionCapabilities.data?.supportedPermissionModes ?? [];
   const permissionUnavailable = !supportedPermissionModes.includes(permissionMode)
@@ -411,14 +397,16 @@ export function Chat({
       suggestionQueryParams?.projectId,
       suggestionQueryParams?.agentId,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!suggestionQueryParams) {
         throw new Error("Agent suggestion query requires an agent.");
       }
 
-      return (await apiGet("/api/agents/suggestions", {
-        params: { query: suggestionQueryParams },
-      })) as AgentSuggestionsResponse;
+      return await chatHttpClient.getAgentSuggestions(
+        { serverId: executionServerId, projectId, conversationId: executionConversationId },
+        suggestionQueryParams,
+        signal,
+      );
     },
     enabled: suggestionQueryParams !== null,
     retry: false,
@@ -451,13 +439,26 @@ export function Chat({
       persistedConversationId,
       sessionSeed.revision,
     ],
-    enabled: showUserInputNavigation && persistedConversationId !== null && !isHydratingSession,
-    queryFn: ({ signal }) => getConversationTurnInputs(persistedConversationId!, signal),
+    enabled:
+      showUserInputNavigation &&
+      projectId !== null &&
+      persistedConversationId !== null &&
+      !isHydratingSession,
+    queryFn: ({ signal }) =>
+      chatHttpClient.getConversationTurnInputs(
+        {
+          serverId: executionServerId,
+          projectId: projectId!,
+          conversationId: persistedConversationId!,
+        },
+        signal,
+      ),
   });
   const queueKey =
     projectId && executionConversationId
       ? { serverId: executionServerId, projectId, conversationId: executionConversationId }
       : null;
+  const conversationUsage = useConversationTokenUsage(queueKey);
   React.useSyncExternalStore(
     executionSessionManager.subscribeQueue,
     executionSessionManager.getQueueVersion,
@@ -596,7 +597,6 @@ export function Chat({
     setHistoryTurns(sessionSeed.historyTurns);
     setExpandedWorkSummaryKeys(new Set());
     setClaudeCommands(preparedHistory.commands);
-    setConversationUsage(sessionSeed.usage);
     conversationIdRef.current = conversationId;
     setDraftConversationId(null);
     setAcceptedConversationId(null);
@@ -738,11 +738,6 @@ export function Chat({
         streamingMessageBatcherRef.current?.flush(generation);
         setClaudeCommands(initCommands);
         return;
-      }
-
-      const messageUsage = getMessageTokenUsage(message);
-      if (messageUsage) {
-        setConversationUsage((current) => addTokenUsage(current, messageUsage));
       }
 
       if (getAgentflowCheckpointMessage(message)) {
@@ -1443,7 +1438,6 @@ export function Chat({
           );
           messagesRef.current = retainedMessages;
           setMessages(retainedMessages);
-          setConversationUsage(calculateConversationUsage(retainedMessages));
           setCheckpointAvailability((current) =>
             current.filter(
               (checkpoint) => checkpoint.boundarySequence <= selectedCheckpoint.boundarySequence,
@@ -1561,7 +1555,11 @@ export function Chat({
     void (async () => {
       try {
         if (projectId && conversationToClear) {
-          const cleared = await clearProjectConversationRecords(projectId, conversationToClear);
+          const cleared = await chatHttpClient.clearConversationRecords({
+            serverId: executionServerId,
+            projectId,
+            conversationId: conversationToClear,
+          });
           if (!cleared) throw new Error("Conversation not found.");
           const imagesCleared = currentImageDraft.clear();
           executionSessionManager.conversationStatuses.reset(
@@ -1633,12 +1631,19 @@ export function Chat({
       setIsLoadingOlderMessages(true);
 
       try {
-        const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
-          direction: "older",
-          cursor: olderMessagesCursorRef.current,
-          pageSize: 50,
-          signal: abortController.signal,
-        });
+        const page = await chatHttpClient.getConversationMessages(
+          {
+            serverId: executionServerId,
+            projectId: activeProjectId,
+            conversationId: activeConversationId,
+          },
+          {
+            direction: "older",
+            cursor: olderMessagesCursorRef.current,
+            pageSize: 50,
+            signal: abortController.signal,
+          },
+        );
         if (abortController.signal.aborted || conversationIdRef.current !== activeConversationId) {
           return;
         }
@@ -1681,7 +1686,13 @@ export function Chat({
         }
       }
     },
-    [isJumpingToTop, notifyExecutionError, projectId, shouldAutoLoadOlderMessages],
+    [
+      executionServerId,
+      isJumpingToTop,
+      notifyExecutionError,
+      projectId,
+      shouldAutoLoadOlderMessages,
+    ],
   );
 
   // 返回历史是否已经加载到目标输入；没有目标时表示是否已经加载到对话开头。
@@ -1722,12 +1733,14 @@ export function Chat({
 
       try {
         while (hasMore && cursor) {
-          const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
-            direction: "older",
-            cursor,
-            pageSize: 50,
-            signal: abortController.signal,
-          });
+          const page = await chatHttpClient.getConversationMessages(
+            {
+              serverId: executionServerId,
+              projectId: activeProjectId,
+              conversationId: activeConversationId,
+            },
+            { direction: "older", cursor, pageSize: 50, signal: abortController.signal },
+          );
           if (
             abortController.signal.aborted ||
             conversationIdRef.current !== activeConversationId
@@ -1796,7 +1809,7 @@ export function Chat({
         }
       }
     },
-    [notifyExecutionError, projectId],
+    [executionServerId, notifyExecutionError, projectId],
   );
 
   const handleScrollToTop = React.useCallback(

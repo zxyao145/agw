@@ -42,6 +42,7 @@ public class AgentUsageRecorderTests : IDisposable
                 projectId,
                 $"  {contextId:D}  ",
                 "planner",
+                turnId: null,
                 new ProjectContextUsage
                 {
                     InputTokenCount = 10,
@@ -66,7 +67,52 @@ public class AgentUsageRecorderTests : IDisposable
             Assert.Equal(30, usage.TotalTokenCount);
             Assert.Equal(4, usage.CachedInputTokenCount);
             Assert.Equal(5, usage.ReasoningTokenCount);
+            Assert.Null(usage.TurnId);
             Assert.Empty(await verifyContext.ProjectConversations.ToListAsync(cancellationToken));
+        }
+        finally
+        {
+            File.Delete(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task AddAsync_TurnId_PersistsTurnId()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var databasePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "test-databases",
+            $"agw-usage-{Guid.CreateVersion7():N}.db"
+        );
+        Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+
+        try
+        {
+            var options = CreateOptions(databasePath);
+            await EnsureCreatedAsync(options, cancellationToken);
+            await using var serviceProvider = CreateServiceProvider(options);
+            var recorder = new AgentUsageRecorder(
+                serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+                new TestTimeProvider(RecordedAt)
+            );
+            var projectId = Guid.CreateVersion7();
+            var turnId = Guid.CreateVersion7();
+            await SeedProjectAsync(options, projectId, cancellationToken);
+
+            await recorder.AddAsync(
+                projectId,
+                "context-1",
+                "planner",
+                turnId,
+                new ProjectContextUsage { TotalTokenCount = 3 },
+                cancellationToken
+            );
+
+            await using var verifyContext = new AgwDbContext(options);
+            var usage = await verifyContext.AgentUsages.SingleAsync(cancellationToken);
+            Assert.Equal(turnId, usage.TurnId);
+            Assert.Equal(3, usage.TotalTokenCount);
         }
         finally
         {
@@ -96,6 +142,7 @@ public class AgentUsageRecorderTests : IDisposable
                 projectId,
                 "context-1",
                 "agent-1",
+                turnId: null,
                 new ProjectContextUsage { TotalTokenCount = 3 },
                 cancellationToken
             );
@@ -103,6 +150,7 @@ public class AgentUsageRecorderTests : IDisposable
                 projectId,
                 "context-1",
                 "agent-1",
+                turnId: null,
                 new ProjectContextUsage { TotalTokenCount = 7 },
                 cancellationToken
             );
@@ -138,8 +186,8 @@ public class AgentUsageRecorderTests : IDisposable
             await SeedProjectAsync(options, projectId, cancellationToken);
 
             await Task.WhenAll(
-                recorder.AddAsync(projectId, "context-1", "agent-1", usage, cancellationToken),
-                recorder.AddAsync(projectId, "context-1", "agent-1", usage, cancellationToken)
+                recorder.AddAsync(projectId, "context-1", "agent-1", turnId: null, usage, cancellationToken),
+                recorder.AddAsync(projectId, "context-1", "agent-1", turnId: null, usage, cancellationToken)
             );
 
             await using var verifyContext = new AgwDbContext(options);

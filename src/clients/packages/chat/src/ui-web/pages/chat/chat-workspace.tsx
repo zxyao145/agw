@@ -23,12 +23,7 @@ import {
   type ProjectDirectory,
 } from "@agw/projects";
 import { apiGet } from "@agw/api";
-import {
-  getProjectConversationDetails,
-  getProjectConversationMessages,
-  type ConversationResumeState,
-  type ConversationSummary,
-} from "@agw/projects";
+import { type ConversationResumeState, type ConversationSummary } from "@agw/projects";
 import { AgentSelector, type AgentSelection } from "../../components/agent-selector";
 import { Explorer, FileContent, type FileViewerOption } from "@agw/projects";
 import type {
@@ -66,7 +61,6 @@ import { Label } from "@agw/components";
 import { SearchableSelect, type SearchableSelectOption } from "@agw/components";
 import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
-import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import { buildChatHref } from "../../../lib/chat-route";
 import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import { conversationImageDrafts } from "../../../lib/chat/conversation-image-drafts";
@@ -92,6 +86,7 @@ import {
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 import { getApiErrorMessage } from "@agw/api";
 import {
+  chatHttpClient,
   executionSessionManager,
   getExecutionReconnectProgress,
   migrateDurableExecutionAttachment,
@@ -547,7 +542,6 @@ export function ChatWorkspaceProvider({
     conversationId: null,
     messages: [],
     historyTurns: [],
-    usage: EMPTY_TOKEN_USAGE,
     olderMessagesCursor: null,
     hasOlderMessages: false,
     agentMode: null,
@@ -883,7 +877,6 @@ export function ChatWorkspaceProvider({
       conversationId: null,
       messages: [],
       historyTurns: [],
-      usage: EMPTY_TOKEN_USAGE,
       olderMessagesCursor: null,
       hasOlderMessages: false,
       agentMode: null,
@@ -910,14 +903,14 @@ export function ChatWorkspaceProvider({
       signal?.addEventListener("abort", abortFromCaller, { once: true });
 
       try {
+        const scope = {
+          serverId: executionServerId,
+          projectId,
+          conversationId: nextConversationId,
+        };
         const [details, messagePage] = await Promise.all([
-          getProjectConversationDetails(
-            projectId,
-            nextConversationId,
-            undefined,
-            abortController.signal,
-          ),
-          getProjectConversationMessages(projectId, nextConversationId, {
+          chatHttpClient.getConversation(scope, abortController.signal),
+          chatHttpClient.getConversationMessages(scope, {
             direction: "older",
             pageSize: 50,
             signal: abortController.signal,
@@ -949,7 +942,6 @@ export function ChatWorkspaceProvider({
           conversationId: details.conversationId,
           messages: messagePage.items,
           historyTurns: messagePage.turns,
-          usage: details.usage,
           olderMessagesCursor: messagePage.nextCursor,
           hasOlderMessages: messagePage.hasMore,
           agentMode:
@@ -1156,7 +1148,6 @@ export function ChatWorkspaceProvider({
         conversationId: null,
         messages: [],
         historyTurns: [],
-        usage: EMPTY_TOKEN_USAGE,
         olderMessagesCursor: null,
         hasOlderMessages: false,
         agentMode: null,

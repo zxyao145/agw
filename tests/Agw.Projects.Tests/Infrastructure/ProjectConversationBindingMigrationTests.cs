@@ -204,11 +204,19 @@ public sealed class ProjectConversationBindingMigrationTests
         await migrator.MigrateAsync(previous, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// 绑定历史迁移与它之前的迁移；之后的迁移不参与这些用例。
+    /// The binding history migration and the one before it; later migrations take no part in these cases.
+    /// </summary>
     private static (string Previous, string Latest) GetMigrations(AgwDbContext context)
     {
         var migrations = context.Database.GetMigrations().ToArray();
-        Assert.EndsWith(MigrationSuffix, migrations[^1], StringComparison.Ordinal);
-        return (migrations[^2], migrations[^1]);
+        var index = Array.FindIndex(
+            migrations,
+            migration => migration.EndsWith(MigrationSuffix, StringComparison.Ordinal)
+        );
+        Assert.True(index > 0);
+        return (migrations[index - 1], migrations[index]);
     }
 
     private static string OriginalIndexName(DatabaseProvider provider) =>

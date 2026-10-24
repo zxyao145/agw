@@ -12704,6 +12704,8 @@
           "createTime",
           "updateTime",
           "errorMessage",
+          "extensionId",
+          "openToExtensions",
           "usage",
           "resumeState"
         ],
@@ -12764,6 +12766,12 @@
               "string"
             ]
           },
+          "extensionId": {
+            "type": "string"
+          },
+          "openToExtensions": {
+            "type": "boolean"
+          },
           "usage": {
             "$ref": "#/components/schemas/ProjectConversationUsage"
           },
@@ -12819,7 +12827,9 @@
           "messageCount",
           "createTime",
           "updateTime",
-          "errorMessage"
+          "errorMessage",
+          "extensionId",
+          "openToExtensions"
         ],
         "type": "object",
         "properties": {
@@ -12877,6 +12887,12 @@
               "null",
               "string"
             ]
+          },
+          "extensionId": {
+            "type": "string"
+          },
+          "openToExtensions": {
+            "type": "boolean"
           }
         }
       },
@@ -12940,6 +12956,14 @@
               "string"
             ],
             "format": "int64"
+          },
+          "unsettledTurnIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "没有计入上面计数的未结算 Turn：运行中、已受理，以及已结束但用量尚未结算的 Turn。\nThe unsettled turns left out of the counts above: running and accepted turns, and finished turns whose usage has not settled yet."
           }
         }
       },

@@ -13,6 +13,8 @@ agent_tests = (
     "Postgres_ConcurrentCommits_AssignContiguousSequences",
     "Postgres_UpgradeActiveExecutions_PreservesStateAndAllowsRecovery",
     "Postgres_ConcurrentStarts_ReserveCapacityBeforeLeasesAndReleaseOnFailure",
+    "Postgres_InterruptFromAnotherInstance_CountsUsageAfterWorkerExits",
+    "Postgres_InterruptWithStoppedHolder_CountsUsageAfterLeaseDuration",
 )
 job_tests = (
     "AcquireAsync_PostgresLeaseLoss_CancelsHeldOperation",

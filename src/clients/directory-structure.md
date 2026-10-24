@@ -52,7 +52,7 @@ clients/
 │   ├── auth/                         # authentication state and Web UI
 │   ├── agents/                       # Agents and Agentflows
 │   ├── projects/                     # Projects, tasks, histories, and file explorer
-│   ├── chat-runtime/                 # platform-neutral SignalR, session/activity, Conversation state
+│   ├── chat-runtime/                 # platform-neutral SignalR, session/activity, Conversation state, ChatHttpClient, Token usage
 │   ├── chat/                         # shared Web/Desktop DOM Chat renderer
 │   ├── chat-native/                  # React Native Chat host, Composer, and Context History
 │   ├── providers/                    # Providers and models

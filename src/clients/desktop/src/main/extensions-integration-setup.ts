@@ -23,6 +23,8 @@ export type IntegrationConfig = {
   secondToken: string;
   agentId: string;
   agentName: string;
+  /** 启用 summary 的 Agent。The Agent with summary enabled. */
+  summaryAgentId: string;
   projectId: string;
 };
 

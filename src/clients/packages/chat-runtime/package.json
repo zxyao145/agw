@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./activity": "./src/execution-activity-store.ts",
+    "./chat-http-client": "./src/chat-http-client.ts",
     "./controller": "./src/conversation-controller.ts",
     "./execution": "./src/execution.ts",
     "./execution-session": "./src/execution-session.ts",
@@ -26,7 +27,11 @@
     "@agw/api": "workspace:*",
     "@agw/chat-core": "workspace:*",
     "@agw/execution-core": "workspace:*",
+    "@agw/projects-core": "workspace:*",
     "@microsoft/signalr": "catalog:"
+  },
+  "devDependencies": {
+    "@agw/test-harness": "workspace:*"
   },
   "peerDependencies": {
     "react": "catalog:"

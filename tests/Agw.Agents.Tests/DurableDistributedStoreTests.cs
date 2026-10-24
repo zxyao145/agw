@@ -176,9 +176,104 @@ public sealed class DurableDistributedStoreTests : IDisposable
         }
     }
 
-    private static async Task<Guid> AcceptQueuedAsync(TurnPersistenceTestKit kit)
+    [Fact(
+        SkipUnless = nameof(PostgresEnabled),
+        Skip = "Set AGW_TEST_POSTGRES_CONNECTION_STRING to an isolated PostgreSQL server with CREATE DATABASE permission."
+    )]
+    [Trait("Category", "Postgres")]
+    public async Task Postgres_InterruptFromAnotherInstance_CountsUsageAfterWorkerExits()
     {
+        // Arrange: instance A runs a segment that has reported usage; instance B shares the database.
+        // 准备：实例 A 运行的 Segment 已经报告用量；实例 B 与它共用数据库。
+        var token = TestContext.Current.CancellationToken;
+        var options = new ExecutionRuntimeOptions
+        {
+            Distributed = new DistributedExecutionOptions { LeaseSeconds = 30, LeaseRenewSeconds = 1 },
+        };
+        var client = new UsageReportingChatClient();
+        await using var instanceA = await TurnPersistenceTestKit.CreatePostgresAsync(
+            Environment.GetEnvironmentVariable(PostgresVariable)!,
+            options,
+            services => DurableUsageTestServices.Add(services, client)
+        );
+        await using var instanceB = instanceA.CreatePeer(options);
+        var agentId = Guid.CreateVersion7();
+        await DurableUsageTestServices.SeedAgentAsync(instanceA, agentId);
+        var task = await instanceA.SeedConversationAsync();
+        var id = await AcceptQueuedAsync(instanceA, task, agentId);
+        var lease = await ClaimAsync(instanceA, id, "worker-a", TimeSpan.FromSeconds(30));
+        var running = instanceA.Coordinator.RunLeasedSegmentAsync(lease, CancellationToken.None);
+        await client.UsageReported.WaitAsync(TimeSpan.FromSeconds(30), token);
+
+        // Act: B interrupts; A stops at its next failed renewal and exits once released.
+        // 执行：B 中断；A 在下一次续租失败时停止，放行后退出。
+        Assert.True(await instanceB.Coordinator.InterruptAsync(id, TurnPersistenceTestKit.UserId, reason: null, token));
+        var whileWorkerRuns = await DurableUsageTestServices.ReadConversationUsageAsync(instanceB, task);
+        client.ReleaseExit();
+        await running.WaitAsync(TimeSpan.FromSeconds(30), token);
+        var afterWorkerExits = await DurableUsageTestServices.ReadConversationUsageAsync(instanceB, task);
+
+        // Assert
+        Assert.Equal([id], whileWorkerRuns.UnsettledTurnIds);
+        Assert.Equal(0, whileWorkerRuns.TotalTokenCount);
+        Assert.Empty(afterWorkerExits.UnsettledTurnIds);
+        Assert.Equal(9, afterWorkerExits.TotalTokenCount);
+        Assert.Null((await instanceB.ReadExecutionAsync(id)).InterruptedLeaseEpoch);
+    }
+
+    [Fact(
+        SkipUnless = nameof(PostgresEnabled),
+        Skip = "Set AGW_TEST_POSTGRES_CONNECTION_STRING to an isolated PostgreSQL server with CREATE DATABASE permission."
+    )]
+    [Trait("Category", "Postgres")]
+    public async Task Postgres_InterruptWithStoppedHolder_CountsUsageAfterLeaseDuration()
+    {
+        // Arrange: instance A holds a valid lease and wrote usage, then stopped before the interrupt.
+        // 准备：实例 A 持有有效的租约并写入了用量，在中断之前已经停止。
+        var token = TestContext.Current.CancellationToken;
+        var options = new ExecutionRuntimeOptions
+        {
+            Distributed = new DistributedExecutionOptions { LeaseSeconds = 5 },
+        };
+        await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
+            Environment.GetEnvironmentVariable(PostgresVariable)!,
+            options
+        );
         var task = await kit.SeedConversationAsync();
+        var id = await AcceptQueuedAsync(kit, task);
+        await ClaimAsync(kit, id, "worker-a", TimeSpan.FromSeconds(5));
+        await DurableUsageTestServices.AddUsageAsync(kit, task, id, 40);
+
+        // Act
+        var interruptedAfter = TimeProvider.System.GetUtcNow();
+        Assert.True(await kit.Coordinator.InterruptAsync(id, TurnPersistenceTestKit.UserId, reason: null, token));
+        var beforeDeadline = await DurableUsageTestServices.ReadConversationUsageAsync(kit, task);
+        var turn = await kit.ReadTurnAsync(id);
+        var remaining = turn.UsageSettlesAt!.Value - TimeProvider.System.GetUtcNow();
+        if (remaining > TimeSpan.Zero)
+            await Task.Delay(remaining + TimeSpan.FromMilliseconds(100), token);
+        var afterDeadline = await DurableUsageTestServices.ReadConversationUsageAsync(kit, task);
+
+        // Assert: usage settles one lease duration after the interrupt committed.
+        // 断言：用量在中断提交之后一个租约时长结算。
+        Assert.InRange(
+            turn.UsageSettlesAt!.Value,
+            interruptedAfter + TimeSpan.FromSeconds(5),
+            turn.FinishedAt!.Value + TimeSpan.FromSeconds(5)
+        );
+        Assert.Equal([id], beforeDeadline.UnsettledTurnIds);
+        Assert.Equal(0, beforeDeadline.TotalTokenCount);
+        Assert.Empty(afterDeadline.UnsettledTurnIds);
+        Assert.Equal(40, afterDeadline.TotalTokenCount);
+    }
+
+    private static async Task<Guid> AcceptQueuedAsync(
+        TurnPersistenceTestKit kit,
+        AgentExecutionTask? task = null,
+        Guid? agentId = null
+    )
+    {
+        task ??= await kit.SeedConversationAsync();
         var accepted = await kit.CreateAcceptance(
                 projectTasks: null,
                 new AgentExecutionFacadeTests.WorkspaceProjects(),
@@ -188,7 +283,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
                 new TurnAcceptanceRequest(
                     TurnPersistenceTestKit.UserId,
                     TurnId: null,
-                    new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
+                    new ExecutionTarget(agentId ?? Guid.CreateVersion7(), AgentRuntimeType.Agent),
                     task.ProjectConversationId,
                     TurnPersistenceTestKit.CreateInput("hello"),
                     TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),

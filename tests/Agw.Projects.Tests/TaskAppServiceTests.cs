@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
@@ -111,7 +112,8 @@ public partial class TaskAppServiceTests
                 ContextId: "context-new",
                 Input: "hello world",
                 Resume: false,
-                User: "tester"
+                User: "tester",
+                RequesterExtensionId: null
             ),
             cancellationToken
         );
@@ -153,7 +155,8 @@ public partial class TaskAppServiceTests
                     ContextId: "context-existing",
                     Input: "hello world",
                     Resume: false,
-                    User: "tester"
+                    User: "tester",
+                    RequesterExtensionId: null
                 ),
                 cancellationToken
             )
@@ -189,7 +192,8 @@ public partial class TaskAppServiceTests
                     ContextId: "context-other",
                     Input: "hello world",
                     Resume: false,
-                    User: "tester"
+                    User: "tester",
+                    RequesterExtensionId: null
                 ),
                 cancellationToken
             )
@@ -218,7 +222,8 @@ public partial class TaskAppServiceTests
             ContextId: "context-reused",
             Input: "first",
             Resume: false,
-            User: "tester"
+            User: "tester",
+            RequesterExtensionId: null
         );
         var secondRequest = firstRequest with { Input = "second" };
 
@@ -257,7 +262,8 @@ public partial class TaskAppServiceTests
                 ContextId: null,
                 Input: "hello world",
                 Resume: false,
-                User: "tester"
+                User: "tester",
+                RequesterExtensionId: null
             ),
             cancellationToken
         );
@@ -286,7 +292,8 @@ public partial class TaskAppServiceTests
             ContextId: null,
             Input: "hello world",
             Resume: false,
-            User: "tester"
+            User: "tester",
+            RequesterExtensionId: null
         );
 
         var first = await service.ResolveTaskAsync(request, cancellationToken);
@@ -334,7 +341,8 @@ public partial class TaskAppServiceTests
                 ContextId: null,
                 Input: "hello world",
                 Resume: false,
-                User: "tester"
+                User: "tester",
+                RequesterExtensionId: null
             ),
             cancellationToken
         );
@@ -370,7 +378,8 @@ public partial class TaskAppServiceTests
                 ContextId: contextId,
                 Input: "hello world",
                 Resume: false,
-                User: "tester"
+                User: "tester",
+                RequesterExtensionId: null
             ),
             cancellationToken
         );
@@ -412,7 +421,8 @@ public partial class TaskAppServiceTests
                         ContextId: "new-context",
                         Input: "hello world",
                         Resume: false,
-                        User: "tester"
+                        User: "tester",
+                        RequesterExtensionId: null
                     ),
                     cancellationToken
                 )
@@ -447,7 +457,8 @@ public partial class TaskAppServiceTests
                 ContextId: null,
                 Input: "resume",
                 Resume: true,
-                User: "tester"
+                User: "tester",
+                RequesterExtensionId: null
             ),
             cancellationToken
         );
@@ -537,7 +548,8 @@ public partial class TaskAppServiceTests
                 ContextId: "context-1",
                 Input: "resume",
                 Resume: true,
-                User: "tester"
+                User: "tester",
+                RequesterExtensionId: null
             ),
             cancellationToken
         );
@@ -582,7 +594,8 @@ public partial class TaskAppServiceTests
             projectResolver,
             new ConversationHistoryDomainService(),
             TimeProvider.System,
-            userInfo
+            userInfo,
+            new ConversationCreatorStore(dbContext)
         );
         var facade = new ProjectTaskFacade(
             taskExecution,
@@ -608,7 +621,8 @@ public partial class TaskAppServiceTests
             projectResolver,
             new ConversationHistoryDomainService(),
             TimeProvider.System,
-            userInfo
+            userInfo,
+            new ConversationCreatorStore(dbContext)
         );
 
         return new TaskAppService(persistence, projectResolver, taskExecutionAppService, userInfo);
@@ -683,18 +697,18 @@ public partial class TaskAppServiceTests
     {
         private readonly AgwDbContext _dbContext;
         private readonly DbContextOptions<AgwDbContext> _options;
-        private readonly ProjectConversation _concurrentConversation;
+        private readonly object[] _concurrentEntities;
         private bool _inserted;
 
         public ConcurrentConversationInsertUnitOfWork(
             AgwDbContext dbContext,
             DbContextOptions<AgwDbContext> options,
-            ProjectConversation concurrentConversation
+            params object[] concurrentEntities
         )
         {
             _dbContext = dbContext;
             _options = options;
-            _concurrentConversation = concurrentConversation;
+            _concurrentEntities = concurrentEntities;
         }
 
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -703,7 +717,7 @@ public partial class TaskAppServiceTests
             {
                 _inserted = true;
                 await using var concurrentContext = new AgwDbContext(_options);
-                concurrentContext.ProjectConversations.Add(_concurrentConversation);
+                concurrentContext.AddRange(_concurrentEntities);
                 await concurrentContext.SaveChangesAsync(cancellationToken);
             }
 

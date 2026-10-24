@@ -199,6 +199,42 @@ public class AgentTurnSummaryServiceTests
         Assert.Equal(11, usage.Usage.InputTokenCount);
         Assert.Equal(7, usage.Usage.OutputTokenCount);
         Assert.Equal(18, usage.Usage.TotalTokenCount);
+        Assert.Null(usage.TurnId);
+    }
+
+    [Fact]
+    public async Task CreateResultAsync_InsideTurnScope_RecordsUsageWithTurnId()
+    {
+        var client = new RecordingChatClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, "done")])
+            {
+                Usage = new UsageDetails { TotalTokenCount = 4 },
+            }
+        );
+        var usageRecorder = new RecordingUsageRecorder();
+        var service = new AgentTurnSummaryService(
+            new StubSummaryChatClientFactory(client),
+            new RecordingConversationHistoryWriter(),
+            usageRecorder,
+            NullLogger<AgentTurnSummaryService>.Instance
+        );
+        var turn = ExecutionTestScopes.Scope();
+
+        using (turn.Push())
+        {
+            await service.CreateResultAsync(
+                Guid.CreateVersion7(),
+                [new ChatMessage(ChatRole.User, "hello")],
+                turn.Context.ProjectId,
+                turn.Context.ContextId,
+                customInstructions: null,
+                TestContext.Current.CancellationToken
+            );
+        }
+
+        var usage = Assert.Single(usageRecorder.Entries);
+        Assert.Equal(4, usage.Usage.TotalTokenCount);
+        Assert.Equal(turn.Context.TurnId, usage.TurnId);
     }
 
     [Theory]
@@ -364,14 +400,21 @@ public class AgentTurnSummaryServiceTests
             Guid projectId,
             string contextId,
             string agentName,
+            Guid? turnId,
             ProjectContextUsage usage,
             CancellationToken cancellationToken = default
         )
         {
-            Entries.Add(new Entry(projectId, contextId, agentName, usage));
+            Entries.Add(new Entry(projectId, contextId, agentName, turnId, usage));
             return Task.CompletedTask;
         }
 
-        public sealed record Entry(Guid ProjectId, string ContextId, string AgentName, ProjectContextUsage Usage);
+        public sealed record Entry(
+            Guid ProjectId,
+            string ContextId,
+            string AgentName,
+            Guid? TurnId,
+            ProjectContextUsage Usage
+        );
     }
 }

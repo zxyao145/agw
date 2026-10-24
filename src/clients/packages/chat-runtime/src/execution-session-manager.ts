@@ -1,4 +1,5 @@
 import type { HumanResponseCommandInput } from "@agw/execution-core";
+import { chatHttpClient } from "./chat-http-client";
 import {
   ExecutionSession,
   ExecutionStartRejectedError,
@@ -58,7 +59,7 @@ type ExecutionClient = Pick<
   | "dispose"
 >;
 
-type ClientFactory = (handlers: ExecutionHubHandlers) => ExecutionClient;
+type ClientFactory = (handlers: ExecutionHubHandlers, key: ExecutionSessionKey) => ExecutionClient;
 
 /** 开始发送一条队列条目：它的用户消息此时进入消息区域。Sending of a queue entry began; its user message enters the message area now. */
 export type SubmissionStartedEvent = {
@@ -182,7 +183,10 @@ export class ExecutionSessionManager {
    */
   public readonly conversationStatuses = new ConversationStatusStore();
 
-  public constructor(createClient: ClientFactory = (handlers) => new ExecutionSession(handlers)) {
+  public constructor(
+    createClient: ClientFactory = (handlers, key) =>
+      chatHttpClient.createExecutionSession(key, handlers),
+  ) {
     this.createClient = createClient;
   }
 
@@ -194,14 +198,17 @@ export class ExecutionSessionManager {
     let entry = this.entries.get(id);
     if (!entry) {
       let nextEntry!: Entry;
-      const client = this.createClient({
-        onMessage: (message) => this.handleMessage(nextEntry, message),
-        onError: (error) => nextEntry.handler?.onError?.(error),
-        onClose: (error) => this.handleClose(nextEntry, error),
-        onReconnecting: (state) => this.handleReconnecting(nextEntry, state),
-        onReconnectFailed: (state) => this.handleReconnectFailed(nextEntry, state),
-        onReconnected: () => this.handleReconnected(nextEntry),
-      });
+      const client = this.createClient(
+        {
+          onMessage: (message) => this.handleMessage(nextEntry, message),
+          onError: (error) => nextEntry.handler?.onError?.(error),
+          onClose: (error) => this.handleClose(nextEntry, error),
+          onReconnecting: (state) => this.handleReconnecting(nextEntry, state),
+          onReconnectFailed: (state) => this.handleReconnectFailed(nextEntry, state),
+          onReconnected: () => this.handleReconnected(nextEntry),
+        },
+        key,
+      );
       nextEntry = {
         key,
         client,
@@ -568,25 +575,26 @@ export class ExecutionSessionManager {
     entry.stopping = false;
     const inFlight = entry.inFlight;
     const endsQueueTurn = inFlight ? turnId === inFlight.item.turnId : wasActive;
-    if (!endsQueueTurn) {
-      if (wasStopping) this.emitQueueChange(entry);
-      return;
+    if (endsQueueTurn) {
+      entry.inFlight = null;
+      if (entry.queue.length > 0 && (superseded || status !== "completed")) {
+        this.pauseQueue(
+          entry,
+          superseded
+            ? SUPERSEDED_TURN_PAUSE_REASON
+            : status === "failed"
+              ? FAILED_TURN_PAUSE_REASON
+              : INTERRUPTED_TURN_PAUSE_REASON,
+        );
+      }
+      this.emitQueueChange(entry);
+    } else if (wasStopping) {
+      this.emitQueueChange(entry);
     }
-
-    entry.inFlight = null;
-    if (entry.queue.length > 0 && (superseded || status !== "completed")) {
-      this.pauseQueue(
-        entry,
-        superseded
-          ? SUPERSEDED_TURN_PAUSE_REASON
-          : status === "failed"
-            ? FAILED_TURN_PAUSE_REASON
-            : INTERRUPTED_TURN_PAUSE_REASON,
-      );
-    }
-    this.emitQueueChange(entry);
-    // 本次消息分发之后再推进：Turn 期间记录的设置先生效，未暂停时再发送队首一条。
-    // Advance after this message is delivered: settings recorded during the turn apply first, then the head is sent unless paused.
+    // 每条结束消息（包括补发的）都在本次消息分发之后检查队列：Turn 期间记录的设置先生效，未暂停时再发送队首一条；
+    // 连接尚未处理成功这条结束消息时，hasRunningTurn() 让队列继续等待。
+    // Every finish message, replays included, checks the queue after this message is delivered: settings recorded during the turn apply first, then the head is sent unless paused;
+    // while the connection has not processed the finish successfully, hasRunningTurn() keeps the queue waiting.
     queueMicrotask(() => this.drain(entry));
   }
 

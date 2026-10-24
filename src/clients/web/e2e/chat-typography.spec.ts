@@ -36,6 +36,20 @@ const conversation = {
   errorMessage: null,
 };
 
+// 对话详情在列表项之外还有用量与恢复状态。The conversation details add usage and resume state to the list item.
+const conversationDetails = {
+  ...conversation,
+  usage: {
+    inputTokenCount: 0,
+    outputTokenCount: 0,
+    totalTokenCount: 0,
+    cachedInputTokenCount: 0,
+    reasoningTokenCount: 0,
+    unsettledTurnIds: [],
+  },
+  resumeState: null,
+};
+
 const textMessage = (messageId: string, role: string, text: string) => ({
   messageId,
   createdAt: "2026-01-01T00:00:00Z",
@@ -68,7 +82,7 @@ async function mockChatApi(page: Page) {
       "/api/projects": [project],
       "/api/projects/conversation-activity": [],
       [conversationPath]: { items: [conversation], total: 1, pageIndex: 1, pageSize: 20 },
-      [`${conversationPath}/${conversationId}`]: conversation,
+      [`${conversationPath}/${conversationId}`]: conversationDetails,
       [`${conversationPath}/${conversationId}/messages`]: {
         items: [userMessage, assistantMessage],
         nextCursor: null,

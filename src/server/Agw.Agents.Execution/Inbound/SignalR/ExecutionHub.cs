@@ -71,10 +71,19 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
             )
         );
 
-    /// <summary>重连后确认旧进程内执行状态；停止请求仍受连接所有权校验。</summary>
+    /// <summary>
+    /// 重连后确认旧进程内执行状态；停止请求受连接所有权与调用方连接的写入检查约束。
+    /// Reports the old in-process execution after a reconnect; a stop request is bound by connection ownership and the write check for the caller's connection.
+    /// </summary>
     public Task<bool> RecoverInProcessExecution(string connectionId, bool interrupt) =>
         InvokeResultAsync(() =>
-            _registry.RecoverInProcessExecutionAsync(connectionId, CurrentUserId, interrupt, Context.ConnectionAborted)
+            _registry.RecoverInProcessExecutionAsync(
+                connectionId,
+                CurrentUserId,
+                Context.ConnectionId,
+                interrupt,
+                Context.ConnectionAborted
+            )
         );
 
     private string CurrentUserId => Context.User.GetUserId();

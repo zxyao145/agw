@@ -20,6 +20,14 @@ A PostgreSQL-owned execution lifecycle with replayable output through PostgreSQL
 
 The owner Module's inward persistence interface. Agents, Projects, Jobs, Auth, Integrations, Providers, Settings, Skills, and Tools expose their owned `DbSet` values and save operations; Agents and Projects also provide generation-checked `SaveConversationChangesAsync`. A single scoped `AgwDbContext` implements every Module DbContext; this does not imply separate databases or separate EF Core contexts.
 
+## Creator Extension
+
+The creator recorded on a Project Conversation (`extension_id`): `host` when Desktop, Web, Mobile, a Job or A2A created it, or the id of the Desktop extension whose execution session sent its first turn. `host` is reserved, so no extension id or name can use it. The host may write every conversation; an extension may write only the conversations it created, open conversations and new ones.
+
+## Open Conversation
+
+A host-created conversation whose records were never cleared and that has no accepted turn, for example one whose first turn failed before acceptance. Every extension may write it, and the first extension that does becomes its creator.
+
 ## Agents Execution Assembly
 
 `Agw.Agents.Execution` contains the runtime, external-agent adapters, SignalR transport, and durable workers. It and `Agw.Agents` form one logical Agents module. Execution references Agents one-way; Host composes both registrations. Shared data ownership and persistence seams stay with Agents.

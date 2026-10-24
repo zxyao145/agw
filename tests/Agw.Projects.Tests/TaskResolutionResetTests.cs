@@ -21,7 +21,7 @@ public partial class TaskAppServiceTests
         );
         await using var connectionScope = database.CreateContext();
         var tasks = CreateService(connectionScope);
-        var request = new ExecutionTaskRequest(null, conversationId, projectId, "reset", "old", false, "tester");
+        var request = new ExecutionTaskRequest(null, conversationId, projectId, "reset", "old", false, "tester", null);
         var old = await tasks.ResolveTaskAsync(request, token);
         Assert.NotNull(old.Task);
         Assert.Equal(0, old.Task.Generation);

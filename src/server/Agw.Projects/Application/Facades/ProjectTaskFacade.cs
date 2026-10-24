@@ -68,7 +68,8 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
                     ContextId: null,
                     request.Input,
                     request.Resume,
-                    request.OwnerUserId
+                    request.OwnerUserId,
+                    request.RequesterExtensionId
                 ),
                 cancellationToken
             )

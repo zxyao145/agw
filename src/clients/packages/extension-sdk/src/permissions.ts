@@ -10,6 +10,7 @@ export const EXTENSION_PERMISSIONS = [
   "execution",
   "a2a",
   "chat.composer",
+  "chat.observe",
   "clipboard.read",
   "clipboard.write",
 ] as const;
@@ -23,6 +24,7 @@ export const HIGH_RISK_EXTENSION_PERMISSIONS: ReadonlySet<ExtensionPermission> =
   "fs.cloud.write",
   "execution",
   "a2a",
+  "chat.observe",
   "clipboard.read",
 ]);
 

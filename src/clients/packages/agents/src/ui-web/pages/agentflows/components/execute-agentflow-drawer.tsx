@@ -10,7 +10,6 @@ import {
 import { X } from "lucide-react";
 import type { AgentflowDto } from "../../../../types/agentflow";
 import { Chat } from "@agw/chat";
-import { EMPTY_TOKEN_USAGE } from "@agw/api";
 
 interface ExecuteAgentflowDrawerProps {
   open: boolean;
@@ -37,7 +36,6 @@ export function ExecuteAgentflowDrawer({
       conversationId: null,
       messages: [],
       historyTurns: [],
-      usage: EMPTY_TOKEN_USAGE,
       olderMessagesCursor: null,
       hasOlderMessages: false,
       agentMode: null,

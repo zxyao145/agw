@@ -108,6 +108,7 @@ internal static class JobTestServices
         services.AddScoped<IJobOutcomeTransaction, JobOutcomeTransaction>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<ConversationHistoryDomainService>();
+        services.AddScoped<IConversationCreatorStore, ConversationCreatorStore>();
         services.AddScoped<TaskExecutionAppService>();
         services.AddScoped<TaskAppService>();
         services.AddScoped<ITaskAppService>(provider => provider.GetRequiredService<TaskAppService>());

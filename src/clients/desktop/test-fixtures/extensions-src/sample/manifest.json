@@ -66,6 +66,7 @@
     "execution",
     "a2a",
     "chat.composer",
+    "chat.observe",
     "clipboard.read",
     "clipboard.write"
   ],
