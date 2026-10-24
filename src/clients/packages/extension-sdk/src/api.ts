@@ -177,8 +177,7 @@ export interface ThemeInfo {
    *   `--color-black`、`--color-white`。
    * - 圆角 Radius：`--radius`，以及由它计算的 `--radius-sm`、`--radius-md`、`--radius-lg`、`--radius-xl`。
    * - 字体 Fonts：`--agw-font-sans`、`--agw-font-mono`，以及引用它们的 `--font-sans`、`--font-mono`。
-   * - 字号 Font sizes：`--agw-font-size-base`、`--agw-font-size-min`，为计算后的 px 值，最小字号固定为 14px。The computed
-   *   px values; the minimum size is fixed at 14px.
+   * - 字号 Font size：`--agw-font-size-base`，为计算后的 px 值。The computed px value.
    */
   tokens: Record<string, string>;
 }

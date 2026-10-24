@@ -104,7 +104,7 @@ test("unloading while the settings read is pending creates no session and no lis
 
   host.changeTheme({
     kind: "light",
-    tokens: { "--agw-font-size-base": "20px", "--agw-font-size-min": "14px" },
+    tokens: { "--agw-font-size-base": "20px" },
   });
   await settle();
   assert.equal(fontSize(), "");
@@ -120,7 +120,7 @@ test("onUnload disposes what was opened, including the font-size listener", asyn
   assert.deepEqual(events, ["open a.md", "dispose"]);
   host.changeTheme({
     kind: "light",
-    tokens: { "--agw-font-size-base": "20px", "--agw-font-size-min": "14px" },
+    tokens: { "--agw-font-size-base": "20px" },
   });
   await settle();
   assert.equal(fontSize(), "16px");

@@ -27,7 +27,7 @@ body {
 .status {
   margin: 0;
   padding: 24px 32px;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
   color: var(--muted-foreground);
 }
 
@@ -122,7 +122,7 @@ body {
   gap: 6px;
   max-width: 100%;
   padding: 2px 6px;
-  font-size: max(var(--agw-font-size-min), 0.85em);
+  font-size: 0.85em;
   color: var(--muted-foreground);
   vertical-align: middle;
   border: 1px dashed var(--border);
@@ -137,7 +137,7 @@ body {
 .markdown-body .image-placeholder-marker {
   flex-shrink: 0;
   padding: 0 4px;
-  font-size: max(var(--agw-font-size-min), 0.85em);
+  font-size: 0.85em;
   font-weight: 600;
   background: var(--muted);
   border-radius: 4px;

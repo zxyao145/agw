@@ -129,5 +129,4 @@ export const THEME_TOKEN_NAMES: readonly string[] = [
   "--font-sans",
   "--font-mono",
   "--agw-font-size-base",
-  "--agw-font-size-min",
 ];

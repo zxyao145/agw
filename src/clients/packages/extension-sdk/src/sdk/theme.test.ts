@@ -13,7 +13,7 @@ before(async () => {
 
 const theme = (kind: "light" | "dark"): ThemeInfo => ({
   kind,
-  tokens: { "--agw-font-size-base": "18px", "--agw-font-size-min": "14px" },
+  tokens: { "--agw-font-size-base": "18px" },
 });
 
 test("applyTheme links the typography stylesheet once across repeated calls", () => {

@@ -106,11 +106,23 @@ test("defaults show base 16 and follow for chat", () => {
   assert.equal(optionText(chatSelect(), "follow"), "Follow base size (14 px)");
 });
 
-test("the size selects offer 14 to 20 for base and 14 to 24 for chat, all enabled", () => {
+test("the size selects offer 12 to 20 for base and 12 to 24 for chat, all enabled", () => {
   renderForm(INITIAL, recordingSave().save);
-  assert.deepEqual(optionValues(baseSelect()), ["14", "15", "16", "17", "18", "19", "20"]);
+  assert.deepEqual(optionValues(baseSelect()), [
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20",
+  ]);
   assert.deepEqual(optionValues(chatSelect()), [
     "follow",
+    "12",
+    "13",
     "14",
     "15",
     "16",
@@ -129,12 +141,6 @@ test("the size selects offer 14 to 20 for base and 14 to 24 for chat, all enable
       false,
     );
   }
-});
-
-test("the form has no minimum font size select", () => {
-  renderForm(INITIAL, recordingSave().save);
-  assert.equal(document.getElementById("appearance-min-font-size"), null);
-  assert.equal(document.body.textContent?.includes("Minimum font size"), false);
 });
 
 test("choosing a base size saves it with the theme and mode and updates the follow text", async () => {
@@ -219,10 +225,15 @@ test("an external appearance change updates the selects", () => {
   assert.equal(themeSelect().value, "soft-theme:soft");
 });
 
-test("a stored value at 14 is selected", () => {
-  renderForm({ ...INITIAL, baseFontSize: 14, chatFontSize: 14 }, recordingSave().save);
-  assert.equal(baseSelect().value, "14");
-  assert.equal(chatSelect().value, "14");
+test("a stored value at 12 is selected", () => {
+  renderForm({ ...INITIAL, baseFontSize: 12, chatFontSize: 12 }, recordingSave().save);
+  assert.equal(baseSelect().value, "12");
+  assert.equal(chatSelect().value, "12");
+});
+
+test("base size 12 makes the chat follow text 10.5 px", () => {
+  renderForm({ ...INITIAL, baseFontSize: 12 }, recordingSave().save);
+  assert.equal(optionText(chatSelect(), "follow"), "Follow base size (10.5 px)");
 });
 
 test("the form has no document font size select and no document preview", () => {

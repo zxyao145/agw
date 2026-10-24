@@ -548,7 +548,7 @@ test("load returns the default appearance when the file has none", async () => {
 });
 
 test("load accepts the appearance range boundaries", async () => {
-  const small = { baseFontSize: 14, chatFontSize: 14, theme: "default" };
+  const small = { baseFontSize: 12, chatFontSize: 12, theme: "default" };
   const large = { baseFontSize: 20, chatFontSize: 24, theme: "default" };
   assert.deepEqual(await loadWithStoredAppearance(small), small);
   assert.deepEqual(await loadWithStoredAppearance(large), large);
@@ -571,13 +571,11 @@ test("load rejects an appearance outside the allowed values", async () => {
   const valid = { baseFontSize: 16, chatFontSize: null };
   for (const invalid of [
     { ...valid, baseFontSize: 21 },
-    { ...valid, baseFontSize: 13 },
+    { ...valid, baseFontSize: 11 },
     { ...valid, chatFontSize: 25 },
-    { ...valid, chatFontSize: 13 },
+    { ...valid, chatFontSize: 11 },
     { ...valid, documentFontSize: null },
     { ...valid, documentFontSize: 18 },
-    { ...valid, minFontSize: 14 },
-    { ...valid, minFontSize: 12 },
     { ...valid, baseFontSize: 16.5 },
     { ...valid, theme: "soft" },
     { ...valid, theme: "Soft-Theme:soft" },
@@ -654,7 +652,7 @@ test("writes that do not change the appearance keep a missing mode missing", asy
   }
 });
 
-test("save rejects sizes below 14 and invalid themes or modes, keeping the stored appearance", async () => {
+test("save rejects sizes below 12 and invalid themes or modes, keeping the stored appearance", async () => {
   const scratch = await createScratchDirectory("settings-appearance");
   try {
     const store = new DesktopSettingsStore(scratch.path, "client", codec);
@@ -665,8 +663,8 @@ test("save rejects sizes below 14 and invalid themes or modes, keeping the store
       mode: "system",
     } as const;
     await store.save({ appearance: stored });
-    await assert.rejects(store.save({ appearance: { ...stored, baseFontSize: 13 } }));
-    await assert.rejects(store.save({ appearance: { ...stored, chatFontSize: 13 } }));
+    await assert.rejects(store.save({ appearance: { ...stored, baseFontSize: 11 } }));
+    await assert.rejects(store.save({ appearance: { ...stored, chatFontSize: 11 } }));
     await assert.rejects(store.save({ appearance: { ...stored, theme: "soft" } }));
     await assert.rejects(
       store.save({ appearance: { ...stored, mode: "auto" as unknown as "system" } }),

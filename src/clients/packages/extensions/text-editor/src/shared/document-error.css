@@ -3,7 +3,7 @@
 
 .document-error {
   padding: 24px 32px;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
   color: var(--muted-foreground);
 }
 

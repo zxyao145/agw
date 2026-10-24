@@ -49,7 +49,7 @@ body {
   height: 32px;
   padding: 0 8px;
   border-bottom: 1px solid var(--border);
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
 }
 
 .edit-toolbar .save-status {
@@ -59,7 +59,7 @@ body {
 .status {
   margin: 0;
   padding: 24px 32px;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
   color: var(--muted-foreground);
 }
 
@@ -165,7 +165,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px 0;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
   user-select: none;
 }
 
@@ -201,7 +201,7 @@ body {
 .edit-content .raw-block-label {
   display: block;
   padding: 4px 8px 0;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
   color: var(--muted-foreground);
   user-select: none;
 }
@@ -241,7 +241,7 @@ body {
   padding: 0.1em 0.5em;
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
   color: var(--muted-foreground);
 }
 
@@ -301,7 +301,7 @@ body {
   background: var(--popover);
   color: var(--popover-foreground);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.16);
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
 }
 
 .slash-menu {
@@ -407,5 +407,5 @@ body {
 .drag-handle .popup-menu {
   left: 0;
   right: auto;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
 }

@@ -24,24 +24,11 @@ test("AppearanceProvider writes the font size properties to the document root", 
   assert.equal(root().fontSize, "var(--agw-font-size-base)");
   assert.equal(root().getPropertyValue("--agw-font-size-chat"), "17.5px");
   assert.equal(root().getPropertyValue("--agw-font-size-document"), "");
-  assert.equal(root().getPropertyValue("--agw-font-size-min"), "");
-});
-
-test("AppearanceProvider floors the seven theme text sizes below 1rem at the minimum font size", () => {
-  environment.render(providerElement({ baseFontSize: 16, chatFontSize: null }));
-
-  const expected = {
-    "--text-3xs": "0.5625rem",
-    "--text-2xs": "0.625rem",
-    "--text-xs": "0.75rem",
-    "--text-11": "0.6875rem",
-    "--text-sm": "0.875rem",
-    "--text-13": "0.8125rem",
-    "--text-15": "0.9375rem",
-  };
-  for (const [name, size] of Object.entries(expected)) {
-    assert.equal(root().getPropertyValue(name), `max(var(--agw-font-size-min), ${size})`, name);
-  }
+  assert.deepEqual(Array.from(root()).sort(), [
+    "--agw-font-size-base",
+    "--agw-font-size-chat",
+    "font-size",
+  ]);
 });
 
 test("AppearanceProvider updates the properties when the appearance changes", () => {

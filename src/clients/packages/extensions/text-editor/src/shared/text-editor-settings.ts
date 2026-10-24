@@ -3,13 +3,13 @@ import { z } from "zod";
 
 import { errorCode } from "./errors";
 
-const MIN_FONT_SIZE = 14;
+const MIN_FONT_SIZE = 12;
 const MAX_FONT_SIZE = 28;
 const SETTINGS_FILE_NAME = "settings.json";
 // Code 的字号默认取文档字号的 0.875 倍。By default the code size is 0.875 times the document size.
 const CODE_TO_DOCUMENT_RATIO = 0.875;
 
-/** 可选的字号（px），14 到 28 的整数。The selectable sizes in px: the integers 14 to 28. */
+/** 可选的字号（px），12 到 28 的整数。The selectable sizes in px: the integers 12 to 28. */
 export const TEXT_EDITOR_FONT_SIZES: readonly number[] = Array.from(
   { length: MAX_FONT_SIZE - MIN_FONT_SIZE + 1 },
   (_, index) => MIN_FONT_SIZE + index,
@@ -100,22 +100,18 @@ function pixels(tokens: Record<string, string>, name: string): number {
 }
 
 /**
- * 实际使用的字号（px）：文档字号 max(最小字号, 设置值 ?? 基础字号)；代码字号为设置值，未设置时取文档字号 × 0.875
- * 并取整到 0.5px，两者都不小于最小字号；同时返回最小字号 `min`。主题变量缺少或不是 px 值时抛出。
- * The effective sizes in px: document = max(min, setting ?? base); code is the setting, or the document size × 0.875
- * rounded to 0.5px when unset, both at least the minimum; `min` is returned too. Throws when a theme token is missing
- * or not a px value.
+ * 实际使用的字号（px）：文档字号为设置值，未设置时取基础字号；代码字号为设置值，未设置时取文档字号 × 0.875 并取整到
+ * 0.5px。主题变量缺少基础字号或不是 px 值时抛出。
+ * The effective sizes in px: the document size is the setting, or the base size when unset; the code size is the
+ * setting, or the document size × 0.875 rounded to 0.5px when unset. Throws when the theme has no base size or it is
+ * not a px value.
  */
 export function resolveTextEditorFontSizes(
   settings: TextEditorSettings,
   tokens: Record<string, string>,
-): { document: number; code: number; min: number } {
+): { document: number; code: number } {
   const base = pixels(tokens, "--agw-font-size-base");
-  const min = pixels(tokens, "--agw-font-size-min");
-  const document = Math.max(min, settings.documentFontSize ?? base);
-  const code = Math.max(
-    min,
-    settings.codeFontSize ?? Math.round(document * CODE_TO_DOCUMENT_RATIO * 2) / 2,
-  );
-  return { document, code, min };
+  const document = settings.documentFontSize ?? base;
+  const code = settings.codeFontSize ?? Math.round(document * CODE_TO_DOCUMENT_RATIO * 2) / 2;
+  return { document, code };
 }
