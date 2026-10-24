@@ -581,17 +581,6 @@ div[role="option"]:hover {
     line-height: 1.5;
   }
 
-  /* Desktop 最小字号：仅 Desktop 生效，Web 保持原字号。Desktop-only minimum size; Web keeps its sizes. */
-  :root[data-agw-desktop="true"] .prose-sm {
-    font-size: max(var(--agw-font-size-min), 0.875rem);
-  }
-
-  :root[data-agw-desktop="true"]
-    .prose
-    :where(code, pre, table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    font-size: max(var(--agw-font-size-min), 0.875em);
-  }
-
   .prose :where(p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     margin-top: 0.75em;
     margin-bottom: 0.75em;
@@ -794,7 +783,7 @@ div[role="option"]:hover {
 
 .msg-content-md-code-header {
   @apply flex min-h-11 items-center justify-between gap-3 border-b border-(--agw-code-block-border) px-3 text-(--agw-code-block-muted);
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
 }
 
 /* 外间距放在 components 层，首尾块的重置规则才能覆盖它。

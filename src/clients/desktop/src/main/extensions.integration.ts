@@ -3635,10 +3635,10 @@ async function openedViewSizes(): Promise<{
 
 /**
  * Appearance 设置：字号随设置改变，已打开的 extension 后台 frame 不重建并收到新的主题令牌，新打开的视图使用当前字号，
- * 最小字号限制生效；Appearance 页面没有 Document font size，Edit 的文档字号跟随基础字号。
+ * 按比例缩小的文字随基础字号缩放；Appearance 页面没有 Document font size，Edit 的文档字号跟随基础字号。
  * Appearance settings: sizes follow the settings, an extension's background frame stays alive and receives the new
- * theme tokens, views opened later use the current sizes, and the minimum font size applies; the Appearance page has
- * no Document font size and Edit's document size follows the base size.
+ * theme tokens, views opened later use the current sizes, and the smaller proportional text scales with the base size;
+ * the Appearance page has no Document font size and Edit's document size follows the base size.
  */
 async function appearanceSettings(): Promise<void> {
   const background = await untilFrame("sample", "background");
@@ -3716,20 +3716,24 @@ async function appearanceSettings(): Promise<void> {
   assert.equal(sizes.preview, "17px");
   pass("Reset chat font size returns to 14.875px at base size 17");
 
-  // 最小字号固定为 14px：text-xs 为 14px，Edit 行内代码不小于 14px，Appearance 页面没有最小字号设置。
-  // The minimum font size is fixed at 14px: text-xs is 14px, Edit inline code is never below 14px, and the Appearance
-  // page has no minimum font size setting.
-  await saveAppearance(DEFAULT_APPEARANCE, chooseSize("appearance-base-font-size", "16"));
-  assert.equal(await eyebrowSize(), "14px");
-  assert.ok(parseFloat((await openedViewSizes()).editCode) >= 14);
-  assert.equal(
-    await evalHost<boolean>(
-      `!document.getElementById("appearance-min-font-size") && !document.body.textContent.includes("Minimum font size")`,
-    ),
-    true,
-    "the Appearance page has no minimum font size",
+  // 基础字号 12：按比例缩小的文字随之缩小。Base size 12 scales the smaller proportional text down with it.
+  await saveAppearance(
+    { ...DEFAULT_APPEARANCE, baseFontSize: 12 },
+    chooseSize("appearance-base-font-size", "12"),
   );
-  pass("the fixed minimum font size 14 limits text-xs and Edit inline code");
+  assert.equal(await eyebrowSize(), "9px");
+  assert.equal(await chatParagraphSize(), "10.5px");
+  assert.deepEqual(await openedViewSizes(), {
+    edit: "12px",
+    editCode: "10.5px",
+    preview: "12px",
+    code: "10.5px",
+  });
+  await saveAppearance(DEFAULT_APPEARANCE, chooseSize("appearance-base-font-size", "16"));
+  assert.equal(await eyebrowSize(), "12px");
+  pass(
+    "base size 12 gives 9px text-xs, a 10.5px chat paragraph, 12px Edit and Preview with 10.5px inline code and 10.5px Code; base size 16 gives 12px text-xs",
+  );
 }
 
 /* ---------- 主题 Themes ---------- */
@@ -5125,7 +5129,7 @@ async function untilTextEditorSettings(
 async function textEditorSettings(): Promise<void> {
   // 基础字号 16：跟随值为文档 16 px，代码 14 px。Base 16: following gives document 16 px and code 14 px.
   let page = await openTextEditorSettings();
-  // 设置页的标签、下拉框与按钮不小于 14px。The labels, select and buttons of the settings page are 14px.
+  // 设置页的标签、下拉框与按钮为 14px。The labels, select and buttons of the settings page are 14px.
   assert.deepEqual(
     await evalFrame<string[]>(
       page,
@@ -6365,7 +6369,7 @@ async function restartPhase(): Promise<void> {
   assert.equal(await chatParagraphSize(), "15px");
   await openSettingsPage("/settings/appearance/");
   await untilHost(`Boolean(document.getElementById("appearance-base-font-size"))`, "Appearance");
-  assert.equal(await eyebrowSize(), "14px");
+  assert.equal(await eyebrowSize(), "13.5px");
   await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
   pass("after restarting Desktop, the saved sizes {18, 15} apply and Reset all restores 16px");
 

@@ -46,10 +46,8 @@ test("the theme offered to extensions includes the computed radius and font vari
   }
 });
 
-test("the theme offered to extensions includes the font size variables", () => {
-  for (const name of ["--agw-font-size-base", "--agw-font-size-min"] as const) {
-    assert.ok(THEME_TOKEN_NAMES.includes(name), name);
-  }
+test("the theme offered to extensions includes the base font size variable", () => {
+  assert.ok(THEME_TOKEN_NAMES.includes("--agw-font-size-base"));
 });
 
 test("the theme offered to extensions excludes the document font size variable", () => {
@@ -67,7 +65,4 @@ test("readTheme reads the font size variables written by AppearanceProvider", ()
   const { tokens } = readTheme("light").theme;
 
   assert.equal(tokens["--agw-font-size-base"], "20px");
-  // 最小字号来自 typography.css 的默认值，AppearanceProvider 不写入。
-  // The minimum size comes from the typography.css default; AppearanceProvider does not write it.
-  assert.equal("--agw-font-size-min" in tokens, false);
 });

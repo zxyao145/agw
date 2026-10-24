@@ -59,7 +59,6 @@ export function connectTestHost(request: RpcRequestHandler): TestHost {
         kind: "light",
         tokens: {
           "--agw-font-size-base": "16px",
-          "--agw-font-size-min": "14px",
         },
       },
     },

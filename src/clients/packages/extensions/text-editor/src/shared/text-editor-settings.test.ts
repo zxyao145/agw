@@ -51,9 +51,9 @@ function settings(
   return { schemaVersion: 1, documentFontSize, codeFontSize };
 }
 
-test("TEXT_EDITOR_FONT_SIZES lists the integers 14 to 28", () => {
-  assert.equal(TEXT_EDITOR_FONT_SIZES.length, 15);
-  assert.equal(TEXT_EDITOR_FONT_SIZES[0], 14);
+test("TEXT_EDITOR_FONT_SIZES lists the integers 12 to 28", () => {
+  assert.equal(TEXT_EDITOR_FONT_SIZES.length, 17);
+  assert.equal(TEXT_EDITOR_FONT_SIZES[0], 12);
   assert.equal(TEXT_EDITOR_FONT_SIZES.at(-1), 28);
 });
 
@@ -84,15 +84,15 @@ test("readTextEditorSettings requests settings.json under the storage URI", asyn
 });
 
 test("readTextEditorSettings reads the boundary sizes", async () => {
-  putSettings(JSON.stringify(settings(14, 28)));
-  assert.deepEqual(await readTextEditorSettings(host.api), settings(14, 28));
+  putSettings(JSON.stringify(settings(12, 28)));
+  assert.deepEqual(await readTextEditorSettings(host.api), settings(12, 28));
   putSettings(JSON.stringify(settings(28, null)));
   assert.deepEqual(await readTextEditorSettings(host.api), settings(28, null));
 });
 
 const INVALID: [string, string][] = [
-  ["a size below 14", JSON.stringify(settings(13, null))],
-  ["a code size below 14", JSON.stringify(settings(null, 12))],
+  ["a size below 12", JSON.stringify(settings(11, null))],
+  ["a code size below 12", JSON.stringify(settings(null, 11))],
   ["a size above 28", JSON.stringify(settings(null, 29))],
   ["a fractional size", JSON.stringify(settings(16.5, null))],
   ["an unknown field", JSON.stringify({ ...settings(null, null), extra: 1 })],
@@ -136,7 +136,7 @@ test("writeTextEditorSettings then readTextEditorSettings returns the same objec
 
 test("writeTextEditorSettings rejects an invalid object before any fs.writeFile request", async () => {
   await assert.rejects(
-    writeTextEditorSettings(host.api, settings(13, null)),
+    writeTextEditorSettings(host.api, settings(11, null)),
     (error: unknown) =>
       error instanceof TextEditorSettingsError && error.message.includes("settings.json"),
   );
@@ -144,57 +144,56 @@ test("writeTextEditorSettings rejects an invalid object before any fs.writeFile 
   assert.equal(files.size, 0);
 });
 
-function tokens(base: string, min: string): Record<string, string> {
-  return { "--agw-font-size-base": base, "--agw-font-size-min": min };
+function tokens(base: string): Record<string, string> {
+  return { "--agw-font-size-base": base };
 }
 
 test("resolveTextEditorFontSizes follows the base size by default", () => {
-  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("16px", "14px")), {
+  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("16px")), {
     document: 16,
     code: 14,
-    min: 14,
   });
-  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("20px", "14px")), {
+  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("20px")), {
     document: 20,
     code: 17.5,
-    min: 14,
   });
 });
 
 test("resolveTextEditorFontSizes derives the code size from the document size", () => {
-  assert.deepEqual(resolveTextEditorFontSizes(settings(18, null), tokens("16px", "14px")), {
+  assert.deepEqual(resolveTextEditorFontSizes(settings(18, null), tokens("16px")), {
     document: 18,
     code: 16,
-    min: 14,
+  });
+});
+
+test("resolveTextEditorFontSizes scales the code size 10.5 from document size 12", () => {
+  assert.deepEqual(resolveTextEditorFontSizes(settings(12, null), tokens("16px")), {
+    document: 12,
+    code: 10.5,
+  });
+  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("12px")), {
+    document: 12,
+    code: 10.5,
   });
 });
 
 test("resolveTextEditorFontSizes keeps an explicit code size independent of the document size", () => {
-  assert.equal(resolveTextEditorFontSizes(settings(null, 15), tokens("16px", "14px")).code, 15);
-  assert.equal(resolveTextEditorFontSizes(settings(null, 15), tokens("24px", "14px")).code, 15);
-});
-
-test("resolveTextEditorFontSizes raises sizes to the minimum of the theme", () => {
-  assert.equal(resolveTextEditorFontSizes(settings(14, null), tokens("16px", "15px")).document, 15);
-  assert.equal(resolveTextEditorFontSizes(settings(null, 14), tokens("16px", "15px")).code, 15);
-});
-
-test("resolveTextEditorFontSizes throws when the host theme has no minimum size", () => {
-  assert.throws(
-    () => resolveTextEditorFontSizes(settings(null, null), { "--agw-font-size-base": "16px" }),
-    { message: "The host theme has no --agw-font-size-min." },
-  );
+  assert.equal(resolveTextEditorFontSizes(settings(null, 15), tokens("16px")).code, 15);
+  assert.equal(resolveTextEditorFontSizes(settings(null, 15), tokens("24px")).code, 15);
+  assert.equal(resolveTextEditorFontSizes(settings(20, 12), tokens("16px")).code, 12);
 });
 
 test("resolveTextEditorFontSizes throws when the host theme has no base size", () => {
-  assert.throws(
-    () => resolveTextEditorFontSizes(settings(null, null), { "--agw-font-size-min": "14px" }),
-    { message: "The host theme has no --agw-font-size-base." },
-  );
+  assert.throws(() => resolveTextEditorFontSizes(settings(null, null), {}), {
+    message: "The host theme has no --agw-font-size-base.",
+  });
+  assert.throws(() => resolveTextEditorFontSizes(settings(18, 15), {}), {
+    message: "The host theme has no --agw-font-size-base.",
+  });
 });
 
 test("resolveTextEditorFontSizes throws on a value that is not px", () => {
-  assert.throws(() => resolveTextEditorFontSizes(settings(null, null), tokens("1rem", "14px")), {
+  assert.throws(() => resolveTextEditorFontSizes(settings(null, null), tokens("1rem")), {
     message: 'The host theme --agw-font-size-base is not a px value: "1rem".',
   });
 });

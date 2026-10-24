@@ -57,7 +57,7 @@ test("applyDocumentFontSize writes the stored document size and keeps it when th
 
   host.changeTheme({
     kind: "light",
-    tokens: { "--agw-font-size-base": "20px", "--agw-font-size-min": "14px" },
+    tokens: { "--agw-font-size-base": "20px" },
   });
   await settle();
   assert.equal(documentFontSize(), "18px");
@@ -83,7 +83,7 @@ test("a viewer started through createSettingsGate follows the base size on a the
 
   host.changeTheme({
     kind: "light",
-    tokens: { "--agw-font-size-base": "20px", "--agw-font-size-min": "14px" },
+    tokens: { "--agw-font-size-base": "20px" },
   });
   await settle();
   assert.equal(documentFontSize(), "20px");

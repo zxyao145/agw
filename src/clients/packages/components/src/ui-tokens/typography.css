@@ -14,7 +14,6 @@
     --agw-font-size-base: 16px;
     --agw-font-size-chat: calc(var(--agw-font-size-base) * 0.875);
     --agw-font-size-document: var(--agw-font-size-base);
-    --agw-font-size-min: 14px;
     --agw-prose-link: #2e82d2;
   }
 
@@ -24,19 +23,13 @@
 
   /* 调用方可在外层设置 --agw-prose-font-size 覆盖字号。Callers may set --agw-prose-font-size on an ancestor. */
   .agw-prose[data-density="compact"] {
-    --agw-prose-size: max(
-      var(--agw-font-size-min),
-      var(--agw-prose-font-size, var(--agw-font-size-chat))
-    );
+    --agw-prose-size: var(--agw-prose-font-size, var(--agw-font-size-chat));
     --agw-prose-line-height: 1.65;
     --agw-prose-block-gap: calc(var(--agw-prose-size) * 0.6);
   }
 
   .agw-prose[data-density="document"] {
-    --agw-prose-size: max(
-      var(--agw-font-size-min),
-      var(--agw-prose-font-size, var(--agw-font-size-document))
-    );
+    --agw-prose-size: var(--agw-prose-font-size, var(--agw-font-size-document));
     --agw-prose-line-height: 1.75;
     --agw-prose-block-gap: calc(var(--agw-prose-size) * 0.8);
   }
@@ -130,7 +123,7 @@
     border-radius: 0.25rem;
     background: var(--muted);
     font-family: var(--font-mono);
-    font-size: max(var(--agw-font-size-min), 0.875em);
+    font-size: 0.875em;
   }
 
   .agw-prose :where(pre) {
@@ -138,7 +131,7 @@
     overflow-x: auto;
     border-radius: 0.5rem;
     background: var(--muted);
-    font-size: max(var(--agw-font-size-min), 0.875em);
+    font-size: 0.875em;
     line-height: 1.55;
   }
 
@@ -151,7 +144,7 @@
 
   .agw-prose :where(table) {
     border-collapse: collapse;
-    font-size: max(var(--agw-font-size-min), 0.9375em);
+    font-size: 0.9375em;
   }
 
   .agw-prose :where(th, td) {
@@ -178,7 +171,7 @@
     padding-top: calc(var(--agw-prose-size) * 0.5);
     border-top: 1px solid var(--border);
     color: var(--muted-foreground);
-    font-size: max(var(--agw-font-size-min), 0.875em);
+    font-size: 0.875em;
   }
 
   .agw-prose :where([data-footnotes] > ol) {
@@ -186,7 +179,7 @@
   }
 
   .agw-prose :where(sup) {
-    font-size: max(var(--agw-font-size-min), 0.75em);
+    font-size: 0.75em;
   }
 
   .agw-prose :where(a) {

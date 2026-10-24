@@ -36,7 +36,7 @@ body {
   gap: 4px;
   box-sizing: border-box;
   padding: 0 8px;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
 }
 
 .code-toolbar {
@@ -67,6 +67,6 @@ body {
 .status {
   margin: 0;
   padding: 24px 32px;
-  font-size: max(var(--agw-font-size-min), 0.875em);
+  font-size: 0.875em;
   color: var(--muted-foreground);
 }

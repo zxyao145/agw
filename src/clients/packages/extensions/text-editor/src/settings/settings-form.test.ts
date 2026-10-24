@@ -142,7 +142,7 @@ test("defaults follow the base and document sizes", async () => {
   assert.equal(selectedText(codeSelect), "Follow document size (14 px)");
   assert.deepEqual(
     Array.from(documentSelect.options).map((option) => option.value),
-    ["follow", ...Array.from({ length: 15 }, (_, index) => String(14 + index))],
+    ["follow", ...Array.from({ length: 17 }, (_, index) => String(12 + index))],
   );
   assert.equal(
     Array.from(documentSelect.options).some((option) => option.disabled),
@@ -171,13 +171,13 @@ test("choosing a document size writes it and updates the code follow text", asyn
   await unmount();
 });
 
-test("a stored size of 14 is selected and shown as a plain size", async () => {
-  putSettings(JSON.stringify(stored(14, null)));
+test("a stored size of 12 is selected and shown as a plain size", async () => {
+  putSettings(JSON.stringify(stored(12, null)));
   const { container, unmount } = await mount();
   const documentSelect = select(container, DOCUMENT_ID);
-  assert.equal(documentSelect.value, "14");
-  assert.equal(selectedText(documentSelect), "14 px");
-  assert.equal(selectedText(select(container, CODE_ID)), "Follow document size (14 px)");
+  assert.equal(documentSelect.value, "12");
+  assert.equal(selectedText(documentSelect), "12 px");
+  assert.equal(selectedText(select(container, CODE_ID)), "Follow document size (10.5 px)");
 
   await choose(documentSelect, "15");
   assert.deepEqual(writes, [stored(15, null)]);
@@ -301,7 +301,7 @@ test("a theme change updates the follow texts", async () => {
   await act(async () => {
     host.changeTheme({
       kind: "light",
-      tokens: { "--agw-font-size-base": "20px", "--agw-font-size-min": "14px" },
+      tokens: { "--agw-font-size-base": "20px" },
     });
   });
   await settled();
