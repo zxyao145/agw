@@ -631,6 +631,12 @@ export interface BinaryDocumentAdapter<Snapshot> {
 export type DocumentState = "loading" | "clean" | "dirty" | "saving" | "conflict" | "failed";
 
 /**
+ * 文档会话报告给宿主、显示在文件名后的保存状态；读取中与失败时不报告状态（null）。
+ * The save status a document session reports to the host, shown after the file name; null while loading or failed.
+ */
+export type DocumentSaveStatus = "saved" | "unsaved" | "saving" | "changed-on-disk";
+
+/**
  * 一个文件的文档会话。`save`、`show`、`reload`、`reopenWithEncoding`、`saveWithEncoding` 按调用顺序执行；
  * 读取与保存的失败显示在 `state`、`error` 与通知中，返回的 Promise 在操作结束时完成，只有对话框失败（例如 frame
  * 已关闭）时被拒绝。

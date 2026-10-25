@@ -13,6 +13,7 @@ import type {
 } from "@desktop/shared/contracts";
 import {
   createExtensionError,
+  type DocumentSaveStatus,
   type ExecutionCloseReason,
   type ExtensionAction,
   type ExtensionFrameKind,
@@ -101,6 +102,8 @@ export type ExtensionHostSnapshot = {
   viewErrors: Readonly<Record<string, ExtensionFailure>>;
   /** 有未保存修改的文件查看器。File viewers with unsaved changes. */
   unsavedViewIds: readonly string[];
+  /** 文件查看器报告的保存状态，按视图 id 记录。The save statuses file viewers reported, by view id. */
+  saveStatuses: Readonly<Record<string, DocumentSaveStatus>>;
 };
 
 type Deferred = {
@@ -275,6 +278,8 @@ export class ExtensionHost {
   private readonly fileViewerFiles = new Map<string, FileViewerFile>();
   /** 报告了未保存修改的 frame。Frames that reported unsaved changes. */
   private readonly unsavedFrames = new Set<string>();
+  /** frame 报告的保存状态：frameId → 状态。Save statuses frames reported: frameId → status. */
+  private readonly saveStatuses = new Map<string, DocumentSaveStatus>();
   /** 等待回答的消息框：clientId → 发出它的页面。Message boxes awaiting answers: clientId → the page that asked. */
   private readonly messageBoxes = new Map<string, PendingMessageBox>();
   private nextMessageBoxId = 1;
@@ -286,6 +291,7 @@ export class ExtensionHost {
     extensions: [],
     viewErrors: {},
     unsavedViewIds: [],
+    saveStatuses: {},
   };
 
   public constructor(private readonly options: ExtensionHostOptions) {
@@ -363,6 +369,12 @@ export class ExtensionHost {
         const frame = this.frames.get(frameId);
         if (frame?.kind === "fileViewer" && frame.pageId === pageId && frame.closing === null) {
           this.setUnsaved(frameId, unsaved);
+        }
+      },
+      setSaveStatus: (frameId, pageId, status) => {
+        const frame = this.frames.get(frameId);
+        if (frame?.kind === "fileViewer" && frame.pageId === pageId && frame.closing === null) {
+          this.setSaveStatus(frameId, status);
         }
       },
       confirmOpenExternal: (extensionId, url) =>
@@ -572,6 +584,7 @@ export class ExtensionHost {
     const params: FileViewerParams = { file };
     frame.params = params;
     this.setUnsaved(frame.frameId, false);
+    this.setSaveStatus(frame.frameId, null);
     if (frame.loaded) {
       void this.broker.call(frame.frameId, "view.onShow", { params }).catch((error: unknown) => {
         console.error(`[extension ${frame.extensionId}/${viewId}] onShow failed.`, error);
@@ -680,6 +693,17 @@ export class ExtensionHost {
     if (frame) await this.closeFrame(frame, "frame-unloaded", false);
     this.publish();
     if ((this.viewHolds.get(viewId) ?? 0) > 0) await this.showView(viewId);
+  }
+
+  /**
+   * 文件名后 "Changed on disk" 的 Reload：文件查看器重新读取磁盘内容已变化的文档，有未保存修改时先确认放弃。
+   * The Reload after "Changed on disk" next to the file name: the file viewer reads its documents changed on disk
+   * again, confirming discarding unsaved changes first.
+   */
+  public reloadFileViewerDocument(viewId: string): void {
+    const frame = this.viewFrames.get(viewId);
+    if (frame?.kind !== "fileViewer" || !frame.loaded || frame.closing !== null) return;
+    this.broker.emit(frame.frameId, frame.pageId, "documents.reloadRequested", null);
   }
 
   public frameIdOfView(viewId: string): string | null {
@@ -1048,6 +1072,7 @@ export class ExtensionHost {
         .catch(() => undefined);
       this.frames.delete(frame.frameId);
       this.unsavedFrames.delete(frame.frameId);
+      this.saveStatuses.delete(frame.frameId);
       if (frame.viewId !== null && this.viewFrames.get(frame.viewId) === frame)
         this.viewFrames.delete(frame.viewId);
       this.publish();
@@ -1325,6 +1350,13 @@ export class ExtensionHost {
     this.publish();
   }
 
+  private setSaveStatus(frameId: string, status: DocumentSaveStatus | null): void {
+    if ((this.saveStatuses.get(frameId) ?? null) === status) return;
+    if (status === null) this.saveStatuses.delete(frameId);
+    else this.saveStatuses.set(frameId, status);
+    this.publish();
+  }
+
   private readonly onBeforeUnload = (event: BeforeUnloadEvent) => {
     // 主进程在 will-prevent-unload 中由用户确认。The main process asks the user in will-prevent-unload.
     if (this.unsavedFrames.size > 0) event.preventDefault();
@@ -1359,6 +1391,7 @@ export class ExtensionHost {
     frame.loaded = false;
     this.dismissMessageBoxes(frame.frameId, pageId);
     this.setUnsaved(frame.frameId, false);
+    this.setSaveStatus(frame.frameId, null);
     await this.execution.closePage(frame.frameId, pageId);
     this.broker.disconnect(frame.frameId, pageId);
     if (frame.kind === "background") {
@@ -1481,6 +1514,12 @@ export class ExtensionHost {
         const viewId = this.frames.get(frameId)?.viewId;
         return viewId ? [viewId] : [];
       }),
+      saveStatuses: Object.fromEntries(
+        [...this.saveStatuses].flatMap(([frameId, status]) => {
+          const viewId = this.frames.get(frameId)?.viewId;
+          return viewId ? [[viewId, status]] : [];
+        }),
+      ),
       extensions: [...this.records.values()]
         .sort((left, right) => left.installed.id.localeCompare(right.installed.id))
         .map((record) => ({

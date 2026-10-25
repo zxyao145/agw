@@ -17,6 +17,7 @@ import {
   type ContextProject,
   type ContextTarget,
   createExtensionError,
+  type DocumentSaveStatus,
   type ExtensionFrameKind,
   type ExtensionManifest,
   type ExtensionPermission,
@@ -122,6 +123,8 @@ export type ExtensionBridgeBrokerOptions = {
   /** 在 Files 中打开当前 Project 的云端文件。Opens a cloud file of the current Project in the Files view. */
   openFile(extensionId: string, uri: string): Promise<void>;
   setUnsavedChanges(frameId: string, pageId: string, unsaved: boolean): void;
+  /** 文件查看器的文档会话报告保存状态。A file viewer's document session reports its save status. */
+  setSaveStatus(frameId: string, pageId: string, status: DocumentSaveStatus | null): void;
   /** 打开未批准的地址前由用户确认。Asks the user before opening a URL outside the approved hosts. */
   confirmOpenExternal(extensionId: string, url: string): Promise<boolean>;
   /** 在宿主的确认队列中显示消息框，返回按钮下标。Shows a message box in the host's confirmation queue and returns the button index. */
@@ -149,6 +152,13 @@ function invalidArgument(message: string): Error {
 }
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+
+const SAVE_STATUSES: ReadonlySet<unknown> = new Set<DocumentSaveStatus>([
+  "saved",
+  "unsaved",
+  "saving",
+  "changed-on-disk",
+]);
 
 /**
  * 执行会话的 projectId 与 conversationId 会进入请求路径，只接受 Server 使用的小写 UUID。
@@ -644,6 +654,22 @@ export class ExtensionBridgeBroker {
           connection.frameId,
           connection.pageId,
           params.unsaved === true,
+        );
+        return null;
+      },
+      "documents.setSaveStatus": (connection, params: { status: unknown }) => {
+        if (connection.kind !== "fileViewer") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only file viewers report a save status.",
+          );
+        }
+        if (params.status !== null && !SAVE_STATUSES.has(params.status))
+          throw invalidArgument(`Unknown save status: ${String(params.status)}`);
+        this.options.setSaveStatus(
+          connection.frameId,
+          connection.pageId,
+          params.status as DocumentSaveStatus | null,
         );
         return null;
       },

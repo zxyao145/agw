@@ -1994,10 +1994,34 @@ async function withPickedPath(path: string, action: () => Promise<void>): Promis
   }
 }
 
+/**
+ * 悬停 "Install extension" 按钮显示 tooltip，点击后在对话框中选择安装来源。
+ * Hovering the Install extension button shows its tooltip; clicking it opens a dialog where `label` picks the source.
+ */
+async function chooseInstallSource(label: string): Promise<void> {
+  const trigger = `document.querySelector('button[aria-label="Install extension"]')`;
+  await untilHost(`Boolean(${trigger})`, "the Install extension button");
+  await evalHost(`(() => {
+    ${trigger}.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse" }));
+    return true;
+  })()`);
+  await untilHost(
+    `[...document.querySelectorAll('[data-slot="tooltip-content"]')].some((element) => element.textContent.includes("Install extension"))`,
+    "the Install extension tooltip",
+  );
+  await evalHost(`${trigger}.click(); true`);
+  await untilHost(
+    `${OPEN_DIALOG}?.textContent.includes("Choose where to install the extension from.") === true`,
+    "the install source dialog",
+  );
+  await clickText(label, OPEN_DIALOG);
+  await untilHost(`!${OPEN_DIALOG}`, "the install source dialog to close");
+}
+
 async function zipInstall(): Promise<void> {
   await goToExtensions();
   await withPickedPath(join(config.fixtures, "sample-v2.zip"), async () => {
-    await clickText("Install from .zip");
+    await chooseInstallSource("Install from .zip");
     await expectConfirmation(
       "install",
       ["Version 1.1.0 · Replaces version 1.0.0"],
@@ -2777,8 +2801,10 @@ async function excalidrawEditor(): Promise<void> {
 const EDIT_VIEWER = "text-editor:markdown";
 const CODE_VIEWER = "text-editor:code";
 const FILE_VIEWER_TABS = `[...document.querySelectorAll('[data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`;
-// 查看器顶部条或工具栏中的保存状态为 "Saved"。The save status in a viewer's top bar or toolbar reads "Saved".
-const SAVED = `document.querySelector(".save-status")?.textContent === "Saved"`;
+/** 宿主文件名后的保存状态。The save status after the host's file name. */
+function saveStatusIs(status: string): string {
+  return `document.querySelector("[data-file-save-status]")?.getAttribute("data-file-save-status") === ${JSON.stringify(status)}`;
+}
 const EDITOR = `document.querySelector(".ProseMirror")`;
 // Code 编辑器显示的全部文字，按行的位置排列；Monaco 把空格显示为 U+00A0。All text the Code editor shows, ordered by
 // line position; Monaco shows spaces as U+00A0.
@@ -2792,6 +2818,11 @@ function unsavedIn(viewerId: string): string {
 
 function selectedViewerIs(viewerId: string): string {
   return `${viewerTab(viewerId)}?.getAttribute("aria-selected") === "true"`;
+}
+
+/** 查看器已选中，文件名后显示 "Saved"。The viewer is selected and "Saved" shows after the file name. */
+function savedIn(viewerId: string): string {
+  return `${selectedViewerIs(viewerId)} && ${saveStatusIs("saved")}`;
 }
 
 function projectPath(path: string): string {
@@ -2979,7 +3010,9 @@ async function untilFileBytes(path: string, expected: Buffer, label: string): Pr
 async function editShowing(predicate: string, label: string): Promise<FrameHandle> {
   const frame = await untilViewerFrame("text-editor", "markdown");
   await until(
-    () => evalFrame<boolean>(frame, `${SAVED} && Boolean(${EDITOR}) && (${predicate})`),
+    async () =>
+      (await evalHost<boolean>(savedIn(EDIT_VIEWER))) &&
+      (await evalFrame<boolean>(frame, `Boolean(${EDITOR}) && (${predicate})`)),
     label,
   );
   return frame;
@@ -2989,11 +3022,12 @@ async function editShowing(predicate: string, label: string): Promise<FrameHandl
 async function codeShowing(predicate: string, label: string): Promise<FrameHandle> {
   const frame = await untilViewerFrame("text-editor", "code");
   await until(
-    () =>
-      evalFrame<boolean>(
+    async () =>
+      (await evalHost<boolean>(savedIn(CODE_VIEWER))) &&
+      (await evalFrame<boolean>(
         frame,
-        `${SAVED} && Boolean(document.querySelector(".code-status-bar")) && (${predicate})`,
-      ),
+        `Boolean(document.querySelector(".code-status-bar")) && (${predicate})`,
+      )),
     label,
   );
   return frame;
@@ -3119,12 +3153,14 @@ async function viewerOrderAndDefaults(): Promise<void> {
   // for its snapshot and hidden, so Monaco draws no text; the status bar's language shows the read finished.
   host().focus();
   await openMenuAndWait(more);
-  const codeHoldsEditMd = `${SAVED} && Boolean(document.querySelector(".code-status-bar")?.textContent.includes("Markdown"))`;
+  const codeHoldsEditMd = `Boolean(document.querySelector(".code-status-bar")?.textContent.includes("Markdown"))`;
+  const codeRead = async (frame: FrameHandle) =>
+    (await evalHost<boolean>(savedIn(CODE_VIEWER))) &&
+    (await evalFrame<boolean>(frame, codeHoldsEditMd));
   const codeBeforeMenu = viewerFrameOf("text-editor", "code");
-  const loadedBeforeMenu =
-    codeBeforeMenu !== undefined && (await evalFrame<boolean>(codeBeforeMenu, codeHoldsEditMd));
+  const loadedBeforeMenu = codeBeforeMenu !== undefined && (await codeRead(codeBeforeMenu));
   const code = await untilViewerFrame("text-editor", "code");
-  await until(() => evalFrame<boolean>(code, codeHoldsEditMd), "edit.md read in Code");
+  await until(() => codeRead(code), "edit.md read in Code");
   await delay(500);
   console.log(
     `More menu after a Code file switch: window focused ${hooks.mainWindow()!.isFocused()}, Code had read the file before the menu opened ${loadedBeforeMenu}`,
@@ -6638,11 +6674,12 @@ async function editInteractions(): Promise<void> {
       : null;
   }, "the reloaded Edit viewer");
   await until(
-    () =>
-      evalFrame<boolean>(
+    async () =>
+      (await evalHost<boolean>(savedIn(EDIT_VIEWER))) &&
+      (await evalFrame<boolean>(
         reloaded,
-        `${SAVED} && Boolean(${editBlock("Related:", "p")}) && !${editBlock("Related:", "h3")}`,
-      ),
+        `Boolean(${editBlock("Related:", "p")}) && !${editBlock("Related:", "h3")}`,
+      )),
     "the file content after Reload view",
   );
   assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), false);
@@ -6943,7 +6980,7 @@ async function conflictsAndRefresh(): Promise<void> {
 async function installFromFolder(directory: string, name: string): Promise<void> {
   await goToExtensions();
   await withPickedPath(directory, async () => {
-    await clickText("Install from folder");
+    await chooseInstallSource("Install from folder");
     await expectConfirmation("install", [`Install ${name}?`], `the ${name} install approval`);
     await answerConfirmation("Install");
   });
@@ -7093,7 +7130,7 @@ async function measureOpen(frame: FrameHandle, ready: string): Promise<number> {
       async () =>
         `page ${runtime().registry.get(frame.frameId)?.pageId} (before ${previousPage}); ${await evalFrame<string>(
           frame,
-          `JSON.stringify({ start: window.__agwOpenStart ?? null, time: window.__agwOpenTime ?? null, status: document.querySelector(".save-status")?.textContent ?? null, hidden: document.querySelector(".edit-scroll")?.hidden ?? null, blocks: document.querySelector(".ProseMirror")?.childElementCount ?? null, url: location.href })`,
+          `JSON.stringify({ start: window.__agwOpenStart ?? null, time: window.__agwOpenTime ?? null, hidden: document.querySelector(".edit-scroll")?.hidden ?? null, blocks: document.querySelector(".ProseMirror")?.childElementCount ?? null, url: location.href })`,
         )}`,
     );
     await debuggerApi.sendCommand("Page.removeScriptToEvaluateOnNewDocument", { identifier });
@@ -7141,63 +7178,75 @@ async function measureKeystroke(frame: FrameHandle, element: string): Promise<nu
 }
 
 /**
- * 按保存快捷键，测量从 keydown 到保存状态显示 "Saved" 的时间，以及其间最长的主线程任务（生成文本在一个任务中完成）。
- * Presses the save shortcut and measures the time from keydown until the save status shows "Saved", plus the longest
- * main-thread task meanwhile (text generation runs in one task).
+ * 按保存快捷键，测量从查看器中的 keydown 到宿主文件名后显示 "Saved" 的时间，以及其间查看器中最长的主线程任务（生成
+ * 文本在一个任务中完成）。两个时刻在不同进程中记录，用 `performance.timeOrigin` 换算到同一时间轴。
+ * Presses the save shortcut and measures the time from the keydown in the viewer until "Saved" shows after the host's
+ * file name, plus the longest main-thread task in the viewer meanwhile (text generation runs in one task). The two
+ * moments are recorded in different processes and put on one timeline with `performance.timeOrigin`.
  */
 async function measureSave(
   frame: FrameHandle,
   viewerId: string,
 ): Promise<{ save: number; longestTask: number }> {
-  // 保存前查看器与宿主都显示未保存。Before saving, the viewer and the host both show unsaved changes.
-  await until(
-    () =>
-      evalFrame<boolean>(
-        frame,
-        `document.querySelector(".save-status")?.textContent === "Unsaved changes"`,
-      ),
+  // 保存前宿主显示未保存。Before saving, the host shows unsaved changes.
+  await untilHost(
+    `${selectedViewerIs(viewerId)} && ${saveStatusIs("unsaved")}`,
     "the Unsaved changes status",
   );
   await untilHost(unsavedIn(viewerId), "the unsaved marker before saving");
   await evalFrame(
     frame,
     `(() => {
-      window.__agwSave = new Promise((resolve) => {
-        const tasks = [];
-        const observer = new PerformanceObserver((list) => tasks.push(...list.getEntries()));
-        observer.observe({ type: "longtask" });
-        let start = null;
-        window.addEventListener("keydown", () => { start = performance.now(); }, { capture: true, once: true });
-        setTimeout(() => resolve({ start, status: document.querySelector(".save-status")?.textContent ?? null }), 30000);
-        const poll = () => {
-          if (start !== null && ${SAVED}) {
-            document.body.getBoundingClientRect();
-            const end = performance.now();
-            observer.disconnect();
-            const durations = tasks.filter((task) => task.startTime >= start).map((task) => task.duration);
-            resolve({ save: end - start, longestTask: Math.max(0, ...durations) });
-            return;
-          }
-          requestAnimationFrame(poll);
-        };
-        requestAnimationFrame(poll);
+      window.__agwSaveTasks = [];
+      window.__agwSaveObserver = new PerformanceObserver((list) => window.__agwSaveTasks.push(...list.getEntries()));
+      window.__agwSaveObserver.observe({ type: "longtask" });
+      window.__agwSaveStart = null;
+      window.addEventListener("keydown", () => { window.__agwSaveStart = performance.timeOrigin + performance.now(); }, { capture: true, once: true });
+      return true;
+    })()`,
+  );
+  await evalHost(
+    `(() => {
+      window.__agwSaved = new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (!(${savedIn(viewerId)})) return;
+          document.body.getBoundingClientRect();
+          const end = performance.timeOrigin + performance.now();
+          observer.disconnect();
+          clearTimeout(timeout);
+          resolve(end);
+        });
+        const timeout = setTimeout(() => {
+          observer.disconnect();
+          resolve(null);
+        }, 30000);
+        observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
       });
       return true;
     })()`,
   );
   saveIn(frame);
-  const result = await evalFrame<{ save?: number; longestTask?: number }>(
+  const end = await evalHost<number | null>("window.__agwSaved");
+  const result = await evalFrame<{ start: number | null; longestTask: number }>(
     frame,
-    "window.__agwSave",
+    `(() => {
+      window.__agwSaveObserver.disconnect();
+      const start = window.__agwSaveStart;
+      const end = ${JSON.stringify(end)} ?? Infinity;
+      const durations = start === null ? [] : window.__agwSaveTasks
+        .filter((task) => performance.timeOrigin + task.startTime >= start && performance.timeOrigin + task.startTime <= end)
+        .map((task) => task.duration);
+      return { start, longestTask: Math.max(0, ...durations) };
+    })()`,
   );
-  if (result.save === undefined || result.longestTask === undefined) {
-    throw new Error(`The save did not finish: ${JSON.stringify(result)}`);
+  if (end === null || result.start === null) {
+    throw new Error(`The save did not finish: ${JSON.stringify({ end, ...result })}`);
   }
-  return { save: result.save, longestTask: result.longestTask };
+  return { save: end - result.start, longestTask: result.longestTask };
 }
 
-const EDIT_READY = `${SAVED} && !document.querySelector(".edit-scroll").hidden && document.querySelector(".ProseMirror")?.childElementCount > 0`;
-const CODE_READY = `${SAVED} && !document.querySelector(".code-editor").hidden && document.querySelectorAll(".code-editor .view-line").length > 0 && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`;
+const EDIT_READY = `!document.querySelector(".edit-scroll").hidden && document.querySelector(".ProseMirror")?.childElementCount > 0`;
+const CODE_READY = `!document.querySelector(".code-editor").hidden && document.querySelectorAll(".code-editor .view-line").length > 0 && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`;
 
 function round(value: number): number {
   return Math.round(value * 10) / 10;

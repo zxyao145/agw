@@ -6,13 +6,14 @@ import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ChevronDown,
+  FileArchive,
   FolderOpen,
   FolderPlus,
   PackagePlus,
   RefreshCw,
   RotateCw,
-  Save,
   Settings,
+  SquareArrowRightExit,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,8 +34,15 @@ import {
   DialogTitle,
   Label,
   Switch,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@agw/components";
-import type { ExtensionInstallPreview, ExtensionRecoveryNotice } from "@desktop/shared/contracts";
+import type {
+  ExtensionInstallPreview,
+  ExtensionInstallSource,
+  ExtensionRecoveryNotice,
+} from "@desktop/shared/contracts";
 import { type ExtensionManifest, HIGH_RISK_EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import {
   isUnencryptedHostPermission,
@@ -142,6 +150,83 @@ function PermissionList({ manifest }: { manifest: ExtensionManifest }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** 页面标题右侧只显示图标的按钮，悬停时 tooltip 显示 `label`。An icon-only header button whose tooltip shows `label`. */
+function HeaderIconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick(): void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button size="icon-sm" variant="outline" aria-label={label} onClick={onClick}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+const INSTALL_SOURCES = [
+  {
+    source: "directory",
+    icon: FolderPlus,
+    label: "Install from folder…",
+    description: "A folder that contains the extension's manifest.json.",
+  },
+  {
+    source: "archive",
+    icon: FileArchive,
+    label: "Install from .zip…",
+    description: "A packaged extension in a .zip file.",
+  },
+] as const;
+
+/** 选择安装来源：文件夹或 .zip。Chooses the install source: a folder or a .zip file. */
+function InstallSourceDialog({
+  open,
+  onCancel,
+  onSelect,
+}: {
+  open: boolean;
+  onCancel(): void;
+  onSelect(source: ExtensionInstallSource): void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Install extension</DialogTitle>
+          <DialogDescription>Choose where to install the extension from.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          {INSTALL_SOURCES.map(({ source, icon: Icon, label, description }) => (
+            <Button
+              key={source}
+              variant="outline"
+              className="h-auto justify-start gap-3 p-3 text-left whitespace-normal"
+              onClick={() => onSelect(source)}
+            >
+              <Icon className="size-5" />
+              <span className="min-w-0">
+                <span className="block font-medium">{label}</span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {description}
+                </span>
+              </span>
+            </Button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -400,6 +485,7 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
     getDesktopChatReturnHref(searchParams.get("returnTo")),
   );
   const [uninstalling, setUninstalling] = React.useState<ExtensionState | null>(null);
+  const [choosingInstallSource, setChoosingInstallSource] = React.useState(false);
   const [invalidPreview, setInvalidPreview] = React.useState<Extract<
     ExtensionInstallPreview,
     { canceled: false }
@@ -408,7 +494,7 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
   // 可以安装的包由主进程的确认窗口批准，批准之后才停用已安装的版本并提交。
   // The main process's confirmation window approves installable packages; only then is the installed version
   // deactivated and the install committed.
-  const install = (source: "directory" | "archive") =>
+  const install = (source: ExtensionInstallSource) =>
     run(async () => {
       const preview = await bridge.prepareExtensionInstall({ source });
       if (preview.canceled) return;
@@ -431,25 +517,23 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Extensions</h1>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => install("directory")}>
-            <FolderPlus /> Install from folder…
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => install("archive")}>
-            <PackagePlus /> Install from .zip…
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => run(() => host.rescan())}>
-            <RefreshCw /> Rescan
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+          <HeaderIconButton
+            label="Install extension"
+            onClick={() => setChoosingInstallSource(true)}
+          >
+            <PackagePlus />
+          </HeaderIconButton>
+          <HeaderIconButton label="Rescan" onClick={() => run(() => host.rescan())}>
+            <RefreshCw />
+          </HeaderIconButton>
+          <HeaderIconButton
+            label="Open extensions folder"
             onClick={() => run(() => bridge.openExtensionsDirectory())}
           >
-            <FolderOpen /> Open extensions folder
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+            <FolderOpen />
+          </HeaderIconButton>
+          <HeaderIconButton
+            label="Save SDK types…"
             onClick={() =>
               run(async () => {
                 const result = await bridge.saveExtensionSdkTypes();
@@ -457,8 +541,8 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
               })
             }
           >
-            <Save /> Save SDK types…
-          </Button>
+            <SquareArrowRightExit />
+          </HeaderIconButton>
         </div>
       </header>
 
@@ -526,6 +610,14 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
         </>
       ) : null}
 
+      <InstallSourceDialog
+        open={choosingInstallSource}
+        onCancel={() => setChoosingInstallSource(false)}
+        onSelect={(source) => {
+          setChoosingInstallSource(false);
+          install(source);
+        }}
+      />
       <UninstallDialog
         extension={uninstalling}
         onCancel={() => setUninstalling(null)}

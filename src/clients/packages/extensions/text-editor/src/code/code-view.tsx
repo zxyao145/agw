@@ -3,13 +3,7 @@ import type { SupportLanguage } from "prettier";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DocumentError } from "../shared/document-error";
-import {
-  EncodingMenu,
-  PopupButton,
-  SaveButton,
-  SaveStatus,
-  useDocumentSession,
-} from "../shared/editor-chrome";
+import { EncodingMenu, PopupButton, SaveButton, useDocumentSession } from "../shared/editor-chrome";
 import { errorMessage, notifyFailure } from "../shared/errors";
 import type { CodeDocument } from "./code-document";
 import {
@@ -59,10 +53,10 @@ function readStatus(editor: monaco.editor.IStandaloneCodeEditor): EditorStatus |
 }
 
 /**
- * Code 查看器（第 6 节）：工具栏（保存状态、Format、换行开关、Save）、Monaco 编辑器与状态栏；文档会话为 Failed 时显示
- * 说明面板。
- * The Code viewer (section 6): the toolbar (save status, Format, word wrap, Save), the Monaco editor and the status
- * bar; a Failed document session shows the explanation panel.
+ * Code 查看器（第 6 节）：工具栏（Format、换行开关、Save）、Monaco 编辑器与状态栏；保存状态由宿主显示在文件名后。文档
+ * 会话为 Failed 时显示说明面板。
+ * The Code viewer (section 6): the toolbar (Format, word wrap, Save), the Monaco editor and the status bar; the host
+ * shows the save status after the file name. A Failed document session shows the explanation panel.
  */
 export function CodeView({
   api,
@@ -229,7 +223,6 @@ export function CodeView({
   return (
     <div className="code-viewer">
       <div className="code-toolbar" hidden={shownModel === null}>
-        <SaveStatus api={api} session={session} />
         <button
           type="button"
           className="chrome-button"

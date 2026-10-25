@@ -71,7 +71,10 @@ function cleanDocument(content = textContent("A", HASH_A)): DocumentModel<string
   const read = step(opened.state, { type: "read-succeeded", content });
   assert.deepEqual(read.actions, [{ type: "load", content }]);
   const loaded = step(read.state, { type: "loaded", snapshot: "A" });
-  assert.deepEqual(loaded.actions, [{ type: "changed" }]);
+  assert.deepEqual(loaded.actions, [
+    { type: "report-save-status", status: "saved" },
+    { type: "changed" },
+  ]);
   assert.equal(loaded.state.state, "clean");
   return loaded.state;
 }
@@ -81,6 +84,7 @@ function dirtyDocument(): DocumentModel<string> {
   const edited = step(cleanDocument(), { type: "edited" }, { matchesBaseline: false });
   assert.deepEqual(edited.actions, [
     { type: "report-unsaved", unsaved: true },
+    { type: "report-save-status", status: "unsaved" },
     { type: "changed" },
   ]);
   assert.equal(edited.state.state, "dirty");
@@ -107,6 +111,7 @@ function savingDocument(): DocumentModel<string> {
       format: UTF8,
       expectedSha256: HASH_A,
     },
+    { type: "report-save-status", status: "saving" },
     { type: "changed" },
   ]);
   assert.equal(captured.state.state, "saving");
@@ -121,6 +126,7 @@ function conflictDocument(): DocumentModel<string> {
   });
   assert.deepEqual(failed.actions, [
     { type: "show-message-box", options: CONFLICT_BOX },
+    { type: "report-save-status", status: "unsaved" },
     { type: "changed" },
   ]);
   assert.equal(failed.state.state, "conflict");
@@ -146,7 +152,11 @@ test("edits during the write leave the document dirty after it succeeds", () => 
     { type: "write-succeeded", sha256: HASH_B },
     { matchesPending: false },
   );
-  assert.deepEqual(written.actions, [{ type: "settle", id: 1, error: null }, { type: "changed" }]);
+  assert.deepEqual(written.actions, [
+    { type: "settle", id: 1, error: null },
+    { type: "report-save-status", status: "unsaved" },
+    { type: "changed" },
+  ]);
   assert.equal(written.state.state, "dirty");
   assert.equal(written.state.unsaved, true);
   assert.deepEqual(written.state.baseline, { sha256: HASH_B, format: UTF8, snapshot: "B" });
@@ -182,6 +192,7 @@ test("undoing to the baseline during the write keeps the unsaved flag until the 
     { type: "notify", message: "Could not save notes.md: Server unavailable." },
     { type: "settle", id: 1, error: null },
     { type: "report-unsaved", unsaved: false },
+    { type: "report-save-status", status: "saved" },
     { type: "changed" },
   ]);
   assert.equal(failed.state.state, "clean");
@@ -217,6 +228,7 @@ test("save, show, reload and the encoding operations run in call order", () => {
   assert.deepEqual(transition.actions, [
     { type: "settle", id: 2, error: null },
     { type: "read", uri: FILE.uri, encoding: "utf-8" },
+    { type: "report-save-status", status: null },
     { type: "changed" },
   ]);
   assert.equal(transition.state.state, "loading");
@@ -239,6 +251,7 @@ test("save, show, reload and the encoding operations run in call order", () => {
   assert.deepEqual(transition.actions, [
     { type: "settle", id: 4, error: null },
     { type: "capture" },
+    { type: "report-save-status", status: "saved" },
     { type: "changed" },
   ]);
   assert.deepEqual(transition.state.baseline?.format, { ...UTF8, encoding: "gbk" });
@@ -254,6 +267,7 @@ test("save, show, reload and the encoding operations run in call order", () => {
       expectedSha256: HASH_A,
     },
     { type: "report-unsaved", unsaved: true },
+    { type: "report-save-status", status: "saving" },
     { type: "changed" },
   ]);
   transition = step(
@@ -264,6 +278,7 @@ test("save, show, reload and the encoding operations run in call order", () => {
   assert.deepEqual(transition.actions, [
     { type: "settle", id: 5, error: null },
     { type: "report-unsaved", unsaved: false },
+    { type: "report-save-status", status: "saved" },
     { type: "changed" },
   ]);
   assert.deepEqual(transition.state.baseline, {
@@ -363,7 +378,11 @@ test("a refresh does not replace content edited during the read and marks the fi
     { type: "read-succeeded", content: textContent("disk", HASH_B) },
     { version: 4 },
   );
-  assert.deepEqual(changed.actions, [{ type: "settle", id: 1, error: null }, { type: "changed" }]);
+  assert.deepEqual(changed.actions, [
+    { type: "settle", id: 1, error: null },
+    { type: "report-save-status", status: "changed-on-disk" },
+    { type: "changed" },
+  ]);
   assert.equal(changed.state.changedOnDisk, true);
   assert.equal(changed.state.state, "dirty");
   assert.equal(changed.state.baseline?.sha256, HASH_A);
@@ -385,6 +404,11 @@ test("a refresh does not replace content edited during the read and marks the fi
   assert.equal(
     undone.actions.some((action) => action.type === "load"),
     false,
+  );
+  assert.ok(
+    undone.actions.some(
+      (action) => action.type === "report-save-status" && action.status === "changed-on-disk",
+    ),
   );
   assert.equal(undone.state.changedOnDisk, true);
   assert.equal(undone.state.state, "clean");
@@ -416,7 +440,11 @@ test("a refresh that finds the baseline hash again clears changedOnDisk", () => 
     { type: "read-succeeded", content: textContent("A", HASH_A) },
     { version: 4 },
   );
-  assert.deepEqual(cleared.actions, [{ type: "settle", id: 2, error: null }, { type: "changed" }]);
+  assert.deepEqual(cleared.actions, [
+    { type: "settle", id: 2, error: null },
+    { type: "report-save-status", status: "saved" },
+    { type: "changed" },
+  ]);
   assert.equal(cleared.state.changedOnDisk, false);
   assert.equal(cleared.state.state, "clean");
 
@@ -463,7 +491,11 @@ test("a failed refresh read in Clean enters Failed and is discarded after an edi
   );
   const missing = createExtensionError("ENOENT", "No such file.");
   const failed = step(requested.state, { type: "read-failed", error: missing }, { version: 3 });
-  assert.deepEqual(failed.actions, [{ type: "settle", id: 1, error: null }, { type: "changed" }]);
+  assert.deepEqual(failed.actions, [
+    { type: "settle", id: 1, error: null },
+    { type: "report-save-status", status: null },
+    { type: "changed" },
+  ]);
   assert.equal(failed.state.state, "failed");
   assert.equal(failed.state.error, missing);
 
@@ -487,7 +519,11 @@ test("a same-file show while the file is being read ends with that read", () => 
   const read = step(shown.state, { type: "read-succeeded", content });
   assert.deepEqual(read.actions, [{ type: "load", content }]);
   const loaded = step(read.state, { type: "loaded", snapshot: "A" });
-  assert.deepEqual(loaded.actions, [{ type: "settle", id: 1, error: null }, { type: "changed" }]);
+  assert.deepEqual(loaded.actions, [
+    { type: "settle", id: 1, error: null },
+    { type: "report-save-status", status: "saved" },
+    { type: "changed" },
+  ]);
 
   // 切换文件后的读取在排队时，同一文件的 show 加入它。A show joins the queued read of a switch.
   const saving = savingDocument();
@@ -514,6 +550,7 @@ test("a same-file show while the file is being read ends with that read", () => 
   assert.deepEqual(otherLoaded.actions, [
     { type: "settle", id: 2, error: null },
     { type: "settle", id: 3, error: null },
+    { type: "report-save-status", status: "saved" },
     { type: "changed" },
   ]);
 });
@@ -629,7 +666,10 @@ test("switching files during a refresh discards the read result", () => {
     id: 2,
     operation: { type: "show", file: OTHER },
   });
-  assert.deepEqual(switched.actions, [{ type: "changed" }]);
+  assert.deepEqual(switched.actions, [
+    { type: "report-save-status", status: null },
+    { type: "changed" },
+  ]);
   assert.equal(switched.state.state, "loading");
   assert.equal(switched.state.generation, 1);
   assert.deepEqual(switched.state.file, OTHER);
@@ -648,7 +688,11 @@ test("switching files during a refresh discards the read result", () => {
   const read = step(discarded.state, { type: "read-succeeded", content });
   assert.deepEqual(read.actions, [{ type: "load", content }]);
   const loaded = step(read.state, { type: "loaded", snapshot: "other" });
-  assert.deepEqual(loaded.actions, [{ type: "settle", id: 2, error: null }, { type: "changed" }]);
+  assert.deepEqual(loaded.actions, [
+    { type: "settle", id: 2, error: null },
+    { type: "report-save-status", status: "saved" },
+    { type: "changed" },
+  ]);
   assert.deepEqual(loaded.state.baseline, { sha256: HASH_C, format: UTF8, snapshot: "other" });
 });
 
@@ -663,6 +707,7 @@ test("operations queued before a file switch are not run for the new file", () =
   });
   assert.deepEqual(switched.actions, [
     { type: "report-unsaved", unsaved: false },
+    { type: "report-save-status", status: null },
     { type: "changed" },
   ]);
   const written = step(switched.state, { type: "write-succeeded", sha256: HASH_B });
@@ -676,7 +721,11 @@ test("operations queued before a file switch are not run for the new file", () =
 
 test("ERR_FILE_CHANGED enters Conflict; Overwrite reads the current hash and writes with it", () => {
   const overwrite = step(conflictDocument(), { type: "message-box-answered", index: 0 });
-  assert.deepEqual(overwrite.actions, [{ type: "read-hash", uri: FILE.uri }, { type: "changed" }]);
+  assert.deepEqual(overwrite.actions, [
+    { type: "read-hash", uri: FILE.uri },
+    { type: "report-save-status", status: "saving" },
+    { type: "changed" },
+  ]);
   assert.equal(overwrite.state.state, "saving");
   const hashed = step(overwrite.state, { type: "hash-read", sha256: HASH_C });
   assert.deepEqual(hashed.actions, [
@@ -697,6 +746,7 @@ test("ERR_FILE_CHANGED enters Conflict; Overwrite reads the current hash and wri
   assert.deepEqual(written.actions, [
     { type: "settle", id: 1, error: null },
     { type: "report-unsaved", unsaved: false },
+    { type: "report-save-status", status: "saved" },
     { type: "changed" },
   ]);
   assert.equal(written.state.state, "clean");
@@ -726,6 +776,7 @@ test("Overwrite creates the file when it no longer exists and asks again when it
   });
   assert.deepEqual(created.actions, [
     { type: "show-message-box", options: CONFLICT_BOX },
+    { type: "report-save-status", status: "unsaved" },
     { type: "changed" },
   ]);
   assert.equal(created.state.state, "conflict");
@@ -736,6 +787,7 @@ test("Reload after a conflict reads the file again, and Cancel keeps the unsaved
   assert.deepEqual(reload.actions, [
     { type: "read", uri: FILE.uri, encoding: "utf-8" },
     { type: "report-unsaved", unsaved: false },
+    { type: "report-save-status", status: null },
     { type: "changed" },
   ]);
   assert.equal(reload.state.state, "loading");
@@ -744,7 +796,11 @@ test("Reload after a conflict reads the file again, and Cancel keeps the unsaved
   const read = step(reload.state, { type: "read-succeeded", content });
   assert.deepEqual(read.actions, [{ type: "load", content }]);
   const loaded = step(read.state, { type: "loaded", snapshot: "theirs" });
-  assert.deepEqual(loaded.actions, [{ type: "settle", id: 1, error: null }, { type: "changed" }]);
+  assert.deepEqual(loaded.actions, [
+    { type: "settle", id: 1, error: null },
+    { type: "report-save-status", status: "saved" },
+    { type: "changed" },
+  ]);
   assert.equal(loaded.state.state, "clean");
 
   // 文件已不存在时进入 Failed。A missing file enters Failed.
@@ -777,6 +833,7 @@ test("ERR_UNENCODABLE and other write errors return to Dirty and notify", () => 
       message: `Could not save notes.md: ${message} Use "Save with Encoding…" to choose another encoding.`,
     },
     { type: "settle", id: 1, error: null },
+    { type: "report-save-status", status: "unsaved" },
     { type: "changed" },
   ]);
   assert.equal(unencodable.state.state, "dirty");
@@ -789,6 +846,7 @@ test("ERR_UNENCODABLE and other write errors return to Dirty and notify", () => 
   assert.deepEqual(other.actions, [
     { type: "notify", message: "Could not save notes.md: Not allowed." },
     { type: "settle", id: 1, error: null },
+    { type: "report-save-status", status: "unsaved" },
     { type: "changed" },
   ]);
   assert.equal(other.state.state, "dirty");
@@ -830,6 +888,7 @@ test("reopenWithEncoding in Dirty asks first and does not read after Cancel", ()
   assert.deepEqual(discarded.actions, [
     { type: "read", uri: FILE.uri, encoding: "gbk" },
     { type: "report-unsaved", unsaved: false },
+    { type: "report-save-status", status: null },
     { type: "changed" },
   ]);
   assert.equal(discarded.state.state, "loading");

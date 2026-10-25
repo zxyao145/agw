@@ -17,7 +17,12 @@ import type {
   ThemeInfo,
 } from "../api";
 import { createExtensionError, type RpcEndpoint } from "../rpc";
-import { openBinaryDocument, openTextDocument } from "./documents";
+import {
+  type DocumentSessionHost,
+  openBinaryDocument,
+  openTextDocument,
+  reloadChangedDocuments,
+} from "./documents";
 import { applyTheme, mergeThemeChange, type ThemeState } from "./theme";
 
 export type EventRouter = Map<string, Set<(data: unknown) => void>>;
@@ -82,6 +87,12 @@ export function createExtensionApi(
 
   const call = <T>(method: string, params: unknown = {}, signal?: AbortSignal) =>
     endpoint.request<T>(method, params, { signal });
+
+  const documentHost: DocumentSessionHost = {
+    setSaveStatus: (status) => call("documents.setSaveStatus", { status }),
+    sessions: new Set(),
+  };
+  subscribe(router, "documents.reloadRequested", () => reloadChangedDocuments(documentHost));
 
   const createSession = (
     sessionId: string,
@@ -193,8 +204,8 @@ export function createExtensionApi(
       showMessageBox: (options) => call("dialog.showMessageBox", options),
     },
     documents: {
-      openText: (options) => openTextDocument(api, options),
-      openBinary: (options) => openBinaryDocument(api, options),
+      openText: (options) => openTextDocument(api, documentHost, options),
+      openBinary: (options) => openBinaryDocument(api, documentHost, options),
     },
     shell: {
       revealInFileManager: (uri) => call("shell.revealInFileManager", { uri }),

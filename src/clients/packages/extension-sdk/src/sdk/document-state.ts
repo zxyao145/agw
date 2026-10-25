@@ -3,7 +3,14 @@
 // The state transitions of a document session (sections 4.2-4.4): pure functions from the current state and an event
 // to the next state and the actions to perform. Following `sampleNeeds`, the runtime samples only what the next
 // transition uses (`version()`, `matches()`) and puts it into the event; nothing here calls the adapter.
-import type { DialogApi, DocumentState, Eol, ExtensionError, HostContext } from "../api";
+import type {
+  DialogApi,
+  DocumentSaveStatus,
+  DocumentState,
+  Eol,
+  ExtensionError,
+  HostContext,
+} from "../api";
 import { createExtensionError } from "../rpc";
 
 export type DocumentKind = "text" | "binary";
@@ -168,6 +175,8 @@ export type DocumentAction<Snapshot> =
   /** 错误通知。An error notification. */
   | { readonly type: "notify"; readonly message: string }
   | { readonly type: "report-unsaved"; readonly unsaved: boolean }
+  /** 报告宿主在文件名后显示的保存状态。Reports the save status the host shows after the file name. */
+  | { readonly type: "report-save-status"; readonly status: DocumentSaveStatus | null }
   /** 结束调用方的 Promise；error 不为 null 时以它拒绝。Settles the caller's promise, rejecting with a non-null error. */
   | { readonly type: "settle"; readonly id: number; readonly error: ExtensionError | null }
   /** 状态、文件、编码、`changedOnDisk` 或 `error` 变化。The public fields changed. */
@@ -245,8 +254,26 @@ export function reduceDocument<Snapshot>(
   // 未保存标记只在结果变化时报告。The unsaved flag is reported only when it changes.
   if (next.unsaved !== model.unsaved)
     actions.push({ type: "report-unsaved", unsaved: next.unsaved });
+  // 保存状态同样只在变化时报告。The save status is likewise reported only when it changes.
+  const saveStatus = saveStatusOf(next);
+  if (saveStatus !== saveStatusOf(model))
+    actions.push({ type: "report-save-status", status: saveStatus });
   if (publicFieldsChanged(model, next)) actions.push({ type: "changed" });
   return { state: next, actions };
+}
+
+/**
+ * 宿主在文件名后显示的保存状态：读取中与失败时为 null；Saving 为 "saving"；磁盘已变化为 "changed-on-disk"；Clean 为
+ * "saved"；Dirty 与 Conflict 为 "unsaved"。
+ * The save status the host shows after the file name: null while loading or failed, "saving" in Saving,
+ * "changed-on-disk" when the disk changed, "saved" in Clean, and "unsaved" in Dirty and Conflict.
+ */
+function saveStatusOf<Snapshot>(model: DocumentModel<Snapshot>): DocumentSaveStatus | null {
+  const { state, changedOnDisk } = model;
+  if (state === "loading" || state === "failed") return null;
+  if (state === "saving") return "saving";
+  if (changedOnDisk) return "changed-on-disk";
+  return state === "clean" ? "saved" : "unsaved";
 }
 
 /**

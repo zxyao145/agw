@@ -21,6 +21,11 @@ export type TestHost = {
    * themes carry `cssText` and `styleId`.
    */
   changeTheme(theme: ThemeInfo, styleId?: string | null): void;
+  /**
+   * 宿主文件名后的 Reload（`documents.reloadRequested` 事件）。
+   * The Reload after the host's file name (the `documents.reloadRequested` event).
+   */
+  requestDocumentReload(): void;
   close(): void;
 };
 
@@ -88,6 +93,9 @@ export function connectTestHost(request: RpcRequestHandler): TestHost {
       sentStyleId = styleId;
       const notification: ThemeChangedNotification = { theme: rest, style };
       host.emit("theme.changed", notification);
+    },
+    requestDocumentReload() {
+      host.emit("documents.reloadRequested", null);
     },
     close() {
       page.close();

@@ -421,19 +421,15 @@ test("the first edit after loading dispatches only its own transaction", async (
   assert.deepEqual(transactions, ["edit"]);
 });
 
-test("the top bar follows every session state without a React commit", async () => {
+test("the session reports every save state to the host, and Save follows without a React commit", async () => {
   const { document, container, commits } = await mount("states.md", "Text.\n");
-  const status = container.querySelector<HTMLElement>(".save-status")!;
   const save = [...container.querySelectorAll<HTMLButtonElement>(".edit-toolbar button")].find(
     (element) => element.textContent === "Save",
   )!;
   const seen: string[] = [];
   const record = () => {
     const { state, changedOnDisk } = document.session;
-    const reload = status.querySelector("button");
-    seen.push(
-      `${state}${changedOnDisk ? "+changed" : ""}: "${status.textContent}"${reload ? ` [${reload.className}]` : ""} save ${save.disabled ? "off" : "on"}`,
-    );
+    seen.push(`${state}${changedOnDisk ? "+changed" : ""}: save ${save.disabled ? "off" : "on"}`);
   };
   // 会话的监听按订阅顺序调用，组件的监听在前。Session listeners run in subscription order, the component's first.
   document.session.onDidChange(record);
@@ -442,6 +438,7 @@ test("the top bar follows every session state without a React commit", async () 
     await settle();
   });
   const before = commits.count;
+  const reported = host.saveStatuses.length;
   record();
   await act(async () => {
     typeText(document.editor, "x");
@@ -461,21 +458,30 @@ test("the top bar follows every session state without a React commit", async () 
     await settle();
   });
   assert.deepEqual(seen, [
-    'clean: "Saved" save off',
-    'dirty: "Unsaved changes" save on',
-    'saving: "Saving…" save off',
-    'clean: "Saved" save off',
-    'dirty: "Unsaved changes" save on',
-    'dirty+changed: "Changed on diskReload" [chrome-button] save on',
+    "clean: save off",
+    "dirty: save on",
+    "saving: save off",
+    "clean: save off",
+    "dirty: save on",
+    "dirty+changed: save on",
+  ]);
+  assert.deepEqual(host.saveStatuses.slice(reported), [
+    "unsaved",
+    "saving",
+    "saved",
+    "unsaved",
+    "changed-on-disk",
   ]);
   assert.equal(commits.count, before, "a session state change commits nothing in React");
 
-  // Reload 先确认放弃修改。Reload asks to discard the changes first.
+  // 宿主文件名后的 Reload 先确认放弃修改。The Reload after the host's file name asks to discard the changes first.
   host.answers.push(1);
+  const boxes = host.messageBoxes.length;
   await act(async () => {
-    status.querySelector("button")!.click();
+    host.requestDocumentReload();
     await settle();
   });
+  assert.equal(host.messageBoxes.length, boxes + 1);
   assert.deepEqual(host.messageBoxes.at(-1), {
     type: "warning",
     message: "Discard unsaved changes to states.md?",
@@ -485,27 +491,27 @@ test("the top bar follows every session state without a React commit", async () 
   });
 });
 
-test("the top bar shows no status and disables Save when the document fails to load", async () => {
+test("a document that fails to load reports no save status and disables Save", async () => {
+  const reported = host.saveStatuses.length;
   const { container } = await mount("binary.md", new Uint8Array([0, 1, 2]));
-  const status = container.querySelector<HTMLElement>(".save-status")!;
-  assert.equal(status.hidden, true);
-  assert.equal(status.textContent, "");
+  await act(settle);
+  assert.deepEqual(host.saveStatuses.slice(reported), []);
   const save = [...container.querySelectorAll<HTMLButtonElement>(".edit-toolbar button")].find(
     (element) => element.textContent === "Save",
   )!;
   assert.equal(save.disabled, true);
 });
 
-test("the top bar shows the save status, the encoding and the Save button", async () => {
+test("the top bar shows the encoding and the Save button", async () => {
   const { document, container } = await mount("chrome.md", "Text.\n");
   const bar = container.querySelector(".edit-toolbar")!;
-  assert.equal(bar.textContent, "SavedUTF-8Save");
+  assert.equal(bar.textContent, "UTF-8Save");
   await act(async () => {
     document.editor.commands.setTextSelection(3);
     typeText(document.editor, "x");
     await settle();
   });
-  assert.equal(bar.textContent, "Unsaved changesUTF-8Save");
+  assert.equal(bar.textContent, "UTF-8Save");
 });
 
 test("unloading the Edit view destroys the editor without drawing the document again", async () => {

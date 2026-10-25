@@ -59,6 +59,8 @@ export type EditHost = TestHost & {
   readonly notifications: Notification[];
   /** 每次 `setUnsavedChanges` 的值。Every `setUnsavedChanges` value. */
   readonly unsaved: boolean[];
+  /** 每次报告的保存状态（`documents.setSaveStatus`）。Every reported save status (`documents.setSaveStatus`). */
+  readonly saveStatuses: (string | null)[];
   readonly opened: { method: string; target: string }[];
   /** 下一次对话框的回答（按钮下标）。The answer (button index) to the next message box. */
   answers: number[];
@@ -84,6 +86,7 @@ export function createEditHost(): EditHost {
     writes: [],
     notifications: [],
     unsaved: [],
+    saveStatuses: [],
     opened: [],
     answers: [],
     messageBoxes: [],
@@ -133,6 +136,9 @@ export function createEditHost(): EditHost {
         return [{ id: "utf-8", label: "Unicode (UTF-8)" }];
       case "workspace.setUnsavedChanges":
         host.unsaved.push(Boolean(values.unsaved));
+        return undefined;
+      case "documents.setSaveStatus":
+        host.saveStatuses.push(values.status as string | null);
         return undefined;
       case "ui.notify":
         host.notifications.push(params as Notification);

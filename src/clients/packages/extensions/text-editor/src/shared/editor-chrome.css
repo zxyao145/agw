@@ -1,14 +1,5 @@
-/* Edit 与 Code 共用的保存状态、Save 按钮与弹出菜单，颜色来自宿主主题变量（theme.apply）。
-   The save status, Save button and popup menus shared by Edit and Code; colors come from the host theme variables
-   (theme.apply). */
-
-.save-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-  color: var(--muted-foreground);
-}
+/* Edit 与 Code 共用的 Save 按钮与弹出菜单，颜色来自宿主主题变量（theme.apply）。
+   The Save button and popup menus shared by Edit and Code; colors come from the host theme variables (theme.apply). */
 
 .chrome-button {
   height: 24px;

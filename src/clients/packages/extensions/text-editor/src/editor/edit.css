@@ -52,10 +52,6 @@ body {
   font-size: 0.875em;
 }
 
-.edit-toolbar .save-status {
-  margin-right: 4px;
-}
-
 .status {
   margin: 0;
   padding: 24px 32px;

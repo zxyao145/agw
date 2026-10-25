@@ -63,54 +63,13 @@ export function useSessionValue<T extends string | number | boolean | null>(
   return useSyncExternalStore(subscribe, () => select(session));
 }
 
-// 保存状态与 Save 按钮随输入变化。编辑器有焦点时 React 的每次提交都会在整个编辑区中计算选区位置，所以这两处订阅会话
-// 后直接修改 DOM，会话变化时不经过 React 提交。
-// The save status and the Save button change with typing. While the editor has focus every React commit computes the
-// selection offsets over the whole editing area, so these two subscribe to the session and update the DOM directly;
-// a session change goes through no React commit.
-
 /**
- * 保存状态："Saved"、"Unsaved changes"、"Saving…"，或 "Changed on disk" 与 Reload 按钮；读取中与失败时不显示。
- * The save status: "Saved", "Unsaved changes", "Saving…", or "Changed on disk" with a Reload button; nothing while
- * loading or failed.
+ * Save 按钮，有未保存修改时可用。按钮随输入变化，编辑器有焦点时 React 的每次提交都会在整个编辑区中计算选区位置，所以它
+ * 订阅会话后直接修改 DOM，会话变化时不经过 React 提交。
+ * The Save button, enabled with unsaved changes. It changes with typing, and while the editor has focus every React
+ * commit computes the selection offsets over the whole editing area, so it subscribes to the session and updates the
+ * DOM directly; a session change goes through no React commit.
  */
-export function SaveStatus({ api, session }: { api: ExtensionApi; session: DocumentSession }) {
-  const statusRef = useRef<HTMLSpanElement>(null);
-  useLayoutEffect(() => {
-    const status = statusRef.current!;
-    const reload = document.createElement("button");
-    reload.type = "button";
-    reload.className = "chrome-button";
-    reload.textContent = "Reload";
-    reload.addEventListener("click", () => notifyFailure(api, session.reload()));
-    let shown: string | null | undefined;
-    const update = () => {
-      const { state, changedOnDisk } = session;
-      const text =
-        state === "loading" || state === "failed"
-          ? null
-          : state === "saving"
-            ? "Saving…"
-            : changedOnDisk
-              ? "Changed on disk"
-              : state === "clean"
-                ? "Saved"
-                : "Unsaved changes";
-      if (text === shown) return;
-      shown = text;
-      status.hidden = text === null;
-      if (text === null) status.replaceChildren();
-      else if (text === "Changed on disk") status.replaceChildren(text, reload);
-      else status.replaceChildren(text);
-    };
-    update();
-    const subscription = session.onDidChange(update);
-    return () => subscription.dispose();
-  }, [api, session]);
-  return <span ref={statusRef} className="save-status" />;
-}
-
-/** Save 按钮，有未保存修改时可用。The Save button, enabled with unsaved changes. */
 export function SaveButton({ api, session }: { api: ExtensionApi; session: DocumentSession }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {

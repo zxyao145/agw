@@ -79,6 +79,7 @@ export function MainWorkspace(props: MainWorkspaceProps) {
             id: view.id,
             title: view.title,
             unsaved: props.snapshot.unsavedViewIds.includes(view.id),
+            saveStatus: props.snapshot.saveStatuses[view.id] ?? null,
           }))}
           renderFileViewer={(viewerId) => {
             const view = fileViewers.find((item) => item.id === viewerId);
@@ -98,6 +99,7 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           onReloadFileViewer={(viewerId) =>
             void reloadExtensionView(props.host, fileViewer(viewerId))
           }
+          onReloadFileViewerDocument={(viewerId) => props.host.reloadFileViewerDocument(viewerId)}
           renderFileViewerInfo={(viewerId) => <ExtensionViewInfo view={fileViewer(viewerId)} />}
           defaultFileViewerId={props.defaultFileViewerId}
           onSetDefaultFileViewer={props.onSetDefaultFileViewer}

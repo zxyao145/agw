@@ -156,6 +156,7 @@ const DEFAULT_HOST_THEME: HostTheme = {
 async function createHarness(permissions: ExtensionPermission[], options: HarnessOptions = {}) {
   const linkRequests: string[] = [];
   const unsaved: [string, string, boolean][] = [];
+  const saveStatuses: [string, string, string | null][] = [];
   // 云端文件按 Project 主目录中的路径保存。Cloud files by their path in the Project's primary directory.
   const cloudFiles = new Map<string, Uint8Array>([["a.bin", new Uint8Array([7, 8, 9])]]);
   const server = await startApiServer({
@@ -286,6 +287,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
       await options.openFile(extensionId, uri);
     },
     setUnsavedChanges: (frameId, pageId, value) => unsaved.push([frameId, pageId, value]),
+    setSaveStatus: (frameId, pageId, status) => saveStatuses.push([frameId, pageId, status]),
     confirmOpenExternal: async (_extensionId, url) => {
       linkRequests.push(url);
       return options.openLink === true;
@@ -336,6 +338,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     },
     linkRequests,
     unsaved,
+    saveStatuses,
     uri: (path: string) =>
       formatCloudUri({ serverId: "local", projectId: PROJECT, directoryId: null, path }),
     localUri: (path: string) => pathToFileURL(join(storage.path, path)).toString(),
@@ -535,6 +538,29 @@ test("only file viewers report unsaved changes", async () => {
   assert.deepEqual(viewer.unsaved, [
     ["frame-1", "page-1", true],
     ["frame-1", "page-1", false],
+  ]);
+});
+
+test("only file viewers report a save status, and only the known statuses", async () => {
+  const view = await createHarness([]);
+  await assert.rejects(view.endpoint.request("documents.setSaveStatus", { status: "saved" }), {
+    code: "ERR_UNSUPPORTED_OPERATION",
+  });
+  assert.deepEqual(view.saveStatuses, []);
+
+  const viewer = await createHarness([], { kind: "fileViewer" });
+  for (const status of ["saved", "unsaved", "saving", "changed-on-disk", null]) {
+    await viewer.endpoint.request("documents.setSaveStatus", { status });
+  }
+  await assert.rejects(viewer.endpoint.request("documents.setSaveStatus", { status: "clean" }), {
+    code: "ERR_INVALID_ARGUMENT",
+  });
+  assert.deepEqual(viewer.saveStatuses, [
+    ["frame-1", "page-1", "saved"],
+    ["frame-1", "page-1", "unsaved"],
+    ["frame-1", "page-1", "saving"],
+    ["frame-1", "page-1", "changed-on-disk"],
+    ["frame-1", "page-1", null],
   ]);
 });
 
@@ -1711,6 +1737,8 @@ async function createDocumentHost() {
     }),
     /** 宿主是否记录了编辑器的未保存修改。Whether the host recorded unsaved changes of the editor. */
     unsaved: () => host.getSnapshot().unsavedViewIds.includes(EDITOR),
+    /** 宿主记录的编辑器保存状态。The editor's save status the host recorded. */
+    saveStatus: () => host.getSnapshot().saveStatuses[EDITOR] ?? null,
     /** 等到确认窗口显示消息框，返回它的内容。Waits for the confirmation window's message box and returns it. */
     messageBox: async () => {
       const confirmation = await until(
@@ -1879,6 +1907,57 @@ test(
     await saving;
     assert.equal(await readFile(path, "utf8"), "three\n");
     assert.equal(session.changedOnDisk, true);
+  },
+);
+
+test(
+  "a document session reports its save status to the host, and the host's Reload reads a file changed on disk",
+  DOCUMENT_TEST,
+  async () => {
+    const harness = await createDocumentHost();
+    const path = harness.path("notes.txt");
+    await writeFile(path, "one\n");
+    const { editor, session } = await openText(harness, "notes.txt");
+    await harness.flush();
+    assert.equal(harness.saveStatus(), "saved");
+
+    editor.type("edited\n");
+    await harness.flush();
+    assert.equal(harness.saveStatus(), "unsaved");
+    await session.save();
+    await harness.flush();
+    assert.equal(harness.saveStatus(), "saved");
+
+    // 读取返回前输入：内容保留，磁盘已变化。Typed before the read returns: the content stays and the disk changed.
+    await writeFile(path, "two\n");
+    const refreshing = session.show(harness.file("notes.txt"));
+    editor.type("typed\n");
+    await refreshing;
+    await harness.flush();
+    assert.equal(harness.saveStatus(), "changed-on-disk");
+
+    // 宿主的 Reload 先确认放弃修改，再读取磁盘内容。The host's Reload confirms discarding first, then reads the disk.
+    harness.host.reloadFileViewerDocument(EDITOR);
+    const box = await harness.messageBox();
+    assert.equal(box.message, "Discard unsaved changes to notes.txt?");
+    await harness.answer(0);
+    await until(() => session.state === "clean" && editor.text === "two\n", "the reloaded file");
+    await harness.flush();
+    assert.equal(harness.saveStatus(), "saved");
+    assert.equal(session.changedOnDisk, false);
+
+    // 切换文件时宿主清除旧文件的保存状态。Switching files clears the old file's status in the host.
+    harness.host.setFileViewerFile(EDITOR, {
+      uri: formatCloudUri({
+        serverId: "local",
+        projectId: PROJECT,
+        directoryId: null,
+        path: "b.txt",
+      }),
+      name: "b.txt",
+      projectId: PROJECT,
+    });
+    assert.equal(harness.saveStatus(), null);
   },
 );
 

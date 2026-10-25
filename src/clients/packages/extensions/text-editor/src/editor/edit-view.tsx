@@ -3,7 +3,7 @@ import { EditorContent } from "@tiptap/react";
 import type { Root } from "react-dom/client";
 
 import { DocumentError } from "../shared/document-error";
-import { EncodingMenu, SaveButton, SaveStatus, useSessionValue } from "../shared/editor-chrome";
+import { EncodingMenu, SaveButton, useSessionValue } from "../shared/editor-chrome";
 import { notifyFailure } from "../shared/errors";
 import { BlockHandle } from "./block-handle";
 import type { EditDocument } from "./edit-document";
@@ -14,10 +14,11 @@ import { SlashMenu } from "./slash-menu";
 import { TableToolbar } from "./table-toolbar";
 
 /**
- * Edit 查看器（设计 5.7）：顶部条（保存状态、编码菜单、Save）、居中的内容列与编辑器的菜单；文档会话读取中显示
- * "Loading"，为 Failed 时显示说明面板。
- * The Edit viewer (design section 5.7): the top bar (save status, encoding menu, Save), the centered content column
- * and the editor's menus; a loading session shows "Loading" and a Failed one the explanation panel.
+ * Edit 查看器（设计 5.7）：顶部条（编码菜单、Save）、居中的内容列与编辑器的菜单；保存状态由宿主显示在文件名后。文档
+ * 会话读取中显示 "Loading"，为 Failed 时显示说明面板。
+ * The Edit viewer (design section 5.7): the top bar (encoding menu, Save), the centered content column and the
+ * editor's menus; the host shows the save status after the file name. A loading session shows "Loading" and a Failed
+ * one the explanation panel.
  */
 export function EditView({ api, editDocument }: { api: ExtensionApi; editDocument: EditDocument }) {
   const { editor, session, ui } = editDocument;
@@ -31,7 +32,6 @@ export function EditView({ api, editDocument }: { api: ExtensionApi; editDocumen
   return (
     <div className="edit-viewer">
       <header className="edit-toolbar">
-        <SaveStatus api={api} session={session} />
         <EncodingMenu api={api} session={session} placement="below" />
         <SaveButton api={api} session={session} />
       </header>

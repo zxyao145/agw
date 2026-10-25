@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { LoaderCircle, MessageSquareText, RefreshCw, Settings, TriangleAlert } from "lucide-react";
+import { LoaderCircle, MessageCircleText, RefreshCw, Settings, TriangleAlert } from "lucide-react";
 import { useQueryErrorResetBoundary } from "@agw/components/query";
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@agw/components";
@@ -46,7 +46,7 @@ export function DesktopWorkspaceErrorState({ error, onRetry }: DesktopWorkspaceE
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/desktop/chat/">
-                <MessageSquareText className="size-4" />
+                <MessageCircleText className="size-4" />
                 Back to chat
               </Link>
             </Button>

@@ -44,10 +44,6 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.code-toolbar .save-status {
-  margin-right: 4px;
-}
-
 .code-editor {
   flex: 1;
   min-height: 0;

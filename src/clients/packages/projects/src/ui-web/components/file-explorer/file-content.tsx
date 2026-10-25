@@ -21,15 +21,30 @@ import NoSelectedFile from "./no-selected-file";
 import { LineComment } from "./types";
 import UnChangedFile from "./unchanged-file";
 
+/** 查看器报告的保存状态。The save status a viewer reports. */
+export type FileViewerSaveStatus = "saved" | "unsaved" | "saving" | "changed-on-disk";
+
 /** 匹配当前文件的查看器（Desktop extension 提供）。A viewer matching the current file (provided by Desktop extensions). */
 export type FileViewerOption = {
   id: string;
   title: string;
   /** 有未保存修改。Has unsaved changes. */
   unsaved: boolean;
+  /**
+   * 选中时显示在文件名后的保存状态；null 时不显示。
+   * The save status shown after the file name while the viewer is selected; nothing shows for null.
+   */
+  saveStatus: FileViewerSaveStatus | null;
 };
 
 const SOURCE_VIEWER_ID = "source";
+
+const SAVE_STATUS_LABELS: Record<FileViewerSaveStatus, string> = {
+  saved: "Saved",
+  unsaved: "Unsaved changes",
+  saving: "Saving…",
+  "changed-on-disk": "Changed on disk",
+};
 
 interface FileContentProps extends ProjectFileScope {
   selectedFile: string | null;
@@ -49,6 +64,11 @@ interface FileContentProps extends ProjectFileScope {
   renderFileViewer?: (viewerId: string) => React.ReactNode;
   /** 有值时选中查看器后切换按钮右侧显示 "Reload view"。When set, a selected viewer shows "Reload view" after the switch. */
   onReloadFileViewer?: (viewerId: string) => void;
+  /**
+   * 有值时文件名后的 "Changed on disk" 带 Reload 按钮，由查看器重新读取文件。
+   * When set, "Changed on disk" after the file name carries a Reload button that makes the viewer read the file again.
+   */
+  onReloadFileViewerDocument?: (viewerId: string) => void;
   /**
    * 有值时选中 Source 后同一位置显示 "Reload file"，重新读取文件内容。
    * When set, selecting Source shows "Reload file" in the same place, which reads the file again.
@@ -88,6 +108,7 @@ export default function FileContent({
   fileViewers = [],
   renderFileViewer,
   onReloadFileViewer,
+  onReloadFileViewerDocument,
   onReloadSource,
   renderFileViewerInfo,
   defaultFileViewerId,
@@ -132,6 +153,7 @@ export default function FileContent({
     activeViewerId === SOURCE_VIEWER_ID
       ? "Source"
       : (viewers.find((viewer) => viewer.id === activeViewerId)?.title ?? activeViewerId);
+  const saveStatus = viewers.find((viewer) => viewer.id === activeViewerId)?.saveStatus ?? null;
 
   return (
     <div className="flex h-full min-w-0 w-full flex-col">
@@ -143,6 +165,27 @@ export default function FileContent({
             <div className="flex flex-col h-full min-h-0">
               <FileHeader
                 file={directoryName ? `${directoryName}/ ${selectedFile}` : selectedFile}
+                status={
+                  saveStatus ? (
+                    <span
+                      data-file-save-status={saveStatus}
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-muted-foreground"
+                    >
+                      {SAVE_STATUS_LABELS[saveStatus]}
+                      {saveStatus === "changed-on-disk" && onReloadFileViewerDocument ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => onReloadFileViewerDocument(activeViewerId)}
+                        >
+                          Reload
+                        </Button>
+                      ) : null}
+                    </span>
+                  ) : undefined
+                }
                 actions={
                   viewers.length > 0 ? (
                     <>
@@ -153,7 +196,12 @@ export default function FileContent({
                       >
                         {[
                           ...viewers,
-                          { id: SOURCE_VIEWER_ID, title: "Source", unsaved: false },
+                          {
+                            id: SOURCE_VIEWER_ID,
+                            title: "Source",
+                            unsaved: false,
+                            saveStatus: null,
+                          },
                         ].map((viewer) => (
                           <button
                             key={viewer.id}

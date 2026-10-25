@@ -8,8 +8,8 @@ const { React, act, fireEvent, render, screen, within } = await setupDomEnvironm
 const { default: FileContent } = await import("./file-content.tsx");
 
 const VIEWERS: FileViewerOption[] = [
-  { id: "markdown-preview:preview", title: "Preview", unsaved: false },
-  { id: "other:outline", title: "Outline", unsaved: true },
+  { id: "markdown-preview:preview", title: "Preview", unsaved: false, saveStatus: "saved" },
+  { id: "other:outline", title: "Outline", unsaved: true, saveStatus: "changed-on-disk" },
 ];
 
 function element(
@@ -18,6 +18,7 @@ function element(
   onReloadFileViewer?: (viewerId: string) => void,
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode,
   onReloadSource?: () => void,
+  onReloadFileViewerDocument?: (viewerId: string) => void,
 ) {
   return React.createElement(FileContent, {
     projectId: "project-1",
@@ -36,7 +37,16 @@ function element(
     onReloadFileViewer,
     renderFileViewerInfo,
     onReloadSource,
+    onReloadFileViewerDocument,
   });
+}
+
+/** 文件名后显示的保存状态。The save status shown after the file name. */
+function saveStatus(): { status: string | null; text: string } | null {
+  const element = document.querySelector("[data-file-save-status]");
+  return element
+    ? { status: element.getAttribute("data-file-save-status"), text: element.textContent ?? "" }
+    : null;
 }
 
 function renderInfo(viewerId: string) {
@@ -162,6 +172,45 @@ test("FileContent_WithoutReloadHandlers_HasNoReloadButton", async () => {
   assert.equal(screen.queryByRole("button", { name: "Reload view" }), null);
   await selectTab("source");
   assert.equal(screen.queryByRole("button", { name: "Reload file" }), null);
+});
+
+test("FileContent_SelectedViewer_ShowsItsSaveStatusAfterFileName", async () => {
+  render(element("README.md", VIEWERS, undefined, undefined, undefined, () => {}));
+
+  // 状态与文件名在同一行，紧跟文件名。The status sits in the file name's row, right after the name.
+  const status = document.querySelector("[data-file-save-status]")!;
+  assert.equal(status.previousElementSibling!.textContent, "README.md");
+  assert.deepEqual(saveStatus(), { status: "saved", text: "Saved" });
+
+  await selectTab("other:outline");
+  assert.deepEqual(saveStatus(), { status: "changed-on-disk", text: "Changed on diskReload" });
+
+  await selectTab("source");
+  assert.equal(saveStatus(), null);
+});
+
+test("FileContent_ChangedOnDiskReload_AsksSelectedViewerToReadFileAgain", async () => {
+  const reloads: string[] = [];
+  render(
+    element("README.md", VIEWERS, undefined, undefined, undefined, (viewerId) =>
+      reloads.push(viewerId),
+    ),
+  );
+  await selectTab("other:outline");
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+  });
+
+  assert.deepEqual(reloads, ["other:outline"]);
+});
+
+test("FileContent_WithoutReloadDocumentHandler_ShowsChangedOnDiskWithoutReload", async () => {
+  render(element("README.md", VIEWERS));
+  await selectTab("other:outline");
+
+  assert.deepEqual(saveStatus(), { status: "changed-on-disk", text: "Changed on disk" });
+  assert.equal(screen.queryByRole("button", { name: "Reload" }), null);
 });
 
 test("FileContent_SelectSource_ShowsFileText", async () => {

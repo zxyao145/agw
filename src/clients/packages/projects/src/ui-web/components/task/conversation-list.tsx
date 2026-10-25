@@ -367,7 +367,7 @@ export function ConversationList({
 
   return (
     <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
-      <div className="p-2 pl-4 flex items-center justify-between">
+      <div className="p-3 pl-3 flex items-center justify-between">
         <h2 className="font-semibold text-sm">Conversations</h2>
         <div className="tools">
           {displayedConversations.length > 0 && (
@@ -440,7 +440,7 @@ export function ConversationList({
                 key={conversation.conversationId}
                 onClick={() => onConversationSelect(conversation)}
                 className={cn(
-                  "group relative py-2.5 pl-4 pr-2 rounded-md cursor-pointer transition-colors",
+                  "group relative py-2.5 pl-3 pr-3 rounded-md cursor-pointer transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
                     : "hover:bg-accent/80 hover:text-accent-foreground",
@@ -448,18 +448,18 @@ export function ConversationList({
               >
                 <div className="flex items-center">
                   {/* 没有图标时保留位置，标题从同一位置开始。The slot stays without an icon so titles start at the same place. */}
-                  <div className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center">
+                  <div className="mr-1 flex h-3 w-3 shrink-0 items-center justify-center">
                     {creatorDisplay ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span
                             role="img"
                             aria-label={creatorDisplay.label}
-                            className="flex h-4 w-4 items-center justify-center"
+                            className="flex h-3 w-3 items-center justify-center"
                           >
                             <creatorDisplay.icon
                               aria-hidden="true"
-                              className="h-4 w-4 text-muted-foreground"
+                              className="h-3 w-3 text-muted-foreground"
                             />
                           </span>
                         </TooltipTrigger>

@@ -4,6 +4,7 @@
 // dialogs, unsaved reports, notifications, the shortcut) and feeds the results back as events. It decides nothing.
 import type {
   BinaryDocumentAdapter,
+  DocumentSaveStatus,
   DocumentSession,
   Eol,
   ExtensionApi,
@@ -51,12 +52,35 @@ type DocumentPort<Snapshot> = {
 
 type SessionOptions = { file: DocumentFile; saveShortcut?: boolean };
 
+/**
+ * 会话与宿主之间不属于公开 API 的部分：报告保存状态，以及登记未释放的会话（宿主请求重新读取时用到）。
+ * The parts between sessions and the host outside the public API: reporting the save status, and the sessions not
+ * yet disposed (used when the host asks for a reload).
+ */
+export type DocumentSessionHost = {
+  setSaveStatus(status: DocumentSaveStatus | null): Promise<void>;
+  readonly sessions: Set<DocumentSession>;
+};
+
+/**
+ * 宿主文件名后的 Reload：磁盘内容已变化的会话重新读取，有未保存修改时先确认放弃。
+ * The Reload after the host's file name: sessions whose file changed on disk read it again, confirming discarding
+ * unsaved changes first.
+ */
+export function reloadChangedDocuments(host: DocumentSessionHost): void {
+  for (const session of host.sessions) {
+    if (session.changedOnDisk)
+      void session.reload().catch((error: unknown) => console.error(error));
+  }
+}
+
 export function openTextDocument<Snapshot>(
   api: ExtensionApi,
+  host: DocumentSessionHost,
   options: SessionOptions & { adapter: TextDocumentAdapter<Snapshot> },
 ): DocumentSession {
   const { adapter } = options;
-  return openSession<Snapshot>(api, "text", options, {
+  return openSession<Snapshot>(api, host, "text", options, {
     read: async (uri, encoding) => {
       const document = await api.fs.readTextDocument(
         uri,
@@ -93,10 +117,11 @@ export function openTextDocument<Snapshot>(
 
 export function openBinaryDocument<Snapshot>(
   api: ExtensionApi,
+  host: DocumentSessionHost,
   options: SessionOptions & { adapter: BinaryDocumentAdapter<Snapshot> },
 ): DocumentSession {
   const { adapter } = options;
-  return openSession<Snapshot>(api, "binary", options, {
+  return openSession<Snapshot>(api, host, "binary", options, {
     read: async (uri) => {
       const bytes = await api.fs.readFile(uri);
       return { kind: "binary", bytes, sha256: await sha256Of(bytes) };
@@ -125,6 +150,7 @@ export function openBinaryDocument<Snapshot>(
 
 function openSession<Snapshot>(
   api: ExtensionApi,
+  host: DocumentSessionHost,
   kind: DocumentKind,
   options: SessionOptions,
   port: DocumentPort<Snapshot>,
@@ -256,6 +282,9 @@ function openSession<Snapshot>(
           .setUnsavedChanges(action.unsaved)
           .catch((error: unknown) => console.error(error));
         return;
+      case "report-save-status":
+        void host.setSaveStatus(action.status).catch((error: unknown) => console.error(error));
+        return;
       case "settle": {
         const caller = callers.get(action.id)!;
         callers.delete(action.id);
@@ -313,6 +342,7 @@ function openSession<Snapshot>(
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      host.sessions.delete(session);
       inputs.length = 0;
       if (options.saveShortcut !== false) window.removeEventListener("keydown", onKeyDown, true);
       // 未完成的操作随会话结束。Pending operations end with the session.
@@ -323,6 +353,7 @@ function openSession<Snapshot>(
   };
 
   if (options.saveShortcut !== false) window.addEventListener("keydown", onKeyDown, true);
+  host.sessions.add(session);
   for (const action of opened.actions) perform(action);
   return session;
 }
