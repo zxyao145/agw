@@ -1,6 +1,6 @@
-/* Mermaid 图表（Edit 与 Preview 共用），颜色来自宿主主题变量（theme.apply）。图表没有内容（源码为空或还没有渲染结果）时
+/* Mermaid 图表（Mixed 与 Preview 共用），颜色来自宿主主题变量（theme.apply）。图表没有内容（源码为空或还没有渲染结果）时
    不占位置；图表居中，宽度超出时缩小到容器宽度。
-   Mermaid diagrams (shared by Edit and Preview); colors come from the host theme variables (theme.apply). Without
+   Mermaid diagrams (shared by Mixed and Preview); colors come from the host theme variables (theme.apply). Without
    content (blank source or no render result yet) a diagram takes no space; diagrams are centered and shrink to the
    container width. */
 

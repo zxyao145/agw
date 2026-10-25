@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Button, Popover, PopoverContent, PopoverTrigger } from "@agw/components";
+import { Button } from "@agw/components";
 import type { FileViewerFile } from "@agw/extension-sdk";
-import { AlertTriangle, Info, RotateCw } from "lucide-react";
+import { AlertTriangle, RotateCw } from "lucide-react";
 
 import type {
   ExtensionFailure,
@@ -54,8 +54,9 @@ export function ExtensionViewHeader({
 }
 
 /**
- * 文件查看器的 Info 按钮：弹出层显示标题条的内容，标明查看器由哪个 extension 提供。
- * A file viewer's Info button: its popup shows the title bar content, naming the extension behind the viewer.
+ * 文件查看器的说明，显示在文件标题栏 "More" 菜单的顶部：标题条的内容，标明查看器由哪个 extension 提供。
+ * A file viewer's info, shown at the top of the file header's "More" menu: the title bar content, naming the extension
+ * behind the viewer.
  */
 export function ExtensionViewInfo({
   view,
@@ -63,18 +64,11 @@ export function ExtensionViewInfo({
   view: Pick<WorkspaceView, "icon" | "title" | "extensionName">;
 }) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="icon" className="size-6" aria-label="View info">
-          <Info className="size-3.5" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-auto max-w-xs items-center gap-2 p-3 text-xs">
-        <WorkspaceIconView icon={view.icon} className="shrink-0" />
-        <span className="truncate font-medium">{view.title}</span>
-        <span className="truncate text-muted-foreground">{view.extensionName}</span>
-      </PopoverContent>
-    </Popover>
+    <>
+      <WorkspaceIconView icon={view.icon} className="shrink-0" />
+      <span className="truncate font-medium">{view.title}</span>
+      <span className="truncate text-muted-foreground">{view.extensionName}</span>
+    </>
   );
 }
 
@@ -145,8 +139,8 @@ export type ExtensionViewProps = {
   /** 文件查看器显示的文件。The file a file viewer shows. */
   file?: FileViewerFile;
   /**
-   * 显示宿主标题条；文件查看器的标题条内容与 "Reload view" 在文件标题行。
-   * Shows the host title bar; file viewers have its content and "Reload view" in the file title row.
+   * 显示宿主标题条；文件查看器的标题条内容与 "Reload view" 在文件标题行的 "More" 菜单中。
+   * Shows the host title bar; file viewers have its content and "Reload view" in the file title row's "More" menu.
    */
   showHeader?: boolean;
 };

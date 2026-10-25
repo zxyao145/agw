@@ -41,9 +41,9 @@ export type ReferenceKind = "full" | "collapsed" | "shortcut";
 
 const BR_TAG = /^<br(?: ?\/)?>$/i;
 
-// Edit 的行内 tokenizer：`<br>` 的三种写法为 br token，其他标签为 rawInline token；普通文字与 Preview 相同；
+// Mixed 的行内 tokenizer：`<br>` 的三种写法为 br token，其他标签为 rawInline token；普通文字与 Preview 相同；
 // 引用式链接与图片记录标签与写法。
-// Edit's inline tokenizers: the three `<br>` spellings become br tokens and other tags rawInline tokens; plain text
+// Mixed's inline tokenizers: the three `<br>` spellings become br tokens and other tags rawInline tokens; plain text
 // is the same as Preview; reference links and images record their label and spelling.
 export const editTokenizers = {
   tag(this: Tokenizer, src: string) {

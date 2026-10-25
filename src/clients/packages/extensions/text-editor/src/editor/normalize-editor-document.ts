@@ -84,11 +84,11 @@ function unresolvedLinkText(
 }
 
 // 第 5 步（图片）：定义存在时得到地址与标题。没有定义时 marked 把 `![说明][标签]` 中的 `!` 与 `[` 读成文字，再把后面的
-// 说明当作行内 Markdown 解析，因此用 Edit 的解析读取图片自己的原文（带上文档中其他的定义，使说明中的引用与脚注引用照常
+// 说明当作行内 Markdown 解析，因此用 Mixed 的解析读取图片自己的原文（带上文档中其他的定义，使说明中的引用与脚注引用照常
 // 成立），得到的每个节点再带上图片的标记。
 // Step 5 (images): with a definition the image gets its destination and title. Without one, marked reads the `!` and
 // `[` of `![alt][label]` as text and parses the alt after them as inline Markdown, so the image's own source is read
-// with Edit's parser (with the document's other definitions, so references and footnote references inside the alt
+// with Mixed's parser (with the document's other definitions, so references and footnote references inside the alt
 // resolve as usual), and every resulting node also carries the image's marks.
 function normalizeReferenceImage(
   node: JSONContent,

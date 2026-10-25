@@ -3,9 +3,10 @@ import type { SupportLanguage } from "prettier";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DocumentError } from "../shared/document-error";
-import { EncodingMenu, PopupButton, SaveButton, useDocumentSession } from "../shared/editor-chrome";
+import { EncodingMenu, PopupButton, useDocumentSession } from "../shared/editor-chrome";
 import { errorMessage, notifyFailure } from "../shared/errors";
 import type { CodeDocument } from "./code-document";
+import { useCodeHeaderItems } from "./code-header-items";
 import {
   resolveTextEditorFontSizes,
   type TextEditorSettings,
@@ -53,10 +54,11 @@ function readStatus(editor: monaco.editor.IStandaloneCodeEditor): EditorStatus |
 }
 
 /**
- * Code 查看器（第 6 节）：工具栏（Format、换行开关、Save）、Monaco 编辑器与状态栏；保存状态由宿主显示在文件名后。文档
- * 会话为 Failed 时显示说明面板。
- * The Code viewer (section 6): the toolbar (Format, word wrap, Save), the Monaco editor and the status bar; the host
- * shows the save status after the file name. A Failed document session shows the explanation panel.
+ * Code 查看器（第 6 节）：Monaco 编辑器与状态栏；Format、Word wrap 与 Save 在宿主文件标题栏的 More 菜单中
+ * （code-header-items.ts），保存状态由宿主显示在文件名后。文档会话为 Failed 时显示说明面板。
+ * The Code viewer (section 6): the Monaco editor and the status bar; Format, Word wrap and Save are in the More menu
+ * of the host's file header (code-header-items.ts), and the host shows the save status after the file name. A Failed
+ * document session shows the explanation panel.
  */
 export function CodeView({
   api,
@@ -210,38 +212,20 @@ export function CodeView({
   }, [editor, shownModel]);
 
   const canFormat = languageId === JSON_LANGUAGE || prettierFormats;
-  const formatTitle =
-    canFormat || prettier === null || languageId === null
-      ? undefined
-      : `No formatter for ${languageName(languageId)}`;
   const formatDocument = () => {
     const action = editor?.getAction("editor.action.formatDocument");
     if (!action) throw new Error("The Format Document action is not available.");
     void action.run();
   };
+  useCodeHeaderItems(
+    api,
+    session,
+    { shown: shownModel !== null, canFormat, wordWrap },
+    { format: formatDocument, toggleWordWrap: () => setWordWrap((current) => !current) },
+  );
 
   return (
     <div className="code-viewer">
-      <div className="code-toolbar" hidden={shownModel === null}>
-        <button
-          type="button"
-          className="chrome-button"
-          disabled={!canFormat}
-          title={formatTitle}
-          onClick={formatDocument}
-        >
-          Format
-        </button>
-        <button
-          type="button"
-          className="chrome-button"
-          aria-pressed={wordWrap}
-          onClick={() => setWordWrap((current) => !current)}
-        >
-          Word wrap
-        </button>
-        <SaveButton api={api} session={session} />
-      </div>
       {view.state === "loading" ? <p className="status">Loading {view.file.name}…</p> : null}
       {view.state === "failed" ? (
         <DocumentError

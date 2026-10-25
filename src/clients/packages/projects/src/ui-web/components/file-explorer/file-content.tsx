@@ -4,10 +4,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   cn,
 } from "@agw/components";
-import { MoreHorizontal, RotateCw } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 
 import { ProjectFileScopeContext, type ProjectFileScope } from "./project-file-scope";
 import type { GitDiffResponse, GitDiffScope } from "../../../services/files";
@@ -17,6 +19,7 @@ import FileHeader from "./file-header";
 import FileLoading from "./file-loading";
 import { fileViewerFileType } from "./file-viewer-file-type";
 import FileViewer from "./file-viewer";
+import { FileViewerMenuEntries, type FileViewerMenuEntry } from "./file-viewer-menu";
 import NoSelectedFile from "./no-selected-file";
 import { LineComment } from "./types";
 import UnChangedFile from "./unchanged-file";
@@ -35,6 +38,17 @@ export type FileViewerOption = {
    * The save status shown after the file name while the viewer is selected; nothing shows for null.
    */
   saveStatus: FileViewerSaveStatus | null;
+  /**
+   * 选中时显示在 "More" 菜单中刷新项之后的条目，带 `menu` 的条目为子菜单。
+   * Items shown in the "More" menu after the reload entry while the viewer is selected; an item with `menu` is a
+   * submenu.
+   */
+  topItems: readonly FileViewerMenuEntry[];
+  /**
+   * 选中时显示在 "More" 菜单最后的条目，带 `menu` 的条目为子菜单。
+   * Items shown at the end of the "More" menu while the viewer is selected; an item with `menu` is a submenu.
+   */
+  bottomItems: readonly FileViewerMenuEntry[];
 };
 
 const SOURCE_VIEWER_ID = "source";
@@ -62,7 +76,10 @@ interface FileContentProps extends ProjectFileScope {
    */
   fileViewers?: readonly FileViewerOption[];
   renderFileViewer?: (viewerId: string) => React.ReactNode;
-  /** 有值时选中查看器后切换按钮右侧显示 "Reload view"。When set, a selected viewer shows "Reload view" after the switch. */
+  /**
+   * 有值时选中查看器后 "More" 菜单提供 "Reload view"。
+   * When set, the "More" menu offers "Reload view" for the selected viewer.
+   */
   onReloadFileViewer?: (viewerId: string) => void;
   /**
    * 有值时文件名后的 "Changed on disk" 带 Reload 按钮，由查看器重新读取文件。
@@ -70,24 +87,30 @@ interface FileContentProps extends ProjectFileScope {
    */
   onReloadFileViewerDocument?: (viewerId: string) => void;
   /**
-   * 有值时选中 Source 后同一位置显示 "Reload file"，重新读取文件内容。
-   * When set, selecting Source shows "Reload file" in the same place, which reads the file again.
+   * 有值时选中 Source 后 "More" 菜单在同一位置提供 "Reload file"，重新读取文件内容。
+   * When set, selecting Source puts "Reload file" in the same place of the "More" menu, which reads the file again.
    */
   onReloadSource?: () => void;
   /**
-   * 显示在刷新按钮右侧的内容，例如查看器的来源说明；选中 Source 时对应切换前的查看器。
-   * Shown to the right of the reload button, such as where the viewer comes from; with Source selected it describes
-   * the viewer selected before the switch.
+   * "More" 菜单顶部不能点击的一行，例如查看器的来源说明；选中 Source 时对应切换前的查看器。
+   * The non-clickable row at the top of the "More" menu, such as where the viewer comes from; with Source selected it
+   * describes the viewer selected before the switch.
    */
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode;
+  /**
+   * 用户选择了查看器在 "More" 菜单中的条目；`entryId` 为子菜单中的项，条目没有子菜单时为 null。
+   * The user chose one of the viewer's items in the "More" menu; `entryId` is the submenu entry, or null for an item
+   * without a submenu.
+   */
+  onSelectFileViewerItem?: (viewerId: string, itemId: string, entryId: string | null) => void;
   /**
    * 用户为当前文件类型设置的默认查看器 id，或 "source"；匹配时初始选中它，非空时 "More" 菜单提供 "Reset default"。
    * The user's default viewer id for the file type, or "source"; selected initially when it matches, and a non-null value adds "Reset default" to the "More" menu.
    */
   defaultFileViewerId?: string | null;
   /**
-   * 有值时切换按钮右侧显示 "More" 菜单：把当前选中的查看器（含 Source）设为默认，或传入 null 删除设置。
-   * When set, a "More" menu follows the switch: set the selected viewer (Source included) as the default, or pass null to remove the setting.
+   * 有值时 "More" 菜单可以把当前选中的查看器（含 Source）设为默认，或传入 null 删除设置。
+   * When set, the "More" menu can set the selected viewer (Source included) as the default, or pass null to remove the setting.
    */
   onSetDefaultFileViewer?: (viewerId: string | null) => void;
 }
@@ -111,6 +134,7 @@ export default function FileContent({
   onReloadFileViewerDocument,
   onReloadSource,
   renderFileViewerInfo,
+  onSelectFileViewerItem,
   defaultFileViewerId,
   onSetDefaultFileViewer,
 }: FileContentProps) {
@@ -153,7 +177,75 @@ export default function FileContent({
     activeViewerId === SOURCE_VIEWER_ID
       ? "Source"
       : (viewers.find((viewer) => viewer.id === activeViewerId)?.title ?? activeViewerId);
-  const saveStatus = viewers.find((viewer) => viewer.id === activeViewerId)?.saveStatus ?? null;
+  const activeViewer = viewers.find((viewer) => viewer.id === activeViewerId);
+  const saveStatus = activeViewer?.saveStatus ?? null;
+  // 查看器的条目：没有子菜单的条目本身被选择时 entryId 为 null。The viewer's items: choosing an item without a submenu
+  // reports a null entryId.
+  const viewerItems = (items: readonly FileViewerMenuEntry[]) =>
+    items.map((item) => (
+      <FileViewerMenuEntries
+        key={item.id}
+        entries={[item]}
+        onSelect={(entryId) =>
+          onSelectFileViewerItem!(activeViewerId, item.id, item.menu ? entryId : null)
+        }
+      />
+    ));
+  const reload =
+    activeViewerId === SOURCE_VIEWER_ID
+      ? onReloadSource && { label: "Reload file", run: onReloadSource }
+      : onReloadFileViewer && {
+          label: "Reload view",
+          run: () => onReloadFileViewer(activeViewerId),
+        };
+  // "More" 菜单依次为查看器说明、刷新与查看器的 top 条目、默认查看器设置、查看器的 bottom 条目；非空的组之间有分隔线。
+  // The "More" menu holds the viewer info, then reloading with the viewer's top items, the default viewer setting and
+  // the viewer's bottom items; non-empty groups are separated.
+  const moreMenuGroups = [
+    renderFileViewerInfo && infoViewerId !== null
+      ? [
+          <DropdownMenuLabel
+            key="info"
+            className="flex max-w-xs items-center gap-2 text-xs font-normal"
+          >
+            {renderFileViewerInfo(infoViewerId)}
+          </DropdownMenuLabel>,
+        ]
+      : [],
+    [
+      ...(reload
+        ? [
+            <DropdownMenuItem key="reload" className="cursor-pointer" onSelect={reload.run}>
+              {reload.label}
+            </DropdownMenuItem>,
+          ]
+        : []),
+      ...viewerItems(activeViewer?.topItems ?? []),
+    ],
+    onSetDefaultFileViewer
+      ? [
+          <DropdownMenuItem
+            key="default"
+            className="cursor-pointer"
+            onSelect={() => setDefaultFileViewer(activeViewerId)}
+          >
+            Open with {activeViewerTitle} by default for {fileType}
+          </DropdownMenuItem>,
+          ...(defaultFileViewerId
+            ? [
+                <DropdownMenuItem
+                  key="reset"
+                  className="cursor-pointer"
+                  onSelect={() => setDefaultFileViewer(null)}
+                >
+                  Reset default for {fileType}
+                </DropdownMenuItem>,
+              ]
+            : []),
+        ]
+      : [],
+    viewerItems(activeViewer?.bottomItems ?? []),
+  ].filter((group) => group.length > 0);
 
   return (
     <div className="flex h-full min-w-0 w-full flex-col">
@@ -201,6 +293,8 @@ export default function FileContent({
                             title: "Source",
                             unsaved: false,
                             saveStatus: null,
+                            topItems: [],
+                            bottomItems: [],
                           },
                         ].map((viewer) => (
                           <button
@@ -225,7 +319,7 @@ export default function FileContent({
                           </button>
                         ))}
                       </div>
-                      {onSetDefaultFileViewer ? (
+                      {moreMenuGroups.length > 0 ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -239,53 +333,15 @@ export default function FileContent({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              className="cursor-pointer"
-                              onSelect={() => setDefaultFileViewer(activeViewerId)}
-                            >
-                              Open with {activeViewerTitle} by default for {fileType}
-                            </DropdownMenuItem>
-                            {defaultFileViewerId ? (
-                              <DropdownMenuItem
-                                className="cursor-pointer"
-                                onSelect={() => setDefaultFileViewer(null)}
-                              >
-                                Reset default for {fileType}
-                              </DropdownMenuItem>
-                            ) : null}
+                            {moreMenuGroups.map((group, index) => (
+                              <React.Fragment key={index}>
+                                {index > 0 ? <DropdownMenuSeparator /> : null}
+                                {group}
+                              </React.Fragment>
+                            ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : null}
-                      {/* 选中 Source 时刷新按钮重新读取文件，位置不变。With Source selected the reload button reads the file again in place. */}
-                      {activeViewerId === SOURCE_VIEWER_ID ? (
-                        onReloadSource ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-6"
-                            aria-label="Reload file"
-                            title="Reload file"
-                            onClick={onReloadSource}
-                          >
-                            <RotateCw className="size-3.5" />
-                          </Button>
-                        ) : null
-                      ) : onReloadFileViewer ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-6"
-                          aria-label="Reload view"
-                          onClick={() => onReloadFileViewer(activeViewerId)}
-                        >
-                          <RotateCw className="size-3.5" />
-                        </Button>
-                      ) : null}
-                      {renderFileViewerInfo && infoViewerId !== null
-                        ? renderFileViewerInfo(infoViewerId)
-                        : null}
                     </>
                   ) : undefined
                 }

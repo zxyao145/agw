@@ -8,6 +8,7 @@ import type {
   ExtensionApi,
   ExtensionWelcome,
   FileChangeEvent,
+  FileHeaderItemSelection,
   FileKind,
   FileStat,
   HostContext,
@@ -134,6 +135,11 @@ export function createExtensionApi(
       openMainView: (id, params) => call("workspace.openMainView", { id, params: params ?? {} }),
       openFile: (uri) => call("workspace.openFile", { uri }),
       setUnsavedChanges: (unsaved) => call("workspace.setUnsavedChanges", { unsaved }),
+      setFileHeaderItems: (items) => call("workspace.setFileHeaderItems", { items }),
+      onDidSelectFileHeaderItem: (listener) =>
+        subscribe(router, "workspace.fileHeaderItemSelected", (data) =>
+          listener(data as FileHeaderItemSelection),
+        ),
     },
     fs: {
       kind: fileKind,

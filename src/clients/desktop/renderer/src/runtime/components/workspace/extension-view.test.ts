@@ -54,6 +54,7 @@ function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHost
     viewErrors: {},
     unsavedViewIds: [],
     saveStatuses: {},
+    fileHeaderItems: {},
     imagePreview: null,
     ...overrides,
   };
@@ -82,19 +83,15 @@ test("the title bar names the view and its extension and reloads the view", () =
   assert.equal(reloads, 1);
 });
 
-test("the file viewer Info button shows the title bar content in a popup", async () => {
-  render(environment.React.createElement(views.ExtensionViewInfo, { view }));
-  assert.equal(document.querySelector('[data-slot="popover-content"]'), null);
-
-  await environment.act(async () => {
-    environment.fireEvent.click(environment.screen.getByRole("button", { name: "View info" }));
-  });
-
-  const popup = document.querySelector('[data-slot="popover-content"]')!;
-  assert.match(popup.textContent ?? "", /Greeting app/u);
-  assert.match(popup.textContent ?? "", /Sample/u);
+test("the file viewer info for the More menu names the viewer and its extension", () => {
+  const { createElement } = environment.React;
+  const result = render(
+    createElement("div", null, createElement(views.ExtensionViewInfo, { view })),
+  );
+  const info = result.container.firstElementChild!;
+  assert.equal(info.textContent, "Greeting appSample");
   assert.equal(
-    popup.querySelector("img")?.getAttribute("src"),
+    info.querySelector("img")?.getAttribute("src"),
     view.icon.kind === "image" ? view.icon.src : null,
   );
 });

@@ -133,7 +133,7 @@ async function clickHost(selector: string): Promise<void> {
 async function clickText(text: string, scope = "document"): Promise<void> {
   const code = `(() => {
     const root = ${scope};
-    const items = [...root.querySelectorAll('button, [role="menuitem"], a')];
+    const items = [...root.querySelectorAll('button, [role="menuitem"], [role="menuitemcheckbox"], a')];
     const item = items.find((element) => element.textContent.replace(/\\s+/g, " ").trim().includes(${JSON.stringify(text)}));
     if (!item) return false;
     item.click();
@@ -2165,10 +2165,10 @@ function viewerTab(id: string): string {
 
 async function filesView(): Promise<void> {
   await openFileInTree("readme.md");
-  // Markdown 文件默认由 Text Editor 的 Edit 打开，切换到 Source 显示原文。Markdown opens in Text Editor's Edit; Source shows the text.
+  // Markdown 文件默认由 Text Editor 的 Mixed 打开，切换到 Source 显示原文。Markdown opens in Text Editor's Mixed; Source shows the text.
   await untilHost(
     `${viewerTab("text-editor:markdown")}?.getAttribute("aria-selected") === "true"`,
-    "the Edit tab",
+    "the Mixed tab",
   );
   await clickHost('[data-file-viewer-tab="source"]');
   await untilHost(
@@ -2186,8 +2186,19 @@ async function filesView(): Promise<void> {
 
 const MARKDOWN_VIEWER = "text-editor:preview";
 
+/** 文件标题行的 "More" 按钮。The file title row's "More" button. */
+const MORE_BUTTON = '.agw-main-workspace button[aria-label="More"]';
+/** 打开的 "More" 菜单第一行的查看器说明。The viewer info in the first row of the open "More" menu. */
+const MORE_MENU_INFO = `${OPEN_MENU}?.querySelector('[data-slot="dropdown-menu-label"]')?.textContent`;
+
+/** 打开文件标题行的 "More" 菜单并选择一项。Opens the file title row's "More" menu and chooses an entry. */
+async function chooseFileHeaderEntry(text: string): Promise<void> {
+  await openMenuAndWait(MORE_BUTTON);
+  await clickText(text, OPEN_MENU);
+}
+
 /**
- * 文件标题行右侧各元素及其是否在窗口内可以点到，例如 `[["File views", true], ["More", true], ["Reload file", true], ["View info", true]]`。
+ * 文件标题行右侧各元素及其是否在窗口内可以点到，例如 `[["File views", true], ["More", true]]`。
  * The file title row's right-side items and whether each is clickable inside the window.
  */
 const FILE_HEADER_ACTIONS = `(() => {
@@ -2228,7 +2239,7 @@ function markdownText(includes: string): string {
   return `Boolean(document.querySelector("article.markdown-body")?.textContent.includes(${JSON.stringify(includes)}))`;
 }
 
-/** 选择 Preview：Markdown 文件默认由 Edit 打开。Selects Preview; Markdown files open in Edit by default. */
+/** 选择 Preview：Markdown 文件默认由 Mixed 打开。Selects Preview; Markdown files open in Mixed by default. */
 async function selectPreview(): Promise<void> {
   await clickHost(`[data-file-viewer-tab="${MARKDOWN_VIEWER}"]`);
   await untilHost(
@@ -2282,17 +2293,14 @@ async function textEditorPreview(): Promise<void> {
   });
   pass("the Text Editor Preview renders heading ids, footnotes, task lists, and raw HTML as text");
 
-  // 文件标题行右侧的 "Reload view" 是文件视图中唯一的刷新按钮，点击后用新的 frame 重新加载查看器。
-  // "Reload view" next to the file name is the only one in the file view, and it reloads the viewer in a new frame.
-  const reloadButtons = `document.querySelectorAll('.agw-main-workspace [aria-label="Reload view"]')`;
-  assert.equal(await evalHost<number>(`${reloadButtons}.length`), 1);
-  assert.equal(
-    await evalHost<boolean>(
-      `${reloadButtons}[0].parentElement === document.querySelector('.agw-main-workspace [role="tablist"]').parentElement`,
-    ),
-    true,
-  );
-  await evalHost(`${reloadButtons}[0].click(); true`);
+  // 文件标题行右侧只有切换按钮与 "More"；"More" 菜单中的 "Reload view" 用新的 frame 重新加载查看器。
+  // The file title row's right side holds only the switch and "More"; "Reload view" in the "More" menu reloads the
+  // viewer in a new frame.
+  assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
+    ["File views", true],
+    ["More", true],
+  ]);
+  await chooseFileHeaderEntry("Reload view");
   const preview = await until(() => {
     const frame = viewerFrameOf("text-editor", "preview");
     return frame &&
@@ -2302,26 +2310,19 @@ async function textEditorPreview(): Promise<void> {
       : null;
   }, "the reloaded preview");
   await until(() => evalFrame<boolean>(preview, rendered), "the Markdown after reloading");
-  pass("Reload view next to the file name reloads the viewer");
+  pass("Reload view in the More menu reloads the viewer");
 
-  // 文件查看器没有宿主标题条，来源显示在 "Reload view" 右侧 Info 按钮的弹出层中。
-  // File viewers have no host title bar; the source shows in the popup of the Info button right of "Reload view".
+  // 文件查看器没有宿主标题条，来源显示在 "More" 菜单的第一行。
+  // File viewers have no host title bar; the source shows in the first row of the "More" menu.
   assert.equal(
     await evalHost<boolean>(
       `Boolean(document.querySelector('.agw-main-workspace .agw-extension-view-header'))`,
     ),
     false,
   );
-  assert.equal(
-    await evalHost<string | null>(
-      `${reloadButtons}[0].nextElementSibling?.getAttribute("aria-label") ?? null`,
-    ),
-    "View info",
-  );
-  const infoPopup = `document.querySelector('[data-slot="popover-content"][data-state="open"]')`;
   const pageBeforeInfo = runtime().registry.get(preview.frameId)!.pageId;
   await evalFrame(preview, "window.__infoProbe = 1; true");
-  // 重新加载的查看器显示后再打开弹出层：遮挡开始时 view 还没有显示就直接隐藏，没有截图。Open the popup once the
+  // 重新加载的查看器显示后再打开菜单：遮挡开始时 view 还没有显示就直接隐藏，没有截图。Open the menu once the
   // reloaded viewer shows: a view that is not showing yet when obscuring starts is hidden at once, without a snapshot.
   await until(
     () => preview.view.getVisible(),
@@ -2329,12 +2330,12 @@ async function textEditorPreview(): Promise<void> {
     undefined,
     () => overlayState(preview),
   );
-  await clickHost('.agw-main-workspace [aria-label="View info"]');
+  await openMenuAndWait(MORE_BUTTON);
   await untilHost(
-    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Text Editor")`,
-    "the viewer info popup",
+    `${MORE_MENU_INFO}?.includes("Preview") && ${MORE_MENU_INFO}.includes("Text Editor")`,
+    "the viewer info in the More menu",
   );
-  // 弹出层盖住查看器时换成已画出的截图，页面不重新加载。Under the popup the viewer swaps to a painted snapshot without reloading.
+  // 菜单盖住查看器时换成已画出的截图，页面不重新加载。Under the menu the viewer swaps to a painted snapshot without reloading.
   await until(() => !preview.view.getVisible(), "the preview to be replaced by its snapshot");
   assert.equal(
     await evalHost<boolean>(snapshotLoaded(preview.frameId)),
@@ -2342,7 +2343,7 @@ async function textEditorPreview(): Promise<void> {
     await overlayState(preview),
   );
   await pressEscape();
-  await untilHost(`!${infoPopup}`, "the viewer info popup to close");
+  await untilHost(`!${OPEN_MENU}`, "the More menu to close");
   await until(() => preview.view.getVisible(), "the preview to show again");
   await untilHost(
     `!document.querySelector('[data-frame-id="${preview.frameId}"] img')`,
@@ -2357,7 +2358,7 @@ async function textEditorPreview(): Promise<void> {
     return { header: [header.left, header.right], main: [main.left, main.right] };
   })()`);
   assert.deepEqual(edges.header, edges.main);
-  pass("the Info button right of Reload view names the viewer and its extension");
+  pass("the first row of the More menu names the viewer and its extension");
 
   await clickHost('[data-file-viewer-tab="source"]');
   await untilHost(
@@ -2367,9 +2368,9 @@ async function textEditorPreview(): Promise<void> {
   // 切换到 Source 时查看器隐藏并保留页面。Switching to Source hides the viewer and keeps its page.
   await until(() => !preview.view.getVisible(), "the preview to hide");
   assert.equal(viewerFrameOf("text-editor", "preview")?.frameId, preview.frameId);
-  // 源码中的长行不撑宽主区；Source 时标题行仍有切换按钮、"More"、"Reload file" 与 Info，都在窗口内可以点到。
-  // Long source lines do not widen the main workspace; with Source the title row keeps the switch, "More",
-  // "Reload file" and Info, all clickable inside the window.
+  // 源码中的长行不撑宽主区；Source 时标题行仍有切换按钮与 "More"，都在窗口内可以点到。
+  // Long source lines do not widen the main workspace; with Source the title row keeps the switch and "More", both
+  // clickable inside the window.
   assert.equal(
     await evalHost<boolean>(
       `document.querySelector('.agw-main-workspace').getBoundingClientRect().right <= window.innerWidth`,
@@ -2379,22 +2380,21 @@ async function textEditorPreview(): Promise<void> {
   assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
     ["File views", true],
     ["More", true],
-    ["Reload file", true],
-    ["View info", true],
   ]);
-  // Info 仍说明切换前的查看器。Info still describes the viewer selected before the switch.
-  await clickHost('.agw-main-workspace [aria-label="View info"]');
+  // "More" 菜单的第一行仍说明切换前的查看器，刷新项为 "Reload file"。The "More" menu's first row still describes the
+  // viewer selected before the switch, and its reload entry is "Reload file".
+  await openMenuAndWait(MORE_BUTTON);
   await untilHost(
-    `${infoPopup}?.textContent.includes("Preview") && ${infoPopup}.textContent.includes("Text Editor")`,
-    "the viewer info popup with Source selected",
+    `${MORE_MENU_INFO}?.includes("Preview") && ${MORE_MENU_INFO}.includes("Text Editor") && [...${OPEN_MENU}.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "Reload file")`,
+    "the viewer info and Reload file with Source selected",
   );
   await pressEscape();
-  await untilHost(`!${infoPopup}`, "the viewer info popup to close");
+  await untilHost(`!${OPEN_MENU}`, "the More menu to close");
   // "Reload file" 重新读取源码。"Reload file" reads the source again.
   const guidePath = join(config.projectDirectory, "guide.md");
   const guide = await readFile(guidePath, "utf8");
   await writeFile(guidePath, `${guide}\nReloaded source line.\n`);
-  await clickHost('.agw-main-workspace [aria-label="Reload file"]');
+  await chooseFileHeaderEntry("Reload file");
   await untilHost(
     `document.querySelector('.agw-main-workspace')?.textContent.includes("Reloaded source line.")`,
     "the reloaded source",
@@ -2405,9 +2405,9 @@ async function textEditorPreview(): Promise<void> {
 
   await evalFrame(preview, `document.querySelector('a[href="docs/notes.md"]').click(); true`);
   await untilHost(shownFileIs("notes.md"), "docs/notes.md in the file view");
-  // 打开的文件回到默认的 Edit，再选 Preview 时由同一个 Preview frame 显示。The opened file returns to the default
-  // Edit; selecting Preview again shows it in the same Preview frame.
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "docs/notes.md in the default Edit viewer");
+  // 打开的文件回到默认的 Mixed，再选 Preview 时由同一个 Preview frame 显示。The opened file returns to the default
+  // Mixed; selecting Preview again shows it in the same Preview frame.
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "docs/notes.md in the default Mixed viewer");
   await selectPreview();
   await until(
     () => evalFrame<boolean>(preview, markdownText("project notes")),
@@ -2541,12 +2541,10 @@ async function excalidrawEditor(): Promise<void> {
   assert.deepEqual(await evalHost(FILE_HEADER_ACTIONS), [
     ["File views", true],
     ["More", true],
-    ["Reload file", true],
-    ["View info", true],
   ]);
   await clickHost(`[data-file-viewer-tab="${EXCALIDRAW_VIEWER}"]`);
   await until(() => editor.view.getVisible(), "the editor to show again");
-  pass("with Source selected the Excalidraw file keeps the reload and info buttons");
+  pass("with Source selected the Excalidraw file keeps the switch and the More menu");
 
   pressKey(editor, "r");
   await until(
@@ -2820,7 +2818,7 @@ async function excalidrawEditor(): Promise<void> {
 
 /* ---------- Text Editor 与 todo-editor Text Editor and todo-editor ---------- */
 
-const EDIT_VIEWER = "text-editor:markdown";
+const MIXED_VIEWER = "text-editor:markdown";
 const CODE_VIEWER = "text-editor:code";
 const FILE_VIEWER_TABS = `[...document.querySelectorAll('[data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`;
 /** 宿主文件名后的保存状态。The save status after the host's file name. */
@@ -2856,8 +2854,8 @@ async function selectViewer(viewerId: string): Promise<void> {
   await untilHost(selectedViewerIs(viewerId), `the ${viewerId} tab`);
 }
 
-/** Edit 中文字包含 text 的顶层块，tag 为块的选择器。The top-level Edit block containing text; tag selects the block. */
-function editBlock(text: string, tag = "*"): string {
+/** Mixed 中文字包含 text 的顶层块，tag 为块的选择器。The top-level Mixed block containing text; tag selects the block. */
+function mixedBlock(text: string, tag = "*"): string {
   return `[...document.querySelectorAll(".ProseMirror > ${tag}")].find((block) => block.textContent.includes(${JSON.stringify(text)}))`;
 }
 
@@ -3028,12 +3026,12 @@ async function untilFileBytes(path: string, expected: Buffer, label: string): Pr
   );
 }
 
-/** 等待 Edit 显示满足条件的已保存文档。Waits for Edit to show a saved document matching the predicate. */
-async function editShowing(predicate: string, label: string): Promise<FrameHandle> {
+/** 等待 Mixed 显示满足条件的已保存文档。Waits for Mixed to show a saved document matching the predicate. */
+async function mixedShowing(predicate: string, label: string): Promise<FrameHandle> {
   const frame = await untilViewerFrame("text-editor", "markdown");
   await until(
     async () =>
-      (await evalHost<boolean>(savedIn(EDIT_VIEWER))) &&
+      (await evalHost<boolean>(savedIn(MIXED_VIEWER))) &&
       (await evalFrame<boolean>(frame, `Boolean(${EDITOR}) && (${predicate})`)),
     label,
   );
@@ -3149,7 +3147,7 @@ async function closeToasts(): Promise<void> {
 
 async function viewerOrderAndDefaults(): Promise<void> {
   for (const [path, tabs] of [
-    ["notes/edit.md", [EDIT_VIEWER, MARKDOWN_VIEWER, CODE_VIEWER, "source"]],
+    ["notes/edit.md", [MIXED_VIEWER, MARKDOWN_VIEWER, CODE_VIEWER, "source"]],
     ["diagram.excalidraw", [EXCALIDRAW_VIEWER, CODE_VIEWER, "source"]],
     ["src/app.ts", [CODE_VIEWER, "source"]],
   ] as const) {
@@ -3158,7 +3156,7 @@ async function viewerOrderAndDefaults(): Promise<void> {
     assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), tabs, path);
   }
   pass(
-    "viewers follow their priority: Edit, Preview, Code for Markdown, Excalidraw then Code for diagrams, Code for other files",
+    "viewers follow their priority: Mixed, Preview, Code for Markdown, Excalidraw then Code for diagrams, Code for other files",
   );
 
   const settingsPath = join(config.userData, "settings.json");
@@ -3203,7 +3201,7 @@ async function viewerOrderAndDefaults(): Promise<void> {
   // 用户默认的查看器排在最前。The user's default viewer comes first.
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
     CODE_VIEWER,
-    EDIT_VIEWER,
+    MIXED_VIEWER,
     MARKDOWN_VIEWER,
     "source",
   ]);
@@ -3213,52 +3211,52 @@ async function viewerOrderAndDefaults(): Promise<void> {
   await until(async () => !("*.md" in (await defaults())), "the *.md default to be removed");
   // 重置不切换正在显示的查看器。The reset keeps the viewer being shown.
   await untilHost(
-    `${FILE_VIEWER_TABS}.join() === ${JSON.stringify([EDIT_VIEWER, MARKDOWN_VIEWER, CODE_VIEWER, "source"].join())}`,
+    `${FILE_VIEWER_TABS}.join() === ${JSON.stringify([MIXED_VIEWER, MARKDOWN_VIEWER, CODE_VIEWER, "source"].join())}`,
     "the priority order after the reset",
   );
   assert.equal(await evalHost<boolean>(selectedViewerIs(CODE_VIEWER)), true);
   await openFileInTree("guide.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit as the default for guide.md");
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed as the default for guide.md");
   pass(
-    "More sets Code as the default for *.md in settings.json, and after Reset default for *.md the shown file keeps Code while other Markdown files open in Edit",
+    "More sets Code as the default for *.md in settings.json, and after Reset default for *.md the shown file keeps Code while other Markdown files open in Mixed",
   );
 }
 
 async function textEditorMarkdown(): Promise<void> {
   const path = projectPath("notes/edit.md");
   const original = await readFile(path, "utf8");
-  // 回到同一个文件时文件视图保留之前选中的 Code，这里重新选中 Edit。Returning to the same file keeps the Code chosen
-  // earlier, so Edit is selected again.
+  // 回到同一个文件时文件视图保留之前选中的 Code，这里重新选中 Mixed。Returning to the same file keeps the Code chosen
+  // earlier, so Mixed is selected again.
   await openFileInTree("notes/edit.md");
-  await selectViewer(EDIT_VIEWER);
-  const edit = await editShowing(`Boolean(${editBlock("Second paragraph", "p")})`, "edit.md");
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await mixedShowing(`Boolean(${mixedBlock("Second paragraph", "p")})`, "edit.md");
 
   // 1-2：修改一个 paragraph 后保存，只有这个 paragraph 变化；展开的 notes/ 重新读取子项。Editing one paragraph changes
   // only that paragraph on save; the expanded notes/ reads its children again.
-  await placeCaret(edit, editBlock("Second paragraph", "p"));
-  await typeIn(edit, " Typed in Edit.");
-  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker");
+  await placeCaret(mixed, mixedBlock("Second paragraph", "p"));
+  await typeIn(mixed, " Typed in Mixed.");
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved marker");
   await writeFile(projectPath("notes/added.md"), "added on disk\n");
   await delay(500);
   assert.equal(await evalHost<boolean>(`Boolean(${treeItem("added.md")})`), false);
-  saveIn(edit);
-  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
-  const typed = original.replace("at the end.\n", "at the end. Typed in Edit.\n");
+  saveIn(mixed);
+  await untilHost(`!${unsavedIn(MIXED_VIEWER)}`, "the unsaved marker to clear");
+  const typed = original.replace("at the end.\n", "at the end. Typed in Mixed.\n");
   await untilFileText(path, typed, "the paragraph edit on disk");
   await untilHost(`Boolean(${treeItem("added.md")})`, "notes/ to be read again after the save");
-  pass("Edit saves a paragraph edit with Cmd/Ctrl+S, changing only that paragraph on disk");
-  pass("saving in Edit reads the expanded notes/ directory of the file tree again");
+  pass("Mixed saves a paragraph edit with Cmd/Ctrl+S, changing only that paragraph on disk");
+  pass("saving in Mixed reads the expanded notes/ directory of the file tree again");
 
   // 3：修改链接定义中的地址，只有该定义所在的行变化。Editing a definition's address changes only its line.
   await placeCaret(
-    edit,
-    editBlock("https://example.com/first", "div.raw-block"),
+    mixed,
+    mixedBlock("https://example.com/first", "div.raw-block"),
     "https://example.com/first",
   );
-  await typeIn(edit, "-v2");
-  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker for the definition");
-  saveIn(edit);
-  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
+  await typeIn(mixed, "-v2");
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved marker for the definition");
+  saveIn(mixed);
+  await untilHost(`!${unsavedIn(MIXED_VIEWER)}`, "the unsaved marker to clear");
   const definition = typed.replace(
     "[docs]: https://example.com/first\n",
     "[docs]: https://example.com/first-v2\n",
@@ -3269,32 +3267,35 @@ async function textEditorMarkdown(): Promise<void> {
   // 4：空 paragraph 中输入 `/` 选择 Heading 2。`/` in an empty paragraph, then Heading 2.
   const trailing = `${EDITOR}.lastElementChild`;
   assert.equal(
-    await evalFrame<boolean>(edit, `${trailing}.tagName === "P" && ${trailing}.textContent === ""`),
+    await evalFrame<boolean>(
+      mixed,
+      `${trailing}.tagName === "P" && ${trailing}.textContent === ""`,
+    ),
     true,
   );
-  await placeCaret(edit, trailing);
-  await typeIn(edit, "/");
+  await placeCaret(mixed, trailing);
+  await typeIn(mixed, "/");
   const heading2 = `[...document.querySelectorAll('.slash-menu [role="option"]')].find((option) => option.textContent === "Heading 2")`;
-  await clickInFrame(edit, heading2);
+  await clickInFrame(mixed, heading2);
   await until(
-    () => evalFrame<boolean>(edit, `Boolean(document.querySelector(".ProseMirror > h2"))`),
+    () => evalFrame<boolean>(mixed, `Boolean(document.querySelector(".ProseMirror > h2"))`),
     "the Heading 2 block",
   );
-  await typeIn(edit, "New section");
-  saveIn(edit);
-  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
+  await typeIn(mixed, "New section");
+  saveIn(mixed);
+  await untilHost(`!${unsavedIn(MIXED_VIEWER)}`, "the unsaved marker to clear");
   const heading = `${definition}\n## New section\n`;
   await untilFileText(path, heading, "the new heading on disk");
   pass("the / menu turns an empty paragraph into Heading 2, saved as a ## line");
 
   // 5：点击任务项的复选框。Clicking a task item's checkbox.
   await clickInFrame(
-    edit,
+    mixed,
     `[...document.querySelectorAll(".ProseMirror li.task-item")].find((item) => item.textContent.includes("open task"))?.querySelector('input[type="checkbox"]')`,
   );
-  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker for the checkbox");
-  saveIn(edit);
-  await untilHost(`!${unsavedIn(EDIT_VIEWER)}`, "the unsaved marker to clear");
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved marker for the checkbox");
+  saveIn(mixed);
+  await untilHost(`!${unsavedIn(MIXED_VIEWER)}`, "the unsaved marker to clear");
   const checked = heading.replace("- [ ] open task", "- [x] open task");
   await untilFileText(path, checked, "the checked task on disk");
   pass("clicking a task checkbox saves only that item as - [x]");
@@ -3316,7 +3317,7 @@ async function textEditorMarkdown(): Promise<void> {
       `(() => {
         const article = document.querySelector("article.markdown-body");
         return {
-          typed: article.textContent.includes("at the end. Typed in Edit."),
+          typed: article.textContent.includes("at the end. Typed in Mixed."),
           href: [...article.querySelectorAll("a")].find((link) => link.textContent === "reference link")?.getAttribute("href") ?? null,
           openTask: [...article.querySelectorAll("li")].find((item) => item.textContent.includes("open task"))?.querySelector("input")?.checked ?? null,
         };
@@ -3324,14 +3325,14 @@ async function textEditorMarkdown(): Promise<void> {
     ),
     { typed: true, href: "https://example.com/first-v2", openTask: true },
   );
-  pass("Preview shows the content saved in Edit, with the link pointing to the new address");
+  pass("Preview shows the content saved in Mixed, with the link pointing to the new address");
 
-  // 7：Code 中修改并保存，回到 Edit 时 onShow 读取新内容。Code edits and saves; back in Edit, onShow reads it.
+  // 7：Code 中修改并保存，回到 Mixed 时 onShow 读取新内容。Code edits and saves; back in Mixed, onShow reads it.
   await selectViewer(CODE_VIEWER);
   // Monaco 只渲染可见的行，这里检查文件前部保存过的 paragraph。Monaco renders only visible lines, so the saved
   // paragraph near the start of the file is checked. 快捷键要等 Monaco 获得焦点后再按下。The shortcut waits until Monaco has focus.
   const code = await codeShowing(
-    `${CODE_TEXT}.includes("at the end. Typed in Edit.") && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`,
+    `${CODE_TEXT}.includes("at the end. Typed in Mixed.") && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`,
     "the saved edit.md in Code",
   );
   moveCodeCursor(code, "end");
@@ -3340,10 +3341,10 @@ async function textEditorMarkdown(): Promise<void> {
   saveIn(code);
   await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker in Code to clear");
   await untilFileText(path, `${checked}Code line.`, "the Code edit on disk");
-  await selectViewer(EDIT_VIEWER);
-  await editShowing(`Boolean(${editBlock("Code line.", "p")})`, "Edit to show the Code change");
-  assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), false);
-  pass("a change saved in Code shows in Edit when it is shown again");
+  await selectViewer(MIXED_VIEWER);
+  await mixedShowing(`Boolean(${mixedBlock("Code line.", "p")})`, "Mixed to show the Code change");
+  assert.equal(await evalHost<boolean>(unsavedIn(MIXED_VIEWER)), false);
+  pass("a change saved in Code shows in Mixed when it is shown again");
 }
 
 /**
@@ -3433,16 +3434,16 @@ async function dragBlock(
 }
 
 /**
- * Edit 与 Preview 使用共用排版：默认设置下按计算样式检查任务项、表格单元格、引用链接、拖动手柄菜单、引用块中的代码块与正文。
- * Edit and Preview use the shared typography: at the default settings the computed styles of task items, table cells,
+ * Mixed 与 Preview 使用共用排版：默认设置下按计算样式检查任务项、表格单元格、引用链接、拖动手柄菜单、引用块中的代码块与正文。
+ * Mixed and Preview use the shared typography: at the default settings the computed styles of task items, table cells,
  * a reference link, the drag-handle menu, a code block in a blockquote and body text are checked.
  */
 async function textEditorTypography(): Promise<void> {
   await openFileInTree("notes/typography.md");
-  await selectViewer(EDIT_VIEWER);
-  const edit = await editShowing(`Boolean(${editBlock("Top paragraph", "p")})`, "typography.md");
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await mixedShowing(`Boolean(${mixedBlock("Top paragraph", "p")})`, "typography.md");
   const styles = await evalFrame<Record<string, unknown>>(
-    edit,
+    mixed,
     `(() => {
       const root = document.querySelector(".ProseMirror");
       const center = (element) => { const rect = element.getBoundingClientRect(); return rect.top + rect.height / 2; };
@@ -3480,28 +3481,28 @@ async function textEditorTypography(): Promise<void> {
 
   // 悬停到块上，点击拖动手柄打开 Turn into 菜单。Hover the block and click the drag handle to open the Turn into menu.
   const block = await until(
-    () => centerOf(edit, editBlock("Top paragraph", "p")),
+    () => centerOf(mixed, mixedBlock("Top paragraph", "p")),
     "the paragraph to hover",
   );
-  edit.view.webContents.sendInputEvent({
+  mixed.view.webContents.sendInputEvent({
     type: "mouseMove",
     x: Math.round(block.x),
     y: Math.round(block.y),
   });
-  await clickInFrame(edit, `document.querySelector(".drag-handle .chrome-button")`);
+  await clickInFrame(mixed, `document.querySelector(".drag-handle .chrome-button")`);
   await until(
-    () => evalFrame<boolean>(edit, `Boolean(document.querySelector(".drag-handle .popup-menu"))`),
+    () => evalFrame<boolean>(mixed, `Boolean(document.querySelector(".drag-handle .popup-menu"))`),
     "the drag-handle menu",
   );
   assert.equal(
     await evalFrame<string>(
-      edit,
+      mixed,
       `getComputedStyle(document.querySelector(".drag-handle .popup-menu")).fontSize`,
     ),
     "14px",
   );
   pass(
-    "Edit computes the shared typography: aligned task items, margin-free cell paragraphs, underlined reference links, 14px menus, a flush code block in a quote, 16px/28px text",
+    "Mixed computes the shared typography: aligned task items, margin-free cell paragraphs, underlined reference links, 14px menus, a flush code block in a quote, 16px/28px text",
   );
 
   await selectPreview();
@@ -3545,11 +3546,11 @@ const FIRST_LINE_BLOCKS: { name: string; block: string; line: string }[] = [
   },
   {
     name: "paragraph",
-    block: editBlock("Paragraph line", "p"),
+    block: mixedBlock("Paragraph line", "p"),
     line: "firstCharacter(block)",
   },
-  { name: "H1", block: editBlock("Level one", "h1"), line: "firstCharacter(block)" },
-  { name: "H3", block: editBlock("Level three", "h3"), line: "firstCharacter(block)" },
+  { name: "H1", block: mixedBlock("Level one", "h1"), line: "firstCharacter(block)" },
+  { name: "H3", block: mixedBlock("Level three", "h3"), line: "firstCharacter(block)" },
   {
     name: "list item",
     block: `[...document.querySelectorAll(".ProseMirror > ul > li")].find((item) => item.textContent === "Bullet item")`,
@@ -3562,17 +3563,17 @@ const FIRST_LINE_BLOCKS: { name: string; block: string; line: string }[] = [
   },
   {
     name: "blockquote",
-    block: editBlock("Quoted line", "blockquote"),
+    block: mixedBlock("Quoted line", "blockquote"),
     line: `firstCharacter(block.querySelector("p"))`,
   },
   {
     name: "code block",
-    block: editBlock("const line = 1;", "div.code-block"),
+    block: mixedBlock("const line = 1;", "div.code-block"),
     line: `block.querySelector(".code-block-header select").getBoundingClientRect()`,
   },
   {
     name: "table",
-    block: editBlock("Cell name", ".tableWrapper"),
+    block: mixedBlock("Cell name", ".tableWrapper"),
     line: `firstCharacter(block.querySelector("th > p"))`,
   },
   {
@@ -3605,11 +3606,20 @@ async function checkFirstLineHandles(frame: FrameHandle, size: string): Promise<
   try {
     const moveMouse = (point: { x: number; y: number }) =>
       debuggerApi.sendCommand("Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
-    // 顶部条在编辑区之外：滚动期间鼠标停留在这里，不会悬停到别的块上。The top bar lies outside the editing area; the mouse
-    // rests there while scrolling, so it hovers no other block.
+    // 滚动区域的左上角在内容列的内边距中，不在编辑器元素上（手柄只响应编辑器元素上的鼠标）：滚动期间鼠标停留在这里，
+    // 不会悬停到别的块上。The scroll area's top-left corner lies in the content column's padding, off the editor element
+    // (the handle follows the mouse over the editor element only); the mouse rests there while scrolling, so it hovers
+    // no other block.
     const outside = await evalFrame<{ x: number; y: number }>(
       frame,
-      `(() => { const rect = document.querySelector(".edit-toolbar").getBoundingClientRect(); return { x: rect.left + 8, y: rect.top + rect.height / 2 }; })()`,
+      `(() => { const rect = document.querySelector(".edit-scroll").getBoundingClientRect(); return { x: rect.left + 2, y: rect.top + 2 }; })()`,
+    );
+    assert.equal(
+      await evalFrame<boolean>(
+        frame,
+        `!document.querySelector(".ProseMirror").contains(document.elementFromPoint(${outside.x}, ${outside.y}))`,
+      ),
+      true,
     );
     const results: { name: string; handleX: number; handleCenter: number; lineCenter: number }[] =
       [];
@@ -3731,10 +3741,10 @@ const RESET_APPEARANCE: AppearanceSettings = { ...DEFAULT_APPEARANCE, mode: "sys
 
 async function openFirstLine(): Promise<FrameHandle> {
   await openFileInTree("first-line.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for first-line.md");
-  return editShowing(
-    `Boolean(${editBlock("Paragraph line", "p")}) && Boolean(document.querySelector(".ProseMirror .image-placeholder-alt"))`,
-    "first-line.md in Edit",
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed for first-line.md");
+  return mixedShowing(
+    `Boolean(${mixedBlock("Paragraph line", "p")}) && Boolean(document.querySelector(".ProseMirror .image-placeholder-alt"))`,
+    "first-line.md in Mixed",
   );
 }
 
@@ -3744,15 +3754,15 @@ async function openFirstLine(): Promise<FrameHandle> {
  * size and at base size 20; the default sizes are restored at the end.
  */
 async function dragHandleFirstLine(): Promise<void> {
-  const edit = await openFirstLine();
+  const mixed = await openFirstLine();
   // 排版检查在同一个编辑器中留下打开的手柄菜单，菜单打开时手柄锁定；Escape 关闭菜单。The typography check leaves the
   // handle menu open in the same editor, which locks the handle; Escape closes the menu.
-  pressKey(edit, "Escape");
+  pressKey(mixed, "Escape");
   await until(
-    () => evalFrame<boolean>(edit, `!document.querySelector(".drag-handle .popup-menu")`),
+    () => evalFrame<boolean>(mixed, `!document.querySelector(".drag-handle .popup-menu")`),
     "the drag-handle menu to close",
   );
-  await checkFirstLineHandles(edit, "the default sizes");
+  await checkFirstLineHandles(mixed, "the default sizes");
 
   const larger: AppearanceSettings = { ...DEFAULT_APPEARANCE, baseFontSize: 20 };
   await saveAppearance(larger, async () => {
@@ -3763,16 +3773,16 @@ async function dragHandleFirstLine(): Promise<void> {
       return true;
     })()`);
   });
-  const largerEdit = await openFirstLine();
+  const largerMixed = await openFirstLine();
   await until(
     () =>
       evalFrame<boolean>(
-        largerEdit,
-        `getComputedStyle(${editBlock("Paragraph line", "p")}).fontSize === "20px"`,
+        largerMixed,
+        `getComputedStyle(${mixedBlock("Paragraph line", "p")}).fontSize === "20px"`,
       ),
-    "20px paragraphs in Edit",
+    "20px paragraphs in Mixed",
   );
-  await checkFirstLineHandles(largerEdit, "base size 20");
+  await checkFirstLineHandles(largerMixed, "base size 20");
 
   await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
   await goToChat();
@@ -3931,7 +3941,7 @@ async function hostScaling(): Promise<void> {
   await openFileInTree("readme.md");
   await untilHost(
     `${viewerTab("text-editor:markdown")}?.getAttribute("aria-selected") === "true"`,
-    "the Edit tab",
+    "the Mixed tab",
   );
   // 对照：宽 20px 且隐藏溢出的按钮必须被扫描报告。Negative control: a 20px wide button with hidden overflow must be reported.
   await evalHost(`(() => {
@@ -4056,23 +4066,23 @@ async function chatParagraphSize(): Promise<string> {
 }
 
 /**
- * 当前设置下新打开的 Edit、Preview 与 Code 的字号。
- * The font sizes of Edit, Preview and Code opened now with the current settings.
+ * 当前设置下新打开的 Mixed、Preview 与 Code 的字号。
+ * The font sizes of Mixed, Preview and Code opened now with the current settings.
  */
 async function openedViewSizes(): Promise<{
-  edit: string;
-  editCode: string;
+  mixed: string;
+  mixedCode: string;
   preview: string;
   code: string;
 }> {
   await showMarkdownReply();
   await openFileInTree("notes/typography.md");
-  await selectViewer(EDIT_VIEWER);
-  const edit = await editShowing(`Boolean(${editBlock("Top paragraph", "p")})`, "typography.md");
-  const editSizes = await evalFrame<{ paragraph: string; code: string }>(
-    edit,
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await mixedShowing(`Boolean(${mixedBlock("Top paragraph", "p")})`, "typography.md");
+  const mixedSizes = await evalFrame<{ paragraph: string; code: string }>(
+    mixed,
     `(() => {
-      const paragraph = ${editBlock("Top paragraph", "p")};
+      const paragraph = ${mixedBlock("Top paragraph", "p")};
       return {
         paragraph: getComputedStyle(paragraph).fontSize,
         code: getComputedStyle(paragraph.querySelector("code")).fontSize,
@@ -4104,8 +4114,8 @@ async function openedViewSizes(): Promise<{
     `getComputedStyle(document.querySelector(".code-editor .view-lines")).fontSize`,
   );
   return {
-    edit: editSizes.paragraph,
-    editCode: editSizes.code,
+    mixed: mixedSizes.paragraph,
+    mixedCode: mixedSizes.code,
     preview: previewSize,
     code: codeSize,
   };
@@ -4113,10 +4123,10 @@ async function openedViewSizes(): Promise<{
 
 /**
  * Appearance 设置：字号随设置改变，已打开的 extension 后台 frame 不重建并收到新的主题令牌，新打开的视图使用当前字号，
- * 按比例缩小的文字随基础字号缩放；Appearance 页面没有 Document font size，Edit 的文档字号跟随基础字号。
+ * 按比例缩小的文字随基础字号缩放；Appearance 页面没有 Document font size，Mixed 的文档字号跟随基础字号。
  * Appearance settings: sizes follow the settings, an extension's background frame stays alive and receives the new
  * theme tokens, views opened later use the current sizes, and the smaller proportional text scales with the base size;
- * the Appearance page has no Document font size and Edit's document size follows the base size.
+ * the Appearance page has no Document font size and Mixed's document size follows the base size.
  */
 async function appearanceSettings(): Promise<void> {
   const background = await untilFrame("sample", "background");
@@ -4132,8 +4142,8 @@ async function appearanceSettings(): Promise<void> {
     "undefined",
   );
 
-  // 基础字号 20：宿主、Settings 页面、Chat、新打开的 Edit、Preview 与 Code 一起放大。
-  // Base size 20 scales the host, the Settings page, Chat and Edit, Preview and Code opened now.
+  // 基础字号 20：宿主、Settings 页面、Chat、新打开的 Mixed、Preview 与 Code 一起放大。
+  // Base size 20 scales the host, the Settings page, Chat and Mixed, Preview and Code opened now.
   await saveAppearance(
     { ...DEFAULT_APPEARANCE, baseFontSize: 20 },
     chooseSize("appearance-base-font-size", "20"),
@@ -4155,22 +4165,22 @@ async function appearanceSettings(): Promise<void> {
   assert.equal(await evalFrame<string>(background, "window.__appearanceMarker"), "kept");
   assert.equal(await chatParagraphSize(), "17.5px");
   const larger = await openedViewSizes();
-  assert.equal(larger.edit, "20px");
+  assert.equal(larger.mixed, "20px");
   assert.equal(larger.preview, "20px");
   assert.equal(larger.code, "17.5px");
   pass(
-    "base size 20 scales the host and the Settings page, updates the background frame's tokens without rebuilding it, and Chat, Edit, Preview and Code opened afterwards use the new sizes",
+    "base size 20 scales the host and the Settings page, updates the background frame's tokens without rebuilding it, and Chat, Mixed, Preview and Code opened afterwards use the new sizes",
   );
 
-  // 聊天字号单独设置，基础字号改变时保持不变，Edit 与 Preview 跟随基础字号。
-  // The chat size is set on its own and stays when the base size changes; Edit and Preview follow the base size.
+  // 聊天字号单独设置，基础字号改变时保持不变，Mixed 与 Preview 跟随基础字号。
+  // The chat size is set on its own and stays when the base size changes; Mixed and Preview follow the base size.
   await saveAppearance(
     { ...DEFAULT_APPEARANCE, baseFontSize: 20, chatFontSize: 15 },
     chooseSize("appearance-chat-font-size", "15"),
   );
   assert.equal(await chatParagraphSize(), "15px");
   let sizes = await openedViewSizes();
-  assert.equal(sizes.edit, "20px");
+  assert.equal(sizes.mixed, "20px");
   assert.equal(sizes.preview, "20px");
   await saveAppearance(
     { ...DEFAULT_APPEARANCE, baseFontSize: 17, chatFontSize: 15 },
@@ -4178,10 +4188,10 @@ async function appearanceSettings(): Promise<void> {
   );
   assert.equal(await chatParagraphSize(), "15px");
   sizes = await openedViewSizes();
-  assert.equal(sizes.edit, "17px");
+  assert.equal(sizes.mixed, "17px");
   assert.equal(sizes.preview, "17px");
   pass(
-    "the chat size 15 stays unchanged when the base size becomes 17, and Edit and Preview follow 17px",
+    "the chat size 15 stays unchanged when the base size becomes 17, and Mixed and Preview follow 17px",
   );
 
   // 重置后聊天字号回到跟随基础字号。Resetting returns the chat size to following the base size.
@@ -4190,7 +4200,7 @@ async function appearanceSettings(): Promise<void> {
   );
   assert.equal(await chatParagraphSize(), "14.875px");
   sizes = await openedViewSizes();
-  assert.equal(sizes.edit, "17px");
+  assert.equal(sizes.mixed, "17px");
   assert.equal(sizes.preview, "17px");
   pass("Reset chat font size returns to 14.875px at base size 17");
 
@@ -4202,15 +4212,15 @@ async function appearanceSettings(): Promise<void> {
   assert.equal(await eyebrowSize(), "9px");
   assert.equal(await chatParagraphSize(), "10.5px");
   assert.deepEqual(await openedViewSizes(), {
-    edit: "12px",
-    editCode: "10.5px",
+    mixed: "12px",
+    mixedCode: "10.5px",
     preview: "12px",
     code: "10.5px",
   });
   await saveAppearance(DEFAULT_APPEARANCE, chooseSize("appearance-base-font-size", "16"));
   assert.equal(await eyebrowSize(), "12px");
   pass(
-    "base size 12 gives 9px text-xs, a 10.5px chat paragraph, 12px Edit and Preview with 10.5px inline code and 10.5px Code; base size 16 gives 12px text-xs",
+    "base size 12 gives 9px text-xs, a 10.5px chat paragraph, 12px Mixed and Preview with 10.5px inline code and 10.5px Code; base size 16 gives 12px text-xs",
   );
 }
 
@@ -4374,11 +4384,11 @@ async function applyAppearanceInPlace(changes: Partial<AppearanceSettings>): Pro
 /**
  * 主题选择：不合法的主题文件显示校验错误且不出现在下拉框中；Manage 只显示主题 extension，类型 Select 切换到文件查看器与
  * 全部 extension；Extensions 页面的卡片按 gallery 排列；目录安装的主题 extension 启用后出现在下拉框中；Soft 与 Light 下
- * 宿主与侧栏的颜色、Edit 页面的变量；切换主题时没有过渡动画。
+ * 宿主与侧栏的颜色、Mixed 页面的变量；切换主题时没有过渡动画。
  * Theme selection: an invalid theme file shows its validation error and stays out of the select; Manage shows only
  * theme extensions, and the type Select switches to file viewers and to every extension; the Extensions page lays its
  * cards out as a gallery; a theme extension installed from a folder appears once enabled; Soft with Light colors the
- * host, the sidebars and the Edit page variables; switching themes runs no transitions.
+ * host, the sidebars and the Mixed page variables; switching themes runs no transitions.
  */
 async function themeSelection(): Promise<void> {
   // 首次启动时把 next-themes 的值（没有值时为 system）迁移到 settings.json。The first launch migrates next-themes' value.
@@ -4556,18 +4566,18 @@ async function themeSelection(): Promise<void> {
     "rgb(249, 249, 249)",
   );
   await openFileInTree("readme.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
-  const edit = await editShowing(EDITOR, "readme.md in Edit");
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed for readme.md");
+  const mixed = await mixedShowing(EDITOR, "readme.md in Mixed");
   await until(
     async () =>
       (await evalFrame<string>(
-        edit,
+        mixed,
         `getComputedStyle(document.documentElement).getPropertyValue("--background").trim()`,
       )) === "#ffffff",
-    "the Soft background variable in Edit",
+    "the Soft background variable in Mixed",
   );
   pass(
-    "Soft with Light colors the host white, the Ribbon, Left Sidebar and Settings navigation #f9f9f9, and Edit gets --background #ffffff",
+    "Soft with Light colors the host white, the Ribbon, Left Sidebar and Settings navigation #f9f9f9, and Mixed gets --background #ffffff",
   );
 
   // 同一 Mode 下从 Default 切换到 Soft：下一帧没有 CSS 过渡，选中的设置项已经是 Soft 的颜色。
@@ -4610,8 +4620,8 @@ type BackdropStyles = {
   margin: string;
 };
 
-/** Edit 与 Preview 中背景图形所在的元素与卡片元素。The backdrop element and the card in Edit and Preview. */
-const EDIT_BACKDROP = [
+/** Mixed 与 Preview 中背景图形所在的元素与卡片元素。The backdrop element and the card in Mixed and Preview. */
+const MIXED_BACKDROP = [
   `document.querySelector(".edit-scroll")`,
   `document.querySelector(".edit-column")`,
 ] as const;
@@ -4679,9 +4689,9 @@ function untilWorkspace(
 
 /**
  * Warm Minimalism：浅色与深色下宿主与侧栏的颜色，推送给 extension 的变量与主题名称，宿主 Main Workspace 的背景图形与
- * 卡片，以及 Edit 与 Preview 自己绘制的背景图形与卡片。
+ * 卡片，以及 Mixed 与 Preview 自己绘制的背景图形与卡片。
  * Warm Minimalism: the host and sidebar colors in Light and Dark, the variables and theme name pushed to extensions,
- * the host Main Workspace backdrop and cards, and the backdrop and card Edit and Preview draw themselves.
+ * the host Main Workspace backdrop and cards, and the backdrop and card Mixed and Preview draw themselves.
  */
 async function warmMinimalismTheme(): Promise<void> {
   await chooseMode("light");
@@ -4742,8 +4752,8 @@ async function warmMinimalismTheme(): Promise<void> {
     "Warm Minimalism draws its backdrop on the Main Workspace with the Chat column on a card, and extensions receive the theme id and title",
   );
 
-  // Text Editor 自己绘制背景：Edit 与 Preview 在背景图形上用卡片显示文档；已打开的 frame 随主题切换立即更新，不重建。
-  // Text Editor draws its own backdrop: Edit and Preview show the document on a card over it; open frames follow theme
+  // Text Editor 自己绘制背景：Mixed 与 Preview 在背景图形上用卡片显示文档；已打开的 frame 随主题切换立即更新，不重建。
+  // Text Editor draws its own backdrop: Mixed and Preview show the document on a card over it; open frames follow theme
   // changes at once without being rebuilt.
   const lightCard = (styles: BackdropStyles) =>
     styles.image.startsWith("radial-gradient(") &&
@@ -4757,15 +4767,15 @@ async function warmMinimalismTheme(): Promise<void> {
     styles.radius === "0px" &&
     styles.margin === "0px";
   await openFileInTree("readme.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
-  const edit = await editShowing("true", "readme.md in Edit");
-  const editLight = await untilBackdrop(
-    edit,
-    EDIT_BACKDROP,
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed for readme.md");
+  const mixed = await mixedShowing("true", "readme.md in Mixed");
+  const mixedLight = await untilBackdrop(
+    mixed,
+    MIXED_BACKDROP,
     lightCard,
-    "the Warm Minimalism backdrop and card in Edit",
+    "the Warm Minimalism backdrop and card in Mixed",
   );
-  assert.equal(editLight.margin, "32px");
+  assert.equal(mixedLight.margin, "32px");
   // 宿主绘制的 Source 区域同样显示为卡片。The Source area the host draws is a card as well.
   await selectViewer("source");
   await untilWorkspace(
@@ -4803,12 +4813,12 @@ async function warmMinimalismTheme(): Promise<void> {
     async () => (await identity()).join() === "default,Default",
     "the Default theme id and title in the background frame",
   );
-  await selectViewer(EDIT_VIEWER);
-  const defaultEdit = await editShowing("true", "readme.md in Edit under Default");
-  await untilBackdrop(defaultEdit, EDIT_BACKDROP, noCard, "no backdrop in Edit under Default");
+  await selectViewer(MIXED_VIEWER);
+  const defaultMixed = await mixedShowing("true", "readme.md in Mixed under Default");
+  await untilBackdrop(defaultMixed, MIXED_BACKDROP, noCard, "no backdrop in Mixed under Default");
   await applyAppearanceInPlace({ theme: WARM_THEME });
-  await untilBackdrop(defaultEdit, EDIT_BACKDROP, darkCard, "the dark backdrop in Edit");
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, defaultEdit.frameId);
+  await untilBackdrop(defaultMixed, MIXED_BACKDROP, darkCard, "the dark backdrop in Mixed");
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, defaultMixed.frameId);
   await untilWorkspace(
     (styles) =>
       styles.marked &&
@@ -4817,7 +4827,7 @@ async function warmMinimalismTheme(): Promise<void> {
     "the dark backdrop and Chat card in the Main Workspace",
   );
   pass(
-    "Warm Minimalism shows its backdrop with the document on a card in the Main Workspace, Edit and Preview in both modes, and Default keeps the plain layout, without rebuilding the frames",
+    "Warm Minimalism shows its backdrop with the document on a card in the Main Workspace, Mixed and Preview in both modes, and Default keeps the plain layout, without rebuilding the frames",
   );
 
   await chooseMode("dark");
@@ -5271,11 +5281,11 @@ async function darkModeAndExtensionViews(): Promise<void> {
   await chooseTheme(SOFT_THEME);
   await goToChat();
   await openFileInTree("readme.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
-  const edit = await editShowing(EDITOR, "readme.md in Edit");
-  await evalFrame(edit, `window.__themeMarker = "kept"; true`);
-  // sample 的侧栏视图不调用 theme.apply()，与 Edit 同时显示。Sample's sidebar view does not call theme.apply() and shows
-  // next to Edit.
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed for readme.md");
+  const mixed = await mixedShowing(EDITOR, "readme.md in Mixed");
+  await evalFrame(mixed, `window.__themeMarker = "kept"; true`);
+  // sample 的侧栏视图不调用 theme.apply()，与 Mixed 同时显示。Sample's sidebar view does not call theme.apply() and shows
+  // next to Mixed.
   await showSidebarView("sample:list");
   const sample = await untilFrame("sample", "sidebarView");
   const sampleStyle = () =>
@@ -5303,17 +5313,17 @@ async function darkModeAndExtensionViews(): Promise<void> {
   await until(
     async () =>
       (await evalFrame<string>(
-        edit,
+        mixed,
         `getComputedStyle(document.documentElement).getPropertyValue("--background").trim()`,
       )) === "#212121",
-    "the dark Soft background in the open Edit frame",
+    "the dark Soft background in the open Mixed frame",
   );
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, edit.frameId);
-  assert.equal(await evalFrame<string>(edit, "window.__themeMarker"), "kept");
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, mixed.frameId);
+  assert.equal(await evalFrame<string>(mixed, "window.__themeMarker"), "kept");
   assert.deepEqual(await sampleStyle(), sampleBefore);
   await showSidebarView("agw.conversations", "agw.ribbon.conversations");
   pass(
-    "Soft with Dark colors the host rgb(33, 33, 33), the open Edit frame receives the new variables without being rebuilt, and a page without theme.apply() has no theme variables and keeps its style",
+    "Soft with Dark colors the host rgb(33, 33, 33), the open Mixed frame receives the new variables without being rebuilt, and a page without theme.apply() has no theme variables and keeps its style",
   );
 
   // 标题栏按钮在浅色与深色之间切换并保存 Mode。The title bar button toggles light and dark and saves the mode.
@@ -5512,21 +5522,21 @@ async function cssThemes(): Promise<void> {
     "a CSS theme applies its custom variables, component styles and Grid/Flex layout to the host, with images and a font from nested imports loading offline",
   );
 
-  // extension 页面：调用 theme.apply() 的 Edit 应用同一份主题与默认变量，sample 侧栏不调用，保持原样。Extension pages:
-  // Edit, which calls theme.apply(), applies the same theme and the default variables; sample's sidebar does not.
+  // extension 页面：调用 theme.apply() 的 Mixed 应用同一份主题与默认变量，sample 侧栏不调用，保持原样。Extension pages:
+  // Mixed, which calls theme.apply(), applies the same theme and the default variables; sample's sidebar does not.
   await openFileInTree("readme.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md");
-  const edit = await editShowing(EDITOR, "readme.md in Edit");
-  await evalFrame(edit, `window.__cssThemeMarker = "kept"; true`);
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed for readme.md");
+  const mixed = await mixedShowing(EDITOR, "readme.md in Mixed");
+  await evalFrame(mixed, `window.__cssThemeMarker = "kept"; true`);
   await until(
-    async () => (await pageThemeState(edit)).adopted === 2,
-    "the theme stylesheets in Edit",
+    async () => (await pageThemeState(mixed)).adopted === 2,
+    "the theme stylesheets in Mixed",
   );
-  const editState = await pageThemeState(edit);
+  const mixedState = await pageThemeState(mixed);
   // 主题系统只写 --agw-font-size-base；--agw-font-size-document 由 Text Editor 自己写入。The theme system writes only
   // --agw-font-size-base; Text Editor writes --agw-font-size-document itself.
   assert.deepEqual(
-    { ...editState, defaults: editState.defaults.map(Boolean) },
+    { ...mixedState, defaults: mixedState.defaults.map(Boolean) },
     {
       document: "extension",
       extension: "text-editor",
@@ -5539,12 +5549,12 @@ async function cssThemes(): Promise<void> {
     },
   );
   assert.equal(
-    await evalFrame<string>(edit, `getComputedStyle(document.body).color`),
+    await evalFrame<string>(mixed, `getComputedStyle(document.body).color`),
     "rgb(36, 33, 29)",
   );
   assert.equal(
     await evalFrame<string>(
-      edit,
+      mixed,
       `getComputedStyle(document.querySelector(".edit-scroll")).outlineColor`,
     ),
     "rgb(11, 110, 79)",
@@ -5563,13 +5573,13 @@ async function cssThemes(): Promise<void> {
   );
   await showSidebarView("agw.files", "agw.ribbon.files");
   pass(
-    "Edit receives the same CSS theme with the default variables and the extension document markers, and a page without theme.apply() keeps its style",
+    "Mixed receives the same CSS theme with the default variables and the extension document markers, and a page without theme.apply() keeps its style",
   );
 
   // 级联：主题样式表排在页面样式表之后，特异性、inline、!important 与 layer 遵循 CSS 规则。The cascade: the theme
   // stylesheet comes after page stylesheets, and specificity, inline styles, !important and layers follow CSS.
   const cascade = await evalFrame<Record<string, string>>(
-    edit,
+    mixed,
     `(() => {
       const probes = document.createElement("div");
       probes.innerHTML = '<span class="css-theme-order" id="same"></span><span class="css-theme-order" id="specific"></span>'
@@ -5604,7 +5614,7 @@ async function cssThemes(): Promise<void> {
 
   // Mode：样式表复用，背景只在深色下定义时属性与公共变量随 Mode 一致。Modes reuse the stylesheet; with a backdrop
   // defined only for dark, the attribute and the public variables follow the mode.
-  await evalFrame(edit, `window.__cssThemeSheet = document.adoptedStyleSheets.at(-1); true`);
+  await evalFrame(mixed, `window.__cssThemeSheet = document.adoptedStyleSheets.at(-1); true`);
   const backdropAttribute = `document.documentElement.hasAttribute("data-workspace-backdrop")`;
   assert.equal(await evalHost<boolean>(backdropAttribute), false);
   await applyAppearanceInPlace({ mode: "dark" });
@@ -5615,14 +5625,17 @@ async function cssThemes(): Promise<void> {
     "the dark theme published",
   );
   await until(
-    async () => (await pageThemeState(edit)).background === "#24211d",
-    "the dark Edit background",
+    async () => (await pageThemeState(mixed)).background === "#24211d",
+    "the dark Mixed background",
   );
   assert.equal(
-    await evalFrame<boolean>(edit, `window.__cssThemeSheet === document.adoptedStyleSheets.at(-1)`),
+    await evalFrame<boolean>(
+      mixed,
+      `window.__cssThemeSheet === document.adoptedStyleSheets.at(-1)`,
+    ),
     true,
   );
-  assert.equal((await pageThemeState(edit)).dark, true);
+  assert.equal((await pageThemeState(mixed)).dark, true);
   nativeTheme.themeSource = "light";
   await applyAppearanceInPlace({ mode: "system" });
   await untilHost(
@@ -5639,7 +5652,10 @@ async function cssThemes(): Promise<void> {
   await applyAppearanceInPlace({ mode: "light" });
   await untilHost(`!${backdropAttribute}`, "the light mode without a backdrop");
   assert.equal(
-    await evalFrame<boolean>(edit, `window.__cssThemeSheet === document.adoptedStyleSheets.at(-1)`),
+    await evalFrame<boolean>(
+      mixed,
+      `window.__cssThemeSheet === document.adoptedStyleSheets.at(-1)`,
+    ),
     true,
   );
   pass(
@@ -5661,35 +5677,35 @@ async function cssThemes(): Promise<void> {
     const idle = layoutUpdates;
     await delay(1000);
     assert.equal(layoutUpdates, idle, "no view updates while nothing changes");
-    const base = edit.view.getBounds();
+    const base = mixed.view.getBounds();
     const near = (value: number, expected: number) => Math.abs(value - expected) <= 1;
     await setSlotProbe("shift");
-    await until(() => near(edit.view.getBounds().x, base.x + 40), "the shifted view");
-    assert.equal(edit.view.getBounds().width, base.width);
+    await until(() => near(mixed.view.getBounds().x, base.x + 40), "the shifted view");
+    assert.equal(mixed.view.getBounds().width, base.width);
     await setSlotProbe(null);
-    await until(() => near(edit.view.getBounds().x, base.x), "the view back in place");
+    await until(() => near(mixed.view.getBounds().x, base.x), "the view back in place");
     await setSlotProbe("narrow");
-    await until(() => near(edit.view.getBounds().width, base.width - 100), "the narrower view");
+    await until(() => near(mixed.view.getBounds().width, base.width - 100), "the narrower view");
     await setSlotProbe(null);
-    await until(() => near(edit.view.getBounds().width, base.width), "the view at its width");
+    await until(() => near(mixed.view.getBounds().width, base.width), "the view at its width");
     for (const probe of ["hidden", "transparent"]) {
       await setSlotProbe(probe);
-      await until(() => !edit.view.getVisible(), `the view hidden by ${probe}`);
+      await until(() => !mixed.view.getVisible(), `the view hidden by ${probe}`);
       await setSlotProbe(null);
-      await until(() => edit.view.getVisible(), `the view shown again after ${probe}`);
+      await until(() => mixed.view.getVisible(), `the view shown again after ${probe}`);
     }
     const positions = new Set<number>();
     await setSlotProbe("animate");
     await until(() => {
-      positions.add(edit.view.getBounds().x);
-      return near(edit.view.getBounds().x, base.x + 30);
+      positions.add(mixed.view.getBounds().x);
+      return near(mixed.view.getBounds().x, base.x + 30);
     }, "the end of the animation");
     assert.ok(positions.size > 2, `the view followed the animation: ${[...positions].join()}`);
     await setSlotProbe(null);
-    await until(() => near(edit.view.getBounds().x, base.x), "the view back after the animation");
+    await until(() => near(mixed.view.getBounds().x, base.x), "the view back after the animation");
     await hoverHost(ribbon);
     await until(
-      () => near(edit.view.getBounds().y, base.y + 12),
+      () => near(mixed.view.getBounds().y, base.y + 12),
       "the view moved by :hover and :has()",
     );
     const workspace = await evalHost<{ x: number; y: number }>(
@@ -5697,33 +5713,33 @@ async function cssThemes(): Promise<void> {
     );
     host().sendInputEvent({ type: "mouseMove", x: workspace.x, y: workspace.y });
     await until(
-      () => near(edit.view.getBounds().y, base.y),
+      () => near(mixed.view.getBounds().y, base.y),
       "the view back after the pointer leaves",
     );
   } finally {
     views.updateLayout = updateLayout;
   }
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, edit.frameId);
-  assert.equal(await evalFrame<string>(edit, "window.__cssThemeMarker"), "kept");
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, mixed.frameId);
+  assert.equal(await evalFrame<string>(mixed, "window.__cssThemeMarker"), "kept");
   pass(
     "the WebContentsView follows position-only moves, size changes, CSS hiding, opacity, animations and :hover/:has() while the CSS theme is active, without updates while nothing changes",
   );
 
-  // 字号：CSS 主题下 Edit、Preview 与 Code 继续使用设置的字号。Font sizes: Edit, Preview and Code keep the set sizes.
+  // 字号：CSS 主题下 Mixed、Preview 与 Code 继续使用设置的字号。Font sizes: Mixed, Preview and Code keep the set sizes.
   await applyAppearanceInPlace({ baseFontSize: 20 });
   const sizes = await openedViewSizes();
   assert.deepEqual(
-    { edit: sizes.edit, preview: sizes.preview, code: sizes.code },
-    { edit: "20px", preview: "20px", code: "17.5px" },
+    { mixed: sizes.mixed, preview: sizes.preview, code: sizes.code },
+    { mixed: "20px", preview: "20px", code: "17.5px" },
   );
   await applyAppearanceInPlace({ baseFontSize: 16 });
-  pass("under a CSS theme, Edit, Preview and Code use the font sizes set on the Appearance page");
+  pass("under a CSS theme, Mixed, Preview and Code use the font sizes set on the Appearance page");
 
   // CSS、JSON 与 Default 之间切换：只移除主题系统拥有的样式表与变量。Switching between CSS, JSON and Default removes
   // only what the theme system owns.
   await openFileInTree("readme.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "Edit for readme.md again");
-  const switching = await editShowing(EDITOR, "readme.md in Edit again");
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "Mixed for readme.md again");
+  const switching = await mixedShowing(EDITOR, "readme.md in Mixed again");
   await evalFrame(
     switching,
     `document.adoptedStyleSheets = [...document.adoptedStyleSheets, new CSSStyleSheet()]; window.__ownSheet = document.adoptedStyleSheets.at(-1); true`,
@@ -5746,11 +5762,11 @@ async function cssThemes(): Promise<void> {
   );
   await until(
     async () => (await pageThemeState(switching)).gap === "",
-    "the CSS theme to leave Edit",
+    "the CSS theme to leave Mixed",
   );
-  const softEdit = await pageThemeState(switching);
-  assert.equal(softEdit.background, "#ffffff");
-  assert.ok(softEdit.inline.includes("--background"));
+  const softMixed = await pageThemeState(switching);
+  assert.equal(softMixed.background, "#ffffff");
+  assert.ok(softMixed.inline.includes("--background"));
   assert.equal(
     await evalFrame<boolean>(
       switching,
@@ -5767,7 +5783,7 @@ async function cssThemes(): Promise<void> {
   await untilCssThemeApplied(PAPER_THEME);
   await until(
     async () => (await pageThemeState(switching)).gap === "20px",
-    "the CSS theme back in Edit",
+    "the CSS theme back in Mixed",
   );
   assert.equal(
     await evalFrame<boolean>(
@@ -5780,7 +5796,7 @@ async function cssThemes(): Promise<void> {
     `document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== window.__ownSheet); true`,
   );
   pass(
-    "switching between CSS, JSON and Default replaces only the theme system's stylesheets and variables in the host and in Edit",
+    "switching between CSS, JSON and Default replaces only the theme system's stylesheets and variables in the host and in Mixed",
   );
 
   // namespace 入口：URI 只是标识符。The namespace entry: the URI is only a name.
@@ -6587,9 +6603,9 @@ async function untilTextEditorSettings(
 }
 
 /**
- * Text Editor 设置：设置页显示两项设置，选择写入 settings.json，新打开的 Edit、Preview 与 Code 使用选择的字号；Reset 恢复
+ * Text Editor 设置：设置页显示两项设置，选择写入 settings.json，新打开的 Mixed、Preview 与 Code 使用选择的字号；Reset 恢复
  * 跟随；设置文件不合法时查看器显示错误，设置页只有 Reset all 可用；最后保存文档字号 20 与 Appearance {18, 15}，供重新启动后检查。
- * Text Editor settings: the settings page shows both settings, choices are written to settings.json, Edit, Preview and
+ * Text Editor settings: the settings page shows both settings, choices are written to settings.json, Mixed, Preview and
  * Code opened afterwards use the chosen sizes, Reset returns to following, an invalid settings file makes the viewers
  * show the error and leaves only Reset all working on the settings page; document size 20 and Appearance
  * {18, 15} stay saved for the check after the restart.
@@ -6657,11 +6673,11 @@ async function textEditorSettings(): Promise<void> {
   );
   await backToTestProjectChat();
   let sizes = await openedViewSizes();
-  assert.equal(sizes.edit, "20px");
+  assert.equal(sizes.mixed, "20px");
   assert.equal(sizes.preview, "20px");
   assert.equal(sizes.code, "15px");
   pass(
-    "document size 20 and code size 15 are saved and Edit, Preview and Code opened afterwards use them",
+    "document size 20 and code size 15 are saved and Mixed, Preview and Code opened afterwards use them",
   );
 
   // 逐项 Reset 与 Reset all。Reset per row and Reset all.
@@ -6677,7 +6693,7 @@ async function textEditorSettings(): Promise<void> {
     "Reset code editor font size in settings.json",
   );
   sizes = await openedViewSizes();
-  assert.equal(sizes.edit, "16px");
+  assert.equal(sizes.mixed, "16px");
   assert.equal(sizes.preview, "16px");
   assert.equal(sizes.code, "14px");
   page = await openTextEditorSettings();
@@ -6690,25 +6706,25 @@ async function textEditorSettings(): Promise<void> {
   await clickInFrame(page, settingsButton("Reset all"));
   await untilTextEditorSettings(TEXT_EDITOR_DEFAULTS, "Reset all in settings.json");
   pass(
-    "Reset document font size, Reset code editor font size and Reset all return Edit to 16px and Code to 14px",
+    "Reset document font size, Reset code editor font size and Reset all return Mixed to 16px and Code to 14px",
   );
 
-  // 设置文件不合法：Edit 显示错误，设置页只有 Reset all 可用。An invalid settings file: Edit shows the error and only Reset all works.
+  // 设置文件不合法：Mixed 显示错误，设置页只有 Reset all 可用。An invalid settings file: Mixed shows the error and only Reset all works.
   await writeFile(TEXT_EDITOR_SETTINGS_FILE, "{ not json");
   await backToTestProjectChat();
   await openFileInTree("notes/typography.md");
-  await selectViewer(EDIT_VIEWER);
-  const edit = await untilViewerFrame("text-editor", "markdown");
+  await selectViewer(MIXED_VIEWER);
+  const mixed = await untilViewerFrame("text-editor", "markdown");
   await until(
     () =>
       evalFrame<boolean>(
-        edit,
+        mixed,
         `document.body.textContent.includes("Text Editor settings are invalid:") && document.body.textContent.includes("Open Text Editor settings to reset them.")`,
       ),
-    "the invalid settings error in Edit",
+    "the invalid settings error in Mixed",
   );
   assert.equal(
-    await evalFrame<boolean>(edit, `Boolean(document.querySelector(".ProseMirror"))`),
+    await evalFrame<boolean>(mixed, `Boolean(document.querySelector(".ProseMirror"))`),
     false,
   );
   page = await openTextEditorSettings();
@@ -6738,9 +6754,9 @@ async function textEditorSettings(): Promise<void> {
     "the settings page to recover",
   );
   sizes = await openedViewSizes();
-  assert.equal(sizes.edit, "16px");
+  assert.equal(sizes.mixed, "16px");
   pass(
-    "an invalid settings file shows the error in Edit and leaves only Reset all on the settings page, which restores the defaults",
+    "an invalid settings file shows the error in Mixed and leaves only Reset all on the settings page, which restores the defaults",
   );
 
   // 保存文档字号 20 与 Appearance {18, 15}，供重新启动后检查；文档字号与基础字号 18 不同。Saves document size 20 and
@@ -6763,21 +6779,92 @@ async function textEditorSettings(): Promise<void> {
   pass("document size 20 and Appearance {18, 15} stay saved for the restart check");
 }
 
-async function editInteractions(): Promise<void> {
-  const edit = await editShowing(`Boolean(${editBlock("Code line.", "p")})`, "edit.md in Edit");
-  const codeBlock = editBlock("const x = 1;", "div.code-block");
+/**
+ * Mixed 的编码与 Save 在宿主文件标题栏的 More 菜单中（文件标题栏条目设计第 3.1 节）："Reload view" 之后是显示编码名称的
+ * 子菜单与 Save；Reopen with Encoding 按选择的编码重新读取，Save 在有未保存修改时可用并写入文件；Mixed 页面没有顶部条。
+ * 结束时文件内容与编码都与开始时相同。
+ * Mixed's encoding and Save are in the More menu of the host's file header (file header items design, section 3.1):
+ * after "Reload view" come a submenu named after the encoding and Save; Reopen with Encoding reads the file again in
+ * the chosen encoding, and Save is available with unsaved changes and writes the file; the Mixed page has no top bar.
+ * The file content and encoding end as they began.
+ */
+async function mixedEncodingInfo(): Promise<void> {
+  const path = projectPath("notes/edit.md");
+  const original = await readFile(path, "utf8");
+  const mixed = await mixedShowing(`Boolean(${mixedBlock("Code line.", "p")})`, "edit.md in Mixed");
+  assert.equal(
+    await evalFrame<boolean>(mixed, `Boolean(document.querySelector(".edit-viewer > header"))`),
+    false,
+  );
+  // 第二层子菜单在第一层之后打开，取最后一个打开的子菜单。The second submenu opens after the first; take the last open one.
+  const lastSubmenu = `[...document.querySelectorAll('[data-slot="dropdown-menu-sub-content"][data-state="open"]')].at(-1)`;
+  const menuEntries = `[...${OPEN_MENU}.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent + (item.getAttribute("aria-disabled") === "true" ? " (disabled)" : ""))`;
+  /** 打开 More 菜单，等到前三项为 Reload view、编码与 Save。Opens More and waits for Reload view, the encoding and Save. */
+  const expectEntries = async (label: string, save: string) => {
+    await openMenuAndWait(MORE_BUTTON);
+    await untilHost(
+      `JSON.stringify(${menuEntries}.slice(0, 3)) === ${JSON.stringify(JSON.stringify(["Reload view", label, save]))}`,
+      `Reload view, the ${label} encoding and ${save} in the More menu`,
+    );
+  };
+  const reopenWith = async (current: string, encoding: string, label: string) => {
+    await clickText(current, OPEN_MENU);
+    await clickText("Reopen with Encoding", lastSubmenu);
+    await clickText(encoding, lastSubmenu);
+    await untilHost(`!${OPEN_MENU}`, "the More menu to close");
+    await expectEntries(label, "Save (disabled)");
+  };
+  const closeMenu = async () => {
+    await pressEscape();
+    await untilHost(`!${OPEN_MENU}`, "the More menu to close");
+  };
+
+  await expectEntries("UTF-8", "Save (disabled)");
+  await reopenWith("UTF-8", "Chinese Simplified (GB18030)", "GB18030");
+  await reopenWith("GB18030", "Unicode (UTF-8)", "UTF-8");
+  await closeMenu();
+  await mixedShowing(`Boolean(${mixedBlock("Code line.", "p")})`, "edit.md read as UTF-8 again");
+  pass(
+    "Mixed shows its encoding as a submenu of the host's More menu, whose Reopen with Encoding reads the file in the chosen encoding",
+  );
+
+  // 输入后 Save 可用，选择它写入文件；撤销输入再保存，文件回到原样。Typing makes Save available and choosing it writes
+  // the file; undoing the typing and saving again restores the file.
+  await placeCaret(mixed, mixedBlock("Code line.", "p"));
+  await typeIn(mixed, "!");
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved marker after typing");
+  await expectEntries("UTF-8", "Save");
+  await clickText("Save", OPEN_MENU);
+  await untilFileText(
+    path,
+    original.replace("Code line.", "Code line.!"),
+    "edit.md saved from More",
+  );
+  await untilHost(`!${unsavedIn(MIXED_VIEWER)}`, "the unsaved marker to clear");
+  pressKey(mixed, "z", [MOD]);
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved marker after undoing");
+  await chooseFileHeaderEntry("Save");
+  await untilFileText(path, original, "edit.md restored");
+  await expectEntries("UTF-8", "Save (disabled)");
+  await closeMenu();
+  pass("Save in the More menu is available with unsaved changes and writes the Mixed document");
+}
+
+async function mixedInteractions(): Promise<void> {
+  const mixed = await mixedShowing(`Boolean(${mixedBlock("Code line.", "p")})`, "edit.md in Mixed");
+  const codeBlock = mixedBlock("const x = 1;", "div.code-block");
 
   // 代码块的 Copy 在没有剪贴板权限时通过 execCommand("copy") 复制。Copy works through execCommand("copy") without a
   // clipboard permission.
   await clipboard.writeText("");
-  await clickInFrame(edit, `${codeBlock}.querySelector(".code-block-copy")`);
+  await clickInFrame(mixed, `${codeBlock}.querySelector(".code-block-copy")`);
   await until(async () => (await clipboard.readText()) === "const x = 1;", "the copied code");
   pass("the code block Copy button puts the code on the clipboard");
 
   // 语言选择框在 pointerdown 时得到全部选项，早于原生列表打开（原生列表在 mousedown 的默认行为中打开）。
   // The language select gets every option on pointerdown, before the native list opens on mousedown's default action.
   const options = await evalFrame<{ before: number; after: number; value: string }>(
-    edit,
+    mixed,
     `(() => {
       const select = ${codeBlock}.querySelector("select.code-block-language");
       const before = select.options.length;
@@ -6794,50 +6881,50 @@ async function editInteractions(): Promise<void> {
   // ui.openExternal or workspace.openFile and opens no other window.
   const windows = BrowserWindow.getAllWindows().length;
   const created = createdWebContents;
-  const editUrl = edit.view.webContents.getURL();
+  const mixedUrl = mixed.view.webContents.getURL();
   const link = (text: string) =>
     `[...document.querySelectorAll(".ProseMirror a")].find((element) => element.textContent === ${JSON.stringify(text)})`;
-  await clickInFrame(edit, link("example"), [MOD]);
+  await clickInFrame(mixed, link("example"), [MOD]);
   await expectConfirmation(
     "open-link",
     ["https://example.com/related", "Text Editor"],
-    "the Open link confirmation from Edit",
+    "the Open link confirmation from Mixed",
   );
   await answerConfirmation("Cancel");
-  await clickInFrame(edit, link("readme"), [MOD]);
-  await untilHost(shownFileIs("readme.md"), "readme.md opened from the Edit link");
+  await clickInFrame(mixed, link("readme"), [MOD]);
+  await untilHost(shownFileIs("readme.md"), "readme.md opened from the Mixed link");
   // 只有已经关闭的确认窗口新建过 WebContents。Only the confirmation window, now closed, created a WebContents.
   assert.equal(BrowserWindow.getAllWindows().length, windows);
   assert.equal(createdWebContents, created + 1);
-  assert.equal(edit.view.webContents.getURL(), editUrl);
+  assert.equal(mixed.view.webContents.getURL(), mixedUrl);
   pass(
     "Mod+click on links asks before opening the browser or opens the project file, and opens no extra window",
   );
 
   await openFileInTree("notes/edit.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "the Edit tab");
-  await editShowing(`Boolean(${editBlock("Related:", "p")})`, "edit.md in Edit again");
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "the Mixed tab");
+  await mixedShowing(`Boolean(${mixedBlock("Related:", "p")})`, "edit.md in Mixed again");
 
   // 格式工具条中的 Turn into 弹出菜单获得焦点时工具条保持显示。The formatting toolbar stays while its Turn into popup
   // has focus.
-  await selectTextIn(edit, editBlock("Related:", "p"), "Related");
+  await selectTextIn(mixed, mixedBlock("Related:", "p"), "Related");
   const toolbar = `document.querySelector(".formatting-menu")`;
   const toolbarButton = (text: string) =>
     `[...(${toolbar}?.querySelectorAll("button") ?? [])].find((button) => button.textContent === ${JSON.stringify(text)})`;
-  await clickInFrame(edit, toolbarButton("Turn into"));
+  await clickInFrame(mixed, toolbarButton("Turn into"));
   const popupItem = (text: string) =>
     `[...(${toolbar}?.querySelectorAll('[role="menuitem"]') ?? [])].find((item) => item.textContent === ${JSON.stringify(text)})`;
   await until(
-    async () => (await centerOf(edit, popupItem("Heading 3")))?.hit,
+    async () => (await centerOf(mixed, popupItem("Heading 3")))?.hit,
     "the Turn into menu",
   );
-  assert.equal((await centerOf(edit, toolbarButton("Bold")))?.hit, true);
-  await clickInFrame(edit, popupItem("Heading 3"));
+  assert.equal((await centerOf(mixed, toolbarButton("Bold")))?.hit, true);
+  await clickInFrame(mixed, popupItem("Heading 3"));
   await until(
-    () => evalFrame<boolean>(edit, `Boolean(${editBlock("Related:", "h3")})`),
+    () => evalFrame<boolean>(mixed, `Boolean(${mixedBlock("Related:", "h3")})`),
     "the paragraph to become Heading 3",
   );
-  await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker after Turn into");
+  await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved marker after Turn into");
   pass(
     "the formatting toolbar keeps focus with its Turn into popup and turns the block into Heading 3",
   );
@@ -6845,13 +6932,13 @@ async function editInteractions(): Promise<void> {
   // 拖动手柄移动块与列表项。The drag handle moves blocks and list items.
   const order = (selector: string) =>
     evalFrame<string[]>(
-      edit,
+      mixed,
       `[...document.querySelectorAll(${JSON.stringify(selector)})].map((element) => element.textContent)`,
     );
   const blockHandle = await dragBlock(
-    edit,
-    editBlock("Setext heading", "h1"),
-    editBlock("First paragraph", "p"),
+    mixed,
+    mixedBlock("Setext heading", "h1"),
+    mixedBlock("First paragraph", "p"),
   );
   await until(async () => {
     const blocks = await order(".ProseMirror > *");
@@ -6861,7 +6948,7 @@ async function editInteractions(): Promise<void> {
   const items = `.ProseMirror > ul > li`;
   const starItem = (text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(items)})].find((item) => item.textContent === ${JSON.stringify(text)})`;
-  const itemHandle = await dragBlock(edit, starItem("star item two"), starItem("star item one"));
+  const itemHandle = await dragBlock(mixed, starItem("star item two"), starItem("star item one"));
   await until(async () => {
     const listed = await order(items);
     return (
@@ -6879,45 +6966,48 @@ async function editInteractions(): Promise<void> {
   // `/` 菜单的 Image：地址输入框打开期间在它前面输入文字，确认后图片仍插入在输入 `/` 的 paragraph 中。
   // The `/` menu's Image: text typed before the place while the address input is open still leaves the image in the
   // paragraph where `/` was typed.
-  await placeCaret(edit, editBlock("Code line.", "p"));
-  pressKey(edit, "Enter");
+  await placeCaret(mixed, mixedBlock("Code line.", "p"));
+  pressKey(mixed, "Enter");
   const lastBlock = `${EDITOR}.lastElementChild`;
   await until(
     () =>
       evalFrame<boolean>(
-        edit,
+        mixed,
         `${lastBlock}.tagName === "P" && ${lastBlock}.textContent === "" && ${lastBlock}.previousElementSibling.textContent === "Code line."`,
       ),
     "an empty paragraph after Code line.",
   );
-  await typeIn(edit, "/");
+  await typeIn(mixed, "/");
   await clickInFrame(
-    edit,
+    mixed,
     `[...document.querySelectorAll('.slash-menu [role="option"]')].find((option) => option.textContent === "Image")`,
   );
   const addressInput = `document.querySelector('.image-insert input[aria-label="Image address"]')`;
   await until(
-    () => evalFrame<boolean>(edit, `document.activeElement === ${addressInput}`),
+    () => evalFrame<boolean>(mixed, `document.activeElement === ${addressInput}`),
     "the image address input",
   );
-  await placeCaret(edit, editBlock("Code line.", "p"));
-  await typeIn(edit, " Typed before the image.");
+  await placeCaret(mixed, mixedBlock("Code line.", "p"));
+  await typeIn(mixed, " Typed before the image.");
   await until(
     () =>
-      evalFrame<boolean>(edit, `Boolean(${editBlock("Code line. Typed before the image.", "p")})`),
+      evalFrame<boolean>(
+        mixed,
+        `Boolean(${mixedBlock("Code line. Typed before the image.", "p")})`,
+      ),
     "the text typed before the image",
   );
-  await evalFrame(edit, `${addressInput}.focus(); true`);
-  await typeIn(edit, "https://example.com/later.png");
-  pressKey(edit, "Enter");
+  await evalFrame(mixed, `${addressInput}.focus(); true`);
+  await typeIn(mixed, "https://example.com/later.png");
+  pressKey(mixed, "Enter");
   const laterImage = `document.querySelector('.ProseMirror .edit-image .image-placeholder[title="https://example.com/later.png"]')`;
   await until(
-    () => evalFrame<boolean>(edit, `!${addressInput} && Boolean(${laterImage})`),
+    () => evalFrame<boolean>(mixed, `!${addressInput} && Boolean(${laterImage})`),
     "the inserted image",
   );
   assert.deepEqual(
     await evalFrame(
-      edit,
+      mixed,
       `(() => {
         const block = ${laterImage}.closest(".ProseMirror > *");
         return { last: block === ${lastBlock}, tag: block.tagName, before: block.previousElementSibling.textContent };
@@ -6929,57 +7019,69 @@ async function editInteractions(): Promise<void> {
     "the / menu's image address input follows text typed before it and inserts where / was typed",
   );
 
-  // "Reload view" 在有未保存修改时先确认。"Reload view" asks first when there are unsaved changes.
-  const reload = `.agw-main-workspace [aria-label="Reload view"]`;
-  await clickHost(reload);
+  // More 菜单的 "Reload view" 在有未保存修改时先确认。"Reload view" in the More menu asks first when there are unsaved
+  // changes.
+  await chooseFileHeaderEntry("Reload view");
   await expectConfirmation(
     "discard-unsaved",
     ["Discard unsaved changes?", "edit.md"],
     "the discard confirmation for Reload view",
   );
   await answerConfirmation("Cancel");
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, edit.frameId);
-  assert.equal(await evalFrame<boolean>(edit, `Boolean(${editBlock("Related:", "h3")})`), true);
-  assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), true);
-  await clickHost(reload);
+  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, mixed.frameId);
+  assert.equal(await evalFrame<boolean>(mixed, `Boolean(${mixedBlock("Related:", "h3")})`), true);
+  assert.equal(await evalHost<boolean>(unsavedIn(MIXED_VIEWER)), true);
+  await chooseFileHeaderEntry("Reload view");
   await answerConfirmation("Discard");
   const reloaded = await until(() => {
     const frame = viewerFrameOf("text-editor", "markdown");
-    return frame && frame.frameId !== edit.frameId && runtime().registry.get(frame.frameId)?.pageId
+    return frame && frame.frameId !== mixed.frameId && runtime().registry.get(frame.frameId)?.pageId
       ? frame
       : null;
-  }, "the reloaded Edit viewer");
+  }, "the reloaded Mixed viewer");
   await until(
     async () =>
-      (await evalHost<boolean>(savedIn(EDIT_VIEWER))) &&
+      (await evalHost<boolean>(savedIn(MIXED_VIEWER))) &&
       (await evalFrame<boolean>(
         reloaded,
-        `Boolean(${editBlock("Related:", "p")}) && !${editBlock("Related:", "h3")}`,
+        `Boolean(${mixedBlock("Related:", "p")}) && !${mixedBlock("Related:", "h3")}`,
       )),
     "the file content after Reload view",
   );
-  assert.equal(await evalHost<boolean>(unsavedIn(EDIT_VIEWER)), false);
+  assert.equal(await evalHost<boolean>(unsavedIn(MIXED_VIEWER)), false);
   pass(
-    "Reload view asks before discarding Edit changes: Cancel keeps them, Discard reloads the viewer",
+    "Reload view asks before discarding Mixed changes: Cancel keeps them, Discard reloads the viewer",
   );
 }
 
 async function textEditorCode(): Promise<void> {
-  // 1：Shift+Alt+F 用 Prettier 格式化，保存后磁盘内容与格式化结果相同。Shift+Alt+F formats with Prettier; saving writes
-  // the formatted text.
+  // 1：More 菜单中的 Format 用 Prettier 格式化，Save 写入后磁盘内容与格式化结果相同；Code 页面没有工具栏。Format in the
+  // More menu formats with Prettier and Save writes the formatted text; the Code page has no toolbar.
   const appPath = projectPath("src/app.ts");
   await openFileInTree("src/app.ts");
   await untilHost(selectedViewerIs(CODE_VIEWER), "the Code tab for app.ts");
-  // 上一步打开 Settings 时 view 关闭，Code 在这里新建；快捷键要等 Monaco 获得焦点且 Prettier 注册完成（Format 按钮可用）后再按下。Opening Settings in the previous
-  // step closed the views, so Code is created here; the shortcut waits until Monaco has focus and Prettier is registered
-  // (the Format button is enabled once it is).
-  const code = await codeShowing(
-    `${CODE_TEXT}.includes("function   add") && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement)) && [...document.querySelectorAll(".code-toolbar button")].some((button) => button.textContent === "Format" && !button.disabled)`,
-    "app.ts in Code",
+  const code = await codeShowing(`${CODE_TEXT}.includes("function   add")`, "app.ts in Code");
+  assert.equal(
+    await evalFrame<boolean>(code, `Boolean(document.querySelector(".code-toolbar"))`),
+    false,
   );
+  // 上一步打开 Settings 时 view 关闭，Code 在这里新建；Prettier 注册完成后 Format 才可用。Opening Settings in the previous
+  // step closed the views, so Code is created here; Format becomes available once Prettier is registered.
+  const formatAvailable = `[...${OPEN_MENU}.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "Format" && item.getAttribute("aria-disabled") !== "true")`;
+  await until(
+    async () => {
+      await openMenuAndWait(MORE_BUTTON);
+      if (await evalHost<boolean>(formatAvailable)) return true;
+      await pressEscape();
+      await untilHost(`!${OPEN_MENU}`, "the More menu to close");
+      return false;
+    },
+    "Format to become available in the More menu",
+    20_000,
+  );
+  await clickText("Format", OPEN_MENU);
   const formatted =
     "function add(a: number, b: number) {\n    return a + b;\n}\nconst total = add(1, 2);\n";
-  pressKey(code, "F", ["shift", "alt"]);
   await until(
     async () => (await evalFrame<string>(code, CODE_TEXT)) === formatted,
     "the Prettier output",
@@ -6987,10 +7089,12 @@ async function textEditorCode(): Promise<void> {
     async () => JSON.stringify(await evalFrame<string>(code, CODE_TEXT)),
   );
   await untilHost(unsavedIn(CODE_VIEWER), "the unsaved marker after formatting");
-  saveIn(code);
+  await chooseFileHeaderEntry("Save");
   await untilHost(`!${unsavedIn(CODE_VIEWER)}`, "the unsaved marker to clear");
   await untilFileText(appPath, formatted, "the formatted app.ts on disk");
-  pass("Shift+Alt+F formats TypeScript with Prettier and Cmd/Ctrl+S writes the formatted text");
+  pass(
+    "Format in the More menu formats TypeScript with Prettier and Save there writes the formatted text",
+  );
 
   // 语法高亮、worker 与 codicon 字体都从 extension 自身加载。Highlighting, workers and the codicon font load from the
   // extension itself.
@@ -7329,9 +7433,9 @@ async function todoEditorFixture(): Promise<void> {
   // the headings.
   const OUTLINE_VIEWER = "todo-editor:outline";
   await openFileInTree("notes/edit.md");
-  await untilHost(selectedViewerIs(EDIT_VIEWER), "the Edit tab");
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "the Mixed tab");
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
-    EDIT_VIEWER,
+    MIXED_VIEWER,
     MARKDOWN_VIEWER,
     CODE_VIEWER,
     OUTLINE_VIEWER,
@@ -7346,7 +7450,7 @@ async function todoEditorFixture(): Promise<void> {
     );
     return listed.length > 0 ? listed : null;
   }, "the outline");
-  assert.deepEqual(headings, ["1 Edit sample", "1 Setext heading", "2 New section"]);
+  assert.deepEqual(headings, ["1 Mixed sample", "1 Setext heading", "2 New section"]);
   pass("todo-editor's Outline is an option viewer for Markdown and lists the document's headings");
 }
 
@@ -7523,7 +7627,7 @@ async function measureSave(
 
 // 容器渲染之前表达式为 false，openProbe 的逐帧检查继续等待。Before the container renders the expression is false, so
 // openProbe's per-frame check keeps waiting.
-const EDIT_READY = `document.querySelector(".edit-scroll")?.hidden === false && document.querySelector(".ProseMirror")?.childElementCount > 0`;
+const MIXED_READY = `document.querySelector(".edit-scroll")?.hidden === false && document.querySelector(".ProseMirror")?.childElementCount > 0`;
 const CODE_READY = `document.querySelector(".code-editor")?.hidden === false && document.querySelectorAll(".code-editor .view-line").length > 0 && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`;
 
 function round(value: number): number {
@@ -7544,15 +7648,15 @@ async function performancePhase(): Promise<void> {
 
   for (const input of inputs.markdown) {
     await openFileInTree(input.path);
-    await untilHost(selectedViewerIs(EDIT_VIEWER), `the Edit tab for ${input.path}`);
-    const edit = await editShowing("true", input.path);
+    await untilHost(selectedViewerIs(MIXED_VIEWER), `the Mixed tab for ${input.path}`);
+    const mixed = await mixedShowing("true", input.path);
     const opens: number[] = [];
-    for (let run = 0; run < 3; run += 1) opens.push(await measureOpen(edit, EDIT_READY));
+    for (let run = 0; run < 3; run += 1) opens.push(await measureOpen(mixed, MIXED_READY));
     // 文档中间的 paragraph；表格组中 paragraph 都在单元格内。The paragraph in the middle of the document; in the tables
     // composition every paragraph is inside a cell.
     const paragraphs = input.kind === "tables" ? ".ProseMirror td" : ".ProseMirror > p";
     const count = await evalFrame<number>(
-      edit,
+      mixed,
       `document.querySelectorAll("${paragraphs}").length`,
     );
     const middle = `document.querySelectorAll("${paragraphs}")[${Math.floor(count / 2)}]`;
@@ -7562,27 +7666,27 @@ async function performancePhase(): Promise<void> {
     const unsavedKeystrokes: number[] = [];
     const saves: { save: number; longestTask: number }[] = [];
     for (let run = 0; run < 3; run += 1) {
-      keystrokes.push(await measureKeystroke(edit, middle));
-      await untilHost(unsavedIn(EDIT_VIEWER), "the unsaved marker after a keystroke");
-      unsavedKeystrokes.push(await measureKeystroke(edit, middle));
-      saves.push(await measureSave(edit, EDIT_VIEWER));
+      keystrokes.push(await measureKeystroke(mixed, middle));
+      await untilHost(unsavedIn(MIXED_VIEWER), "the unsaved marker after a keystroke");
+      unsavedKeystrokes.push(await measureKeystroke(mixed, middle));
+      saves.push(await measureSave(mixed, MIXED_VIEWER));
     }
     // 代码块中输入只作为参考（CodeBlockLowlight 每次重建全部装饰），没有指标。Typing in a code block is for
     // information only (CodeBlockLowlight rebuilds every decoration); no target applies.
     const codeKeystrokes: number[] = [];
     if (input.kind === "spaced" && input.kib === 631) {
       const blocks = await evalFrame<number>(
-        edit,
+        mixed,
         `document.querySelectorAll(".ProseMirror .code-block code").length`,
       );
       const block = `document.querySelectorAll(".ProseMirror .code-block code")[${Math.floor(blocks / 2)}]`;
       for (let run = 0; run < 3; run += 1) {
-        codeKeystrokes.push(await measureKeystroke(edit, block));
-        await measureSave(edit, EDIT_VIEWER);
+        codeKeystrokes.push(await measureKeystroke(mixed, block));
+        await measureSave(mixed, MIXED_VIEWER);
       }
     }
     const result = {
-      viewer: "Edit",
+      viewer: "Mixed",
       file: input.path,
       kind: input.kind,
       kib: input.kib,
@@ -7628,7 +7732,7 @@ async function performancePhase(): Promise<void> {
 
   await writeFile(config.results, `${JSON.stringify(results, null, 2)}\n`);
   assert.deepEqual(failures, []);
-  pass("Edit and Code meet the performance targets (results in performance.json)");
+  pass("Mixed and Code meet the performance targets (results in performance.json)");
 }
 
 async function viewReloads(): Promise<void> {
@@ -7861,7 +7965,7 @@ async function restartPhase(): Promise<void> {
     codeFontSize: null,
   });
   const restored = await openedViewSizes();
-  assert.equal(restored.edit, "20px");
+  assert.equal(restored.mixed, "20px");
   assert.equal(restored.preview, "20px");
   assert.equal(restored.code, "17.5px");
   const page = await openTextEditorSettings();
@@ -7878,10 +7982,10 @@ async function restartPhase(): Promise<void> {
     "Reset all in settings.json after the restart",
   );
   const defaults = await openedViewSizes();
-  assert.equal(defaults.edit, "16px");
+  assert.equal(defaults.mixed, "16px");
   assert.equal(defaults.code, "14px");
   pass(
-    "after restarting Desktop, the Text Editor document size 20 applies to Edit and Preview, and Reset all restores 16px and 14px",
+    "after restarting Desktop, the Text Editor document size 20 applies to Mixed and Preview, and Reset all restores 16px and 14px",
   );
 
   await goToExtensions();
@@ -7976,7 +8080,8 @@ async function run(): Promise<void> {
   await textEditorPreview();
   await viewerOrderAndDefaults();
   await textEditorMarkdown();
-  await editInteractions();
+  await mixedEncodingInfo();
+  await mixedInteractions();
   await textEditorTypography();
   await dragHandleFirstLine();
   await hostScaling();

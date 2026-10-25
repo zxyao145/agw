@@ -29,13 +29,13 @@ import { classifyCharacter } from "micromark-util-classify-character";
 
 import { escapeImageAlt, normalizeLinkLabel, startsWithDefinition } from "./markdown-syntax";
 
-// Edit 输出行内内容（paragraph、标题与表格单元格中的文字、标记与行内节点）：Tiptap 的平铺标记先转为 mdast 的嵌套节点，
+// Mixed 输出行内内容（paragraph、标题与表格单元格中的文字、标记与行内节点）：Tiptap 的平铺标记先转为 mdast 的嵌套节点，
 // 再由 mdast-util-to-markdown（带 GFM 扩展）输出。marked 与 CommonMark 不同的地方由它的 handlers 与 unsafe 选项处理；
-// 分隔符的选择由 writeInline 用 Edit 的解析读回检查。
-// Edit's output for inline content (text, marks and inline nodes of paragraphs, headings and table cells): Tiptap's
+// 分隔符的选择由 writeInline 用 Mixed 的解析读回检查。
+// Mixed's output for inline content (text, marks and inline nodes of paragraphs, headings and table cells): Tiptap's
 // flat marks become nested mdast nodes, which mdast-util-to-markdown (with the GFM extension) writes. Where marked
 // differs from CommonMark, its handlers and unsafe options take over; writeInline chooses delimiters by reading the
-// output back with Edit's parser.
+// output back with Mixed's parser.
 
 // 行内 HTML 原文（rawInline 与 `<br>`）使用自定义的 rawHtml 节点：mdast-util-to-markdown 会把 mdast html 节点前的换行
 // 改为空格，hardBreak 与 soft line break 都会因此改变。
@@ -582,14 +582,14 @@ const SETEXT_OPTIONS: Options = { ...OPTIONS, setext: true };
 
 type InlineBlock = Paragraph | Heading | TableCell;
 
-/** 用 Edit 的配置把 Markdown 正文解析为 Tiptap JSON。Parses a Markdown body into Tiptap JSON with Edit's configuration. */
+/** 用 Mixed 的配置把 Markdown 正文解析为 Tiptap JSON。Parses a Markdown body into Tiptap JSON with Mixed's configuration. */
 export type MarkdownReader = (markdown: string) => JSONContent;
 
 let markdownReader: MarkdownReader | null = null;
 
 /**
- * 登记 Edit 的解析函数（src/editor/markdown-parser.ts 载入时调用），writeInline 用它检查写出的文字，没有登记时抛出。
- * Registers Edit's parser (src/editor/markdown-parser.ts calls it when it loads); writeInline checks its output with
+ * 登记 Mixed 的解析函数（src/editor/markdown-parser.ts 载入时调用），writeInline 用它检查写出的文字，没有登记时抛出。
+ * Registers Mixed's parser (src/editor/markdown-parser.ts calls it when it loads); writeInline checks its output with
  * it and throws without it.
  */
 export function registerMarkdownReader(reader: MarkdownReader): void {
@@ -755,12 +755,12 @@ function* searchWindows(choices: readonly SpellingChoice[], at: number): Generat
 
 /**
  * 局部逐步搜索写法：从默认写法开始，在读回内容的第一处不同附近改变节点的写法（searchWindows，每个集合中改变的节点少的
- * 在前），采用第一个使第一处不同后移或消失的组合，再从新的位置继续，每一步都用 Edit 的解析读回。第一处不同没有后移时
+ * 在前），采用第一个使第一处不同后移或消失的组合，再从新的位置继续，每一步都用 Mixed 的解析读回。第一处不同没有后移时
  * 用于读回检查的量超过 `limit`，或某处的所有节点集合都不能推进时返回 null。
  * Local, incremental spelling search: starting from the default spelling, change the spelling of nodes around the
  * first difference of the read-back (searchWindows, fewest changes first within each set), adopt the first
  * combination that moves the first difference later or removes it, and continue from the new position; every step is
- * read back with Edit's parser. Returns null when the checking spent without the first difference moving exceeds
+ * read back with Mixed's parser. Returns null when the checking spent without the first difference moving exceeds
  * `limit`, or when no node set makes progress at some position.
  */
 function searchSpelling(
@@ -911,14 +911,14 @@ function readInlineBack(
 /**
  * 输出行内内容，并选择 bold 与斜体的分隔符字符（`*` 或 `_`）以及含有反引号的行内代码的分隔符长度（spellingChoices）。
  * marked 判断分隔符的规则与 CommonMark 有多处不同（GFM 规则对 `*` 不把 `~` 当作标点、按三的倍数规则跳过两边都可能的
- * 分隔符、寻找强调范围时只跳过不含反引号的行内代码并按长度相同的反引号串配对等），因此先用默认写法输出，用 Edit 的解析
+ * 分隔符、寻找强调范围时只跳过不含反引号的行内代码并按长度相同的反引号串配对等），因此先用默认写法输出，用 Mixed 的解析
  * 读回检查；内容不同时用 searchSpelling 从第一处不同开始逐步改变附近节点的写法。找不到时使用默认写法，保存在校验时按
  * 设计失败，本次保存的其余行内内容不再搜索（`budget.stopped`）。
  * Writes inline content and chooses the delimiter character (`*` or `_`) of bold and italic and the fence length of
  * inline code holding a backtick (spellingChoices). marked classifies delimiters differently from CommonMark in
  * several ways (its GFM rules do not count `~` as punctuation for `*`, it skips delimiters that could open or close by
  * the multiple-of-three rule, and when it looks for emphasis ranges it skips only backtick-free inline code, pairing
- * backtick runs of equal length, and so on), so the default spelling is written first and read back with Edit's
+ * backtick runs of equal length, and so on), so the default spelling is written first and read back with Mixed's
  * parser; when the content differs, searchSpelling changes the spelling of nearby nodes step by step from the first
  * difference. When nothing is found, the default spelling stays, saving fails verification as designed, and the rest
  * of the save's inline content is not searched (`budget.stopped`).
@@ -932,7 +932,7 @@ function writeInline(
   const reader = markdownReader;
   if (!reader) {
     throw new Error(
-      "Inline Markdown is written only after src/editor/markdown-parser.ts registers Edit's parser.",
+      "Inline Markdown is written only after src/editor/markdown-parser.ts registers Mixed's parser.",
     );
   }
   const written = serialize(block, options);

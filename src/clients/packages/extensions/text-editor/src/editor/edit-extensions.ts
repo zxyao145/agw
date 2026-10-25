@@ -21,9 +21,9 @@ import { ReferenceDecorations } from "./reference-decorations";
 import { createSlashCommand, type SlashMenuStore } from "./slash-command";
 import { TableNormalization } from "./table-normalization";
 
-// Edit 编辑器的扩展：Task 11 的 schema、解析与输出（editorExtensions），其中代码块、列表项、图片与原文块换成带 node view
+// Mixed 编辑器的扩展：Task 11 的 schema、解析与输出（editorExtensions），其中代码块、列表项、图片与原文块换成带 node view
 // 的扩展；再加上只用于编辑的扩展（设计 5.7 与 Tiptap 选型）。node 的 schema 不变，载入与写回使用同一个 schema。
-// The Edit editor's extensions: Task 11's schema, parsing and output (editorExtensions), with the code block, list
+// The Mixed editor's extensions: Task 11's schema, parsing and output (editorExtensions), with the code block, list
 // item, image and raw block nodes extended by node views; plus the editing-only extensions (design section 5.7 and
 // the Tiptap choices). Node schemas stay the same, so loading and writing use the same schema.
 

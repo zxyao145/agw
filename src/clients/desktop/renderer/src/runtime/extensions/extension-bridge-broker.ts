@@ -22,6 +22,8 @@ import {
   type ExtensionManifest,
   type ExtensionPermission,
   type ExtensionWelcome,
+  type FileHeaderItem,
+  type FileHeaderMenuEntry,
   fromExtensionErrorData,
   type HostContext,
   type PreviewImageType,
@@ -128,6 +130,8 @@ export type ExtensionBridgeBrokerOptions = {
   setUnsavedChanges(frameId: string, pageId: string, unsaved: boolean): void;
   /** 文件查看器的文档会话报告保存状态。A file viewer's document session reports its save status. */
   setSaveStatus(frameId: string, pageId: string, status: DocumentSaveStatus | null): void;
+  /** 文件查看器设置文件标题栏中的条目（已检查）。A file viewer sets its file header items (checked). */
+  setFileHeaderItems(frameId: string, pageId: string, items: readonly FileHeaderItem[]): void;
   /** 打开未批准的地址前由用户确认。Asks the user before opening a URL outside the approved hosts. */
   confirmOpenExternal(extensionId: string, url: string): Promise<boolean>;
   /** 在宿主的确认队列中显示消息框，返回按钮下标。Shows a message box in the host's confirmation queue and returns the button index. */
@@ -268,6 +272,109 @@ function toImagePreviewRequest(image: unknown): ImagePreviewRequest {
   }
   if (!isText(name, 1, 255)) throw invalidArgument("name must have 1 to 255 characters.");
   return { data: data as Uint8Array<ArrayBuffer>, type: type as PreviewImageType, name };
+}
+
+/** `workspace.setFileHeaderItems` 的数量限制。The count limits of `workspace.setFileHeaderItems`. */
+const MAX_FILE_HEADER_ITEMS = 16;
+const MAX_FILE_HEADER_MENU_ENTRIES = 100;
+const MAX_FILE_HEADER_TOTAL_ENTRIES = 500;
+
+function objectFields(value: unknown, path: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw invalidArgument(`${path} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+/**
+ * 检查条目与菜单项共有的字段（id、label、disabled、checked），返回只含这些字段中已提供者的对象；`checked` 不能与
+ * `menu` 同时提供。
+ * Checks the fields items and menu entries share (id, label, disabled, checked) and returns an object with the given
+ * ones only; `checked` is not allowed together with `menu`.
+ */
+function menuEntryFields(fields: Record<string, unknown>, path: string): FileHeaderMenuEntry {
+  const { id, label, disabled, checked, menu } = fields;
+  if (!isText(id, 1, 64)) throw invalidArgument(`${path}.id must have 1 to 64 characters.`);
+  if (!isText(label, 1, 80)) throw invalidArgument(`${path}.label must have 1 to 80 characters.`);
+  if (disabled !== undefined && typeof disabled !== "boolean") {
+    throw invalidArgument(`${path}.disabled must be a boolean.`);
+  }
+  if (checked !== undefined && typeof checked !== "boolean") {
+    throw invalidArgument(`${path}.checked must be a boolean.`);
+  }
+  if (checked !== undefined && menu !== undefined) {
+    throw invalidArgument(`${path} cannot have both checked and menu.`);
+  }
+  return {
+    id,
+    label,
+    ...(disabled === undefined ? {} : { disabled }),
+    ...(checked === undefined ? {} : { checked }),
+  };
+}
+
+/**
+ * 检查文件标题栏条目并复制为只含已知字段的对象（文件标题栏条目设计第 1 节）。
+ * Checks file header items and copies them into objects with only the known fields (file header items design,
+ * section 1).
+ */
+function toFileHeaderItems(items: unknown): FileHeaderItem[] {
+  if (!Array.isArray(items) || items.length > MAX_FILE_HEADER_ITEMS) {
+    throw invalidArgument(`items must be an array of at most ${MAX_FILE_HEADER_ITEMS} items.`);
+  }
+  const itemIds = new Set<string>();
+  let entryCount = 0;
+  return items.map((item: unknown, index) => {
+    const path = `items[${index}]`;
+    const fields = objectFields(item, path);
+    const shared = menuEntryFields(fields, path);
+    if (itemIds.has(shared.id)) {
+      throw invalidArgument(`${path}.id "${shared.id}" is used by another item.`);
+    }
+    itemIds.add(shared.id);
+    const { placement, menu } = fields;
+    if (placement !== "top" && placement !== "bottom") {
+      throw invalidArgument(`${path}.placement must be "top" or "bottom".`);
+    }
+    const entryIds = new Set<string>();
+    // 第 1 层为条目的菜单，第 2 层的菜单项不能再带菜单。Level 1 is the item's menu; level 2 entries hold no menu.
+    const toMenu = (value: unknown, menuPath: string, level: 1 | 2): FileHeaderMenuEntry[] => {
+      if (
+        !Array.isArray(value) ||
+        value.length < 1 ||
+        value.length > MAX_FILE_HEADER_MENU_ENTRIES
+      ) {
+        throw invalidArgument(
+          `${menuPath} must be an array of 1 to ${MAX_FILE_HEADER_MENU_ENTRIES} entries.`,
+        );
+      }
+      entryCount += value.length;
+      if (entryCount > MAX_FILE_HEADER_TOTAL_ENTRIES) {
+        throw invalidArgument(
+          `The items must have at most ${MAX_FILE_HEADER_TOTAL_ENTRIES} menu entries in total.`,
+        );
+      }
+      return value.map((entry: unknown, entryIndex) => {
+        const entryPath = `${menuPath}[${entryIndex}]`;
+        const entryFields = objectFields(entry, entryPath);
+        const checkedEntry = menuEntryFields(entryFields, entryPath);
+        if (entryIds.has(checkedEntry.id)) {
+          throw invalidArgument(
+            `${entryPath}.id "${checkedEntry.id}" is used by another entry of ${path}.`,
+          );
+        }
+        entryIds.add(checkedEntry.id);
+        if (entryFields.menu === undefined) return checkedEntry;
+        if (level === 2) {
+          throw invalidArgument(`${entryPath}.menu is nested deeper than two levels.`);
+        }
+        return { ...checkedEntry, menu: toMenu(entryFields.menu, `${entryPath}.menu`, 2) };
+      });
+    };
+    return menu === undefined
+      ? { ...shared, placement }
+      : { ...shared, placement, menu: toMenu(menu, `${path}.menu`, 1) };
+  });
 }
 
 function fileKind(uri: string): "local" | "cloud" {
@@ -697,6 +804,20 @@ export class ExtensionBridgeBroker {
           connection.frameId,
           connection.pageId,
           params.unsaved === true,
+        );
+        return null;
+      },
+      "workspace.setFileHeaderItems": (connection, params: { items: unknown }) => {
+        if (connection.kind !== "fileViewer") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only file viewers set file header items.",
+          );
+        }
+        this.options.setFileHeaderItems(
+          connection.frameId,
+          connection.pageId,
+          toFileHeaderItems(params.items),
         );
         return null;
       },

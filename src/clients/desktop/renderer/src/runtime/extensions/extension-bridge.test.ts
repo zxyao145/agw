@@ -161,6 +161,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   const imagePreviews: ({ frameId: string; pageId: string } & ImagePreviewRequest)[] = [];
   const unsaved: [string, string, boolean][] = [];
   const saveStatuses: [string, string, string | null][] = [];
+  const fileHeaderItems: [string, string, unknown][] = [];
   // 云端文件按 Project 主目录中的路径保存。Cloud files by their path in the Project's primary directory.
   const cloudFiles = new Map<string, Uint8Array>([["a.bin", new Uint8Array([7, 8, 9])]]);
   const server = await startApiServer({
@@ -292,6 +293,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     },
     setUnsavedChanges: (frameId, pageId, value) => unsaved.push([frameId, pageId, value]),
     setSaveStatus: (frameId, pageId, status) => saveStatuses.push([frameId, pageId, status]),
+    setFileHeaderItems: (frameId, pageId, items) => fileHeaderItems.push([frameId, pageId, items]),
     confirmOpenExternal: async (_extensionId, url) => {
       linkRequests.push(url);
       return options.openLink === true;
@@ -349,6 +351,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     imagePreviews,
     unsaved,
     saveStatuses,
+    fileHeaderItems,
     uri: (path: string) =>
       formatCloudUri({ serverId: "local", projectId: PROJECT, directoryId: null, path }),
     localUri: (path: string) => pathToFileURL(join(storage.path, path)).toString(),
@@ -572,6 +575,132 @@ test("only file viewers report a save status, and only the known statuses", asyn
     ["frame-1", "page-1", "changed-on-disk"],
     ["frame-1", "page-1", null],
   ]);
+});
+
+test("only file viewers set file header items, and the host receives only the known fields", async () => {
+  const view = await createHarness([]);
+  await assert.rejects(view.api.workspace.setFileHeaderItems([]), {
+    code: "ERR_UNSUPPORTED_OPERATION",
+  });
+  assert.deepEqual(view.fileHeaderItems, []);
+
+  const viewer = await createHarness([], { kind: "fileViewer" });
+  await viewer.endpoint.request("workspace.setFileHeaderItems", {
+    items: [
+      {
+        id: "encoding",
+        placement: "top",
+        label: "UTF-8",
+        icon: "Languages",
+        menu: [
+          {
+            id: "reopen",
+            label: "Reopen with Encoding",
+            tooltip: "Read again",
+            disabled: true,
+            menu: [{ id: "reopen:gbk", label: "GBK" }],
+          },
+        ],
+      },
+      { id: "wrap", placement: "top", label: "Word wrap", disabled: false, checked: false },
+      // 菜单项 id 只需在同一条目中唯一。Entry ids need to be unique within one item only.
+      {
+        id: "export",
+        placement: "bottom",
+        label: "Export",
+        menu: [{ id: "reopen", label: "Again", checked: true }],
+      },
+    ],
+  });
+  await viewer.api.workspace.setFileHeaderItems([]);
+  assert.deepEqual(viewer.fileHeaderItems, [
+    [
+      "frame-1",
+      "page-1",
+      [
+        {
+          id: "encoding",
+          placement: "top",
+          label: "UTF-8",
+          menu: [
+            {
+              id: "reopen",
+              label: "Reopen with Encoding",
+              disabled: true,
+              menu: [{ id: "reopen:gbk", label: "GBK" }],
+            },
+          ],
+        },
+        { id: "wrap", placement: "top", label: "Word wrap", disabled: false, checked: false },
+        {
+          id: "export",
+          placement: "bottom",
+          label: "Export",
+          menu: [{ id: "reopen", label: "Again", checked: true }],
+        },
+      ],
+    ],
+    ["frame-1", "page-1", []],
+  ]);
+});
+
+test("file header items outside the limits are rejected, and the limits themselves are accepted", async () => {
+  const viewer = await createHarness([], { kind: "fileViewer" });
+  const item = (id: string, fields: Record<string, unknown> = {}) => ({
+    id,
+    placement: "bottom",
+    label: "Item",
+    ...fields,
+  });
+  const entries = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({ id: `e${index}`, label: "Entry" }));
+  const invalid: unknown[] = [
+    null,
+    "items",
+    Array.from({ length: 17 }, (_, index) => item(`i${index}`)),
+    [item("")],
+    [item("x".repeat(65))],
+    [item("a", { label: "" })],
+    [item("a", { label: "x".repeat(81) })],
+    [item("a"), item("a")],
+    [item("a", { placement: "toolbar" })],
+    [item("a", { disabled: "yes" })],
+    [item("a", { checked: 1 })],
+    // 勾选项不能带菜单。A checkbox item cannot hold a menu.
+    [item("a", { checked: true, menu: entries(1) })],
+    [item("a", { menu: [{ id: "b", label: "B", checked: false, menu: entries(1) }] })],
+    [item("a", { menu: [] })],
+    [item("a", { menu: entries(101) })],
+    [item("a", { menu: ["entry"] })],
+    // 第三层菜单与同一条目中重复的菜单项 id。A third menu level, and an entry id repeated within one item.
+    [
+      item("a", {
+        menu: [{ id: "b", label: "B", menu: [{ id: "c", label: "C", menu: entries(1) }] }],
+      }),
+    ],
+    [item("a", { menu: [{ id: "b", label: "B", menu: [{ id: "b", label: "Again" }] }] })],
+    // 菜单项合计 600 个。600 menu entries in total.
+    Array.from({ length: 6 }, (_, index) => item(`i${index}`, { menu: entries(100) })),
+  ];
+  for (const items of invalid) {
+    await assert.rejects(
+      viewer.endpoint.request("workspace.setFileHeaderItems", { items }),
+      { code: "ERR_INVALID_ARGUMENT" },
+      JSON.stringify(items)?.slice(0, 120),
+    );
+  }
+  assert.deepEqual(viewer.fileHeaderItems, []);
+
+  // 16 个条目、合计 500 个菜单项、64 个字符的 id 与 80 个字符的文字。16 items, 500 menu entries in total, 64-character
+  // ids and 80-character labels.
+  const atLimits = [
+    ...Array.from({ length: 5 }, (_, index) => item(`i${index}`, { menu: entries(100) })),
+    ...Array.from({ length: 11 }, (_, index) =>
+      item(`j${index}`.padEnd(64, "x"), { label: "x".repeat(80) }),
+    ),
+  ];
+  await viewer.endpoint.request("workspace.setFileHeaderItems", { items: atLimits });
+  assert.deepEqual(viewer.fileHeaderItems, [["frame-1", "page-1", atLimits]]);
 });
 
 test("openFile passes the URI to the host and returns its rejection", async () => {

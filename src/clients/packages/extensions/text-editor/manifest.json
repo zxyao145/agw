@@ -9,7 +9,7 @@
     "fileViewers": [
       {
         "id": "markdown",
-        "title": "Edit",
+        "title": "Mixed",
         "icon": "SquarePen",
         "patterns": ["*.md", "*.markdown"],
         "entry": "markdown.html"

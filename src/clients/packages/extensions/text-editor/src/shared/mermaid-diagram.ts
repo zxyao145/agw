@@ -3,9 +3,9 @@ import type { Disposable, ExtensionApi } from "@agw/extension-sdk";
 import { errorMessage, notifyFailure } from "./errors";
 import { renderMermaid } from "./mermaid-render";
 
-// Mermaid 代码块的图表（Mermaid 设计第 1 节），Edit 的 node view 与 Preview 共用。图表渲染出来后右上角有预览按钮，预览
+// Mermaid 代码块的图表（Mermaid 设计第 1 节），Mixed 的 node view 与 Preview 共用。图表渲染出来后右上角有预览按钮，预览
 // 由宿主在 Desktop 窗口上显示（第 4 节）。不使用 React。
-// Diagrams for Mermaid code blocks (Mermaid design section 1), shared by Edit's node view and Preview. A rendered
+// Diagrams for Mermaid code blocks (Mermaid design section 1), shared by Mixed's node view and Preview. A rendered
 // diagram has a preview button in its top-right corner, and the host shows the preview over the Desktop window
 // (section 4). No React.
 

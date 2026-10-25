@@ -127,7 +127,7 @@ test("links and unsaved changes name their source and answer true or false", () 
     items: [
       {
         fileName: "notes.md",
-        viewerTitle: "Edit",
+        viewerTitle: "Mixed",
         extensionId: "text-editor",
         extensionName: "Text Editor",
       },
@@ -135,7 +135,7 @@ test("links and unsaved changes name their source and answer true or false", () 
   });
   assert.equal(
     unsaved.container.querySelector("li")?.textContent,
-    "notes.md · Edit (Text Editor, text-editor)",
+    "notes.md · Mixed (Text Editor, text-editor)",
   );
   assert.deepEqual(
     unsaved.buttons.map((button) => [button.textContent, button.className]),

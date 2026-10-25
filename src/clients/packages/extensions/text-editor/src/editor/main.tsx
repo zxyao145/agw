@@ -7,6 +7,7 @@ import { applyHighlightTheme } from "../shared/theme";
 import { applyWorkspaceBackdrop } from "../shared/workspace-backdrop";
 import { EditDocument } from "./edit-document";
 import { EditView, unmountEditView } from "./edit-view";
+import { publishHeaderItems } from "./header-items";
 import "../shared/document-error.css";
 import "../shared/editor-chrome.css";
 import "../shared/mermaid-diagram.css";
@@ -20,12 +21,14 @@ const gate = createSettingsGate(root, (api, settings, params) => {
   const fontSize = applyDocumentFontSize(api, settings);
   const { file } = params as FileViewerParams;
   const editDocument = new EditDocument(api, file);
+  const headerItems = publishHeaderItems(api, editDocument.session);
   root.render(<EditView api={api} editDocument={editDocument} />);
   return {
     // 每次显示都交给文档会话：同一个文件刷新，另一个文件切换。Every show goes to the session: refresh or switch.
     show: (next) => editDocument.show((next as FileViewerParams).file),
     dispose() {
       fontSize.dispose();
+      headerItems.dispose();
       unmountEditView(root, editDocument);
     },
   };

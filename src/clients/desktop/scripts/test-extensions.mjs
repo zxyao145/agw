@@ -77,18 +77,18 @@ function shapeSvg(width, height) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#3b82f6"/></svg>\n`;
 }
 
-// Edit 写回检查使用的文档：每种需要原样保留的写法各出现一次。front matter 以列表结束，CommonMark 读到的标题只有正文中的
+// Mixed 写回检查使用的文档：每种需要原样保留的写法各出现一次。front matter 以列表结束，CommonMark 读到的标题只有正文中的
 // 两个，todo-editor 的 Outline 据此列出标题。
-// The document for the Edit write-back checks: every construct that must be kept verbatim appears once. The front
+// The document for the Mixed write-back checks: every construct that must be kept verbatim appears once. The front
 // matter ends with a list, so CommonMark reads only the two headings of the body, which todo-editor's Outline lists.
-const EDIT_MARKDOWN = `---
-title: Edit sample
+const MIXED_MARKDOWN = `---
+title: Mixed sample
 tags:
   - alpha
   - beta
 ---
 
-# Edit sample
+# Mixed sample
 
 First paragraph with <kbd>inline HTML</kbd> and a footnote[^note].
 
@@ -123,8 +123,8 @@ const x = 1;
 [^note]: The footnote text.
 `;
 
-// 检查 Edit 与 Preview 排版的文档：任务列表（含嵌套列表）、表格、带定义的引用链接、行内代码、引用块中的代码块。
-// The document for the Edit and Preview typography checks: a task list with a nested list, a table, a reference link
+// 检查 Mixed 与 Preview 排版的文档：任务列表（含嵌套列表）、表格、带定义的引用链接、行内代码、引用块中的代码块。
+// The document for the Mixed and Preview typography checks: a task list with a nested list, a table, a reference link
 // with its definition, inline code, and a fenced code block inside a blockquote.
 const TYPOGRAPHY_MARKDOWN = `# Typography sample
 
@@ -145,8 +145,8 @@ Top paragraph with a [typography link][typo] and \`inline code\`.
 [typo]: https://example.com/typography
 `;
 
-// 检查拖动手柄与第一行对齐的文档：每种块各一个；图片文件不存在，Edit 显示占位。
-// The document for the drag handle first-line checks: one block of each kind; the image file does not exist, so Edit
+// 检查拖动手柄与第一行对齐的文档：每种块各一个；图片文件不存在，Mixed 显示占位。
+// The document for the drag handle first-line checks: one block of each kind; the image file does not exist, so Mixed
 // shows a placeholder.
 const FIRST_LINE_MARKDOWN = `---
 title: First line
@@ -472,7 +472,7 @@ async function prepareServerData(baseUrl, echoPort) {
   await writeFile(join(projectDirectory, "blank.excalidraw"), "");
   // Text Editor 与 todo-editor 使用的文件。Files for Text Editor and todo-editor.
   await mkdir(join(projectDirectory, "notes"), { recursive: true });
-  await writeFile(join(projectDirectory, "notes", "edit.md"), EDIT_MARKDOWN);
+  await writeFile(join(projectDirectory, "notes", "edit.md"), MIXED_MARKDOWN);
   await writeFile(join(projectDirectory, "notes", "typography.md"), TYPOGRAPHY_MARKDOWN);
   await writeFile(join(projectDirectory, "first-line.md"), FIRST_LINE_MARKDOWN);
   await mkdir(join(projectDirectory, "src"), { recursive: true });

@@ -163,7 +163,7 @@ export function SettingsForm({ api }: { api: ExtensionApi }) {
       <SizeField
         id="text-editor-document-font-size"
         label="Document font size"
-        description="Used by Edit and Preview."
+        description="Used by Mixed and Preview."
         value={settings.documentFontSize}
         followText={`Follow base size (${followDocument} px)`}
         resetLabel="Reset document font size"

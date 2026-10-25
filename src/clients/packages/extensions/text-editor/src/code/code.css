@@ -1,5 +1,5 @@
-/* Code 查看器的布局：工具栏、编辑器与状态栏，颜色来自宿主主题变量（theme.apply）。
-   The Code viewer layout: toolbar, editor and status bar; colors come from the host theme variables (theme.apply). */
+/* Code 查看器的布局：编辑器与状态栏，颜色来自宿主主题变量（theme.apply）。
+   The Code viewer layout: editor and status bar; colors come from the host theme variables (theme.apply). */
 
 html,
 body,
@@ -27,7 +27,6 @@ body {
   height: 100%;
 }
 
-.code-toolbar,
 .code-status-bar {
   display: flex;
   flex: none;
@@ -37,11 +36,6 @@ body {
   box-sizing: border-box;
   padding: 0 8px;
   font-size: 0.875em;
-}
-
-.code-toolbar {
-  height: 32px;
-  border-bottom: 1px solid var(--border);
 }
 
 .code-editor {

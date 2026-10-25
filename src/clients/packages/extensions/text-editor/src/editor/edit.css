@@ -1,7 +1,7 @@
-/* Edit 查看器（设计 5.7）：固定的顶部条、居中的内容列（最大宽度 760 px，左侧留出拖动手柄的位置）、Notion 风格的块与菜单。
+/* Mixed 查看器（设计 5.7）：居中的内容列（最大宽度 760 px，左侧留出拖动手柄的位置）、Notion 风格的块与菜单。
    颜色与等宽字体来自宿主主题变量（theme.apply），深色模式随之变化。Markdown 内容的字号、行高与间距来自 /__agw/typography.css
    （.agw-prose，document 密度），这里只保留 node view、菜单与浮层的样式。
-   The Edit viewer (design section 5.7): a fixed top bar, a centered content column (at most 760 px, with room for
+   The Mixed viewer (design section 5.7): a centered content column (at most 760 px, with room for
    the drag handle on its left), Notion-style blocks and menus. Colors and the monospace font come from the host theme
    variables (theme.apply), so dark mode follows. Font sizes, line heights and spacing of the Markdown content come
    from /__agw/typography.css (.agw-prose, document density); this file keeps only the styles of node views, menus and
@@ -39,19 +39,6 @@ body {
   height: 100%;
 }
 
-.edit-toolbar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  box-sizing: border-box;
-  height: 32px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.875em;
-}
-
 .status {
   margin: 0;
   padding: 24px 32px;
@@ -68,9 +55,9 @@ body {
 
 .edit-column {
   box-sizing: border-box;
-  max-width: calc(760px + 96px);
+  max-width: calc(830px + 64px);
   margin: 0 auto;
-  padding: 32px 48px 120px 48px;
+  padding: 32px 32px 120px 32px;
 }
 
 /* 主题提供工作区背景时（html 上有 data-workspace-backdrop，见 shared/workspace-backdrop.ts），背景图形铺在滚动区域上且不
@@ -83,7 +70,7 @@ body {
 }
 
 :root[data-workspace-backdrop] .edit-column {
-  max-width: min(calc(760px + 96px), calc(100% - 32px));
+  max-width: min(calc(830px + 64px), calc(100% - 32px));
   margin: 32px auto 48px;
   border-radius: var(--radius-xl);
   background: var(--card);

@@ -62,6 +62,9 @@ export function MainWorkspace(props: MainWorkspaceProps) {
     if (!view) throw new Error(`File viewer ${viewerId} is not available.`);
     return view;
   };
+  /** 查看器在 "More" 菜单某一组中的条目。A viewer's file header items in one group of the "More" menu. */
+  const headerItems = (viewerId: string, placement: "top" | "bottom") =>
+    (props.snapshot.fileHeaderItems[viewerId] ?? []).filter((item) => item.placement === placement);
 
   return (
     <main className="agw-main-workspace" aria-label={activeView.title} data-view-id={activeView.id}>
@@ -80,6 +83,8 @@ export function MainWorkspace(props: MainWorkspaceProps) {
             title: view.title,
             unsaved: props.snapshot.unsavedViewIds.includes(view.id),
             saveStatus: props.snapshot.saveStatuses[view.id] ?? null,
+            topItems: headerItems(view.id, "top"),
+            bottomItems: headerItems(view.id, "bottom"),
           }))}
           renderFileViewer={(viewerId) => {
             const view = fileViewers.find((item) => item.id === viewerId);
@@ -101,6 +106,9 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           }
           onReloadFileViewerDocument={(viewerId) => props.host.reloadFileViewerDocument(viewerId)}
           renderFileViewerInfo={(viewerId) => <ExtensionViewInfo view={fileViewer(viewerId)} />}
+          onSelectFileViewerItem={(viewerId, itemId, entryId) =>
+            props.host.selectFileHeaderItem(viewerId, itemId, entryId)
+          }
           defaultFileViewerId={props.defaultFileViewerId}
           onSetDefaultFileViewer={props.onSetDefaultFileViewer}
         />

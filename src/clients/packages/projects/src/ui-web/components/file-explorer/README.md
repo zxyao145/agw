@@ -10,7 +10,9 @@ It is designed to be reusable across pages, but it is still intentionally aligne
 
 ```ts
 export { default as Explorer } from "./explorer";
-export { default as FileContent } from "./file-content";
+export { default as FileContent, type FileViewerOption } from "./file-content";
+export { fileViewerFileType } from "./file-viewer-file-type";
+export { FileViewerMenuEntries, type FileViewerMenuEntry } from "./file-viewer-menu";
 export type { CommentSide, LineComment } from "./types";
 ```
 

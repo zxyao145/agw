@@ -444,10 +444,10 @@ function saveOnce(
 }
 
 /**
- * 在同一个编辑器中逐轮执行编辑，每一轮之后保存一次（saveOnce）；之后的保存以上一次保存后的基线为准，与 Edit 的文档
+ * 在同一个编辑器中逐轮执行编辑，每一轮之后保存一次（saveOnce）；之后的保存以上一次保存后的基线为准，与 Mixed 的文档
  * 会话相同。返回每次保存的结果。
  * Runs the edits round by round in one editor and saves after each round (saveOnce); each later save uses the
- * baseline after the previous save, as Edit's document session does. Returns every save's outcome.
+ * baseline after the previous save, as Mixed's document session does. Returns every save's outcome.
  */
 export function editAndSave(
   source: string,

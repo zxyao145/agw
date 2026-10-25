@@ -1,8 +1,8 @@
 import { Marked, type Tokenizer } from "marked";
 import markedFootnote from "marked-footnote";
 
-// 链接定义、脚注定义与标签的写法，Edit 的解析、规范化与输出共用。
-// Syntax of link definitions, footnote definitions and labels, shared by Edit's parsing, normalization and output.
+// 链接定义、脚注定义与标签的写法，Mixed 的解析、规范化与输出共用。
+// Syntax of link definitions, footnote definitions and labels, shared by Mixed's parsing, normalization and output.
 
 export type LinkDefinition = { href: string; title: string | null };
 

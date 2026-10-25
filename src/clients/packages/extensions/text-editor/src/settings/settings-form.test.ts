@@ -156,7 +156,7 @@ test("the rows show their labels and descriptions", async () => {
   const { container, unmount } = await mount();
   const text = container.textContent ?? "";
   assert.ok(text.includes("Document font size"));
-  assert.ok(text.includes("Used by Edit and Preview."));
+  assert.ok(text.includes("Used by Mixed and Preview."));
   assert.ok(text.includes("Code editor font size"));
   assert.ok(text.includes("Used by Code."));
   await unmount();

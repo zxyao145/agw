@@ -471,6 +471,70 @@ export interface WorkspaceApi {
   openFile(uri: string): Promise<void>;
   /** 文件查看器报告未保存修改。A file viewer reports unsaved changes. */
   setUnsavedChanges(unsaved: boolean): Promise<void>;
+  /**
+   * 文件查看器在宿主文件标题栏中的条目，替换之前设置的全部条目，空数组清除。只有文件查看器可以调用，其他 frame 为
+   * `ERR_UNSUPPORTED_OPERATION`；条目不合法时为 `ERR_INVALID_ARGUMENT`。页面关闭或重新加载后条目清除。
+   * A file viewer's items in the host's file header; replaces every item set before, and an empty array clears them.
+   * File viewers only; other frames get `ERR_UNSUPPORTED_OPERATION`, and invalid items `ERR_INVALID_ARGUMENT`. The
+   * items are cleared when the page closes or reloads.
+   */
+  setFileHeaderItems(items: FileHeaderItem[]): Promise<void>;
+  /** 用户选择了条目或条目菜单中的一项。The user chose an item or an entry of its menu. */
+  onDidSelectFileHeaderItem(listener: (selection: FileHeaderItemSelection) => void): Disposable;
+}
+
+/**
+ * 文件查看器在宿主文件标题栏 More 菜单中的条目（`workspace.setFileHeaderItems`）。最多 16 个，菜单项合计最多 500 个。
+ * A file viewer's item in the More menu of the host's file header (`workspace.setFileHeaderItems`). At most 16 items
+ * and 500 menu entries in total.
+ */
+export interface FileHeaderItem {
+  /** 1 到 64 个字符，在全部条目中唯一。1 to 64 characters, unique among all items. */
+  id: string;
+  /**
+   * 在 More 菜单中的位置。`top`：查看器说明与 "Reload view" 之后；`bottom`：默认查看器设置之后，菜单的最后。
+   * Where the item goes in the More menu. `top`: after the viewer info and "Reload view"; `bottom`: after the default
+   * viewer setting, at the end of the menu.
+   */
+  placement: "top" | "bottom";
+  /** 1 到 80 个字符。1 to 80 characters. */
+  label: string;
+  /** true 时显示为不可用，不能选择。When true, the item shows as unavailable and cannot be chosen. */
+  disabled?: boolean;
+  /**
+   * 提供时条目为勾选项，true 时显示勾号；不能与 `menu` 同时提供。
+   * When given, the item is a checkbox item showing a check mark for true; not allowed together with `menu`.
+   */
+  checked?: boolean;
+  /**
+   * 条目的菜单，1 到 100 项；菜单项可以再带一层子菜单。省略时选择条目本身。
+   * The item's menu of 1 to 100 entries, whose entries may hold one more level. Omitted: the item itself is chosen.
+   */
+  menu?: FileHeaderMenuEntry[];
+}
+
+/** 条目菜单中的一项；带 `menu` 时为子菜单，本身不能被选择。An entry of an item's menu; with `menu` it is a submenu. */
+export interface FileHeaderMenuEntry {
+  /** 1 到 64 个字符，在同一条目的全部菜单项中唯一。1 to 64 characters, unique among the item's entries. */
+  id: string;
+  /** 1 到 80 个字符。1 to 80 characters. */
+  label: string;
+  /** true 时显示为不可用，不能选择。When true, the entry shows as unavailable and cannot be chosen. */
+  disabled?: boolean;
+  /**
+   * 提供时为勾选项，true 时显示勾号；不能与 `menu` 同时提供。
+   * When given, the entry is a checkbox item showing a check mark for true; not allowed together with `menu`.
+   */
+  checked?: boolean;
+  /** 子菜单，1 到 100 项。A submenu of 1 to 100 entries. */
+  menu?: FileHeaderMenuEntry[];
+}
+
+/** 用户的选择。The user's choice. */
+export interface FileHeaderItemSelection {
+  itemId: string;
+  /** 选择的菜单项；条目没有菜单时为 null。The chosen entry; null for an item without a menu. */
+  entryId: string | null;
 }
 
 /* ---------- 文件系统 File system ---------- */

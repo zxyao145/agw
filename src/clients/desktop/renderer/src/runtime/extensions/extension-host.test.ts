@@ -438,6 +438,66 @@ test("closing a frame closes its image preview and the call fails with ERR_FRAME
   assert.equal(await blobText(shown.src), null);
 });
 
+const HEADER_ITEMS = [
+  {
+    id: "encoding",
+    placement: "top" as const,
+    label: "UTF-8",
+    menu: [
+      { id: "reopen", label: "Reopen with Encoding", menu: [{ id: "reopen:gbk", label: "GBK" }] },
+    ],
+  },
+  { id: "export", placement: "bottom" as const, label: "Export" },
+];
+
+test("a file viewer's header items show under its view id, stay across files and reach the page when chosen", async () => {
+  const viewer = await showLoaded(VIEWER, fileNamed("notes.md"));
+  const api = await viewer.page.api;
+  const chosen: unknown[] = [];
+  api.workspace.onDidSelectFileHeaderItem((selection) => chosen.push(selection));
+  await api.workspace.setFileHeaderItems(HEADER_ITEMS);
+  assert.deepEqual(host.getSnapshot().fileHeaderItems, { [VIEWER]: HEADER_ITEMS });
+
+  host.selectFileHeaderItem(VIEWER, "encoding", "reopen:gbk");
+  host.selectFileHeaderItem(VIEWER, "export", null);
+  await until(() => chosen.length === 2, "the choices to reach the page");
+  assert.deepEqual(chosen, [
+    { itemId: "encoding", entryId: "reopen:gbk" },
+    { itemId: "export", entryId: null },
+  ]);
+
+  // 条目由页面按新文件更新，切换文件时宿主保留。The page updates its items for the new file; the host keeps them.
+  host.setFileViewerFile(VIEWER, fileNamed("other.md"));
+  assert.deepEqual(host.getSnapshot().fileHeaderItems[VIEWER], HEADER_ITEMS);
+
+  await api.workspace.setFileHeaderItems([]);
+  assert.deepEqual(host.getSnapshot().fileHeaderItems, {});
+
+  // Reload view 关闭 frame，条目随之清除。Reload view closes the frame and its items go with it.
+  await api.workspace.setFileHeaderItems(HEADER_ITEMS);
+  await host.reloadView(VIEWER);
+  assert.deepEqual(host.getSnapshot().fileHeaderItems, {});
+});
+
+test("a replaced page's header items are cleared while the frame stays", async () => {
+  const viewer = await showLoaded(VIEWER, fileNamed("notes.md"));
+  await (await viewer.page.api).workspace.setFileHeaderItems(HEADER_ITEMS);
+  const frameId = host.frameIdOfView(VIEWER)!;
+
+  main.emit({
+    type: "frame-page-replaced",
+    extensionId: "sample",
+    frameId,
+    pageId: main.pageIds.get(frameId)!,
+  });
+  viewer.page.endpoint.close();
+  await until(
+    () => host.getSnapshot().fileHeaderItems[VIEWER] === undefined,
+    "the header items to clear",
+  );
+  assert.equal(host.frameIdOfView(VIEWER), frameId);
+});
+
 test("a replaced page's image preview closes while the frame stays", async () => {
   const file = fileNamed("notes.md");
   const viewer = await showLoaded(VIEWER, file);

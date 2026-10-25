@@ -78,9 +78,9 @@ export function SettingsError({ error, hint }: { error: Error; hint: string }) {
 }
 
 /**
- * 文本文档读取失败时的说明面板，Preview、Code 与 Edit 共用。编码不能识别时显示 "Reopen with Encoding…"，
+ * 文本文档读取失败时的说明面板，Preview、Code 与 Mixed 共用。编码不能识别时显示 "Reopen with Encoding…"，
  * 用户从 `listEncodings` 的结果中选择编码后调用 `onReopenWithEncoding`。
- * The panel shown when reading a text document fails, shared by Preview, Code and Edit. When the encoding cannot be
+ * The panel shown when reading a text document fails, shared by Preview, Code and Mixed. When the encoding cannot be
  * detected it offers "Reopen with Encoding…"; picking one of `listEncodings`'s encodings calls
  * `onReopenWithEncoding`.
  */

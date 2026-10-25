@@ -17,6 +17,7 @@ import {
   type ExecutionCloseReason,
   type ExtensionAction,
   type ExtensionFrameKind,
+  type FileHeaderItem,
   type FileViewerFile,
   type FileViewerParams,
   type HostContext,
@@ -105,6 +106,8 @@ export type ExtensionHostSnapshot = {
   unsavedViewIds: readonly string[];
   /** 文件查看器报告的保存状态，按视图 id 记录。The save statuses file viewers reported, by view id. */
   saveStatuses: Readonly<Record<string, DocumentSaveStatus>>;
+  /** 文件查看器设置的文件标题栏条目，按视图 id 记录。The file header items file viewers set, by view id. */
+  fileHeaderItems: Readonly<Record<string, readonly FileHeaderItem[]>>;
   /** 视图请求的图片预览（`ui.previewImage`）；没有时为 null。The image preview a view requested (`ui.previewImage`), or null. */
   imagePreview: ExtensionImagePreview | null;
 };
@@ -295,6 +298,8 @@ export class ExtensionHost {
   private readonly unsavedFrames = new Set<string>();
   /** frame 报告的保存状态：frameId → 状态。Save statuses frames reported: frameId → status. */
   private readonly saveStatuses = new Map<string, DocumentSaveStatus>();
+  /** frame 设置的文件标题栏条目：frameId → 条目。File header items frames set: frameId → items. */
+  private readonly fileHeaderItems = new Map<string, readonly FileHeaderItem[]>();
   /** 等待回答的消息框：clientId → 发出它的页面。Message boxes awaiting answers: clientId → the page that asked. */
   private readonly messageBoxes = new Map<string, PendingMessageBox>();
   private nextMessageBoxId = 1;
@@ -310,6 +315,7 @@ export class ExtensionHost {
     viewErrors: {},
     unsavedViewIds: [],
     saveStatuses: {},
+    fileHeaderItems: {},
     imagePreview: null,
   };
 
@@ -394,6 +400,12 @@ export class ExtensionHost {
         const frame = this.frames.get(frameId);
         if (frame?.kind === "fileViewer" && frame.pageId === pageId && frame.closing === null) {
           this.setSaveStatus(frameId, status);
+        }
+      },
+      setFileHeaderItems: (frameId, pageId, items) => {
+        const frame = this.frames.get(frameId);
+        if (frame?.kind === "fileViewer" && frame.pageId === pageId && frame.closing === null) {
+          this.setFileHeaderItems(frameId, items);
         }
       },
       confirmOpenExternal: (extensionId, url) =>
@@ -724,6 +736,19 @@ export class ExtensionHost {
     const frame = this.viewFrames.get(viewId);
     if (frame?.kind !== "fileViewer" || !frame.loaded || frame.closing !== null) return;
     this.broker.emit(frame.frameId, frame.pageId, "documents.reloadRequested", null);
+  }
+
+  /**
+   * 用户在文件标题栏中选择了文件查看器的条目或它的菜单项，交给查看器页面。
+   * The user chose a file viewer's file header item or one of its menu entries; hands the choice to the viewer page.
+   */
+  public selectFileHeaderItem(viewId: string, itemId: string, entryId: string | null): void {
+    const frame = this.viewFrames.get(viewId);
+    if (frame?.kind !== "fileViewer" || !frame.loaded || frame.closing !== null) return;
+    this.broker.emit(frame.frameId, frame.pageId, "workspace.fileHeaderItemSelected", {
+      itemId,
+      entryId,
+    });
   }
 
   public frameIdOfView(viewId: string): string | null {
@@ -1094,6 +1119,7 @@ export class ExtensionHost {
       this.frames.delete(frame.frameId);
       this.unsavedFrames.delete(frame.frameId);
       this.saveStatuses.delete(frame.frameId);
+      this.fileHeaderItems.delete(frame.frameId);
       if (frame.viewId !== null && this.viewFrames.get(frame.viewId) === frame)
         this.viewFrames.delete(frame.viewId);
       this.publish();
@@ -1437,6 +1463,13 @@ export class ExtensionHost {
     this.publish();
   }
 
+  private setFileHeaderItems(frameId: string, items: readonly FileHeaderItem[]): void {
+    if (items.length === 0 && !this.fileHeaderItems.has(frameId)) return;
+    if (items.length === 0) this.fileHeaderItems.delete(frameId);
+    else this.fileHeaderItems.set(frameId, items);
+    this.publish();
+  }
+
   private readonly onBeforeUnload = (event: BeforeUnloadEvent) => {
     // 主进程在 will-prevent-unload 中由用户确认。The main process asks the user in will-prevent-unload.
     if (this.unsavedFrames.size > 0) event.preventDefault();
@@ -1473,6 +1506,7 @@ export class ExtensionHost {
     this.dismissImagePreview(frame.frameId, pageId);
     this.setUnsaved(frame.frameId, false);
     this.setSaveStatus(frame.frameId, null);
+    this.setFileHeaderItems(frame.frameId, []);
     await this.execution.closePage(frame.frameId, pageId);
     this.broker.disconnect(frame.frameId, pageId);
     if (frame.kind === "background") {
@@ -1599,6 +1633,12 @@ export class ExtensionHost {
         [...this.saveStatuses].flatMap(([frameId, status]) => {
           const viewId = this.frames.get(frameId)?.viewId;
           return viewId ? [[viewId, status]] : [];
+        }),
+      ),
+      fileHeaderItems: Object.fromEntries(
+        [...this.fileHeaderItems].flatMap(([frameId, items]) => {
+          const viewId = this.frames.get(frameId)?.viewId;
+          return viewId ? [[viewId, items]] : [];
         }),
       ),
       imagePreview: this.imagePreview?.preview ?? null,

@@ -23,7 +23,7 @@ async function mount(name: string, text: string | Uint8Array) {
   const container = window.document.createElement("div");
   window.document.body.append(container);
   const root = createRoot(container);
-  // Edit 视图中每次 React 提交都调用 onRender。onRender runs for every React commit in the Edit view.
+  // Mixed 视图中每次 React 提交都调用 onRender。onRender runs for every React commit in the Mixed view.
   const commits = { count: 0 };
   await act(async () =>
     root.render(
@@ -401,8 +401,8 @@ test("Mod+K is left to the browser inside code blocks", async () => {
 });
 
 test("the first edit after loading dispatches only its own transaction", async () => {
-  // 未保存状态的出现只更新顶部条；编辑器中的菜单不重新渲染，也不因此派发事务。The unsaved state appearing updates
-  // only the top bar; the editor's menus do not render again or dispatch transactions because of it.
+  // 未保存状态的出现不使编辑器中的菜单重新渲染，也不因此派发事务。The unsaved state appearing neither renders the
+  // editor's menus again nor dispatches transactions.
   const { document } = await mount("transition.md", "Text.\n");
   const transactions: string[] = [];
   document.editor.on("transaction", ({ transaction }) =>
@@ -421,15 +421,12 @@ test("the first edit after loading dispatches only its own transaction", async (
   assert.deepEqual(transactions, ["edit"]);
 });
 
-test("the session reports every save state to the host, and Save follows without a React commit", async () => {
-  const { document, container, commits } = await mount("states.md", "Text.\n");
-  const save = [...container.querySelectorAll<HTMLButtonElement>(".edit-toolbar button")].find(
-    (element) => element.textContent === "Save",
-  )!;
+test("the session reports every save state to the host without a React commit", async () => {
+  const { document, commits } = await mount("states.md", "Text.\n");
   const seen: string[] = [];
   const record = () => {
     const { state, changedOnDisk } = document.session;
-    seen.push(`${state}${changedOnDisk ? "+changed" : ""}: save ${save.disabled ? "off" : "on"}`);
+    seen.push(`${state}${changedOnDisk ? "+changed" : ""}`);
   };
   // 会话的监听按订阅顺序调用，组件的监听在前。Session listeners run in subscription order, the component's first.
   document.session.onDidChange(record);
@@ -457,14 +454,7 @@ test("the session reports every save state to the host, and Save follows without
     await refresh;
     await settle();
   });
-  assert.deepEqual(seen, [
-    "clean: save off",
-    "dirty: save on",
-    "saving: save off",
-    "clean: save off",
-    "dirty: save on",
-    "dirty+changed: save on",
-  ]);
+  assert.deepEqual(seen, ["clean", "dirty", "saving", "clean", "dirty", "dirty+changed"]);
   assert.deepEqual(host.saveStatuses.slice(reported), [
     "unsaved",
     "saving",
@@ -491,30 +481,21 @@ test("the session reports every save state to the host, and Save follows without
   });
 });
 
-test("a document that fails to load reports no save status and disables Save", async () => {
+test("a document that fails to load reports no save status", async () => {
   const reported = host.saveStatuses.length;
-  const { container } = await mount("binary.md", new Uint8Array([0, 1, 2]));
+  await mount("binary.md", new Uint8Array([0, 1, 2]));
   await act(settle);
   assert.deepEqual(host.saveStatuses.slice(reported), []);
-  const save = [...container.querySelectorAll<HTMLButtonElement>(".edit-toolbar button")].find(
-    (element) => element.textContent === "Save",
-  )!;
-  assert.equal(save.disabled, true);
 });
 
-test("the top bar shows the encoding and the Save button", async () => {
-  const { document, container } = await mount("chrome.md", "Text.\n");
-  const bar = container.querySelector(".edit-toolbar")!;
-  assert.equal(bar.textContent, "UTF-8Save");
-  await act(async () => {
-    document.editor.commands.setTextSelection(3);
-    typeText(document.editor, "x");
-    await settle();
-  });
-  assert.equal(bar.textContent, "UTF-8Save");
+test("the Mixed view has no top bar; Save and the encoding are in the host's More menu", async () => {
+  const { container } = await mount("chrome.md", "Text.\n");
+  const viewer = container.querySelector(".edit-viewer")!;
+  assert.equal(viewer.querySelector("header"), null);
+  assert.equal(viewer.firstElementChild?.className, "edit-scroll");
 });
 
-test("unloading the Edit view destroys the editor without drawing the document again", async () => {
+test("unloading the Mixed view destroys the editor without drawing the document again", async () => {
   // 列表项、代码块与图片都由节点视图绘制。List items, code blocks and images are drawn by node views.
   host.files.set(
     "unload.md",

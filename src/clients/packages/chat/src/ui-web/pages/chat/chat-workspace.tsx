@@ -1646,8 +1646,12 @@ export type ChatFilePaneProps = {
   onReloadFileViewer?: (viewerId: string) => void;
   /** 查看器重新读取磁盘内容已变化的文件。The viewer reads its file changed on disk again. */
   onReloadFileViewerDocument?: (viewerId: string) => void;
-  /** 显示在刷新按钮右侧的查看器说明，选中 Source 时也显示。The viewer info right of the reload button, also with Source. */
+  /**
+   * "More" 菜单顶部的查看器说明，选中 Source 时也显示。The viewer info at the top of the "More" menu, also with Source.
+   */
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode;
+  /** 用户选择了查看器在 "More" 菜单中的条目。The user chose one of the viewer's items in the "More" menu. */
+  onSelectFileViewerItem?: (viewerId: string, itemId: string, entryId: string | null) => void;
   /** 用户为当前文件类型设置的默认查看器 id，或 "source"。The user's default viewer id for the file type, or "source". */
   defaultFileViewerId?: string | null;
   /** 把当前查看器设为默认，null 表示删除设置。Sets the current viewer as the default; null removes the setting. */
@@ -1661,6 +1665,7 @@ export function ChatFilePane({
   onReloadFileViewer,
   onReloadFileViewerDocument,
   renderFileViewerInfo,
+  onSelectFileViewerItem,
   defaultFileViewerId,
   onSetDefaultFileViewer,
 }: ChatFilePaneProps = {}) {
@@ -1691,6 +1696,7 @@ export function ChatFilePane({
       onReloadFileViewerDocument={onReloadFileViewerDocument}
       onReloadSource={() => workspace.handleFileReset(workspace.selectedFile)}
       renderFileViewerInfo={renderFileViewerInfo}
+      onSelectFileViewerItem={onSelectFileViewerItem}
       defaultFileViewerId={defaultFileViewerId}
       onSetDefaultFileViewer={onSetDefaultFileViewer}
     />

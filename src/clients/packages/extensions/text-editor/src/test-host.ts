@@ -26,6 +26,11 @@ export type TestHost = {
    * The Reload after the host's file name (the `documents.reloadRequested` event).
    */
   requestDocumentReload(): void;
+  /**
+   * 用户在宿主文件标题栏中选择了条目（`workspace.fileHeaderItemSelected` 事件）。
+   * The user chose an item in the host's file header (the `workspace.fileHeaderItemSelected` event).
+   */
+  selectFileHeaderItem(itemId: string, entryId: string | null): void;
   close(): void;
 };
 
@@ -96,6 +101,9 @@ export function connectTestHost(request: RpcRequestHandler): TestHost {
     },
     requestDocumentReload() {
       host.emit("documents.reloadRequested", null);
+    },
+    selectFileHeaderItem(itemId, entryId) {
+      host.emit("workspace.fileHeaderItemSelected", { itemId, entryId });
     },
     close() {
       page.close();

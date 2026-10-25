@@ -11,7 +11,7 @@ import { normalizeEditorDocument } from "./normalize-editor-document";
 // `rawBlock` or `frontMatter`, the text is parsed as Markdown and inserted. ProseMirror inserts raw text in code nodes.
 // The transaction carries no paste uiEvent, so Tiptap's paste rules do not rewrite text in the parsed result.
 
-/** 用 Edit 的解析与规范化把 Markdown 文字变成可以插入的片段。Turns Markdown text into an insertable slice with Edit's
+/** 用 Mixed 的解析与规范化把 Markdown 文字变成可以插入的片段。Turns Markdown text into an insertable slice with Mixed's
  *  parsing and normalization. */
 export function parseMarkdownSlice(text: string, schema: Schema): Slice {
   const doc = schema.nodeFromJSON(normalizeEditorDocument(parseEditorMarkdown(text)));

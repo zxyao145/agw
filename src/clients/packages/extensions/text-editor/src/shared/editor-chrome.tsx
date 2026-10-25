@@ -2,7 +2,6 @@ import type { DocumentSession, ExtensionApi } from "@agw/extension-sdk";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -64,36 +63,6 @@ export function useSessionValue<T extends string | number | boolean | null>(
 }
 
 /**
- * Save 按钮，有未保存修改时可用。按钮随输入变化，编辑器有焦点时 React 的每次提交都会在整个编辑区中计算选区位置，所以它
- * 订阅会话后直接修改 DOM，会话变化时不经过 React 提交。
- * The Save button, enabled with unsaved changes. It changes with typing, and while the editor has focus every React
- * commit computes the selection offsets over the whole editing area, so it subscribes to the session and updates the
- * DOM directly; a session change goes through no React commit.
- */
-export function SaveButton({ api, session }: { api: ExtensionApi; session: DocumentSession }) {
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  useLayoutEffect(() => {
-    const button = buttonRef.current!;
-    const update = () => {
-      button.disabled = session.state !== "dirty";
-    };
-    update();
-    const subscription = session.onDidChange(update);
-    return () => subscription.dispose();
-  }, [session]);
-  return (
-    <button
-      ref={buttonRef}
-      type="button"
-      className="chrome-button"
-      onClick={() => notifyFailure(api, session.save())}
-    >
-      Save
-    </button>
-  );
-}
-
-/**
  * 按钮与它打开的弹出菜单；点击外部或按 `Esc` 时关闭。`placement` 为弹出层相对按钮的方向。
  * A button and the popup menu it opens; clicking outside or pressing `Esc` closes it. `placement` is the popup's side
  * of the button.
@@ -152,7 +121,7 @@ export function PopupButton({
 }
 
 // fs.writeTextDocument 只允许这三种编码带 BOM。fs.writeTextDocument allows a BOM only for these encodings.
-const BOM_ENCODINGS = new Set(["utf-8", "utf-16le", "utf-16be"]);
+export const BOM_ENCODINGS: ReadonlySet<string> = new Set(["utf-8", "utf-16le", "utf-16be"]);
 
 /** 编码名称，带 BOM 时加 " with BOM"，例如 "UTF-8 with BOM"。The encoding name, e.g. "UTF-8 with BOM". */
 export function encodingName(format: { encoding: string; bom: boolean }): string {

@@ -9,9 +9,9 @@ import { loadMarkdown, type LoadedMarkdown, type MarkdownBaseline } from "./mark
 import { MarkdownRoundTripError, writeMarkdown } from "./markdown-writer";
 import { SlashMenuStore } from "./slash-command";
 
-// Edit 打开的文档（设计 5.7 "文档会话的接入"）：Tiptap 编辑器与它的文档会话。快照为 `editor.state.doc`，未修改的子树
+// Mixed 打开的文档（设计 5.7 "文档会话的接入"）：Tiptap 编辑器与它的文档会话。快照为 `editor.state.doc`，未修改的子树
 // 共用节点对象，`matches` 用 `Node.eq` 对比；载入执行 5.1 节并清空撤销历史；序列化为 5.6 节的写回。
-// The document Edit opens (design section 5.7, session wiring): the Tiptap editor and its document session. Snapshots
+// The document Mixed opens (design section 5.7, session wiring): the Tiptap editor and its document session. Snapshots
 // are `editor.state.doc`, whose unchanged subtrees share node objects, and `matches` compares with `Node.eq`; loading
 // runs section 5.1 and clears the undo history; serializing is the write-back of section 5.6.
 

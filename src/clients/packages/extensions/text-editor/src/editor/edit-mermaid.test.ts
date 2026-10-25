@@ -237,7 +237,7 @@ test("changing the language from mermaid removes the diagram, and changing it ba
   assert.equal(viewToggle(block).getAttribute("aria-pressed"), "false");
 });
 
-test("a theme change renders the Edit diagrams in the new theme", async () => {
+test("a theme change renders the Mixed diagrams in the new theme", async () => {
   const { container } = await mount("theme.md", SOURCE);
   const block = blockElement(container);
   await rendered(block, "Start");

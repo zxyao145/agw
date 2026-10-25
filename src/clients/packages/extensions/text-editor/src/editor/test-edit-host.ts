@@ -4,7 +4,7 @@
 // over a MessageChannel. Host files live in memory and writes check their precondition.
 import { createHash } from "node:crypto";
 
-import { createExtensionError, type PreviewImage } from "@agw/extension-sdk";
+import { createExtensionError, type FileHeaderItem, type PreviewImage } from "@agw/extension-sdk";
 import type { Editor } from "@tiptap/core";
 import { JSDOM } from "jsdom";
 
@@ -63,6 +63,8 @@ export type EditHost = TestHost & {
   readonly unsaved: boolean[];
   /** 每次报告的保存状态（`documents.setSaveStatus`）。Every reported save status (`documents.setSaveStatus`). */
   readonly saveStatuses: (string | null)[];
+  /** 每次设置的文件标题栏条目（`workspace.setFileHeaderItems`）。Every set of file header items. */
+  readonly fileHeaderItems: FileHeaderItem[][];
   readonly opened: { method: string; target: string }[];
   /** 下一次对话框的回答（按钮下标）。The answer (button index) to the next message box. */
   answers: number[];
@@ -83,7 +85,7 @@ export function fileUri(name: string): string {
   return `${ROOT}${name}`;
 }
 
-/** 内存中的宿主：Edit 用到的 RPC。An in-memory host answering the RPCs Edit uses. */
+/** 内存中的宿主：Mixed 用到的 RPC。An in-memory host answering the RPCs Mixed uses. */
 export function createEditHost(): EditHost {
   const files = new Map<string, string | Uint8Array>();
   const host: Omit<EditHost, keyof TestHost> = {
@@ -92,6 +94,7 @@ export function createEditHost(): EditHost {
     notifications: [],
     unsaved: [],
     saveStatuses: [],
+    fileHeaderItems: [],
     opened: [],
     answers: [],
     messageBoxes: [],
@@ -107,9 +110,10 @@ export function createEditHost(): EditHost {
         if (text === undefined) throw createExtensionError("ENOENT", `${name} does not exist.`);
         if (typeof text !== "string")
           throw createExtensionError("ERR_NOT_TEXT", `${name} is binary.`);
+        // 文字原样返回，编码为请求的编码。The text comes back as stored, in the requested encoding.
         return {
           text,
-          encoding: "utf-8",
+          encoding: typeof values.encoding === "string" ? values.encoding : "utf-8",
           bom: false,
           eol: text.includes("\r\n") ? "\r\n" : "\n",
           sha256: sha256(text),
@@ -139,7 +143,14 @@ export function createEditHost(): EditHost {
         return bytes;
       }
       case "fs.listTextEncodings":
-        return [{ id: "utf-8", label: "Unicode (UTF-8)" }];
+        return [
+          { id: "utf-8", label: "Unicode (UTF-8)" },
+          { id: "utf-16le", label: "Unicode (UTF-16LE)" },
+          { id: "gb18030", label: "Chinese Simplified (GB18030)" },
+        ];
+      case "workspace.setFileHeaderItems":
+        host.fileHeaderItems.push(values.items as FileHeaderItem[]);
+        return undefined;
       case "workspace.setUnsavedChanges":
         host.unsaved.push(Boolean(values.unsaved));
         return undefined;

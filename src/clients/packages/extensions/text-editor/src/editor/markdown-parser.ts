@@ -29,7 +29,7 @@ function createEditorParser(extensions: AnyExtension[] = editorExtensions): {
   return { marked, manager };
 }
 
-/** 用 Edit 的配置解析 Markdown 正文。Parses a Markdown body with Edit's configuration. */
+/** 用 Mixed 的配置解析 Markdown 正文。Parses a Markdown body with Mixed's configuration. */
 export function parseEditorMarkdown(body: string): JSONContent {
   return createEditorParser().manager.parse(body);
 }

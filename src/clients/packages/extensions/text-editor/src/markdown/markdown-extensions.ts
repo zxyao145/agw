@@ -37,10 +37,10 @@ import {
   type SpellingBudget,
 } from "./markdown-inline";
 
-// Markdown 的 Tiptap 扩展。Preview 的扩展（markdownExtensions）只用于解析，渲染由 markdown-pipeline 完成；Edit 的扩展
+// Markdown 的 Tiptap 扩展。Preview 的扩展（markdownExtensions）只用于解析，渲染由 markdown-pipeline 完成；Mixed 的扩展
 // （editMarkdownExtensions，在文件后半部分）用于解析与输出（renderMarkdown，设计 5.5）。
 // Tiptap extensions for Markdown. Preview's extensions (markdownExtensions) only parse, and markdown-pipeline renders
-// the result; Edit's extensions (editMarkdownExtensions, in the second half of this file) parse and write
+// the result; Mixed's extensions (editMarkdownExtensions, in the second half of this file) parse and write
 // (renderMarkdown, design section 5.5).
 
 // 只含一张图片或 `&nbsp;` 的 paragraph 也保留为 paragraph。A paragraph holding only an image or `&nbsp;` stays a paragraph.
@@ -303,8 +303,8 @@ export const markdownExtensions: AnyExtension[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------------------------
-// Edit 的解析与输出。与 Preview 的差异见设计 5.2 与 5.5；块级扩展记录自己返回的节点（markdown-blocks.ts）。
-// Edit's parsing and output. The differences from Preview follow design sections 5.2 and 5.5; block-level extensions
+// Mixed 的解析与输出。与 Preview 的差异见设计 5.2 与 5.5；块级扩展记录自己返回的节点（markdown-blocks.ts）。
+// Mixed's parsing and output. The differences from Preview follow design sections 5.2 and 5.5; block-level extensions
 // record the nodes they return (markdown-blocks.ts).
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -360,9 +360,9 @@ function starterKitMark(name: string): Mark {
 }
 
 /**
- * 输出行内内容的 Edit 扩展的选项：本次保存的行内写法搜索（见 markdown-inline.ts 的 SpellingBudget）。输出只发生在
+ * 输出行内内容的 Mixed 扩展的选项：本次保存的行内写法搜索（见 markdown-inline.ts 的 SpellingBudget）。输出只发生在
  * 保存中，createEditorRenderer 用 configure 设置它；没有设置时输出抛出错误。
- * The option of the Edit extensions that write inline content: this save's inline spelling search (see
+ * The option of the Mixed extensions that write inline content: this save's inline spelling search (see
  * SpellingBudget in markdown-inline.ts). Writing happens only while saving, and createEditorRenderer sets it with
  * configure; without it, writing throws.
  */
@@ -715,8 +715,8 @@ const EditLink = Link.extend({
 }).configure({ openOnClick: false, autolink: false, linkOnPaste: false });
 
 /**
- * Edit 的 Markdown 扩展（编辑器专用的节点在 src/editor/editor-nodes.ts）。Preview 不使用。
- * Edit's Markdown extensions (editor-only nodes live in src/editor/editor-nodes.ts). Preview does not use them.
+ * Mixed 的 Markdown 扩展（编辑器专用的节点在 src/editor/editor-nodes.ts）。Preview 不使用。
+ * Mixed's Markdown extensions (editor-only nodes live in src/editor/editor-nodes.ts). Preview does not use them.
  */
 export const editMarkdownExtensions: AnyExtension[] = [
   editStarterKitExtensions.get("text")!,

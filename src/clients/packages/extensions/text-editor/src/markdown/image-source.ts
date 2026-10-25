@@ -1,4 +1,4 @@
-// Markdown 中项目内图片的读取，Preview 与 Edit 共用。Reading of project images referenced by Markdown, shared by Preview and Edit.
+// Markdown 中项目内图片的读取，Preview 与 Mixed 共用。Reading of project images referenced by Markdown, shared by Preview and Mixed.
 import type { FileSystemApi } from "@agw/extension-sdk";
 
 import { imageMimeType } from "./markdown-links";
