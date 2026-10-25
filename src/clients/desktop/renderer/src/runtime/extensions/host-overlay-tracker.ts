@@ -1,8 +1,11 @@
 /**
- * `@agw/components` 中经 Portal 渲染的内容与遮罩的 `data-slot`。新增经 Portal 渲染的组件时同时加入这里与测试。
- * `data-slot`s of portaled content and overlays in `@agw/components`; add new portaled components here and to the test.
+ * `@agw/components` 中经 Portal 渲染的内容与遮罩的 `data-slot`，以及 `@agw/chat` 的图片预览（`IMAGE_PREVIEW_SLOT`）。
+ * 新增经 Portal 渲染的组件时同时加入这里与测试。
+ * `data-slot`s of portaled content and overlays in `@agw/components`, plus the image preview of `@agw/chat`
+ * (`IMAGE_PREVIEW_SLOT`); add new portaled components here and to the test.
  */
 export const OVERLAY_SLOTS = [
+  "image-preview",
   "dialog-content",
   "dialog-overlay",
   "alert-dialog-content",
@@ -23,6 +26,7 @@ export const OVERLAY_SLOTS = [
 
 /** 覆盖整个窗口的遮罩。Overlays covering the whole window. */
 const MODAL_SLOTS: ReadonlySet<string> = new Set([
+  "image-preview",
   "dialog-overlay",
   "alert-dialog-overlay",
   "sheet-overlay",

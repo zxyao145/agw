@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useDesktopTheme } from "../appearance/theme-provider";
 import { useDesktopRuntime } from "../runtime-provider";
 import { normalizeBaseUrl } from "./context-service";
+import { ExtensionImagePreview } from "./extension-image-preview";
 import { type ExtensionRuntime, getExtensionRuntime } from "./extension-runtime";
 
 const ExtensionHostContext = React.createContext<ExtensionRuntime | null>(null);
@@ -98,7 +99,12 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
   }, [value, publishedTheme]);
   React.useEffect(() => () => value?.layout.setContinuous(false), [value]);
 
-  return <ExtensionHostContext value={value}>{children}</ExtensionHostContext>;
+  return (
+    <ExtensionHostContext value={value}>
+      {children}
+      {value ? <ExtensionImagePreview host={value.host} /> : null}
+    </ExtensionHostContext>
+  );
 }
 
 /** 宿主与遮挡跟踪器；预渲染阶段为 null。The host and overlay tracker; null while prerendering. */

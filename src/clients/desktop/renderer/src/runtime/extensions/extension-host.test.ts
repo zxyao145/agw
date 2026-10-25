@@ -375,6 +375,120 @@ test("closing a frame removes its queued and shown message boxes and the calls f
   assert.equal(await other, 0);
 });
 
+/** 预览图片的 SVG 文字。The SVG text of a preview image. */
+function svgText(label: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><text>${label}</text></svg>`;
+}
+
+function svgImage(label: string, name = `${label}.svg`) {
+  return { data: new TextEncoder().encode(svgText(label)), type: "image/svg+xml" as const, name };
+}
+
+/** 显示中的图片预览；没有时为 undefined，供 `until` 等待。The image preview showing, or undefined for `until`. */
+function currentPreview() {
+  return host.getSnapshot().imagePreview ?? undefined;
+}
+
+/** Blob URL 指向的文字；URL 已释放时为 null。The text a Blob URL points at, or null once revoked. */
+async function blobText(src: string): Promise<string | null> {
+  return (await environment.objectUrls.get(src)?.text()) ?? null;
+}
+
+test("image previews show one at a time, settle when closed, and release their Blob URLs", async () => {
+  const file = fileNamed("notes.md");
+  const viewer = await showLoaded(VIEWER, file);
+  const outline = await showLoaded(OUTLINE, file);
+
+  const first = (await viewer.page.api).ui.previewImage(svgImage("first"));
+  const shown = await until(currentPreview, "the first preview");
+  assert.equal(shown.name, "first.svg");
+  assert.match(shown.src, /^blob:/);
+  assert.equal(await blobText(shown.src), svgText("first"));
+
+  // 新的预览替换当前预览，被替换的调用完成。A new preview replaces the current one, whose call settles.
+  const second = (await outline.page.api).ui.previewImage(svgImage("second"));
+  assert.equal(await first, undefined);
+  const replaced = await until(
+    () => currentPreview()?.name === "second.svg" && currentPreview(),
+    "the second preview",
+  );
+  assert.notEqual(replaced.id, shown.id);
+  assert.equal(await blobText(shown.src), null);
+
+  // 关闭旧的预览不影响当前预览。Closing an earlier preview leaves the current one.
+  host.closeImagePreview(shown.id);
+  assert.equal(host.getSnapshot().imagePreview, replaced);
+  host.closeImagePreview(replaced.id);
+  assert.equal(await second, undefined);
+  assert.equal(host.getSnapshot().imagePreview, null);
+  assert.equal(await blobText(replaced.src), null);
+});
+
+test("closing a frame closes its image preview and the call fails with ERR_FRAME_GONE", async () => {
+  const file = fileNamed("notes.md");
+  const viewer = await showLoaded(VIEWER, file);
+  await showLoaded(OUTLINE, file);
+  const pending = (await viewer.page.api).ui.previewImage(svgImage("closing"));
+  const failure = assert.rejects(pending, { code: "ERR_FRAME_GONE" });
+  const shown = await until(currentPreview, "the preview");
+
+  host.retainFileViewers([OUTLINE]);
+  await failure;
+  assert.equal(host.getSnapshot().imagePreview, null);
+  assert.equal(await blobText(shown.src), null);
+});
+
+test("a replaced page's image preview closes while the frame stays", async () => {
+  const file = fileNamed("notes.md");
+  const viewer = await showLoaded(VIEWER, file);
+  const pending = (await viewer.page.api).ui.previewImage(svgImage("replaced"));
+  await until(currentPreview, "the preview");
+  const frameId = host.frameIdOfView(VIEWER)!;
+
+  main.emit({
+    type: "frame-page-replaced",
+    extensionId: "sample",
+    frameId,
+    pageId: main.pageIds.get(frameId)!,
+  });
+  // 旧文档已经不存在，它一侧的端口随之关闭。The old document is gone and its side of the port closes with it.
+  viewer.page.endpoint.close();
+  await assert.rejects(pending, { code: "ERR_CONNECTION_CLOSED" });
+  await until(() => host.getSnapshot().imagePreview === null, "the preview to close");
+  assert.equal(host.frameIdOfView(VIEWER), frameId);
+});
+
+test("the host shows a view's image preview over the window and settles the call when the user closes it", async () => {
+  const { ExtensionImagePreview } = await import("./extension-image-preview");
+  const rendered = environment.render(
+    environment.React.createElement(ExtensionImagePreview, { host }) as Parameters<
+      DomEnvironment["render"]
+    >[0],
+  );
+  const viewer = await showLoaded(VIEWER, fileNamed("notes.md"));
+  const pending = (await viewer.page.api).ui.previewImage(svgImage("shown", "diagram.svg"));
+  const shown = await until(currentPreview, "the preview");
+
+  const root = await until(
+    () => document.querySelector<HTMLElement>('[data-slot="image-preview"]') ?? undefined,
+    "the preview root",
+  );
+  assert.equal(root.getAttribute("role"), "dialog");
+  const image = await until(() => root.querySelector("img") ?? undefined, "the preview image");
+  assert.equal(image.getAttribute("src"), shown.src);
+  assert.equal(image.getAttribute("alt"), "diagram.svg");
+
+  await environment.act(async () => {
+    environment.fireEvent.click(environment.screen.getByRole("button", { name: "Close" }));
+  });
+  assert.equal(await pending, undefined);
+  await until(
+    () => document.querySelector('[data-slot="image-preview"]') === null,
+    "the preview to close",
+  );
+  rendered.unmount();
+});
+
 test("a replaced page's message boxes leave the queue while the frame stays", async () => {
   const file = fileNamed("notes.md");
   const viewer = await showLoaded(VIEWER, file);

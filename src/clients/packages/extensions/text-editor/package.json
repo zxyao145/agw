@@ -52,6 +52,7 @@
     "marked-footnote": "catalog:",
     "mdast-util-gfm": "catalog:",
     "mdast-util-to-markdown": "catalog:",
+    "mermaid": "catalog:",
     "micromark-util-classify-character": "catalog:",
     "micromark-util-decode-string": "catalog:",
     "monaco-editor": "catalog:",

@@ -386,6 +386,9 @@ catalogs:
     mdast-util-to-markdown:
       specifier: 2.1.2
       version: 2.1.2
+    mermaid:
+      specifier: 12.0.0
+      version: 12.0.0
     micromark-util-classify-character:
       specifier: 2.0.1
       version: 2.0.1
@@ -917,7 +920,7 @@ importers:
         specifier: 0.12.0
         version: 0.12.0
       mermaid:
-        specifier: 12.0.0
+        specifier: 'catalog:'
         version: 12.0.0
       reactflow:
         specifier: 11.11.4
@@ -1383,6 +1386,9 @@ importers:
       mdast-util-to-markdown:
         specifier: 'catalog:'
         version: 2.1.2
+      mermaid:
+        specifier: 'catalog:'
+        version: 12.0.0
       micromark-util-classify-character:
         specifier: 'catalog:'
         version: 2.0.1

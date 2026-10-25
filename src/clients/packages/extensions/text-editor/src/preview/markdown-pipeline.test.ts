@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { JSDOM } from "jsdom";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+
+import type { MermaidBlockProps } from "./markdown-pipeline";
 
 // 浏览器中有 window.DOMParser，测试与浏览器走同一条 HTML 解析路径。
 // Browsers have window.DOMParser, so the tests take the browser's HTML parsing path.
@@ -48,6 +51,20 @@ test("fenced code with a language is highlighted", () => {
   const html = render("```ts\nconst answer = 42;\n```\n\n```\nplain\n```");
   assert.match(html, /<code class="hljs language-ts"><span class="hljs-keyword">const<\/span>/);
   assert.match(html, /<pre><code>plain\n<\/code><\/pre>/);
+});
+
+test("Mermaid code blocks stay code blocks without a mermaid component and go to it with one", () => {
+  const markdown = "```mermaid\nflowchart LR\n```";
+  assert.match(
+    render(markdown),
+    /<pre><code class="language-mermaid">flowchart LR\n<\/code><\/pre>/,
+  );
+  const figure = ({ source, children }: MermaidBlockProps) =>
+    createElement("figure", { "data-source": source }, children);
+  assert.equal(
+    renderToStaticMarkup(renderMarkdown(markdown, { mermaid: figure })),
+    '<figure data-source="flowchart LR"><pre><code class="language-mermaid">flowchart LR\n</code></pre></figure>',
+  );
 });
 
 test("image sources stay unchanged while unsafe link URLs are removed", () => {

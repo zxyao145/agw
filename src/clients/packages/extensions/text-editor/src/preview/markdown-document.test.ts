@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 
-import { createExtensionError, type TextDocument } from "@agw/extension-sdk";
+import { createExtensionError, type PreviewImage, type TextDocument } from "@agw/extension-sdk";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 
 import { connectTestHost } from "../test-host";
+import { installMermaidDom } from "../test-mermaid-dom";
 
 // React 在 jsdom 的 document 中渲染，Markdown 管线使用 window.DOMParser。
 // React renders into jsdom's document, and the Markdown pipeline uses window.DOMParser.
@@ -14,8 +15,10 @@ Object.assign(globalThis, {
   window,
   document: window.document,
   DOMParser: window.DOMParser,
+  getComputedStyle: window.getComputedStyle.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 });
+installMermaidDom(window);
 
 const { createRoot } = await import("react-dom/client");
 const { MarkdownDocument } = await import("./markdown-document");
@@ -38,8 +41,15 @@ function textDocument(text: string): TextDocument {
   return { text, encoding: "utf-8", bom: false, eol: "\n", sha256: "0".repeat(64) };
 }
 
+/** 每次 `ui.previewImage` 的图片；宿主收到后立即作为已关闭回答。Every `ui.previewImage` image, answered as closed. */
+const previewImages: PreviewImage[] = [];
+
 const host = connectTestHost(async (method, params) => {
   if (method === "fs.listTextEncodings") return ENCODINGS;
+  if (method === "ui.previewImage") {
+    previewImages.push(params as PreviewImage);
+    return undefined;
+  }
   assert.equal(method, "fs.readTextDocument");
   const { uri, encoding } = params as { uri: string; encoding?: string };
   reads.push({ uri, encoding: encoding ?? null });
@@ -266,6 +276,88 @@ test("choosing an encoding that still fails shows the panel again, and choosing 
       { uri: `${ROOT}unknown.md`, encoding: "utf-8" },
       { uri: `${ROOT}unknown.md`, encoding: "utf-8" },
     ]);
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+/** Mermaid 代码块与它的图表 SVG 文字。The Mermaid block and its diagram's SVG text. */
+function mermaidBlock(viewer: Viewer): { block: HTMLElement | null; svg: string } {
+  const block = viewer.container.querySelector<HTMLElement>("article.markdown-body .mermaid-block");
+  return { block, svg: block?.querySelector(".mermaid-diagram > svg")?.outerHTML ?? "" };
+}
+
+test("clicking a rendered Mermaid diagram asks the host to preview it as an SVG image", async () => {
+  document.documentElement.style.setProperty("--background", "rgb(255, 255, 255)");
+  files.set(`${ROOT}preview.md`, {
+    text: '```mermaid\nflowchart LR\n  a["Previewed"] --> b["End"]\n```\n',
+  });
+  previewImages.length = 0;
+  const viewer = mountViewer();
+  try {
+    await viewer.show("preview.md");
+    await until(viewer, () => mermaidBlock(viewer).svg.includes("Previewed"), "the diagram");
+    await act(async () => {
+      (
+        mermaidBlock(viewer).block!.querySelector(".mermaid-diagram > svg") as SVGElement
+      ).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    await until(viewer, () => previewImages.length === 1, "the preview request");
+    const [image] = previewImages;
+    assert.equal(image!.type, "image/svg+xml");
+    assert.equal(image!.name, "mermaid-diagram.svg");
+    const svg = new window.DOMParser().parseFromString(
+      new TextDecoder().decode(image!.data),
+      "image/svg+xml",
+    ).documentElement;
+    assert.equal(svg.localName, "svg");
+    assert.equal(svg.firstElementChild!.getAttribute("fill"), "rgb(255, 255, 255)");
+    assert.ok(svg.textContent!.includes("Previewed"));
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+test("a Mermaid code block shows its diagram, and a changed file keeps the diagram until the new one renders", async () => {
+  const diagram = (label: string) =>
+    `# Diagram\n\n\`\`\`mermaid\nflowchart LR\n  a["${label}"] --> b["End"]\n\`\`\`\n`;
+  files.set(`${ROOT}diagram.md`, { text: diagram("Start") });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("diagram.md");
+    await until(viewer, () => mermaidBlock(viewer).svg.includes("Start"), "the diagram");
+    const { block } = mermaidBlock(viewer);
+    assert.equal(block!.dataset.diagram, "rendered");
+    // 源码仍在，由样式隐藏。The source stays and the styles hide it.
+    assert.equal(
+      block!.querySelector("pre > code.language-mermaid")?.textContent?.startsWith("flowchart LR"),
+      true,
+    );
+    const element = block!.querySelector(".mermaid-diagram");
+
+    files.set(`${ROOT}diagram.md`, { text: diagram("Changed") });
+    await viewer.show("diagram.md");
+    await until(viewer, () => mermaidBlock(viewer).svg.includes("Changed"), "the changed diagram");
+    assert.equal(mermaidBlock(viewer).block!.querySelector(".mermaid-diagram"), element);
+  } finally {
+    await viewer.unmount();
+  }
+});
+
+test("a Mermaid syntax error shows the error below the source", async () => {
+  files.set(`${ROOT}broken.md`, { text: "```mermaid\nflowchart LR\n  a -->\n```\n" });
+  const viewer = mountViewer();
+  try {
+    await viewer.show("broken.md");
+    await until(
+      viewer,
+      () => mermaidBlock(viewer).block?.dataset.diagram === "failed",
+      "the error",
+    );
+    const { block, svg } = mermaidBlock(viewer);
+    assert.equal(svg, "");
+    assert.match(block!.querySelector(".mermaid-diagram-error")!.textContent!, /Parse error/);
+    assert.ok(block!.querySelector("pre > code.language-mermaid"));
   } finally {
     await viewer.unmount();
   }

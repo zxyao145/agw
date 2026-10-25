@@ -8,8 +8,13 @@ export * from "./ui-web/components/message/chat";
 export * from "./ui-web/components/message/chat-extension-types";
 export {
   ConversationImagePlatformProvider,
+  type ConversationImageSource,
   type ImageContextMenuRequest,
 } from "./ui-web/components/message/conversation-image";
+export {
+  IMAGE_PREVIEW_SLOT,
+  ImagePreview,
+} from "./ui-web/components/message/conversation-image-preview";
 export {
   MarkdownRendererProvider,
   type MarkdownRenderer,

@@ -113,6 +113,38 @@ body {
   border: 0;
 }
 
+/* Mermaid 代码块：图表渲染出来后隐藏源码；源码有错误时错误信息在源码下方。外间距取块间距，首尾块不留外间距。
+   Mermaid code blocks: the source hides once the diagram renders; an error shows below the source. The block gap is
+   the outer margin, and the first and last blocks carry none. */
+.markdown-body .mermaid-block {
+  margin-block: var(--agw-prose-block-gap);
+}
+
+.markdown-body > .mermaid-block:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > .mermaid-block:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body .mermaid-block > pre {
+  margin-block: 0;
+}
+
+.markdown-body .mermaid-block[data-diagram="rendered"] > pre {
+  display: none;
+}
+
+/* 点击图表由宿主预览。Clicking the diagram has the host preview it. */
+.markdown-body .mermaid-block[data-diagram="rendered"] .mermaid-diagram {
+  cursor: zoom-in;
+}
+
+.markdown-body .mermaid-block .mermaid-diagram-error {
+  margin-top: 0.5em;
+}
+
 /* 表格。Tables. */
 .markdown-body table {
   display: block;

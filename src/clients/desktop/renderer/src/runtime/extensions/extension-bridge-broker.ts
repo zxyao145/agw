@@ -24,6 +24,7 @@ import {
   type ExtensionWelcome,
   fromExtensionErrorData,
   type HostContext,
+  type PreviewImageType,
   RpcEndpoint,
   type RpcPort,
   type ThemeChangedNotification,
@@ -42,6 +43,8 @@ import type { WorkspaceLayoutStore } from "./workspace-layout-store";
 import { resolveViewId } from "./workspace-ids";
 
 export const MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION = 16;
+/** `ui.previewImage` 的图片大小上限。The size limit of a `ui.previewImage` image. */
+export const MAX_PREVIEW_IMAGE_BYTES = 32 * 1024 * 1024;
 
 /** broker 需要的 extension 当前状态。The extension state the broker needs. */
 export type BrokerExtension = {
@@ -129,6 +132,15 @@ export type ExtensionBridgeBrokerOptions = {
   confirmOpenExternal(extensionId: string, url: string): Promise<boolean>;
   /** 在宿主的确认队列中显示消息框，返回按钮下标。Shows a message box in the host's confirmation queue and returns the button index. */
   showMessageBox(owner: SessionOwner, request: MessageBoxRequest): Promise<number>;
+  /** 在宿主窗口上显示图片预览，用户关闭时完成。Shows an image preview over the host window; settles when the user closes it. */
+  previewImage(owner: SessionOwner, request: ImagePreviewRequest): Promise<void>;
+};
+
+/** 检查后的 `ui.previewImage` 参数。Checked `ui.previewImage` options. */
+export type ImagePreviewRequest = {
+  data: Uint8Array<ArrayBuffer>;
+  type: PreviewImageType;
+  name: string;
 };
 
 type RequestHandler = (connection: FrameConnection, params: never, signal: AbortSignal) => unknown;
@@ -225,6 +237,37 @@ function toMessageBoxRequest(options: unknown): MessageBoxRequest {
     defaultId: buttonIndex(defaultId, buttons.length, "defaultId"),
     cancelId: buttonIndex(cancelId, buttons.length, "cancelId") ?? buttons.length - 1,
   };
+}
+
+const PREVIEW_IMAGE_TYPES: ReadonlySet<unknown> = new Set<PreviewImageType>([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/bmp",
+  "image/svg+xml",
+]);
+
+/** 检查 `ui.previewImage` 的图片。Checks the `ui.previewImage` image. */
+function toImagePreviewRequest(image: unknown): ImagePreviewRequest {
+  if (typeof image !== "object" || image === null) {
+    throw invalidArgument("The image must be an object.");
+  }
+  const { data, type, name } = image as Record<string, unknown>;
+  if (
+    !(data instanceof Uint8Array) ||
+    !(data.buffer instanceof ArrayBuffer) ||
+    data.byteLength < 1 ||
+    data.byteLength > MAX_PREVIEW_IMAGE_BYTES
+  ) {
+    throw invalidArgument("data must be a Uint8Array of 1 byte to 32 MiB.");
+  }
+  if (!PREVIEW_IMAGE_TYPES.has(type)) {
+    throw invalidArgument(`type must be one of ${[...PREVIEW_IMAGE_TYPES].join(", ")}.`);
+  }
+  if (!isText(name, 1, 255)) throw invalidArgument("name must have 1 to 255 characters.");
+  return { data: data as Uint8Array<ArrayBuffer>, type: type as PreviewImageType, name };
 }
 
 function fileKind(uri: string): "local" | "cloud" {
@@ -1046,6 +1089,12 @@ export class ExtensionBridgeBroker {
         }
         await bridge().openExternal(params.url);
         return null;
+      },
+      "ui.previewImage": (connection, params) => {
+        if (connection.kind === "background") {
+          throw createExtensionError("ERR_UNSUPPORTED_OPERATION", "Only views can preview images.");
+        }
+        return this.options.previewImage(this.owner(connection), toImagePreviewRequest(params));
       },
     };
   }

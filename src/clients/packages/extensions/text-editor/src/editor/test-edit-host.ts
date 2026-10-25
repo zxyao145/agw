@@ -4,11 +4,12 @@
 // over a MessageChannel. Host files live in memory and writes check their precondition.
 import { createHash } from "node:crypto";
 
-import { createExtensionError } from "@agw/extension-sdk";
+import { createExtensionError, type PreviewImage } from "@agw/extension-sdk";
 import type { Editor } from "@tiptap/core";
 import { JSDOM } from "jsdom";
 
 import { connectTestHost, type TestHost } from "../test-host";
+import { installMermaidDom } from "../test-mermaid-dom";
 
 const { window } = new JSDOM("<!doctype html><html><body></body></html>", {
   pretendToBeVisual: true,
@@ -42,6 +43,7 @@ Object.assign(globalThis, {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 });
+installMermaidDom(window);
 
 export const ROOT = "agw-cloud://local/project-1/workspace/";
 
@@ -65,6 +67,9 @@ export type EditHost = TestHost & {
   /** 下一次对话框的回答（按钮下标）。The answer (button index) to the next message box. */
   answers: number[];
   readonly messageBoxes: unknown[];
+  /** 每次 `ui.previewImage` 的图片；宿主收到后立即作为已关闭回答。Every `ui.previewImage` image; the host answers each
+   *  as closed at once. */
+  readonly previewImages: PreviewImage[];
   /** 设置后，下一次写入以这个错误码失败。When set, the next write fails with this code. */
   failNextWrite: string | null;
 };
@@ -90,6 +95,7 @@ export function createEditHost(): EditHost {
     opened: [],
     answers: [],
     messageBoxes: [],
+    previewImages: [],
     failNextWrite: null,
   };
   const testHost = connectTestHost(async (method, params) => {
@@ -148,6 +154,9 @@ export function createEditHost(): EditHost {
         return undefined;
       case "ui.openExternal":
         host.opened.push({ method, target: String(values.url) });
+        return undefined;
+      case "ui.previewImage":
+        host.previewImages.push(params as PreviewImage);
         return undefined;
       case "dialog.showMessageBox": {
         host.messageBoxes.push(params);

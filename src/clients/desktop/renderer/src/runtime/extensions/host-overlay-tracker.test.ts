@@ -3,10 +3,12 @@ import test, { before } from "node:test";
 
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
 type Components = typeof import("@agw/components");
+type Chat = typeof import("@agw/chat");
 type Tracker = typeof import("./host-overlay-tracker");
 
 let environment: DomEnvironment;
 let components: Components;
+let chat: Chat;
 let tracker: Tracker;
 
 // desktop 的测试按 CommonJS 编译，DOM 环境在 before 中建立。Desktop tests compile to CommonJS, so the DOM is set up in before.
@@ -35,6 +37,7 @@ before(async () => {
     }),
   });
   components = await import("@agw/components");
+  chat = await import("@agw/chat");
   tracker = await import("./host-overlay-tracker");
 });
 
@@ -64,7 +67,17 @@ type Case = {
   expected: string[];
 };
 
+const PREVIEW_IMAGE = {
+  src: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E",
+  alt: "Diagram",
+};
+
 const cases: Case[] = [
+  {
+    name: "ImagePreview",
+    element: () => h(chat.ImagePreview, { image: PREVIEW_IMAGE, onClose: () => undefined }),
+    expected: ["image-preview"],
+  },
   {
     name: "Dialog",
     element: () =>
@@ -238,6 +251,20 @@ for (const { name, element, open, expected } of cases) {
     assert.deepEqual(openSlots(), [], name);
   });
 }
+
+test("the image preview covers the whole window, so every extension view gets a snapshot", async () => {
+  const view = environment.render(
+    h(chat.ImagePreview, { image: PREVIEW_IMAGE, onClose: () => undefined }) as Parameters<
+      DomEnvironment["render"]
+    >[0],
+  );
+  await settle();
+  const preview = findOpenOverlays(document).find((overlay) => overlay.slot === "image-preview");
+  assert.equal(preview?.modal, true);
+  assert.equal(chat.IMAGE_PREVIEW_SLOT, "image-preview");
+  view.unmount();
+  await settle();
+});
 
 test("sonner toasts are found", async () => {
   const view = environment.render(

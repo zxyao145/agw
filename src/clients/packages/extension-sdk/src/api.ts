@@ -305,6 +305,19 @@ export interface ExtensionApi {
      * Opens an `http:` or `https:` URL in the system browser. URLs on approved hosts open directly; others need the user's confirmation.
      */
     openExternal(url: string): Promise<void>;
+    /**
+     * 在 Desktop 窗口上显示图片预览，与聊天中的图片预览相同：滚轮与按钮缩放，拖动平移，右键菜单复制或另存图片，点击背景
+     * 或 `Esc` 关闭。用户关闭时 resolve；同一时间只有一个预览，新的预览替换当前预览，被替换的调用 resolve；发出调用的页面
+     * 关闭或被替换时预览关闭，调用为 `ERR_FRAME_GONE`。只有视图可以调用，background 为 `ERR_UNSUPPORTED_OPERATION`；
+     * 图片不符合 `PreviewImage` 的要求时为 `ERR_INVALID_ARGUMENT`。
+     * Shows an image preview over the Desktop window, the same as the chat's image preview: wheel and button zoom, drag
+     * to pan, a context menu that copies or saves the image, and closing by clicking the backdrop or `Esc`. Resolves when
+     * the user closes it. One preview shows at a time: a new preview replaces the current one, whose call resolves; when
+     * the calling page closes or is replaced the preview closes and the call fails with `ERR_FRAME_GONE`. Views only;
+     * the background gets `ERR_UNSUPPORTED_OPERATION`. An image not meeting `PreviewImage` fails with
+     * `ERR_INVALID_ARGUMENT`.
+     */
+    previewImage(image: PreviewImage): Promise<void>;
   };
   readonly theme: {
     /** 当前主题的完整状态，CSS 主题包含 `cssText`。The complete current theme; CSS themes include `cssText`. */
@@ -331,6 +344,31 @@ export interface ExtensionApi {
      */
     apply(): Disposable;
   };
+}
+
+/** `ui.previewImage` 支持的图片类型。The image types `ui.previewImage` supports. */
+export type PreviewImageType =
+  | "image/png"
+  | "image/jpeg"
+  | "image/gif"
+  | "image/webp"
+  | "image/avif"
+  | "image/bmp"
+  | "image/svg+xml";
+
+/** `ui.previewImage` 显示的图片。The image `ui.previewImage` shows. */
+export interface PreviewImage {
+  /**
+   * 图片文件的内容，1 字节到 32 MiB；它的 ArrayBuffer 随调用转移给宿主。
+   * The image file's bytes, from 1 byte to 32 MiB; its ArrayBuffer is transferred to the host by the call.
+   */
+  data: Uint8Array;
+  type: PreviewImageType;
+  /**
+   * 1 到 255 个字符，用作替代文字与 "Save image as…" 的默认文件名。
+   * 1 to 255 characters, used as the alt text and the default file name of "Save image as…".
+   */
+  name: string;
 }
 
 export interface BackgroundDefinition {

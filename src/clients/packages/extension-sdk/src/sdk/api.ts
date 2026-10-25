@@ -291,6 +291,7 @@ export function createExtensionApi(
         void call("ui.notify", notification).catch((error: unknown) => console.error(error));
       },
       openExternal: (url) => call("ui.openExternal", { url }),
+      previewImage: (image) => call("ui.previewImage", image),
     },
     theme: {
       get: () => themeState.theme,

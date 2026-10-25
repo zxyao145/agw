@@ -54,6 +54,7 @@ function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHost
     viewErrors: {},
     unsavedViewIds: [],
     saveStatuses: {},
+    imagePreview: null,
     ...overrides,
   };
 }

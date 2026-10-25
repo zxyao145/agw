@@ -3,6 +3,7 @@ import {
   createContext,
   use,
   useEffect,
+  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type MouseEvent,
@@ -10,7 +11,12 @@ import {
 import { createImageObjectUrl } from "../markdown/image-source";
 import { classifyImage, classifyLink } from "../markdown/markdown-links";
 import { errorMessage, notifyFailure } from "../shared/errors";
-import type { MarkdownComponents, MarkdownImageProps } from "./markdown-pipeline";
+import { MermaidDiagram, type MermaidDiagramState } from "../shared/mermaid-diagram";
+import type {
+  MarkdownComponents,
+  MarkdownImageProps,
+  MermaidBlockProps,
+} from "./markdown-pipeline";
 
 /** 当前渲染的文件与 API。The file being rendered and the API. */
 export type MarkdownContextValue = { api: ExtensionApi; fileUri: string };
@@ -105,4 +111,49 @@ function MarkdownImage({ src, alt, title }: MarkdownImageProps) {
   return <CloudImage key={source.uri} uri={source.uri} alt={alt} title={title} />;
 }
 
-export const markdownComponents: MarkdownComponents = { a: MarkdownLink, img: MarkdownImage };
+/**
+ * Mermaid 代码块（Mermaid 设计第 5 节）：图表渲染出来后隐藏源码，点击图表由宿主在 Desktop 窗口上预览；源码有错误时同时
+ * 显示源码与错误信息。源码变化时保留当前图表直到新的结果出来。
+ * A Mermaid code block (Mermaid design section 5): the source hides once the diagram renders, and clicking the diagram
+ * has the host preview it over the Desktop window; a source error shows the source with the error. When the source
+ * changes, the current diagram stays until the new result arrives.
+ */
+function MermaidBlock({ source, children }: MermaidBlockProps) {
+  const { api } = useMarkdownContext();
+  const container = useRef<HTMLDivElement>(null);
+  const diagram = useRef<MermaidDiagram | null>(null);
+  const [state, setState] = useState<MermaidDiagramState>(source.trim() ? "pending" : "empty");
+
+  useEffect(() => {
+    const created = new MermaidDiagram(api, () => setState(created.state));
+    container.current!.append(created.dom);
+    diagram.current = created;
+    return () => {
+      created.destroy();
+      created.dom.remove();
+      diagram.current = null;
+    };
+  }, [api]);
+
+  useEffect(() => {
+    diagram.current!.update(source);
+    setState(diagram.current!.state);
+  }, [api, source]);
+
+  const open = () => {
+    if (diagram.current?.state === "rendered") notifyFailure(api, diagram.current.openPreview());
+  };
+
+  return (
+    <div className="mermaid-block" data-diagram={state}>
+      {children}
+      <div ref={container} onClick={open} />
+    </div>
+  );
+}
+
+export const markdownComponents: MarkdownComponents = {
+  a: MarkdownLink,
+  img: MarkdownImage,
+  mermaid: MermaidBlock,
+};

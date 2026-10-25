@@ -9,6 +9,7 @@ import { EditDocument } from "./edit-document";
 import { EditView, unmountEditView } from "./edit-view";
 import "../shared/document-error.css";
 import "../shared/editor-chrome.css";
+import "../shared/mermaid-diagram.css";
 import "./edit.css";
 
 const container = document.getElementById("root");

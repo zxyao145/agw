@@ -196,15 +196,51 @@ body {
 }
 
 .edit-content .code-block-header select:hover,
-.edit-content .code-block-header button:hover {
+.edit-content .code-block-header button:hover,
+.edit-content .code-block-header button[aria-pressed="true"] {
   background: var(--accent);
   color: var(--accent-foreground);
+}
+
+.edit-content .code-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .edit-content :is(.code-block, .raw-block) pre {
   margin: 0;
   padding: 0.5em 1em 0.75em;
   white-space: pre;
+}
+
+/* Mermaid 代码块：图表在源码下方。默认视图中图表渲染出来并且光标不在代码块中时隐藏源码，点击图表进入源码；
+   "Diagram only" 视图始终隐藏源码，点击图表由宿主预览，代码块像图片一样整体选中。
+   Mermaid code blocks: the diagram sits below the source. In the default view the source hides once the diagram renders
+   unless the cursor is in the block, and clicking the diagram enters the source; the Diagram only view always hides the
+   source, clicking the diagram has the host preview it, and the block is selected as a whole like an image. */
+.edit-content .code-block[data-diagram="rendered"]:not([data-editing]) > pre,
+.edit-content .code-block[data-view="diagram"] > pre {
+  display: none;
+}
+
+.edit-content .code-block .mermaid-diagram {
+  padding: 0.5em 1em 0.75em;
+  cursor: text;
+}
+
+.edit-content .code-block[data-view="diagram"][data-diagram="rendered"] .mermaid-diagram {
+  cursor: zoom-in;
+}
+
+.edit-content
+  .code-block:not([data-view="diagram"]):is([data-editing], [data-diagram="failed"])
+  .mermaid-diagram {
+  border-top: 1px dashed var(--border);
+}
+
+.edit-content .code-block.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
 }
 
 /* 原文块与 front matter：等宽字体，左上角的标签。Raw blocks and front matter: monospace with a top-left label. */

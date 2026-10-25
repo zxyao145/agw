@@ -29,13 +29,22 @@ import { jsx, jsxs } from "react/jsx-runtime";
 import { footnoteId, footnoteRefId } from "../markdown/markdown-extensions";
 import { normalizeMarkdownDocument } from "../markdown/normalize-document";
 import { parseMarkdown } from "../markdown/parse-markdown";
+import { isMermaidLanguage } from "../shared/mermaid-render";
 
 export type MarkdownImageProps = { src?: string; alt?: string; title?: string };
 
-/** 与 react-markdown 的 components 作用相同；不传时输出普通的 a 与 img。Like react-markdown's components; plain a and img by default. */
+/** Mermaid 代码块：`source` 为源码，`children` 为源码的代码块。A Mermaid code block: `source` is the source and
+ *  `children` the source's code block. */
+export type MermaidBlockProps = { source: string; children: ReactNode };
+
+/**
+ * 与 react-markdown 的 components 作用相同；不传时输出普通的 a 与 img，Mermaid 代码块输出为代码块。
+ * Like react-markdown's components; plain a and img by default, and Mermaid code blocks as code blocks.
+ */
 export type MarkdownComponents = {
   a?: ElementType<ComponentPropsWithoutRef<"a">>;
   img?: ElementType<MarkdownImageProps>;
+  mermaid?: ElementType<MermaidBlockProps>;
 };
 
 type NodeComponentProps = NodeProps<JSONNodeType, ReactNode>;
@@ -186,10 +195,16 @@ function ListItemNode({ node, children }: NodeComponentProps) {
 }
 
 function CodeBlockNode({ node }: NodeComponentProps) {
-  // 与 mdast-util-to-hast 相同，代码末尾多一个换行；不做语言自动识别，与 rehype-highlight 的默认行为一致。
-  // As in mdast-util-to-hast, the code ends with a newline; no language detection, as rehype-highlight's default.
-  const text = (node.content ?? []).map((child) => child.text ?? "").join("") + "\n";
+  const { mermaid } = use(ComponentsContext);
+  const source = (node.content ?? []).map((child) => child.text ?? "").join("");
   const language: string | null = node.attrs?.language ?? null;
+  // 与 mdast-util-to-hast 相同，代码末尾多一个换行。As in mdast-util-to-hast, the code ends with a newline.
+  const block = codeBlock(`${source}\n`, language);
+  return mermaid && isMermaidLanguage(language) ? h(mermaid, { source }, block) : block;
+}
+
+/** 不做语言自动识别，与 rehype-highlight 的默认行为一致。No language detection, as rehype-highlight's default. */
+function codeBlock(text: string, language: string | null): ReactElement {
   if (language === null) return h("pre", null, h("code", null, text));
   if (!lowlight.registered(language)) {
     return h("pre", null, h("code", { className: `language-${language}` }, text));

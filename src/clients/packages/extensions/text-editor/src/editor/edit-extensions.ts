@@ -15,6 +15,7 @@ import { ImageView } from "./image-view";
 import { currentLink, linkAt, openLink } from "./link-commands";
 import { ListItemView } from "./list-item-view";
 import { MarkdownPaste } from "./markdown-paste";
+import { MermaidEditing } from "./mermaid-editing";
 import { RawBlockView } from "./raw-block-view";
 import { ReferenceDecorations } from "./reference-decorations";
 import { createSlashCommand, type SlashMenuStore } from "./slash-command";
@@ -64,8 +65,8 @@ function withNodeViews(extension: AnyExtension, context: EditContext): AnyExtens
       return (extension as Node).extend({
         addNodeView() {
           const languages = codeLanguages(this.options.lowlight.listLanguages());
-          return ({ node, editor, getPos }) =>
-            new CodeBlockView(node, editor, getPos, context.api, languages);
+          return ({ node, decorations, editor, getPos }) =>
+            new CodeBlockView(node, decorations, editor, getPos, context.api, languages);
         },
       });
     case "listItem":
@@ -169,6 +170,7 @@ export function createEditExtensions(context: EditContext): AnyExtension[] {
     createSlashCommand(context.slashMenu, context.ui),
     EditorInputRules,
     MarkdownPaste,
+    MermaidEditing,
     ReferenceDecorations,
     TableNormalization,
     editShortcuts(context),

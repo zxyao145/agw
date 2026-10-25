@@ -42,6 +42,7 @@ import {
   type ExtensionPermission,
   type ExtensionWelcome,
   type HostContext,
+  type PreviewImage,
   RpcEndpoint,
   type RpcPort,
   type TextDocument,
@@ -64,6 +65,8 @@ import {
   ExtensionBridgeBroker,
   type ExtensionTextCodec,
   type HostTheme,
+  type ImagePreviewRequest,
+  MAX_PREVIEW_IMAGE_BYTES,
 } from "./extension-bridge-broker";
 import { ExtensionHost } from "./extension-host";
 import {
@@ -155,6 +158,7 @@ const DEFAULT_HOST_THEME: HostTheme = {
 
 async function createHarness(permissions: ExtensionPermission[], options: HarnessOptions = {}) {
   const linkRequests: string[] = [];
+  const imagePreviews: ({ frameId: string; pageId: string } & ImagePreviewRequest)[] = [];
   const unsaved: [string, string, boolean][] = [];
   const saveStatuses: [string, string, string | null][] = [];
   // 云端文件按 Project 主目录中的路径保存。Cloud files by their path in the Project's primary directory.
@@ -296,6 +300,11 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     showMessageBox: () => {
       throw new Error("The confirmation queue is not part of this test.");
     },
+    // 预览的显示与关闭属于 ExtensionHost，这里只记录检查后的请求。Showing and closing previews belong to
+    // ExtensionHost; this records the checked requests only.
+    previewImage: async (owner, request) => {
+      imagePreviews.push({ frameId: owner.frameId, pageId: owner.pageId, ...request });
+    },
   });
   const channel = new MessageChannel();
   broker.connect(
@@ -337,6 +346,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
       };
     },
     linkRequests,
+    imagePreviews,
     unsaved,
     saveStatuses,
     uri: (path: string) =>
@@ -590,6 +600,57 @@ test("openExternal accepts only HTTP(S) and asks the user about unapproved hosts
     code: "ERR_CANCELED",
   });
   assert.deepEqual(declined.linkRequests, ["https://example.com/docs"]);
+});
+
+test("previewImage checks the image, transfers its bytes to the host, and is for views only", async () => {
+  const harness = await createHarness([]);
+  const bytes = [...new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')];
+  const data = new Uint8Array(bytes);
+  await harness.api.ui.previewImage({ data, type: "image/svg+xml", name: "diagram.svg" });
+  assert.equal(data.byteLength, 0, "the ArrayBuffer was transferred");
+  assert.deepEqual(
+    harness.imagePreviews.map(({ data: received, ...rest }) => ({ ...rest, data: [...received] })),
+    [
+      {
+        frameId: "frame-1",
+        pageId: "page-1",
+        type: "image/svg+xml",
+        name: "diagram.svg",
+        data: bytes,
+      },
+    ],
+  );
+
+  const invalid: [unknown, RegExp][] = [
+    ["diagram.svg", /must be an object/],
+    [{ data: "<svg/>", type: "image/svg+xml", name: "a.svg" }, /data must be/],
+    [{ data: new Uint8Array(), type: "image/png", name: "a.png" }, /data must be/],
+    [
+      { data: new Uint8Array(MAX_PREVIEW_IMAGE_BYTES + 1), type: "image/png", name: "a.png" },
+      /data must be/,
+    ],
+    [{ data: new Uint8Array([1]), type: "image/tiff", name: "a.tiff" }, /type must be one of/],
+    [{ data: new Uint8Array([1]), type: "image/png", name: "" }, /name must have/],
+    [{ data: new Uint8Array([1]), type: "image/png", name: "a".repeat(256) }, /name must have/],
+  ];
+  for (const [image, message] of invalid) {
+    await assert.rejects(harness.api.ui.previewImage(image as PreviewImage), {
+      code: "ERR_INVALID_ARGUMENT",
+      message,
+    });
+  }
+  assert.equal(harness.imagePreviews.length, 1);
+
+  const background = await createHarness([], { kind: "background" });
+  await assert.rejects(
+    background.api.ui.previewImage({
+      data: new Uint8Array([1]),
+      type: "image/png",
+      name: "a.png",
+    }),
+    { code: "ERR_UNSUPPORTED_OPERATION" },
+  );
+  assert.deepEqual(background.imagePreviews, []);
 });
 
 test("readTextDocument detects encodings, BOMs and line endings of cloud files", async () => {

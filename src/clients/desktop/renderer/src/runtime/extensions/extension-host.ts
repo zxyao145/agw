@@ -37,6 +37,7 @@ import {
   type BrokerExtension,
   ExtensionBridgeBroker,
   type HostTheme,
+  type ImagePreviewRequest,
   type MessageBoxRequest,
 } from "./extension-bridge-broker";
 import { ExecutionService, type SessionOwner } from "./execution-service";
@@ -104,6 +105,20 @@ export type ExtensionHostSnapshot = {
   unsavedViewIds: readonly string[];
   /** 文件查看器报告的保存状态，按视图 id 记录。The save statuses file viewers reported, by view id. */
   saveStatuses: Readonly<Record<string, DocumentSaveStatus>>;
+  /** 视图请求的图片预览（`ui.previewImage`）；没有时为 null。The image preview a view requested (`ui.previewImage`), or null. */
+  imagePreview: ExtensionImagePreview | null;
+};
+
+/** 宿主显示的图片预览；`src` 为宿主页面中的 Blob URL。An image preview the host shows; `src` is a Blob URL in the host page. */
+export type ExtensionImagePreview = { id: number; src: string; name: string };
+
+type PendingImagePreview = {
+  /** snapshot 中的对象，预览期间保持不变。The snapshot's object, unchanged while the preview shows. */
+  preview: ExtensionImagePreview;
+  frameId: string;
+  pageId: string;
+  resolve(): void;
+  reject(error: Error): void;
 };
 
 type Deferred = {
@@ -283,6 +298,9 @@ export class ExtensionHost {
   /** 等待回答的消息框：clientId → 发出它的页面。Message boxes awaiting answers: clientId → the page that asked. */
   private readonly messageBoxes = new Map<string, PendingMessageBox>();
   private nextMessageBoxId = 1;
+  /** 显示中的图片预览，同一时间只有一个。The image preview showing; only one at a time. */
+  private imagePreview: PendingImagePreview | null = null;
+  private nextImagePreviewId = 1;
   private readonly listeners = new Set<() => void>();
   private snapshot: ExtensionHostSnapshot = {
     started: false,
@@ -292,6 +310,7 @@ export class ExtensionHost {
     viewErrors: {},
     unsavedViewIds: [],
     saveStatuses: {},
+    imagePreview: null,
   };
 
   public constructor(private readonly options: ExtensionHostOptions) {
@@ -385,6 +404,7 @@ export class ExtensionHost {
           url,
         }),
       showMessageBox: (owner, request) => this.showMessageBox(owner, request),
+      previewImage: (owner, request) => this.previewImage(owner, request),
     });
   }
 
@@ -1040,6 +1060,7 @@ export class ExtensionHost {
     frame.closing ??= (async () => {
       this.publish();
       this.dismissMessageBoxes(frame.frameId);
+      this.dismissImagePreview(frame.frameId);
       if (frame.handshakeTimer !== null) clearTimeout(frame.handshakeTimer);
       if (!frame.handshake.settled)
         frame.handshake.reject(createExtensionError("ERR_FRAME_CLOSING", "The frame is closing."));
@@ -1343,6 +1364,65 @@ export class ExtensionHost {
     }
   }
 
+  /**
+   * 视图页面的图片预览：宿主用 Blob URL 显示图片，用户关闭时完成；新的预览替换当前预览，被替换的调用完成。
+   * A view page's image preview: the host shows the image through a Blob URL and settles when the user closes it; a new
+   * preview replaces the current one, whose call settles.
+   */
+  private previewImage(owner: SessionOwner, request: ImagePreviewRequest): Promise<void> {
+    const frame = this.frames.get(owner.frameId);
+    if (!frame || frame.closing !== null || frame.pageId !== owner.pageId) {
+      return Promise.reject(createExtensionError("ERR_FRAME_GONE", "The frame is gone."));
+    }
+    this.endImagePreview()?.resolve();
+    return new Promise((resolve, reject) => {
+      this.imagePreview = {
+        preview: {
+          id: this.nextImagePreviewId++,
+          src: URL.createObjectURL(new Blob([request.data], { type: request.type })),
+          name: request.name,
+        },
+        frameId: owner.frameId,
+        pageId: owner.pageId,
+        resolve,
+        reject,
+      };
+      this.publish();
+    });
+  }
+
+  /** 用户关闭了 `id` 的图片预览。The user closed the image preview `id`. */
+  public closeImagePreview(id: number): void {
+    if (this.imagePreview?.preview.id !== id) return;
+    this.endImagePreview()!.resolve();
+  }
+
+  /**
+   * frame（指定 `pageId` 时只限该页面）关闭时关闭它的图片预览，调用以 `ERR_FRAME_GONE` 结束。
+   * Closes the image preview of a closing frame (of one page when `pageId` is given); the call fails with
+   * `ERR_FRAME_GONE`.
+   */
+  private dismissImagePreview(frameId: string, pageId?: string): void {
+    const preview = this.imagePreview;
+    if (
+      !preview ||
+      preview.frameId !== frameId ||
+      (pageId !== undefined && preview.pageId !== pageId)
+    )
+      return;
+    this.endImagePreview()!.reject(createExtensionError("ERR_FRAME_GONE", "The frame is gone."));
+  }
+
+  /** 移除当前的图片预览并释放 Blob URL。Removes the current image preview and revokes its Blob URL. */
+  private endImagePreview(): PendingImagePreview | null {
+    const preview = this.imagePreview;
+    if (!preview) return null;
+    this.imagePreview = null;
+    URL.revokeObjectURL(preview.preview.src);
+    this.publish();
+    return preview;
+  }
+
   private setUnsaved(frameId: string, unsaved: boolean): void {
     if (this.unsavedFrames.has(frameId) === unsaved) return;
     if (unsaved) this.unsavedFrames.add(frameId);
@@ -1390,6 +1470,7 @@ export class ExtensionHost {
     frame.pageId = null;
     frame.loaded = false;
     this.dismissMessageBoxes(frame.frameId, pageId);
+    this.dismissImagePreview(frame.frameId, pageId);
     this.setUnsaved(frame.frameId, false);
     this.setSaveStatus(frame.frameId, null);
     await this.execution.closePage(frame.frameId, pageId);
@@ -1520,6 +1601,7 @@ export class ExtensionHost {
           return viewId ? [[viewId, status]] : [];
         }),
       ),
+      imagePreview: this.imagePreview?.preview ?? null,
       extensions: [...this.records.values()]
         .sort((left, right) => left.installed.id.localeCompare(right.installed.id))
         .map((record) => ({
