@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   BASE_FONT_SIZES,
   CHAT_FONT_SIZES,
+  CODE_FONT_SIZES,
   DEFAULT_APPEARANCE,
   DEFAULT_MODE,
   DEFAULT_THEME_ID,
@@ -252,6 +253,17 @@ export function AppearanceSettingsForm({
             resetLabel="Reset chat font size"
             onChange={(next) => void apply({ ...value, chatFontSize: nullableSize(next) })}
             onReset={() => void apply({ ...value, chatFontSize: null })}
+          />
+          <SizeField
+            id="appearance-code-font-size"
+            label="Code font size"
+            description="Used by Source in the Files view."
+            value={value.codeFontSize === null ? FOLLOW : String(value.codeFontSize)}
+            sizes={CODE_FONT_SIZES}
+            followText={`Follow base size (${sizes.code} px)`}
+            resetLabel="Reset code font size"
+            onChange={(next) => void apply({ ...value, codeFontSize: nullableSize(next) })}
+            onReset={() => void apply({ ...value, codeFontSize: null })}
           />
         </CardContent>
       </Card>

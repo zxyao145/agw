@@ -7,6 +7,7 @@ import {
   type ExtensionMenuItem,
 } from "@agw/chat";
 import type { FileViewerFile } from "@agw/extension-sdk";
+import type { EditableSource } from "@agw/projects";
 
 import type { ExtensionHost, ExtensionHostSnapshot } from "../../extensions/extension-host";
 import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
@@ -28,6 +29,8 @@ export type MainWorkspaceProps = {
   /** 匹配当前文件的文件查看器及其文件。File viewers matching the current file, and that file. */
   fileViewers: readonly WorkspaceView[];
   fileViewerFile: FileViewerFile | null;
+  /** 可编辑的 Source。The editable Source. */
+  editableSource: EditableSource;
   /** 用户为当前文件类型设置的默认查看器 id 或 "source"。The user's default viewer id for the file type, or "source". */
   defaultFileViewerId: string | null;
   /** 把查看器设为当前文件类型的默认，null 删除设置。Sets the file type's default viewer; null removes it. */
@@ -111,6 +114,7 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           }
           defaultFileViewerId={props.defaultFileViewerId}
           onSetDefaultFileViewer={props.onSetDefaultFileViewer}
+          editableSource={props.editableSource}
         />
       ) : null}
       {props.retainedViews.map((view) => extensionView(view, view.id !== activeView.id))}

@@ -1,4 +1,4 @@
-import type { FileItem, GitDiffResponse, GitDiffScope } from "../../../services/files";
+import type { FileItem, GitDiffScope } from "../../../services/files";
 import type { ExplorerContextMenuArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 
 export const CommentSide = {
@@ -64,20 +64,6 @@ export interface LineComment {
   timestamp: Date;
 }
 
-export type DiffLineKind =
-  | "context"
-  | "addition"
-  | "deletion"
-  | "placeholder"
-  | "hunk"
-  | "annotation";
-
-export interface CodeViewerLine {
-  content: string;
-  kind: DiffLineKind;
-  lineNumber?: number;
-}
-
 export interface FileTreeNodeProps {
   projectId: string;
   item: FileTreeItem;
@@ -92,32 +78,4 @@ export interface FileTreeNodeProps {
   contextMenuItems?: readonly ExtensionMenuItem<ExplorerContextMenuArgs>[];
   /** 变化时已展开的目录重新读取子项。An expanded directory rereads its children when it changes. */
   refreshSignal?: number;
-}
-
-export interface CodeViewerProps {
-  content: string;
-  lines?: CodeViewerLine[];
-  filePath: string;
-  comments: LineComment[];
-  setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
-  isDiffView?: boolean;
-  commentSide?: CommentSide;
-  diffScope?: GitDiffScope;
-}
-
-export interface DiffViewerProps {
-  diff: string;
-  className?: string;
-  filePath?: string;
-  comments?: LineComment[];
-  setComments?: React.Dispatch<React.SetStateAction<LineComment[]>>;
-  scope?: GitDiffScope;
-}
-
-export interface UnChangedFileProps {
-  diffContentData: GitDiffResponse;
-  selectedFile: string;
-  diffScope?: GitDiffScope;
-  comments: LineComment[];
-  setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
 }

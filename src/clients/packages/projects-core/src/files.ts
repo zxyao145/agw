@@ -11,6 +11,7 @@ import {
   apiPost,
   apiPut,
   type AgwApiClient,
+  type components,
 } from "@agw/api";
 
 type ProjectFilesApiClient = Pick<
@@ -132,12 +133,8 @@ export async function readFile(
   }
 }
 
-export interface GitDiffResponse {
-  diff: string;
-  unchanged: boolean;
-  message?: string;
-  originalContent?: string;
-}
+/** `/api/files/diff` 的响应：unified diff 与两侧全文。The `/api/files/diff` response: the unified diff and both texts. */
+export type GitDiffResponse = components["schemas"]["FileDiffResponse"];
 
 /**
  * Get git diff for the specified file

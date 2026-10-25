@@ -32,6 +32,7 @@ import {
 } from "./runtime-model";
 import { ServerQueryClientRegistry } from "./query-client-registry";
 import { AppearanceProvider } from "./appearance/appearance-provider";
+import { DesktopCodeViewAppearance } from "./appearance/code-view-appearance";
 import { ThemeProvider } from "./appearance/theme-provider";
 import { getExtensionRuntime } from "./extensions/extension-runtime";
 
@@ -420,20 +421,22 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
           save={saveAppearance}
           host={extensionHost}
         >
-          <QueryClientProvider client={queryClient}>
-            <ExecutionPlatformProvider
-              serverId={activeProfile?.id ?? "browser"}
-              onActiveCountChange={handleActiveCountChange}
-            >
-              <ConversationImagePlatformProvider
-                onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+          <DesktopCodeViewAppearance>
+            <QueryClientProvider client={queryClient}>
+              <ExecutionPlatformProvider
+                serverId={activeProfile?.id ?? "browser"}
+                onActiveCountChange={handleActiveCountChange}
               >
-                <MarkdownRendererProvider renderer={TiptapMarkdown}>
-                  {children}
-                </MarkdownRendererProvider>
-              </ConversationImagePlatformProvider>
-            </ExecutionPlatformProvider>
-          </QueryClientProvider>
+                <ConversationImagePlatformProvider
+                  onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+                >
+                  <MarkdownRendererProvider renderer={TiptapMarkdown}>
+                    {children}
+                  </MarkdownRendererProvider>
+                </ConversationImagePlatformProvider>
+              </ExecutionPlatformProvider>
+            </QueryClientProvider>
+          </DesktopCodeViewAppearance>
         </ThemeProvider>
       </AppearanceProvider>
     </DesktopRuntimeContext.Provider>

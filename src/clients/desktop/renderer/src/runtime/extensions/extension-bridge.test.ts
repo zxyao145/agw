@@ -1960,8 +1960,7 @@ async function openText(
 
 const CONFLICT_BOX = {
   kind: "message",
-  extensionId: "sample",
-  extensionName: "Sample",
+  origin: { kind: "extension", extensionId: "sample", extensionName: "Sample" },
   type: "warning",
   message: "notes.txt was changed on disk after it was opened.",
   detail: "Overwrite it with your version, or reload it and discard your changes.",
@@ -2227,8 +2226,7 @@ test(
     const canceled = session.reopenWithEncoding("gbk");
     assert.deepEqual(await harness.messageBox(), {
       kind: "message",
-      extensionId: "sample",
-      extensionName: "Sample",
+      origin: { kind: "extension", extensionId: "sample", extensionName: "Sample" },
       type: "warning",
       message: "Discard unsaved changes to notes.txt?",
       detail: null,

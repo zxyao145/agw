@@ -4,6 +4,10 @@ import { setupDomEnvironment } from "@agw/test-harness";
 
 import type { FileViewerOption } from "./file-content.tsx";
 
+// 这里只测试选中 extension 查看器时的行为：Source 使用 Monaco，jsdom 不能运行，渲染 Source 的用例在
+// browser-tests/file-content.test.ts 中。
+// Only behavior with an extension viewer selected is tested here: Source uses Monaco, which jsdom cannot run, so the
+// cases that render Source are in browser-tests/file-content.test.ts.
 const { React, act, fireEvent, render, screen, within } = await setupDomEnvironment();
 const { default: FileContent } = await import("./file-content.tsx");
 
@@ -30,8 +34,6 @@ function element(
   selectedFile: string,
   fileViewers?: readonly FileViewerOption[],
   onReloadFileViewer?: (viewerId: string) => void,
-  renderFileViewerInfo?: (viewerId: string) => React.ReactNode,
-  onReloadSource?: () => void,
   onReloadFileViewerDocument?: (viewerId: string) => void,
 ) {
   return React.createElement(FileContent, {
@@ -49,8 +51,6 @@ function element(
     renderFileViewer: (viewerId: string) =>
       React.createElement("div", { "data-testid": "viewer" }, `viewer ${viewerId}`),
     onReloadFileViewer,
-    renderFileViewerInfo,
-    onReloadSource,
     onReloadFileViewerDocument,
   });
 }
@@ -61,10 +61,6 @@ function saveStatus(): { status: string | null; text: string } | null {
   return element
     ? { status: element.getAttribute("data-file-save-status"), text: element.textContent ?? "" }
     : null;
-}
-
-function renderInfo(viewerId: string) {
-  return React.createElement("span", { "data-testid": "info" }, `info ${viewerId}`);
 }
 
 function tabs(): { id: string | null; selected: boolean; text: string }[] {
@@ -108,55 +104,6 @@ async function chooseMoreItem(text: string) {
   await menuClosed();
 }
 
-/** "More" 菜单顶部的查看器说明。The viewer info at the top of the "More" menu. */
-async function moreMenuInfo(): Promise<string | null> {
-  const menu = await openMoreMenu();
-  const info = within(menu).getByTestId("info").textContent;
-  await act(async () => {
-    fireEvent.keyDown(menu, { key: "Escape" });
-  });
-  await menuClosed();
-  return info;
-}
-
-test("FileContent_WithViewers_ShowsSwitchAndMoreMenuWithInfoAndReload", async () => {
-  render(
-    element(
-      "README.md",
-      VIEWERS,
-      () => {},
-      renderInfo,
-      () => {},
-    ),
-  );
-
-  // 文件标题行右侧依次是切换按钮与 "More" 菜单，切换到 Source 后不变。
-  // The file title row's right side holds the switch and the "More" menu, also in Source.
-  const actions = screen.getByRole("tablist").parentElement!;
-  const controls = () => [
-    screen.getByRole("tablist"),
-    screen.getByRole("button", { name: "More" }),
-  ];
-  assert.deepEqual([...actions.children], controls());
-  assert.ok(actions.parentElement!.textContent!.includes("README.md"));
-
-  // 菜单顶部是查看器说明，分隔线之后是刷新。The menu starts with the viewer info, then reloading after a separator.
-  const menu = await openMoreMenu();
-  const info = within(menu).getByTestId("info");
-  assert.equal(info.textContent, "info markdown-preview:preview");
-  assert.equal(menu.firstElementChild, info.parentElement);
-  assert.deepEqual(menuTexts(menu), ["Reload view"]);
-  assert.equal(menu.querySelectorAll('[role="separator"]').length, 1);
-  await act(async () => {
-    fireEvent.keyDown(menu, { key: "Escape" });
-  });
-  await menuClosed();
-
-  await selectTab("source");
-  assert.deepEqual([...actions.children], controls());
-  assert.deepEqual(menuTexts(await openMoreMenu()), ["Reload file"]);
-});
-
 test("FileContent_ReloadView_ReloadsSelectedViewer", async () => {
   const reloads: string[] = [];
   render(element("README.md", VIEWERS, (viewerId) => reloads.push(viewerId)));
@@ -168,169 +115,9 @@ test("FileContent_ReloadView_ReloadsSelectedViewer", async () => {
   assert.deepEqual(reloads, ["markdown-preview:preview", "other:outline"]);
 });
 
-test("FileContent_SourceSelected_ReloadRereadsFileInsteadOfViewer", async () => {
-  const viewerReloads: string[] = [];
-  let sourceReloads = 0;
-  render(
-    element(
-      "README.md",
-      VIEWERS,
-      (viewerId) => viewerReloads.push(viewerId),
-      undefined,
-      () => (sourceReloads += 1),
-    ),
-  );
-
-  await selectTab("source");
-  await chooseMoreItem("Reload file");
-
-  assert.equal(sourceReloads, 1);
-  assert.deepEqual(viewerReloads, []);
-  assert.deepEqual(menuTexts(await openMoreMenu()), ["Reload file"]);
-});
-
-test("FileContent_SourceSelected_InfoShowsViewerSelectedBeforeSource", async () => {
-  render(element("README.md", VIEWERS, undefined, renderInfo));
-
-  await selectTab("source");
-  assert.equal(await moreMenuInfo(), "info markdown-preview:preview");
-
-  await selectTab("other:outline");
-  await selectTab("source");
-  await selectTab("source");
-  assert.equal(await moreMenuInfo(), "info other:outline");
-});
-
-test("FileContent_MoreMenu_TopItemsFollowReloadOnlyForSelectedViewer", async () => {
-  const chosen: [string, string, string | null][] = [];
-  render(
-    React.createElement(FileContent, {
-      projectId: "project-1",
-      directoryId: "workspace",
-      selectedFile: "README.md",
-      isLoadingContent: false,
-      contentError: null,
-      onlyDiff: false,
-      diffContentData: null,
-      comments: [],
-      setComments() {},
-      fileContent: "# Title",
-      fileViewers: [
-        {
-          ...VIEWERS[0],
-          topItems: [
-            {
-              id: "encoding",
-              label: "UTF-8",
-              menu: [
-                {
-                  id: "reopen",
-                  label: "Reopen with Encoding",
-                  menu: [
-                    { id: "reopen:utf-8", label: "UTF-8" },
-                    { id: "reopen:gbk", label: "GBK" },
-                  ],
-                },
-              ],
-            },
-            { id: "wrap", label: "Word wrap", checked: true },
-            { id: "save", label: "Save", disabled: true },
-          ],
-          bottomItems: [{ id: "export", label: "Export" }],
-        },
-        VIEWERS[1],
-      ],
-      renderFileViewer: (viewerId: string) =>
-        React.createElement("div", { "data-testid": "viewer" }, `viewer ${viewerId}`),
-      onReloadFileViewer: () => {},
-      onReloadSource: () => {},
-      renderFileViewerInfo: renderInfo,
-      onSetDefaultFileViewer: () => {},
-      onSelectFileViewerItem: (viewerId: string, itemId: string, entryId: string | null) =>
-        chosen.push([viewerId, itemId, entryId]),
-    }),
-  );
-
-  const menu = await openMoreMenu();
-  assert.deepEqual(menuTexts(menu), [
-    "Reload view",
-    "UTF-8",
-    "Word wrap",
-    "Save",
-    "Open with Preview by default for *.md",
-    "Export",
-  ]);
-  assert.equal(menu.querySelectorAll('[role="separator"]').length, 3);
-  // 勾选项显示勾选状态，不可用的项不能选择。A checkbox item shows its state; an unavailable entry cannot be chosen.
-  const wordWrap = within(menu).getByRole("menuitemcheckbox", { name: "Word wrap" });
-  assert.equal(wordWrap.getAttribute("aria-checked"), "true");
-  const save = within(menu).getByRole("menuitem", { name: "Save" });
-  assert.equal(save.getAttribute("aria-disabled"), "true");
-  await act(async () => {
-    fireEvent.click(save);
-  });
-  assert.deepEqual(chosen, []);
-  await act(async () => {
-    fireEvent.click(wordWrap);
-  });
-  assert.deepEqual(chosen, [["markdown-preview:preview", "wrap", null]]);
-  await menuClosed();
-
-  const reopened = await openMoreMenu();
-  await act(async () => {
-    fireEvent.click(within(reopened).getByText("UTF-8"));
-  });
-  await act(async () => {
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Reopen with Encoding" }));
-  });
-  await act(async () => {
-    fireEvent.click(await screen.findByRole("menuitem", { name: "GBK" }));
-  });
-  assert.deepEqual(chosen.at(-1), ["markdown-preview:preview", "encoding", "reopen:gbk"]);
-  await menuClosed();
-
-  // 选中 Source 时说明仍为切换前的查看器，菜单中没有它的条目。With Source selected the info still describes the
-  // viewer selected before, and the menu has none of its items.
-  await selectTab("source");
-  const sourceMenu = await openMoreMenu();
-  assert.equal(within(sourceMenu).getByTestId("info").textContent, "info markdown-preview:preview");
-  assert.deepEqual(menuTexts(sourceMenu), ["Reload file", "Open with Source by default for *.md"]);
-});
-
-test("FileContent_WithoutReloadHandlers_MoreMenuHasNoReloadEntry", async () => {
-  render(element("README.md", VIEWERS, undefined, renderInfo));
-
-  assert.deepEqual(menuTexts(await openMoreMenu()), []);
-  await act(async () => {
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-  });
-  await menuClosed();
-  await selectTab("source");
-  assert.deepEqual(menuTexts(await openMoreMenu()), []);
-});
-
-test("FileContent_SelectedViewer_ShowsItsSaveStatusAfterFileName", async () => {
-  render(element("README.md", VIEWERS, undefined, undefined, undefined, () => {}));
-
-  // 状态与文件名在同一行，紧跟文件名。The status sits in the file name's row, right after the name.
-  const status = document.querySelector("[data-file-save-status]")!;
-  assert.equal(status.previousElementSibling!.textContent, "README.md");
-  assert.deepEqual(saveStatus(), { status: "saved", text: "Saved" });
-
-  await selectTab("other:outline");
-  assert.deepEqual(saveStatus(), { status: "changed-on-disk", text: "Changed on diskReload" });
-
-  await selectTab("source");
-  assert.equal(saveStatus(), null);
-});
-
 test("FileContent_ChangedOnDiskReload_AsksSelectedViewerToReadFileAgain", async () => {
   const reloads: string[] = [];
-  render(
-    element("README.md", VIEWERS, undefined, undefined, undefined, (viewerId) =>
-      reloads.push(viewerId),
-    ),
-  );
+  render(element("README.md", VIEWERS, undefined, (viewerId) => reloads.push(viewerId)));
   await selectTab("other:outline");
 
   await act(async () => {
@@ -348,16 +135,6 @@ test("FileContent_WithoutReloadDocumentHandler_ShowsChangedOnDiskWithoutReload",
   assert.equal(screen.queryByRole("button", { name: "Reload" }), null);
 });
 
-test("FileContent_SelectSource_ShowsFileText", async () => {
-  render(element("README.md", VIEWERS));
-
-  await selectTab("source");
-
-  assert.equal(tabs().find((tab) => tab.selected)?.id, "source");
-  assert.equal(screen.queryByTestId("viewer"), null);
-  assert.ok(screen.getByText("# Title"));
-});
-
 test("FileContent_FileChanges_ReturnsToDefaultViewer", async () => {
   const view = render(element("README.md", VIEWERS));
   await selectTab("other:outline");
@@ -367,14 +144,6 @@ test("FileContent_FileChanges_ReturnsToDefaultViewer", async () => {
 
   assert.equal(tabs().find((tab) => tab.selected)?.id, "markdown-preview:preview");
   assert.equal(screen.getByTestId("viewer").textContent, "viewer markdown-preview:preview");
-});
-
-test("FileContent_WithoutViewers_ShowsTextWithoutTabs", async () => {
-  render(element("README.md"));
-
-  assert.equal(screen.queryAllByRole("tab").length, 0);
-  assert.equal(screen.queryByTestId("viewer"), null);
-  assert.ok(screen.getByText("# Title"));
 });
 
 function elementWithDefaults(
@@ -424,13 +193,6 @@ test("FileContent_DefaultViewerIdMatchesViewer_SelectsItInitially", () => {
   assert.equal(screen.getByTestId("viewer").textContent, "viewer other:outline");
 });
 
-test("FileContent_DefaultViewerIdIsSource_SelectsSourceInitially", () => {
-  render(elementWithDefaults("README.md", "source"));
-
-  assert.equal(tabs().find((tab) => tab.selected)?.id, "source");
-  assert.equal(screen.queryByTestId("viewer"), null);
-});
-
 test("FileContent_DefaultViewerIdMatchesNothing_KeepsFirstViewer", () => {
   render(elementWithDefaults("README.md", "gone:viewer"));
 
@@ -449,19 +211,6 @@ test("FileContent_MoreMenu_SetsSelectedViewerAsDefaultForFileType", async () => 
   });
 
   assert.deepEqual(calls, ["other:outline"]);
-});
-
-test("FileContent_MoreMenu_SourceSelectedCanBecomeDefault", async () => {
-  const calls: (string | null)[] = [];
-  render(elementWithDefaults("Dockerfile", null, (viewerId) => calls.push(viewerId)));
-
-  await selectTab("source");
-  const menu = await openMoreMenu();
-  await act(async () => {
-    fireEvent.click(within(menu).getByText("Open with Source by default for dockerfile"));
-  });
-
-  assert.deepEqual(calls, ["source"]);
 });
 
 test("FileContent_MoreMenu_WithDefaultOffersReset", async () => {
@@ -590,22 +339,4 @@ test("FileContent_MoreMenu_ViewerItemsWithoutDefaultHandler_ListsOnlyItems", asy
   const menu = await openMoreMenu();
   assert.deepEqual(menuTexts(menu), ["Export", "Indentation"]);
   assert.equal(menu.querySelectorAll('[role="separator"]').length, 0);
-});
-
-test("FileContent_MoreMenu_OtherViewerOrSourceSelected_HasNoItemsOfFirstViewer", async () => {
-  const view = render(
-    elementWithItems(
-      () => undefined,
-      () => undefined,
-    ),
-  );
-  await selectTab("other:outline");
-  const menu = await openMoreMenu();
-  assert.deepEqual(menuTexts(menu), ["Open with Outline by default for *.md"]);
-  view.unmount();
-
-  // 没有默认查看器设置时，选中 Source 没有 More 菜单。Without the default setting, Source has no More menu.
-  render(elementWithItems(() => undefined));
-  await selectTab("source");
-  assert.equal(screen.queryByRole("button", { name: "More" }), null);
 });

@@ -1,7 +1,10 @@
-// 文档会话的运行时（第 4 节）：执行 document-state 给出的动作（RPC、适配器、对话框、未保存报告、通知、快捷键），
-// 把结果作为事件交回状态转换。这里不做任何决定。
-// The document session runtime (section 4): performs the actions document-state returns (RPCs, adapter calls,
-// dialogs, unsaved reports, notifications, the shortcut) and feeds the results back as events. It decides nothing.
+// 文档会话的运行时（第 4 节）：执行 document-state 给出的动作（读写、适配器、对话框、未保存报告、通知、快捷键），
+// 把结果作为事件交回状态转换。这里不做任何决定。extension 页面通过 ExtensionApi 使用它，Desktop 的 Source 通过
+// `openDocumentSession` 提供自己的平台接口与读写端口。
+// The document session runtime (section 4): performs the actions document-state returns (reads and writes, adapter
+// calls, dialogs, unsaved reports, notifications, the shortcut) and feeds the results back as events. It decides
+// nothing. Extension pages use it through ExtensionApi; Desktop's Source supplies its own platform and port through
+// `openDocumentSession`.
 import type {
   BinaryDocumentAdapter,
   DocumentSaveStatus,
@@ -9,6 +12,7 @@ import type {
   Eol,
   ExtensionApi,
   ExtensionError,
+  HostContext,
   TextDocumentAdapter,
 } from "../api";
 import {
@@ -26,14 +30,29 @@ import {
   type DocumentOperation,
   type EditorSample,
   isSaveShortcut,
+  type MessageBoxOptions,
   openDocument,
   reduceDocument,
   sampleNeeds,
   type TextFormat,
 } from "./document-state";
 
+export type { DiskContent, DocumentFile, DocumentKind, TextFormat };
+
+/**
+ * 会话使用的宿主能力：读取字节（冲突与刷新时计算哈希）、消息框、错误通知与未保存报告。
+ * The host capabilities a session uses: reading bytes (hashing on conflicts and refreshes), message boxes, error
+ * notifications and unsaved reports.
+ */
+export type DocumentPlatform = {
+  readFile(uri: string): Promise<Uint8Array>;
+  showMessageBox(options: MessageBoxOptions): Promise<number>;
+  notifyError(message: string): void;
+  setUnsavedChanges(unsaved: boolean): Promise<void>;
+};
+
 /** 一种文档的读写与适配器调用。Reading, writing and adapter calls of one document kind. */
-type DocumentPort<Snapshot> = {
+export type DocumentPort<Snapshot> = {
   read(uri: string, encoding: string | null): Promise<DiskContent>;
   /** 序列化并写入，返回写入内容的哈希。Serializes and writes; returns the hash of the written content. */
   write(
@@ -51,6 +70,35 @@ type DocumentPort<Snapshot> = {
 };
 
 type SessionOptions = { file: DocumentFile; saveShortcut?: boolean };
+
+/**
+ * `openDocumentSession` 的选项：`shortcutPlatform` 为 null 时不监听保存快捷键，由调用方处理。
+ * `openDocumentSession` options: a null `shortcutPlatform` listens for no save shortcut; the caller handles it.
+ */
+export type DocumentSessionOptions = {
+  file: DocumentFile;
+  shortcutPlatform: HostContext["app"]["platform"] | null;
+};
+
+/** extension 页面的平台接口。The platform of extension pages. */
+function extensionPlatform(api: ExtensionApi): DocumentPlatform {
+  return {
+    readFile: (uri) => api.fs.readFile(uri),
+    showMessageBox: (options) => api.dialog.showMessageBox(options),
+    notifyError: (message) => api.ui.notify({ type: "error", message }),
+    setUnsavedChanges: (unsaved) => api.workspace.setUnsavedChanges(unsaved),
+  };
+}
+
+function extensionSessionOptions(
+  api: ExtensionApi,
+  options: SessionOptions,
+): DocumentSessionOptions {
+  return {
+    file: options.file,
+    shortcutPlatform: options.saveShortcut === false ? null : api.context.get().app.platform,
+  };
+}
 
 /**
  * 会话与宿主之间不属于公开 API 的部分：报告保存状态，以及登记未释放的会话（宿主请求重新读取时用到）。
@@ -80,39 +128,45 @@ export function openTextDocument<Snapshot>(
   options: SessionOptions & { adapter: TextDocumentAdapter<Snapshot> },
 ): DocumentSession {
   const { adapter } = options;
-  return openSession<Snapshot>(api, host, "text", options, {
-    read: async (uri, encoding) => {
-      const document = await api.fs.readTextDocument(
-        uri,
-        encoding === null ? undefined : { encoding },
-      );
-      return {
-        kind: "text",
-        text: document.text,
-        format: { encoding: document.encoding, bom: document.bom, eol: document.eol },
-        sha256: document.sha256,
-      };
+  return openDocumentSession<Snapshot>(
+    extensionPlatform(api),
+    host,
+    "text",
+    extensionSessionOptions(api, options),
+    {
+      read: async (uri, encoding) => {
+        const document = await api.fs.readTextDocument(
+          uri,
+          encoding === null ? undefined : { encoding },
+        );
+        return {
+          kind: "text",
+          text: document.text,
+          format: { encoding: document.encoding, bom: document.bom, eol: document.eol },
+          sha256: document.sha256,
+        };
+      },
+      write: async (uri, snapshot, baseline, format, expectedSha256) => {
+        const { sha256 } = await api.fs.writeTextDocument(
+          uri,
+          adapter.serialize(snapshot, baseline),
+          {
+            ...requireFormat(format),
+            expectedSha256,
+          },
+        );
+        return sha256;
+      },
+      load: (content) => {
+        if (content.kind !== "text") throw new Error("A text document read binary content.");
+        adapter.load({ text: content.text, eol: content.format.eol });
+      },
+      snapshot: () => adapter.snapshot(),
+      matches: (snapshot) => adapter.matches(snapshot),
+      version: () => adapter.version(),
+      eol: () => adapter.eol?.() ?? null,
     },
-    write: async (uri, snapshot, baseline, format, expectedSha256) => {
-      const { sha256 } = await api.fs.writeTextDocument(
-        uri,
-        adapter.serialize(snapshot, baseline),
-        {
-          ...requireFormat(format),
-          expectedSha256,
-        },
-      );
-      return sha256;
-    },
-    load: (content) => {
-      if (content.kind !== "text") throw new Error("A text document read binary content.");
-      adapter.load({ text: content.text, eol: content.format.eol });
-    },
-    snapshot: () => adapter.snapshot(),
-    matches: (snapshot) => adapter.matches(snapshot),
-    version: () => adapter.version(),
-    eol: () => adapter.eol?.() ?? null,
-  });
+  );
 }
 
 export function openBinaryDocument<Snapshot>(
@@ -121,38 +175,48 @@ export function openBinaryDocument<Snapshot>(
   options: SessionOptions & { adapter: BinaryDocumentAdapter<Snapshot> },
 ): DocumentSession {
   const { adapter } = options;
-  return openSession<Snapshot>(api, host, "binary", options, {
-    read: async (uri) => {
-      const bytes = await api.fs.readFile(uri);
-      return { kind: "binary", bytes, sha256: await sha256Of(bytes) };
+  return openDocumentSession<Snapshot>(
+    extensionPlatform(api),
+    host,
+    "binary",
+    extensionSessionOptions(api, options),
+    {
+      read: async (uri) => {
+        const bytes = await api.fs.readFile(uri);
+        return { kind: "binary", bytes, sha256: await sha256Of(bytes) };
+      },
+      write: async (uri, snapshot, baseline, _format, expectedSha256) => {
+        const bytes = adapter.serialize(snapshot, baseline);
+        // RPC 会转移字节的 buffer，先计算内容哈希。The RPC transfers the buffer, so the hash comes first.
+        const sha256 = await sha256Of(bytes);
+        await api.fs.writeFile(
+          uri,
+          bytes,
+          expectedSha256 === null ? { overwrite: false } : { overwrite: true, expectedSha256 },
+        );
+        return sha256;
+      },
+      load: (content) => {
+        if (content.kind !== "binary") throw new Error("A binary document read text content.");
+        adapter.load(content.bytes);
+      },
+      snapshot: () => adapter.snapshot(),
+      matches: (snapshot) => adapter.matches(snapshot),
+      version: () => adapter.version(),
+      eol: () => null,
     },
-    write: async (uri, snapshot, baseline, _format, expectedSha256) => {
-      const bytes = adapter.serialize(snapshot, baseline);
-      // RPC 会转移字节的 buffer，先计算内容哈希。The RPC transfers the buffer, so the hash comes first.
-      const sha256 = await sha256Of(bytes);
-      await api.fs.writeFile(
-        uri,
-        bytes,
-        expectedSha256 === null ? { overwrite: false } : { overwrite: true, expectedSha256 },
-      );
-      return sha256;
-    },
-    load: (content) => {
-      if (content.kind !== "binary") throw new Error("A binary document read text content.");
-      adapter.load(content.bytes);
-    },
-    snapshot: () => adapter.snapshot(),
-    matches: (snapshot) => adapter.matches(snapshot),
-    version: () => adapter.version(),
-    eol: () => null,
-  });
+  );
 }
 
-function openSession<Snapshot>(
-  api: ExtensionApi,
+/**
+ * 用给定的平台接口与读写端口打开文档会话；状态转换与 extension 的会话相同。
+ * Opens a document session over the given platform and port; the transitions are the same as extension sessions'.
+ */
+export function openDocumentSession<Snapshot>(
+  platform: DocumentPlatform,
   host: DocumentSessionHost,
   kind: DocumentKind,
-  options: SessionOptions,
+  options: DocumentSessionOptions,
   port: DocumentPort<Snapshot>,
 ): DocumentSession {
   const opened = openDocument<Snapshot>(kind, options.file);
@@ -221,7 +285,7 @@ function openSession<Snapshot>(
         );
         return;
       case "read-hash":
-        void api.fs
+        void platform
           .readFile(action.uri)
           .then(sha256Of)
           .then(
@@ -268,17 +332,17 @@ function openSession<Snapshot>(
           );
         return;
       case "show-message-box":
-        void api.dialog.showMessageBox(action.options).then(
+        void platform.showMessageBox(action.options).then(
           (index) => dispatch({ type: "message-box-answered", index }),
           (error: unknown) =>
             dispatch({ type: "message-box-failed", error: toExtensionError(error) }),
         );
         return;
       case "notify":
-        api.ui.notify({ type: "error", message: action.message });
+        platform.notifyError(action.message);
         return;
       case "report-unsaved":
-        void api.workspace
+        void platform
           .setUnsavedChanges(action.unsaved)
           .catch((error: unknown) => console.error(error));
         return;
@@ -306,9 +370,9 @@ function openSession<Snapshot>(
     return settled;
   };
 
-  const platform = api.context.get().app.platform;
+  const { shortcutPlatform } = options;
   const onKeyDown = (event: KeyboardEvent) => {
-    if (!isSaveShortcut(event, platform)) return;
+    if (shortcutPlatform === null || !isSaveShortcut(event, shortcutPlatform)) return;
     event.preventDefault();
     void session.save();
   };
@@ -344,7 +408,7 @@ function openSession<Snapshot>(
       disposed = true;
       host.sessions.delete(session);
       inputs.length = 0;
-      if (options.saveShortcut !== false) window.removeEventListener("keydown", onKeyDown, true);
+      if (shortcutPlatform !== null) window.removeEventListener("keydown", onKeyDown, true);
       // 未完成的操作随会话结束。Pending operations end with the session.
       for (const caller of callers.values()) caller.resolve();
       callers.clear();
@@ -352,7 +416,7 @@ function openSession<Snapshot>(
     },
   };
 
-  if (options.saveShortcut !== false) window.addEventListener("keydown", onKeyDown, true);
+  if (shortcutPlatform !== null) window.addEventListener("keydown", onKeyDown, true);
   host.sessions.add(session);
   for (const action of opened.actions) perform(action);
   return session;

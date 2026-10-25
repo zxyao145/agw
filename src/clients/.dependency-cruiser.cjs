@@ -74,6 +74,34 @@ module.exports = {
       to: { path: String.raw`(^|/)node_modules/@radix-ui/react-accordion/` },
     },
     {
+      name: "monaco-only-in-code-view",
+      comment: "Only @agw/code-view loads Monaco and Prettier.",
+      severity: "error",
+      from: { pathNot: "^packages/code-view/" },
+      to: { path: String.raw`(^|/)node_modules/(monaco-editor|prettier)/` },
+    },
+    {
+      name: "code-view-monaco-behind-lazy-import",
+      comment:
+        "The @agw/code-view entry reaches Monaco and Prettier only through import(), so they load on first display.",
+      severity: "error",
+      from: { path: "^packages/code-view/src/", pathNot: "^packages/code-view/src/monaco/" },
+      to: {
+        path: [
+          "^packages/code-view/src/monaco/",
+          String.raw`(^|/)node_modules/(monaco-editor|prettier)/`,
+        ],
+        dependencyTypesNot: ["dynamic-import"],
+      },
+    },
+    {
+      name: "code-view-importers",
+      comment: "Only @agw/projects, Web and Desktop use @agw/code-view, so Mobile never reaches Monaco.",
+      severity: "error",
+      from: { pathNot: "^(packages/(code-view|projects)|web|desktop)/" },
+      to: { path: "^packages/code-view/" },
+    },
+    {
       name: "no-self-barrel-import",
       comment: "A package never imports its own public barrel.",
       severity: "error",

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./browser": "./src/browser-fixture.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -16,7 +17,10 @@
     "@microsoft/signalr": "catalog:",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "catalog:",
-    "jsdom": "catalog:"
+    "@vitejs/plugin-react": "catalog:",
+    "jsdom": "catalog:",
+    "playwright": "catalog:",
+    "vite": "catalog:"
   },
   "devDependencies": {
     "@types/jsdom": "catalog:"

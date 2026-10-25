@@ -3059,17 +3059,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfObject"
+                  "$ref": "#/components/schemas/ApiResultOfFileDiffResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfObject"
+                  "$ref": "#/components/schemas/ApiResultOfFileDiffResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfObject"
+                  "$ref": "#/components/schemas/ApiResultOfFileDiffResponse"
                 }
               }
             }
@@ -8833,6 +8833,38 @@
           }
         }
       },
+      "ApiResultOfFileDiffResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FileDiffResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfFileItem": {
         "required": [
           "code",
@@ -10901,6 +10933,45 @@
             }
           }
         }
+      },
+      "FileDiffResponse": {
+        "required": [
+          "diff",
+          "unchanged",
+          "isBinary",
+          "originalContent",
+          "modifiedContent"
+        ],
+        "type": "object",
+        "properties": {
+          "diff": {
+            "type": "string",
+            "description": "git 输出的 unified diff。The unified diff from git."
+          },
+          "unchanged": {
+            "type": "boolean",
+            "description": "git 没有报告改动。Git reports no change."
+          },
+          "isBinary": {
+            "type": "boolean",
+            "description": "任一侧是二进制文件；此时两侧内容都为 null。Either side is binary; both contents are then null."
+          },
+          "originalContent": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "原始侧的全文（staged、缺省范围为 HEAD，unstaged 为暂存区）；该侧没有这个文件时为 null。\nThe original side's text (HEAD for staged and the default scope, the index for unstaged); null when absent."
+          },
+          "modifiedContent": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "修改侧的全文（staged 为暂存区，其他范围为工作区）；该侧没有这个文件时为 null。\nThe modified side's text (the index for staged, the working tree otherwise); null when absent."
+          }
+        },
+        "description": "文件在 diff 范围内的改动：unified diff 文字与两侧全文。\nA file's change in a diff scope: the unified diff text and the full text of both sides."
       },
       "FileItem": {
         "required": [

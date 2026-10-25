@@ -8,13 +8,15 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint -c ../../.oxlintrc.json ./src",
+    "lint": "oxlint -c ../../.oxlintrc.json ./src ./browser-tests",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "format": "oxfmt -c ../../.oxfmtrc.json ./src *.json",
-    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src *.json"
+    "test:browser": "tsx --test browser-tests/*.test.ts",
+    "format": "oxfmt -c ../../.oxfmtrc.json ./src ./browser-tests *.json",
+    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src ./browser-tests *.json"
   },
   "dependencies": {
     "@agw/api": "workspace:*",
+    "@agw/code-view": "workspace:*",
     "@agw/components": "workspace:*",
     "@agw/integrations": "workspace:*",
     "@agw/projects-core": "workspace:*",
@@ -23,8 +25,11 @@
   },
   "devDependencies": {
     "@agw/test-harness": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
     "@types/jsdom": "catalog:",
-    "jsdom": "catalog:"
+    "jsdom": "catalog:",
+    "playwright": "catalog:",
+    "tailwindcss": "catalog:"
   },
   "peerDependencies": {
     "lucide-react": "catalog:",

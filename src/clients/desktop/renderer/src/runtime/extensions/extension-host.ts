@@ -10,6 +10,7 @@ import type {
   InstalledExtension,
   ThemeStyleRequest,
   ThemeStyleText,
+  UnsavedFileItem,
 } from "@desktop/shared/contracts";
 import {
   createExtensionError,
@@ -37,6 +38,7 @@ import { extensionRegistration } from "./extension-contributions";
 import {
   type BrokerExtension,
   ExtensionBridgeBroker,
+  type ExtensionTextCodec,
   type HostTheme,
   type ImagePreviewRequest,
   type MessageBoxRequest,
@@ -296,6 +298,9 @@ export class ExtensionHost {
   private readonly fileViewerFiles = new Map<string, FileViewerFile>();
   /** 报告了未保存修改的 frame。Frames that reported unsaved changes. */
   private readonly unsavedFrames = new Set<string>();
+  /** 宿主 Source 中有未保存修改的文件名；没有时为 null。The file with unsaved changes in the host's Source, or null. */
+  private sourceUnsavedFile: string | null = null;
+  private readonly cloud: CloudFileSystem;
   /** frame 报告的保存状态：frameId → 状态。Save statuses frames reported: frameId → status. */
   private readonly saveStatuses = new Map<string, DocumentSaveStatus>();
   /** frame 设置的文件标题栏条目：frameId → 条目。File header items frames set: frameId → items. */
@@ -356,6 +361,7 @@ export class ExtensionHost {
     const cloud = new CloudFileSystem(this.context, this.cloudGrants, (location) =>
       this.fileWriteListener?.(location),
     );
+    this.cloud = cloud;
     this.execution = new ExecutionService({
       context: this.context,
       deliver: (owner, event, data) => this.broker.deliverExecution(owner, event, data),
@@ -637,15 +643,24 @@ export class ExtensionHost {
   }
 
   public hasUnsavedChanges(): boolean {
-    return this.unsavedFrames.size > 0;
+    return this.unsavedFrames.size > 0 || this.sourceUnsavedFile !== null;
   }
 
   /**
-   * 存在未保存修改时由用户确认放弃；传入 `viewIds` 时只考虑这些视图。
-   * Asks the user to discard unsaved changes when there are any; with `viewIds`, only those views count.
+   * 宿主 Source 的未保存文件（设计文档 5.5 节），null 表示没有未保存修改。
+   * The unsaved file of the host's Source (design section 5.5); null means no unsaved changes.
+   */
+  public setSourceUnsaved(fileName: string | null): void {
+    this.sourceUnsavedFile = fileName;
+  }
+
+  /**
+   * 存在未保存修改时由用户确认放弃；传入 `viewIds` 时只考虑这些 extension 视图，不包括 Source。
+   * Asks the user to discard unsaved changes when there are any; with `viewIds`, only those extension views count and
+   * Source is left out.
    */
   public confirmDiscardUnsaved(viewIds?: readonly string[]): Promise<boolean> {
-    const items = [...this.unsavedFrames].flatMap((frameId) => {
+    const items: UnsavedFileItem[] = [...this.unsavedFrames].flatMap((frameId) => {
       const frame = this.frames.get(frameId);
       const view = frame?.viewId ? this.registry.view(frame.viewId) : undefined;
       if (!frame || !view || (viewIds !== undefined && !viewIds.includes(view.id))) return [];
@@ -653,14 +668,97 @@ export class ExtensionHost {
         {
           fileName: (frame.params as FileViewerParams).file.name,
           viewerTitle: view.title,
-          extensionId: frame.extensionId,
-          extensionName: view.extensionName ?? frame.extensionId,
+          origin: {
+            kind: "extension" as const,
+            extensionId: frame.extensionId,
+            extensionName: view.extensionName ?? frame.extensionId,
+          },
         },
       ];
     });
+    if (viewIds === undefined && this.sourceUnsavedFile !== null) {
+      items.push({
+        fileName: this.sourceUnsavedFile,
+        viewerTitle: "Source",
+        origin: { kind: "host" },
+      });
+    }
     return items.length === 0
       ? Promise.resolve(true)
       : this.confirm({ kind: "discard-unsaved", items });
+  }
+
+  /** 宿主读取云端文件的字节（Source）。Reads a cloud file's bytes for the host (Source). */
+  public readHostFile(uri: string, signal?: AbortSignal): Promise<Uint8Array> {
+    return this.cloud.readFile({ kind: "host" }, uri, signal);
+  }
+
+  /**
+   * 宿主写入云端文件（Source）；成功后文件树按写入的路径刷新，与 extension 的写入相同。
+   * Writes a cloud file for the host (Source); the file tree refreshes the written path afterwards, as for extension
+   * writes.
+   */
+  public writeHostFile(
+    uri: string,
+    data: Uint8Array,
+    options: { overwrite: boolean; createParents: boolean; expectedSha256?: string },
+  ): Promise<null> {
+    return this.cloud.writeFile({ kind: "host" }, uri, data, options);
+  }
+
+  /** 主进程的文本编码转换。The main process's text encoding conversion. */
+  public textCodec(): ExtensionTextCodec {
+    return this.bridge;
+  }
+
+  /**
+   * 宿主来源的消息框（Source 的冲突与放弃修改），在确认窗口中显示并返回按钮下标；`signal` 中止时撤回消息框并以
+   * `ERR_CANCELED` 结束。
+   * A host message box (Source's conflicts and discards) shown in the confirmation window, resolving with the button
+   * index; aborting `signal` withdraws it and ends with `ERR_CANCELED`.
+   */
+  public showHostMessageBox(request: MessageBoxRequest, signal: AbortSignal): Promise<number> {
+    const canceled = () => createExtensionError("ERR_CANCELED", "The message box was withdrawn.");
+    if (signal.aborted) return Promise.reject(canceled());
+    const clientId = `${this.hostInstanceId}:${this.nextMessageBoxId++}`;
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const withdraw = () => {
+        if (settled) return;
+        settled = true;
+        reject(canceled());
+        this.bridge
+          .dismissHostConfirmation(clientId)
+          .catch((error: unknown) => console.error("Unable to withdraw a message box.", error));
+      };
+      signal.addEventListener("abort", withdraw, { once: true });
+      this.bridge
+        .confirmHostAction({
+          kind: "message",
+          clientId,
+          origin: { kind: "host" },
+          type: request.type,
+          message: request.message,
+          detail: request.detail,
+          buttons: [...request.buttons],
+          defaultId: request.defaultId,
+          cancelId: request.cancelId,
+        })
+        .then(
+          (answer) => {
+            if (settled) return;
+            settled = true;
+            signal.removeEventListener("abort", withdraw);
+            resolve(answer as number);
+          },
+          (error: unknown) => {
+            if (settled) return;
+            settled = true;
+            signal.removeEventListener("abort", withdraw);
+            reject(error instanceof Error ? error : new Error(String(error)));
+          },
+        );
+    });
   }
 
   /** 外壳挂载；卸载时关闭全部视图 frame（下一轮执行，StrictMode 重新挂载会取消）。Shell mount; unmount closes every view frame. */
@@ -1348,9 +1446,12 @@ export class ExtensionHost {
         .confirmHostAction({
           kind: "message",
           clientId,
-          extensionId: owner.extensionId,
-          extensionName:
-            this.records.get(owner.extensionId)?.installed.manifest?.name ?? owner.extensionId,
+          origin: {
+            kind: "extension",
+            extensionId: owner.extensionId,
+            extensionName:
+              this.records.get(owner.extensionId)?.installed.manifest?.name ?? owner.extensionId,
+          },
           type: request.type,
           message: request.message,
           detail: request.detail,
@@ -1472,7 +1573,7 @@ export class ExtensionHost {
 
   private readonly onBeforeUnload = (event: BeforeUnloadEvent) => {
     // 主进程在 will-prevent-unload 中由用户确认。The main process asks the user in will-prevent-unload.
-    if (this.unsavedFrames.size > 0) event.preventDefault();
+    if (this.hasUnsavedChanges()) event.preventDefault();
   };
 
   private async openFile(extensionId: string, uri: string): Promise<void> {

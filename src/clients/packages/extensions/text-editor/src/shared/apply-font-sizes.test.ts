@@ -39,10 +39,10 @@ beforeEach(() => {
 });
 afterEach(() => host.close());
 
-function putSettings(documentFontSize: number | null, codeFontSize: number | null): void {
+function putSettings(documentFontSize: number | null): void {
   files.set(
     SETTINGS_URI,
-    new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, documentFontSize, codeFontSize })),
+    new TextEncoder().encode(JSON.stringify({ schemaVersion: 2, documentFontSize })),
   );
 }
 
@@ -51,7 +51,7 @@ function documentFontSize(): string {
 }
 
 test("applyDocumentFontSize writes the stored document size and keeps it when the base size changes", async () => {
-  putSettings(18, null);
+  putSettings(18);
   applyDocumentFontSize(host.api, await readTextEditorSettings(host.api));
   assert.equal(documentFontSize(), "18px");
 
@@ -66,7 +66,7 @@ test("applyDocumentFontSize writes the stored document size and keeps it when th
 });
 
 test("a viewer started through createSettingsGate follows the base size on a theme change with one settings read", async () => {
-  putSettings(null, null);
+  putSettings(null);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -96,7 +96,7 @@ test("a viewer started through createSettingsGate follows the base size on a the
 });
 
 test("applyDocumentFontSize writes the smallest allowed stored size", async () => {
-  putSettings(14, null);
+  putSettings(14);
   applyDocumentFontSize(host.api, await readTextEditorSettings(host.api));
   assert.equal(documentFontSize(), "14px");
 });

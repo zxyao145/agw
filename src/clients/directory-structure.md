@@ -51,6 +51,7 @@ clients/
 │   │       └── ui-tokens/
 │   ├── auth/                         # authentication state and Web UI
 │   ├── agents/                       # Agents and Agentflows
+│   ├── code-view/                    # Monaco editor, status bar and diff viewer, loaded on first display
 │   ├── projects/                     # Projects, tasks, histories, and file explorer
 │   ├── chat-runtime/                 # platform-neutral SignalR, session/activity, Conversation state, ChatHttpClient, Token usage
 │   ├── chat/                         # shared Web/Desktop DOM Chat renderer

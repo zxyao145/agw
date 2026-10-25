@@ -188,7 +188,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("diff")]
-    [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult<FileDiffResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DiffAsync(
@@ -204,20 +204,17 @@ public class FilesController : ControllerBase
             return MapError(result);
         }
 
-        if (result.Value!.Unchanged)
-        {
-            return ApiResult.Ok(
-                new
-                {
-                    diff = "",
-                    message = "No changes detected",
-                    unchanged = true,
-                    originalContent = result.Value.OriginalContent,
-                }
-            );
-        }
-
-        return ApiResult.Ok(new { diff = result.Value.Diff, unchanged = false });
+        var output = result.Value!;
+        return ApiResult.Ok(
+            new FileDiffResponse
+            {
+                Diff = output.Diff,
+                Unchanged = output.Unchanged,
+                IsBinary = output.IsBinary,
+                OriginalContent = output.OriginalContent,
+                ModifiedContent = output.ModifiedContent,
+            }
+        );
     }
 
     [HttpDelete("delete")]

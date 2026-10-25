@@ -4,6 +4,7 @@ import { ThemeProvider } from "@agw/components";
 import { Toaster } from "@agw/components";
 import { TooltipProvider } from "@agw/components";
 
+import { WebCodeViewAppearance } from "./code-view-appearance";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,23 +26,25 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <TooltipProvider>
-            <QueryProvider>
-              {children}
-              <Toaster
-                position="top-center"
-                richColors
-                closeButton
-                style={
-                  {
-                    "--toast-close-button-start": "unset",
-                    "--toast-close-button-end": "0",
-                    "--toast-close-button-transform": "translate(35%, -35%)",
-                  } as React.CSSProperties
-                }
-              />
-            </QueryProvider>
-          </TooltipProvider>
+          <WebCodeViewAppearance>
+            <TooltipProvider>
+              <QueryProvider>
+                {children}
+                <Toaster
+                  position="top-center"
+                  richColors
+                  closeButton
+                  style={
+                    {
+                      "--toast-close-button-start": "unset",
+                      "--toast-close-button-end": "0",
+                      "--toast-close-button-transform": "translate(35%, -35%)",
+                    } as React.CSSProperties
+                  }
+                />
+              </QueryProvider>
+            </TooltipProvider>
+          </WebCodeViewAppearance>
         </ThemeProvider>
       </body>
     </html>

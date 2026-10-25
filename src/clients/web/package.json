@@ -6,16 +6,18 @@
     "dev": "next dev --port 3001 --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "oxlint -c ../.oxlintrc.json ./src ./e2e ./playwright.config.ts",
-    "lint:fix": "oxlint -c ../.oxlintrc.json --fix ./src ./e2e ./playwright.config.ts",
+    "lint": "oxlint -c ../.oxlintrc.json ./src ./e2e ./playwright.config.ts ./playwright.export.config.ts",
+    "lint:fix": "oxlint -c ../.oxlintrc.json --fix ./src ./e2e ./playwright.config.ts ./playwright.export.config.ts",
     "test:e2e": "playwright test",
-    "format": "oxfmt -c ../.oxfmtrc.json ./src ./e2e ./playwright.config.ts",
-    "format:check": "oxfmt -c ../.oxfmtrc.json --check ./src ./e2e ./playwright.config.ts"
+    "test:e2e:export": "playwright test -c playwright.export.config.ts",
+    "format": "oxfmt -c ../.oxfmtrc.json ./src ./e2e ./playwright.config.ts ./playwright.export.config.ts",
+    "format:check": "oxfmt -c ../.oxfmtrc.json --check ./src ./e2e ./playwright.config.ts ./playwright.export.config.ts"
   },
   "dependencies": {
     "@agw/agents": "workspace:*",
     "@agw/auth": "workspace:*",
     "@agw/chat": "workspace:*",
+    "@agw/code-view": "workspace:*",
     "@agw/components": "workspace:*",
     "@agw/integrations": "workspace:*",
     "@agw/jobs": "workspace:*",
@@ -37,6 +39,7 @@
     "@tailwindcss/postcss": "catalog:",
     "baseline-browser-mapping": "2.11.25",
     "code-inspector-plugin": "catalog:",
+    "serve": "catalog:",
     "tailwindcss": "catalog:",
     "tw-animate-css": "catalog:"
   }

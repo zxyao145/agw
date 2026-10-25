@@ -4,36 +4,48 @@ import test from "node:test";
 import type { FontSizeSettings } from "@desktop/shared/contracts";
 import { resolveAppearance } from "./resolve-appearance";
 
-const appearance = (baseFontSize: number, chatFontSize: number | null): FontSizeSettings => ({
-  baseFontSize,
-  chatFontSize,
-});
+const appearance = (
+  baseFontSize: number,
+  chatFontSize: number | null,
+  codeFontSize: number | null = null,
+): FontSizeSettings => ({ baseFontSize, chatFontSize, codeFontSize });
 
 function sizes(value: FontSizeSettings) {
   const properties = resolveAppearance(value);
-  return [properties["--agw-font-size-base"], properties["--agw-font-size-chat"]];
+  return [
+    properties["--agw-font-size-base"],
+    properties["--agw-font-size-chat"],
+    properties["--agw-font-size-code"],
+  ];
 }
 
 test("resolveAppearance maps the defaults to px values", () => {
-  assert.deepEqual(sizes(appearance(16, null)), ["16px", "14px"]);
+  assert.deepEqual(sizes(appearance(16, null)), ["16px", "14px", "14px"]);
 });
 
-test("resolveAppearance writes only the base and chat font sizes", () => {
+test("resolveAppearance writes the base, chat and code font sizes", () => {
   assert.deepEqual(resolveAppearance(appearance(16, null)), {
     "--agw-font-size-base": "16px",
     "--agw-font-size-chat": "14px",
+    "--agw-font-size-code": "14px",
   });
 });
 
 test("resolveAppearance derives the chat size 10.5px from base size 12", () => {
-  assert.deepEqual(sizes(appearance(12, null)), ["12px", "10.5px"]);
+  assert.deepEqual(sizes(appearance(12, null)), ["12px", "10.5px", "10.5px"]);
 });
 
 test("resolveAppearance keeps an explicit chat size independent of the base size", () => {
-  assert.deepEqual(sizes(appearance(16, 15)), ["16px", "15px"]);
-  assert.deepEqual(sizes(appearance(20, 15)), ["20px", "15px"]);
+  assert.deepEqual(sizes(appearance(16, 15)), ["16px", "15px", "14px"]);
+  assert.deepEqual(sizes(appearance(20, 15)), ["20px", "15px", "17.5px"]);
 });
 
 test("resolveAppearance derives the chat size from the base size", () => {
-  assert.deepEqual(sizes(appearance(20, null)), ["20px", "17.5px"]);
+  assert.deepEqual(sizes(appearance(20, null)), ["20px", "17.5px", "17.5px"]);
+});
+
+test("resolveAppearance rounds the derived code size to 0.5px and keeps an explicit one", () => {
+  // 13 × 0.875 = 11.375，按 0.5px 四舍五入为 11.5。13 × 0.875 = 11.375 rounds to 11.5 at 0.5px steps.
+  assert.deepEqual(sizes(appearance(13, null)), ["13px", "11.375px", "11.5px"]);
+  assert.deepEqual(sizes(appearance(16, null, 22)), ["16px", "14px", "22px"]);
 });

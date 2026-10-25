@@ -99,19 +99,29 @@ export function wheelScale(
 }
 
 /**
- * 滚动位置为 `scroll` 时 `anchor`（显示区中的坐标）下的点，以图片像素为单位，可以在图片之外。
- * The point under `anchor` (display-area coordinates) at scroll position `scroll`, in image pixels; it may lie outside
- * the image.
+ * 显示区中的位置；null 为 `stage` 的中心，滚动条出现或消失后按新的可见尺寸计算。
+ * A position in the display area; null is the center of `stage`, so it follows the visible size once scrollbars come
+ * or go.
+ */
+function anchorIn(stage: Size, anchor: Point | null): Point {
+  return anchor ?? { x: stage.width / 2, y: stage.height / 2 };
+}
+
+/**
+ * 滚动位置为 `scroll` 时 `anchor`（显示区中的坐标，null 为中心）下的点，以图片像素为单位，可以在图片之外。
+ * The point under `anchor` (display-area coordinates, null for the center) at scroll position `scroll`, in image
+ * pixels; it may lie outside the image.
  */
 export function imagePointUnder(options: {
   image: Size;
   stage: Size;
   scale: number;
   scroll: Point;
-  anchor: Point;
+  anchor: Point | null;
 }): Point {
-  const { image, stage, scale, scroll, anchor } = options;
+  const { image, stage, scale, scroll } = options;
   const layout = layoutImage(image, stage, scale);
+  const anchor = anchorIn(stage, options.anchor);
   return {
     x: (scroll.x + anchor.x - layout.left) / scale,
     y: (scroll.y + anchor.y - layout.top) / scale,
@@ -119,19 +129,20 @@ export function imagePointUnder(options: {
 }
 
 /**
- * 使图片点 `point` 位于 `anchor`（显示区中的坐标）下的滚动位置，限制在可滚动范围内。
- * The scroll position that puts image point `point` under `anchor` (display-area coordinates), clamped to the
- * scrollable range.
+ * 使图片点 `point` 位于 `anchor`（显示区中的坐标，null 为中心）下的滚动位置，限制在可滚动范围内。
+ * The scroll position that puts image point `point` under `anchor` (display-area coordinates, null for the center),
+ * clamped to the scrollable range.
  */
 export function scrollToPoint(options: {
   image: Size;
   stage: Size;
   scale: number;
   point: Point;
-  anchor: Point;
+  anchor: Point | null;
 }): Point {
-  const { image, stage, scale, point, anchor } = options;
+  const { image, stage, scale, point } = options;
   const layout = layoutImage(image, stage, scale);
+  const anchor = anchorIn(stage, options.anchor);
   const clamp = (value: number, max: number) => Math.min(Math.max(value, 0), max);
   return {
     x: clamp(layout.left + point.x * scale - anchor.x, layout.content.width - stage.width),

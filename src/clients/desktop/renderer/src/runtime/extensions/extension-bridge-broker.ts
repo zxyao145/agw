@@ -210,7 +210,7 @@ function buttonIndex(value: unknown, buttonCount: number, name: string): number 
 }
 
 /** 检查 `dialog.showMessageBox` 的参数（9.5 节）。Checks the `dialog.showMessageBox` options (section 9.5). */
-function toMessageBoxRequest(options: unknown): MessageBoxRequest {
+export function toMessageBoxRequest(options: unknown): MessageBoxRequest {
   if (typeof options !== "object" || options === null) {
     throw invalidArgument("The message box options must be an object.");
   }
@@ -651,6 +651,7 @@ export class ExtensionBridgeBroker {
 
   private cloudAccess(connection: FrameConnection): CloudAccess {
     return {
+      kind: "extension",
       extensionId: connection.extensionId,
       permissions: this.requireExtension(connection.extensionId).permissions,
     };

@@ -6,8 +6,6 @@ import { errorCode } from "./errors";
 const MIN_FONT_SIZE = 12;
 const MAX_FONT_SIZE = 28;
 const SETTINGS_FILE_NAME = "settings.json";
-// Code 的字号默认取文档字号的 0.875 倍。By default the code size is 0.875 times the document size.
-const CODE_TO_DOCUMENT_RATIO = 0.875;
 
 /** 可选的字号（px），12 到 28 的整数。The selectable sizes in px: the integers 12 to 28. */
 export const TEXT_EDITOR_FONT_SIZES: readonly number[] = Array.from(
@@ -18,6 +16,16 @@ export const TEXT_EDITOR_FONT_SIZES: readonly number[] = Array.from(
 const fontSizeSchema = z.number().int().min(MIN_FONT_SIZE).max(MAX_FONT_SIZE).nullable();
 
 const settingsSchema = z.strictObject({
+  schemaVersion: z.literal(2),
+  documentFontSize: fontSizeSchema,
+});
+
+/**
+ * 版本 1 另有 Code 查看器的 `codeFontSize`；Code 由宿主的 Source 取代后，这个字号在 Desktop 的 Appearance 中设置。
+ * Version 1 also had the Code viewer's `codeFontSize`; Code was replaced by the host's Source, whose size is set in
+ * Desktop's Appearance.
+ */
+const settingsV1Schema = z.strictObject({
   schemaVersion: z.literal(1),
   documentFontSize: fontSizeSchema,
   codeFontSize: fontSizeSchema,
@@ -27,9 +35,8 @@ const settingsSchema = z.strictObject({
 export type TextEditorSettings = z.infer<typeof settingsSchema>;
 
 export const DEFAULT_TEXT_EDITOR_SETTINGS: TextEditorSettings = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   documentFontSize: null,
-  codeFontSize: null,
 };
 
 /** 设置文件无法解析或校验失败。The settings file cannot be parsed or fails validation. */
@@ -53,6 +60,21 @@ function validate(value: unknown): TextEditorSettings {
 }
 
 /**
+ * 读取到的设置：版本 1 的文件校验后去掉 `codeFontSize`，下次保存时写为版本 2。
+ * Settings as read: a version 1 file is validated and loses `codeFontSize`, and the next save writes version 2.
+ */
+function upgrade(value: unknown): TextEditorSettings {
+  if ((value as { schemaVersion?: unknown } | null)?.schemaVersion !== 1) return validate(value);
+  const result = settingsV1Schema.safeParse(value);
+  if (!result.success) {
+    throw new TextEditorSettingsError(
+      `${SETTINGS_FILE_NAME} is invalid: ${z.prettifyError(result.error)}`,
+    );
+  }
+  return { schemaVersion: 2, documentFontSize: result.data.documentFontSize };
+}
+
+/**
  * 读取设置文件；文件不存在时返回默认值，内容不合法时抛出 TextEditorSettingsError，其他读取错误原样抛出。
  * Reads the settings file: defaults when it does not exist, TextEditorSettingsError when the content is invalid,
  * any other read error is rethrown.
@@ -73,7 +95,7 @@ export async function readTextEditorSettings(api: ExtensionApi): Promise<TextEdi
       `${SETTINGS_FILE_NAME} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return validate(parsed);
+  return upgrade(parsed);
 }
 
 /**
@@ -100,18 +122,14 @@ function pixels(tokens: Record<string, string>, name: string): number {
 }
 
 /**
- * 实际使用的字号（px）：文档字号为设置值，未设置时取基础字号；代码字号为设置值，未设置时取文档字号 × 0.875 并取整到
- * 0.5px。主题变量缺少基础字号或不是 px 值时抛出。
- * The effective sizes in px: the document size is the setting, or the base size when unset; the code size is the
- * setting, or the document size × 0.875 rounded to 0.5px when unset. Throws when the theme has no base size or it is
- * not a px value.
+ * 实际使用的字号（px）：文档字号为设置值，未设置时取基础字号。主题变量缺少基础字号或不是 px 值时抛出。
+ * The effective sizes in px: the document size is the setting, or the base size when unset. Throws when the theme has
+ * no base size or it is not a px value.
  */
 export function resolveTextEditorFontSizes(
   settings: TextEditorSettings,
   tokens: Record<string, string>,
-): { document: number; code: number } {
+): { document: number } {
   const base = pixels(tokens, "--agw-font-size-base");
-  const document = settings.documentFontSize ?? base;
-  const code = settings.codeFontSize ?? Math.round(document * CODE_TO_DOCUMENT_RATIO * 2) / 2;
-  return { document, code };
+  return { document: settings.documentFontSize ?? base };
 }

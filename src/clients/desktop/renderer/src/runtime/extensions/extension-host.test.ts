@@ -16,6 +16,11 @@ type ViewModule = typeof import("../components/workspace/extension-view");
 const PROJECT = "0192f0c5-3c2a-7cc1-9d4e-6f1a2b3c4d5e";
 const VIEWER = "sample:viewer";
 const OUTLINE = "sample:outline";
+const SAMPLE_ORIGIN = {
+  kind: "extension",
+  extensionId: "sample",
+  extensionName: "Sample",
+} as const;
 
 const installed = sampleExtension([
   { id: "viewer", title: "Viewer", icon: "Eye", patterns: ["*.md"], entry: "viewer.html" },
@@ -163,8 +168,7 @@ test("confirmDiscardUnsaved lists only the unsaved changes of the given viewers"
       {
         fileName: "notes.md",
         viewerTitle: "Outline",
-        extensionId: "sample",
-        extensionName: "Sample",
+        origin: SAMPLE_ORIGIN,
       },
     ],
   });
@@ -178,14 +182,12 @@ test("confirmDiscardUnsaved lists only the unsaved changes of the given viewers"
       {
         fileName: "notes.md",
         viewerTitle: "Viewer",
-        extensionId: "sample",
-        extensionName: "Sample",
+        origin: SAMPLE_ORIGIN,
       },
       {
         fileName: "notes.md",
         viewerTitle: "Outline",
-        extensionId: "sample",
-        extensionName: "Sample",
+        origin: SAMPLE_ORIGIN,
       },
     ],
   });
@@ -194,6 +196,74 @@ test("confirmDiscardUnsaved lists only the unsaved changes of the given viewers"
 
   assert.equal(await host.confirmDiscardUnsaved(["sample:other"]), true);
   assert.equal(currentConfirmation(), null);
+});
+
+test("the host Source's unsaved file joins every confirmation except a viewer-only one", async () => {
+  const file = fileNamed("notes.md");
+  const viewer = await showLoaded(VIEWER, file);
+  await reportUnsaved(viewer.page, true);
+  assert.equal(host.hasUnsavedChanges(), true);
+  await reportUnsaved(viewer.page, false);
+  assert.equal(host.hasUnsavedChanges(), false);
+
+  host.setSourceUnsaved("app.ts");
+  assert.equal(host.hasUnsavedChanges(), true);
+  await reportUnsaved(viewer.page, true);
+  const every = host.confirmDiscardUnsaved();
+  assert.deepEqual(currentConfirmation(), {
+    kind: "discard-unsaved",
+    items: [
+      { fileName: "notes.md", viewerTitle: "Viewer", origin: SAMPLE_ORIGIN },
+      { fileName: "app.ts", viewerTitle: "Source", origin: { kind: "host" } },
+    ],
+  });
+  await answer(false);
+  assert.equal(await every, false);
+
+  // 只针对某个 extension 视图的确认不包括 Source。A confirmation for one extension view leaves Source out.
+  const onlyViewer = host.confirmDiscardUnsaved([VIEWER]);
+  assert.deepEqual(currentConfirmation(), {
+    kind: "discard-unsaved",
+    items: [{ fileName: "notes.md", viewerTitle: "Viewer", origin: SAMPLE_ORIGIN }],
+  });
+  await answer(true);
+  assert.equal(await onlyViewer, true);
+
+  await reportUnsaved(viewer.page, false);
+  host.setSourceUnsaved(null);
+  assert.equal(host.hasUnsavedChanges(), false);
+  assert.equal(await host.confirmDiscardUnsaved(), true);
+  assert.equal(currentConfirmation(), null);
+});
+
+test("a host message box shows with the host origin and an abort withdraws it with ERR_CANCELED", async () => {
+  const request = {
+    type: "warning" as const,
+    message: "app.ts was changed on disk after it was opened.",
+    detail: "Overwrite it with your version, or reload it and discard your changes.",
+    buttons: ["Overwrite", "Reload", "Cancel"],
+    defaultId: 2,
+    cancelId: 2,
+  };
+  const answered = host.showHostMessageBox(request, new AbortController().signal);
+  await until(() => currentConfirmation() !== null, "the host message box");
+  assert.deepEqual(currentConfirmation(), {
+    kind: "message",
+    origin: { kind: "host" },
+    ...request,
+  });
+  await answer(0);
+  assert.equal(await answered, 0);
+
+  const closing = new AbortController();
+  const withdrawn = host.showHostMessageBox(request, closing.signal);
+  await until(() => currentConfirmation() !== null, "the second host message box");
+  closing.abort();
+  await assert.rejects(withdrawn, { code: "ERR_CANCELED" });
+  await until(() => currentConfirmation() === null, "the message box to be withdrawn");
+  await assert.rejects(host.showHostMessageBox(request, closing.signal), {
+    code: "ERR_CANCELED",
+  });
 });
 
 test("closing the confirmation window answers as canceled", async () => {
@@ -225,8 +295,7 @@ test("Reload view asks before discarding unsaved changes and reloads only after 
       {
         fileName: "notes.md",
         viewerTitle: "Viewer",
-        extensionId: "sample",
-        extensionName: "Sample",
+        origin: SAMPLE_ORIGIN,
       },
     ],
   });
@@ -280,8 +349,7 @@ test("message boxes from views join the confirmation queue in order and resolve 
 
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
-    extensionId: "sample",
-    extensionName: "Sample",
+    origin: SAMPLE_ORIGIN,
     type: "warning",
     message: "notes.md was changed on disk after it was opened.",
     detail: "Overwrite it with your version, or reload it and discard your changes.",
@@ -300,8 +368,7 @@ test("message boxes from views join the confirmation queue in order and resolve 
   // 缺省的 cancelId 为最后一个按钮。cancelId defaults to the last button.
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
-    extensionId: "sample",
-    extensionName: "Sample",
+    origin: SAMPLE_ORIGIN,
     type: null,
     message: "m".repeat(500),
     detail: "d".repeat(2000),
@@ -319,8 +386,7 @@ test("message boxes from views join the confirmation queue in order and resolve 
       {
         fileName: "notes.md",
         viewerTitle: "Viewer",
-        extensionId: "sample",
-        extensionName: "Sample",
+        origin: SAMPLE_ORIGIN,
       },
     ],
   });
@@ -347,8 +413,7 @@ test("closing a frame removes its queued and shown message boxes and the calls f
   await reportUnsaved(viewer.page, false);
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
-    extensionId: "sample",
-    extensionName: "Sample",
+    origin: SAMPLE_ORIGIN,
     type: null,
     message: "First",
     detail: null,
@@ -362,8 +427,7 @@ test("closing a frame removes its queued and shown message boxes and the calls f
   await queuedFailure;
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
-    extensionId: "sample",
-    extensionName: "Sample",
+    origin: SAMPLE_ORIGIN,
     type: null,
     message: "Second",
     detail: null,
@@ -577,8 +641,7 @@ test("a replaced page's message boxes leave the queue while the frame stays", as
   assert.equal(host.frameIdOfView(VIEWER), frameId);
   assert.deepEqual(currentConfirmation(), {
     kind: "message",
-    extensionId: "sample",
-    extensionName: "Sample",
+    origin: SAMPLE_ORIGIN,
     type: null,
     message: "Second",
     detail: null,

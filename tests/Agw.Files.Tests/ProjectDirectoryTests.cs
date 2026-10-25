@@ -162,6 +162,8 @@ public sealed class ProjectDirectoryTests : IDisposable
         var diff = await _files.DiffAsync(_projectId, "README.md", null, Token, _directoryId);
         Assert.Contains("additional changed", diff.Value!.Diff);
         Assert.DoesNotContain("primary changed", diff.Value.Diff);
+        Assert.Equal("additional\n", diff.Value.OriginalContent);
+        Assert.Equal("additional changed\n", diff.Value.ModifiedContent);
         Assert.Equal(
             FileOperationStatus.Success,
             (await _files.StageAsync(_projectId, "README.md", Token, _directoryId)).Status

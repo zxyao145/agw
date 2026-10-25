@@ -14,6 +14,9 @@ public sealed class FileAppService
 
     private const int Sha256HexLength = 64;
 
+    /// <summary>判断二进制时检查的字符数，与 git 相同。The characters checked for binary content, as in git.</summary>
+    private const int BinaryProbeLength = 8000;
+
     private const string GitRequiresLocalFileSystem =
         "Git operations are only supported for local project file systems";
 
@@ -243,16 +246,77 @@ public sealed class FileAppService
             }
         }
 
-        var result = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken, diffScope);
-        if (!result.Success)
+        var diff = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken, diffScope);
+        if (!diff.Success)
         {
-            _logger.LogWarning("Git diff failed: {Error}", result.Error);
-            return FileOperationResult<FileDiffOutput>.Invalid("Git diff failed", result.Error);
+            return DiffFailed(diff.Error);
         }
 
-        return FileOperationResult<FileDiffOutput>.Succeeded(
-            new FileDiffOutput(result.Diff, result.Unchanged, result.OriginalContent)
+        // 原始侧：unstaged 为暂存区，其他范围为 HEAD。The original side: the index for unstaged, HEAD otherwise.
+        var original = await _gitCommandService.ReadBlobAsync(
+            physicalPath,
+            diffScope == GitDiffScope.Unstaged ? GitBlobSource.Index : GitBlobSource.Head,
+            cancellationToken
         );
+        if (!original.Success)
+        {
+            return DiffFailed(original.Error);
+        }
+
+        var modified = await ReadModifiedSideAsync(fileSystem, path, physicalPath, diffScope, cancellationToken);
+        if (!modified.Success)
+        {
+            return DiffFailed(modified.Error);
+        }
+
+        var isBinary = IsBinaryText(original.Content) || IsBinaryText(modified.Content);
+        return FileOperationResult<FileDiffOutput>.Succeeded(
+            new FileDiffOutput
+            {
+                Diff = diff.Diff,
+                Unchanged = string.IsNullOrWhiteSpace(diff.Diff),
+                IsBinary = isBinary,
+                OriginalContent = isBinary ? null : original.Content,
+                ModifiedContent = isBinary ? null : modified.Content,
+            }
+        );
+    }
+
+    /// <summary>
+    /// 修改侧：staged 为暂存区，其他范围为工作区（与 /api/files/read 相同的路径限制）。
+    /// The modified side: the index for staged, the working tree otherwise (with the same path confinement as
+    /// /api/files/read).
+    /// </summary>
+    private async Task<GitBlobResult> ReadModifiedSideAsync(
+        IAgwFileSystem fileSystem,
+        string path,
+        string physicalPath,
+        GitDiffScope diffScope,
+        CancellationToken cancellationToken
+    )
+    {
+        if (diffScope == GitDiffScope.Staged)
+        {
+            return await _gitCommandService.ReadBlobAsync(physicalPath, GitBlobSource.Index, cancellationToken);
+        }
+
+        var content = await fileSystem.ExistsFileAsync(path, cancellationToken)
+            ? await fileSystem.ReadAllTextAsync(path, cancellationToken)
+            : null;
+        return new GitBlobResult(true, content, null);
+    }
+
+    /// <summary>
+    /// 前 <see cref="BinaryProbeLength"/> 个字符中有 NUL 时按二进制处理，与 git 的判断相同。
+    /// Text with a NUL in its first <see cref="BinaryProbeLength"/> characters is binary, as git decides.
+    /// </summary>
+    private static bool IsBinaryText(string? content) =>
+        content != null && content.AsSpan(0, Math.Min(content.Length, BinaryProbeLength)).Contains('\0');
+
+    private FileOperationResult<FileDiffOutput> DiffFailed(string? error)
+    {
+        _logger.LogWarning("Git diff failed: {Error}", error);
+        return FileOperationResult<FileDiffOutput>.Invalid("Git diff failed", error);
     }
 
     public async Task<FileOperationResult<FileMutationOutput>> DeleteAsync(

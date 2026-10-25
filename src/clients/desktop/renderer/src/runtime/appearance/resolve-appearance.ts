@@ -10,5 +10,6 @@ export function resolveAppearance(appearance: FontSizeSettings): Record<string, 
   return {
     "--agw-font-size-base": `${sizes.base}px`,
     "--agw-font-size-chat": `${sizes.chat}px`,
+    "--agw-font-size-code": `${sizes.code}px`,
   };
 }

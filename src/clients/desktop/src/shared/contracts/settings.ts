@@ -14,6 +14,8 @@ export type AppearanceMode = "system" | "light" | "dark";
 export type FontSizeSettings = {
   baseFontSize: number;
   chatFontSize: number | null;
+  /** Files 中 Source 的字号；null 跟随基础字号。Source's size in Files; null follows the base size. */
+  codeFontSize: number | null;
 };
 
 /** 外观设置：字号、主题与 Mode。Appearance settings: font sizes, theme and mode. */

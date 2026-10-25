@@ -153,8 +153,6 @@ export function SettingsForm({ api }: { api: ExtensionApi }) {
     { ...settings, documentFontSize: null },
     tokens,
   );
-  const followCode = resolveTextEditorFontSizes({ ...settings, codeFontSize: null }, tokens).code;
-
   return (
     <div className="settings-page">
       {state.status === "invalid" ? (
@@ -169,16 +167,6 @@ export function SettingsForm({ api }: { api: ExtensionApi }) {
         resetLabel="Reset document font size"
         disabled={invalid}
         onChange={(documentFontSize) => apply({ ...settings, documentFontSize })}
-      />
-      <SizeField
-        id="text-editor-code-font-size"
-        label="Code editor font size"
-        description="Used by Code."
-        value={settings.codeFontSize}
-        followText={`Follow document size (${followCode} px)`}
-        resetLabel="Reset code editor font size"
-        disabled={invalid}
-        onChange={(codeFontSize) => apply({ ...settings, codeFontSize })}
       />
       <div className="settings-actions">
         <button type="button" onClick={() => apply({ ...DEFAULT_TEXT_EDITOR_SETTINGS })}>

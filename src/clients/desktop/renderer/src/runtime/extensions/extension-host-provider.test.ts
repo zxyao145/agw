@@ -57,7 +57,7 @@ test("the theme offered to extensions excludes the document font size variable",
 test("readTheme reads the font size variables written by AppearanceProvider", () => {
   environment.render(
     environment.React.createElement(AppearanceProvider, {
-      appearance: { baseFontSize: 20, chatFontSize: null },
+      appearance: { baseFontSize: 20, chatFontSize: null, codeFontSize: null },
       children: null,
     }),
   );

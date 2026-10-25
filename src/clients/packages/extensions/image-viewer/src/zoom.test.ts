@@ -164,6 +164,28 @@ test("scrollToPoint_FromFitToActualSizeAtCenter_KeepsTheCenter", () => {
   });
 });
 
+test("scrollToPoint_CenterAnchorAfterScrollbarsAppear_CentersInTheNewStage", () => {
+  // 1:1 使两条常显滚动条出现，可见区域从 1070×726 变为 1055×711；图片中心位于缩小后的显示区中心。
+  // 1:1 brings in both classic scrollbars, shrinking the visible area from 1070×726 to 1055×711; the image center lies
+  // at the center of the smaller display area.
+  const image = { width: 1024, height: 1024 };
+  const fitted = { width: 1070, height: 726 };
+  const scrolled = { width: 1055, height: 711 };
+  const point = imagePointUnder({
+    image,
+    stage: fitted,
+    scale: fitScale(image, fitted),
+    scroll: { x: 0, y: 0 },
+    anchor: null,
+  });
+  assert.deepEqual(point, { x: 512, y: 512 });
+  const content = layoutImage(image, scrolled, 1).content;
+  assert.deepEqual(scrollToPoint({ image, stage: scrolled, scale: 1, point, anchor: null }), {
+    x: (content.width - scrolled.width) / 2,
+    y: (content.height - scrolled.height) / 2,
+  });
+});
+
 test("scrollToPoint_InsideTheRange_KeepsThePointUnderTheAnchor", () => {
   const image = { width: 1200, height: 900 };
   const from = 1.5;

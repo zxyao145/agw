@@ -7,6 +7,7 @@ import {
   session,
 } from "electron";
 
+import { confirmationOriginName } from "../../shared/confirmation-origin";
 import type { ConfirmationView } from "../../shared/contracts";
 import {
   CONFIRMATION_ORIGIN,
@@ -52,7 +53,7 @@ function titleOf(view: ConfirmationView): string {
     case "open-link":
       return "Open link?";
     case "message":
-      return view.extensionName;
+      return confirmationOriginName(view.origin);
     case "install":
       return `Install ${view.extensionName}?`;
     case "enable":

@@ -10,6 +10,14 @@ namespace Agw.Files.Infrastructure.Git;
 
 public class GitCommandService : IGitCommandService
 {
+    private const string NotInRepository = "File is not in a git repository";
+
+    /// <summary>
+    /// `git rev-parse --verify --quiet` 在对象不存在时的退出码。The exit code of `git rev-parse --verify --quiet` for
+    /// a missing object.
+    /// </summary>
+    private const int MissingObjectExitCode = 1;
+
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> IndexMutationLocks = new(
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal
     );
@@ -90,7 +98,7 @@ public class GitCommandService : IGitCommandService
         var gitDirectory = FindGitDirectory(filePath);
         if (gitDirectory == null)
         {
-            return new GitDiffResult(false, string.Empty, false, null, "File is not in a git repository");
+            return new GitDiffResult(false, string.Empty, NotInRepository);
         }
 
         IReadOnlyCollection<string> diffArguments = scope switch
@@ -102,12 +110,12 @@ public class GitCommandService : IGitCommandService
         var diffResult = await RunGitAsync(gitDirectory, diffArguments, cancellationToken);
         if (diffResult.ExitCode != 0 && !string.IsNullOrEmpty(diffResult.StandardError))
         {
-            return new GitDiffResult(false, string.Empty, false, null, diffResult.StandardError);
+            return new GitDiffResult(false, string.Empty, diffResult.StandardError);
         }
 
         if (!string.IsNullOrWhiteSpace(diffResult.StandardOutput))
         {
-            return new GitDiffResult(true, diffResult.StandardOutput, false, null, null);
+            return new GitDiffResult(true, diffResult.StandardOutput, null);
         }
 
         if (scope == GitDiffScope.Unstaged)
@@ -119,22 +127,44 @@ public class GitCommandService : IGitCommandService
             }
         }
 
-        var gitRootResult = await RunGitAsync(gitDirectory, ["rev-parse", "--show-toplevel"], cancellationToken);
-        if (gitRootResult.ExitCode != 0)
+        return new GitDiffResult(true, string.Empty, null);
+    }
+
+    public async Task<GitBlobResult> ReadBlobAsync(
+        string filePath,
+        GitBlobSource source,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var gitDirectory = FindGitDirectory(filePath);
+        if (gitDirectory == null)
         {
-            return new GitDiffResult(false, string.Empty, false, null, "Failed to get git root directory");
+            return new GitBlobResult(false, null, NotInRepository);
         }
 
-        var gitRoot = gitRootResult.StandardOutput.Trim();
-        var relativePath = Path.GetRelativePath(gitRoot, filePath).Replace("\\", "/");
-        var baseline = scope == GitDiffScope.Unstaged ? $":{relativePath}" : $"HEAD:{relativePath}";
-        var showResult = await RunGitAsync(gitDirectory, ["show", baseline], cancellationToken);
-        if (showResult.ExitCode == 0)
+        // 相对路径以 FindGitDirectory 的结果为基准，与 ResetFileAsync 相同。The relative path is based on
+        // FindGitDirectory, as in ResetFileAsync.
+        var relativePath = Path.GetRelativePath(gitDirectory, filePath).Replace("\\", "/");
+        var objectName = source == GitBlobSource.Head ? $"HEAD:{relativePath}" : $":0:{relativePath}";
+        var verifyResult = await RunGitAsync(
+            gitDirectory,
+            ["rev-parse", "--verify", "--quiet", objectName],
+            cancellationToken
+        );
+        if (verifyResult.ExitCode == MissingObjectExitCode)
         {
-            return new GitDiffResult(true, string.Empty, true, showResult.StandardOutput, null);
+            return new GitBlobResult(true, null, null);
         }
 
-        return new GitDiffResult(true, string.Empty, false, null, null);
+        if (verifyResult.ExitCode != 0)
+        {
+            return new GitBlobResult(false, null, verifyResult.StandardError);
+        }
+
+        var blobResult = await RunGitAsync(gitDirectory, ["cat-file", "blob", objectName], cancellationToken);
+        return blobResult.ExitCode == 0
+            ? new GitBlobResult(true, blobResult.StandardOutput, null)
+            : new GitBlobResult(false, null, blobResult.StandardError);
     }
 
     private static string? MapStatus(char statusCode) =>
@@ -175,13 +205,13 @@ public class GitCommandService : IGitCommandService
             {
                 if (diffResult.ExitCode == 0)
                 {
-                    return new GitDiffResult(true, string.Empty, false, null, null);
+                    return new GitDiffResult(true, string.Empty, null);
                 }
 
-                return new GitDiffResult(false, string.Empty, false, null, diffResult.StandardError);
+                return new GitDiffResult(false, string.Empty, diffResult.StandardError);
             }
 
-            return new GitDiffResult(true, diffResult.StandardOutput, false, null, null);
+            return new GitDiffResult(true, diffResult.StandardOutput, null);
         }
         finally
         {

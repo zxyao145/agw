@@ -2,7 +2,7 @@
   "name": "@agw/extension-text-editor",
   "version": "1.0.0",
   "private": true,
-  "description": "Agw Desktop bundled extension that previews Markdown files and edits text files in the Files view",
+  "description": "Agw Desktop bundled extension that previews and edits Markdown files in the Files view",
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -55,8 +55,6 @@
     "mermaid": "catalog:",
     "micromark-util-classify-character": "catalog:",
     "micromark-util-decode-string": "catalog:",
-    "monaco-editor": "catalog:",
-    "prettier": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "vfile": "catalog:",

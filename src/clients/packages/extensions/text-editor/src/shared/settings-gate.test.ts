@@ -72,7 +72,7 @@ function mountViewer() {
 }
 
 test("an early onShow opens the file only after the settings are read", async () => {
-  putSettings(JSON.stringify({ schemaVersion: 1, documentFontSize: 18, codeFontSize: null }));
+  putSettings(JSON.stringify({ schemaVersion: 2, documentFontSize: 18 }));
   const { events, viewer } = mountViewer();
   let release!: () => void;
   gate = new Promise<void>((resolve) => (release = resolve));
@@ -91,7 +91,7 @@ test("an early onShow opens the file only after the settings are read", async ()
 });
 
 test("unloading while the settings read is pending creates no session and no listener", async () => {
-  putSettings(JSON.stringify({ schemaVersion: 1, documentFontSize: 18, codeFontSize: null }));
+  putSettings(JSON.stringify({ schemaVersion: 2, documentFontSize: 18 }));
   const { events, viewer } = mountViewer();
   let release!: () => void;
   gate = new Promise<void>((resolve) => (release = resolve));
@@ -113,7 +113,7 @@ test("unloading while the settings read is pending creates no session and no lis
 });
 
 test("onUnload disposes what was opened, including the font-size listener", async () => {
-  putSettings(JSON.stringify({ schemaVersion: 1, documentFontSize: null, codeFontSize: null }));
+  putSettings(JSON.stringify({ schemaVersion: 2, documentFontSize: null }));
   const { events, viewer } = mountViewer();
   await act(() => viewer.onLoad(host.api, "a.md"));
   assert.equal(fontSize(), "16px");

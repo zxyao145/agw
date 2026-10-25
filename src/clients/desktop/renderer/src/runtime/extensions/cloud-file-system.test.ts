@@ -58,8 +58,13 @@ async function createHarness(routes: Parameters<typeof startApiServer>[0] = {}) 
   return { api, context, grants, files, uri, identity, written };
 }
 
-const reader = { extensionId: "sample", permissions: ["fs.cloud.read" as const] };
+const reader = {
+  kind: "extension" as const,
+  extensionId: "sample",
+  permissions: ["fs.cloud.read" as const],
+};
 const writer = {
+  kind: "extension" as const,
   extensionId: "sample",
   permissions: ["fs.cloud.read" as const, "fs.cloud.write" as const],
 };
@@ -291,6 +296,33 @@ test("a failed or refused writeFile does not call the file-write listener", asyn
   assert.deepEqual(written, []);
 });
 
+test("the host reads and writes without extension permissions or grants, only on the current Server", async () => {
+  const { api, files, uri, written } = await createHarness({
+    "GET /api/files/download": rawApiResponse({
+      headers: { "content-type": "application/octet-stream" },
+      body: "text",
+    }),
+    "PUT /api/files/write": fileItem("src/app.ts"),
+  });
+  const host = { kind: "host" as const };
+  assert.deepEqual(await files.readFile(host, uri("src/app.ts")), new TextEncoder().encode("text"));
+  await files.writeFile(host, uri("src/app.ts"), new Uint8Array([1]), {
+    overwrite: true,
+    createParents: false,
+    expectedSha256: "0123456789abcdef".repeat(4),
+  });
+  assert.deepEqual(written, [{ projectId: PROJECT, directoryId: null, path: "src/app.ts" }]);
+  const sent = api.requests.length;
+  await assert.rejects(
+    files.readFile(
+      host,
+      formatCloudUri({ serverId: "remote-9", projectId: PROJECT, directoryId: null, path: "a.md" }),
+    ),
+    { code: "ERR_CONNECTION_CHANGED" },
+  );
+  assert.equal(api.requests.length, sent);
+});
+
 test("URIs for another server, another directory, or missing permissions are refused before sending", async () => {
   const { api, files, uri } = await createHarness();
   const sent = api.requests.length;
@@ -304,9 +336,10 @@ test("URIs for another server, another directory, or missing permissions are ref
   await assert.rejects(files.rename(writer, uri("a.md"), uri("a.md", DIRECTORY), false), {
     code: "ERR_CROSS_DEVICE",
   });
-  await assert.rejects(files.readFile({ extensionId: "sample", permissions: [] }, uri("a.md")), {
-    code: "ERR_PERMISSION_DENIED",
-  });
+  await assert.rejects(
+    files.readFile({ kind: "extension", extensionId: "sample", permissions: [] }, uri("a.md")),
+    { code: "ERR_PERMISSION_DENIED" },
+  );
   await assert.rejects(files.delete(reader, uri("a.md"), false), { code: "ERR_PERMISSION_DENIED" });
   assert.equal(api.requests.length, sent);
 });
@@ -318,7 +351,7 @@ test("context-menu grants allow reading until the connection identity changes or
       body: "ok",
     }),
   });
-  const none = { extensionId: "viewer", permissions: [] };
+  const none = { kind: "extension" as const, extensionId: "viewer", permissions: [] };
   grants.grant("viewer", uri("docs"), true, context.connectionKey!);
   assert.deepEqual(
     await files.readFile(none, uri("docs/nested/a.md")),

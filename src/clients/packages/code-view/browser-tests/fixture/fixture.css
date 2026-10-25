@@ -1,0 +1,67 @@
+/* 测试页的宿主变量：颜色使用 oklch 与 color-mix，卡片作用域覆盖 --background。Tailwind 生成包中用到的 utility，颜色
+   映射到这些变量，与应用的 ui-tokens 相同。
+   Host variables of the test page: colors use oklch and color-mix, and the card scope overrides --background.
+   Tailwind generates the utilities the package uses, with colors mapped to these variables as in the apps' ui-tokens. */
+@import "tailwindcss";
+
+@source "../../src";
+@source "./main.tsx";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --font-mono: ui-monospace, Menlo, monospace;
+}
+
+:root {
+  --background: oklch(0.98 0.01 250);
+  --foreground: #17191d;
+  --muted: #f0f1f3;
+  --muted-foreground: #666c77;
+  --sidebar-primary: #006fee;
+  --popover: #ffffff;
+  --popover-foreground: #17191d;
+  --border: #ebebeb;
+  --accent: #f0f1f3;
+  --accent-foreground: #17191d;
+  --ring: oklch(0.708 0 0);
+  font-size: 16px;
+}
+
+:root.dark {
+  --background: oklch(0.2 0.02 260);
+  --foreground: #f3f4f6;
+  --muted: #202329;
+  --muted-foreground: #a0a6b0;
+  --popover: #121418;
+  --popover-foreground: #f3f4f6;
+  --border: #5f6060;
+  --accent: #202329;
+  --accent-foreground: #f3f4f6;
+}
+
+.card {
+  --background: color-mix(in srgb, #ff0000 20%, #ffffff);
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}

@@ -55,14 +55,17 @@ Right-panel viewer for the currently selected file. It handles:
 
 - empty state when no file is selected
 - loading and error states
-- plain file rendering
-- diff rendering
-- unchanged diff rendering
-- line comment editing
+- Source: the file in a Monaco editor with a status bar (`@agw/code-view`, loaded on first display); read-only in
+  Web, and editable in Desktop through `editableSource`
+- the title row's "More" menu, which also offers Source's Reload file, Format, Word wrap and Save
+- Only diff: both full texts in Monaco's side-by-side diff editor, plus unchanged, binary and metadata-only views
+- line comments beside line numbers, shown in zones below their lines; in editable Source they follow the edits
 
-`FileContent` does not fetch by itself. The parent provides the selected file, raw content, diff payload, and comments.
-When `diffScope` is provided, its headers identify `HEAD → Staged` or
-`Staged → Working Tree` content.
+`FileContent` does not fetch by itself. The parent provides the selected file, raw content (Web), diff payload
+(`GitDiffResponse` with `originalContent` and `modifiedContent`), and comments; Desktop provides the editable document
+(`SourceDocumentState`) instead of raw content. When `diffScope` is provided, its headers identify `HEAD → Staged` or
+`Staged → Working Tree` content. Monaco cannot run in jsdom, so cases that render Source or the diff are tested in
+Chromium (`pnpm --filter @agw/projects test:browser`).
 
 ## Types
 
@@ -249,8 +252,13 @@ export function ExampleFileExplorer({
 - `explorer-file-tree.tsx`: recursive tree node rendering and actions
 - `git-change-tree.ts`: staged/unstaged grouping and partially staged duplication
 - `file-content.tsx`: selected file content shell
-- `file-viewer.tsx`: plain text file viewer with line comments
-- `diff-viewer.tsx`: split original/modified diff viewer
+- `source-view.tsx`: Source in `CodeViewer` with line comments; editable Source adds the loading and failed panels and
+  the save shortcut
+- `source-document.ts`: `EditableSource` and `SourceDocumentState`, the editable document Desktop provides
+- `source-encoding-menu.tsx`, `source-document-error.tsx`: the status bar's encoding menu and the failed-read panel
+- `git-diff-view.tsx`: the Only diff views; changed files use `CodeDiffViewer`
+- `use-line-comment-zones.tsx`: line comments as `@agw/code-view` line zones and the "Add comment" action
+- `line-comments.ts`: matching, grouping, creating and remapping line comments
 - `comment-section.tsx`: create, edit, and delete comments
 - `types.ts`: shared module types and typed constants
 

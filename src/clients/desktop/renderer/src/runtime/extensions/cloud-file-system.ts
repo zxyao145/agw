@@ -138,10 +138,14 @@ export function toCloudError(error: unknown): Error {
   return createExtensionError(code, error.message);
 }
 
-export type CloudAccess = {
-  extensionId: string;
-  permissions: readonly ExtensionPermission[];
-};
+/**
+ * 访问云端文件的一方：宿主自身（Source）不经过权限与授权检查，extension 按它的权限与授权检查。
+ * The party accessing cloud files: the host itself (Source) skips permission and grant checks, an extension is
+ * checked against its permissions and grants.
+ */
+export type CloudAccess =
+  | { kind: "host" }
+  | { kind: "extension"; extensionId: string; permissions: readonly ExtensionPermission[] };
 
 /** 写入成功的文件；`directoryId` 为 null 表示 Project 主目录。A written file; a null `directoryId` is the primary directory. */
 export type FileWriteLocation = { projectId: string; directoryId: string | null; path: string };
@@ -302,6 +306,7 @@ export class CloudFileSystem {
   private checkAccess(access: CloudAccess, uri: string, mode: "read" | "write"): CloudLocation {
     const location = parseCloudUri(uri);
     if (location.serverId !== this.context.snapshot().server.id) throw connectionChangedError();
+    if (access.kind === "host") return location;
     const permission: ExtensionPermission = mode === "read" ? "fs.cloud.read" : "fs.cloud.write";
     if (access.permissions.includes(permission)) return location;
     if (mode === "read" && this.grants.allows(access.extensionId, uri, this.context.connectionKey))

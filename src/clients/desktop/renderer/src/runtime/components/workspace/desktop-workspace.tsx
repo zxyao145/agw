@@ -25,6 +25,7 @@ import { useExtensionRuntime } from "../../extensions/extension-host-provider";
 import type { ExtensionLayoutSampler } from "../../extensions/extension-layout-sampler";
 import type { HostOverlayTracker } from "../../extensions/host-overlay-tracker";
 import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
+import { useEditableSource } from "../../source/use-editable-source";
 import {
   fileViewerDefault,
   type WorkspaceEntry,
@@ -191,6 +192,8 @@ function DesktopWorkspaceLayout({
         : null,
     [serverId, selectedProjectId, selectedDirectoryId, selectedFile],
   );
+  // Source 编辑当前文件，内容由它自己读取。Source edits the current file and reads it itself.
+  const editableSource = useEditableSource(host, fileViewerFile);
   const fileViewerIds = fileViewers.map((view) => view.id).join("\n");
   React.useEffect(() => {
     host.retainFileViewers(fileViewerIds ? fileViewerIds.split("\n") : []);
@@ -319,6 +322,7 @@ function DesktopWorkspaceLayout({
             messageActions={messageActions}
             fileViewers={fileViewers}
             fileViewerFile={fileViewerFile}
+            editableSource={editableSource}
             defaultFileViewerId={defaultFileViewerId}
             onSetDefaultFileViewer={setDefaultFileViewer}
           />
@@ -337,6 +341,7 @@ export function DesktopWorkspace() {
       <ChatWorkspaceProvider
         routeBasePath="/desktop/chat"
         confirmFileChange={() => runtime.host.confirmDiscardUnsaved()}
+        readSourceContent={false}
       >
         <DesktopWorkspaceLayout
           host={runtime.host}

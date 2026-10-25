@@ -225,10 +225,10 @@ export interface ThemeInfo {
    * - 其他宿主颜色 Other host colors：`--agw-status-running`、`--agw-server-online-halo`、`--agw-agentflow-edge`、
    *   `--agw-agentflow-edge-fan-out`、`--agw-agentflow-edge-fan-in`、`--agw-agentflow-edge-switch-case`、
    *   `--agw-agentflow-edge-switch-default`。
-   * - Tailwind 基础色阶 Tailwind palette：`--color-{name}-{step}`（slate 400；zinc 50、200、800、900；red 50、100、200、400、
-   *   700、800、900、950；orange 50、100、200、400、600、900、950；amber 50–950；yellow 100、400、700、900；green 50、100、200、
-   *   300、400、600、700、800、900、950；emerald 50、200、300、500、600、700、800；teal 50、200、800；sky 50、200、600、800；
-   *   blue 50–950；indigo 50、200、900；violet 50、100、200、300、700、900、950；rose 50、200、300、500、800），以及
+   * - Tailwind 基础色阶 Tailwind palette：`--color-{name}-{step}`（slate 400；zinc 50、200、800、900；red 50、100、400、700、
+   *   900、950；orange 50、100、200、400、600、900、950；amber 50–950；yellow 100、400、700、900；green 50、100、300、400、600、
+   *   700、900、950；emerald 50、200、300、500、600、700、800；teal 50、200、800；sky 50、200、600、800；blue 50–700、900、950；
+   *   indigo 50、200、900；violet 50、100、200、300、700、900、950；rose 50、200、300、500、800），以及
    *   `--color-black`、`--color-white`。
    * - 圆角 Radius：`--radius`，以及由它计算的 `--radius-sm`、`--radius-md`、`--radius-lg`、`--radius-xl`。
    * - 字体 Fonts：`--agw-font-sans`、`--agw-font-mono`，以及引用它们的 `--font-sans`、`--font-mono`。

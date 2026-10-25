@@ -32,6 +32,8 @@ const THEME_ID_PATTERN = /^(?:default|[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z
 const appearanceSchema = z.strictObject({
   baseFontSize: z.number().int().min(12).max(20),
   chatFontSize: z.number().int().min(12).max(24).nullable(),
+  // 旧版本的设置没有这个字段，缺失时跟随基础字号。Older settings lack the field; missing follows the base size.
+  codeFontSize: z.number().int().min(12).max(28).nullable().default(null),
   theme: z.string().regex(THEME_ID_PATTERN).default(DEFAULT_THEME_ID),
   mode: z.enum(APPEARANCE_MODES).optional(),
 });

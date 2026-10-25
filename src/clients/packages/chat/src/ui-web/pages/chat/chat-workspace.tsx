@@ -25,7 +25,7 @@ import {
 import { apiGet } from "@agw/api";
 import { type ConversationResumeState, type ConversationSummary } from "@agw/projects";
 import { AgentSelector, type AgentSelection } from "../../components/agent-selector";
-import { Explorer, FileContent, type FileViewerOption } from "@agw/projects";
+import { type EditableSource, Explorer, FileContent, type FileViewerOption } from "@agw/projects";
 import type {
   ConversationItemActionArgs,
   ExplorerContextMenuArgs,
@@ -134,6 +134,12 @@ export type ChatWorkspaceProviderProps = {
    * Confirmation before the current file changes (another file, directory or Project); false keeps the current file.
    */
   confirmFileChange?: () => Promise<boolean>;
+  /**
+   * 选中文件时为 Source 读取文字，缺省为 true。Desktop 的 Source 由自己的文档读取，传 false 时只更新选择。
+   * Reads the text for Source when a file is selected; true by default. Desktop's Source reads through its own
+   * document, so false only updates the selection.
+   */
+  readSourceContent?: boolean;
   children?: React.ReactNode;
 };
 
@@ -502,6 +508,7 @@ function ProjectRequiredState() {
 export function ChatWorkspaceProvider({
   routeBasePath,
   confirmFileChange,
+  readSourceContent = true,
   children,
 }: ChatWorkspaceProviderProps) {
   const router = useRouter();
@@ -754,12 +761,9 @@ export function ChatWorkspaceProvider({
           if (!selectedProjectId) {
             throw new Error("Select a project before loading files");
           }
-          const content = await readFile(
-            selectedProjectId,
-            filePath,
-            undefined,
-            selectedDirectory?.id,
-          );
+          const content = readSourceContent
+            ? await readFile(selectedProjectId, filePath, undefined, selectedDirectory?.id)
+            : "";
           if (generation !== fileLoadGenerationRef.current) {
             return;
           }
@@ -782,7 +786,7 @@ export function ChatWorkspaceProvider({
         }
       }
     },
-    [onlyDiff, selectedProjectId, selectedDirectory?.id],
+    [onlyDiff, readSourceContent, selectedProjectId, selectedDirectory?.id],
   );
 
   const handleOnFileDeleted = React.useCallback(
@@ -1656,6 +1660,8 @@ export type ChatFilePaneProps = {
   defaultFileViewerId?: string | null;
   /** 把当前查看器设为默认，null 表示删除设置。Sets the current viewer as the default; null removes the setting. */
   onSetDefaultFileViewer?: (viewerId: string | null) => void;
+  /** Desktop 的可编辑 Source；没有时 Source 只读。Desktop's editable Source; read-only without it. */
+  editableSource?: EditableSource;
 };
 
 /** 选中文件的内容或 diff；未选择项目时显示提示。The selected file's content or diff, or a prompt without a project. */
@@ -1668,6 +1674,7 @@ export function ChatFilePane({
   onSelectFileViewerItem,
   defaultFileViewerId,
   onSetDefaultFileViewer,
+  editableSource,
 }: ChatFilePaneProps = {}) {
   const workspace = useChatWorkspace();
   const { projectDirectories, selectedDirectory, selectedProjectId } = workspace;
@@ -1695,6 +1702,7 @@ export function ChatFilePane({
       onReloadFileViewer={onReloadFileViewer}
       onReloadFileViewerDocument={onReloadFileViewerDocument}
       onReloadSource={() => workspace.handleFileReset(workspace.selectedFile)}
+      editableSource={editableSource}
       renderFileViewerInfo={renderFileViewerInfo}
       onSelectFileViewerItem={onSelectFileViewerItem}
       defaultFileViewerId={defaultFileViewerId}

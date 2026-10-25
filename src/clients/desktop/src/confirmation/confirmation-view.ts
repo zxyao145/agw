@@ -1,5 +1,7 @@
+import { confirmationOriginName, HOST_ORIGIN_NAME } from "../shared/confirmation-origin";
 import type {
   ConfirmationAnswer,
+  ConfirmationOrigin,
   ConfirmationView,
   PermissionApprovalView,
 } from "../shared/contracts";
@@ -22,6 +24,14 @@ function element<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+/**
+ * 未保存文件后面的来源：宿主的查看器（Source）没有括注，extension 的查看器带名称与 id。
+ * The origin after an unsaved file: the host's viewer (Source) has none, an extension's viewer shows its name and id.
+ */
+function originSuffix(origin: ConfirmationOrigin): string {
+  return origin.kind === "host" ? "" : ` (${origin.extensionName}, ${origin.extensionId})`;
 }
 
 /** 权限批准的正文：权限说明、网络访问与提示全部由应用生成。The approval body; descriptions, network access and notes all come from the app. */
@@ -120,18 +130,13 @@ export function renderConfirmation(
   switch (view.kind) {
     case "discard-unsaved": {
       title = "Discard unsaved changes?";
-      source = "Agw Desktop";
+      source = HOST_ORIGIN_NAME;
       const list = element(document, "ul", "files");
       for (const item of view.items) {
         const entry = element(document, "li");
         entry.append(element(document, "strong", undefined, item.fileName));
         entry.append(
-          element(
-            document,
-            "span",
-            "muted",
-            ` · ${item.viewerTitle} (${item.extensionName}, ${item.extensionId})`,
-          ),
+          element(document, "span", "muted", ` · ${item.viewerTitle}${originSuffix(item.origin)}`),
         );
         list.append(entry);
       }
@@ -160,8 +165,11 @@ export function renderConfirmation(
       ];
       break;
     case "message":
-      title = view.extensionName;
-      source = `Message from ${view.extensionName} (${view.extensionId})`;
+      title = confirmationOriginName(view.origin);
+      source =
+        view.origin.kind === "host"
+          ? HOST_ORIGIN_NAME
+          : `Message from ${view.origin.extensionName} (${view.origin.extensionId})`;
       body = [];
       if (view.type !== null) {
         body.push(element(document, "p", `message-type ${view.type}`, MESSAGE_TYPES[view.type]));

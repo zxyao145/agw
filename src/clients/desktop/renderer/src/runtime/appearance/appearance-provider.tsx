@@ -17,17 +17,17 @@ export function AppearanceProvider({
   appearance: FontSizeSettings;
   children: React.ReactNode;
 }) {
-  const { baseFontSize, chatFontSize } = appearance;
+  const { baseFontSize, chatFontSize, codeFontSize } = appearance;
   React.useLayoutEffect(() => {
     const style = document.documentElement.style;
-    const properties = resolveAppearance({ baseFontSize, chatFontSize });
+    const properties = resolveAppearance({ baseFontSize, chatFontSize, codeFontSize });
     style.fontSize = "var(--agw-font-size-base)";
     for (const [name, value] of Object.entries(properties)) style.setProperty(name, value);
     return () => {
       style.removeProperty("font-size");
       for (const name of Object.keys(properties)) style.removeProperty(name);
     };
-  }, [baseFontSize, chatFontSize]);
+  }, [baseFontSize, chatFontSize, codeFontSize]);
 
   return <>{children}</>;
 }

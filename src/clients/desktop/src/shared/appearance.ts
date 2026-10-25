@@ -7,6 +7,7 @@ export const DEFAULT_THEME_ID = "default";
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   baseFontSize: 16,
   chatFontSize: null,
+  codeFontSize: null,
   theme: DEFAULT_THEME_ID,
 };
 
@@ -30,15 +31,21 @@ function range(from: number, to: number): readonly number[] {
 
 export const BASE_FONT_SIZES: readonly number[] = range(12, 20);
 export const CHAT_FONT_SIZES: readonly number[] = range(12, 24);
+export const CODE_FONT_SIZES: readonly number[] = range(12, 28);
 
-/** 各区域生效的字号，单位 px。The effective size of each area in px. */
+/**
+ * 各区域生效的字号，单位 px。Code 默认为基础字号的 0.875 倍，按 0.5px 四舍五入。
+ * The effective size of each area in px. Code defaults to 0.875 times the base size, rounded to 0.5px.
+ */
 export function resolveFontSizes(appearance: FontSizeSettings): {
   base: number;
   chat: number;
+  code: number;
 } {
   const { baseFontSize } = appearance;
   return {
     base: baseFontSize,
     chat: appearance.chatFontSize ?? baseFontSize * 0.875,
+    code: appearance.codeFontSize ?? Math.round(baseFontSize * 0.875 * 2) / 2,
   };
 }

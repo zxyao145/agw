@@ -45,6 +45,7 @@ export type {
 export type {
   AgwConfirmationBridge,
   ConfirmationAnswer,
+  ConfirmationOrigin,
   ConfirmationView,
   HostConfirmationRequest,
   MessageBoxContent,

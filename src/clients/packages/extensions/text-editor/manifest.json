@@ -20,14 +20,6 @@
         "icon": "BookOpen",
         "patterns": ["*.md", "*.markdown"],
         "entry": "preview.html"
-      },
-      {
-        "id": "code",
-        "title": "Code",
-        "icon": "Code",
-        "patterns": ["*"],
-        "priority": "option",
-        "entry": "code.html"
       }
     ],
     "settings": { "entry": "settings.html" }

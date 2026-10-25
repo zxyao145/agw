@@ -15,7 +15,6 @@ const { SettingsForm } = await import("./settings-form");
 
 const SETTINGS_URI = "file:///storage/text-editor/settings.json";
 const DOCUMENT_ID = "text-editor-document-font-size";
-const CODE_ID = "text-editor-code-font-size";
 
 const files = new Map<string, Uint8Array>();
 const notifications: Notification[] = [];
@@ -77,8 +76,8 @@ function putSettings(text: string): void {
   files.set(SETTINGS_URI, new TextEncoder().encode(text));
 }
 
-function stored(documentFontSize: number | null, codeFontSize: number | null) {
-  return { schemaVersion: 1, documentFontSize, codeFontSize };
+function stored(documentFontSize: number | null) {
+  return { schemaVersion: 2, documentFontSize };
 }
 
 /** 等待写入队列与读取完成，状态更新在 act 内发生。Waits for reads and the write queue, inside act. */
@@ -132,14 +131,11 @@ async function click(element: HTMLButtonElement): Promise<void> {
   await settled();
 }
 
-test("defaults follow the base and document sizes", async () => {
+test("the document size follows the base size by default and there is no code size", async () => {
   const { container, unmount } = await mount();
   const documentSelect = select(container, DOCUMENT_ID);
-  const codeSelect = select(container, CODE_ID);
   assert.equal(documentSelect.value, "follow");
   assert.equal(selectedText(documentSelect), "Follow base size (16 px)");
-  assert.equal(codeSelect.value, "follow");
-  assert.equal(selectedText(codeSelect), "Follow document size (14 px)");
   assert.deepEqual(
     Array.from(documentSelect.options).map((option) => option.value),
     ["follow", ...Array.from({ length: 17 }, (_, index) => String(12 + index))],
@@ -148,68 +144,63 @@ test("defaults follow the base and document sizes", async () => {
     Array.from(documentSelect.options).some((option) => option.disabled),
     false,
   );
+  assert.equal(container.querySelector("#text-editor-code-font-size"), null);
   assert.equal(writes.length, 0);
   await unmount();
 });
 
-test("the rows show their labels and descriptions", async () => {
+test("the row shows its label and description", async () => {
   const { container, unmount } = await mount();
   const text = container.textContent ?? "";
   assert.ok(text.includes("Document font size"));
   assert.ok(text.includes("Used by Mixed and Preview."));
-  assert.ok(text.includes("Code editor font size"));
-  assert.ok(text.includes("Used by Code."));
   await unmount();
 });
 
-test("choosing a document size writes it and updates the code follow text", async () => {
+test("choosing a document size writes it", async () => {
   const { container, unmount } = await mount();
   await choose(select(container, DOCUMENT_ID), "20");
-  assert.deepEqual(writes, [stored(20, null)]);
+  assert.deepEqual(writes, [stored(20)]);
   assert.equal(select(container, DOCUMENT_ID).value, "20");
-  assert.equal(selectedText(select(container, CODE_ID)), "Follow document size (17.5 px)");
   await unmount();
 });
 
 test("a stored size of 12 is selected and shown as a plain size", async () => {
-  putSettings(JSON.stringify(stored(12, null)));
+  putSettings(JSON.stringify(stored(12)));
   const { container, unmount } = await mount();
   const documentSelect = select(container, DOCUMENT_ID);
   assert.equal(documentSelect.value, "12");
   assert.equal(selectedText(documentSelect), "12 px");
-  assert.equal(selectedText(select(container, CODE_ID)), "Follow document size (10.5 px)");
 
   await choose(documentSelect, "15");
-  assert.deepEqual(writes, [stored(15, null)]);
+  assert.deepEqual(writes, [stored(15)]);
   await unmount();
 });
 
-test("Reset document font size writes null for the document size only", async () => {
-  putSettings(JSON.stringify(stored(20, 15)));
+test("a version 1 file shows its document size and the next write is version 2", async () => {
+  putSettings(JSON.stringify({ schemaVersion: 1, documentFontSize: 18, codeFontSize: 15 }));
+  const { container, unmount } = await mount();
+  assert.equal(select(container, DOCUMENT_ID).value, "18");
+  await choose(select(container, DOCUMENT_ID), "19");
+  assert.deepEqual(writes, [stored(19)]);
+  await unmount();
+});
+
+test("Reset document font size writes null", async () => {
+  putSettings(JSON.stringify(stored(20)));
   const { container, unmount } = await mount();
   await click(button(container, "Reset document font size"));
-  assert.deepEqual(writes, [stored(null, 15)]);
+  assert.deepEqual(writes, [stored(null)]);
   assert.equal(select(container, DOCUMENT_ID).value, "follow");
-  assert.equal(select(container, CODE_ID).value, "15");
-  await unmount();
-});
-
-test("Reset code editor font size writes null for the code size only", async () => {
-  putSettings(JSON.stringify(stored(20, 15)));
-  const { container, unmount } = await mount();
-  await click(button(container, "Reset code editor font size"));
-  assert.deepEqual(writes, [stored(20, null)]);
-  assert.equal(select(container, CODE_ID).value, "follow");
   await unmount();
 });
 
 test("Reset all writes the defaults", async () => {
-  putSettings(JSON.stringify(stored(20, 15)));
+  putSettings(JSON.stringify(stored(20)));
   const { container, unmount } = await mount();
   await click(button(container, "Reset all"));
-  assert.deepEqual(writes, [stored(null, null)]);
+  assert.deepEqual(writes, [stored(null)]);
   assert.equal(select(container, DOCUMENT_ID).value, "follow");
-  assert.equal(select(container, CODE_ID).value, "follow");
   await unmount();
 });
 
@@ -217,31 +208,27 @@ test("a failed write notifies and returns to the last saved values", async () =>
   const { container, unmount } = await mount();
   await choose(select(container, DOCUMENT_ID), "18");
   failWritesAfter = 1;
-  await choose(select(container, CODE_ID), "15");
-  assert.deepEqual(writes, [stored(18, null)]);
+  await choose(select(container, DOCUMENT_ID), "15");
+  assert.deepEqual(writes, [stored(18)]);
   assert.deepEqual(notifications, [{ type: "error", message: "The disk is full." }]);
   assert.equal(select(container, DOCUMENT_ID).value, "18");
-  assert.equal(select(container, CODE_ID).value, "follow");
   await unmount();
 });
 
 test("an invalid file shows the error and only Reset all works", async () => {
-  putSettings(JSON.stringify({ schemaVersion: 1, documentFontSize: 11, codeFontSize: null }));
+  putSettings(JSON.stringify({ schemaVersion: 2, documentFontSize: 11 }));
   const { container, unmount } = await mount();
   assert.ok((container.textContent ?? "").includes("Text Editor settings are invalid:"));
   assert.ok((container.textContent ?? "").includes("settings.json"));
   assert.ok((container.textContent ?? "").includes("Use Reset all to restore the defaults."));
   assert.equal(select(container, DOCUMENT_ID).disabled, true);
-  assert.equal(select(container, CODE_ID).disabled, true);
   assert.equal(button(container, "Reset document font size").disabled, true);
-  assert.equal(button(container, "Reset code editor font size").disabled, true);
   assert.equal(button(container, "Reset all").disabled, false);
 
   await click(button(container, "Reset all"));
-  assert.deepEqual(writes, [stored(null, null)]);
+  assert.deepEqual(writes, [stored(null)]);
   assert.ok(!(container.textContent ?? "").includes("Text Editor settings are invalid"));
   assert.equal(select(container, DOCUMENT_ID).disabled, false);
-  assert.equal(select(container, CODE_ID).disabled, false);
   assert.equal(select(container, DOCUMENT_ID).value, "follow");
   await unmount();
 });
@@ -253,18 +240,17 @@ test("a read error other than an invalid file also shows the error and only Rese
   assert.ok(text.includes("Text Editor settings are invalid: no access"), text);
   assert.ok(text.includes("Use Reset all to restore the defaults."), text);
   assert.equal(select(container, DOCUMENT_ID).disabled, true);
-  assert.equal(select(container, CODE_ID).disabled, true);
   assert.equal(button(container, "Reset all").disabled, false);
 
   failReadsWith = null;
   await click(button(container, "Reset all"));
-  assert.deepEqual(writes, [stored(null, null)]);
+  assert.deepEqual(writes, [stored(null)]);
   assert.equal(select(container, DOCUMENT_ID).disabled, false);
   await unmount();
 });
 
 test("a failed write drops the writes queued behind it and keeps the file in step with the UI", async () => {
-  putSettings(JSON.stringify(stored(18, null)));
+  putSettings(JSON.stringify(stored(18)));
   const fileBefore = files.get(SETTINGS_URI);
   const { container, unmount } = await mount();
   let rejectHeld!: (error: Error) => void;
@@ -276,7 +262,7 @@ test("a failed write drops the writes queued behind it and keeps the file in ste
     documentSelect.value = "20";
     documentSelect.dispatchEvent(new window.Event("change", { bubbles: true }));
   });
-  await choose(select(container, CODE_ID), "15");
+  await choose(select(container, DOCUMENT_ID), "22");
   assert.equal(writeRequests, 1);
 
   await act(async () => rejectHeld(createExtensionError("EIO", "The disk is full.")));
@@ -285,16 +271,15 @@ test("a failed write drops the writes queued behind it and keeps the file in ste
   assert.deepEqual(writes, []);
   assert.deepEqual(notifications, [{ type: "error", message: "The disk is full." }]);
   assert.equal(select(container, DOCUMENT_ID).value, "18");
-  assert.equal(select(container, CODE_ID).value, "follow");
   assert.equal(files.get(SETTINGS_URI), fileBefore);
 
   // 失败之后的修改仍然写入。A change made after the failure is still written.
-  await choose(select(container, CODE_ID), "16");
-  assert.deepEqual(writes, [stored(18, 16)]);
+  await choose(select(container, DOCUMENT_ID), "16");
+  assert.deepEqual(writes, [stored(16)]);
   await unmount();
 });
 
-test("a theme change updates the follow texts", async () => {
+test("a theme change updates the follow text", async () => {
   const { container, unmount } = await mount();
   assert.equal(selectedText(select(container, DOCUMENT_ID)), "Follow base size (16 px)");
 
@@ -307,8 +292,6 @@ test("a theme change updates the follow texts", async () => {
     });
   });
   await settled();
-  const documentSelect = select(container, DOCUMENT_ID);
-  assert.equal(selectedText(documentSelect), "Follow base size (20 px)");
-  assert.equal(selectedText(select(container, CODE_ID)), "Follow document size (17.5 px)");
+  assert.equal(selectedText(select(container, DOCUMENT_ID)), "Follow base size (20 px)");
   await unmount();
 });

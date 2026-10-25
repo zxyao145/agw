@@ -4,5 +4,6 @@
 @import "@agw/components/typography.css";
 @import "@agw/chat/math.css";
 @import "@agw/chat/image-preview.css";
+@import "@agw/code-view/code-view.css";
 
 @source "../../../packages";

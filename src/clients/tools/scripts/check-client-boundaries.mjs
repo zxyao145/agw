@@ -66,6 +66,36 @@ for (const directory of [
   }
 }
 
+// monaco-editor 与 prettier 只由 @agw/code-view 声明；@agw/code-view 只由 @agw/projects、Web 与 Desktop 声明，Mobile
+// 因此不会引入 Monaco。
+// Only @agw/code-view declares monaco-editor and prettier; only @agw/projects, Web and Desktop declare @agw/code-view,
+// so Mobile never brings in Monaco.
+const CODE_VIEW_CONSUMERS = new Set(["@agw/projects", "@agw/web", "@agw/desktop"]);
+for (const directory of [
+  ...packageDirectories,
+  ...["web", "desktop", "mobile"].map((name) => join(clientsRoot, name)),
+]) {
+  const manifest = readManifest(directory);
+  const declared = Object.keys({
+    ...manifest.dependencies,
+    ...manifest.devDependencies,
+    ...manifest.peerDependencies,
+  });
+  for (const dependency of ["monaco-editor", "prettier"]) {
+    if (!declared.includes(dependency)) continue;
+    assert.ok(
+      manifest.name === "@agw/code-view",
+      `${manifest.name} must use ${dependency} through @agw/code-view`,
+    );
+  }
+  if (declared.includes("@agw/code-view")) {
+    assert.ok(
+      CODE_VIEW_CONSUMERS.has(manifest.name),
+      `${manifest.name} must not depend on @agw/code-view`,
+    );
+  }
+}
+
 for (const directory of packageDirectories) {
   const manifest = readManifest(directory);
   assert.match(manifest.name, /^@agw\//u, `${directory} must be named @agw/*`);

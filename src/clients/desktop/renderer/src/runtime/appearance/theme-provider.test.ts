@@ -117,6 +117,7 @@ function themeExtension(enabled = true): InstalledExtension {
 const appearance = (overrides: Partial<AppearanceSettings> = {}): AppearanceSettings => ({
   baseFontSize: 16,
   chatFontSize: null,
+  codeFontSize: null,
   theme: "default",
   mode: "light",
   ...overrides,
@@ -415,7 +416,7 @@ test("settings without a mode migrate the next-themes value and keep it while th
     calls.push(next);
     return new Promise<void>(() => undefined);
   };
-  const stored = { baseFontSize: 16, chatFontSize: null, theme: "default" };
+  const stored = { baseFontSize: 16, chatFontSize: null, codeFontSize: null, theme: "default" };
   renderTheme({ appearance: stored, host }, save);
   await environment.waitFor(() => assert.deepEqual(calls, [{ ...stored, mode: "dark" }]));
   assert.ok(root().classList.contains("dark"));
@@ -430,7 +431,7 @@ test("settings without a mode migrate the next-themes value and keep it while th
 test("settings without a mode migrate System when next-themes has no value", async () => {
   const host = await startedHost(() => [themeExtension()]);
   const { calls, save } = recordingSave();
-  const stored = { baseFontSize: 16, chatFontSize: null, theme: "default" };
+  const stored = { baseFontSize: 16, chatFontSize: null, codeFontSize: null, theme: "default" };
   renderTheme({ appearance: stored, host }, save);
   await environment.waitFor(() => assert.deepEqual(calls, [{ ...stored, mode: "system" }]));
 });

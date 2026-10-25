@@ -37,8 +37,7 @@ const LINK: ConfirmationView = {
 };
 const MESSAGE: ConfirmationView = {
   kind: "message",
-  extensionId: "sample",
-  extensionName: "Sample",
+  origin: { kind: "extension", extensionId: "sample", extensionName: "Sample" },
   type: null,
   message: "Save?",
   detail: null,

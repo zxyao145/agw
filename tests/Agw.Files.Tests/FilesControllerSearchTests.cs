@@ -138,7 +138,16 @@ public class FilesControllerSearchTests
             GitDiffScope scope = GitDiffScope.All
         )
         {
-            return Task.FromResult(new GitDiffResult(false, "", false, null, null));
+            return Task.FromResult(new GitDiffResult(false, "", null));
+        }
+
+        public Task<GitBlobResult> ReadBlobAsync(
+            string filePath,
+            GitBlobSource source,
+            CancellationToken cancellationToken = default
+        )
+        {
+            return Task.FromResult(new GitBlobResult(false, null, "Not implemented by test fake."));
         }
 
         public Task<GitResetResult> ResetFileAsync(string filePath, CancellationToken cancellationToken = default)

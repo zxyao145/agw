@@ -1,0 +1,16 @@
+/* 测试页使用与应用相同的 Tailwind 与宿主变量，Source 的高度与颜色与应用一致。
+   The test page uses the app's Tailwind and host variables, so Source gets the app's height and colors. */
+@import "tailwindcss";
+@import "@agw/components/ui-tokens.css";
+@import "@agw/code-view/code-view.css";
+
+@source "../../src";
+@source "../../../code-view/src";
+@source "../../../components/src";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}

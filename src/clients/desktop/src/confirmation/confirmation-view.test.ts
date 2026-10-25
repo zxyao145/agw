@@ -29,8 +29,7 @@ test("extension text renders as text, and the message box answers with button in
   const markup = '<img src="x" onerror="alert(1)"><b>bold</b>';
   const { container, answers, result, buttons } = render({
     kind: "message",
-    extensionId: "sample",
-    extensionName: `Sample ${markup}`,
+    origin: { kind: "extension", extensionId: "sample", extensionName: `Sample ${markup}` },
     type: "warning",
     message: markup,
     detail: "Line 1\nLine 2",
@@ -60,6 +59,23 @@ test("extension text renders as text, and the message box answers with button in
   buttons[0].click();
   assert.deepEqual(answers, [0]);
   assert.ok(buttons.every((button) => button.disabled));
+});
+
+test("a host message box names Agw Desktop as its title and source", () => {
+  const { container, answers, buttons } = render({
+    kind: "message",
+    origin: { kind: "host" },
+    type: "warning",
+    message: "app.ts was changed on disk after it was opened.",
+    detail: "Overwrite it with your version, or reload it and discard your changes.",
+    buttons: ["Overwrite", "Reload", "Cancel"],
+    defaultId: 2,
+    cancelId: 2,
+  });
+  assert.equal(container.querySelector("h1")?.textContent, "Agw Desktop");
+  assert.equal(container.querySelector(".source")?.textContent, "Agw Desktop");
+  buttons[1].click();
+  assert.deepEqual(answers, [1]);
 });
 
 test("permission approvals show the app's descriptions, the source and the app's buttons", () => {
@@ -128,14 +144,15 @@ test("links and unsaved changes name their source and answer true or false", () 
       {
         fileName: "notes.md",
         viewerTitle: "Mixed",
-        extensionId: "text-editor",
-        extensionName: "Text Editor",
+        origin: { kind: "extension", extensionId: "text-editor", extensionName: "Text Editor" },
       },
+      { fileName: "app.ts", viewerTitle: "Source", origin: { kind: "host" } },
     ],
   });
-  assert.equal(
-    unsaved.container.querySelector("li")?.textContent,
-    "notes.md · Mixed (Text Editor, text-editor)",
+  // 宿主的 Source 没有括注。The host's Source has no origin note.
+  assert.deepEqual(
+    [...unsaved.container.querySelectorAll("li")].map((item) => item.textContent),
+    ["notes.md · Mixed (Text Editor, text-editor)", "app.ts · Source"],
   );
   assert.deepEqual(
     unsaved.buttons.map((button) => [button.textContent, button.className]),

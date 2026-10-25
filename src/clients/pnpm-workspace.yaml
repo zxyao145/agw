@@ -106,6 +106,7 @@ catalog:
   react-native-svg: 15.15.5
   remark-gfm: 4.0.1
   semver: 7.8.5
+  serve: 14.2.6
   sonner: 2.0.8
   tailwindcss: 4.3.3
   tsx: 4.23.15

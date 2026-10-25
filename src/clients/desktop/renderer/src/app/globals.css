@@ -4,6 +4,7 @@
 @import "@agw/components/typography.css";
 @import "@agw/chat/math.css";
 @import "@agw/chat/image-preview.css";
+@import "@agw/code-view/code-view.css";
 
 @source "../../../../packages";
 @source "../runtime";
@@ -22,17 +23,18 @@
 }
 
 /* 主题提供工作区背景时（ThemeProvider 在 html 上设置 data-workspace-backdrop），Main Workspace 画出背景图形，宿主自己绘制
-   的 Chat 列与文件 Source 区域显示为卡片，卡片内的 --background、--foreground 连接到卡片颜色；extension 视图由 extension
-   自己绘制。这些规则不在 cascade layer 中，因此覆盖 Tailwind utility 的尺寸与边距。
+   的 Chat 列显示为卡片，卡片内的 --background、--foreground 连接到卡片颜色；文件的 Source 与 extension 视图铺满文件标题行
+   以下的区域，用自己的背景盖住背景图形。这些规则不在 cascade layer 中，因此覆盖 Tailwind utility 的尺寸与边距。
    While the theme provides a workspace backdrop (ThemeProvider sets data-workspace-backdrop on html), the Main
-   Workspace draws it, and the Chat column and the file Source area the host draws become cards whose --background and
-   --foreground point to the card colors; extension views draw themselves. These rules sit outside cascade layers, so
-   they override the sizes and margins of Tailwind utilities. */
+   Workspace draws it, and the Chat column the host draws becomes a card whose --background and --foreground point to
+   the card colors; a file's Source and extension views fill the area below the file title row and cover the backdrop
+   with their own background. These rules sit outside cascade layers, so they override the sizes and margins of
+   Tailwind utilities. */
 :root[data-workspace-backdrop] .agw-main-workspace {
   background-image: var(--agw-workspace-backdrop);
 }
 
-:root[data-workspace-backdrop] .agw-main-workspace :is(.agw-chat-column, .agw-file-source) {
+:root[data-workspace-backdrop] .agw-main-workspace .agw-chat-column {
   --background: var(--card);
   --foreground: var(--card-foreground);
   border-radius: var(--radius-xl);
@@ -51,8 +53,4 @@
 
 :root[data-workspace-backdrop] .agw-main-workspace .agw-chat-composer {
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-}
-
-:root[data-workspace-backdrop] .agw-main-workspace .agw-file-source {
-  margin: 16px;
 }

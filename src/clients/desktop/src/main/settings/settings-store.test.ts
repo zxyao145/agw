@@ -548,21 +548,32 @@ test("load returns the default appearance when the file has none", async () => {
 });
 
 test("load accepts the appearance range boundaries", async () => {
-  const small = { baseFontSize: 12, chatFontSize: 12, theme: "default" };
-  const large = { baseFontSize: 20, chatFontSize: 24, theme: "default" };
+  const small = { baseFontSize: 12, chatFontSize: 12, codeFontSize: 12, theme: "default" };
+  const large = { baseFontSize: 20, chatFontSize: 24, codeFontSize: 28, theme: "default" };
   assert.deepEqual(await loadWithStoredAppearance(small), small);
   assert.deepEqual(await loadWithStoredAppearance(large), large);
 });
 
-test("load reads a missing theme as default and keeps a missing mode missing", async () => {
+test("load reads a missing theme as default, a missing code size as null and keeps a missing mode missing", async () => {
   const appearance = await loadWithStoredAppearance({ baseFontSize: 18, chatFontSize: null });
-  assert.deepEqual(appearance, { baseFontSize: 18, chatFontSize: null, theme: "default" });
+  assert.deepEqual(appearance, {
+    baseFontSize: 18,
+    chatFontSize: null,
+    codeFontSize: null,
+    theme: "default",
+  });
   assert.equal("mode" in appearance, false);
 });
 
 test("load accepts extension theme ids and the three modes", async () => {
   for (const mode of ["system", "light", "dark"] as const) {
-    const stored = { baseFontSize: 16, chatFontSize: null, theme: "soft-theme:soft", mode };
+    const stored = {
+      baseFontSize: 16,
+      chatFontSize: null,
+      codeFontSize: null,
+      theme: "soft-theme:soft",
+      mode,
+    };
     assert.deepEqual(await loadWithStoredAppearance(stored), stored);
   }
 });
@@ -574,6 +585,9 @@ test("load rejects an appearance outside the allowed values", async () => {
     { ...valid, baseFontSize: 11 },
     { ...valid, chatFontSize: 25 },
     { ...valid, chatFontSize: 11 },
+    { ...valid, codeFontSize: 29 },
+    { ...valid, codeFontSize: 11 },
+    { ...valid, codeFontSize: 14.5 },
     { ...valid, documentFontSize: null },
     { ...valid, documentFontSize: 18 },
     { ...valid, baseFontSize: 16.5 },
@@ -598,6 +612,7 @@ test("save stores the appearance and keeps the other settings", async () => {
     const appearance = {
       baseFontSize: 18,
       chatFontSize: 15,
+      codeFontSize: 20,
       theme: "soft-theme:soft",
       mode: "dark",
     } as const;
@@ -618,6 +633,7 @@ test("save without an appearance keeps the stored appearance", async () => {
     const appearance = {
       baseFontSize: 18,
       chatFontSize: 15,
+      codeFontSize: null,
       theme: "soft-theme:soft",
       mode: "light",
     } as const;
@@ -644,7 +660,13 @@ test("writes that do not change the appearance keep a missing mode missing", asy
     await store.save({ closeBehavior: "quit-desktop" });
 
     const file = JSON.parse(await readFile(join(scratch.path, "settings.json"), "utf8"));
-    assert.deepEqual(file.appearance, { baseFontSize: 17, chatFontSize: null, theme: "default" });
+    // 缺失的 Code 字号读作 null。A missing code size reads as null.
+    assert.deepEqual(file.appearance, {
+      baseFontSize: 17,
+      chatFontSize: null,
+      codeFontSize: null,
+      theme: "default",
+    });
     assert.equal(file.extensions.viewer.enabled, true);
     assert.deepEqual(file.fileViewerDefaults, { "*.md": "viewer:preview" });
   } finally {
@@ -659,12 +681,15 @@ test("save rejects sizes below 12 and invalid themes or modes, keeping the store
     const stored = {
       baseFontSize: 18,
       chatFontSize: null,
+      codeFontSize: null,
       theme: "default",
       mode: "system",
     } as const;
     await store.save({ appearance: stored });
     await assert.rejects(store.save({ appearance: { ...stored, baseFontSize: 11 } }));
     await assert.rejects(store.save({ appearance: { ...stored, chatFontSize: 11 } }));
+    await assert.rejects(store.save({ appearance: { ...stored, codeFontSize: 11 } }));
+    await assert.rejects(store.save({ appearance: { ...stored, codeFontSize: 29 } }));
     await assert.rejects(store.save({ appearance: { ...stored, theme: "soft" } }));
     await assert.rejects(
       store.save({ appearance: { ...stored, mode: "auto" as unknown as "system" } }),

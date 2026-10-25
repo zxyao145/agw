@@ -44,10 +44,12 @@ function putSettings(text: string): void {
   files.set(SETTINGS_URI, new TextEncoder().encode(text));
 }
 
-function settings(
-  documentFontSize: number | null,
-  codeFontSize: number | null,
-): TextEditorSettings {
+function settings(documentFontSize: number | null): TextEditorSettings {
+  return { schemaVersion: 2, documentFontSize };
+}
+
+/** 版本 1 的文件内容，另有 Code 的字号。A version 1 file, with Code's size too. */
+function settingsV1(documentFontSize: number | null, codeFontSize: number | null) {
   return { schemaVersion: 1, documentFontSize, codeFontSize };
 }
 
@@ -59,14 +61,14 @@ test("TEXT_EDITOR_FONT_SIZES lists the integers 12 to 28", () => {
 
 test("readTextEditorSettings returns the defaults when the file does not exist", async () => {
   assert.deepEqual(await readTextEditorSettings(host.api), DEFAULT_TEXT_EDITOR_SETTINGS);
-  assert.deepEqual(DEFAULT_TEXT_EDITOR_SETTINGS, settings(null, null));
+  assert.deepEqual(DEFAULT_TEXT_EDITOR_SETTINGS, settings(null));
 });
 
 test("readTextEditorSettings returns a copy that callers can change", async () => {
   const first = await readTextEditorSettings(host.api);
   first.documentFontSize = 20;
-  assert.deepEqual(DEFAULT_TEXT_EDITOR_SETTINGS, settings(null, null));
-  assert.deepEqual(await readTextEditorSettings(host.api), settings(null, null));
+  assert.deepEqual(DEFAULT_TEXT_EDITOR_SETTINGS, settings(null));
+  assert.deepEqual(await readTextEditorSettings(host.api), settings(null));
 });
 
 test("readTextEditorSettings requests settings.json under the storage URI", async () => {
@@ -84,20 +86,32 @@ test("readTextEditorSettings requests settings.json under the storage URI", asyn
 });
 
 test("readTextEditorSettings reads the boundary sizes", async () => {
-  putSettings(JSON.stringify(settings(12, 28)));
-  assert.deepEqual(await readTextEditorSettings(host.api), settings(12, 28));
-  putSettings(JSON.stringify(settings(28, null)));
-  assert.deepEqual(await readTextEditorSettings(host.api), settings(28, null));
+  putSettings(JSON.stringify(settings(12)));
+  assert.deepEqual(await readTextEditorSettings(host.api), settings(12));
+  putSettings(JSON.stringify(settings(28)));
+  assert.deepEqual(await readTextEditorSettings(host.api), settings(28));
+});
+
+test("readTextEditorSettings reads a version 1 file without its code size", async () => {
+  putSettings(JSON.stringify(settingsV1(18, 15)));
+  assert.deepEqual(await readTextEditorSettings(host.api), settings(18));
+  putSettings(JSON.stringify(settingsV1(null, null)));
+  assert.deepEqual(await readTextEditorSettings(host.api), settings(null));
 });
 
 const INVALID: [string, string][] = [
-  ["a size below 12", JSON.stringify(settings(11, null))],
-  ["a code size below 12", JSON.stringify(settings(null, 11))],
-  ["a size above 28", JSON.stringify(settings(null, 29))],
-  ["a fractional size", JSON.stringify(settings(16.5, null))],
-  ["an unknown field", JSON.stringify({ ...settings(null, null), extra: 1 })],
-  ["schemaVersion 2", JSON.stringify({ ...settings(null, null), schemaVersion: 2 })],
-  ["a missing field", JSON.stringify({ schemaVersion: 1, documentFontSize: null })],
+  ["a size below 12", JSON.stringify(settings(11))],
+  ["a size above 28", JSON.stringify(settings(29))],
+  ["a fractional size", JSON.stringify(settings(16.5))],
+  ["an unknown field", JSON.stringify({ ...settings(null), extra: 1 })],
+  ["a code size in version 2", JSON.stringify({ ...settings(null), codeFontSize: 14 })],
+  ["schemaVersion 3", JSON.stringify({ ...settings(null), schemaVersion: 3 })],
+  ["a missing field", JSON.stringify({ schemaVersion: 2 })],
+  ["a version 1 code size below 12", JSON.stringify(settingsV1(null, 11))],
+  [
+    "a version 1 file without its code size",
+    JSON.stringify({ schemaVersion: 1, documentFontSize: null }),
+  ],
   ["text that is not JSON", "not json"],
 ];
 
@@ -128,15 +142,16 @@ test("readTextEditorSettings rethrows read errors other than ENOENT", async () =
 });
 
 test("writeTextEditorSettings then readTextEditorSettings returns the same object", async () => {
-  const value = settings(18, 15);
+  const value = settings(18);
   await writeTextEditorSettings(host.api, value);
-  assert.ok(files.has(SETTINGS_URI));
+  // 读取时 RPC 会转移这个 buffer，所以先检查文件内容。Reading transfers this buffer, so the content is checked first.
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get(SETTINGS_URI))), value);
   assert.deepEqual(await readTextEditorSettings(host.api), value);
 });
 
 test("writeTextEditorSettings rejects an invalid object before any fs.writeFile request", async () => {
   await assert.rejects(
-    writeTextEditorSettings(host.api, settings(11, null)),
+    writeTextEditorSettings(host.api, settings(11)),
     (error: unknown) =>
       error instanceof TextEditorSettingsError && error.message.includes("settings.json"),
   );
@@ -149,51 +164,25 @@ function tokens(base: string): Record<string, string> {
 }
 
 test("resolveTextEditorFontSizes follows the base size by default", () => {
-  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("16px")), {
-    document: 16,
-    code: 14,
-  });
-  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("20px")), {
-    document: 20,
-    code: 17.5,
-  });
+  assert.deepEqual(resolveTextEditorFontSizes(settings(null), tokens("16px")), { document: 16 });
+  assert.deepEqual(resolveTextEditorFontSizes(settings(null), tokens("20px")), { document: 20 });
 });
 
-test("resolveTextEditorFontSizes derives the code size from the document size", () => {
-  assert.deepEqual(resolveTextEditorFontSizes(settings(18, null), tokens("16px")), {
-    document: 18,
-    code: 16,
-  });
-});
-
-test("resolveTextEditorFontSizes scales the code size 10.5 from document size 12", () => {
-  assert.deepEqual(resolveTextEditorFontSizes(settings(12, null), tokens("16px")), {
-    document: 12,
-    code: 10.5,
-  });
-  assert.deepEqual(resolveTextEditorFontSizes(settings(null, null), tokens("12px")), {
-    document: 12,
-    code: 10.5,
-  });
-});
-
-test("resolveTextEditorFontSizes keeps an explicit code size independent of the document size", () => {
-  assert.equal(resolveTextEditorFontSizes(settings(null, 15), tokens("16px")).code, 15);
-  assert.equal(resolveTextEditorFontSizes(settings(null, 15), tokens("24px")).code, 15);
-  assert.equal(resolveTextEditorFontSizes(settings(20, 12), tokens("16px")).code, 12);
+test("resolveTextEditorFontSizes keeps an explicit document size", () => {
+  assert.deepEqual(resolveTextEditorFontSizes(settings(18), tokens("16px")), { document: 18 });
 });
 
 test("resolveTextEditorFontSizes throws when the host theme has no base size", () => {
-  assert.throws(() => resolveTextEditorFontSizes(settings(null, null), {}), {
+  assert.throws(() => resolveTextEditorFontSizes(settings(null), {}), {
     message: "The host theme has no --agw-font-size-base.",
   });
-  assert.throws(() => resolveTextEditorFontSizes(settings(18, 15), {}), {
+  assert.throws(() => resolveTextEditorFontSizes(settings(18), {}), {
     message: "The host theme has no --agw-font-size-base.",
   });
 });
 
 test("resolveTextEditorFontSizes throws on a value that is not px", () => {
-  assert.throws(() => resolveTextEditorFontSizes(settings(null, null), tokens("1rem")), {
+  assert.throws(() => resolveTextEditorFontSizes(settings(null), tokens("1rem")), {
     message: 'The host theme --agw-font-size-base is not a px value: "1rem".',
   });
 });

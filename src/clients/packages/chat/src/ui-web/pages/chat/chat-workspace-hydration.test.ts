@@ -299,7 +299,13 @@ async function checkConversationSession(kind: string, strictMode = false) {
       },
       getFileDiff: async (...args: unknown[]) => {
         fileReads.push(args);
-        return { diff: "", unchanged: true };
+        return {
+          diff: "",
+          unchanged: true,
+          isBinary: false,
+          originalContent: diskContent,
+          modifiedContent: diskContent,
+        };
       },
       getConversationActivity: async () => {
         activityRequests += 1;

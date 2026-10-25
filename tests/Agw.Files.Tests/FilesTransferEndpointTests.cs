@@ -435,6 +435,27 @@ public sealed class FilesTransferEndpointTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(Workspace, "docs")));
     }
 
+    [Fact]
+    public async Task Diff_ChangedFile_ReturnsTextsAndUnifiedDiff()
+    {
+        using var repository = TempGitRepository.InitializeIn(Workspace);
+        repository.Write("app.ts", "const a = 1;\n");
+        repository.CommitAll();
+        repository.Write("app.ts", "const a = 2;\n");
+        await using var app = await StartAsync();
+        using var client = app.GetTestClient();
+
+        using var response = await client.GetAsync(Url("diff", "path=app.ts&scope=unstaged"), Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var data = (await ReadJsonAsync(response)).GetProperty("data");
+        Assert.Contains("+const a = 2;", data.GetProperty("diff").GetString(), StringComparison.Ordinal);
+        Assert.False(data.GetProperty("unchanged").GetBoolean());
+        Assert.False(data.GetProperty("isBinary").GetBoolean());
+        Assert.Equal("const a = 1;\n", data.GetProperty("originalContent").GetString());
+        Assert.Equal("const a = 2;\n", data.GetProperty("modifiedContent").GetString());
+    }
+
     private string Url(string action, string query) => $"/api/files/{action}?projectId={_projectId}&{query}";
 
     /// <summary>

@@ -2513,9 +2513,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfObject"];
-            "application/json": components["schemas"]["ApiResultOfObject"];
-            "text/json": components["schemas"]["ApiResultOfObject"];
+            "text/plain": components["schemas"]["ApiResultOfFileDiffResponse"];
+            "application/json": components["schemas"]["ApiResultOfFileDiffResponse"];
+            "text/json": components["schemas"]["ApiResultOfFileDiffResponse"];
           };
         };
         /** @description Bad Request */
@@ -5709,6 +5709,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfFileDiffResponse: {
+      data?: null | components["schemas"]["FileDiffResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfFileItem: {
       data?: null | components["schemas"]["FileItem"];
       /** Format: int32 */
@@ -6235,6 +6242,28 @@ export interface components {
       displayName: string;
       defaultExtra: string;
       supportedProviderTypes: components["schemas"]["ProviderType"][];
+    };
+    /**
+     * @description 文件在 diff 范围内的改动：unified diff 文字与两侧全文。
+     *     A file's change in a diff scope: the unified diff text and the full text of both sides.
+     */
+    FileDiffResponse: {
+      /** @description git 输出的 unified diff。The unified diff from git. */
+      diff: string;
+      /** @description git 没有报告改动。Git reports no change. */
+      unchanged: boolean;
+      /** @description 任一侧是二进制文件；此时两侧内容都为 null。Either side is binary; both contents are then null. */
+      isBinary: boolean;
+      /**
+       * @description 原始侧的全文（staged、缺省范围为 HEAD，unstaged 为暂存区）；该侧没有这个文件时为 null。
+       *     The original side's text (HEAD for staged and the default scope, the index for unstaged); null when absent.
+       */
+      originalContent: null | string;
+      /**
+       * @description 修改侧的全文（staged 为暂存区，其他范围为工作区）；该侧没有这个文件时为 null。
+       *     The modified side's text (the index for staged, the working tree otherwise); null when absent.
+       */
+      modifiedContent: null | string;
     };
     FileItem: {
       /** Format: uuid */

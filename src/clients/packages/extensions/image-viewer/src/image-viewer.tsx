@@ -123,10 +123,11 @@ function ImageStage({ image, name }: { image: DecodedImage; name: string }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<Size | null>(null);
   const [zoom, setZoom] = useState<Zoom>({ mode: "fit" });
-  // 已经请求、尚未应用的缩放：比例，以及要停在 anchor（显示区坐标）下的图片点；连续的滚轮事件以它为起点。
+  // 已经请求、尚未应用的缩放：比例，以及要停在 anchor（显示区坐标；null 为应用时显示区的中心）下的图片点；
+  // 连续的滚轮事件以它为起点。
   // The requested zoom not yet applied: the scale and the image point to keep under the anchor (display-area
-  // coordinates); consecutive wheel events start from it.
-  const pending = useRef<{ scale: number; point: Point; anchor: Point } | null>(null);
+  // coordinates; null for the display area's center when applied); consecutive wheel events start from it.
+  const pending = useRef<{ scale: number; point: Point; anchor: Point | null } | null>(null);
   const drag = useRef<{ pointerId: number; x: number; y: number; scroll: Point } | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -173,7 +174,6 @@ function ImageStage({ image, name }: { image: DecodedImage; name: string }) {
   const zoomTo = (next: number, anchor: Point | null) => {
     if (stage === null || scale === null) return;
     const element = stageRef.current!;
-    const at = anchor ?? { x: stage.width / 2, y: stage.height / 2 };
     // 等待中的缩放尚未应用时，从它的比例与滚动位置开始。A pending zoom not yet applied is the starting point.
     const current = pending.current;
     const scroll =
@@ -187,9 +187,9 @@ function ImageStage({ image, name }: { image: DecodedImage; name: string }) {
         stage,
         scale: current?.scale ?? scale,
         scroll,
-        anchor: at,
+        anchor,
       }),
-      anchor: at,
+      anchor,
     };
     setZoom({ mode: "scale", scale: next });
   };

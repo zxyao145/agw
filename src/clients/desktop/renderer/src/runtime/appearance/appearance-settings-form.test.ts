@@ -81,6 +81,7 @@ function select(id: string): HTMLSelectElement {
 
 const baseSelect = () => select("appearance-base-font-size");
 const chatSelect = () => select("appearance-chat-font-size");
+const codeSelect = () => select("appearance-code-font-size");
 const themeSelect = () => select("appearance-theme");
 const modeButton = (name: string) => environment.screen.getByRole("button", { name });
 
@@ -106,11 +107,36 @@ function recordingSave() {
   return { calls, save };
 }
 
-test("defaults show base 16 and follow for chat", () => {
+test("defaults show base 16 and follow for chat and code", () => {
   renderForm(INITIAL, recordingSave().save);
   assert.equal(baseSelect().value, "16");
   assert.equal(chatSelect().value, "follow");
   assert.equal(optionText(chatSelect(), "follow"), "Follow base size (14 px)");
+  assert.equal(codeSelect().value, "follow");
+  assert.equal(optionText(codeSelect(), "follow"), "Follow base size (14 px)");
+});
+
+test("the code size select offers 12 to 28, and choosing or resetting saves it", async () => {
+  const { calls, save } = recordingSave();
+  const view = renderForm(INITIAL, save);
+  assert.deepEqual(optionValues(codeSelect()), [
+    "follow",
+    ...Array.from({ length: 17 }, (_, index) => String(12 + index)),
+  ]);
+  choose(codeSelect(), "22");
+  await environment.waitFor(() => assert.equal(calls.length, 1));
+  assert.deepEqual(calls[0], { ...INITIAL, codeFontSize: 22 });
+  view.rerender({ ...INITIAL, codeFontSize: 22 });
+  environment.fireEvent.click(
+    environment.screen.getByRole("button", { name: "Reset code font size" }),
+  );
+  await environment.waitFor(() => assert.equal(calls.length, 2));
+  assert.deepEqual(calls[1], { ...INITIAL, codeFontSize: null });
+});
+
+test("base size 13 makes the code follow text 11.5 px", () => {
+  renderForm({ ...INITIAL, baseFontSize: 13 }, recordingSave().save);
+  assert.equal(optionText(codeSelect(), "follow"), "Follow base size (11.5 px)");
 });
 
 test("the size selects offer 12 to 20 for base and 12 to 24 for chat, all enabled", () => {
@@ -158,6 +184,7 @@ test("choosing a base size saves it with the theme and mode and updates the foll
   assert.deepEqual(calls[0], {
     baseFontSize: 18,
     chatFontSize: null,
+    codeFontSize: null,
     theme: "soft-theme:soft",
     mode: "dark",
   });
@@ -176,12 +203,22 @@ test("the reset button of a field saves that field's default", async () => {
 
 test("Reset all saves the default sizes, the Default theme and the System mode", async () => {
   const { calls, save } = recordingSave();
-  renderForm({ baseFontSize: 18, chatFontSize: 20, theme: "soft-theme:soft", mode: "dark" }, save);
+  renderForm(
+    {
+      baseFontSize: 18,
+      chatFontSize: 20,
+      codeFontSize: 24,
+      theme: "soft-theme:soft",
+      mode: "dark",
+    },
+    save,
+  );
   environment.fireEvent.click(environment.screen.getByRole("button", { name: "Reset all" }));
   await environment.waitFor(() => assert.equal(calls.length, 1));
   assert.deepEqual(calls[0], {
     baseFontSize: 16,
     chatFontSize: null,
+    codeFontSize: null,
     theme: "default",
     mode: "system",
   });

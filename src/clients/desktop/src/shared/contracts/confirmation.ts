@@ -1,14 +1,21 @@
 import type { ExtensionPermission } from "@agw/extension-sdk";
 
+/**
+ * 确认的来源：宿主自身（例如 Source）或某个 extension。
+ * Where a confirmation comes from: the host itself (Source, for example) or an extension.
+ */
+export type ConfirmationOrigin =
+  | { kind: "host" }
+  | { kind: "extension"; extensionId: string; extensionName: string };
+
 /** 文件查看器中有未保存修改的文件。A file with unsaved changes in a file viewer. */
 export type UnsavedFileItem = {
   fileName: string;
   viewerTitle: string;
-  extensionId: string;
-  extensionName: string;
+  origin: ConfirmationOrigin;
 };
 
-/** 检查后的 extension 消息框。A checked extension message box. */
+/** 检查后的消息框。A checked message box. */
 export type MessageBoxContent = {
   /** 未指定时为 null。Null when not given. */
   type: "info" | "warning" | "error" | null;
@@ -32,8 +39,7 @@ export type HostConfirmationRequest =
   | ({
       kind: "message";
       clientId: string;
-      extensionId: string;
-      extensionName: string;
+      origin: ConfirmationOrigin;
     } & MessageBoxContent);
 
 /** 安装或启用 extension 的权限批准；说明、动作含义与按钮由应用生成。A permission approval for installing or enabling an extension; descriptions, action meanings and buttons come from the app. */
@@ -58,7 +64,7 @@ export type PermissionApprovalView = {
 export type ConfirmationView =
   | { kind: "discard-unsaved"; items: UnsavedFileItem[] }
   | { kind: "open-link"; extensionId: string; extensionName: string; url: string }
-  | ({ kind: "message"; extensionId: string; extensionName: string } & MessageBoxContent)
+  | ({ kind: "message"; origin: ConfirmationOrigin } & MessageBoxContent)
   | PermissionApprovalView;
 
 export type ConfirmationAnswer = boolean | number;

@@ -36,6 +36,7 @@
     "@agw/api": "workspace:*",
     "@agw/chat": "workspace:*",
     "@agw/chat-runtime": "workspace:*",
+    "@agw/code-view": "workspace:*",
     "@agw/components": "workspace:*",
     "@agw/execution-core": "workspace:*",
     "@agw/extension-sdk": "workspace:*",
