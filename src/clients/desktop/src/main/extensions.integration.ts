@@ -313,6 +313,25 @@ async function goToExtensions(): Promise<void> {
   await openSettingsPage("/extensions/");
 }
 
+const EXTENSION_TYPE_SELECT = `button[aria-label="Extension type"]`;
+
+/**
+ * 在 Extensions 页面的类型 Select 中选择 `label`：Radix Select 按 pointerdown 打开，选项响应 Enter。
+ * Chooses `label` in the Extensions page type Select: Radix Select opens on pointerdown and its options respond to
+ * Enter.
+ */
+async function chooseExtensionType(label: string): Promise<void> {
+  await openMenu(EXTENSION_TYPE_SELECT);
+  const option = `[...document.querySelectorAll('[data-slot="select-content"][data-state="open"] [role="option"]')].find((option) => option.textContent === ${JSON.stringify(label)})`;
+  await untilHost(`Boolean(${option})`, `the "${label}" type option`);
+  await evalHost(`(() => {
+    const option = ${option};
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    return true;
+  })()`);
+}
+
 async function goToChat(): Promise<void> {
   if (await evalHost<boolean>("location.pathname.startsWith('/desktop/chat')")) return;
   await clickHost("a.agw-back-button");
@@ -367,7 +386,7 @@ async function disable(id: string): Promise<void> {
 
 async function reloadExtension(id: string): Promise<void> {
   await goToExtensions();
-  await clickText("Reload", `document.querySelector('[data-extension-id="${id}"]')`);
+  await clickHost(`[data-extension-id="${id}"] button[aria-label="Reload"]`);
 }
 
 /** 通过 sample 的 workspace API 打开任意主区视图。Opens any main view through sample's workspace API. */
@@ -4350,11 +4369,13 @@ async function applyAppearanceInPlace(changes: Partial<AppearanceSettings>): Pro
 }
 
 /**
- * 主题选择：不合法的主题文件显示校验错误且不出现在下拉框中；Manage 只显示主题 extension；目录安装的主题 extension 启用后
- * 出现在下拉框中；Soft 与 Light 下宿主与侧栏的颜色、Edit 页面的变量；切换主题时没有过渡动画。
+ * 主题选择：不合法的主题文件显示校验错误且不出现在下拉框中；Manage 只显示主题 extension，类型 Select 切换到文件查看器与
+ * 全部 extension；Extensions 页面的卡片按 gallery 排列；目录安装的主题 extension 启用后出现在下拉框中；Soft 与 Light 下
+ * 宿主与侧栏的颜色、Edit 页面的变量；切换主题时没有过渡动画。
  * Theme selection: an invalid theme file shows its validation error and stays out of the select; Manage shows only
- * theme extensions; a theme extension installed from a folder appears once enabled; Soft with Light colors the host,
- * the sidebars and the Edit page variables; switching themes runs no transitions.
+ * theme extensions, and the type Select switches to file viewers and to every extension; the Extensions page lays its
+ * cards out as a gallery; a theme extension installed from a folder appears once enabled; Soft with Light colors the
+ * host, the sidebars and the Edit page variables; switching themes runs no transitions.
  */
 async function themeSelection(): Promise<void> {
   // 首次启动时把 next-themes 的值（没有值时为 system）迁移到 settings.json。The first launch migrates next-themes' value.
@@ -4409,12 +4430,11 @@ async function themeSelection(): Promise<void> {
     );
   await until(async () => (await listed()).length > 0, "theme extension cards");
   assert.deepEqual(await listed(), ["bad-theme", "soft-theme", "warm-minimalism-theme"]);
-  assert.ok(
-    (
-      await evalHost<string>(
-        `document.querySelector('[data-testid="extension-category"]').textContent`,
-      )
-    ).includes("Theme extensions"),
+  assert.equal(
+    await evalHost<string>(
+      `document.querySelector(${JSON.stringify(EXTENSION_TYPE_SELECT)}).textContent`,
+    ),
+    "Theme",
   );
   assert.ok(
     (
@@ -4423,12 +4443,41 @@ async function themeSelection(): Promise<void> {
       )
     ).includes("Themes: Soft"),
   );
-  await clickText("Show all", `document.querySelector('[data-testid="extension-category"]')`);
+  await chooseExtensionType("File viewer");
+  await untilHost(
+    `(() => { const search = new URLSearchParams(location.search); return search.get("category") === "file-viewers" && search.has("returnTo"); })()`,
+    "the file viewer extensions",
+  );
+  await until(async () => {
+    const ids = await listed();
+    return ids.includes("text-editor") && !ids.includes("soft-theme");
+  }, "the file viewer extension cards");
+  assert.ok(
+    await evalHost<boolean>(
+      `[...document.querySelectorAll('[data-extension-id="text-editor"] [data-slot="badge"]')].some((badge) => badge.textContent === "File viewer")`,
+    ),
+  );
+  await chooseExtensionType("All types");
   await untilHost(`!new URLSearchParams(location.search).has("category")`, "every extension");
   await until(async () => (await listed()).includes("sample"), "the full extension list");
   pass(
-    "Manage opens the Extensions page with only theme extensions, and Show all lists every extension",
+    "Manage opens the Extensions page with only theme extensions, and the type Select lists file viewers and then every extension",
   );
+
+  // 卡片按 gallery 排列，每张不窄于 400px：默认窗口宽度下每行两张，最小窗口宽度下每行一张。
+  // Cards form a gallery, each at least 400px wide: two per row at the default window width, one at the minimum width.
+  const galleryColumns = (columns: number) => `(() => {
+    const rects = [...document.querySelectorAll('[data-testid="extension-gallery"] > [data-extension-id]')].map((card) => card.getBoundingClientRect());
+    return rects.length > ${columns} && new Set(rects.map((rect) => rect.left)).size === ${columns} && rects.every((rect) => rect.width >= 400);
+  })()`;
+  const mainWindow = hooks.mainWindow()!;
+  const [windowWidth, windowHeight] = mainWindow.getSize();
+  await untilHost(galleryColumns(2), "two gallery columns at the default window width");
+  mainWindow.setSize(980, windowHeight);
+  await untilHost(galleryColumns(1), "one gallery column at the minimum window width");
+  mainWindow.setSize(windowWidth, windowHeight);
+  await untilHost(galleryColumns(2), "two gallery columns after restoring the window width");
+  pass("the Extensions page lays cards out as a gallery of columns at least 400px wide");
 
   await installFromFolder(join(config.fixtures, "contrast-theme"), "Contrast Themes");
   await untilStatus("contrast-theme", "Disabled");
@@ -4841,7 +4890,7 @@ async function sidebarThemes(): Promise<void> {
 
   // body 下的对话框与主区域使用界面变量。Dialogs under body and the main area use the interface variables.
   await goToExtensions();
-  await clickText("Uninstall", `document.querySelector('[data-extension-id="contrast-theme"]')`);
+  await clickHost(`[data-extension-id="contrast-theme"] button[aria-label="Uninstall"]`);
   await untilHost(`Boolean(${OPEN_DIALOG})`, "the uninstall dialog");
   assert.equal(await hostStyle(OPEN_DIALOG, "background-color"), "rgb(255, 247, 237)");
   assert.equal(await hostStyle(OPEN_DIALOG, "color"), "rgb(23, 25, 29)");
@@ -5808,7 +5857,7 @@ async function cssThemes(): Promise<void> {
   await chooseTheme(PAPER_THEME);
   await untilCssThemeApplied(PAPER_THEME);
   await goToExtensions();
-  await clickText("Uninstall", `document.querySelector('[data-extension-id="css-theme"]')`);
+  await clickHost(`[data-extension-id="css-theme"] button[aria-label="Uninstall"]`);
   await clickText("Uninstall", OPEN_DIALOG);
   await untilHost(
     `!document.querySelector('[data-extension-id="css-theme"]')`,
@@ -6206,7 +6255,7 @@ async function themeExtensionRemoval(): Promise<void> {
 
   await chooseTheme(CONTRAST_THEME);
   await goToExtensions();
-  await clickText("Uninstall", `document.querySelector('[data-extension-id="contrast-theme"]')`);
+  await clickHost(`[data-extension-id="contrast-theme"] button[aria-label="Uninstall"]`);
   await clickText("Uninstall", OPEN_DIALOG);
   await untilHost(
     `!document.querySelector('[data-extension-id="contrast-theme"]')`,
@@ -7245,8 +7294,10 @@ async function measureSave(
   return { save: end - result.start, longestTask: result.longestTask };
 }
 
-const EDIT_READY = `!document.querySelector(".edit-scroll").hidden && document.querySelector(".ProseMirror")?.childElementCount > 0`;
-const CODE_READY = `!document.querySelector(".code-editor").hidden && document.querySelectorAll(".code-editor .view-line").length > 0 && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`;
+// 容器渲染之前表达式为 false，openProbe 的逐帧检查继续等待。Before the container renders the expression is false, so
+// openProbe's per-frame check keeps waiting.
+const EDIT_READY = `document.querySelector(".edit-scroll")?.hidden === false && document.querySelector(".ProseMirror")?.childElementCount > 0`;
+const CODE_READY = `document.querySelector(".code-editor")?.hidden === false && document.querySelectorAll(".code-editor .view-line").length > 0 && Boolean(document.querySelector(".code-editor .monaco-editor")?.contains(document.activeElement))`;
 
 function round(value: number): number {
   return Math.round(value * 10) / 10;
@@ -7523,7 +7574,7 @@ async function safeMode(): Promise<void> {
 
 async function uninstallBundled(): Promise<void> {
   await goToExtensions();
-  await clickText("Uninstall", `document.querySelector('[data-extension-id="excalidraw"]')`);
+  await clickHost(`[data-extension-id="excalidraw"] button[aria-label="Uninstall"]`);
   await clickHost("#extension-delete-data");
   await clickText("Uninstall", OPEN_DIALOG);
   await untilHost(
@@ -7648,7 +7699,7 @@ async function restartPhase(): Promise<void> {
   );
   assert.equal(frames("sample").length, 0);
   await goToExtensions();
-  await clickText("Uninstall", `document.querySelector('[data-extension-id="sample"]')`);
+  await clickHost(`[data-extension-id="sample"] button[aria-label="Uninstall"]`);
   await clickHost("#extension-delete-data");
   await clickText("Uninstall", OPEN_DIALOG);
   await until(

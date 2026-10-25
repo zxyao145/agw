@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ChevronDown,
@@ -33,6 +33,11 @@ import {
   DialogHeader,
   DialogTitle,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Switch,
   Tooltip,
   TooltipContent,
@@ -55,6 +60,7 @@ import {
 import { buildSettingsHref, getDesktopChatReturnHref } from "./components/app-shell-routing";
 import {
   EXTENSION_CATEGORIES,
+  extensionCategories,
   extensionsInCategory,
   themeTitles,
 } from "./extensions/extension-categories";
@@ -72,6 +78,9 @@ const STATUS_LABELS: Record<ExtensionState["status"], string> = {
   invalid: "Invalid",
   incompatible: "Incompatible",
 };
+
+/** 类型 Select 中 "All types" 的值，对应没有 `category` 参数。The type Select value for "All types": no `category`. */
+const ALL_CATEGORIES = "all";
 
 function useHostSnapshot(host: ExtensionHost) {
   return React.useSyncExternalStore(host.subscribe, host.getSnapshot, host.getSnapshot);
@@ -153,22 +162,21 @@ function PermissionList({ manifest }: { manifest: ExtensionManifest }) {
   );
 }
 
-/** 页面标题右侧只显示图标的按钮，悬停时 tooltip 显示 `label`。An icon-only header button whose tooltip shows `label`. */
-function HeaderIconButton({
+/**
+ * 只显示图标的按钮，tooltip 显示 `label`。按钮停用时由外层 span 接收悬停与聚焦，tooltip 仍然显示。
+ * An icon-only button whose tooltip shows `label`. When the button is disabled, the outer span takes hover and focus
+ * so the tooltip still shows.
+ */
+function TooltipIconButton({
   label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick(): void;
-  children: React.ReactNode;
-}) {
+  ...props
+}: { label: string } & React.ComponentProps<typeof Button>) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button size="icon-sm" variant="outline" aria-label={label} onClick={onClick}>
-          {children}
-        </Button>
+        <span tabIndex={props.disabled ? 0 : undefined} className="inline-flex">
+          <Button size="icon-sm" variant="outline" aria-label={label} {...props} />
+        </span>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
@@ -332,6 +340,7 @@ function ExtensionCard({
   const busy = extension.status === "deactivating";
   const canEnable = installed.validation === "valid";
   const themes = themeTitles(manifest);
+  const categories = extensionCategories(extension);
   return (
     <section className="rounded-xl border bg-card p-4" data-extension-id={extension.id}>
       <div className="flex items-start gap-3">
@@ -339,26 +348,37 @@ function ExtensionCard({
           <WorkspaceIconView icon={extensionIcon(installed)} className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-medium">{manifest?.name ?? extension.id}</h2>
-            {manifest ? (
-              <span className="text-xs text-muted-foreground">{manifest.version}</span>
-            ) : null}
-            <Badge
-              variant={extension.status === "failed" || !canEnable ? "destructive" : "secondary"}
-            >
-              {STATUS_LABELS[extension.status]}
-            </Badge>
-            {installed.permissionApprovalRequired ? (
-              <Badge variant="outline">Permission approval required</Badge>
-            ) : null}
-            {themes.length > 0 ? <Badge variant="outline">Theme</Badge> : null}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-medium">{manifest?.name ?? extension.id}</h2>
+              {manifest ? (
+                <span className="text-xs text-muted-foreground">{manifest.version}</span>
+              ) : null}
+              <Badge
+                variant={extension.status === "failed" || !canEnable ? "destructive" : "secondary"}
+              >
+                {STATUS_LABELS[extension.status]}
+              </Badge>
+              {installed.permissionApprovalRequired ? (
+                <Badge variant="outline">Permission approval required</Badge>
+              ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground" data-testid="extension-id">
+              {extension.id}
+              {manifest?.author ? ` · ${manifest.author}` : ""}
+            </p>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {extension.id}
-            {manifest?.author ? ` · ${manifest.author}` : ""}
-            {manifest ? ` · Extension API ${manifest.manifestVersion}` : ""}
-          </p>
+
+          {categories.length > 0 ? (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {categories.map((category) => (
+                <Badge key={category} variant="outline">
+                  {EXTENSION_CATEGORIES[category].label}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+
           {manifest?.description ? <p className="mt-2 text-sm">{manifest.description}</p> : null}
           {themes.length > 0 ? (
             <p className="mt-2 text-sm" data-testid="extension-themes">
@@ -391,37 +411,35 @@ function ExtensionCard({
           }}
         />
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="outline"
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <TooltipIconButton
+          label="Reload"
           disabled={!canEnable}
           onClick={() => run(() => host.reload(extension.id))}
         >
-          <RotateCw /> Reload
-        </Button>
+          <RotateCw />
+        </TooltipIconButton>
         {manifest?.contributes?.settings ? (
-          <Button size="sm" variant="outline" asChild>
+          <TooltipIconButton label="Settings" asChild>
             <Link
               href={buildSettingsHref(
                 `/extensions/settings/?id=${encodeURIComponent(extension.id)}`,
                 getDesktopChatReturnHref(returnTo),
               )}
             >
-              <Settings /> Settings
+              <Settings />
             </Link>
-          </Button>
+          </TooltipIconButton>
         ) : null}
-        <Button
-          size="sm"
-          variant="outline"
+        <TooltipIconButton
+          label="Open data folder"
           onClick={() => run(() => bridge.openExtensionDataDirectory(extension.id))}
         >
-          <FolderOpen /> Open data folder
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => onUninstall(extension)}>
-          <Trash2 /> Uninstall
-        </Button>
+          <FolderOpen />
+        </TooltipIconButton>
+        <TooltipIconButton label="Uninstall" onClick={() => onUninstall(extension)}>
+          <Trash2 />
+        </TooltipIconButton>
       </div>
       {manifest ? (
         <Collapsible className="mt-3">
@@ -480,10 +498,16 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
   const searchParams = useSearchParams();
   const categoryName = searchParams.get("category");
   const extensions = extensionsInCategory(snapshot.extensions, categoryName);
-  const showAllHref = buildSettingsHref(
-    "/extensions/",
-    getDesktopChatReturnHref(searchParams.get("returnTo")),
-  );
+  const router = useRouter();
+  const selectCategory = (category: string) =>
+    router.replace(
+      buildSettingsHref(
+        category === ALL_CATEGORIES
+          ? "/extensions/"
+          : `/extensions/?category=${encodeURIComponent(category)}`,
+        getDesktopChatReturnHref(searchParams.get("returnTo")),
+      ),
+    );
   const [uninstalling, setUninstalling] = React.useState<ExtensionState | null>(null);
   const [choosingInstallSource, setChoosingInstallSource] = React.useState(false);
   const [invalidPreview, setInvalidPreview] = React.useState<Extract<
@@ -517,22 +541,39 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Extensions</h1>
         <div className="flex flex-wrap gap-2">
-          <HeaderIconButton
+          {/* 未知类型时值为空字符串，显示 placeholder。An unknown type uses the empty value and shows the placeholder. */}
+          <Select
+            value={extensions ? (categoryName ?? ALL_CATEGORIES) : ""}
+            onValueChange={selectCategory}
+          >
+            <SelectTrigger size="sm" aria-label="Extension type" className="min-w-36">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent position="popper" side="bottom" align="start" avoidCollisions={false}>
+              <SelectItem value={ALL_CATEGORIES}>All types</SelectItem>
+              {Object.entries(EXTENSION_CATEGORIES).map(([category, { label }]) => (
+                <SelectItem key={category} value={category}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <TooltipIconButton
             label="Install extension"
             onClick={() => setChoosingInstallSource(true)}
           >
             <PackagePlus />
-          </HeaderIconButton>
-          <HeaderIconButton label="Rescan" onClick={() => run(() => host.rescan())}>
+          </TooltipIconButton>
+          <TooltipIconButton label="Rescan" onClick={() => run(() => host.rescan())}>
             <RefreshCw />
-          </HeaderIconButton>
-          <HeaderIconButton
+          </TooltipIconButton>
+          <TooltipIconButton
             label="Open extensions folder"
             onClick={() => run(() => bridge.openExtensionsDirectory())}
           >
             <FolderOpen />
-          </HeaderIconButton>
-          <HeaderIconButton
+          </TooltipIconButton>
+          <TooltipIconButton
             label="Save SDK types…"
             onClick={() =>
               run(async () => {
@@ -542,7 +583,7 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
             }
           >
             <SquareArrowRightExit />
-          </HeaderIconButton>
+          </TooltipIconButton>
         </div>
       </header>
 
@@ -576,28 +617,19 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
         </p>
       ))}
 
-      {categoryName !== null ? (
-        <div className="flex items-center gap-3 text-sm" data-testid="extension-category">
-          <span className="font-medium">
-            {extensions
-              ? EXTENSION_CATEGORIES[categoryName].label
-              : `Unknown category: ${categoryName}`}
-          </span>
-          <Button size="sm" variant="outline" asChild>
-            <Link href={showAllHref}>Show all</Link>
-          </Button>
-        </div>
-      ) : null}
-
-      {extensions ? (
-        <>
-          {extensions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {categoryName === null
-                ? "No extensions are installed."
-                : `No ${EXTENSION_CATEGORIES[categoryName].label.toLowerCase()} are installed.`}
-            </p>
-          ) : null}
+      {extensions === null ? (
+        <p className="text-sm text-muted-foreground">Unknown extension type: {categoryName}</p>
+      ) : extensions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {categoryName === null
+            ? "No extensions are installed."
+            : `No ${EXTENSION_CATEGORIES[categoryName].label.toLowerCase()} extensions are installed.`}
+        </p>
+      ) : (
+        <div
+          className="grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4"
+          data-testid="extension-gallery"
+        >
           {extensions.map((extension) => (
             <ExtensionCard
               key={extension.id}
@@ -607,8 +639,8 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
               onUninstall={setUninstalling}
             />
           ))}
-        </>
-      ) : null}
+        </div>
+      )}
 
       <InstallSourceDialog
         open={choosingInstallSource}
