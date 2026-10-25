@@ -123,11 +123,9 @@ function MessageScrollArea({
 
 function PresentedMessageView({
   message,
-  embedded = false,
   streaming = false,
 }: {
   message: PresentedMessage;
-  embedded?: boolean;
   /** 消息所在的 Turn 正在流式输出。The turn this message belongs to is streaming. */
   streaming?: boolean;
 }) {
@@ -162,13 +160,7 @@ function PresentedMessageView({
   );
 
   return (
-    <div
-      className={cn(
-        "flex",
-        isUser ? "justify-end" : "justify-start",
-        embedded || message.width === "full" || isUser ? "w-full" : "max-w-[80%]",
-      )}
-    >
+    <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
           "min-w-0 max-w-full",

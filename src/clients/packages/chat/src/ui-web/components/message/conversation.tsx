@@ -483,7 +483,7 @@ function ConversationItem({
 
   if (item.type === "tool-accordion") {
     return (
-      <div className="mx-4 min-w-0 w-full max-w-[80%]">
+      <div className="mx-4 min-w-0">
         <ToolAccordionRow tool={item} />
       </div>
     );
@@ -491,7 +491,7 @@ function ConversationItem({
 
   if (item.type === "tool-batch") {
     return (
-      <div className="mx-4 min-w-0 w-full max-w-[80%]">
+      <div className="mx-4 min-w-0">
         <ToolBatch tools={item.tools} batchKey={item.key} />
       </div>
     );
@@ -499,7 +499,7 @@ function ConversationItem({
 
   if (item.type === "tool-state") {
     return (
-      <div className="mx-4 max-w-[80%]">
+      <div className="mx-4 max-w-full">
         <ToolState message={item.message} />
       </div>
     );
@@ -518,8 +518,8 @@ function ConversationItem({
       {message.meta ? (
         <div
           className={cn(
-            "mb-1 flex max-w-[80%] items-center gap-1.5 text-xs text-muted-foreground",
-            message.alignment === "right" && "ml-auto justify-end",
+            "mb-1 flex items-center gap-1.5 text-xs text-muted-foreground",
+            message.alignment === "right" && "ml-auto max-w-[80%] justify-end",
           )}
         >
           {message.meta.name ? (
@@ -627,7 +627,7 @@ function ToolAccordionRow({ tool }: { tool: PresentedTool }) {
           {tool.messages.length > 0 ? (
             <div className="space-y-3 pl-6 pr-1">
               {tool.messages.map((message) => (
-                <PresentedMessageComponent key={message.identity} message={message} embedded />
+                <PresentedMessageComponent key={message.identity} message={message} />
               ))}
             </div>
           ) : (
