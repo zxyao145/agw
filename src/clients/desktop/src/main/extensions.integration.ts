@@ -3813,11 +3813,13 @@ const FIRST_LINE_BLOCKS: { name: string; block: string; line: string }[] = [
 ];
 
 const DRAG_HANDLE = `document.querySelector(".drag-handle")`;
+// 手柄中显示出来的按钮，对齐检查测量它。The handle's visible button, which the alignment checks measure.
+const DRAG_HANDLE_BUTTON = `document.querySelector(".drag-handle .chrome-button")`;
 
 /**
- * 依次用鼠标悬停 first-line.md 的每个块，检查手柄中心与块的第一行中心相差不超过 1px，所有手柄的 x 与 paragraph 的相同。
- * Hovers every block of first-line.md with the mouse and checks that the handle center is within 1px of the block's
- * first-line center and that every handle has the paragraph handle's x.
+ * 依次用鼠标悬停 first-line.md 的每个块，检查手柄按钮中心与块的第一行中心相差不超过 1px，所有手柄按钮的 x 与 paragraph 的相同。
+ * Hovers every block of first-line.md with the mouse and checks that the handle button's center is within 1px of the
+ * block's first-line center and that every handle button has the paragraph handle button's x.
  */
 async function checkFirstLineHandles(frame: FrameHandle, size: string): Promise<void> {
   const debuggerApi = frame.view.webContents.debugger;
@@ -3889,7 +3891,7 @@ async function checkFirstLineHandles(frame: FrameHandle, size: string): Promise<
           };
           const block = ${block};
           const line = ${line};
-          const handle = ${DRAG_HANDLE}.getBoundingClientRect();
+          const handle = ${DRAG_HANDLE_BUTTON}.getBoundingClientRect();
           return { handleX: handle.left, handleCenter: handle.top + handle.height / 2, lineCenter: line.top + line.height / 2 };
         })()`,
       );

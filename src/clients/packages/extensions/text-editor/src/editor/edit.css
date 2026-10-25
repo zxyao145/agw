@@ -431,10 +431,6 @@ body {
   padding-right: 4px;
 }
 
-.drag-handle .popup {
-  margin-top: 0.5em;
-}
-
 .drag-handle .chrome-button {
   padding: 0 4px;
   color: var(--muted-foreground);
