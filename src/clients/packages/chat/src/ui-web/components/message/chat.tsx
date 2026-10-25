@@ -493,6 +493,11 @@ export function Chat({
       target?.type,
     ],
   );
+  // 已载入且没有任何消息的对话只显示输入框：对话列只包住输入框，并在聊天区域中垂直居中。
+  // A loaded conversation without any message shows only the composer: the column wraps just the composer and is
+  // vertically centered in the chat area.
+  const isEmptyConversation =
+    renderItems.length === 0 && !hasOlderMessages && !isHydratingSession && !isRestoringExecution;
   const unloadedWorkSummaryKeys = React.useMemo(
     () => getUnloadedWorkSummaryKeys(renderItems, messages),
     [renderItems, messages],
@@ -1900,44 +1905,54 @@ export function Chat({
           {/* agw-chat-* 类名供 Desktop 的工作区背景样式使用。The agw-chat-* classes serve Desktop's workspace backdrop styles. */}
           <div className="agw-chat-column-area relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表和输入框共用同一个宽度容器，保证两者严格对齐 */}
-            <div className="agw-chat-column mx-auto flex min-h-full w-full max-w-3xl flex-col">
+            <div
+              className={cn(
+                "agw-chat-column mx-auto flex w-full max-w-3xl flex-col",
+                isEmptyConversation ? "self-center" : "min-h-full",
+              )}
+            >
               <ToolDirectoriesContext.Provider value={directories}>
                 {/* 对话列表 */}
-                <Conversation
-                  items={renderItems}
-                  conversationKey={JSON.stringify([
-                    executionServerId,
-                    projectId,
-                    executionConversationId,
-                  ])}
-                  onWorkSummaryToggle={handleUserInputNavigate}
-                  onImagePreviewOpenChange={handleImagePreviewOpenChange}
-                  onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
-                  scrollElementRef={conversationScrollRef}
-                  userInputNavigationHost={userInputNavigationHost}
-                  onUserInputNavigate={handleAnchorNavigate}
-                  userInputs={userInputsQuery.data}
-                  onLoadUserInput={loadHistoryThroughInput}
-                  activeStreamingScopeId={activeStreamingScopeRef.current}
-                  hasOlderMessages={hasOlderMessages}
-                  isLoadingOlderMessages={isLoadingOlderMessages}
-                  isInitialLoading={isLoadingConversation}
-                  onLoadOlderMessages={() => void loadOlderMessages(true)}
-                  onAutoLoadOlderMessages={() => void loadOlderMessages()}
-                  autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
-                  permissionMode={activePermissionMode ?? undefined}
-                  onHumanResponse={submitInteractionResponse}
-                  showCheckpointResume={target?.type === "agentflow"}
-                  checkpointResumeDisabled={checkpointResumeDisabled}
-                  onCheckpointResume={handleResumeCheckpoint}
-                  messageActions={messageActions}
-                />
+                {isEmptyConversation ? null : (
+                  <Conversation
+                    items={renderItems}
+                    conversationKey={JSON.stringify([
+                      executionServerId,
+                      projectId,
+                      executionConversationId,
+                    ])}
+                    onWorkSummaryToggle={handleUserInputNavigate}
+                    onImagePreviewOpenChange={handleImagePreviewOpenChange}
+                    onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
+                    scrollElementRef={conversationScrollRef}
+                    userInputNavigationHost={userInputNavigationHost}
+                    onUserInputNavigate={handleAnchorNavigate}
+                    userInputs={userInputsQuery.data}
+                    onLoadUserInput={loadHistoryThroughInput}
+                    activeStreamingScopeId={activeStreamingScopeRef.current}
+                    hasOlderMessages={hasOlderMessages}
+                    isLoadingOlderMessages={isLoadingOlderMessages}
+                    isInitialLoading={isLoadingConversation}
+                    onLoadOlderMessages={() => void loadOlderMessages(true)}
+                    onAutoLoadOlderMessages={() => void loadOlderMessages()}
+                    autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
+                    permissionMode={activePermissionMode ?? undefined}
+                    onHumanResponse={submitInteractionResponse}
+                    showCheckpointResume={target?.type === "agentflow"}
+                    checkpointResumeDisabled={checkpointResumeDisabled}
+                    onCheckpointResume={handleResumeCheckpoint}
+                    messageActions={messageActions}
+                  />
+                )}
               </ToolDirectoriesContext.Provider>
 
               <div
                 inert={showReconnect}
                 aria-hidden={showReconnect}
-                className="agw-chat-composer pointer-events-none sticky bottom-0 z-10 min-h-30 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-2"
+                className={cn(
+                  "agw-chat-composer pointer-events-none sticky bottom-0 z-10 min-h-30 px-3 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent ",
+                  isEmptyConversation && "py-3",
+                )}
               >
                 {/* 输入框 */}
                 <div className="pointer-events-auto">

@@ -24,8 +24,6 @@ import {
   Badge,
   Button,
   Empty,
-  EmptyContent,
-  EmptyDescription,
   EmptyHeader,
   EmptyTitle,
   cn,
@@ -246,15 +244,9 @@ export function Conversation({
   }
 
   if (items.length === 0 && !hasHistoryLoader && !previewOpen) {
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>No Message Yet</EmptyTitle>
-          <EmptyDescription>There are currently no messages.</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent className="flex-row justify-center gap-2" />
-      </Empty>
-    );
+    // 空对话只保留占位高度，让输入框停在底部。
+    // An empty conversation only keeps the filler height so the composer stays at the bottom.
+    return <div className="w-full flex-1" />;
   }
 
   return (

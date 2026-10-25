@@ -110,18 +110,18 @@ function messageScrollArea(content: HTMLElement) {
   };
 }
 
-test("an empty conversation says there are no messages", async () => {
+test("an empty conversation renders no placeholder", async () => {
   renderConversation();
 
-  assert.ok(await screen.findByText("No Message Yet"));
-  assert.ok(screen.getByText("There are currently no messages."));
+  const scroller = await screen.findByTestId("scroller");
+  assert.equal(scroller.textContent, "");
+  assert.equal(screen.queryByRole("list"), null);
 });
 
-test("an empty conversation that is still loading says so instead", async () => {
+test("an empty conversation that is still loading says so", async () => {
   renderConversation({ isInitialLoading: true });
 
   assert.ok(await screen.findByText("Loading conversation..."));
-  assert.equal(screen.queryByText("No Message Yet"), null);
 });
 
 test("messages render as a labelled list in order", async () => {

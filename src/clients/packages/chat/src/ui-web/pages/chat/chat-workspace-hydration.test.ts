@@ -448,7 +448,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       "./conversation": {
         Conversation: ({ items }: { items: NonNullable<typeof observed.items> }) => {
           observed.items = items;
-          return null;
+          return React.createElement("div", { "data-testid": "conversation" });
         },
       },
     },
@@ -1230,6 +1230,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return;
       }
       if (["new-chat", "project-switch", "clear-history"].includes(kind)) {
+        const conversationShown = () =>
+          dom.window.document.querySelector('[data-testid="conversation"]') !== null;
         if (kind === "new-chat") {
           assert.ok(observed.newChat);
           await React.act(async () => observed.newChat!());
@@ -1253,8 +1255,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
           assert.deepEqual(queryClient.getQueryData(inputQueryKey), []);
         }
         assert.equal(observed.input?.isTransitioning, false);
+        assert.equal(conversationShown(), false, "an empty conversation shows only the composer");
         await React.act(async () => observed.input!.onExecute("next turn", []));
         assert.equal(executions.length, 1);
+        assert.equal(conversationShown(), true, "the first message shows the conversation");
         if (kind === "clear-history") {
           assert.equal(executions[0].conversationId, "conversation-1");
         } else {
