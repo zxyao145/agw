@@ -9,6 +9,7 @@ const { act, createElement, Profiler } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { EditDocument } = await import("./edit-document");
 const { EditView, unmountEditView } = await import("./edit-view");
+const { TABLE_ACTIONS } = await import("./table-commands");
 
 const host = createEditHost();
 const cleanups: (() => Promise<void>)[] = [];
@@ -126,6 +127,76 @@ test("the / menu filters by the typed text and is driven by the arrow keys and E
   });
   assert.deepEqual(slashMenu(), []);
   assert.equal(editor.state.doc.child(1).textContent, "Title /quo");
+});
+
+test("moving the mouse over a / menu entry selects it for the arrow keys and Enter", async () => {
+  const { document } = await mount("slash-hover.md", "First.\n");
+  const { editor } = document;
+  await act(async () => {
+    editor.commands.setTextSelection(1 + "First.".length);
+    pressKey(editor, "Enter");
+    typeText(editor, "/");
+    await settle();
+  });
+  const option = [...window.document.querySelectorAll(".slash-menu [role=option]")].find(
+    (element) => element.textContent === "Numbered list",
+  )!;
+  await act(async () => {
+    option.dispatchEvent(new window.MouseEvent("mousemove", { bubbles: true }));
+  });
+  const selected = () => slashMenu().filter((entry) => entry.startsWith("> "));
+  assert.deepEqual(selected(), ["> Numbered list"]);
+  await act(async () => {
+    pressKey(editor, "ArrowDown");
+    await settle();
+  });
+  assert.deepEqual(selected(), ["> To-do list"]);
+  await act(async () => {
+    option.dispatchEvent(new window.MouseEvent("mousemove", { bubbles: true }));
+    pressKey(editor, "Enter");
+    await settle();
+  });
+  assert.deepEqual(slashMenu(), []);
+  assert.equal(editor.state.doc.child(1).type.name, "orderedList");
+});
+
+test("the table toolbar shows icon buttons whose tooltips name the operations", async () => {
+  const { document } = await mount("table-toolbar.md", "| a | b |\n| --- | --- |\n| 1 | 2 |\n");
+  const { editor } = document;
+  let cell = -1;
+  editor.state.doc.descendants((node, position) => {
+    if (cell < 0 && node.isText && node.text === "1") cell = position;
+  });
+  await act(async () => {
+    editor.view.focus();
+    editor.commands.setTextSelection(cell + 1);
+  });
+  await waitForPopovers();
+  const toolbar = window.document.querySelector(".table-toolbar")!;
+  const buttons = [...toolbar.querySelectorAll("button")];
+  assert.deepEqual(
+    buttons.map((element) => [
+      element.getAttribute("aria-label"),
+      element.textContent,
+      element.querySelector("svg") !== null,
+    ]),
+    TABLE_ACTIONS.map((action) => [action.title, "", true]),
+  );
+
+  const insertBelow = buttons[TABLE_ACTIONS.findIndex(({ title }) => title === "Insert row below")];
+  await act(async () => {
+    insertBelow.dispatchEvent(
+      new window.PointerEvent("pointermove", { bubbles: true, pointerType: "mouse" }),
+    );
+    await settle();
+  });
+  assert.equal(window.document.querySelector(".tooltip")?.textContent, "Insert row below");
+  await act(async () => {
+    insertBelow.click();
+    await settle();
+  });
+  assert.equal(window.document.querySelector(".tooltip"), null);
+  assert.equal(editor.state.doc.child(0).childCount, 3);
 });
 
 test("the / menu's image address input follows later edits and closes once its position is gone", async () => {

@@ -389,6 +389,30 @@ body {
   opacity: 0.5;
 }
 
+/* 表格工具条的图标按钮。Icon buttons of the table toolbar. */
+.table-toolbar .menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  padding: 0;
+}
+
+/* 工具条按钮的 tooltip，配色与宿主的 tooltip 相同。Tooltips of toolbar buttons, colored like the host's tooltips. */
+.tooltip {
+  z-index: 30;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 0.875em;
+  white-space: nowrap;
+}
+
+.tooltip-arrow {
+  fill: var(--foreground);
+}
+
 .link-address {
   max-width: 320px;
   padding: 0 6px;
@@ -431,7 +455,11 @@ body {
   padding-right: 4px;
 }
 
+/* 按钮按块显示，手柄的高度等于按钮高度，middleware 居中手柄即居中按钮；按行内显示时，较大的继承字号使行框高于按钮。
+   The button is a block, so the handle is exactly as tall as the button and centering the handle centers the button;
+   as an inline box, a larger inherited font size makes the line box taller than the button. */
 .drag-handle .chrome-button {
+  display: block;
   padding: 0 4px;
   color: var(--muted-foreground);
   font-size: 1rem;

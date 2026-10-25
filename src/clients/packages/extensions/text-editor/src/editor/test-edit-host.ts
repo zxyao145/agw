@@ -30,9 +30,19 @@ Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
   value: window.localStorage,
 });
+// jsdom 没有 ResizeObserver（Radix tooltip 的箭头使用它）；没有排版时元素尺寸不会变化，观察者从不回调。
+// jsdom lacks ResizeObserver (Radix's tooltip arrow uses it); without layout no element size changes, so the observer
+// never calls back.
+class LayoutFreeResizeObserver {
+  public observe(): void {}
+  public unobserve(): void {}
+  public disconnect(): void {}
+}
 Object.assign(globalThis, {
   window,
   document: window.document,
+  ResizeObserver: LayoutFreeResizeObserver,
+  CustomEvent: window.CustomEvent,
   DOMParser: window.DOMParser,
   DOMRect: window.DOMRect,
   Element: window.Element,

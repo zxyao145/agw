@@ -14,6 +14,7 @@ catalog:
   "@excalidraw/excalidraw": 0.18.1
   "@floating-ui/dom": 1.8.0
   "@microsoft/signalr": 10.0.11
+  "@tabler/icons-react": 3.49.0
   "@tailwindcss/postcss": 4.3.3
   "@tanstack/react-query": 5.103.2
   "@tanstack/react-virtual": 3.14.13
@@ -98,6 +99,7 @@ catalog:
   oxfmt: 0.69.0
   oxlint: 1.84.0
   prettier: 3.9.10
+  radix-ui: 1.6.7
   react: 19.3.0
   react-dom: 19.3.0
   react-markdown: 10.1.0

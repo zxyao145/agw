@@ -112,7 +112,11 @@
     vertical-align: middle;
   }
 
+  /* 清除浏览器默认的左右外边距（没有 Tailwind preflight 的页面中为 40px），引用块与正文左对齐。
+     Clears the browser's default inline margins (40px on pages without Tailwind preflight), so quotes line up with
+     body text. */
   .agw-prose :where(blockquote) {
+    margin-inline: 0;
     padding-left: var(--agw-prose-size);
     border-left: 3px solid var(--border);
     color: var(--muted-foreground);

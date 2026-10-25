@@ -19,6 +19,9 @@ export function SlashMenu({ store }: { store: SlashMenuStore }) {
           role="option"
           aria-selected={index === state.selected}
           className="slash-menu-item"
+          // 鼠标移到项目上时选中它，同一时间只有一项高亮。Moving the mouse over an item selects it, so one item is
+          // highlighted at a time.
+          onMouseMove={() => store.select(index)}
           // 点击不移走编辑器的焦点与选区。Clicking keeps the editor's focus and selection.
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => state.choose(item)}

@@ -47,6 +47,13 @@ export class SlashMenuStore {
     this.set(null);
   }
 
+  /** 选中第 `index` 项（鼠标移到该项上）。Selects item `index` (the mouse moved over it). */
+  public select(index: number): void {
+    const state = this.state;
+    if (state === null || state.selected === index) return;
+    this.set({ ...state, selected: index });
+  }
+
   /** 菜单打开并有项目时处理方向键与 Enter。Handles the arrow keys and Enter while the menu is open with items. */
   public keyDown(event: KeyboardEvent): boolean {
     const state = this.state;

@@ -173,6 +173,9 @@ catalogs:
     '@microsoft/signalr':
       specifier: 10.0.11
       version: 10.0.11
+    '@tabler/icons-react':
+      specifier: 3.49.0
+      version: 3.49.0
     '@tailwindcss/postcss':
       specifier: 4.3.3
       version: 4.3.3
@@ -425,6 +428,9 @@ catalogs:
     prettier:
       specifier: 3.9.10
       version: 3.9.10
+    radix-ui:
+      specifier: 1.6.7
+      version: 1.6.7
     react:
       specifier: 19.3.0
       version: 19.3.0
@@ -1214,7 +1220,7 @@ importers:
         specifier: 4.4.0
         version: 4.4.0
       radix-ui:
-        specifier: 1.6.7
+        specifier: 'catalog:'
         version: 1.6.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react-day-picker:
         specifier: 10.0.1
@@ -1303,6 +1309,9 @@ importers:
       '@floating-ui/dom':
         specifier: 'catalog:'
         version: 1.8.0
+      '@tabler/icons-react':
+        specifier: 'catalog:'
+        version: 3.49.0(react@19.3.0)
       '@tiptap/core':
         specifier: 'catalog:'
         version: 3.32.0(@tiptap/pm@3.32.0)
@@ -1423,6 +1432,9 @@ importers:
       micromark-util-decode-string:
         specifier: 'catalog:'
         version: 2.0.1
+      radix-ui:
+        specifier: 'catalog:'
+        version: 1.6.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -5001,6 +5013,14 @@ packages:
   '@szmarczak/http-timer@4.0.6':
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
+
+  '@tabler/icons-react@3.49.0':
+    resolution: {integrity: sha512-Um59pm5RVNUaQjFUtG0r4oYJbZuBS3tGugAA2tgBg0WufMk34Eio3nsO30RUkLuL2giYPQUNdY9HvqltLLYyNA==}
+    peerDependencies:
+      react: '>= 16'
+
+  '@tabler/icons@3.49.0':
+    resolution: {integrity: sha512-l+GnSkFETx0U26icxv1VUFnxxiTqXfCcVRiRAnyMwibupM2S2L/hSaZ9gmSgz01rkrsH/93NvLsxykqdanc6lw==}
 
   '@tailwindcss/node@4.3.3':
     resolution: {integrity: sha512-/T8IKEsf9VTU6tLjgC7+sv2mOPtQxzE2jMw7u4Tt40Tx+QSZxpzh95/H6cMKoja9XuW7iMdLJYBB0o9G1CaAgg==}
@@ -15420,6 +15440,13 @@ snapshots:
   '@szmarczak/http-timer@4.0.6':
     dependencies:
       defer-to-connect: 2.0.1
+
+  '@tabler/icons-react@3.49.0(react@19.3.0)':
+    dependencies:
+      '@tabler/icons': 3.49.0
+      react: 19.3.0
+
+  '@tabler/icons@3.49.0': {}
 
   '@tailwindcss/node@4.3.3':
     dependencies:

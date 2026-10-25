@@ -3682,9 +3682,11 @@ async function dragBlock(
 }
 
 /**
- * Mixed 与 Preview 使用共用排版：默认设置下按计算样式检查任务项、表格单元格、引用链接、拖动手柄菜单、引用块中的代码块与正文。
+ * Mixed 与 Preview 使用共用排版：默认设置下按计算样式检查任务项、表格单元格、引用链接、拖动手柄菜单、引用块（不缩进）及其中的
+ * 代码块与正文；Mixed 中另外检查表格工具条按钮的 tooltip。
  * Mixed and Preview use the shared typography: at the default settings the computed styles of task items, table cells,
- * a reference link, the drag-handle menu, a code block in a blockquote and body text are checked.
+ * a reference link, the drag-handle menu, the unindented blockquote with its code block and body text are checked;
+ * Mixed also checks the table toolbar button tooltip.
  */
 async function textEditorTypography(): Promise<void> {
   await openFileInTree("notes/typography.md");
@@ -3705,6 +3707,7 @@ async function textEditorTypography(): Promise<void> {
         cellMargins: [...root.querySelectorAll("th > p, td > p")].map(margins),
         linkDecoration: link ? getComputedStyle(link).textDecorationLine : null,
         quotedCodeMarginTop: getComputedStyle(root.querySelector("blockquote > .code-block")).marginTop,
+        quoteIndent: root.querySelector(":scope > blockquote").getBoundingClientRect().left - paragraph.getBoundingClientRect().left,
         paragraphSize: getComputedStyle(paragraph).fontSize,
         paragraphLineHeight: getComputedStyle(paragraph).lineHeight,
       };
@@ -3724,8 +3727,49 @@ async function textEditorTypography(): Promise<void> {
   );
   assert.ok(String(styles.linkDecoration).includes("underline"), `link: ${styles.linkDecoration}`);
   assert.equal(styles.quotedCodeMarginTop, "0px");
+  assert.equal(styles.quoteIndent, 0, "the blockquote starts at the paragraph's left edge");
   assert.equal(styles.paragraphSize, "16px");
   assert.equal(styles.paragraphLineHeight, "28px");
+
+  // 光标放进表格单元格，鼠标悬停工具条的第一个图标按钮：tooltip 显示操作名称，位于工具条上方且不被遮挡；之后光标回到段落，
+  // 工具条隐藏。Put the caret in a table cell and hover the toolbar's first icon button: the tooltip names the
+  // operation, sits above the toolbar and is not covered; then the caret goes back to the paragraph, hiding the toolbar.
+  await clickInFrame(
+    mixed,
+    `[...document.querySelectorAll(".ProseMirror td > p")].find((cell) => cell.textContent === "alpha")`,
+  );
+  const insertAbove = `document.querySelector('.table-toolbar button[aria-label="Insert row above"]')`;
+  const insertAbovePoint = await until(async () => {
+    const center = await centerOf(mixed, insertAbove);
+    return center?.hit ? center : null;
+  }, "the table toolbar");
+  mixed.view.webContents.sendInputEvent({
+    type: "mouseMove",
+    x: Math.round(insertAbovePoint.x),
+    y: Math.round(insertAbovePoint.y),
+  });
+  const tooltip = await until(
+    () =>
+      evalFrame<{ text: string; aboveToolbar: boolean; onTop: boolean } | null>(
+        mixed,
+        `(async () => {
+          await ${NEXT_RENDERED_FRAME};
+          const tip = document.querySelector(".tooltip");
+          if (!tip) return null;
+          const rect = tip.getBoundingClientRect();
+          const toolbar = document.querySelector(".table-toolbar").getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return { text: tip.textContent, aboveToolbar: rect.bottom <= toolbar.top, onTop: tip.contains(hit) };
+        })()`,
+      ),
+    "the table toolbar tooltip",
+  );
+  assert.deepEqual(tooltip, { text: "Insert row above", aboveToolbar: true, onTop: true });
+  await clickInFrame(mixed, mixedBlock("Top paragraph", "p"));
+  await until(
+    () => evalFrame<boolean>(mixed, `!document.querySelector(".table-toolbar")`),
+    "the table toolbar to hide",
+  );
 
   // 悬停到块上，点击拖动手柄打开 Turn into 菜单。Hover the block and click the drag handle to open the Turn into menu.
   const block = await until(
@@ -3750,7 +3794,7 @@ async function textEditorTypography(): Promise<void> {
     "14px",
   );
   pass(
-    "Mixed computes the shared typography: aligned task items, margin-free cell paragraphs, underlined reference links, 14px menus, a flush code block in a quote, 16px/28px text",
+    "Mixed computes the shared typography: aligned task items, margin-free cell paragraphs, underlined reference links, 14px menus, a flush code block in an unindented quote, 16px/28px text, and a table toolbar tooltip above the toolbar",
   );
 
   await selectPreview();
@@ -3768,15 +3812,19 @@ async function textEditorTypography(): Promise<void> {
       preview,
       `(() => {
         const article = document.querySelector("article.markdown-body");
+        const paragraph = article.querySelector(":scope > p");
         return [
-          getComputedStyle(article.querySelector(":scope > p")).fontSize,
+          getComputedStyle(paragraph).fontSize,
           getComputedStyle(article.querySelector("h1")).fontSize,
+          article.querySelector(":scope > blockquote").getBoundingClientRect().left - paragraph.getBoundingClientRect().left,
         ];
       })()`,
     ),
-    ["16px", "28px"],
+    ["16px", "28px", 0],
   );
-  pass("Preview computes 16px paragraphs and 28px level 1 headings at the default settings");
+  pass(
+    "Preview computes 16px paragraphs, 28px level 1 headings and a blockquote at the paragraph's left edge at the default settings",
+  );
 }
 
 /**

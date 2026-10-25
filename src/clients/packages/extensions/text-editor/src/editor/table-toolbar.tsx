@@ -1,13 +1,15 @@
 import type { Editor } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
 import { BubbleMenu } from "@tiptap/react/menus";
+import { Tooltip } from "radix-ui";
 import { useCallback, type ComponentProps } from "react";
 
 import { hasFocus, MenuButton } from "./menu-parts";
 import { TABLE_ACTIONS } from "./table-commands";
 
-// 表格工具条（设计 5.7）：光标在表格中时显示在表格上方。The table toolbar (design section 5.7): shown above the
-// table while the cursor is in it.
+// 表格工具条（设计 5.7）：光标在表格中时显示在表格上方，每个操作是一个图标按钮，悬停时 tooltip 显示操作名称。
+// The table toolbar (design section 5.7): shown above the table while the cursor is in it; each operation is an icon
+// button whose tooltip shows the operation's name on hover.
 
 /** 选区所在表格的位置；不在表格中时为 null。The position of the table around the selection, or null. */
 function tablePosition(state: EditorState): number | null {
@@ -44,16 +46,28 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       shouldShow={shouldShow}
       getReferencedVirtualElement={referencedElement}
     >
-      {TABLE_ACTIONS.map((action) => (
-        <MenuButton
-          key={action.title}
-          label={action.title}
-          onClick={() => {
-            action.run(editor);
-            editor.view.focus();
-          }}
-        />
-      ))}
+      <Tooltip.Provider delayDuration={0}>
+        {TABLE_ACTIONS.map((action) => (
+          <Tooltip.Root key={action.title}>
+            <Tooltip.Trigger asChild>
+              <MenuButton
+                label={<action.icon size={16} aria-hidden />}
+                aria-label={action.title}
+                onClick={() => {
+                  action.run(editor);
+                  editor.view.focus();
+                }}
+              />
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content className="tooltip" side="top" sideOffset={6}>
+                {action.title}
+                <Tooltip.Arrow className="tooltip-arrow" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        ))}
+      </Tooltip.Provider>
     </BubbleMenu>
   );
 }

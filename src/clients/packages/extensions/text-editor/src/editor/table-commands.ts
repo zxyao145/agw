@@ -1,9 +1,23 @@
+import {
+  IconAlignCenter,
+  IconAlignLeft,
+  IconAlignRight,
+  IconColumnInsertLeft,
+  IconColumnInsertRight,
+  IconColumnRemove,
+  IconRowInsertBottom,
+  IconRowInsertTop,
+  IconRowRemove,
+  IconTrash,
+  type TablerIcon,
+} from "@tabler/icons-react";
 import type { Editor } from "@tiptap/core";
 import { TableMap } from "@tiptap/pm/tables";
 
-// 表格工具条的操作（设计 5.7）。插入行之后的单元格类型与对齐方式由 table-normalization 补齐。
-// The table toolbar's operations (design section 5.7). table-normalization fixes cell types and alignment after rows
-// are inserted.
+// 表格工具条的操作（设计 5.7），工具条按 icon 显示按钮，title 是 tooltip 与无障碍名称。插入行之后的单元格类型与对齐方式由
+// table-normalization 补齐。
+// The table toolbar's operations (design section 5.7); the toolbar shows each as its icon, with the title as tooltip
+// and accessible name. table-normalization fixes cell types and alignment after rows are inserted.
 
 export type TableAlign = "left" | "center" | "right";
 
@@ -29,15 +43,43 @@ function alignColumn(editor: Editor, align: TableAlign): boolean {
   return false;
 }
 
-export const TABLE_ACTIONS: readonly { readonly title: string; run(editor: Editor): boolean }[] = [
-  { title: "Insert row above", run: (editor) => editor.commands.addRowBefore() },
-  { title: "Insert row below", run: (editor) => editor.commands.addRowAfter() },
-  { title: "Insert column left", run: (editor) => editor.commands.addColumnBefore() },
-  { title: "Insert column right", run: (editor) => editor.commands.addColumnAfter() },
-  { title: "Delete row", run: (editor) => editor.commands.deleteRow() },
-  { title: "Delete column", run: (editor) => editor.commands.deleteColumn() },
-  { title: "Align left", run: (editor) => alignColumn(editor, "left") },
-  { title: "Align center", run: (editor) => alignColumn(editor, "center") },
-  { title: "Align right", run: (editor) => alignColumn(editor, "right") },
-  { title: "Delete table", run: (editor) => editor.commands.deleteTable() },
+export const TABLE_ACTIONS: readonly {
+  readonly title: string;
+  readonly icon: TablerIcon;
+  run(editor: Editor): boolean;
+}[] = [
+  {
+    title: "Insert row above",
+    icon: IconRowInsertTop,
+    run: (editor) => editor.commands.addRowBefore(),
+  },
+  {
+    title: "Insert row below",
+    icon: IconRowInsertBottom,
+    run: (editor) => editor.commands.addRowAfter(),
+  },
+  {
+    title: "Insert column left",
+    icon: IconColumnInsertLeft,
+    run: (editor) => editor.commands.addColumnBefore(),
+  },
+  {
+    title: "Insert column right",
+    icon: IconColumnInsertRight,
+    run: (editor) => editor.commands.addColumnAfter(),
+  },
+  { title: "Delete row", icon: IconRowRemove, run: (editor) => editor.commands.deleteRow() },
+  {
+    title: "Delete column",
+    icon: IconColumnRemove,
+    run: (editor) => editor.commands.deleteColumn(),
+  },
+  { title: "Align left", icon: IconAlignLeft, run: (editor) => alignColumn(editor, "left") },
+  {
+    title: "Align center",
+    icon: IconAlignCenter,
+    run: (editor) => alignColumn(editor, "center"),
+  },
+  { title: "Align right", icon: IconAlignRight, run: (editor) => alignColumn(editor, "right") },
+  { title: "Delete table", icon: IconTrash, run: (editor) => editor.commands.deleteTable() },
 ];

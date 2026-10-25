@@ -1,5 +1,11 @@
 import type { EditorView } from "@tiptap/pm/view";
-import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useState,
+  type ComponentProps,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 // 浮层与工具条共用的部件。Parts shared by the popovers and toolbars.
 
@@ -9,29 +15,30 @@ export function hasFocus(view: EditorView, element: HTMLElement): boolean {
   return view.hasFocus() || element.contains(document.activeElement);
 }
 
-/** 不移走编辑器焦点与选区的按钮。A button that keeps the editor's focus and selection. */
+/**
+ * 不移走编辑器焦点与选区的按钮；其余属性与 ref 传给 button，Radix 的 `asChild` 由此合并事件处理函数。
+ * A button that keeps the editor's focus and selection; other props and the ref go to the button, so Radix `asChild`
+ * can merge its event handlers.
+ */
 export function MenuButton({
   label,
-  title,
   active,
-  disabled,
-  onClick,
-}: {
+  onMouseDown,
+  ...props
+}: Omit<ComponentProps<"button">, "type" | "className" | "children" | "aria-pressed"> & {
   label: ReactNode;
-  title?: string;
   active?: boolean;
-  disabled?: boolean;
-  onClick(): void;
 }) {
   return (
     <button
+      {...props}
       type="button"
       className="menu-button"
-      title={title}
       aria-pressed={active}
-      disabled={disabled}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onClick}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        onMouseDown?.(event);
+      }}
     >
       {label}
     </button>

@@ -15,6 +15,7 @@
   "devDependencies": {
     "@agw/extension-sdk": "workspace:*",
     "@floating-ui/dom": "catalog:",
+    "@tabler/icons-react": "catalog:",
     "@tiptap/core": "catalog:",
     "@tiptap/extension-bubble-menu": "catalog:",
     "@tiptap/extension-code-block": "catalog:",
@@ -55,6 +56,7 @@
     "mermaid": "catalog:",
     "micromark-util-classify-character": "catalog:",
     "micromark-util-decode-string": "catalog:",
+    "radix-ui": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "vfile": "catalog:",
