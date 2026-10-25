@@ -1,0 +1,147 @@
+/* Image 查看器的布局：显示区与状态栏，颜色来自宿主主题变量（theme.apply）。
+   The Image viewer layout: the display area and the status bar; colors come from the host theme variables
+   (theme.apply). */
+
+:root {
+  /* 透明像素下的棋盘格颜色，深浅色主题下都清楚可见。The checkerboard under transparent pixels, visible in both modes. */
+  --image-checker-light: color-mix(in srgb, var(--foreground) 4%, var(--background));
+  --image-checker-dark: color-mix(in srgb, var(--foreground) 12%, var(--background));
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: var(--agw-font-size-base);
+}
+
+.image-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.status {
+  margin: 0;
+  padding: 24px 32px;
+  font-size: 0.875em;
+  color: var(--muted-foreground);
+}
+
+.image-error {
+  padding: 24px 32px;
+  font-size: 0.875em;
+  color: var(--muted-foreground);
+}
+
+.image-error p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.image-error-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: var(--destructive);
+}
+
+.image-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  user-select: none;
+}
+
+.image-stage[data-pannable] {
+  cursor: grab;
+}
+
+.image-stage[data-dragging] {
+  cursor: grabbing;
+}
+
+.image-content {
+  position: relative;
+}
+
+.image-content img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  outline: 1px solid var(--border);
+  background-color: var(--image-checker-light);
+  background-image: conic-gradient(
+    var(--image-checker-dark) 0 25%,
+    var(--image-checker-light) 0 50%,
+    var(--image-checker-dark) 0 75%,
+    var(--image-checker-light) 0
+  );
+  background-size: 16px 16px;
+}
+
+.image-content img.pixelated {
+  image-rendering: pixelated;
+}
+
+.image-status-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.875em;
+}
+
+.image-status-bar > span {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.image-status-bar > .image-status-spacer {
+  flex: 1;
+  padding: 0;
+}
+
+.image-status-bar > .image-zoom {
+  min-width: 4ch;
+  padding: 0 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.chrome-button {
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chrome-button:hover:not(:disabled),
+.chrome-button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.chrome-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

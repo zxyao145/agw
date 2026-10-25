@@ -498,6 +498,7 @@ async function bundledDefaults(): Promise<void> {
   await goToExtensions();
   await untilStatus("text-editor", "Active");
   await untilStatus("excalidraw", "Active");
+  await untilStatus("image-viewer", "Active");
   assert.equal(await evalHost<boolean>(`Boolean(${OPEN_DIALOG})`), false);
   const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
   assert.equal(settings.extensions["text-editor"].enabled, true);
@@ -510,6 +511,8 @@ async function bundledDefaults(): Promise<void> {
     "fs.cloud.read",
     "fs.cloud.write",
   ]);
+  assert.equal(settings.extensions["image-viewer"].enabled, true);
+  assert.deepEqual(settings.extensions["image-viewer"].grantedPermissions, ["fs.cloud.read"]);
   assert.deepEqual(settings.removedBundledExtensions, []);
   // 用户安装的包在 extensions/packages，数据在 extensions/data。Installed packages and data live side by side.
   assert.equal(
@@ -6231,6 +6234,230 @@ async function excalidrawThemes(): Promise<void> {
   );
 }
 
+/* ---------- Image Viewer ---------- */
+
+const IMAGE_VIEWER = "image-viewer:image";
+
+type ImageState = {
+  natural: [number, number] | null;
+  /** 图片在 frame 视口中的位置与显示尺寸。The image's position in the frame viewport and its displayed size. */
+  rect: { left: number; top: number; width: number; height: number } | null;
+  /** 显示区在视口中的位置、可见尺寸与滚动状态。The display area's viewport position, visible size and scrolling. */
+  stage: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    scrollLeft: number;
+    scrollTop: number;
+    scrollWidth: number;
+    scrollHeight: number;
+  } | null;
+  size: string | null;
+  fileSize: string | null;
+  zoom: string | null;
+  fitPressed: boolean;
+  dragging: boolean;
+  error: string | null;
+};
+
+const IMAGE_STATE = `(() => {
+  const stage = document.querySelector(".image-stage");
+  const image = document.querySelector(".image-content img");
+  const stageRect = stage?.getBoundingClientRect();
+  const imageRect = image?.getBoundingClientRect();
+  return {
+    natural: image ? [image.naturalWidth, image.naturalHeight] : null,
+    rect: imageRect
+      ? { left: imageRect.left, top: imageRect.top, width: imageRect.width, height: imageRect.height }
+      : null,
+    stage: stage
+      ? {
+          left: stageRect.left,
+          top: stageRect.top,
+          width: stage.clientWidth,
+          height: stage.clientHeight,
+          scrollLeft: stage.scrollLeft,
+          scrollTop: stage.scrollTop,
+          scrollWidth: stage.scrollWidth,
+          scrollHeight: stage.scrollHeight,
+        }
+      : null,
+    size: document.querySelector("[data-image-size]")?.textContent ?? null,
+    fileSize: document.querySelector("[data-file-size]")?.textContent ?? null,
+    zoom: document.querySelector("[data-zoom]")?.textContent ?? null,
+    fitPressed:
+      document.querySelector('.image-status-bar button[title="Fit to window"]')?.getAttribute("aria-pressed") === "true",
+    dragging: Boolean(stage?.hasAttribute("data-dragging")),
+    error: document.querySelector(".image-error")?.textContent ?? null,
+  };
+})()`;
+
+/** Image 查看器状态栏中按 aria-label 或文字找到的按钮。A status bar button of the Image viewer, by aria-label or text. */
+function imageButton(name: string): string {
+  return `[...document.querySelectorAll(".image-status-bar button")].find((button) => (button.getAttribute("aria-label") ?? button.textContent.trim()) === ${JSON.stringify(name)})`;
+}
+
+/** 视口中一点下的图片像素坐标。The image pixel coordinates under a viewport point. */
+function imagePointAt(state: ImageState, point: { x: number; y: number }) {
+  const rect = state.rect!;
+  return {
+    x: ((point.x - rect.left) / rect.width) * state.natural![0],
+    y: ((point.y - rect.top) / rect.height) * state.natural![1],
+  };
+}
+
+async function imageViewer(): Promise<void> {
+  // 1：PNG 默认由 Image 查看器打开并适应显示区。PNG opens in the Image viewer by default, fitted to the display area.
+  await openFileInTree("images/logo.png");
+  await untilHost(selectedViewerIs(IMAGE_VIEWER), "the Image tab");
+  assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
+    IMAGE_VIEWER,
+    CODE_VIEWER,
+    "source",
+  ]);
+  const viewer = await untilViewerFrame("image-viewer", "image");
+  const state = () => evalFrame<ImageState>(viewer, IMAGE_STATE);
+  const untilState = (check: (current: ImageState) => boolean, label: string) =>
+    until(async () => {
+      const current = await state();
+      return check(current) ? current : null;
+    }, label);
+  const fitted = await untilState(
+    (current) => current.natural?.[0] === 1024 && current.rect !== null,
+    "the decoded logo",
+  );
+  assert.deepEqual(fitted.natural, [1024, 1024]);
+  assert.equal(fitted.size, "1024 × 1024");
+  assert.match(fitted.fileSize!, /^\d+(\.\d)? (B|KB|MB)$/u);
+  assert.equal(fitted.fitPressed, true);
+  // 较小的一边四周各留 16 像素，不能滚动，比例与显示尺寸一致。16 pixels on each side of the tighter dimension, no
+  // scrolling, and a zoom matching the displayed size.
+  const stage = fitted.stage!;
+  const fittedWidth = Math.min(1024, stage.width - 32, stage.height - 32);
+  assert.ok(Math.abs(fitted.rect!.width - fittedWidth) < 1, JSON.stringify(fitted));
+  assert.equal(stage.scrollWidth, stage.width);
+  assert.equal(stage.scrollHeight, stage.height);
+  assert.equal(fitted.zoom, `${Math.round((fitted.rect!.width / 1024) * 100)}%`);
+  pass(
+    "PNG files open in the Image viewer before Code and Source, fitted to the display area with their pixel and file sizes",
+  );
+
+  // 2：1:1 以显示区中心缩放到实际大小；+ 与 − 按档位缩放。1:1 zooms to actual size at the center; + and − step.
+  await clickInFrame(viewer, imageButton("Actual size"));
+  const actual = await untilState((current) => current.zoom === "100%", "the 100% zoom");
+  assert.deepEqual([actual.rect!.width, actual.rect!.height], [1024, 1024]);
+  assert.equal(actual.fitPressed, false);
+  const scrolled = actual.stage!;
+  assert.ok(scrolled.scrollHeight > scrolled.height, JSON.stringify(scrolled));
+  assert.ok(
+    Math.abs(scrolled.scrollTop - (scrolled.scrollHeight - scrolled.height) / 2) <= 1 &&
+      Math.abs(scrolled.scrollLeft - (scrolled.scrollWidth - scrolled.width) / 2) <= 1,
+    JSON.stringify(scrolled),
+  );
+  await clickInFrame(viewer, imageButton("Zoom in"));
+  await untilState((current) => current.zoom === "150%", "the 150% zoom");
+  await clickInFrame(viewer, imageButton("Zoom out"));
+  await untilState((current) => current.zoom === "100%", "the 100% zoom again");
+  pass(
+    "1:1 shows actual pixels with the image center at the display center, and the zoom buttons step 100% → 150% → 100%",
+  );
+
+  // 3：带 Ctrl 的滚轮在指针处放大，指针下的图片点不动。Ctrl + wheel zooms in at the pointer, keeping the point under it.
+  const beforeWheel = await state();
+  const visibleLeft = Math.max(beforeWheel.stage!.left, beforeWheel.rect!.left);
+  const visibleRight = Math.min(
+    beforeWheel.stage!.left + beforeWheel.stage!.width,
+    beforeWheel.rect!.left + beforeWheel.rect!.width,
+  );
+  const visibleTop = Math.max(beforeWheel.stage!.top, beforeWheel.rect!.top);
+  const visibleBottom = Math.min(
+    beforeWheel.stage!.top + beforeWheel.stage!.height,
+    beforeWheel.rect!.top + beforeWheel.rect!.height,
+  );
+  const point = {
+    x: Math.round((visibleLeft + visibleRight) / 2),
+    y: Math.round(visibleTop + (visibleBottom - visibleTop) / 3),
+  };
+  const under = imagePointAt(beforeWheel, point);
+  const contents = viewer.view.webContents;
+  contents.sendInputEvent({ type: "mouseMove", ...point });
+  contents.sendInputEvent({
+    type: "mouseWheel",
+    ...point,
+    deltaX: 0,
+    deltaY: 120,
+    modifiers: ["control"],
+  });
+  const wheeled = await untilState((current) => current.zoom !== "100%", "the wheel zoom");
+  assert.ok(wheeled.rect!.width > 1024, `the wheel zooms in: ${wheeled.zoom}`);
+  const after = imagePointAt(wheeled, point);
+  assert.ok(
+    Math.abs(after.x - under.x) < 1.5 && Math.abs(after.y - under.y) < 1.5,
+    JSON.stringify({ point, under, after }),
+  );
+  pass("Ctrl + wheel zooms in at the pointer and keeps the image point under it");
+
+  // 4：拖动按位移滚动显示区。Dragging scrolls the display area by the pointer movement.
+  const beforeDrag = wheeled.stage!;
+  drag(viewer, point, { x: point.x - 60, y: point.y - 40 });
+  const dragged = await untilState(
+    (current) => !current.dragging && current.stage!.scrollTop !== beforeDrag.scrollTop,
+    "the drag to scroll",
+  );
+  assert.ok(
+    Math.abs(
+      dragged.stage!.scrollLeft -
+        Math.min(beforeDrag.scrollLeft + 60, beforeDrag.scrollWidth - beforeDrag.width),
+    ) <= 1 &&
+      Math.abs(
+        dragged.stage!.scrollTop -
+          Math.min(beforeDrag.scrollTop + 40, beforeDrag.scrollHeight - beforeDrag.height),
+      ) <= 1,
+    JSON.stringify({ beforeDrag, after: dragged.stage }),
+  );
+  assert.equal(dragged.zoom, wheeled.zoom);
+  pass("dragging a zoomed image scrolls the display area by the pointer movement");
+
+  // 5：Fit 回到适应显示区。Fit returns to fitting the display area.
+  await clickInFrame(viewer, imageButton("Fit"));
+  const refitted = await untilState((current) => current.fitPressed, "Fit");
+  assert.equal(refitted.zoom, fitted.zoom);
+  assert.equal(refitted.stage!.scrollHeight, refitted.stage!.height);
+  assert.equal(refitted.stage!.scrollWidth, refitted.stage!.width);
+  pass("Fit returns to the fitted zoom without scrolling");
+
+  // 6：不能解码的文件显示说明。A file that cannot be decoded shows an explanation.
+  await openFileInTree("images/broken.png");
+  await untilHost(selectedViewerIs(IMAGE_VIEWER), "the Image tab for broken.png");
+  const broken = await untilState((current) => current.error !== null, "the decoding error");
+  assert.equal(
+    broken.error,
+    "Could not display broken.pngThe file is not a valid image, or its format is not supported.",
+  );
+  pass("a .png that is not an image shows that it cannot be displayed");
+
+  // 7：SVG 由 Image 查看器显示；再次显示时重新读取文件。SVG shows in the Image viewer and is read again on the next show.
+  await openFileInTree("images/shape.svg");
+  await untilHost(selectedViewerIs(IMAGE_VIEWER), "the Image tab for shape.svg");
+  assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
+    IMAGE_VIEWER,
+    CODE_VIEWER,
+    "source",
+  ]);
+  const shape = await untilState((current) => current.size === "200 × 100", "the SVG size");
+  assert.equal(shape.zoom, "100%");
+  assert.equal(shape.fitPressed, true);
+  await writeFile(
+    projectPath("images/shape.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#3b82f6"/></svg>\n`,
+  );
+  await selectViewer("source");
+  await selectViewer(IMAGE_VIEWER);
+  await untilState((current) => current.size === "300 × 150", "the rewritten SVG");
+  pass("SVG files open in the Image viewer, which reads the file again when it is shown again");
+}
+
 /**
  * 主题不可用：停用 Soft 所属的 extension 或删除测试主题的 extension 后，主题恢复为 Default 并显示提示。
  * Unavailable themes: disabling Soft's extension or uninstalling the test themes' extension returns to Default with a
@@ -7768,6 +7995,7 @@ async function run(): Promise<void> {
   await conflictsAndRefresh();
   await excalidrawEditor();
   await excalidrawThemes();
+  await imageViewer();
   await todoEditorFixture();
   await viewReloads();
   await hostReloads();

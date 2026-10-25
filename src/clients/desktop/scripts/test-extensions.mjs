@@ -72,6 +72,11 @@ const DIAGRAM = {
   files: {},
 };
 
+/** 指定尺寸的 SVG 矩形。An SVG rectangle of the given size. */
+function shapeSvg(width, height) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="#3b82f6"/></svg>\n`;
+}
+
 // Edit 写回检查使用的文档：每种需要原样保留的写法各出现一次。front matter 以列表结束，CommonMark 读到的标题只有正文中的
 // 两个，todo-editor 的 Outline 据此列出标题。
 // The document for the Edit write-back checks: every construct that must be kept verbatim appears once. The front
@@ -456,6 +461,9 @@ async function prepareServerData(baseUrl, echoPort) {
     join(desktopDirectory, "assets", "agw-logo.png"),
     join(projectDirectory, "images", "logo.png"),
   );
+  // Image 查看器的解码失败与 SVG 检查。The Image viewer's decoding failure and SVG checks.
+  await writeFile(join(projectDirectory, "images", "broken.png"), "not an image\n");
+  await writeFile(join(projectDirectory, "images", "shape.svg"), shapeSvg(200, 100));
   await writeFile(join(projectDirectory, "guide.md"), GUIDE_MARKDOWN);
   await writeFile(
     join(projectDirectory, "diagram.excalidraw"),
