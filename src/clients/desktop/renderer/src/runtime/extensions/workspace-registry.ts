@@ -2,7 +2,11 @@ import type { ExtensionAction } from "@agw/extension-sdk";
 import { fileViewerFileType } from "@agw/projects";
 import { matchesFileNamePattern } from "./file-viewer-patterns";
 
-export type WorkspaceIcon = { kind: "lucide"; name: string } | { kind: "image"; src: string };
+/** `svg` 按文字颜色显示形状，`image` 按原图显示。`svg` draws its shape in the text color; `image` shows as is. */
+export type WorkspaceIcon =
+  | { kind: "lucide"; name: string }
+  | { kind: "svg"; src: string }
+  | { kind: "image"; src: string };
 
 /** `file` 为文件查看器，在 Files 的文件视图中显示。`file` is a file viewer, shown inside the Files view. */
 export type WorkspaceViewLocation = "sidebar" | "main" | "file";

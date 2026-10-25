@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "description": "Opens and edits .excalidraw files in the Files view.",
   "author": "Agw",
+  "icon": "icon.svg",
   "contributes": {
     "fileViewers": [
       {

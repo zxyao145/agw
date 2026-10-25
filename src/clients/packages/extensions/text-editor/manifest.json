@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "description": "Renders Markdown files in the Files view.",
   "author": "Agw",
+  "icon": "icon.svg",
   "contributes": {
     "fileViewers": [
       {

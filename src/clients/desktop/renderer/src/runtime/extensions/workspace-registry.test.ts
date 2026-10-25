@@ -373,7 +373,7 @@ test("registering an extension adds its views and entries and notifies subscribe
   );
   assert.deepEqual(snapshot.ribbon[1].action, { type: "openMainView", view: "sample:app" });
   assert.deepEqual(snapshot.ribbon[1].icon, {
-    kind: "image",
+    kind: "svg",
     src: "data:image/svg+xml;base64,PHN2Zy8+",
   });
   assert.deepEqual(snapshot.composerActions[0].action, { type: "command", command: "greet" });

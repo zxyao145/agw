@@ -54,7 +54,11 @@ export interface ExtensionCommandContribution {
 export interface ExtensionActionContribution {
   id: string;
   title: string;
-  /** lucide-react 导出名或包内 `.svg` / `.png`。A lucide-react export name or a package `.svg` / `.png`. */
+  /**
+   * lucide-react 导出名，或包内 `.svg`（形状按文字颜色显示）/ `.png`、`.jpg`、`.jpeg`、`.webp`（按原图显示）。
+   * A lucide-react export name, or a package `.svg` (its shape drawn in the text color) or `.png`, `.jpg`, `.jpeg`,
+   * `.webp` (shown as is).
+   */
   icon: string;
   action: ExtensionAction;
 }

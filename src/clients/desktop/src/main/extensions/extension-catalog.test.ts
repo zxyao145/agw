@@ -137,6 +137,47 @@ test("icons larger than 256 KB are errors", async () => {
   }
 });
 
+test("image icons become data URLs with the MIME type of their extension", async () => {
+  const scratch = await createScratchDirectory("catalog");
+  try {
+    const images: [path: string, mimeType: string][] = [
+      ["icon.png", "image/png"],
+      ["photo.jpg", "image/jpeg"],
+      ["photo.jpeg", "image/jpeg"],
+      ["picture.webp", "image/webp"],
+    ];
+    await writeTestExtension(
+      join(scratch.path, "images"),
+      testManifest("images", {
+        icon: "icon.png",
+        contributes: {
+          ribbon: images.slice(1).map(([icon], index) => ({
+            id: `open-${index}`,
+            title: "Open",
+            icon,
+            action: { type: "openMainView", view: "app" },
+          })),
+          mainViews: [{ id: "app", title: "App", icon: "Box", entry: "index.html" }],
+        },
+      }),
+      Object.fromEntries(images.map(([path]) => [path, new TextEncoder().encode(path)])),
+    );
+    const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+    assert.equal(entry.validation, "valid");
+    assert.deepEqual(
+      entry.icons,
+      Object.fromEntries(
+        images.map(([path, mimeType]) => [
+          path,
+          `data:${mimeType};base64,${Buffer.from(path).toString("base64")}`,
+        ]),
+      ),
+    );
+  } finally {
+    await scratch.dispose();
+  }
+});
+
 const THEME_MANIFEST = {
   manifestVersion: 1,
   id: "themes",

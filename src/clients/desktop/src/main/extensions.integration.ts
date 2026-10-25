@@ -509,11 +509,40 @@ type SettingsFile = {
   removedBundledExtensions: string[];
 };
 
+/**
+ * Extensions 页面中内置 extension 卡片的 SVG 图标作为 mask 显示，用卡片标题的文字颜色填充。
+ * The bundled extension cards on the Extensions page draw their SVG icons as masks filled with the card title color.
+ */
+async function assertBundledIconsUseTextColor(): Promise<void> {
+  for (const id of ["text-editor", "excalidraw", "image-viewer"]) {
+    await untilHost(
+      `Boolean(document.querySelector('[data-extension-id="${id}"] .bg-current'))`,
+      `the ${id} card icon`,
+    );
+    const icon = await evalHost<{ images: number; mask: string; fill: string; text: string }>(
+      `(() => {
+        const card = document.querySelector('[data-extension-id="${id}"]');
+        const style = getComputedStyle(card.querySelector(".bg-current"));
+        return {
+          images: card.querySelectorAll("img").length,
+          mask: style.maskImage,
+          fill: style.backgroundColor,
+          text: getComputedStyle(card.querySelector("h2")).color,
+        };
+      })()`,
+    );
+    assert.equal(icon.images, 0, id);
+    assert.ok(icon.mask.startsWith('url("data:image/svg+xml;base64,'), `${id}: ${icon.mask}`);
+    assert.equal(icon.fill, icon.text, id);
+  }
+}
+
 async function bundledDefaults(): Promise<void> {
   await goToExtensions();
   await untilStatus("text-editor", "Active");
   await untilStatus("excalidraw", "Active");
   await untilStatus("image-viewer", "Active");
+  await assertBundledIconsUseTextColor();
   assert.equal(await evalHost<boolean>(`Boolean(${OPEN_DIALOG})`), false);
   const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
   assert.equal(settings.extensions["text-editor"].enabled, true);
@@ -538,7 +567,7 @@ async function bundledDefaults(): Promise<void> {
   assert.equal(existsSync(join(config.userData, "extension-data")), false);
   await goToChat();
   pass(
-    "bundled extensions are active on first launch with their permissions approved, with data in extensions/data",
+    "bundled extensions are active on first launch with their permissions approved, with data in extensions/data, and their cards draw the SVG icons in the text color",
   );
 }
 
@@ -5585,6 +5614,9 @@ async function darkModeAndExtensionViews(): Promise<void> {
     "Dark mode on the Appearance page",
   );
   pass("the title bar button saves the light and dark modes and the Appearance page follows");
+  await goToExtensions();
+  await assertBundledIconsUseTextColor();
+  pass("in Dark mode the bundled extension cards draw their SVG icons in the card text color");
   await chooseMode("light");
   await chooseTheme("default");
 }

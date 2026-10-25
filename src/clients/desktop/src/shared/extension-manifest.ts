@@ -14,7 +14,7 @@ export const EXTENSION_MANIFEST_VERSION_CURRENT = 1;
 // 包路径：根目录内的相对 POSIX 路径，不以 `/` 开头，不含 `\`、`.`/`..` 段与空段，不以 `__agw/` 开头。
 // Package path: a relative POSIX path inside the root without a leading `/`, `\`, `.`/`..` or empty segments, and not under `__agw/`.
 const PACKAGE_PATH = String.raw`(?!/)(?!__agw(?:/|$))(?!.*\\)(?!(?:.*/)?\.{1,2}(?:/|$))(?!.*//)[^\u0000]*[^/\u0000]`;
-const ICON_FILE = String.raw`${PACKAGE_PATH}\.(?:svg|png)`;
+const ICON_FILE = String.raw`${PACKAGE_PATH}\.(?:svg|png|jpg|jpeg|webp)`;
 const LUCIDE_ICON = String.raw`[A-Z][A-Za-z0-9]*`;
 
 const PACKAGE_PATH_PATTERN = new RegExp(`^${PACKAGE_PATH}$`, "u");

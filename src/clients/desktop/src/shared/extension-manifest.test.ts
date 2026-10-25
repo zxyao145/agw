@@ -210,13 +210,16 @@ test("entry, background and icon files need the allowed extensions", () => {
   assert.deepEqual(errorCodes(withChange((manifest) => (manifest.background = "background.ts"))), [
     "INVALID_FIELD",
   ]);
-  assert.deepEqual(errorCodes(withChange((manifest) => (manifest.icon = "icon.jpg"))), [
+  assert.deepEqual(errorCodes(withChange((manifest) => (manifest.icon = "icon.gif"))), [
     "INVALID_FIELD",
   ]);
   assert.deepEqual(
     errorCodes(withChange((manifest) => (manifest.background = "background.mjs"))),
     [],
   );
+  for (const icon of ["icon.png", "icon.jpg", "icon.jpeg", "icon.webp"]) {
+    assert.deepEqual(errorCodes(withChange((manifest) => (manifest.icon = icon))), [], icon);
+  }
 });
 
 test("actions must reference declared views and commands", () => {

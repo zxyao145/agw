@@ -16,7 +16,8 @@ export function resolveIcon(
 ): WorkspaceIcon {
   if (icon === undefined) return { kind: "lucide", name: "Puzzle" };
   const dataUrl = icons[icon];
-  return dataUrl ? { kind: "image", src: dataUrl } : { kind: "lucide", name: icon };
+  if (!dataUrl) return { kind: "lucide", name: icon };
+  return { kind: icon.endsWith(".svg") ? "svg" : "image", src: dataUrl };
 }
 
 export function extensionIcon(installed: InstalledExtension): WorkspaceIcon {

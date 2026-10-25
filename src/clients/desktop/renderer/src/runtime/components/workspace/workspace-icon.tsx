@@ -13,6 +13,19 @@ export function WorkspaceIconView({
   icon: WorkspaceIcon;
   className?: string;
 }) {
+  if (icon.kind === "svg") {
+    // SVG 作为 mask 使用，形状按文字颜色填充。The SVG is a mask, so its shape takes the text color.
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          "inline-block size-4 bg-current mask-contain mask-center mask-no-repeat",
+          className,
+        )}
+        style={{ maskImage: `url("${icon.src}")` }}
+      />
+    );
+  }
   if (icon.kind === "image") {
     return (
       <img

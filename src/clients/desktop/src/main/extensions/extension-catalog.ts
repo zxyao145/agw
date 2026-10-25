@@ -1,5 +1,5 @@
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
-import { basename, join, relative, isAbsolute, sep } from "node:path";
+import { basename, extname, join, relative, isAbsolute, sep } from "node:path";
 
 import type {
   ExtensionGrants,
@@ -17,6 +17,15 @@ import { readExtensionThemes } from "./extension-theme-file";
 import { type ThemeStyleCompiler, themeStyleCompiler } from "./extension-theme-style-cache";
 
 export const MAX_ICON_BYTES = 256 * 1024;
+
+/** 包内图标扩展名对应的 MIME。The MIME type of each package icon extension. */
+const ICON_MIME_TYPES: Readonly<Record<string, string>> = {
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+};
 
 /** 扫描得到的一个 extension 目录。One scanned extension directory. */
 export type CatalogEntry = {
@@ -157,7 +166,7 @@ export async function readExtensionDirectory(
         });
         continue;
       }
-      const mimeType = reference.path.endsWith(".svg") ? "image/svg+xml" : "image/png";
+      const mimeType = ICON_MIME_TYPES[extname(reference.path)];
       icons[reference.path] =
         `data:${mimeType};base64,${(await readFile(fileRealPath)).toString("base64")}`;
     }
