@@ -20,15 +20,25 @@ function connectHost(notifications: unknown[]) {
   const api = createExtensionApi(
     page,
     {
-      frame: { frameId: "frame-1", kind: "fileViewer", viewId: "excalidraw:editor", params: null },
-      manifest: { manifestVersion: 1, id: "excalidraw", name: "Excalidraw", version: "1.0.0" },
+      frame: {
+        frameId: "frame-1",
+        kind: "fileViewer",
+        viewId: "01a173b5-526c-74d8-864c-0e2da2d0a21c:editor",
+        params: null,
+      },
+      manifest: {
+        manifestVersion: 1,
+        id: "01a173b5-526c-74d8-864c-0e2da2d0a21c",
+        name: "Excalidraw",
+        version: "1.0.0",
+      },
       context: {
         app: { version: "0.1.0", platform: "darwin", architecture: "arm64" },
         extension: {
-          id: "excalidraw",
+          id: "01a173b5-526c-74d8-864c-0e2da2d0a21c",
           version: "1.0.0",
           manifestVersion: 1,
-          storageUri: "file:///storage/excalidraw/",
+          storageUri: "file:///storage/01a173b5-526c-74d8-864c-0e2da2d0a21c/",
         },
         server: { id: "local", name: "Local", kind: "local" },
         workspace: {

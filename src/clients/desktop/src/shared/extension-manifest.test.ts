@@ -9,12 +9,13 @@ import {
 import { matchesConnectTarget, parseHostPermission } from "./extension-host-permissions";
 
 const APP_VERSION = "0.5.0";
+const EXTENSION_ID = "01a173b5-526c-74d8-864c-1effa3c5a7ce";
 
 function sampleManifest(): Record<string, unknown> {
   return {
     $schema: "./agw/manifest.schema.json",
     manifestVersion: 1,
-    id: "hello-world",
+    id: EXTENSION_ID,
     name: "Hello World",
     version: "1.2.0",
     minAppVersion: "0.5.0",
@@ -103,22 +104,24 @@ test("a complete manifest passes validation", () => {
   const result = evaluateExtensionManifest(sampleManifest(), APP_VERSION);
   assert.deepEqual(result.errors, []);
   assert.equal(result.validation, "valid");
-  assert.equal(result.manifest?.id, "hello-world");
+  assert.equal(result.manifest?.id, EXTENSION_ID);
 });
 
-test("extension ids must match the format and must not start with agw", () => {
-  for (const id of ["Hello", "hello_world", "-hello", "hello-", "ab", "agw-tools", "agwx"]) {
-    const result = evaluateExtensionManifest(
-      withChange((manifest) => (manifest.id = id)),
-      APP_VERSION,
-    );
-    assert.equal(result.validation, "invalid", id);
-    assert.equal(result.errors[0]?.path, "id", id);
-  }
-});
-
-test("the directory names data and packages are not extension ids, but ids containing them are", () => {
-  for (const id of ["data", "packages"]) {
+test("extension ids must be lowercase GUID v7", () => {
+  for (const id of [
+    "hello-world",
+    "host",
+    "data",
+    "packages",
+    EXTENSION_ID.toUpperCase(),
+    // version 4。Version 4.
+    "0199c1f2-8f1a-4b2c-9d3e-1234567890ab",
+    // variant 不是 RFC 9562。A variant other than RFC 9562.
+    "01a173b5-526c-74d8-c64c-1effa3c5a7ce",
+    EXTENSION_ID.replaceAll("-", ""),
+    `{${EXTENSION_ID}}`,
+    ` ${EXTENSION_ID}`,
+  ]) {
     const result = evaluateExtensionManifest(
       withChange((manifest) => (manifest.id = id)),
       APP_VERSION,
@@ -130,21 +133,12 @@ test("the directory names data and packages are not extension ids, but ids conta
       id,
     );
   }
-  for (const id of ["data-viewer", "my-packages", "datasets"]) {
+  for (const id of [EXTENSION_ID, "01a173c2-a2d2-7731-8616-73338f39b8b2"]) {
     assert.deepEqual(errorCodes(withChange((manifest) => (manifest.id = id))), [], id);
   }
 });
 
-test("host is reserved for the host's conversations as an extension id and name", () => {
-  const id = evaluateExtensionManifest(
-    withChange((manifest) => (manifest.id = "host")),
-    APP_VERSION,
-  );
-  assert.equal(id.validation, "invalid");
-  assert.deepEqual(
-    id.errors.map((error) => error.path),
-    ["id"],
-  );
+test("host is reserved for the host's conversations as an extension name", () => {
   for (const name of ["host", "Host", " HOST "]) {
     const result = evaluateExtensionManifest(
       withChange((manifest) => (manifest.name = name)),
@@ -156,9 +150,6 @@ test("host is reserved for the host's conversations as an extension id and name"
       ["name"],
       name,
     );
-  }
-  for (const id of ["host-tools", "my-host", "hosts"]) {
-    assert.deepEqual(errorCodes(withChange((manifest) => (manifest.id = id))), [], id);
   }
   for (const name of ["Host Tools", "My host", "hosts"]) {
     assert.deepEqual(errorCodes(withChange((manifest) => (manifest.name = name))), [], name);
@@ -448,7 +439,7 @@ test("minAppVersion above the running Desktop is incompatible, including preview
   );
   assert.equal(newer.validation, "incompatible");
   assert.equal(newer.errors[0].code, "APP_VERSION_TOO_OLD");
-  assert.equal(newer.manifest?.id, "hello-world");
+  assert.equal(newer.manifest?.id, EXTENSION_ID);
 
   const preview = evaluateExtensionManifest(
     withChange((manifest) => (manifest.minAppVersion = "1.2.0")),
@@ -477,7 +468,7 @@ test("a manifest that contributes only themes is valid without a background or v
   const result = evaluateExtensionManifest(
     {
       manifestVersion: 1,
-      id: "only-themes",
+      id: EXTENSION_ID,
       name: "Only themes",
       version: "1.0.0",
       contributes: { themes: [{ id: "soft", title: "Soft", path: "themes/soft.json" }] },
@@ -550,12 +541,14 @@ test("the generated JSON Schema validates the same samples", () => {
       withChange((manifest) => (contributes(manifest).views = [])),
       false,
     ],
-    ["id format", withChange((manifest) => (manifest.id = "Hello")), false],
-    ["agw prefix", withChange((manifest) => (manifest.id = "agw-tools")), false],
-    ["reserved id data", withChange((manifest) => (manifest.id = "data")), false],
-    ["reserved id packages", withChange((manifest) => (manifest.id = "packages")), false],
-    ["reserved id host", withChange((manifest) => (manifest.id = "host")), false],
-    ["id containing host", withChange((manifest) => (manifest.id = "host-tools")), true],
+    ["id name", withChange((manifest) => (manifest.id = "hello-world")), false],
+    ["id host", withChange((manifest) => (manifest.id = "host")), false],
+    ["uppercase id", withChange((manifest) => (manifest.id = EXTENSION_ID.toUpperCase())), false],
+    [
+      "id GUID v4",
+      withChange((manifest) => (manifest.id = "0199c1f2-8f1a-4b2c-9d3e-1234567890ab")),
+      false,
+    ],
     ["reserved name host", withChange((manifest) => (manifest.name = " HOST ")), false],
     ["name containing host", withChange((manifest) => (manifest.name = "Host Tools")), true],
     [

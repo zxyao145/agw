@@ -15,6 +15,9 @@ const codec: SecretCodec = {
   decrypt: (value) => value.toString("utf8").replace(/^encrypted:/u, ""),
 };
 
+const THEME_EXTENSION_ID = "01a173b5-526c-74d8-864c-26b0968892f6";
+const SOFT_THEME = `${THEME_EXTENSION_ID}:soft`;
+
 test("settings store persists the default close behavior and local profile", async () => {
   const directory = await mkdtemp(join(tmpdir(), "agw-desktop-settings-"));
   try {
@@ -571,7 +574,7 @@ test("load accepts extension theme ids and the three modes", async () => {
       baseFontSize: 16,
       chatFontSize: null,
       codeFontSize: null,
-      theme: "soft-theme:soft",
+      theme: SOFT_THEME,
       mode,
     };
     assert.deepEqual(await loadWithStoredAppearance(stored), stored);
@@ -592,8 +595,12 @@ test("load rejects an appearance outside the allowed values", async () => {
     { ...valid, documentFontSize: 18 },
     { ...valid, baseFontSize: 16.5 },
     { ...valid, theme: "soft" },
-    { ...valid, theme: "Soft-Theme:soft" },
-    { ...valid, theme: "soft-theme:soft:x" },
+    { ...valid, theme: "soft-theme:soft" },
+    { ...valid, theme: `${THEME_EXTENSION_ID.toUpperCase()}:soft` },
+    { ...valid, theme: `${THEME_EXTENSION_ID}:Soft` },
+    { ...valid, theme: `${SOFT_THEME}:x` },
+    { ...valid, theme: `${THEME_EXTENSION_ID}:` },
+    { ...valid, theme: THEME_EXTENSION_ID },
     { ...valid, theme: "" },
     { ...valid, theme: null },
     { ...valid, mode: "auto" },
@@ -613,7 +620,7 @@ test("save stores the appearance and keeps the other settings", async () => {
       baseFontSize: 18,
       chatFontSize: 15,
       codeFontSize: 20,
-      theme: "soft-theme:soft",
+      theme: SOFT_THEME,
       mode: "dark",
     } as const;
     await store.save({ appearance });
@@ -634,7 +641,7 @@ test("save without an appearance keeps the stored appearance", async () => {
       baseFontSize: 18,
       chatFontSize: 15,
       codeFontSize: null,
-      theme: "soft-theme:soft",
+      theme: SOFT_THEME,
       mode: "light",
     } as const;
     await store.save({ appearance });

@@ -21,6 +21,9 @@ const codec: SecretCodec = {
 /** 批准核对通过。The approval check passes. */
 const approved = async () => undefined;
 
+const EXTENSION_ID = "01a173c6-4934-746b-b76c-3e397c297940";
+const NESTED_EXTENSION_ID = "01a173c6-4934-746b-b76c-417ece4ebb8f";
+
 type Harness = {
   root: string;
   packages: string;
@@ -122,18 +125,18 @@ const grants = (manifest: Record<string, unknown>): ExtensionGrants => ({
 test("installing from a folder copies the package and commits it", async () => {
   const harness = await createHarness();
   try {
-    const source = join(harness.sources, "hello");
-    await writeTestExtension(source, testManifest("hello"), { "assets/app.js": "export {};" });
+    const source = join(harness.sources, EXTENSION_ID);
+    await writeTestExtension(source, testManifest(EXTENSION_ID), { "assets/app.js": "export {};" });
 
     const preview = await harness.installer.prepareFromDirectory(source);
     assert.deepEqual(preview.errors, []);
-    assert.equal(preview.manifest?.id, "hello");
+    assert.equal(preview.manifest?.id, EXTENSION_ID);
     assert.equal(preview.installedVersion, null);
 
     const installed = await harness.installer.commit(preview.installId, approved);
     assert.equal(installed.validation, "valid");
     assert.equal(
-      await readFile(join(harness.packages, "hello", "assets", "app.js"), "utf8"),
+      await readFile(join(harness.packages, EXTENSION_ID, "assets", "app.js"), "utf8"),
       "export {};",
     );
     assert.deepEqual(await stagingEntries(harness), []);
@@ -146,11 +149,11 @@ test("installing from a folder copies the package and commits it", async () => {
 test("a failed approval check commits nothing and keeps the staged package", async () => {
   const harness = await createHarness();
   try {
-    const source = join(harness.sources, "hello");
-    await writeTestExtension(source, testManifest("hello"));
+    const source = join(harness.sources, EXTENSION_ID);
+    await writeTestExtension(source, testManifest(EXTENSION_ID));
     const preview = await harness.installer.prepareFromDirectory(source);
     const { directory, entry } = await harness.installer.inspect(preview.installId);
-    assert.equal(entry.manifest?.id, "hello");
+    assert.equal(entry.manifest?.id, EXTENSION_ID);
     await writeFile(join(directory, "added.js"), "export {};");
 
     await assert.rejects(
@@ -174,8 +177,8 @@ test("a failed approval check commits nothing and keeps the staged package", asy
 test("a folder containing a symbolic link is rejected and the staging directory removed", async () => {
   const harness = await createHarness();
   try {
-    const source = join(harness.sources, "linked");
-    await writeTestExtension(source, testManifest("linked"));
+    const source = join(harness.sources, EXTENSION_ID);
+    await writeTestExtension(source, testManifest(EXTENSION_ID));
     await symlink(join(source, "index.html"), join(source, "alias.html"));
 
     const preview = await harness.installer.prepareFromDirectory(source);
@@ -193,21 +196,21 @@ test("archives install from the root or from the only top-level folder", async (
   const harness = await createHarness();
   try {
     const atRoot = join(harness.sources, "root.zip");
-    await writeZip(atRoot, extensionEntries("", "zipped"));
+    await writeZip(atRoot, extensionEntries("", EXTENSION_ID));
     const rootPreview = await harness.installer.prepareFromArchive(atRoot);
     assert.deepEqual(rootPreview.errors, []);
     await harness.installer.commit(rootPreview.installId, approved);
-    assert.equal(await installedVersion(harness, "zipped"), "1.0.0");
+    assert.equal(await installedVersion(harness, EXTENSION_ID), "1.0.0");
 
     const nested = join(harness.sources, "nested.zip");
     await writeZip(nested, [
-      ...extensionEntries("nested-ext/", "nested-ext"),
+      ...extensionEntries("nested-ext/", NESTED_EXTENSION_ID),
       { name: "__MACOSX/._manifest.json", content: "metadata" },
     ]);
     const nestedPreview = await harness.installer.prepareFromArchive(nested);
     assert.deepEqual(nestedPreview.errors, []);
     await harness.installer.commit(nestedPreview.installId, approved);
-    assert.equal(await installedVersion(harness, "nested-ext"), "1.0.0");
+    assert.equal(await installedVersion(harness, NESTED_EXTENSION_ID), "1.0.0");
 
     const twoFolders = join(harness.sources, "two.zip");
     await writeZip(twoFolders, [
@@ -303,27 +306,27 @@ test("archives over the entry count or extracted size limit stop and remove the 
 test("replacing keeps the enabled state when grants cover the new declaration and disables otherwise", async () => {
   const harness = await createHarness();
   try {
-    const first = testManifest("swap", { version: "1.0.0" });
+    const first = testManifest(EXTENSION_ID, { version: "1.0.0" });
     await writeTestExtension(join(harness.sources, "v1"), first);
     await harness.installer.commit(
       (await harness.installer.prepareFromDirectory(join(harness.sources, "v1"))).installId,
       approved,
     );
-    await harness.settings.setExtensionEnabled("swap", true, grants(first));
+    await harness.settings.setExtensionEnabled(EXTENSION_ID, true, grants(first));
 
-    const second = testManifest("swap", { version: "1.1.0", hostPermissions: [] });
+    const second = testManifest(EXTENSION_ID, { version: "1.1.0", hostPermissions: [] });
     await writeTestExtension(join(harness.sources, "v2"), second);
     const preview = await harness.installer.prepareFromDirectory(join(harness.sources, "v2"));
     assert.equal(preview.installedVersion, "1.0.0");
     await harness.installer.commit(preview.installId, approved);
-    assert.deepEqual((await harness.settings.load()).extensions.swap, {
+    assert.deepEqual((await harness.settings.load()).extensions[EXTENSION_ID], {
       enabled: true,
       grantedPermissions: ["context.project"],
       grantedHostPermissions: [],
       lastActivatedVersion: null,
     });
 
-    const third = testManifest("swap", {
+    const third = testManifest(EXTENSION_ID, {
       version: "1.2.0",
       permissions: ["context.project", "execution"],
     });
@@ -332,10 +335,10 @@ test("replacing keeps the enabled state when grants cover the new declaration an
       (await harness.installer.prepareFromDirectory(join(harness.sources, "v3"))).installId,
       approved,
     );
-    const saved = (await harness.settings.load()).extensions.swap;
+    const saved = (await harness.settings.load()).extensions[EXTENSION_ID];
     assert.equal(saved.enabled, false);
     assert.deepEqual(saved.grantedPermissions, ["context.project"]);
-    assert.equal(await installedVersion(harness, "swap"), "1.2.0");
+    assert.equal(await installedVersion(harness, EXTENSION_ID), "1.2.0");
   } finally {
     await harness.dispose();
   }
@@ -346,20 +349,20 @@ test("an update replaces only packages/<id> and keeps data/<id>", async () => {
   try {
     await writeTestExtension(
       join(harness.sources, "v1"),
-      testManifest("keep", { version: "1.0.0" }),
+      testManifest(EXTENSION_ID, { version: "1.0.0" }),
       { "old.js": "export {};" },
     );
     await harness.installer.commit(
       (await harness.installer.prepareFromDirectory(join(harness.sources, "v1"))).installId,
       approved,
     );
-    await mkdir(join(harness.data, "keep"), { recursive: true });
-    await writeFile(join(harness.data, "keep", "config.json"), '{"theme":"dark"}');
+    await mkdir(join(harness.data, EXTENSION_ID), { recursive: true });
+    await writeFile(join(harness.data, EXTENSION_ID, "config.json"), '{"theme":"dark"}');
 
     // 包自己的 data/ 目录只是包文件，与数据目录无关。A package's own data/ folder is a package file, not the data directory.
     await writeTestExtension(
       join(harness.sources, "v2"),
-      testManifest("keep", { version: "2.0.0" }),
+      testManifest(EXTENSION_ID, { version: "2.0.0" }),
       { "data/defaults.json": "{}" },
     );
     await harness.installer.commit(
@@ -367,17 +370,17 @@ test("an update replaces only packages/<id> and keeps data/<id>", async () => {
       approved,
     );
 
-    assert.equal(await installedVersion(harness, "keep"), "2.0.0");
-    await assert.rejects(readFile(join(harness.packages, "keep", "old.js"), "utf8"));
+    assert.equal(await installedVersion(harness, EXTENSION_ID), "2.0.0");
+    await assert.rejects(readFile(join(harness.packages, EXTENSION_ID, "old.js"), "utf8"));
     assert.equal(
-      await readFile(join(harness.packages, "keep", "data", "defaults.json"), "utf8"),
+      await readFile(join(harness.packages, EXTENSION_ID, "data", "defaults.json"), "utf8"),
       "{}",
     );
     assert.equal(
-      await readFile(join(harness.data, "keep", "config.json"), "utf8"),
+      await readFile(join(harness.data, EXTENSION_ID, "config.json"), "utf8"),
       '{"theme":"dark"}',
     );
-    assert.deepEqual((await readdir(harness.packages)).sort(), [".staging", "keep"]);
+    assert.deepEqual((await readdir(harness.packages)).sort(), [".staging", EXTENSION_ID]);
   } finally {
     await harness.dispose();
   }
@@ -386,12 +389,14 @@ test("an update replaces only packages/<id> and keeps data/<id>", async () => {
 test("canceling removes the staging directory", async () => {
   const harness = await createHarness();
   try {
-    await writeTestExtension(join(harness.sources, "cancel"), testManifest("cancel"));
-    const preview = await harness.installer.prepareFromDirectory(join(harness.sources, "cancel"));
+    await writeTestExtension(join(harness.sources, EXTENSION_ID), testManifest(EXTENSION_ID));
+    const preview = await harness.installer.prepareFromDirectory(
+      join(harness.sources, EXTENSION_ID),
+    );
     assert.equal((await stagingEntries(harness)).length, 1);
     await harness.installer.cancel(preview.installId);
     assert.deepEqual(await stagingEntries(harness), []);
-    await assert.rejects(readdir(join(harness.packages, "cancel")));
+    await assert.rejects(readdir(join(harness.packages, EXTENSION_ID)));
   } finally {
     await harness.dispose();
   }
@@ -422,28 +427,31 @@ test("uninstalling removes the package and optionally the data", async () => {
 
 /** 构造某一步之后中断的替换安装。Builds a replacement install interrupted after a given step. */
 async function interruptedReplacement(harness: Harness, step: number): Promise<void> {
-  const oldManifest = testManifest("crash", { version: "1.0.0", permissions: ["context.project"] });
-  const newManifest = testManifest("crash", { version: "2.0.0", permissions: [] });
-  await writeTestExtension(join(harness.packages, "crash"), oldManifest);
-  await harness.settings.setExtensionEnabled("crash", true, grants(oldManifest));
+  const oldManifest = testManifest(EXTENSION_ID, {
+    version: "1.0.0",
+    permissions: ["context.project"],
+  });
+  const newManifest = testManifest(EXTENSION_ID, { version: "2.0.0", permissions: [] });
+  await writeTestExtension(join(harness.packages, EXTENSION_ID), oldManifest);
+  await harness.settings.setExtensionEnabled(EXTENSION_ID, true, grants(oldManifest));
   const installId = "00000000-0000-4000-8000-000000000001";
   const staging = join(harness.packages, ".staging", installId);
   await writeTestExtension(join(staging, "package"), newManifest);
   if (step >= 1) {
     await writeJsonFile(join(staging, "journal.json"), {
       operation: "install",
-      extensionId: "crash",
+      extensionId: EXTENSION_ID,
       phase: "swapping",
       hasPrevious: true,
     });
   }
-  if (step >= 2) await rename(join(harness.packages, "crash"), join(staging, "previous"));
-  if (step >= 3) await rename(join(staging, "package"), join(harness.packages, "crash"));
-  if (step >= 4) await harness.settings.applyInstalledExtension("crash", grants(newManifest));
+  if (step >= 2) await rename(join(harness.packages, EXTENSION_ID), join(staging, "previous"));
+  if (step >= 3) await rename(join(staging, "package"), join(harness.packages, EXTENSION_ID));
+  if (step >= 4) await harness.settings.applyInstalledExtension(EXTENSION_ID, grants(newManifest));
   if (step >= 5) {
     await writeJsonFile(join(staging, "journal.json"), {
       operation: "install",
-      extensionId: "crash",
+      extensionId: EXTENSION_ID,
       phase: "committed",
       hasPrevious: true,
     });
@@ -472,11 +480,11 @@ test("startup recovery restores the old version or completes the new one after a
       );
       assert.deepEqual(await readdir(harness.packages).then((names) => names.sort()), [
         ".staging",
-        "crash",
+        EXTENSION_ID,
       ]);
       assert.deepEqual(await stagingEntries(harness), [], `step ${step}`);
-      assert.equal(await installedVersion(harness, "crash"), version, `step ${step}`);
-      const saved = (await harness.settings.load()).extensions.crash;
+      assert.equal(await installedVersion(harness, EXTENSION_ID), version, `step ${step}`);
+      const saved = (await harness.settings.load()).extensions[EXTENSION_ID];
       assert.equal(saved.enabled, true, `step ${step}`);
       assert.deepEqual(saved.grantedPermissions, permissions, `step ${step}`);
     } finally {
@@ -489,31 +497,35 @@ test("startup recovery keeps or finishes an interrupted uninstall", async () => 
   for (const step of [1, 2]) {
     const harness = await createHarness();
     try {
-      await writeTestExtension(join(harness.packages, "gone"), testManifest("gone"));
-      await harness.settings.setExtensionEnabled("gone", true, grants(testManifest("gone")));
-      await mkdir(join(harness.data, "gone"), { recursive: true });
+      await writeTestExtension(join(harness.packages, EXTENSION_ID), testManifest(EXTENSION_ID));
+      await harness.settings.setExtensionEnabled(
+        EXTENSION_ID,
+        true,
+        grants(testManifest(EXTENSION_ID)),
+      );
+      await mkdir(join(harness.data, EXTENSION_ID), { recursive: true });
       const uninstallId = "00000000-0000-4000-8000-000000000002";
       const staging = join(harness.packages, ".staging", uninstallId);
       await writeJsonFile(join(staging, "journal.json"), {
         operation: "uninstall",
-        extensionId: "gone",
+        extensionId: EXTENSION_ID,
         deleteData: true,
         phase: "removing",
       });
-      if (step >= 2) await rename(join(harness.packages, "gone"), join(staging, "previous"));
+      if (step >= 2) await rename(join(harness.packages, EXTENSION_ID), join(staging, "previous"));
 
       await harness.installer.recover();
 
       assert.deepEqual(await stagingEntries(harness), [], `step ${step}`);
       const names = await readdir(harness.packages);
       if (step === 1) {
-        assert.deepEqual(names.sort(), [".staging", "gone"]);
-        assert.equal((await harness.settings.load()).extensions.gone.enabled, true);
+        assert.deepEqual(names.sort(), [".staging", EXTENSION_ID]);
+        assert.equal((await harness.settings.load()).extensions[EXTENSION_ID].enabled, true);
       } else {
         assert.deepEqual(names, [".staging"]);
         assert.deepEqual((await harness.settings.load()).extensions, {});
-        await assert.rejects(readdir(join(harness.data, "gone")));
-        assert.deepEqual(harness.clearedSessions, ["gone"]);
+        await assert.rejects(readdir(join(harness.data, EXTENSION_ID)));
+        assert.deepEqual(harness.clearedSessions, [EXTENSION_ID]);
       }
     } finally {
       await harness.dispose();

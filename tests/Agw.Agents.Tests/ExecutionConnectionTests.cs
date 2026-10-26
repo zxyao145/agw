@@ -488,7 +488,7 @@ public class ExecutionConnectionTests
             new TestLifetime(),
             NullLoggerFactory.Instance
         );
-        await using var caller = await CreateCallerAsync(fixture, "sample");
+        await using var caller = await CreateCallerAsync(fixture, TestExtensionIds.Sample);
         var connections = GetConnections(registry);
         connections["old-connection"] = connection;
         connections["caller"] = caller;
@@ -506,7 +506,7 @@ public class ExecutionConnectionTests
 
     [Theory]
     [InlineData(null)]
-    [InlineData("sample")]
+    [InlineData(TestExtensionIds.Sample)]
     public async Task RecoverInProcessExecution_InterruptFromHostOrCreator_StopsTurn(string? extensionId)
     {
         var token = TestContext.Current.CancellationToken;
@@ -521,7 +521,7 @@ public class ExecutionConnectionTests
                 .ProjectConversations.IgnoreQueryFilters()
                 .Where(conversation => conversation.Id == fixture.Context.ProjectConversationId)
                 .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(conversation => conversation.ExtensionId, "sample"),
+                    setters => setters.SetProperty(conversation => conversation.ExtensionId, TestExtensionIds.Sample),
                     token
                 );
         }
@@ -558,7 +558,7 @@ public class ExecutionConnectionTests
             new TestLifetime(),
             NullLoggerFactory.Instance
         );
-        await using var caller = await CreateCallerAsync(fixture, "sample");
+        await using var caller = await CreateCallerAsync(fixture, TestExtensionIds.Sample);
         var connections = GetConnections(registry);
         connections["old-connection"] = connection;
         connections["caller"] = caller;

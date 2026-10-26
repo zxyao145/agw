@@ -144,7 +144,11 @@ test("links and unsaved changes name their source and answer true or false", () 
       {
         fileName: "notes.md",
         viewerTitle: "Mixed",
-        origin: { kind: "extension", extensionId: "text-editor", extensionName: "Text Editor" },
+        origin: {
+          kind: "extension",
+          extensionId: "01a173b5-526c-74d8-864c-2fa2035185e4",
+          extensionName: "Markdown",
+        },
       },
       { fileName: "app.ts", viewerTitle: "Source", origin: { kind: "host" } },
     ],
@@ -152,7 +156,7 @@ test("links and unsaved changes name their source and answer true or false", () 
   // 宿主的 Source 没有括注。The host's Source has no origin note.
   assert.deepEqual(
     [...unsaved.container.querySelectorAll("li")].map((item) => item.textContent),
-    ["notes.md · Mixed (Text Editor, text-editor)", "app.ts · Source"],
+    ["notes.md · Mixed (Markdown, 01a173b5-526c-74d8-864c-2fa2035185e4)", "app.ts · Source"],
   );
   assert.deepEqual(
     unsaved.buttons.map((button) => [button.textContent, button.className]),

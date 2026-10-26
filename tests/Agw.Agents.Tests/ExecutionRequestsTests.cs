@@ -180,14 +180,14 @@ public class ExecutionRequestsTests
               "type": "SettingCommand",
               "projectId": "{{Guid.CreateVersion7()}}",
               "conversationId": "{{Guid.CreateVersion7()}}",
-              "extensionId": "sample"
+              "extensionId": "{{TestExtensionIds.Sample}}"
             }
             """;
 
         var settingRequest = Assert.IsType<SettingCommand>(Deserialize(payload));
 
-        Assert.Equal("sample", settingRequest.ExtensionId);
-        Assert.Equal("sample", SettingCommandMapper.FromCommand(settingRequest).ExtensionId);
+        Assert.Equal(TestExtensionIds.Sample, settingRequest.ExtensionId);
+        Assert.Equal(TestExtensionIds.Sample, SettingCommandMapper.FromCommand(settingRequest).ExtensionId);
     }
 
     [Fact]
@@ -208,43 +208,33 @@ public class ExecutionRequestsTests
     {
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
-        var sample = new SettingCommand(projectId, conversationId, extensionId: "sample");
+        var sample = new SettingCommand(projectId, conversationId, extensionId: TestExtensionIds.Sample);
 
-        Assert.NotEqual(sample, new SettingCommand(projectId, conversationId, extensionId: "other"));
+        Assert.NotEqual(sample, new SettingCommand(projectId, conversationId, extensionId: TestExtensionIds.Other));
         Assert.NotEqual(sample, new SettingCommand(projectId, conversationId));
-        Assert.Equal(sample, new SettingCommand(projectId, conversationId, extensionId: "sample"));
+        Assert.Equal(sample, new SettingCommand(projectId, conversationId, extensionId: TestExtensionIds.Sample));
         Assert.Equal(
             sample.GetHashCode(),
-            new SettingCommand(projectId, conversationId, extensionId: "sample").GetHashCode()
+            new SettingCommand(projectId, conversationId, extensionId: TestExtensionIds.Sample).GetHashCode()
         );
-    }
-
-    [Theory]
-    [InlineData("host")]
-    [InlineData("HOST")]
-    [InlineData("Host")]
-    public void FromCommand_HostExtensionId_ThrowsInvalidParam(string extensionId)
-    {
-        var command = new SettingCommand(Guid.CreateVersion7(), Guid.CreateVersion7(), extensionId: extensionId);
-
-        var exception = Assert.Throws<Agw.Shared.Exceptions.AgwException>(() =>
-            SettingCommandMapper.FromCommand(command)
-        );
-
-        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
-        Assert.Equal("SettingCommand.extensionId cannot be \"host\".", exception.Message);
     }
 
     [Theory]
     [InlineData("")]
-    [InlineData("ab")]
-    [InlineData("Sample")]
-    [InlineData("-a1")]
-    [InlineData("a1-")]
-    [InlineData("a--b")]
-    [InlineData("a_b")]
-    [InlineData(" sample")]
-    [InlineData("sample\n")]
+    [InlineData("host")]
+    [InlineData("HOST")]
+    [InlineData("todo-editor")]
+    // 大写。Uppercase.
+    [InlineData("01A173B5-526C-74D8-864C-1EFFA3C5A7CE")]
+    // version 4。Version 4.
+    [InlineData("0199c1f2-8f1a-4b2c-9d3e-1234567890ab")]
+    // variant 不是 RFC 9562。A variant other than RFC 9562.
+    [InlineData("01a173b5-526c-74d8-c64c-1effa3c5a7ce")]
+    // 其他格式。Other formats.
+    [InlineData("01a173b5526c74d8864c1effa3c5a7ce")]
+    [InlineData("{01a173b5-526c-74d8-864c-1effa3c5a7ce}")]
+    [InlineData(" 01a173b5-526c-74d8-864c-1effa3c5a7ce")]
+    [InlineData("01a173b5-526c-74d8-864c-1effa3c5a7ce\n")]
     public void FromCommand_InvalidExtensionId_ThrowsInvalidParam(string extensionId)
     {
         var command = new SettingCommand(Guid.CreateVersion7(), Guid.CreateVersion7(), extensionId: extensionId);
@@ -254,31 +244,19 @@ public class ExecutionRequestsTests
         );
 
         Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal("SettingCommand.extensionId must be a lowercase GUID v7.", exception.Message);
     }
 
     [Fact]
-    public void FromCommand_ExtensionIdLength_AcceptsUpTo64Characters()
+    public void FromCommand_LowercaseGuidV7ExtensionId_ReturnsIt()
     {
-        var projectId = Guid.CreateVersion7();
-        var conversationId = Guid.CreateVersion7();
-        var longest = new string('a', 64);
+        var extensionId = Guid.CreateVersion7().ToString("D");
 
         Assert.Equal(
-            longest,
+            extensionId,
             SettingCommandMapper
-                .FromCommand(new SettingCommand(projectId, conversationId, extensionId: longest))
+                .FromCommand(new SettingCommand(Guid.CreateVersion7(), Guid.CreateVersion7(), extensionId: extensionId))
                 .ExtensionId
-        );
-        Assert.Equal(
-            "my-ext-2",
-            SettingCommandMapper
-                .FromCommand(new SettingCommand(projectId, conversationId, extensionId: "my-ext-2"))
-                .ExtensionId
-        );
-        Assert.Throws<Agw.Shared.Exceptions.AgwException>(() =>
-            SettingCommandMapper.FromCommand(
-                new SettingCommand(projectId, conversationId, extensionId: new string('a', 65))
-            )
         );
     }
 

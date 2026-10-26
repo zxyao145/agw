@@ -11,6 +11,7 @@ import type {
 } from "../../shared/contracts";
 import { APPEARANCE_MODES, DEFAULT_APPEARANCE, DEFAULT_THEME_ID } from "../../shared/appearance";
 import { HOST_PERMISSION_PATTERN } from "../../shared/extension-host-permissions";
+import { isExtensionId, isLocalId } from "../../shared/extension-manifest";
 import { EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import { writeJsonFile } from "./json-file";
 import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
@@ -26,7 +27,15 @@ const extensionSettingsSchema = z.record(
 );
 
 // 主题 id：`default` 或 `{extensionId}:{themeId}`。A theme id: `default` or `{extensionId}:{themeId}`.
-const THEME_ID_PATTERN = /^(?:default|[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*)$/u;
+function isThemeId(value: string): boolean {
+  if (value === DEFAULT_THEME_ID) return true;
+  const separator = value.indexOf(":");
+  return (
+    separator !== -1 &&
+    isExtensionId(value.slice(0, separator)) &&
+    isLocalId(value.slice(separator + 1))
+  );
+}
 
 // `mode` 缺失时保持缺失，由 renderer 迁移。A missing `mode` stays missing until the renderer migrates it.
 const appearanceSchema = z.strictObject({
@@ -34,7 +43,7 @@ const appearanceSchema = z.strictObject({
   chatFontSize: z.number().int().min(12).max(24).nullable(),
   // 旧版本的设置没有这个字段，缺失时跟随基础字号。Older settings lack the field; missing follows the base size.
   codeFontSize: z.number().int().min(12).max(28).nullable().default(null),
-  theme: z.string().regex(THEME_ID_PATTERN).default(DEFAULT_THEME_ID),
+  theme: z.string().refine(isThemeId, { message: "Invalid theme id." }).default(DEFAULT_THEME_ID),
   mode: z.enum(APPEARANCE_MODES).optional(),
 });
 

@@ -14,11 +14,12 @@ import {
 import { testManifest, writeTestExtension } from "./extension-fixture.test-helper";
 
 const APP_VERSION = "0.5.0";
+const EXTENSION_ID = "01a173c6-4933-766f-8182-77f77ba5b946";
 
 test("scanning lists valid extensions with icon data URLs matching the files", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
-    await writeTestExtension(join(scratch.path, "hello-world"), testManifest("hello-world"));
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), testManifest(EXTENSION_ID));
     await mkdir(join(scratch.path, ".staging", "abc"), { recursive: true });
     await writeFile(join(scratch.path, "notes.txt"), "not an extension");
 
@@ -26,13 +27,13 @@ test("scanning lists valid extensions with icon data URLs matching the files", a
 
     assert.deepEqual(
       entries.map((entry) => [entry.id, entry.validation]),
-      [["hello-world", "valid"]],
+      [[EXTENSION_ID, "valid"]],
     );
     const dataUrl = entries[0].icons["icon.svg"];
     assert.match(dataUrl, /^data:image\/svg\+xml;base64,/u);
     assert.deepEqual(
       Buffer.from(dataUrl.split(",")[1], "base64"),
-      await readFile(join(scratch.path, "hello-world", "icon.svg")),
+      await readFile(join(scratch.path, EXTENSION_ID, "icon.svg")),
     );
   } finally {
     await scratch.dispose();
@@ -42,7 +43,7 @@ test("scanning lists valid extensions with icon data URLs matching the files", a
 test("a directory name that differs from the manifest id is an error", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
-    await writeTestExtension(join(scratch.path, "renamed"), testManifest("hello-world"));
+    await writeTestExtension(join(scratch.path, "renamed"), testManifest(EXTENSION_ID));
     const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
     assert.equal(entry.id, "renamed");
     assert.equal(entry.validation, "invalid");
@@ -72,8 +73,8 @@ test("missing package files and missing manifests are errors", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
     await writeTestExtension(
-      join(scratch.path, "missing-entry"),
-      testManifest("missing-entry", {
+      join(scratch.path, EXTENSION_ID),
+      testManifest(EXTENSION_ID, {
         contributes: {
           mainViews: [{ id: "app", title: "App", icon: "Box", entry: "missing.html" }],
         },
@@ -84,8 +85,8 @@ test("missing package files and missing manifests are errors", async () => {
     assert.deepEqual(
       entries.map((entry) => [entry.id, entry.errors.map((error) => [error.code, error.path])]),
       [
+        [EXTENSION_ID, [["PACKAGE_FILE_NOT_FOUND", "contributes.mainViews[0].entry"]]],
         ["empty", [["MANIFEST_NOT_FOUND", null]]],
-        ["missing-entry", [["PACKAGE_FILE_NOT_FOUND", "contributes.mainViews[0].entry"]]],
       ],
     );
   } finally {
@@ -97,8 +98,8 @@ test("symbolic links that resolve outside the root are errors", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
     await writeFile(join(scratch.path, "outside.js"), "export {};");
-    const directory = join(scratch.path, "extensions", "linked");
-    await writeTestExtension(directory, testManifest("linked"));
+    const directory = join(scratch.path, "extensions", EXTENSION_ID);
+    await writeTestExtension(directory, testManifest(EXTENSION_ID));
     await rm(join(directory, "background.js"));
     await symlink(join(scratch.path, "outside.js"), join(directory, "background.js"));
 
@@ -120,7 +121,7 @@ test("symbolic links that resolve outside the root are errors", async () => {
 test("icons larger than 256 KB are errors", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
-    await writeTestExtension(join(scratch.path, "big-icon"), testManifest("big-icon"), {
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), testManifest(EXTENSION_ID), {
       "icon.svg": `<svg xmlns="http://www.w3.org/2000/svg"><!--${"x".repeat(MAX_ICON_BYTES)}--></svg>`,
     });
     const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
@@ -147,8 +148,8 @@ test("image icons become data URLs with the MIME type of their extension", async
       ["picture.webp", "image/webp"],
     ];
     await writeTestExtension(
-      join(scratch.path, "images"),
-      testManifest("images", {
+      join(scratch.path, EXTENSION_ID),
+      testManifest(EXTENSION_ID, {
         icon: "icon.png",
         contributes: {
           ribbon: images.slice(1).map(([icon], index) => ({
@@ -180,7 +181,7 @@ test("image icons become data URLs with the MIME type of their extension", async
 
 const THEME_MANIFEST = {
   manifestVersion: 1,
-  id: "themes",
+  id: EXTENSION_ID,
   name: "Themes",
   version: "1.0.0",
   contributes: {
@@ -194,7 +195,7 @@ const THEME_MANIFEST = {
 test("theme files are read after the package checks and merged into the entry", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
-    await writeTestExtension(join(scratch.path, "themes"), THEME_MANIFEST, {
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), THEME_MANIFEST, {
       "themes/night.json": JSON.stringify({
         common: { "--radius": "0.75rem" },
         dark: { "--background": "#212121" },
@@ -237,7 +238,7 @@ test("CSS themes carry only a descriptor of the processed style", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
     const css = ":root.dark { --background: #24211d; }";
-    await writeTestExtension(join(scratch.path, "themes"), CSS_THEME_MANIFEST, {
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), CSS_THEME_MANIFEST, {
       "themes/paper.css": '@import "parts/base.css";',
       "themes/parts/base.css": css,
     });
@@ -260,7 +261,7 @@ test("CSS themes carry only a descriptor of the processed style", async () => {
 test("a CSS theme that fails its checks makes the extension invalid with the theme path", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
-    await writeTestExtension(join(scratch.path, "themes"), CSS_THEME_MANIFEST, {
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), CSS_THEME_MANIFEST, {
       "themes/paper.css": ".hero { background: url(https://example.com/hero.png); }",
     });
     const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
@@ -279,7 +280,7 @@ test("a CSS theme that fails its checks makes the extension invalid with the the
 test("invalid or missing theme files make the extension invalid without themes", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
-    await writeTestExtension(join(scratch.path, "themes"), THEME_MANIFEST, {
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), THEME_MANIFEST, {
       "themes/night.json": JSON.stringify({ light: { "--background": "nope", "--bg": "#fff" } }),
     });
     const [missing] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
@@ -294,7 +295,7 @@ test("invalid or missing theme files make the extension invalid without themes",
       ],
     );
 
-    await writeFile(join(scratch.path, "themes", "themes", "day.json"), "{ not json");
+    await writeFile(join(scratch.path, EXTENSION_ID, "themes", "day.json"), "{ not json");
     const [broken] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
     assert.deepEqual(
       broken.errors.map((error) => [error.code, error.path]),
@@ -313,7 +314,7 @@ test("theme paths that resolve outside the root are errors", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
     await writeFile(join(scratch.path, "outside.json"), '{"light":{"--background":"#fff"}}');
-    const directory = join(scratch.path, "extensions", "themes");
+    const directory = join(scratch.path, "extensions", EXTENSION_ID);
     await writeTestExtension(directory, {
       ...THEME_MANIFEST,
       contributes: { themes: [THEME_MANIFEST.contributes.themes[0]] },
@@ -339,12 +340,12 @@ test("incompatible versions keep the manifest and report the reason", async () =
   const scratch = await createScratchDirectory("catalog");
   try {
     await writeTestExtension(
-      join(scratch.path, "future"),
-      testManifest("future", { minAppVersion: "9.0.0" }),
+      join(scratch.path, EXTENSION_ID),
+      testManifest(EXTENSION_ID, { minAppVersion: "9.0.0" }),
     );
     const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
     assert.equal(entry.validation, "incompatible");
-    assert.equal(entry.manifest?.id, "future");
+    assert.equal(entry.manifest?.id, EXTENSION_ID);
     assert.equal(entry.errors[0].code, "APP_VERSION_TOO_OLD");
   } finally {
     await scratch.dispose();
@@ -354,7 +355,7 @@ test("incompatible versions keep the manifest and report the reason", async () =
 test("installed extensions report when the declaration exceeds the approved grants", async () => {
   const scratch = await createScratchDirectory("catalog");
   try {
-    await writeTestExtension(join(scratch.path, "grants"), testManifest("grants"));
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), testManifest(EXTENSION_ID));
     const [entry] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
     assert.equal(toInstalledExtension(entry, undefined).permissionApprovalRequired, false);
     assert.equal(

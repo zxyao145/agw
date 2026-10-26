@@ -206,7 +206,7 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 
 `SettingCommand.Resume` 是服务端属性，带有 `[JsonIgnore]`。transport command 自身的等价性不包含 `Resume`；复制出的 `ExecutionSettings` 会包含它，因为 resume 变化需要使 connection-owned runtime 失效。
 
-`SettingCommandMapper` 校验 `extensionId`：没有值表示宿主；忽略大小写等于 `host`（`ConversationCreators.Host`）时以 `InvalidParam` 拒绝；其他值必须是 3 到 64 个小写字母、数字与单个连字符（`^[a-z0-9]+(?:-[a-z0-9]+)*\z`）。`ExecutionSettings.ExtensionId` 参与相等判定，`DurableExecutionMapper` 不把它写入 Durable manifest。
+`SettingCommandMapper` 校验 `extensionId`：没有值表示宿主；其他值必须是小写的 GUID v7（`Guid.TryParseExact` 按 `D` 格式解析成功，version 为 7，variant 为 RFC 9562，并且与 `ToString("D")` 相同），否则以 `InvalidParam` 拒绝，`host`（`ConversationCreators.Host`）同样被拒绝。`ExecutionSettings.ExtensionId` 参与相等判定，`DurableExecutionMapper` 不把它写入 Durable manifest。
 
 `ExecutionCommandDispatcher` 在构造时把内部 handler adapter 按 command CLR type 建成字典。重复注册同一命令会立即抛出 `AgwException`；运行时收到未注册命令也会失败，而不是落入默认分支。
 

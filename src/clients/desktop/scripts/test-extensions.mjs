@@ -15,6 +15,7 @@ import electron from "electron";
 import { build } from "esbuild";
 import iconv from "iconv-lite";
 
+import EXTENSION_IDS from "../test-fixtures/extension-ids.json" with { type: "json" };
 import {
   buildExtensionFixtures,
   HTTP_PORT_PLACEHOLDER,
@@ -470,7 +471,7 @@ async function prepareServerData(baseUrl, echoPort) {
     `${JSON.stringify(DIAGRAM, null, 2)}\n`,
   );
   await writeFile(join(projectDirectory, "blank.excalidraw"), "");
-  // Text Editor 与 todo-editor 使用的文件。Files for Text Editor and todo-editor.
+  // Markdown extension 与 todo-editor 使用的文件。Files for the Markdown extension and todo-editor.
   await mkdir(join(projectDirectory, "notes"), { recursive: true });
   await writeFile(join(projectDirectory, "notes", "edit.md"), MIXED_MARKDOWN);
   await writeFile(join(projectDirectory, "notes", "typography.md"), TYPOGRAPHY_MARKDOWN);
@@ -656,21 +657,21 @@ async function installFixtures(httpPort) {
   const extensions = join(userData, "extensions", "packages");
   await mkdir(extensions, { recursive: true });
   // css-theme 在测试中从 fixture 目录安装。css-theme installs from the fixture directory during the test.
-  await replacePortInThemes(join(fixtures, "css-theme"), httpPort);
+  await replacePortInThemes(join(fixtures, EXTENSION_IDS.cssTheme), httpPort);
   for (const id of [
-    "sample",
-    "broken",
-    "slow",
-    "stuck-deactivate",
-    "busy",
-    "bad-view",
-    "no-background",
-    "undeclared",
-    "react-ts",
-    "wasm",
-    "vue",
-    "blazor",
-    "bad-theme",
+    EXTENSION_IDS.sample,
+    EXTENSION_IDS.broken,
+    EXTENSION_IDS.slow,
+    EXTENSION_IDS.stuckDeactivate,
+    EXTENSION_IDS.busy,
+    EXTENSION_IDS.badView,
+    EXTENSION_IDS.noBackground,
+    EXTENSION_IDS.undeclared,
+    EXTENSION_IDS.reactTs,
+    EXTENSION_IDS.wasm,
+    EXTENSION_IDS.vue,
+    EXTENSION_IDS.blazor,
+    EXTENSION_IDS.badTheme,
   ]) {
     await cp(join(fixtures, id), join(extensions, id), { recursive: true });
     const manifestFile = join(extensions, id, "manifest.json");
@@ -679,7 +680,7 @@ async function installFixtures(httpPort) {
     await replacePortInThemes(join(extensions, id), httpPort);
   }
   // sample-v2.zip 由替换端口后的 sample 生成。sample-v2.zip is generated from the port-substituted sample.
-  await writeSampleV2Zip(join(extensions, "sample"), join(fixtures, "sample-v2.zip"));
+  await writeSampleV2Zip(join(extensions, EXTENSION_IDS.sample), join(fixtures, "sample-v2.zip"));
 }
 
 async function main() {

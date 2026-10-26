@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { InstalledExtension } from "@desktop/shared/contracts";
-import { extensionCategories, extensionsInCategory, themeTitles } from "./extension-categories";
+import {
+  extensionCategories,
+  extensionsInCategory,
+  sortExtensionsByName,
+  themeTitles,
+} from "./extension-categories";
 import type { ExtensionState } from "./extension-host";
 import { sampleExtension } from "./extension-host.test-helper";
 
@@ -108,6 +113,23 @@ test("no category lists every extension and an unknown category lists none", () 
   assert.deepEqual(extensionsInCategory(all, null), all);
   assert.equal(extensionsInCategory(all, "widgets"), null);
   assert.equal(extensionsInCategory(all, "toString"), null);
+});
+
+test("the Extensions page lists extensions by name, using the id without a manifest, then by id", () => {
+  const unreadable = extension({
+    ...sampleExtension([]),
+    id: "broken",
+    manifest: null,
+    validation: "invalid",
+  });
+  const sameName = extension({ ...sampleExtension([]), id: "another-sample" });
+  const input = [...all, unreadable, sameName];
+  assert.deepEqual(
+    sortExtensionsByName(input).map((item) => item.id),
+    ["broken", "another-sample", "sample", "snippets", "soft-theme", "studio"],
+  );
+  // 不改变传入的数组。The input array is left unchanged.
+  assert.deepEqual(input, [...all, unreadable, sameName]);
 });
 
 test("theme titles come from the manifest", () => {

@@ -52,7 +52,7 @@ This is a breaking wire-contract change: the required `SettingCommand.conversati
 
 ## Extension requesters
 
-Desktop writes `extensionId` into every `SettingCommand` of an extension's session, including the one it sends after each reconnect; Web, Mobile, and Desktop's own sessions never send it. The value has 3 to 64 lowercase letters, digits, and single hyphens and cannot be `host` in any letter case; any other value fails with `4000001`. A connection without `extensionId`, including one that never sent a `SettingCommand`, represents the host. Changing `extensionId` is a settings change, so it fails with `4090021` while the connection's turn runs.
+Desktop writes `extensionId` into every `SettingCommand` of an extension's session, including the one it sends after each reconnect; Web, Mobile, and Desktop's own sessions never send it. The value is a lowercase GUID v7 in the hyphenated 36-character form with the RFC 9562 variant; any other value, including `host`, fails with `4000001`. A connection without `extensionId`, including one that never sent a `SettingCommand`, represents the host. Changing `extensionId` is a settings change, so it fails with `4090021` while the connection's turn runs.
 
 Each `project_conversation` row records its creator in `extension_id`: `host`, or the extension that sent the first `ExecCommand` of a draft conversation. The creator is written when that command resolves its task, whether or not the turn is accepted afterwards. A conversation is *open* while its creator is `host`, its records were never cleared (`generation` is 0), and it has no accepted turn; the first extension that resolves a task in an open conversation becomes its creator under the conversation row lock.
 

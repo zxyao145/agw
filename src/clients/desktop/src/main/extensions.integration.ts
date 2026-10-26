@@ -24,6 +24,7 @@ import {
 import iconv from "iconv-lite";
 
 import { formatTokenCount } from "@agw/api";
+import EXTENSION_IDS from "../../test-fixtures/extension-ids.json" with { type: "json" };
 import { DEFAULT_APPEARANCE } from "../shared/appearance";
 import type { AppearanceSettings } from "../shared/contracts";
 import { THEME_TOKEN_KINDS, THEME_TOKEN_NAMES } from "../shared/theme-tokens";
@@ -406,7 +407,7 @@ async function reloadExtension(id: string): Promise<void> {
 
 /** 通过 sample 的 workspace API 打开任意主区视图。Opens any main view through sample's workspace API. */
 async function openMainView(viewId: string, params: unknown = {}): Promise<void> {
-  const background = await untilFrame("sample", "background");
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
   await api(
     background,
     `await api.workspace.openMainView(${JSON.stringify(viewId)}, ${JSON.stringify(params)});`,
@@ -453,7 +454,7 @@ async function beforeEnabling(): Promise<void> {
   const hostInstanceId = runtime().registry.hostInstanceId;
   assert.ok(hostInstanceId);
   const result = await evalHost<{ ok: boolean; error?: { code: string } }>(
-    `window.agwDesktop.extensionFileSystem({ hostInstanceId: ${JSON.stringify(hostInstanceId)}, extensionId: "sample", frameId: "test", pageId: "test" }, { operation: "readFile", uri: "file:///etc/hosts" })`,
+    `window.agwDesktop.extensionFileSystem({ hostInstanceId: ${JSON.stringify(hostInstanceId)}, extensionId: "${EXTENSION_IDS.sample}", frameId: "test", pageId: "test" }, { operation: "readFile", uri: "file:///etc/hosts" })`,
   );
   assert.equal(result.ok, false);
   assert.equal(result.error?.code, "ERR_EXTENSION_DISABLED");
@@ -514,7 +515,7 @@ type SettingsFile = {
  * The bundled extension cards on the Extensions page draw their SVG icons as masks filled with the card title color.
  */
 async function assertBundledIconsUseTextColor(): Promise<void> {
-  for (const id of ["text-editor", "excalidraw", "image-viewer"]) {
+  for (const id of [EXTENSION_IDS.markdown, EXTENSION_IDS.excalidraw, EXTENSION_IDS.imageViewer]) {
     await untilHost(
       `Boolean(document.querySelector('[data-extension-id="${id}"] .bg-current'))`,
       `the ${id} card icon`,
@@ -539,31 +540,35 @@ async function assertBundledIconsUseTextColor(): Promise<void> {
 
 async function bundledDefaults(): Promise<void> {
   await goToExtensions();
-  await untilStatus("text-editor", "Active");
-  await untilStatus("excalidraw", "Active");
-  await untilStatus("image-viewer", "Active");
+  await untilStatus(EXTENSION_IDS.markdown, "Active");
+  await untilStatus(EXTENSION_IDS.excalidraw, "Active");
+  await untilStatus(EXTENSION_IDS.imageViewer, "Active");
   await assertBundledIconsUseTextColor();
   assert.equal(await evalHost<boolean>(`Boolean(${OPEN_DIALOG})`), false);
   const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
-  assert.equal(settings.extensions["text-editor"].enabled, true);
-  assert.deepEqual([...settings.extensions["text-editor"].grantedPermissions].sort(), [
+  assert.equal(settings.extensions[EXTENSION_IDS.markdown].enabled, true);
+  assert.deepEqual([...settings.extensions[EXTENSION_IDS.markdown].grantedPermissions].sort(), [
     "fs.cloud.read",
     "fs.cloud.write",
   ]);
-  assert.equal(settings.extensions.excalidraw.enabled, true);
-  assert.deepEqual([...settings.extensions.excalidraw.grantedPermissions].sort(), [
+  assert.equal(settings.extensions[EXTENSION_IDS.excalidraw].enabled, true);
+  assert.deepEqual([...settings.extensions[EXTENSION_IDS.excalidraw].grantedPermissions].sort(), [
     "fs.cloud.read",
     "fs.cloud.write",
   ]);
-  assert.equal(settings.extensions["image-viewer"].enabled, true);
-  assert.deepEqual(settings.extensions["image-viewer"].grantedPermissions, ["fs.cloud.read"]);
+  assert.equal(settings.extensions[EXTENSION_IDS.imageViewer].enabled, true);
+  assert.deepEqual(settings.extensions[EXTENSION_IDS.imageViewer].grantedPermissions, [
+    "fs.cloud.read",
+  ]);
   assert.deepEqual(settings.removedBundledExtensions, []);
   // 用户安装的包在 extensions/packages，数据在 extensions/data。Installed packages and data live side by side.
   assert.equal(
-    existsSync(join(config.userData, "extensions", "packages", "sample", "manifest.json")),
+    existsSync(
+      join(config.userData, "extensions", "packages", EXTENSION_IDS.sample, "manifest.json"),
+    ),
     true,
   );
-  assert.equal(existsSync(storage("text-editor")), true);
+  assert.equal(existsSync(storage(EXTENSION_IDS.markdown)), true);
   assert.equal(existsSync(join(config.userData, "extension-data")), false);
   await goToChat();
   pass(
@@ -572,7 +577,7 @@ async function bundledDefaults(): Promise<void> {
 }
 
 async function enableSample(): Promise<void> {
-  const dialogText = await enable("sample", "Sample");
+  const dialogText = await enable(EXTENSION_IDS.sample, "Sample");
   for (const permission of [
     "context.user",
     "context.project",
@@ -592,31 +597,31 @@ async function enableSample(): Promise<void> {
     dialogText.includes(new URL(config.testServiceUrl).host),
     "approval lists the host permission",
   );
-  await untilStatus("sample", "Active");
+  await untilStatus(EXTENSION_IDS.sample, "Active");
   const settings = await readJson<{
     extensions: Record<string, { enabled: boolean; grantedPermissions: string[] }>;
   }>(join(config.userData, "settings.json"));
-  assert.equal(settings.extensions.sample.enabled, true);
-  assert.equal(settings.extensions.sample.grantedPermissions.length, 11);
+  assert.equal(settings.extensions[EXTENSION_IDS.sample].enabled, true);
+  assert.equal(settings.extensions[EXTENSION_IDS.sample].grantedPermissions.length, 11);
   await goToChat();
   await untilHost(
-    `Boolean(document.querySelector('.agw-ribbon [data-entry-id="sample:open"]'))`,
+    `Boolean(document.querySelector('.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]'))`,
     "sample Ribbon items",
   );
   pass("enabling sample asks for approval, records it, and adds its Ribbon items");
 }
 
 async function processIsolation(): Promise<void> {
-  await enable("react-ts", "React TS");
-  await untilStatus("react-ts", "Active");
+  await enable(EXTENSION_IDS.reactTs, "React TS");
+  await untilStatus(EXTENSION_IDS.reactTs, "Active");
   await goToChat();
-  await clickHost('.agw-ribbon [data-entry-id="sample:open"]');
-  await clickHost('.agw-ribbon [data-entry-id="sample:list"]');
-  const background = await untilFrame("sample", "background");
-  const main = await untilFrame("sample", "mainView");
-  const sidebar = await untilFrame("sample", "sidebarView");
-  await openMainView("react-ts:app");
-  const react = await untilFrame("react-ts", "mainView");
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]`);
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:list"]`);
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
+  const sidebar = await untilFrame(EXTENSION_IDS.sample, "sidebarView");
+  await openMainView(`${EXTENSION_IDS.reactTs}:app`);
+  const react = await untilFrame(EXTENSION_IDS.reactTs, "mainView");
   const hostPid = host().getOSProcessId();
   for (const frame of [background, main, sidebar, react]) {
     assert.notEqual(frame.view.webContents.getOSProcessId(), hostPid);
@@ -628,10 +633,13 @@ async function processIsolation(): Promise<void> {
       frame.view.webContents.getOSProcessId(),
       react.view.webContents.getOSProcessId(),
     );
-    assert.equal(frame.view.webContents.session.getStoragePath(), storagePath("sample"));
+    assert.equal(
+      frame.view.webContents.session.getStoragePath(),
+      storagePath(EXTENSION_IDS.sample),
+    );
   }
-  assert.equal(react.view.webContents.session.getStoragePath(), storagePath("react-ts"));
-  await openMainView("sample:app");
+  assert.equal(react.view.webContents.session.getStoragePath(), storagePath(EXTENSION_IDS.reactTs));
+  await openMainView(`${EXTENSION_IDS.sample}:app`);
   pass("extension frames run in their own processes and partitions");
 }
 
@@ -661,10 +669,10 @@ async function assertBoundsMatch(
 
 async function viewsAndLayout(): Promise<void> {
   await goToChat();
-  const main = await untilFrame("sample", "mainView");
-  const sidebar = await untilFrame("sample", "sidebarView");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
+  const sidebar = await untilFrame(EXTENSION_IDS.sample, "sidebarView");
   const header = await evalHost<string>(
-    `document.querySelector('[data-extension-view="sample:app"] .agw-extension-view-header').textContent`,
+    `document.querySelector('[data-extension-view="${EXTENSION_IDS.sample}:app"] .agw-extension-view-header').textContent`,
   );
   assert.match(header, /Sample/u);
   await assertBoundsMatch(main, "initial main view");
@@ -693,8 +701,8 @@ async function viewsAndLayout(): Promise<void> {
   const instance = await evalFrame<string>(main, "window.instance");
   await api(main, `await api.workspace.openMainView("agw.chat");`);
   await until(() => !main.view.getVisible(), "the retained view to hide");
-  assert.equal(frameOf("sample", "mainView")?.frameId, main.frameId);
-  await clickHost('.agw-ribbon [data-entry-id="sample:open"]');
+  assert.equal(frameOf(EXTENSION_IDS.sample, "mainView")?.frameId, main.frameId);
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]`);
   await until(() => main.view.getVisible(), "the retained view to show");
   assert.equal(await evalFrame<string>(main, "window.instance"), instance);
   pass("views follow their slots and retained main views keep their page state");
@@ -702,8 +710,8 @@ async function viewsAndLayout(): Promise<void> {
 
 async function hostOverlays(): Promise<void> {
   await goToChat();
-  const main = await untilFrame("sample", "mainView");
-  const sidebar = await untilFrame("sample", "sidebarView");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
+  const sidebar = await untilFrame(EXTENSION_IDS.sample, "sidebarView");
   await until(() => main.view.getVisible(), "the main view");
 
   await openMenu("button.agw-task-button");
@@ -724,7 +732,10 @@ async function hostOverlays(): Promise<void> {
   // 对话设置对话框位于对话列表的标题中。The chat settings dialog sits in the conversation list header.
   assert.equal(sidebar.view.getVisible(), true);
   await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.conversations"]');
-  await until(() => !frameOf("sample", "sidebarView"), "the sample sidebar view to close");
+  await until(
+    () => !frameOf(EXTENSION_IDS.sample, "sidebarView"),
+    "the sample sidebar view to close",
+  );
   await clickHost('button[aria-label="Open chat settings"]');
   await untilHost(
     `Boolean(document.querySelector('[data-slot="dialog-content"]'))`,
@@ -821,8 +832,8 @@ async function leaveChatRoute(): Promise<void> {
 }
 
 async function contextAndFiles(): Promise<void> {
-  await clickHost('.agw-ribbon [data-entry-id="sample:open"]');
-  const main = await untilFrame("sample", "mainView");
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]`);
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   type Context = {
     project: { id: string; name: string; directories: { uri: string }[] } | null;
     target: { type: string; id: string; name: string; description: string | null } | null;
@@ -931,7 +942,7 @@ async function contextAndFiles(): Promise<void> {
     return true;
   })()`);
   await clickText("Read with Sample · Sample", OPEN_CONTEXT_MENU);
-  const explorerFile = join(storage("sample"), "explorer-read.json");
+  const explorerFile = join(storage(EXTENSION_IDS.sample), "explorer-read.json");
   const explorerRead = await until(
     async () => (existsSync(explorerFile) ? readJson<{ text: string }>(explorerFile) : null),
     "the explorer action to read the file",
@@ -944,7 +955,7 @@ async function contextAndFiles(): Promise<void> {
 }
 
 async function execution(): Promise<void> {
-  const main = await untilFrame("sample", "mainView");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   const result = await api<{ conversationId: string; text: string }>(
     main,
     `
@@ -997,8 +1008,8 @@ async function execution(): Promise<void> {
 }
 
 async function a2aAndHttp(): Promise<void> {
-  await openMainView("sample:app");
-  const main = await untilFrame("sample", "mainView");
+  await openMainView(`${EXTENSION_IDS.sample}:app`);
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   const agents = await api<{ name: string }[]>(main, "return api.a2a.listAgents();");
   assert.ok(agents.some((agent) => agent.name === config.agentName));
   const reply = await api<{ task?: { status: { state: string } } }>(
@@ -1046,7 +1057,7 @@ async function chatContributions(): Promise<void> {
     return true;
   })()`);
   await clickText("Open in Sample · Sample", OPEN_MENU);
-  const main = await untilFrame("sample", "mainView");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   const received = await until(
     () =>
       evalFrame<string | null>(
@@ -1117,7 +1128,7 @@ async function copyCode(language: string): Promise<string> {
 }
 
 async function chatMarkdown(): Promise<void> {
-  const main = await untilFrame("sample", "mainView");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   const result = await api<{ conversationId: string; text: string }>(
     main,
     `
@@ -1290,7 +1301,7 @@ async function untilAsideTotal(total: number, label: string): Promise<void> {
  * details baseline, adds the pushed usage, and once the turn settles also the summary usage that was never pushed.
  */
 async function chatObserve(): Promise<void> {
-  const main = await untilFrame("sample", "mainView");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   await api(
     main,
     `
@@ -1417,7 +1428,7 @@ async function chatObserve(): Promise<void> {
   );
   assert.match(summaryTurn.text, /Echo: summary hello/u);
   const fromSample = (event: ObservedEvent) =>
-    event.origin.kind === "extension" && event.origin.extensionId === "sample";
+    event.origin.kind === "extension" && event.origin.extensionId === EXTENSION_IDS.sample;
   assert.ok(
     (await observed("requests")).some(
       (event) => fromSample(event) && event.scope.conversationId === conversationId,
@@ -1551,13 +1562,13 @@ async function hostConversationReadOnly(): Promise<void> {
   // chatObserve() 中宿主已在 sample 创建的对话里继续聊天。The host already continued sample's conversation in chatObserve().
   assert.equal(
     conversations.find((item) => item.title === "integration hello")?.extensionId,
-    "sample",
+    EXTENSION_IDS.sample,
   );
   pass(
     "the list reports the host as the creator of its conversation and keeps sample's after the host continued it",
   );
 
-  const main = await untilFrame("sample", "mainView");
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   assert.deepEqual(await writeProbe(main, conversationId, true), {
     readOnly: true,
     codes: READ_ONLY_CODES,
@@ -1585,11 +1596,11 @@ async function hostConversationReadOnly(): Promise<void> {
 }
 
 async function undeclaredExtension(): Promise<void> {
-  await enable("undeclared", "Undeclared");
-  await untilStatus("undeclared", "Active");
+  await enable(EXTENSION_IDS.undeclared, "Undeclared");
+  await untilStatus(EXTENSION_IDS.undeclared, "Active");
   await goToChat();
-  await openMainView("undeclared:app");
-  const page = await untilFrame("undeclared", "mainView");
+  await openMainView(`${EXTENSION_IDS.undeclared}:app`);
+  const page = await untilFrame(EXTENSION_IDS.undeclared, "mainView");
   assert.equal(
     await evalFrame(page, `fetch("https://example.com/").then(() => "loaded", () => "blocked")`),
     "blocked",
@@ -1617,19 +1628,22 @@ async function undeclaredExtension(): Promise<void> {
   assert.equal(
     await evalFrame(
       page,
-      `fetch("agw-extension://sample/index.html").then(() => "loaded", () => "blocked")`,
+      `fetch("agw-extension://${EXTENSION_IDS.sample}/index.html").then(() => "loaded", () => "blocked")`,
     ),
     "blocked",
   );
   // 离开对话页面会关闭视图 frame，所以页面相关的检查在前。Leaving the chat page closes view frames, so page checks come first.
   await goToExtensions();
-  await clickText("Details", `document.querySelector('[data-extension-id="undeclared"]')`);
+  await clickText(
+    "Details",
+    `document.querySelector('[data-extension-id="${EXTENSION_IDS.undeclared}"]')`,
+  );
   await untilHost(
-    `document.querySelector('[data-extension-id="undeclared"] [data-testid="blocked-requests"]')?.textContent.includes(${JSON.stringify(longUrl)})`,
+    `document.querySelector('[data-extension-id="${EXTENSION_IDS.undeclared}"] [data-testid="blocked-requests"]')?.textContent.includes(${JSON.stringify(longUrl)})`,
     "the blocked request on the Extensions page",
   );
   const overflow = await evalHost<{ list: number[]; card: number[] }>(`(() => {
-    const card = document.querySelector('[data-extension-id="undeclared"]');
+    const card = document.querySelector('[data-extension-id="${EXTENSION_IDS.undeclared}"]');
     const list = card.querySelector('[data-testid="blocked-requests"]');
     return { list: [list.scrollWidth, list.clientWidth], card: [card.scrollWidth, card.clientWidth] };
   })()`);
@@ -1646,31 +1660,41 @@ async function undeclaredExtension(): Promise<void> {
 }
 
 async function hookOrderAndReload(): Promise<void> {
-  assert.deepEqual(await readJson<string[]>(join(storage("sample"), "hooks.json")), [
+  assert.deepEqual(await readJson<string[]>(join(storage(EXTENSION_IDS.sample), "hooks.json")), [
     "onInstalled:install:null",
     "activate",
   ]);
-  await reloadExtension("sample");
-  await untilStatus("sample", "Active");
+  await reloadExtension(EXTENSION_IDS.sample);
+  await untilStatus(EXTENSION_IDS.sample, "Active");
   await until(
-    async () => (await readJson<string[]>(join(storage("sample"), "hooks.json"))).length === 4,
+    async () =>
+      (await readJson<string[]>(join(storage(EXTENSION_IDS.sample), "hooks.json"))).length === 4,
     "hooks after reload",
   );
-  assert.deepEqual(await readJson<string[]>(join(storage("sample"), "hooks.json")), [
+  assert.deepEqual(await readJson<string[]>(join(storage(EXTENSION_IDS.sample), "hooks.json")), [
     "onInstalled:install:null",
     "activate",
     "deactivate",
     "activate",
   ]);
-  assert.equal(frames("sample").filter((frame) => frame.kind === "background").length, 1);
+  assert.equal(
+    frames(EXTENSION_IDS.sample).filter((frame) => frame.kind === "background").length,
+    1,
+  );
   await goToChat();
   pass("hooks run in order and Reload does not call onInstalled again");
 
   // Extensions 页面的 Inspect 为 background 打开可用的 DevTools。Inspect on the Extensions page opens working DevTools.
   await goToExtensions();
-  await clickText("Details", `document.querySelector('[data-extension-id="sample"]')`);
-  await clickText("Inspect", `document.querySelector('[data-extension-id="sample"]')`);
-  const background = await untilFrame("sample", "background");
+  await clickText(
+    "Details",
+    `document.querySelector('[data-extension-id="${EXTENSION_IDS.sample}"]')`,
+  );
+  await clickText(
+    "Inspect",
+    `document.querySelector('[data-extension-id="${EXTENSION_IDS.sample}"]')`,
+  );
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
   const contents = background.view.webContents;
   await until(
     async () =>
@@ -1688,57 +1712,61 @@ async function hookOrderAndReload(): Promise<void> {
 }
 
 async function failureModes(): Promise<void> {
-  await enable("no-background", "No Background");
-  await untilStatus("no-background", "Active");
+  await enable(EXTENSION_IDS.noBackground, "No Background");
+  await untilStatus(EXTENSION_IDS.noBackground, "Active");
   await goToChat();
-  await openMainView("no-background:app");
-  await untilFrame("no-background", "mainView");
+  await openMainView(`${EXTENSION_IDS.noBackground}:app`);
+  await untilFrame(EXTENSION_IDS.noBackground, "mainView");
   pass("an extension without background activates directly and opens its view");
 
-  await enable("broken", "Broken");
-  await untilStatus("broken", "Failed");
+  await enable(EXTENSION_IDS.broken, "Broken");
+  await untilStatus(EXTENSION_IDS.broken, "Failed");
   assert.match(
-    await evalHost<string>(`document.querySelector('[data-extension-id="broken"]').textContent`),
+    await evalHost<string>(
+      `document.querySelector('[data-extension-id="${EXTENSION_IDS.broken}"]').textContent`,
+    ),
     /broken on purpose/u,
   );
-  assert.equal(await extensionStatus("sample"), "Active");
+  assert.equal(await extensionStatus(EXTENSION_IDS.sample), "Active");
   pass("a failing activate marks only that extension as failed");
 
   const neverRequests = async () =>
     (await serviceState()).requests.filter((line) => line === "GET /never").length;
   const requestsBefore = await neverRequests();
-  await enable("slow", "Slow");
-  await untilStatus("slow", "Activating");
+  await enable(EXTENSION_IDS.slow, "Slow");
+  await untilStatus(EXTENSION_IDS.slow, "Activating");
   // activate 发出请求后再停用，才能检查请求被关闭。Disable after activate sent its request, so its closing can be checked.
   await until(async () => (await neverRequests()) > requestsBefore, "the pending request");
   const neverClosed = (await serviceState()).neverClosed;
-  await disable("slow");
-  await untilStatus("slow", "Disabled", 3000);
-  assert.equal(frames("slow").length, 0);
+  await disable(EXTENSION_IDS.slow);
+  await untilStatus(EXTENSION_IDS.slow, "Disabled", 3000);
+  assert.equal(frames(EXTENSION_IDS.slow).length, 0);
   await until(
     async () => (await serviceState()).neverClosed > neverClosed,
     "the pending request connection to close",
   );
-  await enable("slow", "Slow");
-  await untilStatus("slow", "Failed", 25_000);
+  await enable(EXTENSION_IDS.slow, "Slow");
+  await untilStatus(EXTENSION_IDS.slow, "Failed", 25_000);
   assert.match(
-    await evalHost<string>(`document.querySelector('[data-extension-id="slow"]').textContent`),
+    await evalHost<string>(
+      `document.querySelector('[data-extension-id="${EXTENSION_IDS.slow}"]').textContent`,
+    ),
     /ACTIVATION_TIMEOUT/u,
   );
-  await disable("slow");
+  await disable(EXTENSION_IDS.slow);
   pass("disabling during activation finishes at once, and a stuck activate times out");
 
-  await enable("stuck-deactivate", "Stuck Deactivate");
-  await untilStatus("stuck-deactivate", "Active");
+  await enable(EXTENSION_IDS.stuckDeactivate, "Stuck Deactivate");
+  await untilStatus(EXTENSION_IDS.stuckDeactivate, "Active");
   await goToChat();
-  await openMainView("stuck-deactivate:app");
-  await untilFrame("stuck-deactivate", "mainView");
+  await openMainView(`${EXTENSION_IDS.stuckDeactivate}:app`);
+  await untilFrame(EXTENSION_IDS.stuckDeactivate, "mainView");
   const started = Date.now();
-  await disable("stuck-deactivate");
-  await untilStatus("stuck-deactivate", "Disabled", 10_000);
+  await disable(EXTENSION_IDS.stuckDeactivate);
+  await untilStatus(EXTENSION_IDS.stuckDeactivate, "Disabled", 10_000);
   assert.ok(Date.now() - started >= 4500, "deactivate waited for its timeout");
-  assert.ok(existsSync(join(storage("stuck-deactivate"), "view-unload.json")));
-  assert.equal(frames("stuck-deactivate").length, 0);
+  assert.ok(existsSync(join(storage(EXTENSION_IDS.stuckDeactivate), "view-unload.json")));
+  assert.equal(frames(EXTENSION_IDS.stuckDeactivate).length, 0);
   pass("a stuck deactivate ends after its timeout, after the view unloaded");
 }
 
@@ -1748,8 +1776,8 @@ async function failureModes(): Promise<void> {
  */
 async function otherExtensionReadOnly(): Promise<void> {
   await goToChat();
-  await openMainView("no-background:app");
-  const other = await untilFrame("no-background", "mainView");
+  await openMainView(`${EXTENSION_IDS.noBackground}:app`);
+  const other = await untilFrame(EXTENSION_IDS.noBackground, "mainView");
   const samples = (await listConversations()).find((item) => item.title === "integration hello");
   assert.ok(samples, "sample's conversation in the list");
   assert.deepEqual(await writeProbe(other, samples.conversationId), {
@@ -1780,9 +1808,9 @@ async function otherExtensionReadOnly(): Promise<void> {
   const details = await hostApi<{ extensionId: string }>(
     `/api/projects/${config.projectId}/conversations/${created.conversationId}`,
   );
-  assert.equal(details.extensionId, "no-background");
+  assert.equal(details.extensionId, EXTENSION_IDS.noBackground);
 
-  const sample = await untilFrame("sample", "background");
+  const sample = await untilFrame(EXTENSION_IDS.sample, "background");
   assert.deepEqual(await writeProbe(sample, created.conversationId), {
     readOnly: true,
     codes: READ_ONLY_CODES,
@@ -1794,20 +1822,22 @@ async function otherExtensionReadOnly(): Promise<void> {
 }
 
 async function busyExtension(): Promise<void> {
-  await enable("busy", "Busy");
-  await untilStatus("busy", "Active");
+  await enable(EXTENSION_IDS.busy, "Busy");
+  await untilStatus(EXTENSION_IDS.busy, "Active");
   await goToChat();
-  const background = await untilFrame("busy", "background");
+  const background = await untilFrame(EXTENSION_IDS.busy, "background");
   const pid = background.view.webContents.getOSProcessId();
   await openMenu('button[aria-label="Add"]');
   await clickText("Spin forever · Busy", OPEN_MENU);
   await goToExtensions();
-  await untilStatus("busy", "Failed", 30_000);
+  await untilStatus(EXTENSION_IDS.busy, "Failed", 30_000);
   assert.match(
-    await evalHost<string>(`document.querySelector('[data-extension-id="busy"]').textContent`),
+    await evalHost<string>(
+      `document.querySelector('[data-extension-id="${EXTENSION_IDS.busy}"]').textContent`,
+    ),
     /UNRESPONSIVE/u,
   );
-  assert.equal(frames("busy").length, 0);
+  assert.equal(frames(EXTENSION_IDS.busy).length, 0);
   await until(
     () => !app.getAppMetrics().some((metric) => metric.pid === pid),
     "the hung process to exit",
@@ -1815,89 +1845,92 @@ async function busyExtension(): Promise<void> {
   const started = Date.now();
   await evalHost("1 + 1");
   assert.ok(Date.now() - started < 1000, "the host stays responsive");
-  assert.equal(await extensionStatus("sample"), "Active");
+  assert.equal(await extensionStatus(EXTENSION_IDS.sample), "Active");
   pass("a hung background is ended and only its extension fails");
 
-  await reloadExtension("busy");
-  await untilStatus("busy", "Active");
+  await reloadExtension(EXTENSION_IDS.busy);
+  await untilStatus(EXTENSION_IDS.busy, "Active");
   await goToChat();
-  await openMainView("busy:app");
-  const view = await untilFrame("busy", "mainView");
-  const busyBackground = await untilFrame("busy", "background");
+  await openMainView(`${EXTENSION_IDS.busy}:app`);
+  const view = await untilFrame(EXTENSION_IDS.busy, "mainView");
+  const busyBackground = await untilFrame(EXTENSION_IDS.busy, "background");
   const samePid =
     view.view.webContents.getOSProcessId() === busyBackground.view.webContents.getOSProcessId();
   void evalFrame(view, "document.querySelector('#spin').click()").catch(() => undefined);
   if (!samePid) {
     await untilHost(
-      `[...document.querySelectorAll('[data-extension-view="busy:app"] button')].some((button) => button.textContent.includes("Reload view"))`,
+      `[...document.querySelectorAll('[data-extension-view="${EXTENSION_IDS.busy}:app"] button')].some((button) => button.textContent.includes("Reload view"))`,
       "the view error panel",
       30_000,
     );
-    assert.ok(frameOf("busy", "background"), "background keeps running");
+    assert.ok(frameOf(EXTENSION_IDS.busy, "background"), "background keeps running");
     await goToExtensions();
-    assert.equal(await extensionStatus("busy"), "Active");
+    assert.equal(await extensionStatus(EXTENSION_IDS.busy), "Active");
     await goToChat();
-    await clickText("Reload view", `document.querySelector('[data-extension-view="busy:app"]')`);
-    await untilFrame("busy", "mainView");
+    await clickText(
+      "Reload view",
+      `document.querySelector('[data-extension-view="${EXTENSION_IDS.busy}:app"]')`,
+    );
+    await untilFrame(EXTENSION_IDS.busy, "mainView");
   } else {
     await untilHost(
-      `[...document.querySelectorAll('[data-extension-view="busy:app"] button')].some((button) => button.textContent.includes("Reload extension"))`,
+      `[...document.querySelectorAll('[data-extension-view="${EXTENSION_IDS.busy}:app"] button')].some((button) => button.textContent.includes("Reload extension"))`,
       "the extension error view",
       30_000,
     );
     await clickText(
       "Reload extension",
-      `document.querySelector('[data-extension-view="busy:app"]')`,
+      `document.querySelector('[data-extension-view="${EXTENSION_IDS.busy}:app"]')`,
     );
     await goToExtensions();
-    await untilStatus("busy", "Active");
+    await untilStatus(EXTENSION_IDS.busy, "Active");
     await goToChat();
-    await openMainView("busy:app");
-    await untilFrame("busy", "mainView");
+    await openMainView(`${EXTENSION_IDS.busy}:app`);
+    await untilFrame(EXTENSION_IDS.busy, "mainView");
   }
-  assert.ok(frameOf("sample", "background"), "sample keeps running");
+  assert.ok(frameOf(EXTENSION_IDS.sample, "background"), "sample keeps running");
   pass(
     `a hung view is handled by its process (${samePid ? "shared with background" : "separate"})`,
   );
 
-  const crashed = await untilFrame("busy", "mainView");
+  const crashed = await untilFrame(EXTENSION_IDS.busy, "mainView");
   crashed.view.webContents.forcefullyCrashRenderer();
   await untilHost(
-    `[...document.querySelectorAll('[data-extension-view="busy:app"] button')].some((button) => /Reload (view|extension)/.test(button.textContent))`,
+    `[...document.querySelectorAll('[data-extension-view="${EXTENSION_IDS.busy}:app"] button')].some((button) => /Reload (view|extension)/.test(button.textContent))`,
     "the crash error panel",
     30_000,
   );
   pass("a crashed view shows its error panel");
-  await disable("busy");
+  await disable(EXTENSION_IDS.busy);
   await goToChat();
 }
 
 async function badView(): Promise<void> {
-  await enable("bad-view", "Bad View");
-  await untilStatus("bad-view", "Active");
+  await enable(EXTENSION_IDS.badView, "Bad View");
+  await untilStatus(EXTENSION_IDS.badView, "Active");
   await goToChat();
-  await openMainView("bad-view:app");
-  const frame = await until(() => frameOf("bad-view", "mainView"), "the bad view frame");
+  await openMainView(`${EXTENSION_IDS.badView}:app`);
+  const frame = await until(() => frameOf(EXTENSION_IDS.badView, "mainView"), "the bad view frame");
   const contents = frame.view.webContents;
   await untilHost(
-    `[...document.querySelectorAll('[data-extension-view="bad-view:app"] button')].some((button) => button.textContent.includes("Reload view"))`,
+    `[...document.querySelectorAll('[data-extension-view="${EXTENSION_IDS.badView}:app"] button')].some((button) => button.textContent.includes("Reload view"))`,
     "the handshake error panel",
     25_000,
   );
   assert.ok(contents.isDestroyed());
   await goToExtensions();
-  assert.equal(await extensionStatus("bad-view"), "Active");
-  assert.ok(frameOf("bad-view", "background"));
-  await disable("bad-view");
+  assert.equal(await extensionStatus(EXTENSION_IDS.badView), "Active");
+  assert.ok(frameOf(EXTENSION_IDS.badView, "background"));
+  await disable(EXTENSION_IDS.badView);
   await goToChat();
   pass("a view that never connects shows an error panel while its extension stays active");
 }
 
 async function closeReasons(): Promise<void> {
   await goToChat();
-  await openMainView("sample:app");
-  const main = await untilFrame("sample", "mainView");
-  const background = await untilFrame("sample", "background");
+  await openMainView(`${EXTENSION_IDS.sample}:app`);
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
   const hubBefore = (await serviceState()).hub.hubOpen;
   await api(main, `await window.openTrackedSession(${JSON.stringify(config.projectId)});`);
   await api(background, `await window.openTrackedSession(${JSON.stringify(config.projectId)});`);
@@ -1905,8 +1938,8 @@ async function closeReasons(): Promise<void> {
     async () => (await serviceState()).hub.hubOpen >= hubBefore + 2,
     "two session connections",
   );
-  await disable("sample");
-  await untilStatus("sample", "Disabled", 10_000);
+  await disable(EXTENSION_IDS.sample);
+  await untilStatus(EXTENSION_IDS.sample, "Disabled", 10_000);
   // 停用只能在 Extensions 页面进行；离开对话路由时视图先按 frame-unloaded 关闭，background 随后按 deactivated 关闭。
   // Disabling happens on the Extensions page: leaving the chat route closes the view with frame-unloaded first,
   // then deactivation closes the background with deactivated.
@@ -1931,11 +1964,11 @@ async function closeReasons(): Promise<void> {
     "closing frames end their sessions before the hooks run and refuse new sessions and watchers",
   );
 
-  await enable("sample", "Sample");
-  await untilStatus("sample", "Active");
+  await enable(EXTENSION_IDS.sample, "Sample");
+  await untilStatus(EXTENSION_IDS.sample, "Active");
   await goToChat();
-  await clickHost('.agw-ribbon [data-entry-id="sample:list"]');
-  const sidebar = await untilFrame("sample", "sidebarView");
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:list"]`);
+  const sidebar = await untilFrame(EXTENSION_IDS.sample, "sidebarView");
   const sidebarHubBefore = (await serviceState()).hub.hubOpen;
   await api(sidebar, `await window.openTrackedSession(${JSON.stringify(config.projectId)});`);
   await until(
@@ -1949,7 +1982,7 @@ async function closeReasons(): Promise<void> {
   );
   assert.equal(runtime().frameResources(sidebar.frameId).watchers, 1);
   await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.conversations"]');
-  await until(() => !frameOf("sample", "sidebarView"), "the sidebar view to close");
+  await until(() => !frameOf(EXTENSION_IDS.sample, "sidebarView"), "the sidebar view to close");
   const record = await readCloseRecord("sidebar-close.json");
   assert.deepEqual(
     record.closes.map((close) => close.reason),
@@ -1965,8 +1998,8 @@ async function closeReasons(): Promise<void> {
 
   await fetch(`${config.testServiceUrl}/__test/delay-hub?enabled=true`);
   const held = (await serviceState()).hub;
-  await clickHost('.agw-ribbon [data-entry-id="sample:list"]');
-  const pendingSidebar = await untilFrame("sample", "sidebarView");
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:list"]`);
+  const pendingSidebar = await untilFrame(EXTENSION_IDS.sample, "sidebarView");
   await api(
     pendingSidebar,
     `void window.openTrackedSession(${JSON.stringify(config.projectId)}).catch(() => undefined); return true;`,
@@ -2000,7 +2033,7 @@ type CloseRecord = {
 };
 
 function readCloseRecord(file: string): Promise<CloseRecord> {
-  return readJson<CloseRecord>(join(storage("sample"), file));
+  return readJson<CloseRecord>(join(storage(EXTENSION_IDS.sample), file));
 }
 
 /** 关闭期间（onClose 与关闭钩子中）新建会话与监听都被拒绝。New sessions and watchers are refused while closing. */
@@ -2018,10 +2051,10 @@ function assertRefusedWhileClosing(record: CloseRecord, file: string): void {
 
 async function otherStacks(): Promise<void> {
   for (const [id, name, text] of [
-    ["react-ts", "React TS", "react-ts ok"],
-    ["wasm", "WASM", "42"],
-    ["vue", "Vue", "vue ok"],
-    ["blazor", "Blazor", "blazor ok"],
+    [EXTENSION_IDS.reactTs, "React TS", "react-ts ok"],
+    [EXTENSION_IDS.wasm, "WASM", "42"],
+    [EXTENSION_IDS.vue, "Vue", "vue ok"],
+    [EXTENSION_IDS.blazor, "Blazor", "blazor ok"],
   ] as const) {
     await goToExtensions();
     if ((await extensionStatus(id)) !== "Active") {
@@ -2095,16 +2128,16 @@ async function zipInstall(): Promise<void> {
     );
     await answerConfirmation("Replace");
   });
-  await untilStatus("sample", "Disabled");
+  await untilStatus(EXTENSION_IDS.sample, "Disabled");
   await untilHost(
-    `document.querySelector('[data-extension-id="sample"]').textContent.includes("Permission approval required")`,
+    `document.querySelector('[data-extension-id="${EXTENSION_IDS.sample}"]').textContent.includes("Permission approval required")`,
     "the approval badge",
   );
-  await enable("sample", "Sample");
-  await untilStatus("sample", "Active");
+  await enable(EXTENSION_IDS.sample, "Sample");
+  await untilStatus(EXTENSION_IDS.sample, "Active");
   await until(
     async () =>
-      (await readJson<string[]>(join(storage("sample"), "hooks.json"))).includes(
+      (await readJson<string[]>(join(storage(EXTENSION_IDS.sample), "hooks.json"))).includes(
         "onInstalled:update:1.0.0",
       ),
     "onInstalled(update)",
@@ -2116,7 +2149,7 @@ async function zipInstall(): Promise<void> {
 
 async function connectionChanges(): Promise<void> {
   type Entry = { project: { id: string } | null; conversation: { id: string } | null };
-  const logFile = join(storage("sample"), "context-log.json");
+  const logFile = join(storage(EXTENSION_IDS.sample), "context-log.json");
   const log = async () => (existsSync(logFile) ? readJson<Entry[]>(logFile) : []);
   // 清空次数：project 从有值变为 null 的次数。Clears: transitions of project from a value to null.
   const clears = (entries: Entry[]) =>
@@ -2151,7 +2184,7 @@ async function connectionChanges(): Promise<void> {
     url: config.remoteProfile.baseUrl.replace("127.0.0.1", "localhost"),
   });
   await editProfile("the token change", { token: config.secondToken });
-  const background = await untilFrame("sample", "background");
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
   const projects = await api<{ id: string }[]>(background, "return api.context.listProjects();");
   assert.ok(projects.some((project) => project.id === config.projectId));
   await goToChat();
@@ -2220,9 +2253,10 @@ function sourceIncludes(text: string): string {
 
 async function filesView(): Promise<void> {
   await openFileInTree("readme.md");
-  // Markdown 文件默认由 Text Editor 的 Mixed 打开，切换到 Source 显示原文。Markdown opens in Text Editor's Mixed; Source shows the text.
+  // Markdown 文件默认由 Markdown extension 的 Mixed 打开，切换到 Source 显示原文。Markdown opens in the Markdown
+  // extension's Mixed; Source shows the text.
   await untilHost(
-    `${viewerTab("text-editor:markdown")}?.getAttribute("aria-selected") === "true"`,
+    `${viewerTab(`${EXTENSION_IDS.markdown}:markdown`)}?.getAttribute("aria-selected") === "true"`,
     "the Mixed tab",
   );
   await clickHost('[data-file-viewer-tab="source"]');
@@ -2344,7 +2378,7 @@ async function monacoDiffAndComments(): Promise<void> {
   }
 }
 
-const MARKDOWN_VIEWER = "text-editor:preview";
+const MARKDOWN_VIEWER = `${EXTENSION_IDS.markdown}:preview`;
 
 /** 文件标题行的 "More" 按钮。The file title row's "More" button. */
 const MORE_BUTTON = '.agw-main-workspace button[aria-label="More"]';
@@ -2426,7 +2460,7 @@ async function selectPreview(): Promise<void> {
 async function textEditorPreview(): Promise<void> {
   await openFileInTree("guide.md");
   await selectPreview();
-  const firstPreview = await untilViewerFrame("text-editor", "preview");
+  const firstPreview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   const rendered = `(() => {
     const article = document.querySelector("article.markdown-body");
     const image = article?.querySelector('img[alt="Logo"]');
@@ -2437,7 +2471,7 @@ async function textEditorPreview(): Promise<void> {
   })()`;
   await until(() => evalFrame<boolean>(firstPreview, rendered), "the rendered Markdown");
   pass(
-    "Markdown files open in the Text Editor Preview with headings, tables, highlighted code, and project images",
+    "Markdown files open in the Markdown extension's Preview with headings, tables, highlighted code, and project images",
   );
 
   const structure = await evalFrame<Record<string, unknown>>(
@@ -2466,7 +2500,9 @@ async function textEditorPreview(): Promise<void> {
     boldElements: 0,
     rawHtmlText: true,
   });
-  pass("the Text Editor Preview renders heading ids, footnotes, task lists, and raw HTML as text");
+  pass(
+    "the Markdown extension's Preview renders heading ids, footnotes, task lists, and raw HTML as text",
+  );
 
   // 文件标题行右侧只有切换按钮与 "More"；"More" 菜单中的 "Reload view" 用新的 frame 重新加载查看器。
   // The file title row's right side holds only the switch and "More"; "Reload view" in the "More" menu reloads the
@@ -2477,7 +2513,7 @@ async function textEditorPreview(): Promise<void> {
   ]);
   await chooseFileHeaderEntry("Reload view");
   const preview = await until(() => {
-    const frame = viewerFrameOf("text-editor", "preview");
+    const frame = viewerFrameOf(EXTENSION_IDS.markdown, "preview");
     return frame &&
       frame.frameId !== firstPreview.frameId &&
       runtime().registry.get(frame.frameId)?.pageId
@@ -2507,7 +2543,7 @@ async function textEditorPreview(): Promise<void> {
   );
   await openMenuAndWait(MORE_BUTTON);
   await untilHost(
-    `${MORE_MENU_INFO}?.includes("Preview") && ${MORE_MENU_INFO}.includes("Text Editor")`,
+    `${MORE_MENU_INFO}?.includes("Preview") && ${MORE_MENU_INFO}.includes("Markdown")`,
     "the viewer info in the More menu",
   );
   // 菜单盖住查看器时换成已画出的截图，页面不重新加载。Under the menu the viewer swaps to a painted snapshot without reloading.
@@ -2539,7 +2575,7 @@ async function textEditorPreview(): Promise<void> {
   await untilHost(sourceIncludes("[Notes](docs/notes.md)"), "the Markdown source");
   // 切换到 Source 时查看器隐藏并保留页面。Switching to Source hides the viewer and keeps its page.
   await until(() => !preview.view.getVisible(), "the preview to hide");
-  assert.equal(viewerFrameOf("text-editor", "preview")?.frameId, preview.frameId);
+  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "preview")?.frameId, preview.frameId);
   // 源码中的长行不撑宽主区；Source 时标题行仍有切换按钮与 "More"，都在窗口内可以点到。
   // Long source lines do not widen the main workspace; with Source the title row keeps the switch and "More", both
   // clickable inside the window.
@@ -2557,7 +2593,7 @@ async function textEditorPreview(): Promise<void> {
   // viewer selected before the switch, and its reload entry is "Reload file".
   await openMenuAndWait(MORE_BUTTON);
   await untilHost(
-    `${MORE_MENU_INFO}?.includes("Preview") && ${MORE_MENU_INFO}.includes("Text Editor") && [...${OPEN_MENU}.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "Reload file")`,
+    `${MORE_MENU_INFO}?.includes("Preview") && ${MORE_MENU_INFO}.includes("Markdown") && [...${OPEN_MENU}.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent === "Reload file")`,
     "the viewer info and Reload file with Source selected",
   );
   await pressEscape();
@@ -2583,7 +2619,7 @@ async function textEditorPreview(): Promise<void> {
     () => evalFrame<boolean>(preview, markdownText("project notes")),
     "the notes preview",
   );
-  assert.equal(viewerFrameOf("text-editor", "preview")?.frameId, preview.frameId);
+  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "preview")?.frameId, preview.frameId);
   pass(
     "Source shows the text, a relative link opens the linked file in the default viewer, and Preview then shows it in the same frame",
   );
@@ -2597,31 +2633,33 @@ async function textEditorPreview(): Promise<void> {
   );
   await expectConfirmation(
     "open-link",
-    ["https://example.com/docs", "Text Editor (text-editor)"],
+    ["https://example.com/docs", `Markdown (${EXTENSION_IDS.markdown})`],
     "the Open link confirmation",
   );
   await answerConfirmation("Cancel");
   await untilHost(shownFileIs("guide.md"), "the guide to stay open");
   pass("an external link asks in the separate confirmation window before opening the browser");
 
-  await disable("text-editor");
-  await untilStatus("text-editor", "Disabled", 10_000);
-  assert.equal(frames("text-editor").length, 0);
+  await disable(EXTENSION_IDS.markdown);
+  await untilStatus(EXTENSION_IDS.markdown, "Disabled", 10_000);
+  assert.equal(frames(EXTENSION_IDS.markdown).length, 0);
   await openFileInTree("guide.md");
   await untilHost(
     `!document.querySelector('[data-file-viewer-tab]') && ${sourceIncludes("[Notes](docs/notes.md)")}`,
     "the Markdown source without viewers",
   );
-  await enable("text-editor", "Text Editor");
-  await untilStatus("text-editor", "Active");
+  await enable(EXTENSION_IDS.markdown, "Markdown");
+  await untilStatus(EXTENSION_IDS.markdown, "Active");
   await openFileInTree("readme.md");
   await selectPreview();
-  const enabled = await untilViewerFrame("text-editor", "preview");
+  const enabled = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   await until(() => evalFrame<boolean>(enabled, markdownText("hello cloud")), "the readme preview");
-  pass("disabling Text Editor leaves only the source, and enabling it again restores the preview");
+  pass(
+    "disabling the Markdown extension leaves only the source, and enabling it again restores the preview",
+  );
 }
 
-const EXCALIDRAW_VIEWER = "excalidraw:editor";
+const EXCALIDRAW_VIEWER = `${EXTENSION_IDS.excalidraw}:editor`;
 // 测试写到磁盘上的 Excalidraw 场景，元素的其余字段由 restore 补全。A scene the test writes to disk; restore fills the
 // other element fields.
 const DIAGRAM_ON_DISK = {
@@ -2693,7 +2731,7 @@ async function excalidrawEditor(): Promise<void> {
     `${viewerTab(EXCALIDRAW_VIEWER)}?.getAttribute("aria-selected") === "true"`,
     "the Excalidraw tab",
   );
-  const editor = await untilFrame("excalidraw", "fileViewer");
+  const editor = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
   await until(
     async () => (await evalFrame<number>(editor, DRAWN_PIXELS)) > 0,
     "the restored diagram",
@@ -2833,12 +2871,12 @@ async function excalidrawEditor(): Promise<void> {
   assert.equal(noConfirmation(), true);
   await openFileInTree("guide.md");
   assert.equal(noConfirmation(), true);
-  await until(() => frames("excalidraw").length === 0, "the Excalidraw frame to close");
+  await until(() => frames(EXTENSION_IDS.excalidraw).length === 0, "the Excalidraw frame to close");
   pass("saving writes the new element and later file changes need no confirmation");
 
   // 冲突：保存时磁盘上的场景已被其他写入方修改。A conflict: the scene on disk was changed by another writer.
   await openFileInTree("diagram.excalidraw");
-  const conflicted = await untilFrame("excalidraw", "fileViewer");
+  const conflicted = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
   await until(
     async () => (await evalFrame<number>(conflicted, DRAWN_PIXELS)) > 0,
     "the saved diagram on the canvas",
@@ -2952,11 +2990,11 @@ async function excalidrawEditor(): Promise<void> {
 
   await openFileInTree("guide.md");
   assert.equal(noConfirmation(), true);
-  await until(() => frames("excalidraw").length === 0, "the Excalidraw frame to close");
+  await until(() => frames(EXTENSION_IDS.excalidraw).length === 0, "the Excalidraw frame to close");
   pass("after an Overwrite or a Reload, other files open without confirmation");
 
   await openFileInTree("blank.excalidraw");
-  const blank = await untilFrame("excalidraw", "fileViewer");
+  const blank = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
   await until(async () => (await evalFrame<number>(blank, DRAWN_PIXELS)) === 0, "the blank canvas");
   assert.equal(
     await evalFrame<boolean>(blank, `Boolean(document.querySelector(".status-error"))`),
@@ -2967,14 +3005,17 @@ async function excalidrawEditor(): Promise<void> {
 
   // 离开对话页面会关闭查看器，所以在最后检查被拦截的请求。Leaving the chat page closes viewers, so blocked requests come last.
   await goToExtensions();
-  await clickText("Details", `document.querySelector('[data-extension-id="excalidraw"]')`);
+  await clickText(
+    "Details",
+    `document.querySelector('[data-extension-id="${EXTENSION_IDS.excalidraw}"]')`,
+  );
   await untilHost(
-    `Boolean(document.querySelector('[data-extension-id="excalidraw"] [data-slot="collapsible-content"][data-state="open"]'))`,
+    `Boolean(document.querySelector('[data-extension-id="${EXTENSION_IDS.excalidraw}"] [data-slot="collapsible-content"][data-state="open"]'))`,
     "the Excalidraw details",
   );
   assert.equal(
     await evalHost<string | null>(
-      `document.querySelector('[data-extension-id="excalidraw"] [data-testid="blocked-requests"]')?.textContent ?? null`,
+      `document.querySelector('[data-extension-id="${EXTENSION_IDS.excalidraw}"] [data-testid="blocked-requests"]')?.textContent ?? null`,
     ),
     null,
   );
@@ -2982,9 +3023,9 @@ async function excalidrawEditor(): Promise<void> {
   pass("an empty file opens as a blank canvas and Excalidraw loads without blocked requests");
 }
 
-/* ---------- Text Editor 与 todo-editor Text Editor and todo-editor ---------- */
+/* ---------- Markdown extension 与 todo-editor Markdown extension and todo-editor ---------- */
 
-const MIXED_VIEWER = "text-editor:markdown";
+const MIXED_VIEWER = `${EXTENSION_IDS.markdown}:markdown`;
 const FILE_VIEWER_TABS = `[...document.querySelectorAll('[data-file-viewer-tab]')].map((tab) => tab.getAttribute("data-file-viewer-tab"))`;
 /** 宿主文件名后的保存状态。The save status after the host's file name. */
 function saveStatusIs(status: string): string {
@@ -3239,7 +3280,7 @@ async function untilFileBytes(path: string, expected: Buffer, label: string): Pr
 
 /** 等待 Mixed 显示满足条件的已保存文档。Waits for Mixed to show a saved document matching the predicate. */
 async function mixedShowing(predicate: string, label: string): Promise<FrameHandle> {
-  const frame = await untilViewerFrame("text-editor", "markdown");
+  const frame = await untilViewerFrame(EXTENSION_IDS.markdown, "markdown");
   await until(
     async () =>
       (await evalHost<boolean>(savedIn(MIXED_VIEWER))) &&
@@ -3550,7 +3591,7 @@ async function textEditorMarkdown(): Promise<void> {
 
   // 6：Preview 显示保存的内容。Preview shows the saved content.
   await selectPreview();
-  const preview = await untilViewerFrame("text-editor", "preview");
+  const preview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   await until(
     () =>
       evalFrame<boolean>(
@@ -3798,7 +3839,7 @@ async function textEditorTypography(): Promise<void> {
   );
 
   await selectPreview();
-  const preview = await untilViewerFrame("text-editor", "preview");
+  const preview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   await until(
     () =>
       evalFrame<boolean>(
@@ -4238,7 +4279,7 @@ async function hostScaling(): Promise<void> {
 
   await openFileInTree("readme.md");
   await untilHost(
-    `${viewerTab("text-editor:markdown")}?.getAttribute("aria-selected") === "true"`,
+    `${viewerTab(`${EXTENSION_IDS.markdown}:markdown`)}?.getAttribute("aria-selected") === "true"`,
     "the Mixed tab",
   );
   // 对照：宽 20px 且隐藏溢出的按钮必须被扫描报告。Negative control: a 20px wide button with hidden overflow must be reported.
@@ -4388,7 +4429,7 @@ async function openedViewSizes(): Promise<{
     })()`,
   );
   await selectPreview();
-  const preview = await untilViewerFrame("text-editor", "preview");
+  const preview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   await until(
     () =>
       evalFrame<boolean>(
@@ -4422,7 +4463,7 @@ async function openedViewSizes(): Promise<{
  * the Appearance page has no Document font size and Mixed's document size follows the base size.
  */
 async function appearanceSettings(): Promise<void> {
-  const background = await untilFrame("sample", "background");
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
   await evalFrame(background, `window.__appearanceMarker = "kept"; true`);
   const baseToken = (frame: FrameHandle) =>
     api<string>(frame, `return api.theme.get().tokens["--agw-font-size-base"];`);
@@ -4453,7 +4494,7 @@ async function appearanceSettings(): Promise<void> {
     async () => (await baseToken(background)) === "20px",
     "the 20px base token in the background frame",
   );
-  const kept = frameOf("sample", "background");
+  const kept = frameOf(EXTENSION_IDS.sample, "background");
   assert.equal(kept?.frameId, background.frameId);
   assert.equal(await evalFrame<string>(background, "window.__appearanceMarker"), "kept");
   assert.equal(await chatParagraphSize(), "17.5px");
@@ -4537,10 +4578,10 @@ async function appearanceSettings(): Promise<void> {
 
 /* ---------- 主题 Themes ---------- */
 
-const SOFT_THEME = "soft-theme:soft";
-const WARM_THEME = "warm-minimalism-theme:warm-minimalism";
-const CONTRAST_THEME = "contrast-theme:contrast";
-const RING_THEME = "contrast-theme:ring";
+const SOFT_THEME = `${EXTENSION_IDS.softTheme}:soft`;
+const WARM_THEME = `${EXTENSION_IDS.warmMinimalismTheme}:warm-minimalism`;
+const CONTRAST_THEME = `${EXTENSION_IDS.contrastTheme}:contrast`;
+const RING_THEME = `${EXTENSION_IDS.contrastTheme}:ring`;
 const THEME_SELECT = `document.getElementById("appearance-theme")`;
 
 /** 等待 settings.json 中的外观包含给出的字段。Waits for the appearance in settings.json to contain the given fields. */
@@ -4709,9 +4750,9 @@ async function themeSelection(): Promise<void> {
   pass("the first launch stores the Default theme and the migrated System mode");
 
   await goToExtensions();
-  const badTheme = `document.querySelector('[data-extension-id="bad-theme"]')`;
+  const badTheme = `document.querySelector('[data-extension-id="${EXTENSION_IDS.badTheme}"]')`;
   await untilHost(`Boolean(${badTheme})`, "the bad-theme card");
-  assert.equal(await extensionStatus("bad-theme"), "Invalid");
+  assert.equal(await extensionStatus(EXTENSION_IDS.badTheme), "Invalid");
   const badText = await evalHost<string>(`${badTheme}.textContent`);
   assert.ok(
     badText.includes("INVALID_THEME_VALUE (contributes.themes[0].light.--background)"),
@@ -4737,7 +4778,7 @@ async function themeSelection(): Promise<void> {
   await openAppearancePage();
   assert.equal(
     await evalHost<boolean>(
-      `[...${THEME_SELECT}.options].some((option) => option.value.startsWith("bad-theme:"))`,
+      `[...${THEME_SELECT}.options].some((option) => option.value.startsWith("${EXTENSION_IDS.badTheme}:"))`,
     ),
     false,
   );
@@ -4753,7 +4794,11 @@ async function themeSelection(): Promise<void> {
       `[...document.querySelectorAll("[data-extension-id]")].map((card) => card.dataset.extensionId)`,
     );
   await until(async () => (await listed()).length > 0, "theme extension cards");
-  assert.deepEqual(await listed(), ["bad-theme", "soft-theme", "warm-minimalism-theme"]);
+  assert.deepEqual(await listed(), [
+    EXTENSION_IDS.badTheme,
+    EXTENSION_IDS.softTheme,
+    EXTENSION_IDS.warmMinimalismTheme,
+  ]);
   assert.equal(
     await evalHost<string>(
       `document.querySelector(${JSON.stringify(EXTENSION_TYPE_SELECT)}).textContent`,
@@ -4763,7 +4808,7 @@ async function themeSelection(): Promise<void> {
   assert.ok(
     (
       await evalHost<string>(
-        `document.querySelector('[data-extension-id="soft-theme"]').textContent`,
+        `document.querySelector('[data-extension-id="${EXTENSION_IDS.softTheme}"]').textContent`,
       )
     ).includes("Themes: Soft"),
   );
@@ -4774,18 +4819,38 @@ async function themeSelection(): Promise<void> {
   );
   await until(async () => {
     const ids = await listed();
-    return ids.includes("text-editor") && !ids.includes("soft-theme");
+    return ids.includes(EXTENSION_IDS.markdown) && !ids.includes(EXTENSION_IDS.softTheme);
   }, "the file viewer extension cards");
   assert.ok(
     await evalHost<boolean>(
-      `[...document.querySelectorAll('[data-extension-id="text-editor"] [data-slot="badge"]')].some((badge) => badge.textContent === "File viewer")`,
+      `[...document.querySelectorAll('[data-extension-id="${EXTENSION_IDS.markdown}"] [data-slot="badge"]')].some((badge) => badge.textContent === "File viewer")`,
     ),
   );
   await chooseExtensionType("All types");
   await untilHost(`!new URLSearchParams(location.search).has("category")`, "every extension");
-  await until(async () => (await listed()).includes("sample"), "the full extension list");
+  await until(
+    async () => (await listed()).includes(EXTENSION_IDS.sample),
+    "the full extension list",
+  );
+  // 卡片按标题排序：Markdown 的 id 排在 Soft Theme 之后，标题排在它之前。Cards are ordered by title: Markdown's id
+  // sorts after Soft Theme's, its title before it.
+  const bundledTitles = [
+    "Excalidraw",
+    "Image Viewer",
+    "Markdown",
+    "Soft Theme",
+    "Warm Minimalism Theme",
+  ];
+  assert.deepEqual(
+    (
+      await evalHost<string[]>(
+        `[...document.querySelectorAll('[data-testid="extension-gallery"] > [data-extension-id] h2')].map((title) => title.textContent)`,
+      )
+    ).filter((title) => bundledTitles.includes(title)),
+    bundledTitles,
+  );
   pass(
-    "Manage opens the Extensions page with only theme extensions, and the type Select lists file viewers and then every extension",
+    "Manage opens the Extensions page with only theme extensions, and the type Select lists file viewers and then every extension ordered by name",
   );
 
   // 卡片按 gallery 排列，每张不窄于 400px：默认窗口宽度下每行两张，最小窗口宽度下每行一张。
@@ -4803,11 +4868,11 @@ async function themeSelection(): Promise<void> {
   await untilHost(galleryColumns(2), "two gallery columns after restoring the window width");
   pass("the Extensions page lays cards out as a gallery of columns at least 400px wide");
 
-  await installFromFolder(join(config.fixtures, "contrast-theme"), "Contrast Themes");
-  await untilStatus("contrast-theme", "Disabled");
-  const approval = await enable("contrast-theme", "Contrast Themes");
+  await installFromFolder(join(config.fixtures, EXTENSION_IDS.contrastTheme), "Contrast Themes");
+  await untilStatus(EXTENSION_IDS.contrastTheme, "Disabled");
+  const approval = await enable(EXTENSION_IDS.contrastTheme, "Contrast Themes");
   assert.ok(approval.includes("This extension requests no permissions."), approval);
-  await untilStatus("contrast-theme", "Active");
+  await untilStatus(EXTENSION_IDS.contrastTheme, "Active");
   await openAppearancePage();
   assert.deepEqual(
     await evalHost<[string, string][]>(
@@ -4826,7 +4891,7 @@ async function themeSelection(): Promise<void> {
   await chooseMode("light");
   // 推送给 extension 的变量：Default 下全部有值；Soft 没有设置的变量与 Default 相同。
   // Variables pushed to extensions: all have values under Default; those Soft leaves unset equal Default's.
-  const background = await untilFrame("sample", "background");
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
   const pushed = () => api<Record<string, string>>(background, "return api.theme.get().tokens;");
   const defaultTokens = await pushed();
   assert.deepEqual(
@@ -5011,7 +5076,7 @@ async function warmMinimalismTheme(): Promise<void> {
     `getComputedStyle(document.body).backgroundColor === "rgb(247, 244, 240)" && getComputedStyle(document.querySelector(".agw-settings-nav")).backgroundColor === "rgb(241, 236, 229)"`,
     "the Warm Minimalism host and settings navigation colors in Light",
   );
-  const background = await untilFrame("sample", "background");
+  const background = await untilFrame(EXTENSION_IDS.sample, "background");
   const pushedWith = (variable: string, value: string) =>
     until(async () => {
       const tokens = await api<Record<string, string>>(
@@ -5063,9 +5128,10 @@ async function warmMinimalismTheme(): Promise<void> {
     "Warm Minimalism draws its backdrop on the Main Workspace with the Chat column on a card, and extensions receive the theme id and title",
   );
 
-  // Text Editor 自己绘制背景：Mixed 与 Preview 在背景图形上用卡片显示文档；已打开的 frame 随主题切换立即更新，不重建。
-  // Text Editor draws its own backdrop: Mixed and Preview show the document on a card over it; open frames follow theme
-  // changes at once without being rebuilt.
+  // Markdown extension 自己绘制背景：Mixed 与 Preview 在背景图形上用卡片显示文档；已打开的 frame 随主题切换立即更新，
+  // 不重建。
+  // The Markdown extension draws its own backdrop: Mixed and Preview show the document on a card over it; open frames
+  // follow theme changes at once without being rebuilt.
   const lightCard = (styles: BackdropStyles) =>
     styles.image.startsWith("radial-gradient(") &&
     styles.card === "rgb(255, 254, 252)" &&
@@ -5101,7 +5167,7 @@ async function warmMinimalismTheme(): Promise<void> {
     "Monaco in Source with the host background",
   );
   await selectViewer(MARKDOWN_VIEWER);
-  const preview = await untilViewerFrame("text-editor", "preview");
+  const preview = await untilViewerFrame(EXTENSION_IDS.markdown, "preview");
   const previewLight = await untilBackdrop(
     preview,
     PREVIEW_BACKDROP,
@@ -5117,7 +5183,7 @@ async function warmMinimalismTheme(): Promise<void> {
   await untilBackdrop(preview, PREVIEW_BACKDROP, darkCard, "the dark backdrop in Preview");
   await applyAppearanceInPlace({ theme: "default" });
   await untilBackdrop(preview, PREVIEW_BACKDROP, noCard, "no backdrop in Preview under Default");
-  assert.equal(viewerFrameOf("text-editor", "preview")?.frameId, preview.frameId);
+  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "preview")?.frameId, preview.frameId);
   await untilWorkspace(
     (styles) =>
       !styles.marked &&
@@ -5136,7 +5202,7 @@ async function warmMinimalismTheme(): Promise<void> {
   await untilBackdrop(defaultMixed, MIXED_BACKDROP, noCard, "no backdrop in Mixed under Default");
   await applyAppearanceInPlace({ theme: WARM_THEME });
   await untilBackdrop(defaultMixed, MIXED_BACKDROP, darkCard, "the dark backdrop in Mixed");
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, defaultMixed.frameId);
+  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, defaultMixed.frameId);
   await untilWorkspace(
     (styles) =>
       styles.marked &&
@@ -5221,7 +5287,9 @@ async function sidebarThemes(): Promise<void> {
 
   // body 下的对话框与主区域使用界面变量。Dialogs under body and the main area use the interface variables.
   await goToExtensions();
-  await clickHost(`[data-extension-id="contrast-theme"] button[aria-label="Uninstall"]`);
+  await clickHost(
+    `[data-extension-id="${EXTENSION_IDS.contrastTheme}"] button[aria-label="Uninstall"]`,
+  );
   await untilHost(`Boolean(${OPEN_DIALOG})`, "the uninstall dialog");
   assert.equal(await hostStyle(OPEN_DIALOG, "background-color"), "rgb(255, 247, 237)");
   assert.equal(await hostStyle(OPEN_DIALOG, "color"), "rgb(23, 25, 29)");
@@ -5371,8 +5439,8 @@ async function imagePreviewThemes(): Promise<void> {
   await chooseMode("light");
   await chooseTheme("default");
   await goToChat();
-  await openMainView("sample:app");
-  const main = await untilFrame("sample", "mainView");
+  await openMainView(`${EXTENSION_IDS.sample}:app`);
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   const text = `Image check [docs](https://example.com/docs)\n\n![Pixel](${testImageDataUrl()})`;
   const conversationId = await api<string>(
     main,
@@ -5604,8 +5672,8 @@ async function darkModeAndExtensionViews(): Promise<void> {
   await evalFrame(mixed, `window.__themeMarker = "kept"; true`);
   // sample 的侧栏视图不调用 theme.apply()，与 Mixed 同时显示。Sample's sidebar view does not call theme.apply() and shows
   // next to Mixed.
-  await showSidebarView("sample:list");
-  const sample = await untilFrame("sample", "sidebarView");
+  await showSidebarView(`${EXTENSION_IDS.sample}:list`);
+  const sample = await untilFrame(EXTENSION_IDS.sample, "sidebarView");
   const sampleStyle = () =>
     evalFrame<{ variables: string[]; background: string; color: string; font: string }>(
       sample,
@@ -5636,7 +5704,7 @@ async function darkModeAndExtensionViews(): Promise<void> {
       )) === "#212121",
     "the dark Soft background in the open Mixed frame",
   );
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, mixed.frameId);
+  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, mixed.frameId);
   assert.equal(await evalFrame<string>(mixed, "window.__themeMarker"), "kept");
   assert.deepEqual(await sampleStyle(), sampleBefore);
   await showSidebarView("agw.conversations", "agw.ribbon.conversations");
@@ -5723,9 +5791,9 @@ const AGENTFLOW_GRAPH = `(() => {
   return { edges, nodes, labels, unsaved: dialog.textContent.includes("Unsaved changes") };
 })()`;
 
-const PAPER_THEME = "css-theme:paper";
-const NAMESPACE_THEME = "css-theme:namespace";
-const COVER_THEME = "css-theme:cover";
+const PAPER_THEME = `${EXTENSION_IDS.cssTheme}:paper`;
+const NAMESPACE_THEME = `${EXTENSION_IDS.cssTheme}:namespace`;
+const COVER_THEME = `${EXTENSION_IDS.cssTheme}:cover`;
 
 /** 等待 CSS 主题的样式表应用并发布。Waits for a CSS theme's stylesheet to apply and publish. */
 async function untilCssThemeApplied(themeId: string): Promise<void> {
@@ -5797,15 +5865,15 @@ async function cssThemes(): Promise<void> {
   await chooseTheme("default");
   const adoptedBefore = await evalHost<number>("document.adoptedStyleSheets.length");
 
-  await installFromFolder(join(config.fixtures, "css-theme"), "CSS Themes");
-  await untilStatus("css-theme", "Disabled");
-  const approval = await enable("css-theme", "CSS Themes");
+  await installFromFolder(join(config.fixtures, EXTENSION_IDS.cssTheme), "CSS Themes");
+  await untilStatus(EXTENSION_IDS.cssTheme, "Disabled");
+  const approval = await enable(EXTENSION_IDS.cssTheme, "CSS Themes");
   assert.ok(approval.includes("This extension requests no permissions."), approval);
-  await untilStatus("css-theme", "Active");
+  await untilStatus(EXTENSION_IDS.cssTheme, "Active");
   assert.ok(
     (
       await evalHost<string>(
-        `document.querySelector('[data-extension-id="css-theme"]').textContent`,
+        `document.querySelector('[data-extension-id="${EXTENSION_IDS.cssTheme}"]').textContent`,
       )
     ).includes("Themes: Paper, Namespace, Cover"),
   );
@@ -5820,7 +5888,7 @@ async function cssThemes(): Promise<void> {
   assert.equal(await hostVariable("--css-theme-gap"), "20px");
   assert.equal(
     await evalHost<string>(
-      `[...document.documentElement.style].filter((name) => name.startsWith("--") && name !== "--agw-font-size-base" && name !== "--agw-font-size-chat").join()`,
+      `[...document.documentElement.style].filter((name) => name.startsWith("--") && !["--agw-font-size-base", "--agw-font-size-chat", "--agw-font-size-code"].includes(name)).join()`,
     ),
     "",
   );
@@ -5854,13 +5922,13 @@ async function cssThemes(): Promise<void> {
     "the theme stylesheets in Mixed",
   );
   const mixedState = await pageThemeState(mixed);
-  // 主题系统只写 --agw-font-size-base；--agw-font-size-document 由 Text Editor 自己写入。The theme system writes only
-  // --agw-font-size-base; Text Editor writes --agw-font-size-document itself.
+  // 主题系统只写 --agw-font-size-base；--agw-font-size-document 由 Markdown extension 自己写入。The theme system writes
+  // only --agw-font-size-base; the Markdown extension writes --agw-font-size-document itself.
   assert.deepEqual(
     { ...mixedState, defaults: mixedState.defaults.map(Boolean) },
     {
       document: "extension",
-      extension: "text-editor",
+      extension: EXTENSION_IDS.markdown,
       adopted: 2,
       inline: ["--agw-font-size-base", "--agw-font-size-document"],
       gap: "20px",
@@ -5880,8 +5948,8 @@ async function cssThemes(): Promise<void> {
     ),
     "rgb(11, 110, 79)",
   );
-  await showSidebarView("sample:list");
-  const sample = await untilFrame("sample", "sidebarView");
+  await showSidebarView(`${EXTENSION_IDS.sample}:list`);
+  const sample = await untilFrame(EXTENSION_IDS.sample, "sidebarView");
   const sampleState = await pageThemeState(sample);
   assert.deepEqual(
     {
@@ -6040,7 +6108,7 @@ async function cssThemes(): Promise<void> {
   } finally {
     views.updateLayout = updateLayout;
   }
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, mixed.frameId);
+  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, mixed.frameId);
   assert.equal(await evalFrame<string>(mixed, "window.__cssThemeMarker"), "kept");
   pass(
     "the WebContentsView follows position-only moves, size changes, CSS hiding, opacity, animations and :hover/:has() while the CSS theme is active, without updates while nothing changes",
@@ -6133,12 +6201,12 @@ async function cssThemes(): Promise<void> {
   // that covers the host and hides lists and buttons does not affect the separate approval window or its result.
   await applyAppearanceInPlace({ theme: COVER_THEME });
   await untilCssThemeApplied(COVER_THEME);
-  await disable("sample");
-  await untilStatus("sample", "Disabled");
-  await clickHost(`[data-extension-id="sample"] button[role="switch"]`);
+  await disable(EXTENSION_IDS.sample);
+  await untilStatus(EXTENSION_IDS.sample, "Disabled");
+  await clickHost(`[data-extension-id="${EXTENSION_IDS.sample}"] button[role="switch"]`);
   const approvalWindow = await expectConfirmation(
     "enable",
-    ["Enable Sample?", "(sample)"],
+    ["Enable Sample?", `(${EXTENSION_IDS.sample})`],
     "the Sample approval",
   );
   const approvalState = await approvalWindow.webContents.executeJavaScript(
@@ -6152,7 +6220,7 @@ async function cssThemes(): Promise<void> {
     true,
   );
   const samplePermissions = await evalHost<number>(
-    `window.agwDesktop.listExtensions().then((list) => list.find((item) => item.id === "sample").manifest.permissions.length)`,
+    `window.agwDesktop.listExtensions().then((list) => list.find((item) => item.id === "${EXTENSION_IDS.sample}").manifest.permissions.length)`,
   );
   assert.deepEqual(approvalState, {
     footer: "flex",
@@ -6169,7 +6237,7 @@ async function cssThemes(): Promise<void> {
   // 宿主页面不能产生批准结果。The host page cannot produce an approval.
   assert.equal(await evalHost<string>("typeof window.agwConfirmation"), "undefined");
   await answerConfirmation("Enable");
-  await untilStatus("sample", "Active");
+  await untilStatus(EXTENSION_IDS.sample, "Active");
   assert.match(
     await evalHost<string>(
       `window.agwDesktop.commitExtensionInstall("00000000-0000-0000-0000-000000000000").then(() => "committed", (error) => error.message)`,
@@ -6184,8 +6252,8 @@ async function cssThemes(): Promise<void> {
   // Default and its stylesheet is removed.
   await chooseTheme(PAPER_THEME);
   await untilCssThemeApplied(PAPER_THEME);
-  await disable("css-theme");
-  await untilStatus("css-theme", "Disabled");
+  await disable(EXTENSION_IDS.cssTheme);
+  await untilStatus(EXTENSION_IDS.cssTheme, "Disabled");
   await untilAppearance({ theme: "default" });
   await untilHost(
     `[...document.querySelectorAll("[data-sonner-toast]")].some((toast) => toast.textContent.includes("Paper is no longer available. Using Default."))`,
@@ -6195,15 +6263,15 @@ async function cssThemes(): Promise<void> {
     `document.adoptedStyleSheets.length === ${adoptedBefore}`,
     "the stylesheet to be removed",
   );
-  await enable("css-theme", "CSS Themes");
-  await untilStatus("css-theme", "Active");
+  await enable(EXTENSION_IDS.cssTheme, "CSS Themes");
+  await untilStatus(EXTENSION_IDS.cssTheme, "Active");
   await chooseTheme(PAPER_THEME);
   await untilCssThemeApplied(PAPER_THEME);
   await goToExtensions();
-  await clickHost(`[data-extension-id="css-theme"] button[aria-label="Uninstall"]`);
+  await clickHost(`[data-extension-id="${EXTENSION_IDS.cssTheme}"] button[aria-label="Uninstall"]`);
   await clickText("Uninstall", OPEN_DIALOG);
   await untilHost(
-    `!document.querySelector('[data-extension-id="css-theme"]')`,
+    `!document.querySelector('[data-extension-id="${EXTENSION_IDS.cssTheme}"]')`,
     "css-theme to leave the list",
   );
   await untilAppearance({ theme: "default" });
@@ -6472,7 +6540,7 @@ async function excalidrawThemes(): Promise<void> {
     `${viewerTab(EXCALIDRAW_VIEWER)}?.getAttribute("aria-selected") === "true"`,
     "the Excalidraw tab",
   );
-  const editor = await untilFrame("excalidraw", "fileViewer");
+  const editor = await untilFrame(EXTENSION_IDS.excalidraw, "fileViewer");
   await until(async () => (await evalFrame<number>(editor, DRAWN_PIXELS)) > 0, "the diagram");
   pressKey(editor, "r");
   const { width, height } = editor.view.getBounds();
@@ -6511,7 +6579,7 @@ async function excalidrawThemes(): Promise<void> {
     assert.equal(await evalFrame<number>(editor, DRAWN_PIXELS), drawn, `${label}: the canvas`);
     assert.equal(await evalHost<boolean>(UNSAVED_MARKER), true, `${label}: the unsaved marker`);
     assert.equal(
-      frameOf("excalidraw", "fileViewer")?.frameId,
+      frameOf(EXTENSION_IDS.excalidraw, "fileViewer")?.frameId,
       editor.frameId,
       `${label}: the frame`,
     );
@@ -6586,7 +6654,7 @@ async function excalidrawThemes(): Promise<void> {
 
 /* ---------- Image Viewer ---------- */
 
-const IMAGE_VIEWER = "image-viewer:image";
+const IMAGE_VIEWER = `${EXTENSION_IDS.imageViewer}:image`;
 
 type ImageState = {
   natural: [number, number] | null;
@@ -6662,7 +6730,7 @@ async function imageViewer(): Promise<void> {
   await openFileInTree("images/logo.png");
   await untilHost(selectedViewerIs(IMAGE_VIEWER), "the Image tab");
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [IMAGE_VIEWER, "source"]);
-  const viewer = await untilViewerFrame("image-viewer", "image");
+  const viewer = await untilViewerFrame(EXTENSION_IDS.imageViewer, "image");
   const state = () => evalFrame<ImageState>(viewer, IMAGE_STATE);
   const untilState = (check: (current: ImageState) => boolean, label: string) =>
     until(async () => {
@@ -6807,8 +6875,8 @@ async function imageViewer(): Promise<void> {
  */
 async function themeExtensionRemoval(): Promise<void> {
   await chooseTheme(SOFT_THEME);
-  await disable("soft-theme");
-  await untilStatus("soft-theme", "Disabled");
+  await disable(EXTENSION_IDS.softTheme);
+  await untilStatus(EXTENSION_IDS.softTheme, "Disabled");
   await untilAppearance({ theme: "default" });
   await untilHost(
     `[...document.querySelectorAll("[data-sonner-toast]")].some((toast) => toast.textContent.includes("Soft is no longer available. Using Default."))`,
@@ -6819,15 +6887,17 @@ async function themeExtensionRemoval(): Promise<void> {
     "the theme variables to be removed",
   );
   pass("disabling Soft's extension returns to Default with a notice and saves default");
-  await enable("soft-theme", "Soft Theme");
-  await untilStatus("soft-theme", "Active");
+  await enable(EXTENSION_IDS.softTheme, "Soft Theme");
+  await untilStatus(EXTENSION_IDS.softTheme, "Active");
 
   await chooseTheme(CONTRAST_THEME);
   await goToExtensions();
-  await clickHost(`[data-extension-id="contrast-theme"] button[aria-label="Uninstall"]`);
+  await clickHost(
+    `[data-extension-id="${EXTENSION_IDS.contrastTheme}"] button[aria-label="Uninstall"]`,
+  );
   await clickText("Uninstall", OPEN_DIALOG);
   await untilHost(
-    `!document.querySelector('[data-extension-id="contrast-theme"]')`,
+    `!document.querySelector('[data-extension-id="${EXTENSION_IDS.contrastTheme}"]')`,
     "the test themes to leave the list",
   );
   await untilAppearance({ theme: "default" });
@@ -6853,7 +6923,7 @@ async function themeBeforeRestart(): Promise<void> {
   pass("Soft and Dark are saved for the restart check");
 }
 
-const TEXT_EDITOR_SETTINGS_FILE = join(storage("text-editor"), "settings.json");
+const TEXT_EDITOR_SETTINGS_FILE = join(storage(EXTENSION_IDS.markdown), "settings.json");
 const TEXT_EDITOR_DEFAULTS = { schemaVersion: 2, documentFontSize: null };
 const DOCUMENT_SIZE_SELECT = "text-editor-document-font-size";
 
@@ -6862,26 +6932,31 @@ function settingsButton(name: string): string {
   return `[...document.querySelectorAll("button")].find((button) => (button.getAttribute("aria-label") ?? button.textContent.trim()) === ${JSON.stringify(name)})`;
 }
 
-/** 打开 Extensions → Text Editor 的设置页并等待下拉框出现。Opens Extensions → Text Editor settings and waits for the select. */
+/** 打开 Extensions → Markdown 的设置页并等待下拉框出现。Opens Extensions → Markdown settings and waits for the select. */
 async function openTextEditorSettings(): Promise<FrameHandle> {
   await goToExtensions();
-  await until(() => !frameOf("text-editor", "settings"), "the previous settings frame to close");
-  await clickHost(`[data-extension-id="text-editor"] a[href^="/extensions/settings/"]`);
+  await until(
+    () => !frameOf(EXTENSION_IDS.markdown, "settings"),
+    "the previous settings frame to close",
+  );
+  await clickHost(
+    `[data-extension-id="${EXTENSION_IDS.markdown}"] a[href^="/extensions/settings/"]`,
+  );
   await untilHost(`location.pathname.startsWith("/extensions/settings/")`, "the settings route");
-  const frame = await untilFrame("text-editor", "settings");
+  const frame = await untilFrame(EXTENSION_IDS.markdown, "settings");
   await until(
     () =>
       evalFrame<boolean>(
         frame,
         `Boolean(document.getElementById(${JSON.stringify(DOCUMENT_SIZE_SELECT)}))`,
       ),
-    "the Text Editor settings select",
+    "the Markdown settings select",
   );
   // 设置页只显示 extension 自己的页面，没有视图标题条。The settings page shows only the extension's page, with no
   // view title bar.
   assert.deepEqual(
     await evalHost<{ view: boolean; header: boolean }>(`(() => {
-      const view = document.querySelector('[data-extension-view="settings:text-editor"]');
+      const view = document.querySelector('[data-extension-view="settings:${EXTENSION_IDS.markdown}"]');
       return { view: Boolean(view), header: Boolean(view?.querySelector(".agw-extension-view-header")) };
     })()`),
     { view: true, header: false },
@@ -6890,7 +6965,7 @@ async function openTextEditorSettings(): Promise<FrameHandle> {
   // 原生视图是矩形的，与圆角边框各边至少相隔 4px 才不会盖住圆角。The native view is rectangular; at least 4px from every
   // side of the rounded border keeps it off the corners.
   const insets = await evalHost<number[]>(`(() => {
-    const view = document.querySelector('[data-extension-view="settings:text-editor"]');
+    const view = document.querySelector('[data-extension-view="settings:${EXTENSION_IDS.markdown}"]');
     const slot = view.querySelector(".agw-extension-view-slot").getBoundingClientRect();
     const border = view.parentElement.getBoundingClientRect();
     return [slot.left - border.left, slot.top - border.top, border.right - slot.right, border.bottom - slot.bottom];
@@ -6928,10 +7003,10 @@ async function untilTextEditorSettings(
 }
 
 /**
- * Text Editor 设置：设置页只有文档字号，选择写入 settings.json，新打开的 Mixed 与 Preview 使用选择的字号，Source 的字号
+ * Markdown 设置：设置页只有文档字号，选择写入 settings.json，新打开的 Mixed 与 Preview 使用选择的字号，Source 的字号
  * 不受影响；Reset 恢复跟随；设置文件不合法时查看器显示错误，设置页只有 Reset all 可用；最后保存文档字号 20 与 Appearance
  * {18, 15}，供重新启动后检查。
- * Text Editor settings: the settings page has only the document size, choices are written to settings.json, Mixed and
+ * Markdown settings: the settings page has only the document size, choices are written to settings.json, Mixed and
  * Preview opened afterwards use the chosen size while Source's size stays, Reset returns to following, an invalid
  * settings file makes the viewers show the error and leaves only Reset all working on the settings page; document size
  * 20 and Appearance {18, 15} stay saved for the check after the restart.
@@ -6978,7 +7053,7 @@ async function textEditorSettings(): Promise<void> {
     false,
     "no settings file before the first change",
   );
-  pass("the Text Editor settings page shows only Document font size, following the base size");
+  pass("the Markdown settings page shows only Document font size, following the base size");
 
   // 文档字号 20 只作用于 Mixed 与 Preview。Document size 20 applies to Mixed and Preview only.
   await chooseInSettings(page, DOCUMENT_SIZE_SELECT, "20");
@@ -7017,12 +7092,12 @@ async function textEditorSettings(): Promise<void> {
   await backToTestProjectChat();
   await openFileInTree("notes/typography.md");
   await selectViewer(MIXED_VIEWER);
-  const mixed = await untilViewerFrame("text-editor", "markdown");
+  const mixed = await untilViewerFrame(EXTENSION_IDS.markdown, "markdown");
   await until(
     () =>
       evalFrame<boolean>(
         mixed,
-        `document.body.textContent.includes("Text Editor settings are invalid:") && document.body.textContent.includes("Open Text Editor settings to reset them.")`,
+        `document.body.textContent.includes("Markdown settings are invalid:") && document.body.textContent.includes("Open Markdown settings to reset them.")`,
       ),
     "the invalid settings error in Mixed",
   );
@@ -7035,7 +7110,7 @@ async function textEditorSettings(): Promise<void> {
     () =>
       evalFrame<boolean>(
         page,
-        `document.body.textContent.includes("Text Editor settings are invalid:") && document.body.textContent.includes("Use Reset all to restore the defaults.")`,
+        `document.body.textContent.includes("Markdown settings are invalid:") && document.body.textContent.includes("Use Reset all to restore the defaults.")`,
       ),
     "the invalid settings error on the settings page",
   );
@@ -7052,7 +7127,7 @@ async function textEditorSettings(): Promise<void> {
     () =>
       evalFrame<boolean>(
         page,
-        `!document.body.textContent.includes("Text Editor settings are invalid:") && !document.getElementById(${JSON.stringify(DOCUMENT_SIZE_SELECT)}).disabled`,
+        `!document.body.textContent.includes("Markdown settings are invalid:") &&!document.getElementById(${JSON.stringify(DOCUMENT_SIZE_SELECT)}).disabled`,
       ),
     "the settings page to recover",
   );
@@ -7196,7 +7271,7 @@ async function mixedInteractions(): Promise<void> {
   await clickInFrame(mixed, link("example"), [MOD]);
   await expectConfirmation(
     "open-link",
-    ["https://example.com/related", "Text Editor"],
+    ["https://example.com/related", "Markdown"],
     "the Open link confirmation from Mixed",
   );
   await answerConfirmation("Cancel");
@@ -7337,13 +7412,13 @@ async function mixedInteractions(): Promise<void> {
     "the discard confirmation for Reload view",
   );
   await answerConfirmation("Cancel");
-  assert.equal(viewerFrameOf("text-editor", "markdown")?.frameId, mixed.frameId);
+  assert.equal(viewerFrameOf(EXTENSION_IDS.markdown, "markdown")?.frameId, mixed.frameId);
   assert.equal(await evalFrame<boolean>(mixed, `Boolean(${mixedBlock("Related:", "h3")})`), true);
   assert.equal(await evalHost<boolean>(unsavedIn(MIXED_VIEWER)), true);
   await chooseFileHeaderEntry("Reload view");
   await answerConfirmation("Discard");
   const reloaded = await until(() => {
-    const frame = viewerFrameOf("text-editor", "markdown");
+    const frame = viewerFrameOf(EXTENSION_IDS.markdown, "markdown");
     return frame && frame.frameId !== mixed.frameId && runtime().registry.get(frame.frameId)?.pageId
       ? frame
       : null;
@@ -7554,28 +7629,33 @@ async function sourceEditing(): Promise<void> {
     "binary and undetected files show their panels, and Reopen with windows-1252 shows the text",
   );
 
-  // Text Editor 的页面没有 CSP 报错，Extensions 页面没有被拦截的请求。No CSP errors in Text Editor pages and no blocked
-  // requests on the Extensions page.
+  // Markdown extension 的页面没有 CSP 报错，Extensions 页面没有被拦截的请求。No CSP errors in the Markdown extension's
+  // pages and no blocked requests on the Extensions page.
   const cspErrors = consoleMessages.filter(
     (message) =>
-      message.url.startsWith("agw-extension://text-editor/") &&
+      message.url.startsWith(`agw-extension://${EXTENSION_IDS.markdown}/`) &&
       /Content Security Policy/iu.test(message.message),
   );
   assert.deepEqual(cspErrors, []);
   await goToExtensions();
-  await clickText("Details", `document.querySelector('[data-extension-id="text-editor"]')`);
+  await clickText(
+    "Details",
+    `document.querySelector('[data-extension-id="${EXTENSION_IDS.markdown}"]')`,
+  );
   await untilHost(
-    `Boolean(document.querySelector('[data-extension-id="text-editor"] [data-slot="collapsible-content"][data-state="open"]'))`,
-    "the Text Editor details",
+    `Boolean(document.querySelector('[data-extension-id="${EXTENSION_IDS.markdown}"] [data-slot="collapsible-content"][data-state="open"]'))`,
+    "the Markdown extension details",
   );
   assert.equal(
     await evalHost<string | null>(
-      `document.querySelector('[data-extension-id="text-editor"] [data-testid="blocked-requests"]')?.textContent ?? null`,
+      `document.querySelector('[data-extension-id="${EXTENSION_IDS.markdown}"] [data-testid="blocked-requests"]')?.textContent ?? null`,
     ),
     null,
   );
   await goToChat();
-  pass("Text Editor pages have no CSP errors and the Extensions page shows no blocked requests");
+  pass(
+    "the Markdown extension's pages have no CSP errors and the Extensions page shows no blocked requests",
+  );
 }
 
 /**
@@ -7699,25 +7779,25 @@ async function installFromFolder(directory: string, name: string): Promise<void>
 }
 
 async function todoEditorFixture(): Promise<void> {
-  await installFromFolder(join(config.fixtures, "todo-editor"), "Todo Editor");
+  await installFromFolder(join(config.fixtures, EXTENSION_IDS.todoEditor), "Todo Editor");
   await untilHost(
-    `Boolean(document.querySelector('[data-extension-id="todo-editor"]'))`,
+    `Boolean(document.querySelector('[data-extension-id="${EXTENSION_IDS.todoEditor}"]'))`,
     "todo-editor in the list",
   );
-  const dialogText = await enable("todo-editor", "Todo Editor");
+  const dialogText = await enable(EXTENSION_IDS.todoEditor, "Todo Editor");
   assert.ok(dialogText.includes("fs.cloud.read") && dialogText.includes("fs.cloud.write"));
-  await untilStatus("todo-editor", "Active");
+  await untilStatus(EXTENSION_IDS.todoEditor, "Active");
   pass(
     "the todo-editor fixture installs from a folder and activates with fs.cloud.read and fs.cloud.write",
   );
 
   // 1：*.todo 默认由 fixture 的编辑器打开。*.todo opens in the fixture's editor by default.
   const listPath = projectPath("list.todo");
-  const TODO_VIEWER = "todo-editor:editor";
+  const TODO_VIEWER = `${EXTENSION_IDS.todoEditor}:editor`;
   await openFileInTree("list.todo");
   await untilHost(selectedViewerIs(TODO_VIEWER), "the todo-editor tab");
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [TODO_VIEWER, "source"]);
-  const todo = await untilViewerFrame("todo-editor", "editor");
+  const todo = await untilViewerFrame(EXTENSION_IDS.todoEditor, "editor");
   const area = `document.querySelector("#todo")`;
   await until(
     () =>
@@ -7756,10 +7836,10 @@ async function todoEditorFixture(): Promise<void> {
   await untilHost(`!${unsavedIn(TODO_VIEWER)}`, "the unsaved marker to clear");
   pass("todo-editor's conflict dialog is titled Todo Editor, and Reload shows the disk content");
 
-  // 4：Outline 为 *.md 的可选查看器，排在 Text Editor 的查看器之后（option 查看器按 extension id 排序），列出标题。
-  // Outline is an option viewer for *.md after Text Editor's viewers (option viewers sort by extension id) and lists
-  // the headings.
-  const OUTLINE_VIEWER = "todo-editor:outline";
+  // 4：Outline 为 *.md 的可选查看器，排在 Markdown extension 的查看器之后（option 查看器按 extension id 排序），列出标题。
+  // Outline is an option viewer for *.md after the Markdown extension's viewers (option viewers sort by extension id)
+  // and lists the headings.
+  const OUTLINE_VIEWER = `${EXTENSION_IDS.todoEditor}:outline`;
   await openFileInTree("notes/edit.md");
   await untilHost(selectedViewerIs(MIXED_VIEWER), "the Mixed tab");
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
@@ -7769,7 +7849,7 @@ async function todoEditorFixture(): Promise<void> {
     "source",
   ]);
   await selectViewer(OUTLINE_VIEWER);
-  const outline = await untilViewerFrame("todo-editor", "outline");
+  const outline = await untilViewerFrame(EXTENSION_IDS.todoEditor, "outline");
   const headings = await until(async () => {
     const listed = await evalFrame<string[]>(
       outline,
@@ -8096,8 +8176,8 @@ async function performancePhase(): Promise<void> {
 
 async function viewReloads(): Promise<void> {
   await goToChat();
-  await openMainView("sample:app");
-  const main = await untilFrame("sample", "mainView");
+  await openMainView(`${EXTENSION_IDS.sample}:app`);
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   const storageUri = await api<string>(main, "return api.context.get().extension.storageUri;");
   const watched = `${storageUri}/watched.json`;
   await api(main, `await api.fs.writeFile(${JSON.stringify(watched)}, "0");`);
@@ -8132,7 +8212,7 @@ async function viewReloads(): Promise<void> {
     `window.watchEvents = []; await window.startWatching(${JSON.stringify(watched)});`,
   );
   await delay(300);
-  await writeFile(join(storage("sample"), "watched.json"), "changed");
+  await writeFile(join(storage(EXTENSION_IDS.sample), "watched.json"), "changed");
   await until(
     () => evalFrame<number>(main, "window.watchEvents.length"),
     "one event on the current page",
@@ -8152,8 +8232,8 @@ async function viewReloads(): Promise<void> {
 async function hostReloads(): Promise<void> {
   for (const trigger of ["tray", "crash"] as const) {
     await goToChat();
-    await openMainView("sample:app");
-    const main = await untilFrame("sample", "mainView");
+    await openMainView(`${EXTENSION_IDS.sample}:app`);
+    const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
     const storageUri = await api<string>(main, "return api.context.get().extension.storageUri;");
     await api(
       main,
@@ -8200,11 +8280,14 @@ async function hostReloads(): Promise<void> {
     );
     // Ribbon 项在 extension 进入 active 时注册。Ribbon entries are registered when an extension becomes active.
     await untilHost(
-      `["sample:open", "react-ts:open"].every((id) => document.querySelector(\`.agw-ribbon [data-entry-id="\${id}"]\`))`,
+      `["${EXTENSION_IDS.sample}:open", "${EXTENSION_IDS.reactTs}:open"].every((id) => document.querySelector(\`.agw-ribbon [data-entry-id="\${id}"]\`))`,
       "sample and react-ts to reactivate",
     );
-    assert.equal(frames("sample").filter((frame) => frame.kind === "background").length, 1);
-    const hooksLog = await readJson<string[]>(join(storage("sample"), "hooks.json"));
+    assert.equal(
+      frames(EXTENSION_IDS.sample).filter((frame) => frame.kind === "background").length,
+      1,
+    );
+    const hooksLog = await readJson<string[]>(join(storage(EXTENSION_IDS.sample), "hooks.json"));
     assert.equal(hooksLog.filter((entry) => entry.startsWith("onInstalled")).length, 2);
     pass(
       `host page ${trigger === "tray" ? "reloads from the tray" : "crashes"} clean up every extension resource and reactivate once`,
@@ -8214,8 +8297,8 @@ async function hostReloads(): Promise<void> {
 
 async function rejectedNavigation(): Promise<void> {
   await goToChat();
-  await openMainView("sample:app");
-  const main = await untilFrame("sample", "mainView");
+  await openMainView(`${EXTENSION_IDS.sample}:app`);
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
   const before = frames().length;
   await evalHost(`location.href = "https://example.com/"; true`).catch(() => undefined);
   await delay(800);
@@ -8224,8 +8307,8 @@ async function rejectedNavigation(): Promise<void> {
     (await api<number>(main, "return api.context.get().extension.version.length;")) > 0,
     true,
   );
-  await openMainView("undeclared:app");
-  const page = await untilFrame("undeclared", "mainView");
+  await openMainView(`${EXTENSION_IDS.undeclared}:app`);
+  const page = await untilFrame(EXTENSION_IDS.undeclared, "mainView");
   const pageId = runtime().registry.get(page.frameId)!.pageId;
   await evalFrame(page, `location.href = "https://example.com/"; true`).catch(() => undefined);
   await delay(800);
@@ -8257,25 +8340,30 @@ async function safeMode(): Promise<void> {
     "the safe mode banner",
   );
   await clickText("Resume extensions");
-  await untilStatus("sample", "Active");
-  assert.equal(frames("sample").filter((frame) => frame.kind === "background").length, 1);
+  await untilStatus(EXTENSION_IDS.sample, "Active");
+  assert.equal(
+    frames(EXTENSION_IDS.sample).filter((frame) => frame.kind === "background").length,
+    1,
+  );
   pass("Reload without extensions enters safe mode, and Resume reactivates");
 }
 
 async function uninstallBundled(): Promise<void> {
   await goToExtensions();
-  await clickHost(`[data-extension-id="excalidraw"] button[aria-label="Uninstall"]`);
+  await clickHost(
+    `[data-extension-id="${EXTENSION_IDS.excalidraw}"] button[aria-label="Uninstall"]`,
+  );
   await clickHost("#extension-delete-data");
   await clickText("Uninstall", OPEN_DIALOG);
   await untilHost(
-    `!document.querySelector('[data-extension-id="excalidraw"]')`,
+    `!document.querySelector('[data-extension-id="${EXTENSION_IDS.excalidraw}"]')`,
     "Excalidraw to leave the list",
   );
-  assert.equal(existsSync(storage("excalidraw")), false);
-  assert.equal(frames("excalidraw").length, 0);
+  assert.equal(existsSync(storage(EXTENSION_IDS.excalidraw)), false);
+  assert.equal(frames(EXTENSION_IDS.excalidraw).length, 0);
   const settings = await readJson<SettingsFile>(join(config.userData, "settings.json"));
-  assert.deepEqual(settings.removedBundledExtensions, ["excalidraw"]);
-  assert.equal(settings.extensions.excalidraw, undefined);
+  assert.deepEqual(settings.removedBundledExtensions, [EXTENSION_IDS.excalidraw]);
+  assert.equal(settings.extensions[EXTENSION_IDS.excalidraw], undefined);
   pass(
     "uninstalling a bundled extension with data removes it from the list and records the removal",
   );
@@ -8313,9 +8401,9 @@ async function restartPhase(): Promise<void> {
   await saveAppearance(RESET_APPEARANCE, () => clickText("Reset all"));
   pass("after restarting Desktop, the saved sizes {18, 15} apply and Reset all restores 16px");
 
-  // Text Editor 设置在重新启动后保持：文档字号 20 与基础字号 16（重置后）和重启前的基础字号 18 都不同；最后恢复默认，
+  // Markdown 设置在重新启动后保持：文档字号 20 与基础字号 16（重置后）和重启前的基础字号 18 都不同；最后恢复默认，
   // 供 performance 阶段使用。
-  // The Text Editor settings persist across the restart: document size 20 differs from the base size 16 (after the
+  // The Markdown settings persist across the restart: document size 20 differs from the base size 16 (after the
   // reset) and from the base size 18 saved before the restart; the defaults are restored at the end for the
   // performance phase.
   assert.deepEqual(await readJson<unknown>(TEXT_EDITOR_SETTINGS_FILE), {
@@ -8325,8 +8413,8 @@ async function restartPhase(): Promise<void> {
   const restored = await openedViewSizes();
   assert.equal(restored.mixed, "20px");
   assert.equal(restored.preview, "20px");
-  // Source 的字号来自 Appearance（重置后基础字号 16），与 Text Editor 无关。Source's size comes from Appearance (base 16
-  // after the reset), independent of Text Editor.
+  // Source 的字号来自 Appearance（重置后基础字号 16），与 Markdown 设置无关。Source's size comes from Appearance (base 16
+  // after the reset), independent of the Markdown settings.
   assert.equal(restored.source, "14px");
   const page = await openTextEditorSettings();
   assert.equal(
@@ -8345,13 +8433,15 @@ async function restartPhase(): Promise<void> {
   assert.equal(defaults.mixed, "16px");
   assert.equal(defaults.source, "14px");
   pass(
-    "after restarting Desktop, the Text Editor document size 20 applies to Mixed and Preview while Source keeps the Appearance size, and Reset all restores 16px",
+    "after restarting Desktop, the Markdown document size 20 applies to Mixed and Preview while Source keeps the Appearance size, and Reset all restores 16px",
   );
 
   await goToExtensions();
-  await untilStatus("text-editor", "Active", 30_000);
+  await untilStatus(EXTENSION_IDS.markdown, "Active", 30_000);
   assert.equal(
-    await evalHost<boolean>(`Boolean(document.querySelector('[data-extension-id="excalidraw"]'))`),
+    await evalHost<boolean>(
+      `Boolean(document.querySelector('[data-extension-id="${EXTENSION_IDS.excalidraw}"]'))`,
+    ),
     false,
   );
   await openFileInTree("diagram.excalidraw");
@@ -8360,36 +8450,39 @@ async function restartPhase(): Promise<void> {
   await sourceShowing(sourceIncludes('"elements"'), "diagram.excalidraw in Source");
   assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), []);
   pass(
-    "after restarting Desktop, Text Editor activates and the uninstalled Excalidraw stays absent, leaving Source alone",
+    "after restarting Desktop, the Markdown extension activates and the uninstalled Excalidraw stays absent, leaving Source alone",
   );
 
   await goToExtensions();
-  await untilStatus("sample", "Active", 30_000);
-  assert.equal(frames("sample").filter((frame) => frame.kind === "background").length, 1);
-  const hooksLog = await readJson<string[]>(join(storage("sample"), "hooks.json"));
+  await untilStatus(EXTENSION_IDS.sample, "Active", 30_000);
+  assert.equal(
+    frames(EXTENSION_IDS.sample).filter((frame) => frame.kind === "background").length,
+    1,
+  );
+  const hooksLog = await readJson<string[]>(join(storage(EXTENSION_IDS.sample), "hooks.json"));
   assert.equal(hooksLog.at(-1), "activate");
   assert.equal(hooksLog.filter((entry) => entry.startsWith("onInstalled")).length, 2);
   pass("after restarting Desktop, sample activates once without onInstalled");
 
-  await disable("sample");
-  await untilStatus("sample", "Disabled", 10_000);
+  await disable(EXTENSION_IDS.sample);
+  await untilStatus(EXTENSION_IDS.sample, "Disabled", 10_000);
   await goToChat();
   assert.equal(
     await evalHost<boolean>(
-      `Boolean(document.querySelector('.agw-ribbon [data-entry-id^="sample:"]'))`,
+      `Boolean(document.querySelector('.agw-ribbon [data-entry-id^="${EXTENSION_IDS.sample}:"]'))`,
     ),
     false,
   );
-  assert.equal(frames("sample").length, 0);
+  assert.equal(frames(EXTENSION_IDS.sample).length, 0);
   await goToExtensions();
-  await clickHost(`[data-extension-id="sample"] button[aria-label="Uninstall"]`);
+  await clickHost(`[data-extension-id="${EXTENSION_IDS.sample}"] button[aria-label="Uninstall"]`);
   await clickHost("#extension-delete-data");
   await clickText("Uninstall", OPEN_DIALOG);
   await until(
-    () => !existsSync(join(config.userData, "extensions", "packages", "sample")),
+    () => !existsSync(join(config.userData, "extensions", "packages", EXTENSION_IDS.sample)),
     "the install directory to be removed",
   );
-  assert.equal(existsSync(storage("sample")), false);
+  assert.equal(existsSync(storage(EXTENSION_IDS.sample)), false);
   pass("disabling removes entries and frames, and uninstalling with data removes both directories");
 }
 

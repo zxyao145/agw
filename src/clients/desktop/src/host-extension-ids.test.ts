@@ -7,11 +7,11 @@ import test from "node:test";
 // The host relies only on the public manifest and Extension API; its code names no bundled extension
 // (integration and unit tests excepted).
 const EXTENSION_IDS = [
-  "text-editor",
-  "excalidraw",
-  "markdown-preview",
-  "soft-theme",
-  "warm-minimalism-theme",
+  "01a173b5-526c-74d8-864c-0e2da2d0a21c",
+  "01a173b5-526c-74d8-864c-116f66ff919e",
+  "01a173b5-526c-74d8-864c-26b0968892f6",
+  "01a173b5-526c-74d8-864c-2fa2035185e4",
+  "01a173b5-526c-74d8-864c-3fd14f2c28b8",
 ];
 
 test("host code names no bundled extension", async () => {

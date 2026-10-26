@@ -15,6 +15,7 @@ import { build as viteBuild } from "vite";
 import createWabt from "wabt";
 import yazl from "yazl";
 
+import EXTENSION_IDS from "../test-fixtures/extension-ids.json" with { type: "json" };
 import { buildExtensionSdk, extensionSdkDirectory } from "./build-extension-sdk.mjs";
 
 const require = createRequire(import.meta.url);
@@ -39,18 +40,18 @@ const SDK_SPECIFIER = "/__agw/sdk.js";
 
 // 不需要构建、按原样复制的 fixture。Fixtures copied as-is without a build step.
 const PLAIN_FIXTURES = [
-  "sample",
-  "broken",
-  "slow",
-  "stuck-deactivate",
-  "busy",
-  "bad-view",
-  "no-background",
-  "undeclared",
-  "wasm",
-  "contrast-theme",
-  "bad-theme",
-  "css-theme",
+  EXTENSION_IDS.sample,
+  EXTENSION_IDS.broken,
+  EXTENSION_IDS.slow,
+  EXTENSION_IDS.stuckDeactivate,
+  EXTENSION_IDS.busy,
+  EXTENSION_IDS.badView,
+  EXTENSION_IDS.noBackground,
+  EXTENSION_IDS.undeclared,
+  EXTENSION_IDS.wasm,
+  EXTENSION_IDS.contrastTheme,
+  EXTENSION_IDS.badTheme,
+  EXTENSION_IDS.cssTheme,
 ];
 // 只在构建时使用、不进入 fixture 的源文件。Source files used by the build only and left out of the fixture.
 const BUILD_ONLY_EXTENSIONS = [".wat"];
@@ -137,7 +138,8 @@ async function assertCspCompatibleHtml(directory, id) {
       }
       const url = new URL(script.src);
       // Blazor 的加载脚本是外部经典脚本。Blazor's loader is an external classic script.
-      const blazorLoader = id === "blazor" && url.pathname === "/_framework/blazor.webassembly.js";
+      const blazorLoader =
+        id === EXTENSION_IDS.blazor && url.pathname === "/_framework/blazor.webassembly.js";
       if (script.type !== "module" && !blazorLoader) {
         throw new Error(`${label}: script ${url.pathname} is not type="module".`);
       }
@@ -237,19 +239,19 @@ async function assertSdkImportsOnlyDefineView(directory) {
 }
 
 async function buildReactTs(outputDirectory) {
-  const root = join(sourceDirectory, "react-ts");
+  const root = join(sourceDirectory, EXTENSION_IDS.reactTs);
   // 与 Extensions 页面的 "Save SDK types…" 相同，把类型与 schema 保存到 agw/。Like "Save SDK types…", save the types and schema to agw/.
   await mkdir(join(root, "agw"), { recursive: true });
   await cp(join(sdkDirectory, "sdk.d.ts"), join(root, "agw", "sdk.d.ts"));
   await cp(join(sdkDirectory, "manifest.schema.json"), join(root, "agw", "manifest.schema.json"));
   const tsc = join(dirname(require.resolve("typescript/package.json")), "bin", "tsc");
   await run(process.execPath, [tsc, "--noEmit", "-p", join(root, "tsconfig.json")]);
-  await buildViteFixture("react-ts", "vite.config.mts", outputDirectory);
+  await buildViteFixture(EXTENSION_IDS.reactTs, "vite.config.mts", outputDirectory);
 }
 
 /** `dotnet publish` 输出的 wwwroot 加上 manifest.json 作为 extension 根目录。The published wwwroot plus manifest.json is the extension root. */
 async function buildBlazor(outputDirectory) {
-  const root = join(sourceDirectory, "blazor");
+  const root = join(sourceDirectory, EXTENSION_IDS.blazor);
   const publishDirectory = join(buildDirectory, "blazor-publish");
   await rm(publishDirectory, { recursive: true, force: true });
   // bin、obj 放在 scratch 目录，源码目录保持干净。bin and obj go to the scratch directory, keeping the sources clean.
@@ -264,7 +266,7 @@ async function buildBlazor(outputDirectory) {
     join(buildDirectory, "blazor-artifacts"),
     "--nologo",
   ]);
-  const outDir = join(outputDirectory, "blazor");
+  const outDir = join(outputDirectory, EXTENSION_IDS.blazor);
   await cp(join(publishDirectory, "wwwroot"), outDir, { recursive: true });
   await cp(join(root, "manifest.json"), join(outDir, "manifest.json"));
 }
@@ -307,24 +309,27 @@ export async function buildExtensionFixtures(outputDirectory = defaultFixturesDi
 
   for (const id of PLAIN_FIXTURES) await copyPlainFixture(id, outputDirectory);
   await compileWat(
-    join(sourceDirectory, "wasm", "add.wat"),
-    join(outputDirectory, "wasm", "app.wasm"),
+    join(sourceDirectory, EXTENSION_IDS.wasm, "add.wat"),
+    join(outputDirectory, EXTENSION_IDS.wasm, "app.wasm"),
   );
   for (const id of PLAIN_FIXTURES) await validateFixture(join(outputDirectory, id));
 
   await buildReactTs(outputDirectory);
-  await validateFixture(join(outputDirectory, "react-ts"));
-  await buildViteFixture("vue", "vite.config.mjs", outputDirectory);
-  await validateFixture(join(outputDirectory, "vue"));
+  await validateFixture(join(outputDirectory, EXTENSION_IDS.reactTs));
+  await buildViteFixture(EXTENSION_IDS.vue, "vite.config.mjs", outputDirectory);
+  await validateFixture(join(outputDirectory, EXTENSION_IDS.vue));
   // 测试用 "Install from folder" 安装 todo-editor，不预先放进安装目录。The test installs todo-editor with
   // "Install from folder"; it is not placed in the install directory beforehand.
-  await buildViteFixture("todo-editor", "vite.config.mjs", outputDirectory);
-  await validateFixture(join(outputDirectory, "todo-editor"));
-  await assertSdkImportsOnlyDefineView(join(outputDirectory, "todo-editor"));
+  await buildViteFixture(EXTENSION_IDS.todoEditor, "vite.config.mjs", outputDirectory);
+  await validateFixture(join(outputDirectory, EXTENSION_IDS.todoEditor));
+  await assertSdkImportsOnlyDefineView(join(outputDirectory, EXTENSION_IDS.todoEditor));
   await buildBlazor(outputDirectory);
-  await validateFixture(join(outputDirectory, "blazor"));
+  await validateFixture(join(outputDirectory, EXTENSION_IDS.blazor));
 
-  await writeSampleV2Zip(join(outputDirectory, "sample"), join(outputDirectory, "sample-v2.zip"));
+  await writeSampleV2Zip(
+    join(outputDirectory, EXTENSION_IDS.sample),
+    join(outputDirectory, "sample-v2.zip"),
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

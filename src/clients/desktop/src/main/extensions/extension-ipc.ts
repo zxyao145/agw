@@ -18,13 +18,12 @@ import type {
   ThemeStyleRequest,
   UninstallExtensionOptions,
 } from "../../shared/contracts";
+import { isExtensionId } from "../../shared/extension-manifest";
 import type { ConfirmationService } from "../confirmation/confirmation-service";
 import { canceledAnswer, hostConfirmationView } from "../confirmation/host-confirmation";
 import { toExtensionIpcResult } from "./extension-ipc-result";
 import type { ExtensionRuntime } from "./extension-runtime";
 import { decodeText, encodeText, listTextEncodings } from "./text-codec";
-
-const EXTENSION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 export type ExtensionIpcOptions = {
   runtime: ExtensionRuntime;
@@ -34,7 +33,7 @@ export type ExtensionIpcOptions = {
 };
 
 function assertExtensionId(extensionId: string): void {
-  if (!EXTENSION_ID_PATTERN.test(extensionId)) throw new Error("Invalid extension id.");
+  if (!isExtensionId(extensionId)) throw new Error("Invalid extension id.");
 }
 
 /** 注册 extension 的管理、frame、能力通道与 extension preload 通道。Registers the extension IPC channels. */

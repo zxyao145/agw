@@ -23,13 +23,26 @@ const ENTRY_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.html$`, "u");
 const BACKGROUND_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.m?js$`, "u");
 const THEME_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.(?:json|css)$`, "u");
 const ICON_PATTERN = new RegExp(`^(?:${LUCIDE_ICON}|${ICON_FILE})$`, "u");
-// `data` 与 `packages` 是 `<userData>/extensions` 下的目录名，不能作为 id；`host` 是宿主创建的对话的创建方，同样不能作为 id。
-// `data` and `packages` name the directories under `<userData>/extensions` and cannot be ids; `host` is the creator of conversations the host creates, so it cannot be an id either.
-const EXTENSION_ID_PATTERN = /^(?!agw)(?!(?:data|packages|host)$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 // 去掉首尾空白后忽略大小写等于 `host` 的名称不合法；大小写写在模式中，生成的 JSON Schema 做同样的检查（它只保留模式，不保留标志）。
 // A name that equals `host` ignoring case once trimmed is invalid; case is spelled out in the pattern so the generated JSON Schema, which keeps the pattern without its flags, checks the same.
 const EXTENSION_NAME_PATTERN = /^(?!\s*[Hh][Oo][Ss][Tt]\s*$)/u;
 const LOCAL_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+/**
+ * extension id 是小写的 GUID v7。`uuidv7()` 不区分大小写，`regex` 补充小写要求；生成的 JSON Schema 输出两个 pattern。
+ * An extension id is a lowercase GUID v7. `uuidv7()` ignores case, so `regex` adds the lowercase rule; the generated
+ * JSON Schema keeps both patterns.
+ */
+export const extensionIdSchema = z.uuidv7().regex(/^[^A-Z]*$/u, { message: "Must be lowercase." });
+
+export function isExtensionId(value: string): boolean {
+  return extensionIdSchema.safeParse(value).success;
+}
+
+/** manifest 中贡献项的 id（视图、命令、主题等）。The id of a manifest contribution (views, commands, themes, ...). */
+export function isLocalId(value: string): boolean {
+  return LOCAL_ID_PATTERN.test(value);
+}
 
 export function isValidPackagePath(value: string): boolean {
   return PACKAGE_PATH_PATTERN.test(value);
@@ -69,7 +82,7 @@ export const extensionManifestSchema = z
   .strictObject({
     $schema: z.string().optional(),
     manifestVersion: z.number().int(),
-    id: z.string().min(3).max(64).regex(EXTENSION_ID_PATTERN),
+    id: extensionIdSchema,
     name: z.string().min(1).max(64).regex(EXTENSION_NAME_PATTERN),
     version: z.string().refine((value) => semver.valid(value) !== null, {
       message: "Version must be a valid semantic version.",

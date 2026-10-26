@@ -62,6 +62,7 @@ import {
   EXTENSION_CATEGORIES,
   extensionCategories,
   extensionsInCategory,
+  sortExtensionsByName,
   themeTitles,
 } from "./extensions/extension-categories";
 import { extensionIcon } from "./extensions/extension-contributions";
@@ -497,7 +498,7 @@ function ExtensionsPageContent({ host }: { host: ExtensionHost }) {
   const bridge = window.agwDesktop!;
   const searchParams = useSearchParams();
   const categoryName = searchParams.get("category");
-  const extensions = extensionsInCategory(snapshot.extensions, categoryName);
+  const extensions = extensionsInCategory(sortExtensionsByName(snapshot.extensions), categoryName);
   const router = useRouter();
   const selectCategory = (category: string) =>
     router.replace(

@@ -29,7 +29,7 @@ import { DesktopSettingsStore } from "./settings/settings-store";
 const directory = resolve(".scratch/extension-network");
 const userData = join(directory, "user-data");
 const HOST = "host-network-test";
-const EXTENSION = "net-test";
+const EXTENSION = "01a173c2-a2d2-7731-8616-73338f39b8b2";
 
 protocol.registerSchemesAsPrivileged([EXTENSION_SCHEME_PRIVILEGES, CONFIRMATION_SCHEME_PRIVILEGES]);
 app.setPath("userData", userData);

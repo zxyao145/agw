@@ -210,21 +210,21 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         await _kit.SeedProjectAsync(projectId);
         var acceptance = CreateResolvingAcceptance();
         var rejected = await Assert.ThrowsAsync<AgwException>(() =>
-            AcceptForAsync(acceptance, projectId, conversationId, Guid.CreateVersion7(), "sample")
+            AcceptForAsync(acceptance, projectId, conversationId, Guid.CreateVersion7(), TestExtensionIds.Sample)
         );
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, rejected.Code);
         var agentId = await SeedAgentAsync();
 
         // Act
         var other = await Assert.ThrowsAsync<AgwException>(() =>
-            AcceptForAsync(acceptance, projectId, conversationId, agentId, "other")
+            AcceptForAsync(acceptance, projectId, conversationId, agentId, TestExtensionIds.Other)
         );
-        var retried = await AcceptForAsync(acceptance, projectId, conversationId, agentId, "sample");
+        var retried = await AcceptForAsync(acceptance, projectId, conversationId, agentId, TestExtensionIds.Sample);
 
         // Assert
         Assert.Equal(ErrorCodes.ConversationReadOnly.Code, other.Code);
         Assert.True(retried.Created);
-        Assert.Equal("sample", (await _kit.ReadConversationAsync(conversationId)).ExtensionId);
+        Assert.Equal(TestExtensionIds.Sample, (await _kit.ReadConversationAsync(conversationId)).ExtensionId);
         Assert.Equal(1, await _kit.CountTurnsAsync(conversationId));
     }
 
@@ -248,11 +248,11 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
         var agentId = await SeedAgentAsync();
 
         // Act
-        var accepted = await AcceptForAsync(acceptance, projectId, conversationId, agentId, "sample");
+        var accepted = await AcceptForAsync(acceptance, projectId, conversationId, agentId, TestExtensionIds.Sample);
 
         // Assert
         Assert.True(accepted.Created);
-        Assert.Equal("sample", (await _kit.ReadConversationAsync(conversationId)).ExtensionId);
+        Assert.Equal(TestExtensionIds.Sample, (await _kit.ReadConversationAsync(conversationId)).ExtensionId);
         Assert.Equal(1, await _kit.CountTurnsAsync(conversationId));
     }
 

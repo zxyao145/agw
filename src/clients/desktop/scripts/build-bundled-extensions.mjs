@@ -100,18 +100,18 @@ async function checkSdkImports(id, distDirectory) {
   }
 }
 
+/**
+ * 校验一个内置 extension 的 dist/，返回 manifest id。源码目录以 extension 名称命名，dist/ 的目录名都不是 id。
+ * Validates one bundled extension's dist/ and returns the manifest id. Source directories are named after the
+ * extension name, so neither they nor dist/ are the id.
+ */
 async function validatePackage(tools, appVersion, name, distDirectory) {
-  // dist/ 的目录名不是 extension id，id 在下面单独比较。The dist/ directory name is not the id, which is compared below.
   const entry = await tools.readExtensionDirectory(distDirectory, appVersion, null);
   if (entry.validation !== "valid") {
     throw new Error(`${name}: the package is ${entry.validation}: ${JSON.stringify(entry.errors)}`);
   }
-  if (entry.manifest.id !== name) {
-    throw new Error(
-      `${name}: the manifest id "${entry.manifest.id}" must equal the package directory name.`,
-    );
-  }
   await checkSdkImports(name, distDirectory);
+  return entry.manifest.id;
 }
 
 export async function buildBundledExtensions() {
@@ -127,14 +127,21 @@ export async function buildBundledExtensions() {
 
   const tools = await loadManifestTools();
   const { version } = JSON.parse(await readFile(join(desktopDirectory, "package.json"), "utf8"));
+  // Desktop 要求 resources/extensions 下的目录名等于 manifest id。
+  // Desktop requires each directory under resources/extensions to be named after its manifest id.
+  const namesById = new Map();
   for (const name of names) {
-    await validatePackage(tools, version, name, join(sourcesDirectory, name, "dist"));
+    const id = await validatePackage(tools, version, name, join(sourcesDirectory, name, "dist"));
+    if (namesById.has(id)) {
+      throw new Error(`${name}: the manifest id "${id}" is also used by ${namesById.get(id)}.`);
+    }
+    namesById.set(id, name);
   }
 
   await rm(bundledExtensionsDirectory, { recursive: true, force: true });
   await mkdir(bundledExtensionsDirectory, { recursive: true });
-  for (const name of names) {
-    await cp(join(sourcesDirectory, name, "dist"), join(bundledExtensionsDirectory, name), {
+  for (const [id, name] of namesById) {
+    await cp(join(sourcesDirectory, name, "dist"), join(bundledExtensionsDirectory, id), {
       recursive: true,
     });
   }

@@ -22,7 +22,7 @@ The owner Module's inward persistence interface. Agents, Projects, Jobs, Auth, I
 
 ## Creator Extension
 
-The creator recorded on a Project Conversation (`extension_id`): `host` when Desktop, Web, Mobile, a Job or A2A created it, or the id of the Desktop extension whose execution session sent its first turn. `host` is reserved, so no extension id or name can use it. The host may write every conversation; an extension may write only the conversations it created, open conversations and new ones.
+The creator recorded on a Project Conversation (`extension_id`): `host` when Desktop, Web, Mobile, a Job or A2A created it, or the id (a lowercase GUID v7) of the Desktop extension whose execution session sent its first turn. `host` is reserved, so no extension name can use it. The host may write every conversation; an extension may write only the conversations it created, open conversations and new ones.
 
 ## Open Conversation
 

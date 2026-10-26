@@ -61,6 +61,18 @@ export function extensionCategories(extension: ExtensionState): string[] {
 }
 
 /**
+ * Extensions 页面的顺序：按卡片标题（manifest 的 name，没有 manifest 时为 id）排序，标题相同时按 id。返回新数组。
+ * The Extensions page order: by card title (the manifest's name, or the id without a manifest), then by id. Returns a
+ * new array.
+ */
+export function sortExtensionsByName(extensions: readonly ExtensionState[]): ExtensionState[] {
+  const title = (extension: ExtensionState) => extension.installed.manifest?.name ?? extension.id;
+  return [...extensions].sort(
+    (left, right) => title(left).localeCompare(title(right)) || left.id.localeCompare(right.id),
+  );
+}
+
+/**
  * 按 `category` 筛选；没有参数时返回全部，未知分类返回 null。
  * Filters by `category`; no parameter returns everything and an unknown category returns null.
  */

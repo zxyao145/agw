@@ -34,11 +34,14 @@ public partial class ExecutionCommandHandlerTests
         await context.WhenIdleAsync();
         var runtime = Assert.Single(Runtimes.Created);
 
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, conversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, conversationId, TestExtensionIds.Sample),
+            token
+        );
 
         Assert.True(runtime.IsDisposed);
         Assert.Null(context.ResolvedTask);
-        Assert.Equal("sample", context.Settings!.ExtensionId);
+        Assert.Equal(TestExtensionIds.Sample, context.Settings!.ExtensionId);
     }
 
     [Fact]
@@ -50,14 +53,17 @@ public partial class ExecutionCommandHandlerTests
         await using var context = CreateContext(task, projectTasks: _persistence.CreateProjectTasks());
         var command = CreateExecCommand(Guid.CreateVersion7());
         var conversationId = command.ConversationId!.Value;
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, conversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, conversationId, TestExtensionIds.Sample),
+            token
+        );
 
         await context.StartTurnAsync(command, token);
         await context.WhenIdleAsync();
         await context.StartTurnAsync(CreateNextCommand(command), token);
         await context.WhenIdleAsync();
 
-        Assert.Equal("sample", (await _persistence.ReadConversationAsync(conversationId)).ExtensionId);
+        Assert.Equal(TestExtensionIds.Sample, (await _persistence.ReadConversationAsync(conversationId)).ExtensionId);
         Assert.Equal(2, await _persistence.CountTurnsAsync(conversationId));
     }
 
@@ -70,7 +76,10 @@ public partial class ExecutionCommandHandlerTests
         await _persistence.AddTurnAsync(task.ProjectConversationId);
         var projectTasks = new FakeProjectTaskFacade(task, _persistence);
         await using var context = CreateContext(task, projectTasks: projectTasks);
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             context.StartTurnAsync(CreateCommandFor(task), token)
@@ -87,9 +96,12 @@ public partial class ExecutionCommandHandlerTests
     {
         var token = TestContext.Current.CancellationToken;
         var task = CreateTask("other-extension");
-        await _persistence.SeedConversationAsync(task, extensionId: "other");
+        await _persistence.SeedConversationAsync(task, extensionId: TestExtensionIds.Other);
         await using var context = CreateContext(task, projectTasks: _persistence.CreateProjectTasks());
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             context.StartTurnAsync(CreateCommandFor(task), token)
@@ -97,7 +109,10 @@ public partial class ExecutionCommandHandlerTests
 
         Assert.Equal(ErrorCodes.ConversationReadOnly.Code, exception.Code);
         Assert.Equal(0, await _persistence.CountTurnsAsync(task.ProjectConversationId));
-        Assert.Equal("other", (await _persistence.ReadConversationAsync(task.ProjectConversationId)).ExtensionId);
+        Assert.Equal(
+            TestExtensionIds.Other,
+            (await _persistence.ReadConversationAsync(task.ProjectConversationId)).ExtensionId
+        );
     }
 
     [Fact]
@@ -107,12 +122,18 @@ public partial class ExecutionCommandHandlerTests
         var task = CreateTask("open-conversation");
         await _persistence.SeedConversationAsync(task);
         await using var context = CreateContext(task, projectTasks: _persistence.CreateProjectTasks());
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         await context.StartTurnAsync(CreateCommandFor(task), token);
         await context.WhenIdleAsync();
 
-        Assert.Equal("sample", (await _persistence.ReadConversationAsync(task.ProjectConversationId)).ExtensionId);
+        Assert.Equal(
+            TestExtensionIds.Sample,
+            (await _persistence.ReadConversationAsync(task.ProjectConversationId)).ExtensionId
+        );
         Assert.Equal(1, await _persistence.CountTurnsAsync(task.ProjectConversationId));
     }
 
@@ -121,7 +142,7 @@ public partial class ExecutionCommandHandlerTests
     {
         var token = TestContext.Current.CancellationToken;
         var task = CreateTask("extension-conversation");
-        await _persistence.SeedConversationAsync(task, extensionId: "sample");
+        await _persistence.SeedConversationAsync(task, extensionId: TestExtensionIds.Sample);
         await _persistence.AddTurnAsync(task.ProjectConversationId);
         await using var context = CreateContext(task, projectTasks: _persistence.CreateProjectTasks());
         await context.ApplySettingsAsync(
@@ -133,7 +154,10 @@ public partial class ExecutionCommandHandlerTests
         await context.WhenIdleAsync();
 
         Assert.Equal(2, await _persistence.CountTurnsAsync(task.ProjectConversationId));
-        Assert.Equal("sample", (await _persistence.ReadConversationAsync(task.ProjectConversationId)).ExtensionId);
+        Assert.Equal(
+            TestExtensionIds.Sample,
+            (await _persistence.ReadConversationAsync(task.ProjectConversationId)).ExtensionId
+        );
     }
 
     [Fact]
@@ -145,7 +169,10 @@ public partial class ExecutionCommandHandlerTests
         await using var context = CreateContext(task, projectTasks: _persistence.CreateProjectTasks());
         var command = CreateExecCommand(Guid.CreateVersion7());
         var conversationId = command.ConversationId!.Value;
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, conversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, conversationId, TestExtensionIds.Sample),
+            token
+        );
         await context.StartTurnAsync(command, token);
         await context.WhenIdleAsync();
         Assert.NotNull(context.ResolvedTask);
@@ -157,7 +184,7 @@ public partial class ExecutionCommandHandlerTests
                 .ProjectConversations.IgnoreQueryFilters()
                 .Where(conversation => conversation.Id == conversationId)
                 .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(conversation => conversation.ExtensionId, "other"),
+                    setters => setters.SetProperty(conversation => conversation.ExtensionId, TestExtensionIds.Other),
                     token
                 );
         }
@@ -176,7 +203,10 @@ public partial class ExecutionCommandHandlerTests
         var token = TestContext.Current.CancellationToken;
         var task = await SeedHostConversationWithTurnAsync("resume-read-only");
         await using var context = CreateContext(task);
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         // 没有配置 checkpoint 存储：检查之后的代码会以 InvalidParam 失败。
         // No checkpoint store is configured: code after the check would fail with InvalidParam.
@@ -198,7 +228,10 @@ public partial class ExecutionCommandHandlerTests
         var task = await SeedHostConversationWithTurnAsync("interrupt-read-only");
         var sink = new CapturingSink();
         await using var context = CreateContext(task, sink: sink);
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             context.InterruptTurnAsync(turnId: null, reason: null, token)
@@ -215,7 +248,10 @@ public partial class ExecutionCommandHandlerTests
         var task = await SeedHostConversationWithTurnAsync("hitl-read-only");
         var sink = new CapturingSink();
         await using var context = CreateContext(task, sink: sink);
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             context.SubmitHumanDecisionAsync(
@@ -235,7 +271,10 @@ public partial class ExecutionCommandHandlerTests
         var task = await SeedHostConversationWithTurnAsync("mode-read-only");
         var sink = new CapturingSink();
         await using var context = CreateContext(task, sink: sink);
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             context.SetModeAsync(Guid.CreateVersion7(), "plan", token)
@@ -252,7 +291,10 @@ public partial class ExecutionCommandHandlerTests
         var task = await SeedHostConversationWithTurnAsync("permission-read-only");
         var sink = new CapturingSink();
         await using var context = CreateContext(task, sink: sink);
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
         var settings = context.Settings;
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -278,7 +320,10 @@ public partial class ExecutionCommandHandlerTests
                 TimeProvider.System
             )
         );
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
 
         var checkpoints = await context.GetAgentflowCheckpointsAsync(Guid.CreateVersion7(), token);
 
@@ -291,7 +336,10 @@ public partial class ExecutionCommandHandlerTests
         var token = TestContext.Current.CancellationToken;
         var (task, turnId) = await AcceptHostDurableTurnAsync();
         await using var context = CreateDurableContext(new CapturingSink());
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
         await context.SubscribeTurnAsync(turnId, cursor: null, token);
         Assert.True(context.HasActiveTurn);
 
@@ -311,7 +359,10 @@ public partial class ExecutionCommandHandlerTests
         var token = TestContext.Current.CancellationToken;
         var (task, turnId) = await AcceptHostDurableTurnAsync();
         await using var context = CreateDurableContext(new CapturingSink());
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
         await context.SubscribeTurnAsync(turnId, cursor: null, token);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -330,7 +381,10 @@ public partial class ExecutionCommandHandlerTests
         var token = TestContext.Current.CancellationToken;
         var (task, turnId) = await AcceptHostDurableTurnAsync();
         await using var context = CreateDurableContext(new CapturingSink());
-        await context.ApplySettingsAsync(CreateSettings(task.ProjectId, task.ProjectConversationId, "sample"), token);
+        await context.ApplySettingsAsync(
+            CreateSettings(task.ProjectId, task.ProjectConversationId, TestExtensionIds.Sample),
+            token
+        );
         await context.SubscribeTurnAsync(turnId, cursor: null, token);
         var settings = context.Settings;
 
