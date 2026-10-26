@@ -280,7 +280,7 @@ function UserInputSuggestions({
               onMouseEnter={() => onActiveIndexChange(index)}
               variant="outline"
               size="sm"
-              className={`p-2 cursor-pointer rounded-sm text-xs text-foreground transition hover:border-border hover:bg-accent/50 ${activeIndex === index ? "border-border bg-accent/50" : "border-transparent bg-transparent"}`}
+              className={`p-2 cursor-pointer rounded-sm text-sm text-foreground transition hover:border-border hover:bg-accent/50 ${activeIndex === index ? "border-border bg-accent/50" : "border-transparent bg-transparent"}`}
             >
               <ItemContent className="min-w-0 flex-row items-center gap-1 overflow-hidden whitespace-nowrap">
                 {fileParts ? (

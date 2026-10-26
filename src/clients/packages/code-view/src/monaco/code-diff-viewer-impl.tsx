@@ -82,7 +82,7 @@ export default function CodeDiffViewerImpl({ filePath, original, modified }: Cod
 
   return (
     <>
-      <div className="flex shrink-0 border-b border-border font-sans text-xs font-medium">
+      <div className="flex shrink-0 border-b border-border font-sans text-sm font-medium">
         <div
           className="truncate bg-red-50 px-3 py-1.5 text-red-900 dark:bg-red-950 dark:text-red-100"
           style={{ width: originalWidth ?? "50%" }}

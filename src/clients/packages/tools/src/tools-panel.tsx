@@ -203,7 +203,7 @@ export function ToolsPanel({
 
                   {selected && item.name === "project-memory" ? (
                     <div className="mt-4 border-t pt-3">
-                      <Label className="text-xs">Storage</Label>
+                      <Label>Storage</Label>
                       <Select
                         value={projectMemoryDefinition?.options?.storage ?? "filesystem"}
                         onValueChange={(storage) =>
@@ -228,7 +228,7 @@ export function ToolsPanel({
 
                   {selected && item.name === "background-agents" ? (
                     <div className="mt-4 space-y-2 border-t pt-3">
-                      <Label className="text-xs">Allowed delegation targets</Label>
+                      <Label>Allowed delegation targets</Label>
                       {agentOptions.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
                           No other System Agents available.

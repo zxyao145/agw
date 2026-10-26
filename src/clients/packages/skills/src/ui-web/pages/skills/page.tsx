@@ -428,7 +428,7 @@ export default function SkillsPage() {
                       {skill.description}
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-sm font-mono text-xs break-all text-muted-foreground">
+                  <TableCell className="max-w-sm font-mono break-all text-muted-foreground">
                     {skill.kind === "BuiltIn" || skill.isBuiltIn ? (
                       <Badge variant="secondary" className="font-sans font-medium">
                         Class-based
@@ -727,7 +727,7 @@ function SkillDialog({
               {mode === "edit" && currentSkill ? (
                 <div className="space-y-2 sm:col-span-2">
                   <Label>Current Content Path</Label>
-                  <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-sm break-all text-muted-foreground">
                     {currentSkill.contentPath}
                   </div>
                 </div>

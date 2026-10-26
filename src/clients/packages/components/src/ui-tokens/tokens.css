@@ -352,7 +352,7 @@ div[role="option"]:hover {
   }
 
   .agw-project-tab > a {
-    @apply flex min-w-0 flex-1 items-center gap-2 px-2.5 text-xs font-medium;
+    @apply flex min-w-0 flex-1 items-center gap-2 px-2.5 text-sm font-medium;
   }
 
   .agw-project-tab > a > span:nth-child(2) {
@@ -401,7 +401,7 @@ div[role="option"]:hover {
 
   .agw-server-pill,
   .agw-task-button {
-    @apply flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[10px] border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-muted;
+    @apply flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[10px] border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted;
   }
 
   .agw-task-button svg {
@@ -477,7 +477,7 @@ div[role="option"]:hover {
   }
 
   .agw-extension-view-header {
-    @apply flex h-8 shrink-0 items-center gap-2 border-b px-2.5 text-xs text-muted-foreground;
+    @apply flex h-8 shrink-0 items-center gap-2 border-b px-2.5 text-sm text-muted-foreground;
   }
 
   .agw-extension-view-header svg,
@@ -503,7 +503,7 @@ div[role="option"]:hover {
   }
 
   .agw-back-button {
-    @apply flex h-8 items-center gap-2 rounded-[9px] px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground;
+    @apply flex h-8 items-center gap-2 rounded-[9px] px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground;
   }
 
   .agw-back-button svg {
@@ -535,7 +535,7 @@ div[role="option"]:hover {
   }
 
   .agw-settings-nav section > a {
-    @apply mb-0.5 flex h-8.5 items-center gap-2.5 rounded-lg px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground;
+    @apply mb-0.5 flex h-8.5 items-center gap-2.5 rounded-lg px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground;
   }
 
   .agw-settings-nav section > a.is-active {
@@ -561,7 +561,7 @@ div[role="option"]:hover {
   }
 
   .agw-settings-nav {
-    width: 210px;
+    width: 224px;
   }
 
   .agw-settings-main {

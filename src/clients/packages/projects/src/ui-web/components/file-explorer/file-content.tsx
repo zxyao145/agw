@@ -333,7 +333,7 @@ export default function FileContent({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 text-xs"
+                          className="h-6 px-2"
                           onClick={reloadChangedDocument}
                         >
                           Reload
@@ -369,7 +369,7 @@ export default function FileContent({
                               aria-selected={viewer.id === activeViewerId}
                               data-file-viewer-tab={viewer.id}
                               className={cn(
-                                "cursor-pointer rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground",
+                                "cursor-pointer rounded-md px-2 py-0.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground",
                                 viewer.id === activeViewerId &&
                                   "bg-accent font-medium text-foreground",
                               )}

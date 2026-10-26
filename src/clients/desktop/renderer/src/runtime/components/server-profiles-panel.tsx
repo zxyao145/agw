@@ -210,12 +210,12 @@ export function ServerProfilesPanel() {
                         </span>
                       ) : null}
                     </div>
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                       <ProfileIcon className="size-3.5" />
                       {profile.kind === "remote" ? "Remote" : "Local"}
                     </span>
                     <span
-                      className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+                      className="min-w-0 truncate font-mono text-sm text-muted-foreground"
                       title={profile.baseUrl}
                     >
                       {profile.baseUrl}
@@ -349,7 +349,7 @@ export function ServerProfilesPanel() {
                       }
                     />
                   </div>
-                  <label className="flex items-start gap-2 rounded-xl border bg-muted/25 p-3 text-xs text-muted-foreground">
+                  <label className="flex items-start gap-2 rounded-xl border bg-muted/25 p-3 text-sm text-muted-foreground">
                     <input
                       type="checkbox"
                       className="mt-0.5"

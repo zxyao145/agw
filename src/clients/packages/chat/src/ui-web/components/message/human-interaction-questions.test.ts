@@ -120,7 +120,7 @@ test("the preview scrolls inside a fixed-height region and sets its prose size",
 
   assert.ok(previewRegion.classList.contains("h-48"));
   assert.ok(scroller);
-  assert.equal(scroller.style.getPropertyValue("--agw-prose-font-size"), "var(--text-xs)");
+  assert.equal(scroller.style.getPropertyValue("--agw-prose-font-size"), "var(--text-sm)");
 });
 
 test("focusing an option with a preview updates content without replacing the region", () => {

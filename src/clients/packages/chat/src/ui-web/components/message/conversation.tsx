@@ -290,7 +290,7 @@ export function Conversation({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="rounded-full text-xs text-muted-foreground"
+                      className="rounded-full text-muted-foreground"
                       disabled={isLoadingOlderMessages}
                       onClick={onLoadOlderMessages}
                     >

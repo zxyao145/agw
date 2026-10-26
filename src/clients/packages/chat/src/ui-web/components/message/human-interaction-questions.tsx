@@ -286,10 +286,10 @@ export function HumanInteractionQuestions({
               </div>
               <div
                 className={cn(
-                  "min-h-0 flex-1 overflow-auto px-3 py-2 text-xs agw-scrollbar",
+                  "min-h-0 flex-1 overflow-auto px-3 py-2 text-sm agw-scrollbar",
                   !preview && "grid place-items-center",
                 )}
-                style={{ "--agw-prose-font-size": "var(--text-xs)" } as React.CSSProperties}
+                style={{ "--agw-prose-font-size": "var(--text-sm)" } as React.CSSProperties}
               >
                 {preview ? (
                   <MarkdownView markdown={preview} />

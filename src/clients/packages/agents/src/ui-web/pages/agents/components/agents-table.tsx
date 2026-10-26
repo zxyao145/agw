@@ -105,7 +105,7 @@ export function AgentsTable({
                 {agent.systemPrompt ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="block truncate text-xs" tabIndex={0}>
+                      <span className="block truncate" tabIndex={0}>
                         {agent.systemPrompt}
                       </span>
                     </TooltipTrigger>
@@ -122,7 +122,7 @@ export function AgentsTable({
               </TableCell>
               <TableCell className="max-w-xs">
                 {toolNames.length > 0 ? (
-                  <span className="text-xs">
+                  <span>
                     {toolNames.slice(0, 2).join(", ")}
                     {toolNames.length > 2 && ` +${toolNames.length - 2} more`}
                   </span>

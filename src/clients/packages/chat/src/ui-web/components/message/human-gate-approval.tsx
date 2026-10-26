@@ -57,12 +57,12 @@ export function HumanGateApproval({
             {request.prompt}
           </div>
           {request.kind === "workflow-gate" && request.inputPreview ? (
-            <div className="whitespace-pre-wrap break-words rounded-md bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
+            <div className="whitespace-pre-wrap break-words rounded-md bg-muted/60 px-2 py-1.5 text-sm text-muted-foreground">
               {request.inputPreview}
             </div>
           ) : null}
           {request.kind === "tool-approval" && request.arguments != null ? (
-            <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-2 font-mono text-11 leading-relaxed text-muted-foreground">
+            <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-2 font-mono text-sm leading-relaxed text-muted-foreground">
               {JSON.stringify(request.arguments, null, 2)}
             </pre>
           ) : null}

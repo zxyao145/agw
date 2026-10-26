@@ -238,7 +238,7 @@ export function TraceTable() {
                   <TableCell>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="block max-w-64 truncate text-xs text-dust" tabIndex={0}>
+                        <span className="block max-w-64 truncate text-dust" tabIndex={0}>
                           {inputText}
                         </span>
                       </TooltipTrigger>
@@ -254,10 +254,7 @@ export function TraceTable() {
                     {trace.error ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span
-                            className="block max-w-64 truncate text-xs text-rose-300"
-                            tabIndex={0}
-                          >
+                          <span className="block max-w-64 truncate text-rose-300" tabIndex={0}>
                             {trace.error}
                           </span>
                         </TooltipTrigger>
@@ -269,7 +266,7 @@ export function TraceTable() {
                         </TooltipContent>
                       </Tooltip>
                     ) : (
-                      <span className="text-xs text-rose-300">—</span>
+                      <span className="text-rose-300">—</span>
                     )}
                   </TableCell>
                 </TableRow>

@@ -122,7 +122,7 @@ function PermissionList({ manifest }: { manifest: ExtensionManifest }) {
                   "text-amber-600 dark:text-amber-400",
               )}
             >
-              <span className="font-mono text-xs">{permission}</span> —{" "}
+              <span className="font-mono">{permission}</span> —{" "}
               {PERMISSION_DESCRIPTIONS[permission]}
             </li>
           ))}
@@ -135,7 +135,7 @@ function PermissionList({ manifest }: { manifest: ExtensionManifest }) {
             {hosts.map((host) => {
               const parsed = parseHostPermission(host);
               return (
-                <li key={host} className="font-mono text-xs">
+                <li key={host} className="font-mono">
                   {host}
                   {parsed && isUnencryptedHostPermission(parsed) ? (
                     <span className="ml-2 font-sans text-amber-600 dark:text-amber-400">
@@ -444,7 +444,7 @@ function ExtensionCard({
       </div>
       {manifest ? (
         <Collapsible className="mt-3">
-          <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
             <ChevronDown className="size-3.5" /> Details
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 space-y-3">
@@ -455,7 +455,7 @@ function ExtensionCard({
                 <ul className="mt-1 space-y-1">
                   {extension.frames.map((frame) => (
                     <li key={frame.frameId} className="flex items-center gap-2">
-                      <span className="font-mono text-xs">
+                      <span className="font-mono">
                         {frame.kind}
                         {frame.viewId ? ` · ${frame.viewId}` : ""}
                       </span>
@@ -474,10 +474,7 @@ function ExtensionCard({
             {extension.blockedRequests.length > 0 ? (
               <div className="text-sm">
                 <p className="font-medium">Recently blocked requests</p>
-                <ul
-                  className="mt-1 space-y-0.5 font-mono text-xs break-all"
-                  data-testid="blocked-requests"
-                >
+                <ul className="mt-1 space-y-0.5 font-mono break-all" data-testid="blocked-requests">
                   {extension.blockedRequests.map((request, index) => (
                     <li key={index}>
                       {request.reason} · {request.resourceType} · {request.url}

@@ -173,7 +173,7 @@ function ProviderSessionGroupCard({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 shrink-0 gap-1.5 px-2.5 text-xs shadow-none"
+            className="h-7 shrink-0 gap-1.5 px-2.5 shadow-none"
             disabled={archiveDisabled}
             aria-label={`Archive the ${group.externalAgentName} engine session`}
             onClick={() => void onArchive(active)}
@@ -202,7 +202,7 @@ function ProviderSessionGroupCard({
 
       {group.history.length > 0 && (
         <Collapsible>
-          <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-1.5 border-t px-3 py-2 text-left text-muted-foreground transition-colors hover:text-foreground">
+          <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-1.5 border-t px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground">
             <ChevronRight
               className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-90"
               aria-hidden

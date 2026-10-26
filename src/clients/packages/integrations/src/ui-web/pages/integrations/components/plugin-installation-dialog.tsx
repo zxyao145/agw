@@ -81,9 +81,7 @@ export function PluginInstallationDialog({
             {selection.authScheme.type === "OAuth2" ? (
               <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm">
                 <p className="font-medium">OAuth callback URL</p>
-                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                  {callbackUrl}
-                </p>
+                <p className="mt-1 break-all font-mono text-muted-foreground">{callbackUrl}</p>
               </div>
             ) : null}
           </div>

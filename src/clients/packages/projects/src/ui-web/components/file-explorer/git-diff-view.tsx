@@ -50,7 +50,7 @@ export function GitDiffView({ diff, filePath, scope, comments, setComments }: Gi
         <p className="rounded bg-muted/50 p-3 text-sm text-muted-foreground">
           Binary file; its contents are not shown.
         </p>
-        <pre aria-label="Git diff" className="whitespace-pre-wrap font-mono text-xs">
+        <pre aria-label="Git diff" className="whitespace-pre-wrap font-mono text-sm">
           {diff.diff}
         </pre>
       </div>
@@ -81,7 +81,7 @@ export function GitDiffView({ diff, filePath, scope, comments, setComments }: Gi
   if (diff.originalContent === diff.modifiedContent) {
     return (
       <div className="h-full min-h-0 overflow-auto p-4 agw-scrollbar">
-        <pre aria-label="Git diff metadata" className="whitespace-pre-wrap font-mono text-xs">
+        <pre aria-label="Git diff metadata" className="whitespace-pre-wrap font-mono text-sm">
           {diff.diff}
         </pre>
       </div>

@@ -1391,7 +1391,7 @@ function ScopeBar({
 
   if (scope.kind === "block" && activeBlockNode) {
     return (
-      <div className="flex items-center gap-2 rounded-full border bg-background/95 px-2 py-1 text-xs shadow-sm">
+      <div className="flex items-center gap-2 rounded-full border bg-background/95 px-2 py-1 text-sm shadow-sm">
         <Button
           type="button"
           variant="ghost"
@@ -1405,7 +1405,7 @@ function ScopeBar({
         <ChevronRight className="h-3 w-3 text-muted-foreground" />
         <span className="max-w-[220px] truncate font-medium">{activeBlockNode.data.title}</span>
         <Badge variant="outline">Block Canvas</Badge>
-        <span className={`rounded-full border px-2 py-0.5 ${validationClassName}`}>
+        <span className={`rounded-full border px-2 py-0.5 text-xs ${validationClassName}`}>
           {validationMessage}
         </span>
       </div>
@@ -1572,7 +1572,7 @@ function BlockScopePalette({
               <button
                 key={member.nodeId}
                 type="button"
-                className="w-full rounded-md border bg-background p-2 text-left text-xs transition-colors hover:border-primary/40 hover:bg-primary/5"
+                className="w-full rounded-md border bg-background p-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-primary/5"
                 onClick={() => onSelectParticipant(blockNode.id, member.nodeId)}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -1851,7 +1851,7 @@ function NodeInspector({
               )
             }
             placeholder='{ "key": "value" }'
-            className="min-h-24 font-mono text-xs"
+            className="min-h-24 font-mono"
           />
         </div>
       ) : null}
@@ -2542,7 +2542,7 @@ function EdgeInspector({
               )
             }
             placeholder='{ "contains": "approved", "minMessages": 1 }'
-            className="min-h-28 font-mono text-xs"
+            className="min-h-28 font-mono"
           />
           <p className="text-xs text-muted-foreground">
             {data.kind === AgentflowEdgeKind.SwitchCase
@@ -2577,7 +2577,7 @@ function EdgeInspector({
                 { group: `edge:${edge.id}:config` },
               )
             }
-            className="min-h-20 font-mono text-xs"
+            className="min-h-20 font-mono"
           />
         </div>
       )}

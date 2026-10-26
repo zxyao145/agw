@@ -59,7 +59,7 @@ function ModeButton({
   return (
     <button
       type="button"
-      className="group grid cursor-pointer gap-1.5 text-left text-xs outline-none"
+      className="group grid cursor-pointer gap-1.5 text-left text-sm outline-none"
       aria-label={`${title} mode`}
       aria-pressed={selected}
       data-appearance-mode={mode}

@@ -426,7 +426,7 @@ function ChatSettingsDialog({
                 </div>
               ) : (
                 <div className="rounded-md border">
-                  <div className="grid grid-cols-12 gap-2 border-b bg-muted/50 p-2 text-xs font-medium text-muted-foreground">
+                  <div className="grid grid-cols-12 gap-2 border-b bg-muted/50 p-2 text-sm font-medium text-muted-foreground">
                     <div className="col-span-5">Key</div>
                     <div className="col-span-6">Value</div>
                     <div className="col-span-1" />
@@ -440,13 +440,13 @@ function ChatSettingsDialog({
                         value={envVar.key}
                         onChange={(event) => handleUpdateEnvVar(index, "key", event.target.value)}
                         placeholder="KEY"
-                        className="col-span-5 h-8 text-xs md:text-xs"
+                        className="col-span-5 h-8"
                       />
                       <Input
                         value={envVar.value}
                         onChange={(event) => handleUpdateEnvVar(index, "value", event.target.value)}
                         placeholder="value"
-                        className="col-span-6 h-8 text-xs md:text-xs"
+                        className="col-span-6 h-8"
                       />
                       <div className="col-span-1 flex items-center">
                         <Button
@@ -1815,13 +1815,13 @@ function ChatWorkspaceLayout({
       <TabsList className={cn("w-fit", compactToolbar && "h-8 p-2")}>
         <TabsTrigger
           value="chat"
-          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
+          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0")}
         >
           Chat
         </TabsTrigger>
         <TabsTrigger
           value="files"
-          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0 text-xs")}
+          className={cn("cursor-pointer", compactToolbar && "h-6 px-2.5 py-0")}
         >
           Files
         </TabsTrigger>
