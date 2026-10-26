@@ -3,6 +3,7 @@ using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Behaviors;
 using Agw.Projects.Domain.Services;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -16,13 +17,15 @@ public class TaskExecutionAppService
     private readonly ConversationHistoryDomainService _historyDomainService;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
+    private readonly IConversationCreatorStore _conversationCreatorStore;
 
     public TaskExecutionAppService(
         IProjectsDbContext dbContext,
         ProjectResolver projectResolver,
         ConversationHistoryDomainService historyDomainService,
         TimeProvider timeProvider,
-        IUserInfoService userInfoService
+        IUserInfoService userInfoService,
+        IConversationCreatorStore conversationCreatorStore
     )
     {
         _dbContext = dbContext;
@@ -30,6 +33,7 @@ public class TaskExecutionAppService
         _historyDomainService = historyDomainService;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
+        _conversationCreatorStore = conversationCreatorStore;
     }
 
     public async Task<IReadOnlyList<TaskProjection>> ListAsync(Expression<Func<TaskProjection, bool>>? predicate = null)
@@ -110,7 +114,15 @@ public class TaskExecutionAppService
         string user
     )
     {
-        return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending);
+        return CreateAsync(
+            projectId,
+            request,
+            user,
+            TaskExecutionStatus.Pending,
+            taskIdOverride: null,
+            conversationId: null,
+            requesterExtensionId: null
+        );
     }
 
     public Task<ApplicationResult<TaskExecutionSnapshot>> CreateRunningAsync(
@@ -119,7 +131,15 @@ public class TaskExecutionAppService
         string user
     )
     {
-        return CreateAsync(projectId, request, user, TaskExecutionStatus.Running);
+        return CreateAsync(
+            projectId,
+            request,
+            user,
+            TaskExecutionStatus.Running,
+            taskIdOverride: null,
+            conversationId: null,
+            requesterExtensionId: null
+        );
     }
 
     public Task<ApplicationResult<TaskExecutionSnapshot>> CreateRunningForExecutionAsync(
@@ -129,7 +149,15 @@ public class TaskExecutionAppService
         string user
     )
     {
-        return CreateAsync(projectId, request, user, TaskExecutionStatus.Running, taskId);
+        return CreateAsync(
+            projectId,
+            request,
+            user,
+            TaskExecutionStatus.Running,
+            taskId,
+            conversationId: null,
+            requesterExtensionId: null
+        );
     }
 
     public Task<ApplicationResult<TaskExecutionSnapshot>> CreateForExecutionAsync(
@@ -139,7 +167,15 @@ public class TaskExecutionAppService
         string user
     )
     {
-        return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId, conversationId: null);
+        return CreateAsync(
+            projectId,
+            request,
+            user,
+            TaskExecutionStatus.Pending,
+            taskId,
+            conversationId: null,
+            requesterExtensionId: null
+        );
     }
 
     internal Task<ApplicationResult<TaskExecutionSnapshot>> CreateForExecutionAsync(
@@ -147,23 +183,34 @@ public class TaskExecutionAppService
         Guid? conversationId,
         Guid? taskId,
         TaskCreateRequest request,
-        string user
+        string user,
+        string? requesterExtensionId
     )
     {
-        return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId, conversationId);
+        return CreateAsync(
+            projectId,
+            request,
+            user,
+            TaskExecutionStatus.Pending,
+            taskId,
+            conversationId,
+            requesterExtensionId
+        );
     }
 
     /// <summary>
     /// 创建或复用 Project Conversation 和初始记录；已有对话沿用保存的 context ID，新对话使用请求中的值或生成新值。
     /// Creates or reuses the Project Conversation and its initial record; an existing conversation keeps its saved context ID, and a new one uses the requested value or a generated one.
+    /// requesterExtensionId 是请求方 extension 的 id，宿主为 null。requesterExtensionId is the requesting extension id, null for the host.
     /// </summary>
     private async Task<ApplicationResult<TaskExecutionSnapshot>> CreateAsync(
         Guid projectId,
         TaskCreateRequest request,
         string user,
         TaskExecutionStatus initialStatus,
-        Guid? taskIdOverride = null,
-        Guid? conversationId = null
+        Guid? taskIdOverride,
+        Guid? conversationId,
+        string? requesterExtensionId
     )
     {
         var project = await _projectResolver.ResolveForUserAsync(projectId, user).ConfigureAwait(false);
@@ -189,7 +236,8 @@ public class TaskExecutionAppService
             requestedContextId,
             request,
             user,
-            now
+            now,
+            requesterExtensionId
         );
         var record = new ProjectConversationChatHistory
         {
@@ -230,6 +278,7 @@ public class TaskExecutionAppService
                 );
             }
 
+            await EnsureWritableByRequesterAsync(concurrentConversation, requesterExtensionId);
             conversation = concurrentConversation;
             UpdateExistingConversation(conversation, request, user, now);
             await _dbContext.ProjectConversationChatHistories.AddAsync(record);
@@ -385,7 +434,8 @@ public class TaskExecutionAppService
         string? requestedContextId,
         TaskCreateRequest request,
         string user,
-        DateTimeOffset now
+        DateTimeOffset now,
+        string? requesterExtensionId
     )
     {
         if (conversationId == Guid.Empty)
@@ -424,6 +474,7 @@ public class TaskExecutionAppService
             {
                 throw new AgwException(ErrorCodes.ResourceNotFound);
             }
+            await EnsureWritableByRequesterAsync(conversation, requesterExtensionId);
             conversation.ContextId = requestedContextId ?? ContextIdUtil.NormalizeContextId(conversation.ContextId);
             UpdateExistingConversation(conversation, request, user, now);
             return (conversation, false);
@@ -435,6 +486,7 @@ public class TaskExecutionAppService
             ProjectId = projectId,
             JobId = request.JobId,
             ContextId = requestedContextId ?? ContextIdUtil.CreateConversationContextId(),
+            ExtensionId = requesterExtensionId ?? ConversationCreators.Host,
             CreateBy = user,
             CreateTime = now,
             UpdateBy = user,
@@ -443,6 +495,41 @@ public class TaskExecutionAppService
         new ProjectConversationBehavior(conversation).SetInitialTitle(request.Title, request.Input);
         await _dbContext.ProjectConversations.AddAsync(conversation);
         return (conversation, true);
+    }
+
+    /// <summary>
+    /// extension 在已保存的对话中解析任务之前检查写入规则：自己创建的对话直接继续；开放对话在对话行锁内重新判断并记录创建方；其他对话拒绝。拒绝发生在修改对话之前。
+    /// Checks the write rule before an extension resolves a task in a saved conversation: its own conversation continues at once, an open conversation is re-checked and gets its creator recorded under the conversation row lock, and any other conversation is refused. The refusal happens before the conversation is changed.
+    /// </summary>
+    private async Task EnsureWritableByRequesterAsync(ProjectConversation conversation, string? requesterExtensionId)
+    {
+        if (requesterExtensionId == null)
+        {
+            return;
+        }
+
+        var behavior = new ProjectConversationBehavior(conversation);
+        if (behavior.IsCreatedBy(requesterExtensionId))
+        {
+            return;
+        }
+
+        var hasAcceptedTurns = await _dbContext.ProjectConversationTurns.AnyAsync(turn =>
+            turn.ProjectConversationId == conversation.Id
+        );
+        behavior.EnsureWritableBy(requesterExtensionId, hasAcceptedTurns);
+        await _conversationCreatorStore.ClaimOpenConversationAsync(
+            conversation.Id,
+            conversation.Generation,
+            claim =>
+            {
+                var locked = new ProjectConversationBehavior(claim.Conversation);
+                locked.EnsureWritableBy(requesterExtensionId, claim.HasAcceptedTurns);
+                locked.RecordCreatorIfOpen(requesterExtensionId, claim.HasAcceptedTurns);
+            }
+        );
+        // 跟踪的实体取得已提交的创建方。The tracked entity takes the committed creator.
+        await _dbContext.ProjectConversations.Entry(conversation).ReloadAsync();
     }
 
     private static void UpdateExistingConversation(

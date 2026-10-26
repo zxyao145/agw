@@ -83,6 +83,7 @@ public class ProjectConversationTurnBehaviorTests
             3,
             "model_error",
             FinishedAt,
+            FinishedAt.AddSeconds(30),
             12
         );
 
@@ -91,6 +92,7 @@ public class ProjectConversationTurnBehaviorTests
         Assert.Equal(5, turn.StepCount);
         Assert.Equal("model_error", turn.ErrorCode);
         Assert.Equal(FinishedAt, turn.FinishedAt);
+        Assert.Equal(FinishedAt.AddSeconds(30), turn.UsageSettlesAt);
         Assert.Equal(12, turn.LastSequence);
     }
 
@@ -109,6 +111,7 @@ public class ProjectConversationTurnBehaviorTests
             8,
             null,
             FinishedAt,
+            FinishedAt,
             20
         );
 
@@ -116,6 +119,7 @@ public class ProjectConversationTurnBehaviorTests
         Assert.Equal(ProjectConversationTurnStatus.Interrupted, turn.Status);
         Assert.Equal("interrupted", turn.ErrorCode);
         Assert.Equal(StartedAt, turn.FinishedAt);
+        Assert.Null(turn.UsageSettlesAt);
     }
 
     [Theory]
@@ -126,7 +130,7 @@ public class ProjectConversationTurnBehaviorTests
         var turn = new ProjectConversationTurn { Status = ProjectConversationTurnStatus.Running };
 
         var exception = Assert.Throws<AgwException>(() =>
-            new ProjectConversationTurnBehavior(turn).TryFinish(status, 1, null, FinishedAt, null)
+            new ProjectConversationTurnBehavior(turn).TryFinish(status, 1, null, FinishedAt, FinishedAt, null)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);

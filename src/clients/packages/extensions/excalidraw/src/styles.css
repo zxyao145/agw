@@ -1,0 +1,129 @@
+html,
+body,
+#root,
+.editor {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, sans-serif;
+}
+
+.status {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  padding: 24px;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  text-align: center;
+}
+
+.status p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.editor {
+  position: relative;
+}
+
+/* 盖住画布：读取文件期间或读取失败时不显示场景。Covers the canvas while the file loads or after loading failed. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  background: var(--background);
+}
+
+.status-error .status-title {
+  color: var(--destructive);
+  font-weight: 600;
+}
+
+/*
+ * 工具栏、菜单、属性面板、输入框与弹窗引用宿主主题变量（theme.apply() 写到 html 上）；选择器分别覆盖库在浅色与深色下的默认值。
+ * 弹窗渲染在 body 下的 `.excalidraw.excalidraw-modal-container` 中。场景、元素与画布的颜色不受影响。变量名来自 Excalidraw
+ * v0.18.1 的 css/theme.scss。
+ * The toolbar, menus, properties panel, inputs and dialogs reference the host theme variables (written on html by
+ * theme.apply()); the selectors override the library defaults for light and dark. Dialogs render into
+ * `.excalidraw.excalidraw-modal-container` under body. Scene, element and canvas colors are unaffected. The variable
+ * names come from css/theme.scss of Excalidraw v0.18.1.
+ */
+.editor .excalidraw,
+.editor .excalidraw.theme--dark,
+.excalidraw.excalidraw-modal-container,
+.excalidraw.excalidraw-modal-container.theme--dark {
+  --island-bg-color: var(--popover);
+  --popup-bg-color: var(--popover);
+  --sidebar-bg-color: var(--popover);
+  --default-bg-color: var(--background);
+  --input-bg-color: var(--background);
+  --color-surface-lowest: var(--background);
+  --popup-secondary-bg-color: var(--muted);
+  --color-surface-low: var(--muted);
+  --color-surface-mid: var(--muted);
+  --color-on-surface: var(--foreground);
+  --text-primary-color: var(--foreground);
+  --popup-text-color: var(--foreground);
+  --icon-fill-color: var(--foreground);
+  --input-label-color: var(--muted-foreground);
+  --keybinding-color: var(--muted-foreground);
+  --color-disabled: var(--muted-foreground);
+  --default-border-color: var(--border);
+  --dialog-border-color: var(--border);
+  --sidebar-border-color: var(--border);
+  --color-border-outline: var(--border);
+  --color-border-outline-variant: var(--border);
+  --input-border-color: var(--input);
+  --button-hover-bg: var(--accent);
+  --button-active-bg: var(--accent);
+  --input-hover-bg-color: var(--accent);
+  --color-surface-high: var(--accent);
+  --color-primary-light: var(--accent);
+  --color-primary-light-darker: var(--accent);
+  --color-surface-primary-container: var(--accent);
+  --color-on-primary-container: var(--accent-foreground);
+  --color-primary: var(--primary);
+  --color-primary-darker: var(--primary);
+  --color-primary-darkest: var(--primary);
+  --color-primary-hover: var(--primary);
+  --color-brand-hover: var(--primary);
+  --color-brand-active: var(--primary);
+  --button-active-border: var(--primary);
+  --popup-text-inverted-color: var(--primary-foreground);
+  --focus-highlight-color: var(--ring);
+  --select-highlight-color: var(--ring);
+  --link-color: var(--agw-prose-link);
+}
+
+.excalidraw .save-button {
+  --button-width: auto;
+  --button-height: var(--lg-button-size);
+  padding: 0 0.875rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.4px;
+}
+
+.excalidraw .save-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/*
+ * Excalidraw 没有关闭在线库的选项：隐藏浏览在线库的链接与发布到在线库的菜单项（库自己的测试 id 为 lib-dropdown--remove）。
+ * Excalidraw has no option for the online library: hide the browse link and the publish item (its own test id is
+ * lib-dropdown--remove).
+ */
+.excalidraw .library-menu-browse-button,
+.excalidraw [data-testid="lib-dropdown--remove"] {
+  display: none;
+}

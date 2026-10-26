@@ -3,6 +3,7 @@ packages:
   - desktop
   - mobile
   - packages/*
+  - packages/extensions/*
 
 # 外部依赖版本的唯一来源；dependencies 与 peerDependencies 共用同一条目，
 # 因此 peer 声明与实际安装的版本永远一致。
@@ -10,29 +11,95 @@ packages:
 # peerDependencies share one entry, so a peer range can never drift from the
 # version that gets installed.
 catalog:
+  "@excalidraw/excalidraw": 0.18.1
+  "@floating-ui/dom": 1.8.0
   "@microsoft/signalr": 10.0.11
+  "@tabler/icons-react": 3.49.0
   "@tailwindcss/postcss": 4.3.3
   "@tanstack/react-query": 5.103.2
   "@tanstack/react-virtual": 3.14.13
   "@testing-library/react": 16.3.3
+  "@tiptap/core": 3.32.0
+  "@tiptap/extension-bubble-menu": 3.32.0
+  "@tiptap/extension-code-block": 3.32.0
+  "@tiptap/extension-code-block-lowlight": 3.32.0
+  "@tiptap/extension-collaboration": 3.32.0
+  "@tiptap/extension-drag-handle": 3.32.0
+  "@tiptap/extension-drag-handle-react": 3.32.0
+  "@tiptap/extension-floating-menu": 3.32.0
+  "@tiptap/extension-heading": 3.32.0
+  "@tiptap/extension-image": 3.32.0
+  "@tiptap/extension-link": 3.32.0
+  "@tiptap/extension-list": 3.32.0
+  "@tiptap/extension-mathematics": 3.32.0
+  "@tiptap/extension-node-range": 3.32.0
+  "@tiptap/extension-paragraph": 3.32.0
+  "@tiptap/extension-table": 3.32.0
+  "@tiptap/extensions": 3.32.0
+  "@tiptap/markdown": 3.32.0
+  "@tiptap/pm": 3.32.0
+  "@tiptap/react": 3.32.0
+  "@tiptap/starter-kit": 3.32.0
+  "@tiptap/static-renderer": 3.32.0
+  "@tiptap/suggestion": 3.32.0
+  "@tiptap/y-tiptap": 3.0.10
+  "@types/css-tree": 3.2.0
   "@types/jsdom": 30.0.0
+  "@types/mdast": 4.0.4
+  "@types/mime-types": 3.0.1
   "@types/node": 26.6.2
+  "@types/postcss-import": 14.0.3
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
+  "@types/semver": 7.8.0
+  "@types/ws": 8.18.2
+  "@types/yauzl": 3.4.0
+  "@types/yazl": 3.3.1
+  "@vitejs/plugin-react": 6.1.2
+  "@vitejs/plugin-vue": 6.0.10
+  "@xmldom/xmldom": 0.9.12
+  acorn: 8.19.0
+  acorn-walk: 8.3.5
+  ajv: 8.20.0
+  chardet: 2.2.0
   code-inspector-plugin: 2.0.9
+  css-tree: 3.2.1
+  data-urls: 7.0.0
+  diff: 9.0.0
+  dts-bundle-generator: 9.5.1
   esbuild: 0.28.2
+  eventsource-parser: 4.1.2
   expo-file-system: ~57.0.7
   expo-image: ~57.0.5
   expo-image-picker: ~57.0.19
+  fast-check: 4.10.2
+  github-slugger: 2.0.0
+  hast-util-to-jsx-runtime: 2.3.6
+  highlight.js: 11.12.0
   jsdom: 30.1.0
+  iconv-lite: 0.7.3
   idb: 8.0.3
+  monaco-editor: 0.57.0
   playwright: 1.63.0
-  lucide-react: 1.47.0
-  lucide-react-native: 1.47.0
+  postcss: 8.5.28
+  postcss-import: 17.0.1
+  lowlight: 3.3.0
+  lucide-react: 1.56.0
+  lucide-react-native: 1.56.0
+  marked: 17.0.6
+  marked-footnote: 1.4.0
+  mdast-util-gfm: 3.1.0
+  mdast-util-to-markdown: 2.1.2
+  mermaid: 12.0.0
+  micromark-util-classify-character: 2.0.1
+  micromark-util-decode-string: 2.0.1
+  mime-types: 3.0.2
   next: 16.3.5
   next-themes: 0.4.6
   oxfmt: 0.69.0
   oxlint: 1.84.0
+  prettier: 3.9.10
+  radix-ui: 1.6.7
   react: 19.3.0
   react-dom: 19.3.0
   react-markdown: 10.1.0
@@ -40,13 +107,26 @@ catalog:
   react-native-enriched-markdown: 1.0.2
   react-native-svg: 15.15.5
   remark-gfm: 4.0.1
+  semver: 7.8.5
+  serve: 14.2.6
   sonner: 2.0.8
   tailwindcss: 4.3.3
   tsx: 4.23.15
   tw-animate-css: 1.4.0
   typescript: 7.0.2
   uuid: 14.0.2
+  vfile: 6.0.3
+  vfile-matter: 5.0.1
+  vite: 8.3.4
+  vue: 3.5.44
+  wabt: 1.0.39
+  ws: 8.22.0
+  y-protocols: 1.0.7
+  yauzl: 3.4.0
+  yazl: 3.3.1
   yet-another-react-lightbox: 3.32.2
+  yjs: 13.6.33
+  zod: 4.6.7
 
 # pnpm add 自动写入 catalog；手写的越界版本以 ERR_PNPM_CATALOG_VERSION_MISMATCH 终止。
 # pnpm add writes into the catalog automatically; an out-of-range version fails the install.
@@ -54,8 +134,21 @@ catalogMode: strict
 
 overrides:
   "@electron/rebuild": 4.0.2
+  # dts-bundle-generator 调用 TypeScript 编译器 API，TypeScript 7 不再提供该 API。
+  # dts-bundle-generator calls the TypeScript compiler API, which TypeScript 7 no longer ships.
+  "dts-bundle-generator>typescript": 6.0.3
+  # @excalidraw/excalidraw 0.18.1 及其 mermaid 依赖锁定了存在 High 级安全公告的版本，改用同一主版本的修复版本。
+  # @excalidraw/excalidraw 0.18.1 and its mermaid dependency pin versions with High advisories; use the patched release of the same major.
+  "@excalidraw/excalidraw>nanoid": 3.3.20
+  "@excalidraw/mermaid-to-excalidraw>nanoid": 5.1.16
+  "chevrotain>lodash-es": 4.18.1
+  "@chevrotain/gast>lodash-es": 4.18.1
+  "@chevrotain/cst-dts-gen>lodash-es": 4.18.1
 
 patchedDependencies:
+  # 设置了 EXCALIDRAW_ASSET_PATH 时字体只从该地址加载，不再加 esm.sh 回退地址（extension 的 CSP 会拦截并报告它）。
+  # With EXCALIDRAW_ASSET_PATH set, fonts load only from it, without the esm.sh fallback the extension CSP blocks and reports.
+  '@excalidraw/excalidraw@0.18.1': patches/@excalidraw__excalidraw@0.18.1.patch
   # Detach DMGs by their stable /dev/diskN device when the /Volumes path disappears on macOS runners.
   appdmg@0.6.6: patches/appdmg@0.6.6.patch
 

@@ -375,6 +375,16 @@ public static class ErrorCodes
         "Shell commands must not read, list, search, write, edit or delete files; use the file access tools.",
         HttpStatusCode.Forbidden
     );
+    public static readonly ErrorCode FileNotWritable = new(
+        403_0007,
+        "File is read-only or not writable.",
+        HttpStatusCode.Forbidden
+    );
+    public static readonly ErrorCode ConversationReadOnly = new(
+        403_0008,
+        "The conversation is read-only for this extension.",
+        HttpStatusCode.Forbidden
+    );
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(
@@ -536,6 +546,22 @@ public static class ErrorCodes
         409_0022,
         "Job changed while the operation was in progress. Reload and try again.",
         HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode DirectoryNotEmpty = new(
+        409_0023,
+        "Directory is not empty.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode FileChanged = new(
+        409_0024,
+        "File changed since it was read. Reload it and try again.",
+        HttpStatusCode.Conflict
+    );
+
+    public static readonly ErrorCode FileTooLarge = new(
+        413_0001,
+        "File exceeds the 100 MiB transfer limit.",
+        HttpStatusCode.RequestEntityTooLarge
     );
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(

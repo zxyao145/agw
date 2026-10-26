@@ -1,0 +1,13 @@
+{
+  "name": "@agw/extension-soft-theme",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agw Desktop bundled extension that provides the Soft theme",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "lint": "oxlint -c ../../../.oxlintrc.json ./build.mjs",
+    "format": "oxfmt -c ../../../.oxfmtrc.json ./build.mjs *.json themes",
+    "format:check": "oxfmt -c ../../../.oxfmtrc.json --check ./build.mjs *.json themes"
+  }
+}

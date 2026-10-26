@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
@@ -12,9 +13,10 @@ namespace Agw.Agents.Tests;
 public sealed class InProcessTurnRecoveryTests : IAsyncLifetime
 {
     private readonly DateTimeOffset _started = new(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
+    private readonly TestTimeProvider _clock = new(new DateTimeOffset(2026, 9, 2, 8, 0, 0, TimeSpan.Zero));
     private TurnPersistenceTestKit _kit = null!;
 
-    public async ValueTask InitializeAsync() => _kit = await TurnPersistenceTestKit.CreateAsync();
+    public async ValueTask InitializeAsync() => _kit = await TurnPersistenceTestKit.CreateAsync(_clock);
 
     public ValueTask DisposeAsync() => _kit.DisposeAsync();
 
@@ -45,7 +47,7 @@ public sealed class InProcessTurnRecoveryTests : IAsyncLifetime
         var completed = await AddTurnAsync(conversationId, ProjectConversationTurnStatus.Completed, 6);
         var failed = await AddTurnAsync(conversationId, ProjectConversationTurnStatus.Failed, 7);
         var foreign = await AddTurnAsync(foreignConversationId, ProjectConversationTurnStatus.Running, 0);
-        var recovery = new InProcessTurnRecovery(_kit.Services.GetRequiredService<IServiceScopeFactory>());
+        var recovery = new InProcessTurnRecovery(_kit.Services.GetRequiredService<IServiceScopeFactory>(), _clock);
 
         // Act
         await recovery.RecoverAsync(token);
@@ -55,7 +57,8 @@ public sealed class InProcessTurnRecoveryTests : IAsyncLifetime
         {
             var turn = await _kit.ReadTurnAsync(turnId);
             Assert.Equal(ProjectConversationTurnStatus.Interrupted, turn.Status);
-            Assert.NotNull(turn.FinishedAt);
+            Assert.Equal(_clock.GetUtcNow(), turn.FinishedAt);
+            Assert.Equal(turn.FinishedAt, turn.UsageSettlesAt);
         }
         Assert.Equal(3, (await _kit.ReadTurnAsync(running)).LastSequence);
         var durableTurn = await _kit.ReadTurnAsync(durable);

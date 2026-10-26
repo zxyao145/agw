@@ -1,0 +1,54 @@
+/* Mermaid 图表（Mixed 与 Preview 共用），颜色来自宿主主题变量（theme.apply）。图表没有内容（源码为空或还没有渲染结果）时
+   不占位置；图表居中，宽度超出时缩小到容器宽度。
+   Mermaid diagrams (shared by Mixed and Preview); colors come from the host theme variables (theme.apply). Without
+   content (blank source or no render result yet) a diagram takes no space; diagrams are centered and shrink to the
+   container width. */
+
+.mermaid-diagram {
+  position: relative;
+}
+
+.mermaid-diagram:empty {
+  display: none;
+}
+
+.mermaid-diagram > svg {
+  display: block;
+  margin-inline: auto;
+}
+
+.mermaid-diagram-error {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--destructive);
+}
+
+/* 预览按钮：鼠标在图表上或按钮有键盘焦点时显示在右上角。The preview button shows in the top-right corner while the
+   pointer is over the diagram or the button has keyboard focus. */
+.mermaid-diagram-open {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.mermaid-diagram:hover .mermaid-diagram-open,
+.mermaid-diagram-open:focus-visible {
+  opacity: 1;
+}
+
+.mermaid-diagram-open:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}

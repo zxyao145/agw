@@ -15,7 +15,8 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         Guid conversationId,
         Dictionary<string, string>? environmentVariables = null,
         AgwPermissionMode? permissionMode = null,
-        bool resultOnly = false
+        bool resultOnly = false,
+        string? extensionId = null
     )
     {
         ProjectId = projectId;
@@ -23,6 +24,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         EnvironmentVariables = environmentVariables ?? new Dictionary<string, string>();
         PermissionMode = permissionMode;
         ResultOnly = resultOnly;
+        ExtensionId = extensionId;
     }
 
     public Guid ProjectId { get; set; }
@@ -47,6 +49,12 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     /// </summary>
     public bool ResultOnly { get; set; }
 
+    /// <summary>
+    /// 连接代表的 Desktop extension；只由 Desktop 为 extension 的会话写入，宿主的会话不带。
+    /// The Desktop extension the connection represents; written only by Desktop for extension sessions and omitted by host sessions.
+    /// </summary>
+    public string? ExtensionId { get; set; }
+
     [JsonIgnore]
     public bool Resume { get; set; }
 
@@ -66,6 +74,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
             && left.ConversationId == right.ConversationId
             && left.PermissionMode == right.PermissionMode
             && left.ResultOnly == right.ResultOnly
+            && string.Equals(left.ExtensionId, right.ExtensionId, StringComparison.Ordinal)
             && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
     }
 
@@ -81,6 +90,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
             ConversationId,
             PermissionMode,
             ResultOnly,
+            ExtensionId,
             GetEnvironmentVariablesHashCode(EnvironmentVariables)
         );
 

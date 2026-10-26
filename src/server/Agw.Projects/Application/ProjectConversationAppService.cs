@@ -71,7 +71,12 @@ public class ProjectConversationAppService
             return CreateConversationPage([], 0, query);
         }
 
-        var conversations = await GetConversationPageAsync(conversationsQuery, query, cancellationToken);
+        var conversations = await GetConversationPageAsync(
+            conversationsQuery,
+            _dbContext.ProjectConversationTurns,
+            query,
+            cancellationToken
+        );
         if (conversations.Count == 0)
         {
             return CreateConversationPage([], total, query);
@@ -463,6 +468,10 @@ public class ProjectConversationAppService
         var latestRecord = await GetLatestRecordAsync(recordsQuery, cancellationToken);
         var usage = await GetUsageAsync(conversation, cancellationToken);
         var resumeState = await GetResumeStateAsync(recordsQuery, cancellationToken);
+        var hasAcceptedTurns = await _dbContext.ProjectConversationTurns.AnyAsync(
+            turn => turn.ProjectConversationId == conversation.Id,
+            cancellationToken
+        );
 
         return new ProjectConversationResponse(
             conversation.ProjectId.Normalize(),
@@ -476,30 +485,92 @@ public class ProjectConversationAppService
             conversation.CreateTime,
             conversation.UpdateTime,
             latestRecord?.TaskErrorMessage ?? latestRecord?.Error,
+            conversation.ExtensionId,
+            ProjectConversationBehavior.IsOpenToExtensions(
+                conversation.ExtensionId,
+                conversation.Generation,
+                hasAcceptedTurns
+            ),
             usage,
             resumeState
         );
     }
 
+    /// <summary>
+    /// 对话的用量：已结算 Turn 与不属于 Turn 的用量之和；未结算 Turn 的用量不计入，Turn 列在 UnsettledTurnIds 中。
+    /// 两次查询之间结算的 Turn 仍算作未结算，之间开始的 Turn 没有被汇总；两种情况下客户端都继续计入它们的推送用量。
+    /// The conversation's usage: the sum over settled turns and usage outside any turn; unsettled turns are left out and listed in UnsettledTurnIds.
+    /// A turn settling between the two queries still counts as unsettled, and one starting between them was not summed; either way clients keep counting its pushed usage.
+    /// </summary>
     private async Task<ProjectConversationUsage> GetUsageAsync(
         ProjectConversation conversation,
         CancellationToken cancellationToken
-    ) =>
-        await _dbContext
-            .AgentUsages.Where(usage =>
+    )
+    {
+        var now = _timeProvider.GetUtcNow();
+        var groups = await (
+            from usage in _dbContext.AgentUsages.Where(usage =>
                 usage.ProjectId == conversation.ProjectId && usage.ContextId == conversation.ContextId
             )
-            .GroupBy(_ => 1)
-            .Select(group => new ProjectConversationUsage
+            join turn in _dbContext.ProjectConversationTurns on usage.TurnId equals (Guid?)turn.Id into turns
+            from turn in turns.DefaultIfEmpty()
+            group usage by new
             {
-                InputTokenCount = group.Sum(usage => usage.InputTokenCount),
-                OutputTokenCount = group.Sum(usage => usage.OutputTokenCount),
-                TotalTokenCount = group.Sum(usage => usage.TotalTokenCount),
-                CachedInputTokenCount = group.Sum(usage => usage.CachedInputTokenCount),
-                ReasoningTokenCount = group.Sum(usage => usage.ReasoningTokenCount),
-            })
-            .SingleOrDefaultAsync(cancellationToken)
-        ?? new ProjectConversationUsage();
+                usage.TurnId,
+                Status = (ProjectConversationTurnStatus?)turn.Status,
+                turn.UsageSettlesAt,
+            } into turnUsage
+            select new
+            {
+                turnUsage.Key.TurnId,
+                turnUsage.Key.Status,
+                turnUsage.Key.UsageSettlesAt,
+                InputTokenCount = turnUsage.Sum(usage => usage.InputTokenCount),
+                OutputTokenCount = turnUsage.Sum(usage => usage.OutputTokenCount),
+                TotalTokenCount = turnUsage.Sum(usage => usage.TotalTokenCount),
+                CachedInputTokenCount = turnUsage.Sum(usage => usage.CachedInputTokenCount),
+                ReasoningTokenCount = turnUsage.Sum(usage => usage.ReasoningTokenCount),
+            }
+        ).ToListAsync(cancellationToken);
+        var unsettled = (
+            await _dbContext
+                .ProjectConversationTurns.AsNoTracking()
+                .Where(turn =>
+                    turn.ProjectConversationId == conversation.Id
+                    && (
+                        turn.Status == ProjectConversationTurnStatus.Accepted
+                        || turn.Status == ProjectConversationTurnStatus.Running
+                        || turn.UsageSettlesAt > now
+                    )
+                )
+                .Select(turn => turn.Id)
+                .ToListAsync(cancellationToken)
+        ).ToHashSet();
+        foreach (var group in groups)
+        {
+            // 没有对应 Turn 行的分组（例如对话记录已经清空）与不属于 Turn 的用量一样计入。
+            // A group without a turn row (for example after the records were cleared) counts like usage outside any turn.
+            if (
+                group.TurnId is { } turnId
+                && (
+                    group.Status is ProjectConversationTurnStatus.Accepted or ProjectConversationTurnStatus.Running
+                    || group.UsageSettlesAt > now
+                )
+            )
+                unsettled.Add(turnId);
+        }
+
+        var settled = groups.Where(group => group.TurnId is not { } turnId || !unsettled.Contains(turnId)).ToArray();
+        return new ProjectConversationUsage
+        {
+            InputTokenCount = settled.Sum(group => group.InputTokenCount),
+            OutputTokenCount = settled.Sum(group => group.OutputTokenCount),
+            TotalTokenCount = settled.Sum(group => group.TotalTokenCount),
+            CachedInputTokenCount = settled.Sum(group => group.CachedInputTokenCount),
+            ReasoningTokenCount = settled.Sum(group => group.ReasoningTokenCount),
+            UnsettledTurnIds = [.. unsettled.Order()],
+        };
+    }
 
     private static ProjectConversationSummaryResponse ToSummaryResponse(
         ConversationListRow conversation,
@@ -535,7 +606,13 @@ public class ProjectConversationAppService
             aggregate?.MessageCount ?? 0,
             conversation.CreateTime,
             conversation.UpdateTime,
-            latestTask?.ErrorMessage
+            latestTask?.ErrorMessage,
+            conversation.ExtensionId,
+            ProjectConversationBehavior.IsOpenToExtensions(
+                conversation.ExtensionId,
+                conversation.Generation,
+                conversation.HasAcceptedTurns
+            )
         );
     }
 
@@ -767,6 +844,7 @@ public class ProjectConversationAppService
 
     private static async Task<IReadOnlyList<ConversationListRow>> GetConversationPageAsync(
         IQueryable<ProjectConversation> query,
+        IQueryable<ProjectConversationTurn> turns,
         ProjectConversationListQuery page,
         CancellationToken cancellationToken
     )
@@ -784,7 +862,8 @@ public class ProjectConversationAppService
                         .OrderByDescending(conversation => conversation.UpdateTime ?? conversation.CreateTime)
                         .ThenByDescending(conversation => conversation.Id)
                         .Skip((int)skip)
-                        .Take(page.PageSize)
+                        .Take(page.PageSize),
+                    turns
                 )
                 .ToListAsync(cancellationToken);
         }
@@ -795,7 +874,7 @@ public class ProjectConversationAppService
                 )
             )
         {
-            var rows = await SelectConversationListRows(query).ToListAsync(cancellationToken);
+            var rows = await SelectConversationListRows(query, turns).ToListAsync(cancellationToken);
             return rows.OrderByDescending(conversation => conversation.UpdateTime ?? conversation.CreateTime)
                 .ThenByDescending(conversation => conversation.Id)
                 .Skip((int)skip)
@@ -804,7 +883,10 @@ public class ProjectConversationAppService
         }
     }
 
-    private static IQueryable<ConversationListRow> SelectConversationListRows(IQueryable<ProjectConversation> query) =>
+    private static IQueryable<ConversationListRow> SelectConversationListRows(
+        IQueryable<ProjectConversation> query,
+        IQueryable<ProjectConversationTurn> turns
+    ) =>
         query.Select(conversation => new ConversationListRow
         {
             Id = conversation.Id,
@@ -813,6 +895,8 @@ public class ProjectConversationAppService
             JobId = conversation.JobId,
             ContextId = conversation.ContextId,
             Title = conversation.Title,
+            ExtensionId = conversation.ExtensionId,
+            HasAcceptedTurns = turns.Any(turn => turn.ProjectConversationId == conversation.Id),
             CreateTime = conversation.CreateTime,
             UpdateTime = conversation.UpdateTime,
         });
@@ -838,6 +922,8 @@ public class ProjectConversationAppService
         public Guid? JobId { get; init; }
         public string ContextId { get; init; } = string.Empty;
         public string Title { get; init; } = string.Empty;
+        public string ExtensionId { get; init; } = string.Empty;
+        public bool HasAcceptedTurns { get; init; }
         public DateTimeOffset CreateTime { get; init; }
         public DateTimeOffset? UpdateTime { get; init; }
     }

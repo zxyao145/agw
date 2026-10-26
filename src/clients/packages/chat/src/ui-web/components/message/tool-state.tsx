@@ -165,7 +165,7 @@ export function MessageCitations({ message }: { message: AiMessage }) {
           target="_blank"
           rel="noreferrer"
           title={citation.snippet}
-          className="inline-flex max-w-full items-center gap-1 rounded-full border bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="inline-flex max-w-full items-center gap-1 rounded-full border bg-muted/30 px-2 py-1 text-11 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <span className="shrink-0">{index + 1}</span>
           <span className="truncate">{citation.title || citation.url}</span>

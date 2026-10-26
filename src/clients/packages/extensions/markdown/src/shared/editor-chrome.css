@@ -1,0 +1,87 @@
+/* Mixed 与 Code 共用的按钮（Mixed 的块菜单按钮、Code 状态栏的按钮）与弹出菜单，颜色来自宿主主题变量（theme.apply）。
+   The buttons (Mixed's block menu buttons, Code's status bar buttons) and popup menus shared by Mixed and Code; colors
+   come from the host theme variables (theme.apply). */
+
+.chrome-button {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chrome-button:hover:not(:disabled),
+.chrome-button[aria-expanded="true"],
+.chrome-button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.chrome-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.popup {
+  position: relative;
+}
+
+.popup-menu {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-height: 320px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16);
+}
+
+.popup-menu[data-placement="below"] {
+  top: calc(100% + 4px);
+}
+
+.popup-menu[data-placement="above"] {
+  bottom: calc(100% + 4px);
+}
+
+.popup-menu button {
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.popup-menu button:hover,
+.popup-menu button:focus-visible {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  outline: none;
+}
+
+.popup-heading,
+.popup-note {
+  margin: 0;
+  padding: 4px 8px;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.popup-heading {
+  font-weight: 600;
+}

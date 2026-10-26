@@ -1,3 +1,4 @@
+export * from "./lib/extension-menu";
 export * from "./lib/project-tabs";
 export * from "./services/files";
 export * from "./services/provider-sessions";

@@ -1,0 +1,50 @@
+/* 编辑器的字号、行区域、行操作按钮与整行标记（设计文档第 2、6 节）。颜色来自宿主变量。
+   The editor size, line zones, the line action button and whole-line marks (design sections 2 and 6). Colors come
+   from host variables. */
+
+/* Desktop 在根元素上设置 Code font size；Web 没有这个变量。Desktop sets the Code font size on the root element; Web has
+   no such variable. */
+.agw-code-view-editor {
+  font-size: var(--agw-font-size-code, 0.875rem);
+}
+
+/* overlay widget 的位置为 null，锚点停在编辑器左上角；frame 由我们定位。The overlay widget has a null position, so the
+   anchor stays at the editor's top left; we position the frame. */
+.agw-code-view-zone-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+}
+
+.agw-code-view-zone {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* 行操作按钮显示在鼠标所在行的行号列左侧。The line action button shows at the left of the line-number column on the
+   line under the mouse. */
+.monaco-editor .agw-code-view-line-action {
+  position: absolute;
+  left: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.monaco-editor .agw-code-view-line-action.is-hidden {
+  display: none;
+}
+
+.monaco-editor .agw-code-view-marked-line {
+  background: color-mix(in oklab, var(--muted) 50%, transparent);
+}

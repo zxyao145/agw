@@ -1,0 +1,99 @@
+@layer css-theme-components, css-theme-probe;
+@import "parts/fonts.css";
+@import "parts/components.css" layer(css-theme-components);
+
+:root {
+  --css-theme-gap: 20px;
+  --css-theme-accent: #0b6e4f;
+}
+
+:root:not(.dark) {
+  --background: #fffdf8;
+  --foreground: #24211d;
+}
+
+/* 背景图形只在深色下定义。The backdrop is defined only in dark mode. */
+:root.dark {
+  --background: #24211d;
+  --foreground: #fffdf8;
+  --agw-workspace-backdrop: linear-gradient(120deg, #2b2620 0 40%, #3a3129 40%);
+}
+
+:root[data-agw-document="desktop"] .agw-main-workspace {
+  gap: var(--css-theme-gap);
+}
+
+:root[data-agw-document="desktop"] .agw-ribbon {
+  display: grid;
+  border-right: 3px solid var(--css-theme-accent);
+}
+
+:root[data-agw-document="extension"] body {
+  color: var(--foreground);
+}
+
+:root[data-agw-extension="01a173b5-526c-74d8-864c-2fa2035185e4"] .edit-scroll {
+  outline: 2px solid var(--css-theme-accent);
+}
+
+.css-theme-font {
+  font-family: "CSS Theme Font", monospace;
+}
+
+/* 来源顺序与级联的探针。Source order and cascade probes. */
+.css-theme-order {
+  color: rgb(1, 2, 3);
+}
+
+@layer css-theme-probe {
+  .css-theme-layered {
+    color: rgb(4, 5, 6);
+  }
+
+  .css-theme-layered-important {
+    color: rgb(7, 8, 9) !important;
+  }
+}
+
+/* 占位区域的位置与可见性探针。Slot position and visibility probes. */
+:root[data-css-theme-probe="shift"] .agw-main-workspace .agw-extension-view-slot {
+  transform: translateX(40px);
+}
+
+:root[data-css-theme-probe="narrow"] .agw-main-workspace .agw-extension-view-slot {
+  margin-right: 100px;
+}
+
+:root[data-css-theme-probe="hidden"] .agw-main-workspace .agw-extension-view-slot {
+  visibility: hidden;
+}
+
+:root[data-css-theme-probe="transparent"] .agw-main-workspace .agw-extension-view-slot {
+  opacity: 0;
+}
+
+:root[data-css-theme-probe="animate"] .agw-main-workspace .agw-extension-view-slot {
+  animation: css-theme-slide 400ms linear forwards;
+}
+
+:root[data-agw-document="desktop"]:has(.agw-ribbon:hover) .agw-main-workspace .agw-extension-view-slot {
+  transform: translateY(12px);
+}
+
+@keyframes css-theme-slide {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(30px);
+  }
+}
+
+@media (min-width: 1px) {
+  @supports (display: grid) {
+    .css-theme-conditional {
+      color: rgb(20, 30, 40);
+    }
+  }
+}

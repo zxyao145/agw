@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Agw.Agents.Execution.Context;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -258,6 +259,7 @@ public sealed class AgentTelemetryMiddleware
                 projectId,
                 contextId,
                 agentName,
+                ExecutionScope.Current?.Context.TurnId,
                 new ProjectContextUsage
                 {
                     InputTokenCount = usage.InputTokenCount ?? 0,

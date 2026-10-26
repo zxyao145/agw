@@ -10,9 +10,9 @@ using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Files.Abstracts;
-using Agw.Files.Infrastructure.Storage;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Runtime;
+using Agw.Testing;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,14 +49,14 @@ internal sealed class InProcessCoordinatorTestKit : IAgwFileSystemResolver
         );
 
     public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
-        Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(AppContext.BaseDirectory));
+        Task.FromResult<IAgwFileSystem?>(TestFileSystems.Local(AppContext.BaseDirectory));
 
     public Task<IAgwFileSystem?> ResolveSnapshotAsync(
         Guid projectId,
         ProjectWorkspaceSnapshot snapshot,
         Guid? directoryId,
         CancellationToken ct
-    ) => Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(snapshot.Workspace));
+    ) => Task.FromResult<IAgwFileSystem?>(TestFileSystems.Local(snapshot.Workspace));
 }
 
 /// <summary>

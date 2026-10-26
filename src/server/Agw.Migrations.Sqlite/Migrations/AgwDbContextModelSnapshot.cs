@@ -998,6 +998,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("error_message");
 
+                    b.Property<long?>("InterruptedLeaseEpoch")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("interrupted_lease_epoch");
+
                     b.Property<long>("LastEventSequence")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -1605,6 +1609,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("total_token_count");
 
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_id");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1747,6 +1755,14 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("CreateTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
+
+                    b.Property<string>("ExtensionId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("host")
+                        .HasColumnName("extension_id");
 
                     b.Property<int>("Generation")
                         .IsConcurrencyToken()
@@ -2040,6 +2056,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("TaskId")
                         .HasColumnType("TEXT")
                         .HasColumnName("task_id");
+
+                    b.Property<long?>("UsageSettlesAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("usage_settles_at");
 
                     b.HasKey("Id")
                         .HasName("pk_project_conversation_turn");

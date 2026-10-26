@@ -30,6 +30,8 @@ module.exports = {
     ],
     extraResource: [
       path.resolve(__dirname, "resources", "renderer"),
+      path.resolve(__dirname, "resources", "extension-sdk"),
+      path.resolve(__dirname, "resources", "extensions"),
       path.resolve(__dirname, "resources", "package-flavor.json"),
       path.resolve(__dirname, "assets"),
       ...(flavor === "full" ? [path.resolve(__dirname, "resources", "server")] : []),
@@ -40,6 +42,8 @@ module.exports = {
       /^\/src($|\/)/,
       /^\/scripts($|\/)/,
       /^\/renderer($|\/)/,
+      /^\/test-fixtures($|\/)/,
+      /^\/\.scratch($|\/)/,
       /^\/node_modules($|\/)/,
       /\.test\.(ts|js)$/,
     ],

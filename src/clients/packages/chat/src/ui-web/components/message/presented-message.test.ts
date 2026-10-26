@@ -169,6 +169,15 @@ test("an ordinary agent message carries no title", () => {
   assert.equal(screen.queryByText("Result"), null);
 });
 
+test("an ordinary agent message spans the full conversation width", () => {
+  const view = renderMessage(
+    presented([{ type: "markdown", markdown: "Working", sourceType: "TextContent" }]),
+  );
+
+  assert.ok(view.container.firstElementChild?.classList.contains("w-full"));
+  assert.equal(view.container.querySelector('[class*="max-w-[80%]"]'), null);
+});
+
 test("tool use and tool result messages are titled by their direction", () => {
   const view = renderMessage(
     presented([{ type: "json", text: "{}" }], {

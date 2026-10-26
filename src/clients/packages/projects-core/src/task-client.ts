@@ -1,5 +1,4 @@
 import type { AiMessage, ConversationHistoryTurn, components } from "@agw/api";
-import { normalizeTokenUsage, type TokenUsage, type TokenUsageInput } from "@agw/api";
 
 import { ApiError, type AgwApiClient } from "@agw/api";
 import * as browserClient from "@agw/api";
@@ -16,12 +15,13 @@ export type ConversationTurnInputSummary = Pick<
 export async function getConversationTurnInputs(
   conversationId: string,
   signal?: AbortSignal,
+  client: ProjectConversationApiClient = browserClient,
 ): Promise<ConversationTurnInputSummary[]> {
   const inputs: ConversationTurnInputSummary[] = [];
   let beforeSequence: number | string | undefined;
   let beforeTurnId: string | undefined;
   while (true) {
-    const page = await browserClient.apiGet("/api/projects/conversation-turns", {
+    const page = await client.apiGet("/api/projects/conversation-turns", {
       params: { query: { conversationId, beforeSequence, beforeTurnId, limit: 100 } },
       signal,
     });
@@ -70,6 +70,9 @@ export async function getConversationActivity(
   });
 }
 
+/** 宿主创建的对话的 `extensionId`。The `extensionId` of a conversation the host created. */
+export const HOST_EXTENSION_ID = "host";
+
 export interface ConversationSummary {
   projectId: string;
   conversationId: string;
@@ -82,6 +85,16 @@ export interface ConversationSummary {
   createTime: string;
   updateTime?: string | null;
   errorMessage?: string | null;
+  /**
+   * 创建方：{@link HOST_EXTENSION_ID}（宿主）或 Desktop extension 的 id；Server 没有返回时（旧版 Server）为 null。
+   * The creator: {@link HOST_EXTENSION_ID} or a Desktop extension id; null when the Server does not return it (an older Server).
+   */
+  extensionId: string | null;
+  /**
+   * 开放对话：宿主创建、从未清空记录、没有已受理的 Turn，所有 extension 都可以写入。
+   * An open conversation: host-created, never cleared and without accepted turns; every extension may write it.
+   */
+  openToExtensions: boolean;
 }
 
 export type ConversationPage = {
@@ -105,7 +118,6 @@ export type ConversationResumeState = {
 };
 
 export interface ConversationDetails extends ConversationSummary {
-  usage: TokenUsage;
   resumeState: ConversationResumeState | null;
 }
 
@@ -132,6 +144,8 @@ export type ProjectConversationSummaryResponse = {
   createTime: string;
   updateTime?: string | null;
   errorMessage?: string | null;
+  extensionId?: string;
+  openToExtensions?: boolean;
 };
 
 export type ProjectConversationPageResponse = {
@@ -142,7 +156,6 @@ export type ProjectConversationPageResponse = {
 };
 
 export type ProjectConversationResponse = ProjectConversationSummaryResponse & {
-  usage?: TokenUsageInput | null;
   resumeState?: ConversationResumeState | null;
 };
 
@@ -175,13 +188,14 @@ function toConversationSummary(
     createTime: conversation.createTime,
     updateTime: conversation.updateTime ?? null,
     errorMessage: conversation.errorMessage ?? null,
+    extensionId: conversation.extensionId ?? null,
+    openToExtensions: conversation.openToExtensions ?? false,
   };
 }
 
 function toConversationDetails(conversation: ProjectConversationResponse): ConversationDetails {
   return {
     ...toConversationSummary(conversation),
-    usage: normalizeTokenUsage(conversation.usage),
     resumeState: conversation.resumeState ?? null,
   };
 }
@@ -259,41 +273,6 @@ export async function getProjectConversationMessages(
     hasMore: response.hasMore,
     turns: response.turns,
   };
-}
-
-export async function getProjectConversationHistory(
-  projectId: string,
-  conversationId: string,
-  client: ProjectConversationApiClient = browserClient,
-  signal?: AbortSignal,
-): Promise<ConversationHistory> {
-  const [details, firstPage] = await Promise.all([
-    getProjectConversationDetails(projectId, conversationId, client, signal),
-    getProjectConversationMessages(
-      projectId,
-      conversationId,
-      { direction: "newer", pageSize: 100, signal },
-      client,
-    ),
-  ]);
-  const messages: AiMessage[] = [];
-  let page = firstPage;
-
-  while (true) {
-    messages.push(...page.items);
-    if (!page.hasMore || !page.nextCursor) {
-      break;
-    }
-
-    page = await getProjectConversationMessages(
-      projectId,
-      conversationId,
-      { direction: "newer", cursor: page.nextCursor, pageSize: 100, signal },
-      client,
-    );
-  }
-
-  return { ...details, messages };
 }
 
 export async function updateProjectConversationTitle(
@@ -403,11 +382,6 @@ export type ProjectConversationService = {
     conversationId: string,
     options: ConversationMessagePageOptions,
   ): Promise<ConversationMessagePage>;
-  getProjectConversationHistory(
-    projectId: string,
-    conversationId: string,
-    signal?: AbortSignal,
-  ): Promise<ConversationHistory>;
   updateProjectConversationTitle(
     projectId: string,
     conversationId: string,
@@ -428,8 +402,6 @@ export function createProjectConversationService(
       getProjectConversationDetails(projectId, conversationId, client),
     getProjectConversationMessages: (projectId, conversationId, options) =>
       getProjectConversationMessages(projectId, conversationId, options, client),
-    getProjectConversationHistory: (projectId, conversationId, signal) =>
-      getProjectConversationHistory(projectId, conversationId, client, signal),
     updateProjectConversationTitle: (projectId, conversationId, title) =>
       updateProjectConversationTitle(projectId, conversationId, title, client),
     deleteProjectConversation: (projectId, conversationId) =>

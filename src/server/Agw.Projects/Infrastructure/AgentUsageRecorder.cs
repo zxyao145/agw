@@ -21,6 +21,7 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
         Guid projectId,
         string contextId,
         string agentName,
+        Guid? turnId,
         ProjectContextUsage usage,
         CancellationToken cancellationToken = default
     )
@@ -51,6 +52,7 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
                 UserId = ownerUserId,
                 ContextId = ContextIdUtil.NormalizeContextId(contextId),
                 AgentName = agentName,
+                TurnId = turnId,
                 RecordedAt = _timeProvider.GetUtcNow(),
                 InputTokenCount = usage.InputTokenCount,
                 OutputTokenCount = usage.OutputTokenCount,

@@ -2,6 +2,8 @@ using System.Reflection;
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
 using Agw.Files.Infrastructure.Storage;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +16,7 @@ public class DependencyInjectionTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
         services.AddFiles(new ConfigurationBuilder().Build());
 
         await using var serviceProvider = services.BuildServiceProvider();
@@ -47,6 +50,7 @@ public class DependencyInjectionTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
+            services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(
                 new TestProjectFileSystemConfigurationProvider(workspace)
             );
@@ -86,6 +90,7 @@ public class DependencyInjectionTests
             var configuration = new TestProjectFileSystemConfigurationProvider(firstWorkspace);
             var services = new ServiceCollection();
             services.AddLogging();
+            services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(configuration);
             services.AddFiles(new ConfigurationBuilder().Build());
 
@@ -125,6 +130,7 @@ public class DependencyInjectionTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
+            services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(
                 new TestProjectFileSystemConfigurationProvider(null, projectName)
             );

@@ -1,0 +1,9 @@
+{
+  "manifestVersion": 1,
+  "id": "01a173b5-526c-74d8-864c-22d6a1aaef33",
+  "name": "Slow",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture whose activate hook never finishes.",
+  "background": "background.js",
+  "hostPermissions": ["http://127.0.0.1:__HTTP_PORT__"]
+}

@@ -1,5 +1,14 @@
 import * as React from "react";
-import { ChevronDown, Pencil, RefreshCw, Settings, Trash2, X } from "lucide-react-native";
+import {
+  ChevronDown,
+  MessageCircleText,
+  Pencil,
+  Puzzle,
+  RefreshCw,
+  Settings,
+  Trash2,
+  X,
+} from "lucide-react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +20,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import type { ConversationSummary } from "@agw/projects-core";
+import { HOST_EXTENSION_ID, type ConversationSummary } from "@agw/projects-core";
 
 import { IconButton } from "./icon-button";
 import { useNativeChat } from "./native-chat-provider";
@@ -139,6 +148,7 @@ export function NativeConversationList({
                 pressed && styles.pressed,
               ]}
             >
+              <ConversationCreatorIcon extensionId={conversation.extensionId} />
               <View style={styles.rowCopy}>
                 <Text numberOfLines={1} style={styles.rowTitle}>
                   {conversation.title}
@@ -194,6 +204,26 @@ export function NativeConversationList({
         }}
       />
       <RenameDialog conversation={editing} onClose={() => setEditing(null)} />
+    </View>
+  );
+}
+
+/**
+ * 标题前的创建方图标；旧版 Server 不返回创建方时只保留位置，标题从同一位置开始。
+ * The creator icon before the title; when an older Server does not return the creator only the slot stays, so titles start at the same place.
+ */
+function ConversationCreatorIcon({ extensionId }: { extensionId: string | null }) {
+  if (extensionId === null) return <View style={styles.rowCreator} />;
+  const host = extensionId === HOST_EXTENSION_ID;
+  const Icon = host ? MessageCircleText : Puzzle;
+  return (
+    <View
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={host ? "Created by Agw" : `Created by extension "${extensionId}"`}
+      style={styles.rowCreator}
+    >
+      <Icon color={theme.muted} size={16} />
     </View>
   );
 }
@@ -345,6 +375,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   rowActive: { backgroundColor: "#D7E8FF" },
+  rowCreator: { width: 16, marginRight: 10, alignItems: "center" },
   rowCopy: { flex: 1, minWidth: 0 },
   rowTitle: { color: theme.ink, fontFamily: theme.fontMedium, fontSize: 14 },
   rowMeta: { color: theme.muted, fontFamily: theme.fontRegular, fontSize: 11, marginTop: 5 },

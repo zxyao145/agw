@@ -115,7 +115,7 @@ export default function SettingsPage() {
               <p className="text-sm font-medium">
                 Copy this secret now. It will not be shown again.
               </p>
-              <code className="mt-2 block break-all rounded-md bg-background p-3 text-xs">
+              <code className="mt-2 block break-all rounded-md bg-background p-3 text-sm">
                 {created.token}
               </code>
               <div className="mt-3 flex gap-2">

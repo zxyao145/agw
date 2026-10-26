@@ -1,0 +1,204 @@
+/*
+ * Markdown 排版规范，所有 Markdown 内容共用。Shared Markdown typography for every Markdown surface.
+ * 容器加 class="agw-prose" 与 data-density="compact|document"。
+ * Containers carry class="agw-prose" and data-density="compact|document".
+ * 间距用 calc(var(--agw-prose-size) * k) 书写，在标题、表格内仍是容器字号的倍数；字号用 em。
+ * Spacing is written as calc(var(--agw-prose-size) * k) so it stays a multiple of the container size
+ * inside headings and tables; font sizes use em.
+ * 全部规则在 @layer components 中，Tailwind utilities 与未分层的组件样式可以覆盖它们。
+ * Every rule sits in @layer components, so Tailwind utilities and unlayered component styles override them.
+ */
+
+@layer components {
+  :root {
+    --agw-font-size-base: 16px;
+    --agw-font-size-chat: calc(var(--agw-font-size-base) * 0.875);
+    --agw-font-size-document: var(--agw-font-size-base);
+    --agw-prose-link: #2e82d2;
+  }
+
+  .dark {
+    --agw-prose-link: #74b8f7;
+  }
+
+  /* 调用方可在外层设置 --agw-prose-font-size 覆盖字号。Callers may set --agw-prose-font-size on an ancestor. */
+  .agw-prose[data-density="compact"] {
+    --agw-prose-size: var(--agw-prose-font-size, var(--agw-font-size-chat));
+    --agw-prose-line-height: 1.65;
+    --agw-prose-block-gap: calc(var(--agw-prose-size) * 0.6);
+  }
+
+  .agw-prose[data-density="document"] {
+    --agw-prose-size: var(--agw-prose-font-size, var(--agw-font-size-document));
+    --agw-prose-line-height: 1.75;
+    --agw-prose-block-gap: calc(var(--agw-prose-size) * 0.8);
+  }
+
+  .agw-prose {
+    font-size: var(--agw-prose-size);
+    line-height: var(--agw-prose-line-height);
+  }
+
+  .agw-prose :where(p, ul, ol, blockquote, pre, table, hr) {
+    margin-block: var(--agw-prose-block-gap);
+  }
+
+  .agw-prose :where(h1, h2, h3, h4, h5, h6) {
+    margin-block: calc(var(--agw-prose-size) * 1.2) calc(var(--agw-prose-size) * 0.5);
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .agw-prose :where(h1) {
+    font-size: 1.75em;
+  }
+
+  .agw-prose :where(h2) {
+    font-size: 1.45em;
+  }
+
+  .agw-prose :where(h1, h2) {
+    margin-top: calc(var(--agw-prose-size) * 1.4);
+    padding-bottom: calc(var(--agw-prose-size) * 0.3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .agw-prose :where(h3) {
+    font-size: 1.25em;
+  }
+
+  .agw-prose :where(h4) {
+    font-size: 1.1em;
+  }
+
+  .agw-prose :where(h5, h6) {
+    font-size: 1em;
+  }
+
+  .agw-prose :where(h6) {
+    color: var(--muted-foreground);
+  }
+
+  .agw-prose :where(ul, ol) {
+    padding-left: calc(var(--agw-prose-size) * 1.5);
+  }
+
+  /* 列表标记：Tailwind preflight 会清除，这里恢复。List markers: restored because Tailwind preflight clears them. */
+  .agw-prose :where(ul) {
+    list-style-type: disc;
+  }
+
+  .agw-prose :where(ol) {
+    list-style-type: decimal;
+  }
+
+  .agw-prose :where(li:has(> input[type="checkbox"], > p:first-child > input[type="checkbox"])) {
+    list-style-type: none;
+  }
+
+  .agw-prose :where(li + li) {
+    margin-top: calc(var(--agw-prose-size) * 0.25);
+  }
+
+  .agw-prose :where(li > ul, li > ol) {
+    margin-block: calc(var(--agw-prose-size) * 0.25);
+  }
+
+  .agw-prose :where(li > p) {
+    margin-block: 0;
+  }
+
+  .agw-prose :where(li > input[type="checkbox"], li > p:first-child > input[type="checkbox"]) {
+    vertical-align: middle;
+  }
+
+  /* 清除浏览器默认的左右外边距（没有 Tailwind preflight 的页面中为 40px），引用块与正文左对齐。
+     Clears the browser's default inline margins (40px on pages without Tailwind preflight), so quotes line up with
+     body text. */
+  .agw-prose :where(blockquote) {
+    margin-inline: 0;
+    padding-left: var(--agw-prose-size);
+    border-left: 3px solid var(--border);
+    color: var(--muted-foreground);
+  }
+
+  .agw-prose :where(code) {
+    padding: calc(var(--agw-prose-size) * 0.15) calc(var(--agw-prose-size) * 0.35);
+    border-radius: 0.25rem;
+    background: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+
+  .agw-prose :where(pre) {
+    padding: calc(var(--agw-prose-size) * 0.85) var(--agw-prose-size);
+    overflow-x: auto;
+    border-radius: 0.5rem;
+    background: var(--muted);
+    font-size: 0.875em;
+    line-height: 1.55;
+  }
+
+  .agw-prose :where(pre code) {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: inherit;
+  }
+
+  .agw-prose :where(table) {
+    border-collapse: collapse;
+    font-size: 0.9375em;
+  }
+
+  .agw-prose :where(th, td) {
+    padding: calc(var(--agw-prose-size) * 0.45) calc(var(--agw-prose-size) * 0.75);
+    border: 1px solid var(--border);
+  }
+
+  .agw-prose :where(th) {
+    font-weight: 600;
+  }
+
+  .agw-prose :where(hr) {
+    margin-block: calc(var(--agw-prose-size) * 1.5);
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .agw-prose :where(img) {
+    max-width: 100%;
+  }
+
+  .agw-prose :where([data-footnotes]) {
+    margin-top: var(--agw-prose-block-gap);
+    padding-top: calc(var(--agw-prose-size) * 0.5);
+    border-top: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 0.875em;
+  }
+
+  .agw-prose :where([data-footnotes] > ol) {
+    margin-block: 0;
+  }
+
+  .agw-prose :where(sup) {
+    font-size: 0.75em;
+  }
+
+  .agw-prose :where(a) {
+    color: var(--agw-prose-link);
+    text-underline-offset: 0.15em;
+  }
+
+  /* 首尾块不留外间距，选择器权重高于块间距规则。The first and last blocks carry no outer margin; the selectors out-rank the block margin rules. */
+  .agw-prose > :first-child,
+  .agw-prose blockquote > :first-child {
+    margin-top: 0;
+  }
+
+  .agw-prose > :last-child,
+  .agw-prose blockquote > :last-child {
+    margin-bottom: 0;
+  }
+}

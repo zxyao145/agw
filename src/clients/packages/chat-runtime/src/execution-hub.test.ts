@@ -3,6 +3,7 @@ import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 import { createUserMessage } from "@agw/chat-core";
+import { replaceExecutionHub } from "@agw/test-harness";
 import type { ExecutionReconnectState } from "./execution-hub";
 import type { ExecutionSubmission } from "./execution-queue";
 import type { SubmissionReturnedEvent } from "./execution-session-manager";
@@ -1339,6 +1340,40 @@ test("in-process reconnect keeps the old turn busy until the server confirms it 
     assert.equal(returned.at(-1)?.error.name, "ExecutionStartRejectedError");
   } finally {
     await handle.dispose();
+  }
+});
+
+test("a refused in-process stop keeps polling until the running turn ends", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let running = true;
+  replaceExecutionHub(t, {
+    provider: "InProcess",
+    onInvoke({ method, args }) {
+      if (method === "FindInProcessExecution") return running ? "original-connection" : null;
+      if (method !== "RecoverInProcessExecution") return undefined;
+      // 只读的 extension 会话停止宿主的 Turn 时，服务端拒绝。The server refuses a read-only extension session's stop of the host's turn.
+      if (args[1] === true)
+        throw new Error("HubException: 4030008: The conversation is read-only for this extension.");
+      return running;
+    },
+  });
+  const session = new ExecutionSession(
+    { onMessage() {} },
+    { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+  );
+  try {
+    await session.configure({ projectId: "project", conversationId: "conversation" });
+    assert.equal(session.hasRunningTurn(), true);
+
+    await assert.rejects(session.interrupt(), /4030008/u);
+    running = false;
+    t.mock.timers.tick(1000);
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+
+    assert.equal(session.hasRunningTurn(), false);
+  } finally {
+    await session.dispose();
   }
 });
 

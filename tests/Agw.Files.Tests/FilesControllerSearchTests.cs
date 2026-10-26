@@ -3,7 +3,6 @@ using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Api;
 using Agw.Files.Api.Dtos;
 using Agw.Files.Application.Files;
-using Agw.Files.Infrastructure.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -81,7 +80,7 @@ public class FilesControllerSearchTests
     private static FilesController CreateController(string rootPath)
     {
         var fileAppService = new FileAppService(
-            new FakeFileSystemResolver(new LocalFileSystem(rootPath)),
+            new FakeFileSystemResolver(TestFileSystems.Local(rootPath)),
             new FakeGitCommandService(),
             NullLogger<FileAppService>.Instance
         );
@@ -139,7 +138,16 @@ public class FilesControllerSearchTests
             GitDiffScope scope = GitDiffScope.All
         )
         {
-            return Task.FromResult(new GitDiffResult(false, "", false, null, null));
+            return Task.FromResult(new GitDiffResult(false, "", null));
+        }
+
+        public Task<GitBlobResult> ReadBlobAsync(
+            string filePath,
+            GitBlobSource source,
+            CancellationToken cancellationToken = default
+        )
+        {
+            return Task.FromResult(new GitBlobResult(false, null, "Not implemented by test fake."));
         }
 
         public Task<GitResetResult> ResetFileAsync(string filePath, CancellationToken cancellationToken = default)

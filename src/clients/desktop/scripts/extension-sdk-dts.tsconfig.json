@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": [],
+    "paths": {
+      "@agw/execution-core": ["../../packages/execution-core/src/index.ts"]
+    }
+  },
+  "include": ["../../packages/extension-sdk/src/**/*.ts"]
+}

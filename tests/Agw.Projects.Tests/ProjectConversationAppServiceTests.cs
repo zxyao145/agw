@@ -3,11 +3,13 @@ using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
+using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -638,7 +640,7 @@ public class ProjectConversationAppServiceTests
         Assert.Equal("context-1", context.ContextId);
         Assert.Equal("Trip", context.Title);
         Assert.Equal(2, context.ExecutionCount);
-        Assert.Equal(expectedUsage, context.Usage);
+        Assert.Equivalent(expectedUsage, context.Usage, strict: true);
 
         var page = await service.GetMessagePageAsync(
             projectId,
@@ -649,6 +651,112 @@ public class ProjectConversationAppServiceTests
 
         Assert.NotNull(page);
         Assert.Equal(["Tokyo trip", "Hotels"], page.Items.Select(GetMessageText));
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_UnsettledTurns_ExcludesTheirUsageAndListsThem()
+    {
+        // Arrange: running, accepted, settled and usage-free turns, usage outside any turn, and another conversation.
+        // 准备：运行中、已受理、已结算与没有用量的 Turn，不属于 Turn 的用量，以及另一个对话。
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var otherConversationId = Guid.CreateVersion7();
+        var running = CreateTurn(conversationId, ProjectConversationTurnStatus.Running);
+        var accepted = CreateTurn(conversationId, ProjectConversationTurnStatus.Accepted);
+        var withoutUsage = CreateTurn(conversationId, ProjectConversationTurnStatus.Running);
+        var settled = CreateTurn(
+            conversationId,
+            ProjectConversationTurnStatus.Completed,
+            UsageNow.AddSeconds(-5),
+            UsageNow.AddSeconds(-5)
+        );
+        var otherRunning = CreateTurn(otherConversationId, ProjectConversationTurnStatus.Running);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.AddRange(
+                CreateContext(conversationId, projectId, "context-1", "Trip"),
+                CreateContext(otherConversationId, projectId, "context-2", "Other")
+            );
+            seedContext.ProjectConversationTurns.AddRange(running, accepted, withoutUsage, settled, otherRunning);
+            seedContext.AgentUsages.AddRange(
+                CreateUsage(projectId, "context-1", "planner", 1, 2, 100, 0, 0, running.Id),
+                CreateUsage(projectId, "context-1", "planner", 1, 2, 200, 0, 0, accepted.Id),
+                CreateUsage(projectId, "context-1", "planner", 3, 4, 10, 1, 2, settled.Id),
+                CreateUsage(projectId, "context-1", "$summary", 1, 1, 5, 0, 1),
+                CreateUsage(projectId, "context-2", "other", 7, 7, 70, 7, 7, otherRunning.Id)
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext, timeProvider: new TestTimeProvider(UsageNow));
+
+        // Act
+        var conversation = await service.GetResponseAsync(projectId, conversationId, cancellationToken);
+
+        // Assert
+        Assert.NotNull(conversation);
+        Assert.Equal(4, conversation.Usage.InputTokenCount);
+        Assert.Equal(5, conversation.Usage.OutputTokenCount);
+        Assert.Equal(15, conversation.Usage.TotalTokenCount);
+        Assert.Equal(1, conversation.Usage.CachedInputTokenCount);
+        Assert.Equal(3, conversation.Usage.ReasoningTokenCount);
+        Assert.Equal(
+            new[] { running.Id, accepted.Id, withoutUsage.Id }.Order(),
+            conversation.Usage.UnsettledTurnIds.Order()
+        );
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_FinishedTurnBeforeSettlement_CountsUsageAfterSettlementTime()
+    {
+        // Arrange: an interrupted turn whose worker may still write usage until its settlement time.
+        // 准备：已中断的 Turn，在结算时间之前 worker 仍可能写入用量。
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var interrupted = CreateTurn(
+            conversationId,
+            ProjectConversationTurnStatus.Interrupted,
+            UsageNow.AddSeconds(-2),
+            UsageNow.AddSeconds(28)
+        );
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "context-1", "Trip"));
+            seedContext.ProjectConversationTurns.Add(interrupted);
+            seedContext.AgentUsages.AddRange(
+                CreateUsage(projectId, "context-1", "planner", 1, 1, 40, 0, 0, interrupted.Id),
+                CreateUsage(projectId, "context-1", "planner", 1, 1, 2, 0, 0)
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var clock = new TestTimeProvider(UsageNow);
+        var service = CreateService(dbContext, timeProvider: clock);
+
+        // Act
+        var beforeSettlement = await service.GetResponseAsync(projectId, conversationId, cancellationToken);
+        clock.SetUtcNow(UsageNow.AddSeconds(28));
+        var afterSettlement = await service.GetResponseAsync(projectId, conversationId, cancellationToken);
+
+        // Assert
+        Assert.Equal(2, beforeSettlement!.Usage.TotalTokenCount);
+        Assert.Equal([interrupted.Id], beforeSettlement.Usage.UnsettledTurnIds);
+        Assert.Equal(42, afterSettlement!.Usage.TotalTokenCount);
+        Assert.Empty(afterSettlement.Usage.UnsettledTurnIds);
     }
 
     [Fact]
@@ -830,7 +938,7 @@ public class ProjectConversationAppServiceTests
 
         Assert.NotNull(context);
         Assert.Equal(2, context.ExecutionCount);
-        Assert.Equal(new ProjectConversationUsage(), context.Usage);
+        Assert.Equivalent(new ProjectConversationUsage(), context.Usage, strict: true);
         Assert.Equal(["first", "second", "third"], page!.Items.Select(GetMessageText));
     }
 
@@ -1527,6 +1635,123 @@ public class ProjectConversationAppServiceTests
         Assert.Equal(0, context.MessageCount);
     }
 
+    [Fact]
+    public async Task ListResponsesAsync_ConversationsOfHostExtensionAndOpen_ReturnCreatorAndOpenState()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var hostConversationId = Guid.CreateVersion7();
+        var extensionConversationId = Guid.CreateVersion7();
+        var openConversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            var extensionConversation = CreateContext(extensionConversationId, projectId, "extension", "Extension");
+            extensionConversation.ExtensionId = "sample";
+            seedContext.ProjectConversations.AddRange(
+                CreateContext(hostConversationId, projectId, "host", "Host"),
+                extensionConversation,
+                CreateContext(openConversationId, projectId, "open", "Open")
+            );
+            seedContext.ProjectConversationChatHistories.AddRange(
+                CreateRecord(hostConversationId, Guid.CreateVersion7(), 0, "host", TaskExecutionStatus.Succeeded),
+                CreateRecord(
+                    extensionConversationId,
+                    Guid.CreateVersion7(),
+                    0,
+                    "extension",
+                    TaskExecutionStatus.Succeeded
+                ),
+                CreateRecord(openConversationId, Guid.CreateVersion7(), 0, "open", TaskExecutionStatus.Failed)
+            );
+            seedContext.ProjectConversationTurns.AddRange(
+                CreateTurn(hostConversationId, ProjectConversationTurnStatus.Completed, UsageNow),
+                CreateTurn(extensionConversationId, ProjectConversationTurnStatus.Completed, UsageNow)
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var page = await service.ListResponsesAsync(projectId, new ProjectConversationListQuery(), cancellationToken);
+
+        var conversations = page.Items.ToDictionary(item => item.ConversationId);
+        Assert.Equal(ConversationCreators.Host, conversations[hostConversationId].ExtensionId);
+        Assert.False(conversations[hostConversationId].OpenToExtensions);
+        Assert.Equal("sample", conversations[extensionConversationId].ExtensionId);
+        Assert.False(conversations[extensionConversationId].OpenToExtensions);
+        Assert.Equal(ConversationCreators.Host, conversations[openConversationId].ExtensionId);
+        Assert.True(conversations[openConversationId].OpenToExtensions);
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_ConversationCreatedByExtension_ReturnsExtensionId()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            var conversation = CreateContext(conversationId, projectId, "extension", "Extension");
+            conversation.ExtensionId = "sample";
+            seedContext.ProjectConversations.Add(conversation);
+            seedContext.ProjectConversationTurns.Add(
+                CreateTurn(conversationId, ProjectConversationTurnStatus.Completed, UsageNow)
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var response = await service.GetResponseAsync(projectId, conversationId, cancellationToken);
+
+        Assert.NotNull(response);
+        Assert.Equal("sample", response.ExtensionId);
+        Assert.False(response.OpenToExtensions);
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task GetResponseAsync_HostConversationWithoutTurns_IsOpenOnlyBeforeClearing(
+        int generation,
+        bool openToExtensions
+    )
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            var conversation = CreateContext(conversationId, projectId, "host", "Host");
+            conversation.Generation = generation;
+            seedContext.ProjectConversations.Add(conversation);
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var response = await service.GetResponseAsync(projectId, conversationId, cancellationToken);
+
+        Assert.NotNull(response);
+        Assert.Equal(ConversationCreators.Host, response.ExtensionId);
+        Assert.Equal(openToExtensions, response.OpenToExtensions);
+    }
+
     private static DbContextOptions<AgwDbContext> CreateOptions(
         SqliteConnection connection,
         params IInterceptor[] interceptors
@@ -1584,7 +1809,8 @@ public class ProjectConversationAppServiceTests
         long outputTokenCount,
         long totalTokenCount,
         long cachedInputTokenCount,
-        long reasoningTokenCount
+        long reasoningTokenCount,
+        Guid? turnId = null
     ) =>
         new()
         {
@@ -1593,12 +1819,33 @@ public class ProjectConversationAppServiceTests
             ContextId = contextId,
             AgentName = agentName,
             UserId = "tester",
+            TurnId = turnId,
             RecordedAt = TimeProvider.System.GetUtcNow(),
             InputTokenCount = inputTokenCount,
             OutputTokenCount = outputTokenCount,
             TotalTokenCount = totalTokenCount,
             CachedInputTokenCount = cachedInputTokenCount,
             ReasoningTokenCount = reasoningTokenCount,
+        };
+
+    private static readonly DateTimeOffset UsageNow = new(2026, 10, 24, 8, 0, 0, TimeSpan.Zero);
+
+    private static ProjectConversationTurn CreateTurn(
+        Guid conversationId,
+        ProjectConversationTurnStatus status,
+        DateTimeOffset? finishedAt = null,
+        DateTimeOffset? usageSettlesAt = null
+    ) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectConversationId = conversationId,
+            TargetId = Guid.CreateVersion7(),
+            RuntimeType = AgentRuntimeType.Agent,
+            Status = status,
+            StartedAt = UsageNow.AddMinutes(-1),
+            FinishedAt = finishedAt,
+            UsageSettlesAt = usageSettlesAt,
         };
 
     private static ProjectConversationChatHistory CreateRecord(
@@ -1670,7 +1917,8 @@ public class ProjectConversationAppServiceTests
 
     private static ProjectConversationAppService CreateService(
         AgwDbContext dbContext,
-        IProjectDeletionCoordinator? deletionCoordinator = null
+        IProjectDeletionCoordinator? deletionCoordinator = null,
+        TimeProvider? timeProvider = null
     )
     {
         var userInfo = new TestUserInfoService();
@@ -1679,7 +1927,7 @@ public class ProjectConversationAppServiceTests
             dbContext,
             new ProjectResolver(dbContext, userInfo),
             deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
-            TimeProvider.System
+            timeProvider ?? TimeProvider.System
         );
     }
 

@@ -11,18 +11,24 @@ namespace Agw.Files.Infrastructure.Storage;
 public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IProjectFileSystemCacheInvalidator
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly FilePathLocks _pathLocks;
     private readonly ILogger<ProjectScopedFileSystemResolver> _logger;
+    private readonly ILogger<LocalFileSystem> _fileSystemLogger;
     private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<(Guid ProjectId, Guid? DirectoryId, string Path), CachedEntry> _cache = new();
 
     public ProjectScopedFileSystemResolver(
         IServiceScopeFactory scopeFactory,
+        FilePathLocks pathLocks,
         ILogger<ProjectScopedFileSystemResolver> logger,
+        ILogger<LocalFileSystem> fileSystemLogger,
         TimeProvider timeProvider
     )
     {
         _scopeFactory = scopeFactory;
+        _pathLocks = pathLocks;
         _logger = logger;
+        _fileSystemLogger = fileSystemLogger;
         _timeProvider = timeProvider;
     }
 
@@ -93,7 +99,7 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
             return cached.FileSystem;
         }
 
-        var fileSystem = new LocalFileSystem(rootPath);
+        var fileSystem = new LocalFileSystem(rootPath, _pathLocks, _fileSystemLogger);
         _logger.LogDebug(
             "Project {ProjectId} directory {DirectoryId} resolved to {Path}",
             projectId,

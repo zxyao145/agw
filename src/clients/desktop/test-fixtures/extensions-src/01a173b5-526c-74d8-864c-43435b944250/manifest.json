@@ -1,0 +1,11 @@
+{
+  "manifestVersion": 1,
+  "id": "01a173b5-526c-74d8-864c-43435b944250",
+  "name": "WASM",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture that runs a WebAssembly module.",
+  "contributes": {
+    "ribbon": [{ "id": "open", "title": "WASM", "icon": "Puzzle", "action": { "type": "openMainView", "view": "app" } }],
+    "mainViews": [{ "id": "app", "title": "WASM", "icon": "Puzzle", "entry": "index.html" }]
+  }
+}

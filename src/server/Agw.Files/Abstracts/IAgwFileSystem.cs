@@ -50,10 +50,65 @@ public interface IAgwFileSystem
     Task CreateDirectoryAsync(string path, CancellationToken ct);
 
     /// <summary>
-    /// 删除指定的文件，或递归删除指定的目录；空路径表示根目录本身。
-    /// Deletes the specified file, or the specified directory recursively; an empty path means the root itself.
+    /// 删除指定的文件、符号链接本身或目录；空路径表示根目录本身。<paramref name="recursive"/> 为 false 时只删除空目录，
+    /// 由删除操作本身保证不清空目录，目录非空时抛出 <c>DirectoryNotEmpty</c>。
+    /// Deletes the specified file, the symbolic link itself, or the directory; an empty path means the root itself.
+    /// When <paramref name="recursive"/> is false only an empty directory is removed: the delete operation itself never
+    /// empties the directory, and <c>DirectoryNotEmpty</c> is thrown when it has entries.
     /// </summary>
-    Task DeleteAsync(string path, CancellationToken ct);
+    Task DeleteAsync(string path, bool recursive, CancellationToken ct);
+
+    /// <summary>
+    /// 打开指定的普通文件用于读取，返回的流可定位且长度为文件大小，由调用方释放；文件不存在时抛出 <c>FileNotFound</c>。
+    /// Opens the specified regular file for reading; the returned stream is seekable, its length is the file size, and
+    /// the caller disposes it. Throws <c>FileNotFound</c> when the file does not exist.
+    /// </summary>
+    Task<Stream> OpenReadAsync(string path, CancellationToken ct);
+
+    /// <summary>
+    /// 把 <paramref name="content"/> 从当前位置起的全部内容写入指定文件。目标已存在且 <paramref name="overwrite"/> 为 false
+    /// 时抛出 <c>FileAlreadyExists</c>；目标是目录且 <paramref name="overwrite"/> 为 true 时抛出 <c>InvalidParam</c>。
+    /// <paramref name="createParents"/> 为 false 且父目录不存在时抛出 <c>DirectoryNotFound</c>。
+    /// <paramref name="expectedSha256"/>（64 位小写十六进制）有值时，在文件锁内计算磁盘上文件的 SHA-256，文件不存在、哈希
+    /// 不同，或提交前复核发现文件被替换或修改时抛出 <c>FileChanged</c>。写入是原子提交：内容先写入同一目录中的临时文件并
+    /// 刷新到磁盘，再用一次重命名替换目标，提交前的任何失败都不改变目标文件。目标已存在而当前进程不能写入它（例如只读文件）
+    /// 时抛出 <c>FileNotWritable</c>，目标不被替换。目标被替换为新文件，指向它的 hard link 不再共享内容，所有者与 Windows
+    /// ACL 使用新文件的默认值，Unix 上复制原文件的读、写、执行权限位，不复制 setuid、setgid 与 sticky；符号链接本身保持不变，
+    /// 替换的是它指向的文件。
+    /// Writes everything from the current position of <paramref name="content"/> to the specified file. Throws
+    /// <c>FileAlreadyExists</c> when the target exists and <paramref name="overwrite"/> is false, and
+    /// <c>InvalidParam</c> when the target is a directory and <paramref name="overwrite"/> is true. Throws
+    /// <c>DirectoryNotFound</c> when <paramref name="createParents"/> is false and the parent directory does not exist.
+    /// When <paramref name="expectedSha256"/> (64 lowercase hex digits) is set, the SHA-256 of the file on disk is
+    /// computed inside the file lock, and <c>FileChanged</c> is thrown when the file is missing, the hash differs, or
+    /// the re-check before committing finds the file replaced or modified. The write is an atomic commit: the content
+    /// goes to a temporary file in the same directory and is flushed to disk, then one rename replaces the target, so
+    /// any failure before the commit leaves the target unchanged. <c>FileNotWritable</c> is thrown when the target
+    /// exists and this process may not write it (for example a read-only file), and the target is not replaced. The
+    /// target is replaced by a new file: hard links to it no longer share its content, the owner and Windows ACL take
+    /// the defaults of the new file, and on Unix the read, write and execute permission bits of the original file are
+    /// copied while setuid, setgid and sticky are not; a symbolic link itself stays unchanged and the file it points to
+    /// is replaced.
+    /// </summary>
+    Task WriteAsync(
+        string path,
+        Stream content,
+        bool overwrite,
+        bool createParents,
+        string? expectedSha256,
+        CancellationToken ct
+    );
+
+    /// <summary>
+    /// 把文件、符号链接本身或目录移动到同一文件系统内的目标路径，目标的父目录必须已经存在（否则抛出
+    /// <c>DirectoryNotFound</c>）。目标已存在时抛出 <c>FileAlreadyExists</c>，只有 <paramref name="overwrite"/> 为 true
+    /// 且源与目标都不是目录时才替换目标；源不存在时抛出 <c>FileNotFound</c>。
+    /// Moves a file, the symbolic link itself, or a directory to the destination path in the same file system; the
+    /// destination's parent directory must already exist (otherwise <c>DirectoryNotFound</c> is thrown). An existing
+    /// destination yields <c>FileAlreadyExists</c>, and it is replaced only when <paramref name="overwrite"/> is true
+    /// and neither the source nor the destination is a directory; a missing source yields <c>FileNotFound</c>.
+    /// </summary>
+    Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct);
 
     /// <summary>
     /// 枚举指定目录下名称与 <paramref name="searchPattern"/>（<c>*</c>、<c>?</c> 通配符）匹配的文件和子目录，递归时跳过符号链接；

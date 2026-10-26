@@ -14,7 +14,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         bool resume = false,
         HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow,
         long permissionVersion = 0,
-        bool resultOnly = false
+        bool resultOnly = false,
+        string? extensionId = null
     )
     {
         ProjectId = projectId;
@@ -27,6 +28,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         Resume = resume;
         HumanInteractionPolicy = humanInteractionPolicy;
         ResultOnly = resultOnly;
+        ExtensionId = extensionId;
     }
 
     public Guid ProjectId { get; }
@@ -57,6 +59,12 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     /// </remarks>
     public bool ResultOnly { get; }
 
+    /// <summary>
+    /// 请求方 Desktop extension 的 id，宿主为 null；参与相等判定，不写入 Durable manifest。
+    /// The requesting Desktop extension id, null for the host; part of equality and never written to the Durable manifest.
+    /// </summary>
+    public string? ExtensionId { get; }
+
     public static ExecutionSettings CreateDefault() => new(ProjectDefaults.DefaultBuiltInId);
 
     public ExecutionSettings WithPermissionMode(AgwPermissionMode permissionMode) =>
@@ -68,7 +76,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             Resume,
             HumanInteractionPolicy,
             PermissionMode == permissionMode ? PermissionVersion : checked(PermissionVersion + 1),
-            ResultOnly
+            ResultOnly,
+            ExtensionId
         );
 
     internal ExecutionSettings WithPermissionSnapshot(AgwPermissionMode? mode, long version) =>
@@ -80,7 +89,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             Resume,
             HumanInteractionPolicy,
             version,
-            ResultOnly
+            ResultOnly,
+            ExtensionId
         );
 
     public ExecutionSettings WithHumanInteractionPolicy(HumanInteractionPolicy policy) =>
@@ -92,7 +102,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             Resume,
             policy,
             PermissionVersion,
-            ResultOnly
+            ResultOnly,
+            ExtensionId
         );
 
     public ExecutionSettings WithResultOnly(bool resultOnly) =>
@@ -104,7 +115,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             Resume,
             HumanInteractionPolicy,
             PermissionVersion,
-            resultOnly
+            resultOnly,
+            ExtensionId
         );
 
     internal ExecutionSettings WithConversationId(Guid conversationId) =>
@@ -116,7 +128,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             Resume,
             HumanInteractionPolicy,
             PermissionVersion,
-            ResultOnly
+            ResultOnly,
+            ExtensionId
         );
 
     public bool Equals(ExecutionSettings? other)
@@ -132,6 +145,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             && PermissionMode == other.PermissionMode
             && Resume == other.Resume
             && HumanInteractionPolicy == other.HumanInteractionPolicy
+            && string.Equals(ExtensionId, other.ExtensionId, StringComparison.Ordinal)
             && EnvironmentVariablesEqual(_environmentVariables, other._environmentVariables);
     }
 
@@ -145,6 +159,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         hash.Add(PermissionMode);
         hash.Add(Resume);
         hash.Add(HumanInteractionPolicy);
+        hash.Add(ExtensionId, StringComparer.Ordinal);
         foreach (var (key, value) in _environmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             hash.Add(key, StringComparer.Ordinal);

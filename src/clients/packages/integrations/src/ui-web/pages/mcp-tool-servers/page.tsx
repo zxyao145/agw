@@ -391,8 +391,8 @@ export default function McpToolServersPage() {
                     )}
                   </TableCell>
                   <TableCell>{server.description || "-"}</TableCell>
-                  <TableCell className="uppercase text-xs">{server.transportType}</TableCell>
-                  <TableCell className="max-w-sm truncate font-mono text-xs">
+                  <TableCell className="uppercase">{server.transportType}</TableCell>
+                  <TableCell className="max-w-sm truncate font-mono">
                     {server.transportType === "stdio" ? server.command || "-" : server.url || "-"}
                   </TableCell>
                   <TableCell>

@@ -1,11 +1,22 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
+using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Files.Application.Files;
 
 public sealed class FileAppService
 {
+    /// <summary>
+    /// 单次读取或写入的文件内容上限（100 MiB）。The limit of file content in one read or write (100 MiB).
+    /// </summary>
+    public const long MaxTransferBytes = 100L * 1024 * 1024;
+
+    private const int Sha256HexLength = 64;
+
+    /// <summary>判断二进制时检查的字符数，与 git 相同。The characters checked for binary content, as in git.</summary>
+    private const int BinaryProbeLength = 8000;
+
     private const string GitRequiresLocalFileSystem =
         "Git operations are only supported for local project file systems";
 
@@ -235,21 +246,83 @@ public sealed class FileAppService
             }
         }
 
-        var result = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken, diffScope);
-        if (!result.Success)
+        var diff = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken, diffScope);
+        if (!diff.Success)
         {
-            _logger.LogWarning("Git diff failed: {Error}", result.Error);
-            return FileOperationResult<FileDiffOutput>.Invalid("Git diff failed", result.Error);
+            return DiffFailed(diff.Error);
         }
 
-        return FileOperationResult<FileDiffOutput>.Succeeded(
-            new FileDiffOutput(result.Diff, result.Unchanged, result.OriginalContent)
+        // 原始侧：unstaged 为暂存区，其他范围为 HEAD。The original side: the index for unstaged, HEAD otherwise.
+        var original = await _gitCommandService.ReadBlobAsync(
+            physicalPath,
+            diffScope == GitDiffScope.Unstaged ? GitBlobSource.Index : GitBlobSource.Head,
+            cancellationToken
         );
+        if (!original.Success)
+        {
+            return DiffFailed(original.Error);
+        }
+
+        var modified = await ReadModifiedSideAsync(fileSystem, path, physicalPath, diffScope, cancellationToken);
+        if (!modified.Success)
+        {
+            return DiffFailed(modified.Error);
+        }
+
+        var isBinary = IsBinaryText(original.Content) || IsBinaryText(modified.Content);
+        return FileOperationResult<FileDiffOutput>.Succeeded(
+            new FileDiffOutput
+            {
+                Diff = diff.Diff,
+                Unchanged = string.IsNullOrWhiteSpace(diff.Diff),
+                IsBinary = isBinary,
+                OriginalContent = isBinary ? null : original.Content,
+                ModifiedContent = isBinary ? null : modified.Content,
+            }
+        );
+    }
+
+    /// <summary>
+    /// 修改侧：staged 为暂存区，其他范围为工作区（与 /api/files/read 相同的路径限制）。
+    /// The modified side: the index for staged, the working tree otherwise (with the same path confinement as
+    /// /api/files/read).
+    /// </summary>
+    private async Task<GitBlobResult> ReadModifiedSideAsync(
+        IAgwFileSystem fileSystem,
+        string path,
+        string physicalPath,
+        GitDiffScope diffScope,
+        CancellationToken cancellationToken
+    )
+    {
+        if (diffScope == GitDiffScope.Staged)
+        {
+            return await _gitCommandService.ReadBlobAsync(physicalPath, GitBlobSource.Index, cancellationToken);
+        }
+
+        var content = await fileSystem.ExistsFileAsync(path, cancellationToken)
+            ? await fileSystem.ReadAllTextAsync(path, cancellationToken)
+            : null;
+        return new GitBlobResult(true, content, null);
+    }
+
+    /// <summary>
+    /// 前 <see cref="BinaryProbeLength"/> 个字符中有 NUL 时按二进制处理，与 git 的判断相同。
+    /// Text with a NUL in its first <see cref="BinaryProbeLength"/> characters is binary, as git decides.
+    /// </summary>
+    private static bool IsBinaryText(string? content) =>
+        content != null && content.AsSpan(0, Math.Min(content.Length, BinaryProbeLength)).Contains('\0');
+
+    private FileOperationResult<FileDiffOutput> DiffFailed(string? error)
+    {
+        _logger.LogWarning("Git diff failed: {Error}", error);
+        return FileOperationResult<FileDiffOutput>.Invalid("Git diff failed", error);
     }
 
     public async Task<FileOperationResult<FileMutationOutput>> DeleteAsync(
         Guid projectId,
         string? path,
+        bool recursive,
         CancellationToken cancellationToken = default,
         Guid? directoryId = null
     )
@@ -284,7 +357,7 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Missing("File or directory not found");
         }
 
-        await fileSystem.DeleteAsync(path, cancellationToken);
+        await fileSystem.DeleteAsync(path, recursive, cancellationToken);
         _logger.LogInformation(
             "Deleted {EntryType} in project {ProjectId}: {Path}",
             isDirectory ? "directory" : "file",
@@ -295,6 +368,257 @@ public sealed class FileAppService
         return FileOperationResult<FileMutationOutput>.Succeeded(
             new FileMutationOutput(true, isDirectory ? "Directory deleted successfully" : "File deleted successfully")
         );
+    }
+
+    public async Task<FileOperationResult<FileListEntry>> StatAsync(
+        Guid projectId,
+        string? path,
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
+    )
+    {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileListEntry>.Invalid("Project ID is required");
+        }
+
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
+        if (fileSystem == null)
+        {
+            return FileOperationResult<FileListEntry>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
+        }
+
+        var entry = await fileSystem.StatAsync(path ?? string.Empty, cancellationToken);
+        return entry == null
+            ? FileOperationResult<FileListEntry>.Missing("File or directory not found")
+            : FileOperationResult<FileListEntry>.Succeeded(ToListEntry(entry, null));
+    }
+
+    /// <summary>
+    /// 打开文件用于下载，返回的流由调用方释放；文件超过 <see cref="MaxTransferBytes"/> 时抛出 <c>FileTooLarge</c>。
+    /// Opens a file for download; the caller disposes the returned stream. Throws <c>FileTooLarge</c> when the file
+    /// exceeds <see cref="MaxTransferBytes"/>.
+    /// </summary>
+    public async Task<FileOperationResult<Stream>> OpenReadAsync(
+        Guid projectId,
+        string? path,
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
+    )
+    {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<Stream>.Invalid("Project ID is required");
+        }
+
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
+        if (fileSystem == null)
+        {
+            return FileOperationResult<Stream>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return FileOperationResult<Stream>.Invalid("Path parameter is required");
+        }
+
+        if (!await fileSystem.ExistsFileAsync(path, cancellationToken))
+        {
+            return FileOperationResult<Stream>.Missing("File not found");
+        }
+
+        // 长度取自已打开的流，与随后发送的内容属于同一个文件。
+        // The length comes from the opened stream, the same file whose content is sent afterwards.
+        var stream = await fileSystem.OpenReadAsync(path, cancellationToken);
+        if (stream.Length > MaxTransferBytes)
+        {
+            await stream.DisposeAsync();
+            throw new AgwException(ErrorCodes.FileTooLarge, $"File '{path}' exceeds the 100 MiB transfer limit.");
+        }
+
+        return FileOperationResult<Stream>.Succeeded(stream);
+    }
+
+    public async Task<FileOperationResult<FileListEntry>> WriteAsync(
+        Guid projectId,
+        string? path,
+        Stream content,
+        bool overwrite,
+        bool createParents,
+        string? expectedSha256,
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
+    )
+    {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileListEntry>.Invalid("Project ID is required");
+        }
+
+        expectedSha256 = NormalizeExpectedSha256(expectedSha256, overwrite);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
+        if (fileSystem == null)
+        {
+            return FileOperationResult<FileListEntry>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return FileOperationResult<FileListEntry>.Invalid("Path parameter is required");
+        }
+
+        if (TargetsWorkspaceRoot(path))
+        {
+            return FileOperationResult<FileListEntry>.Invalid("Project directory root cannot be written as a file");
+        }
+
+        if (content.Length > MaxTransferBytes)
+        {
+            throw new AgwException(
+                ErrorCodes.FileTooLarge,
+                $"Content for '{path}' exceeds the 100 MiB transfer limit."
+            );
+        }
+
+        if (!createParents && !await fileSystem.ExistsDirectoryAsync(GetParentPath(path), cancellationToken))
+        {
+            return FileOperationResult<FileListEntry>.Missing("Parent directory not found");
+        }
+
+        await fileSystem.WriteAsync(path, content, overwrite, createParents, expectedSha256, cancellationToken);
+        _logger.LogInformation("Wrote file in project {ProjectId}: {Path}", projectId, path);
+        return await StatEntryAsync(fileSystem, path, cancellationToken);
+    }
+
+    /// <summary>
+    /// 校验写入前提：必须是 64 位十六进制并与 overwrite 一起使用，返回小写形式。
+    /// Validates the write precondition: it must be 64 hex digits used together with overwrite; returns it lowercased.
+    /// </summary>
+    private static string? NormalizeExpectedSha256(string? expectedSha256, bool overwrite)
+    {
+        if (expectedSha256 == null)
+        {
+            return null;
+        }
+
+        if (expectedSha256.Length != Sha256HexLength || !expectedSha256.All(char.IsAsciiHexDigit))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "expectedSha256 must be 64 hexadecimal characters.");
+        }
+
+        if (!overwrite)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "expectedSha256 requires overwrite=true.");
+        }
+
+        return expectedSha256.ToLowerInvariant();
+    }
+
+    public async Task<FileOperationResult<FileListEntry>> CreateDirectoryAsync(
+        Guid projectId,
+        string? path,
+        bool recursive,
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
+    )
+    {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileListEntry>.Invalid("Project ID is required");
+        }
+
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
+        if (fileSystem == null)
+        {
+            return FileOperationResult<FileListEntry>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return FileOperationResult<FileListEntry>.Invalid("Path parameter is required");
+        }
+
+        // 与 mkdir 相同：已有同名文件总是冲突；已有目录只在非递归时冲突。
+        // Like mkdir: an existing file of the same name always conflicts, an existing directory only when not recursive.
+        if (await fileSystem.ExistsFileAsync(path, cancellationToken))
+        {
+            throw new AgwException(ErrorCodes.FileAlreadyExists, $"A file named '{path}' already exists.");
+        }
+
+        if (await fileSystem.ExistsDirectoryAsync(path, cancellationToken))
+        {
+            return recursive
+                ? await StatEntryAsync(fileSystem, path, cancellationToken)
+                : throw new AgwException(ErrorCodes.FileAlreadyExists, $"Directory '{path}' already exists.");
+        }
+
+        if (!recursive && !await fileSystem.ExistsDirectoryAsync(GetParentPath(path), cancellationToken))
+        {
+            return FileOperationResult<FileListEntry>.Missing("Parent directory not found");
+        }
+
+        await fileSystem.CreateDirectoryAsync(path, cancellationToken);
+        _logger.LogInformation("Created directory in project {ProjectId}: {Path}", projectId, path);
+        return await StatEntryAsync(fileSystem, path, cancellationToken);
+    }
+
+    public async Task<FileOperationResult<FileListEntry>> MoveAsync(
+        Guid projectId,
+        string? sourcePath,
+        string? destinationPath,
+        bool overwrite,
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
+    )
+    {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileListEntry>.Invalid("Project ID is required");
+        }
+
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
+        if (fileSystem == null)
+        {
+            return FileOperationResult<FileListEntry>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
+        }
+
+        var invalid = ValidateMovePaths(sourcePath, destinationPath);
+        if (invalid != null)
+        {
+            return FileOperationResult<FileListEntry>.Invalid(invalid);
+        }
+
+        if (
+            !await fileSystem.ExistsFileAsync(sourcePath!, cancellationToken)
+            && !await fileSystem.ExistsDirectoryAsync(sourcePath!, cancellationToken)
+        )
+        {
+            return FileOperationResult<FileListEntry>.Missing("File or directory not found");
+        }
+
+        if (!await fileSystem.ExistsDirectoryAsync(GetParentPath(destinationPath!), cancellationToken))
+        {
+            return FileOperationResult<FileListEntry>.Missing("Destination directory not found");
+        }
+
+        await fileSystem.MoveAsync(sourcePath!, destinationPath!, overwrite, cancellationToken);
+        _logger.LogInformation(
+            "Moved {SourcePath} to {DestinationPath} in project {ProjectId}",
+            sourcePath,
+            destinationPath,
+            projectId
+        );
+        return await StatEntryAsync(fileSystem, destinationPath!, cancellationToken);
     }
 
     public async Task<FileOperationResult<FileMutationOutput>> ResetAsync(
@@ -558,6 +882,88 @@ public sealed class FileAppService
 
         var sortedItems = items.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList();
         return FileOperationResult<FileListOutput>.Succeeded(new FileListOutput(sortedItems));
+    }
+
+    private static async Task<FileOperationResult<FileListEntry>> StatEntryAsync(
+        IAgwFileSystem fileSystem,
+        string path,
+        CancellationToken cancellationToken
+    )
+    {
+        var entry = await fileSystem.StatAsync(path, cancellationToken);
+        return entry == null
+            ? FileOperationResult<FileListEntry>.Missing("File or directory not found")
+            : FileOperationResult<FileListEntry>.Succeeded(ToListEntry(entry, null));
+    }
+
+    /// <summary>
+    /// 检查移动的源与目标：都必须给出且都不是根目录，两者不能相同，目录不能移动到自身之内。越过根目录的路径交给文件系统拒绝。
+    /// Checks the source and destination of a move: both are required and neither may be the root, they must differ,
+    /// and a directory cannot move into itself. Paths climbing above the root are left to the file system to reject.
+    /// </summary>
+    private static string? ValidateMovePaths(string? sourcePath, string? destinationPath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(destinationPath))
+        {
+            return "Source path and destination path are required";
+        }
+
+        if (TargetsWorkspaceRoot(sourcePath) || TargetsWorkspaceRoot(destinationPath))
+        {
+            return "Project directory root cannot be moved or replaced";
+        }
+
+        var source = NormalizeRelativePath(sourcePath);
+        var destination = NormalizeRelativePath(destinationPath);
+        if (source == null || destination == null)
+        {
+            return null;
+        }
+
+        if (string.Equals(source, destination, PathComparison))
+        {
+            return "Source and destination must be different";
+        }
+
+        return destination.StartsWith(source + "/", PathComparison) ? "A directory cannot be moved into itself" : null;
+    }
+
+    /// <summary>
+    /// 在文本层面折叠 "." 与 ".."，返回以 "/" 分隔的相对路径；越过根目录时返回 null。
+    /// Collapses "." and ".." textually and returns the "/"-separated relative path, or null when it climbs above the root.
+    /// </summary>
+    private static string? NormalizeRelativePath(string path)
+    {
+        var segments = new List<string>();
+        foreach (var segment in NormalizePath(path).Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            if (segment == "..")
+            {
+                if (segments.Count == 0)
+                {
+                    return null;
+                }
+
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+
+            segments.Add(segment);
+        }
+
+        return string.Join('/', segments);
+    }
+
+    private static string GetParentPath(string path)
+    {
+        var normalized = NormalizePath(path).TrimEnd('/');
+        var separator = normalized.LastIndexOf('/');
+        return separator < 0 ? string.Empty : normalized[..separator];
     }
 
     private static FileListEntry ToListEntry(FileEntry entry, GitFileStatus? gitStatus)

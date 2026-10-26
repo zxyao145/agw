@@ -172,6 +172,27 @@ test("shared execution commands match the server contract", () => {
   );
 });
 
+test("setting commands carry the extension identity only when it is given", () => {
+  assert.deepEqual(
+    buildSettingCommand({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      extensionId: "sample",
+    }),
+    {
+      type: "SettingCommand",
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      extensionId: "sample",
+    },
+  );
+  assert.equal(
+    "extensionId" in
+      buildSettingCommand({ projectId: "project-1", conversationId: "conversation-1" }),
+    false,
+  );
+});
+
 test("shared agent mode helpers read live and persisted status messages", () => {
   const directStatus = {
     messageId: "mode-1",

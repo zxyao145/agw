@@ -1005,6 +1005,10 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error_message");
 
+                    b.Property<long?>("InterruptedLeaseEpoch")
+                        .HasColumnType("bigint")
+                        .HasColumnName("interrupted_lease_epoch");
+
                     b.Property<long>("LastEventSequence")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
@@ -1612,6 +1616,10 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("total_token_count");
 
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("turn_id");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1754,6 +1762,14 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<DateTimeOffset>("CreateTime")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("create_time");
+
+                    b.Property<string>("ExtensionId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("host")
+                        .HasColumnName("extension_id");
 
                     b.Property<int>("Generation")
                         .IsConcurrencyToken()
@@ -2047,6 +2063,10 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<Guid?>("TaskId")
                         .HasColumnType("uuid")
                         .HasColumnName("task_id");
+
+                    b.Property<DateTimeOffset?>("UsageSettlesAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("usage_settles_at");
 
                     b.HasKey("Id")
                         .HasName("pk_project_conversation_turn");

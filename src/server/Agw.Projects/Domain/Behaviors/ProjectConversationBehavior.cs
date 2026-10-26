@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 
@@ -126,6 +127,40 @@ public sealed class ProjectConversationBehavior
     }
 
     /// <summary>
+    /// 请求方可以写入这个对话：宿主可以写入任何对话，extension 只能写入自己创建的对话与开放对话。
+    /// The requester may write the conversation: the host may write any conversation, an extension only its own and open ones.
+    /// </summary>
+    /// <param name="requesterExtensionId">请求方 extension 的 id，宿主为 null。The requesting extension id, null for the host.</param>
+    /// <param name="hasAcceptedTurns">对话是否有已受理的 Turn。Whether the conversation has accepted turns.</param>
+    public void EnsureWritableBy(string? requesterExtensionId, bool hasAcceptedTurns)
+    {
+        if (requesterExtensionId == null || IsCreatedBy(requesterExtensionId) || IsOpen(hasAcceptedTurns))
+        {
+            return;
+        }
+
+        throw new AgwException(ErrorCodes.ConversationReadOnly);
+    }
+
+    /// <summary>
+    /// 对话由这个 extension 创建。The conversation was created by this extension.
+    /// </summary>
+    public bool IsCreatedBy(string requesterExtensionId) =>
+        string.Equals(_conversation.ExtensionId, requesterExtensionId, StringComparison.Ordinal);
+
+    /// <summary>
+    /// extension 写入开放对话时成为它的创建方。
+    /// An extension that writes an open conversation becomes its creator.
+    /// </summary>
+    public void RecordCreatorIfOpen(string? requesterExtensionId, bool hasAcceptedTurns)
+    {
+        if (requesterExtensionId != null && IsOpen(hasAcceptedTurns))
+        {
+            _conversation.ExtensionId = requesterExtensionId;
+        }
+    }
+
+    /// <summary>
     /// <para>开始在绑定组中启用 provider session：当前生效记录已经使用该 ID 时返回该记录；ID 属于已归档记录时拒绝；否则停用当前生效记录并返回 null，调用方保存后再调用 <see cref="ActivateProviderSession"/>。</para>
     /// <para>Starts enabling a provider session in a binding group: returns the active record when it already uses the ID; rejects an ID of an archived record; otherwise archives the active record and returns null, after which the caller saves and calls <see cref="ActivateProviderSession"/>.</para>
     /// </summary>
@@ -237,6 +272,18 @@ public sealed class ProjectConversationBehavior
         binding.UpdateBy = user;
         binding.UpdateTime = now;
     }
+
+    /// <summary>
+    /// 开放对话：宿主创建、从未清空记录、没有已受理的 Turn；所有 extension 都可以写入。
+    /// An open conversation: created by the host, never cleared and without accepted turns; every extension may write it.
+    /// </summary>
+    public static bool IsOpenToExtensions(string extensionId, int generation, bool hasAcceptedTurns) =>
+        string.Equals(extensionId, ConversationCreators.Host, StringComparison.Ordinal)
+        && generation == 0
+        && !hasAcceptedTurns;
+
+    private bool IsOpen(bool hasAcceptedTurns) =>
+        IsOpenToExtensions(_conversation.ExtensionId, _conversation.Generation, hasAcceptedTurns);
 
     private static string ResolveTitle(string? requestedTitle, string? input) =>
         string.IsNullOrWhiteSpace(requestedTitle) ? DeriveTitle(input) : requestedTitle.Trim();

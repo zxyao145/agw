@@ -86,9 +86,7 @@ export function ProvidersTable({ providers, isLoading, isError, error }: Provide
             <TableCell className="font-medium">{provider.name}</TableCell>
             <TableCell className="max-w-xs truncate">{provider.description || "-"}</TableCell>
             <TableCell>{provider.providerType}</TableCell>
-            <TableCell className="max-w-sm truncate font-mono text-xs">
-              {provider.endpoint}
-            </TableCell>
+            <TableCell className="max-w-sm truncate font-mono">{provider.endpoint}</TableCell>
             <TableCell>{provider.authConfigs?.length ?? 0}</TableCell>
             <TableCell className="text-xs text-muted-foreground">
               {formatLocalDateTime(provider.createTime)}

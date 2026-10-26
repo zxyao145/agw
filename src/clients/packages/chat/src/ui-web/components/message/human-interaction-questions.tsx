@@ -12,7 +12,7 @@ import {
   OTHER_OPTION_VALUE,
   type HumanInteractionQuestionSelections,
 } from "./human-interaction-questions-state";
-import MdCard from "./renders/md-card";
+import { MarkdownView } from "./renders/markdown-renderer";
 
 type HumanInteractionQuestionsProps = {
   request: PendingInteraction & { questions: HumanInteractionQuestion[] };
@@ -127,7 +127,10 @@ export function HumanInteractionQuestions({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold tracking-tight">Your input is needed</h2>
-              <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px] uppercase">
+              <Badge
+                variant="secondary"
+                className="min-h-5 rounded-md px-1.5 text-2xs leading-none uppercase"
+              >
                 {request.questions.length}{" "}
                 {request.questions.length === 1 ? "question" : "questions"}
               </Badge>
@@ -140,7 +143,7 @@ export function HumanInteractionQuestions({
               role="group"
               aria-label="Question navigation"
             >
-              <span className="min-w-12 px-1 text-center font-mono text-[10px] tabular-nums text-muted-foreground">
+              <span className="min-w-12 px-1 text-center font-mono text-2xs tabular-nums text-muted-foreground">
                 {String(questionIndex + 1).padStart(2, "0")} /{" "}
                 {String(request.questions.length).padStart(2, "0")}
               </span>
@@ -179,10 +182,10 @@ export function HumanInteractionQuestions({
         <fieldset key={question.question} className="min-w-0 space-y-3">
           <legend className="w-full">
             <span className="flex items-center gap-2">
-              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              <span className="font-mono text-2xs tabular-nums text-muted-foreground">
                 {String(questionIndex + 1).padStart(2, "0")}
               </span>
-              <Badge variant="outline" className="rounded-md px-1.5 text-[10px]">
+              <Badge variant="outline" className="rounded-md px-1.5 text-2xs">
                 {question.header}
               </Badge>
             </span>
@@ -190,7 +193,7 @@ export function HumanInteractionQuestions({
               {question.question}
             </span>
             {question.multiSelect ? (
-              <span className="mt-1 block text-[11px] text-muted-foreground">
+              <span className="mt-1 block text-11 text-muted-foreground">
                 Select all that apply
               </span>
             ) : null}
@@ -277,18 +280,19 @@ export function HumanInteractionQuestions({
               aria-label="Option preview"
               className="flex h-48 flex-col overflow-hidden rounded-lg border border-primary/15 bg-muted/25"
             >
-              <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/10 px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.12em] text-muted-foreground">
                 <ChevronRight className="h-3 w-3 text-primary" />
                 Preview
               </div>
               <div
                 className={cn(
-                  "min-h-0 flex-1 overflow-auto px-3 py-2 text-xs agw-scrollbar",
+                  "min-h-0 flex-1 overflow-auto px-3 py-2 text-sm agw-scrollbar",
                   !preview && "grid place-items-center",
                 )}
+                style={{ "--agw-prose-font-size": "var(--text-sm)" } as React.CSSProperties}
               >
                 {preview ? (
-                  <MdCard mdText={preview} />
+                  <MarkdownView markdown={preview} />
                 ) : (
                   <p className="text-center text-muted-foreground">
                     {focusedLabel

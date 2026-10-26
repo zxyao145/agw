@@ -21,6 +21,7 @@ import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 import type { AgentMode, ExecutionQueueSnapshot, PermissionMode } from "@agw/chat-runtime";
 import { ChatInputQueue } from "./chat-input-queue";
 import { ChatInputToolbar } from "./chat-input-toolbar";
+import type { ExtensionMenuItem } from "./chat-extension-types";
 import { UserInput, type UserInputRef } from "./user-input";
 
 interface ChatInputProps {
@@ -69,6 +70,8 @@ interface ChatInputProps {
   onInputDraftChange?: (value: string) => void;
   /** 输入框上方左侧的附加内容，例如 Agent 选择器。 */
   topLeft?: React.ReactNode;
+  /** "+" 菜单 Extensions 分组的菜单项。Items of the Extensions group in the "+" menu. */
+  composerActions?: readonly ExtensionMenuItem<Record<string, never>>[];
 }
 
 export function ChatInput({
@@ -112,6 +115,7 @@ export function ChatInput({
   userInputRef: externalUserInputRef,
   onInputDraftChange,
   topLeft,
+  composerActions,
 }: ChatInputProps) {
   const internalUserInputRef = React.useRef<UserInputRef | null>(null);
   const userInputRef = externalUserInputRef ?? internalUserInputRef;
@@ -255,6 +259,7 @@ export function ChatInput({
           onCommandSelect={handleQuickCommand}
           onPermissionModeChange={onPermissionModeChange}
           onAgentModeChange={onAgentModeChange}
+          composerActions={composerActions}
         />
       </UserInput.BottomLeft>
       <UserInput.TopRight>

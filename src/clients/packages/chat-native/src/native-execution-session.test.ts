@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createBearerApiClient, type AiMessage } from "@agw/api";
+import { ChatHttpClient } from "@agw/chat-runtime/chat-http-client";
 import { ExecutionSession, type ExecutionHubHandlers } from "@agw/chat-runtime/execution-session";
+import type { ChatEvent } from "@agw/execution-core";
+import { replaceExecutionHub } from "@agw/test-harness";
 import { NativeExecutionSession } from "./native-execution-session";
 
 type ExecutionOutcome = "pending" | "completed" | Error;
@@ -20,6 +24,56 @@ const request = {
   input: { messageId: "message", author: "$agw", contents: [] },
 };
 
+const scope = { serverId: "server-1", projectId: "project-1", conversationId: "conversation-1" };
+
+function createChatClient(): ChatHttpClient {
+  return new ChatHttpClient({
+    api: createBearerApiClient({ baseUrl: "https://agw.test", token: "token" }),
+    identity: () => ({ baseUrl: "https://agw.test", token: "token" }),
+    execution: () => ({
+      baseUrl: "https://agw.test",
+      token: "token",
+      withCredentials: false,
+      webSocket: globalThis.WebSocket,
+      attachmentStore: null,
+    }),
+  });
+}
+
+test("messages the native session receives are dispatched as message events of its conversation scope", async (t) => {
+  const hubs = replaceExecutionHub(t, { provider: "InProcess" });
+  const client = createChatClient();
+  const events: ChatEvent<AiMessage>[] = [];
+  client.subscribe({ kinds: ["message"] }, (event) => events.push(event));
+  const received: string[] = [];
+  const native = new NativeExecutionSession({
+    client,
+    scope,
+    onMessage: (message) => received.push(String(message.messageId)),
+  });
+  try {
+    await native.configure({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      permissionMode: "fullAccess",
+    });
+    hubs[0]!.receive({
+      messageId: "text-1",
+      role: "assistant",
+      author: "agent",
+      contents: [{ type: "TextContent", content: "Hello" }],
+    });
+
+    assert.deepEqual(received, ["text-1"]);
+    assert.deepEqual(
+      events.map((event) => ({ kind: event.kind, scope: event.scope })),
+      [{ kind: "message", scope }],
+    );
+  } finally {
+    await native.dispose();
+  }
+});
+
 test("native execution settles with an unknown-outcome error when reconnect confirms idle without a terminal message", async (t) => {
   let active = false;
   t.mock.method(ExecutionSession.prototype, "execute", async () => {
@@ -29,8 +83,8 @@ test("native execution settles with an unknown-outcome error when reconnect conf
   t.mock.method(ExecutionSession.prototype, "dispose", async () => {});
   const reconnectStates: unknown[] = [];
   const native = new NativeExecutionSession({
-    serverUrl: "https://agw.test",
-    token: "token",
+    client: createChatClient(),
+    scope,
     onMessage() {},
     onReconnecting: (state) => reconnectStates.push(state),
   });
@@ -71,8 +125,8 @@ test("native startup rejection releases its terminal waiter without an unhandled
   });
   t.mock.method(ExecutionSession.prototype, "dispose", async () => {});
   const native = new NativeExecutionSession({
-    serverUrl: "https://agw.test",
-    token: "token",
+    client: createChatClient(),
+    scope,
     onMessage() {},
   });
   try {
@@ -92,8 +146,8 @@ test("native execution keeps waiting after an unacknowledged start while the cor
   t.mock.method(ExecutionSession.prototype, "hasRunningTurn", () => active);
   t.mock.method(ExecutionSession.prototype, "dispose", async () => {});
   const native = new NativeExecutionSession({
-    serverUrl: "https://agw.test",
-    token: "token",
+    client: createChatClient(),
+    scope,
     onMessage() {},
   });
   const handlers = (native as unknown as { session: { handlers: ExecutionHubHandlers } }).session
@@ -136,8 +190,8 @@ test("native rejects a pre-existing active execution instead of adopting it as a
   });
   t.mock.method(ExecutionSession.prototype, "dispose", async () => {});
   const native = new NativeExecutionSession({
-    serverUrl: "https://agw.test",
-    token: "token",
+    client: createChatClient(),
+    scope,
     onMessage() {},
   });
   const result: { outcome: ExecutionOutcome } = { outcome: "pending" };

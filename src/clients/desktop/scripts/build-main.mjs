@@ -9,6 +9,8 @@ export const mainBuildOptions = {
   entryPoints: {
     "main/index": "src/main/index.ts",
     "preload/index": "src/preload/index.ts",
+    "preload/extension": "src/preload/extension.ts",
+    "preload/confirmation": "src/preload/confirmation.ts",
   },
   outdir: "dist",
   bundle: true,
@@ -19,6 +21,24 @@ export const mainBuildOptions = {
   logLevel: "info",
 };
 
+// 确认窗口的页面脚本与样式：浏览器环境，由主进程的专用本地资源入口提供。
+// The confirmation window's page script and styles: a browser bundle served by the main process's dedicated local
+// resource entry.
+export const confirmationBuildOptions = {
+  entryPoints: ["src/confirmation/confirmation.ts", "src/confirmation/confirmation.css"],
+  outdir: "dist/confirmation",
+  bundle: true,
+  platform: "browser",
+  format: "iife",
+  target: "chrome140",
+  logLevel: "info",
+};
+
+/** 构建主进程、preload 与确认页面。Builds the main process, the preloads and the confirmation page. */
+export async function buildDesktopMain() {
+  await Promise.all([build(mainBuildOptions), build(confirmationBuildOptions)]);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await build(mainBuildOptions);
+  await buildDesktopMain();
 }

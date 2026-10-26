@@ -42,7 +42,9 @@ public sealed class ProjectDirectoryTests : IDisposable
             .BuildServiceProvider();
         _resolver = new ProjectScopedFileSystemResolver(
             _services.GetRequiredService<IServiceScopeFactory>(),
+            TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
+            NullLogger<LocalFileSystem>.Instance,
             TimeProvider.System
         );
         _files = new FileAppService(
@@ -94,7 +96,7 @@ public sealed class ProjectDirectoryTests : IDisposable
     [InlineData("nested/..")]
     public async Task DeleteAsync_DirectoryRoot_IsProtected(string path)
     {
-        var result = await _files.DeleteAsync(_projectId, path, Token, _directoryId);
+        var result = await _files.DeleteAsync(_projectId, path, recursive: true, Token, _directoryId);
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
         Assert.True(Directory.Exists(Additional));
     }
@@ -160,6 +162,8 @@ public sealed class ProjectDirectoryTests : IDisposable
         var diff = await _files.DiffAsync(_projectId, "README.md", null, Token, _directoryId);
         Assert.Contains("additional changed", diff.Value!.Diff);
         Assert.DoesNotContain("primary changed", diff.Value.Diff);
+        Assert.Equal("additional\n", diff.Value.OriginalContent);
+        Assert.Equal("additional changed\n", diff.Value.ModifiedContent);
         Assert.Equal(
             FileOperationStatus.Success,
             (await _files.StageAsync(_projectId, "README.md", Token, _directoryId)).Status

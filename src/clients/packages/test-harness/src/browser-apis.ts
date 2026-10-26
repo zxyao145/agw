@@ -14,9 +14,27 @@ export type ObservedElement = {
   callback: (entries: unknown[], observer: unknown) => void;
 };
 
+export type MediaQueryRegistry = {
+  /**
+   * 改变媒体查询的结果，并像浏览器一样通知 `matchMedia` 的监听器；默认结果为 false。
+   * Changes a media query result and notifies the `matchMedia` listeners the way a browser does; results start false.
+   */
+  setMatches(query: string, matches: boolean): void;
+};
+
+export type FontRegistry = {
+  /**
+   * 像浏览器完成一批字体加载那样，在 `document.fonts` 上派发 `loadingdone`。
+   * Dispatches `loadingdone` on `document.fonts` the way a browser does after a batch of fonts loads.
+   */
+  loadingDone(): void;
+};
+
 export type ObserverRegistry = {
   resize: ObservedElement[];
   intersection: ObservedElement[];
+  media: MediaQueryRegistry;
+  fonts: FontRegistry;
 };
 
 export type Clipboard = {
@@ -30,12 +48,38 @@ export type Clipboard = {
  * 在 jsdom window 上安装缺失的 API，并返回观察者登记表，供测试自行投递尺寸与可见性通知。
  */
 export function installBrowserApis(window: JsdomWindow): ObserverRegistry {
-  const registry: ObserverRegistry = { resize: [], intersection: [] };
+  const mediaMatches = new Map<string, boolean>();
+  const mediaListeners = new Map<string, Set<(event: unknown) => void>>();
+  // jsdom 没有 FontFaceSet；没有待加载字体的 document.fonts 是一个状态为 loaded 的事件目标。
+  // jsdom has no FontFaceSet; document.fonts with no pending fonts is an event target whose status is loaded.
+  const EventTargetConstructor = window.EventTarget as typeof EventTarget;
+  const fonts = Object.assign(new EventTargetConstructor(), { status: "loaded" });
+  Object.assign(fonts, { ready: Promise.resolve(fonts) });
+  Object.defineProperty(window.document, "fonts", { configurable: true, value: fonts });
+  const EventConstructor = window.Event as typeof Event;
+  const registry: ObserverRegistry = {
+    resize: [],
+    intersection: [],
+    media: {
+      setMatches(query, matches) {
+        mediaMatches.set(query, matches);
+        for (const listener of mediaListeners.get(query) ?? []) listener({ matches, media: query });
+      },
+    },
+    fonts: {
+      loadingDone() {
+        fonts.dispatchEvent(new EventConstructor("loadingdone"));
+      },
+    },
+  };
 
   window.matchMedia = (query: string) => {
-    const listeners = new Set<(event: unknown) => void>();
+    const listeners = mediaListeners.get(query) ?? new Set<(event: unknown) => void>();
+    mediaListeners.set(query, listeners);
     return {
-      matches: false,
+      get matches() {
+        return mediaMatches.get(query) ?? false;
+      },
       media: query,
       onchange: null,
       addEventListener: (_type: string, listener: (event: unknown) => void) =>
@@ -67,6 +111,35 @@ export function installBrowserApis(window: JsdomWindow): ObserverRegistry {
     this.scrollTop = options?.top ?? this.scrollTop;
   };
   window.HTMLElement.prototype.scrollIntoView = function scrollIntoView() {};
+  // CSSOM View 的 checkVisibility：没有盒子、祖先 content-visibility: hidden、按选项检查的透明度为零与 visibility 不可见时
+  // 为 false。jsdom 没有排版，content-visibility: auto 不会跳过内容。
+  // CSSOM View's checkVisibility: false without a box, under a content-visibility: hidden ancestor, and, per the
+  // options, at zero opacity or with an invisible visibility. jsdom has no layout, so content-visibility: auto never
+  // skips contents.
+  window.HTMLElement.prototype.checkVisibility = function checkVisibility(
+    this: HTMLElement,
+    options: {
+      opacityProperty?: boolean;
+      checkOpacity?: boolean;
+      visibilityProperty?: boolean;
+      checkVisibilityCSS?: boolean;
+    } = {},
+  ) {
+    const view = this.ownerDocument.defaultView;
+    if (!view || !this.isConnected) return false;
+    const opacity = options.opacityProperty === true || options.checkOpacity === true;
+    const own = view.getComputedStyle(this);
+    if (own.display === "none" || own.display === "contents") return false;
+    if (opacity && own.opacity === "0") return false;
+    for (const ancestor of ancestorsOf(this)) {
+      const style = view.getComputedStyle(ancestor);
+      if (style.display === "none" || style.getPropertyValue("content-visibility") === "hidden")
+        return false;
+      if (opacity && style.opacity === "0") return false;
+    }
+    const visibility = options.visibilityProperty === true || options.checkVisibilityCSS === true;
+    return !visibility || own.visibility === "visible";
+  };
   window.HTMLElement.prototype.hasPointerCapture = function hasPointerCapture() {
     return false;
   };
@@ -117,6 +190,15 @@ export function installLayoutMetrics(
     configurable: true,
     get: () => width,
   });
+}
+
+/** 元素的祖先，由近到远。An element's ancestors, nearest first. */
+function ancestorsOf(element: Element): Element[] {
+  const ancestors: Element[] = [];
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    ancestors.push(parent);
+  }
+  return ancestors;
 }
 
 function createObserver(observed: ObservedElement[]) {

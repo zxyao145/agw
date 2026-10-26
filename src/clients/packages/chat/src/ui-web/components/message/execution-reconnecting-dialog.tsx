@@ -79,7 +79,7 @@ export function ExecutionReconnectingDialog({ state, onRetry }: ExecutionReconne
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-primary">
+            <p className="text-11 font-semibold uppercase tracking-[0.18em] text-primary">
               Connection interrupted
             </p>
             <h2 id="execution-reconnecting-title" className="mt-1 text-base font-semibold">

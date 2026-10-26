@@ -1,7 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@agw/components/ui-tokens.css";
+@import "@agw/components/typography.css";
 @import "@agw/chat/math.css";
 @import "@agw/chat/image-preview.css";
+@import "@agw/code-view/code-view.css";
 
 @source "../../../packages";

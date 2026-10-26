@@ -128,6 +128,7 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
     public Task<bool> RecoverInProcessExecutionAsync(
         string connectionId,
         string userId,
+        string callerConnectionId,
         bool interrupt,
         CancellationToken cancellationToken
     )
@@ -141,7 +142,22 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
             return Task.FromResult(false);
         }
 
-        return connection.RecoverInProcessExecutionAsync(interrupt, cancellationToken);
+        string? requesterExtensionId = null;
+        if (interrupt)
+        {
+            // 停止按调用方连接的请求方检查。Stopping is checked against the requester of the caller's connection.
+            if (
+                !_connections.TryGetValue(callerConnectionId, out var caller)
+                || !string.Equals(caller.UserId, userId, StringComparison.Ordinal)
+            )
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");
+            }
+
+            requesterExtensionId = caller.RequesterExtensionId;
+        }
+
+        return connection.RecoverInProcessExecutionAsync(interrupt, requesterExtensionId, cancellationToken);
     }
 
     public Task DisconnectAsync(string connectionId)

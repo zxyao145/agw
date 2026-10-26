@@ -320,7 +320,7 @@ export function AgentFormFields({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-auto shrink-0 px-2 py-1 text-xs"
+                  className="h-auto shrink-0 px-2 py-1"
                   aria-label="Clear model provider selection"
                   onClick={() => setModelProviderId("")}
                 >
@@ -478,7 +478,7 @@ export function AgentFormFields({
                   onChange={(event) => setResponseSchema(event.target.value)}
                   placeholder={AGENT_RESPONSE_SCHEMA_EXAMPLE}
                   aria-invalid={Boolean(responseSchemaError)}
-                  className="min-h-80 flex-1 resize-none font-mono text-xs"
+                  className="min-h-80 flex-1 resize-none font-mono"
                 />
                 {responseSchemaError ? (
                   <p role="alert" className="text-xs text-destructive">
@@ -608,7 +608,7 @@ export function AgentFormFields({
                 placeholder="{}"
                 readOnly={!canEditExtra}
                 aria-invalid={Boolean(extraError)}
-                className={`min-h-80 flex-1 resize-none font-mono text-xs ${
+                className={`min-h-80 flex-1 resize-none font-mono ${
                   canEditExtra ? "" : "bg-muted/50"
                 }`}
               />

@@ -43,7 +43,22 @@ public sealed record GitFileStatus(string? StagedStatus, string? UnstagedStatus)
 
 public record GitChangedFiles(Dictionary<string, GitFileStatus> FileStatuses, HashSet<string> DeletedFiles);
 
-public record GitDiffResult(bool Success, string Diff, bool Unchanged, string? OriginalContent, string? Error);
+public record GitDiffResult(bool Success, string Diff, string? Error);
+
+/// <summary>
+/// 读取文件内容的位置：HEAD 提交或暂存区（index）。Where a file's content is read: the HEAD commit or the index.
+/// </summary>
+public enum GitBlobSource
+{
+    Head,
+    Index,
+}
+
+/// <summary>
+/// 读取结果；该位置没有这个文件时 <see cref="Content"/> 为 null。The read result; <see cref="Content"/> is null when
+/// the file is absent there.
+/// </summary>
+public record GitBlobResult(bool Success, string? Content, string? Error);
 
 public record GitResetResult(bool Success, string Message, string? Error, bool IsClientError);
 

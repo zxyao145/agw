@@ -18,8 +18,6 @@ export function ConversationImagePreview({
   scrollElementRef: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }) {
-  const slides = React.useMemo(() => [image], [image]);
-  const onContextMenu = useImageContextMenu(image.name);
   const restoreScroll = React.useRef<() => void>(() => {});
   React.useLayoutEffect(() => {
     const positions: { element: HTMLElement; top: number; left: number }[] = [];
@@ -35,17 +33,50 @@ export function ConversationImagePreview({
   }, [trigger]);
 
   return (
-    <Lightbox
-      open
-      close={() => {
+    <ImagePreview
+      image={image}
+      onClose={() => {
         const target = trigger.isConnected ? trigger : scrollElementRef.current;
         target?.focus({ preventScroll: true });
         restoreScroll.current();
         onClose();
       }}
+    />
+  );
+}
+
+/** 图片预览根元素的 `data-slot`。The `data-slot` of the image preview root. */
+export const IMAGE_PREVIEW_SLOT = "image-preview";
+
+// 类型没有列出 data-* 属性。The type does not list data-* attributes.
+const IMAGE_PREVIEW_CONTAINER = {
+  "data-slot": IMAGE_PREVIEW_SLOT,
+} as React.HTMLAttributes<HTMLDivElement>;
+
+/**
+ * 铺满窗口的图片预览：滚轮与按钮缩放，拖动平移，右键菜单，点击背景或 Esc 关闭。根元素带 `data-slot`，Desktop 据此把
+ * extension 视图换成截图，预览始终在最上层。
+ * A full-window image preview: wheel and button zoom, drag to pan, the context menu, and closing by clicking the
+ * backdrop or Esc. The root carries a `data-slot`, so Desktop replaces extension views with snapshots and the preview
+ * stays on top.
+ */
+export function ImagePreview({
+  image,
+  onClose,
+}: {
+  image: ConversationImageSource;
+  onClose: () => void;
+}) {
+  const slides = React.useMemo(() => [image], [image]);
+  const onContextMenu = useImageContextMenu(image.name);
+  return (
+    <Lightbox
+      open
+      close={onClose}
       slides={slides}
       plugins={[Zoom]}
       className="agw-image-preview"
+      portal={{ container: IMAGE_PREVIEW_CONTAINER }}
       labels={{ Lightbox: "Image preview" }}
       carousel={{ finite: true, preload: 0, padding: "64px", imageProps: { onContextMenu } }}
       controller={{ closeOnBackdropClick: true, disableSwipeNavigation: true }}

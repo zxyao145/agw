@@ -1,5 +1,7 @@
+export * from "./chat-http-client";
 export * from "./conversation-controller";
 export * from "./conversation-status-store";
+export * from "./conversation-token-usage";
 export * from "./execution";
 export * from "./execution-activity-store";
 export * from "./execution-queue";
@@ -8,3 +10,4 @@ export * from "./execution-session";
 export * from "./execution-session-manager";
 export * from "./execution-stream";
 export * from "./use-conversation-controller";
+export * from "./use-conversation-token-usage";

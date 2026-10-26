@@ -1,0 +1,224 @@
+/* 页面与 GitHub 风格的 Markdown 细节，颜色来自宿主主题变量（theme.apply）。字号、行高与间距来自 /__agw/typography.css
+   （.agw-prose，document 密度），这里只保留排版规范没有覆盖的部分。
+   Page and GitHub-specific Markdown details; colors come from the host theme variables (theme.apply). Font sizes, line
+   heights and spacing come from /__agw/typography.css (.agw-prose, document density); this file keeps only what the
+   typography does not cover. */
+
+:root {
+  scrollbar-color: var(--border) transparent;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: var(--agw-font-size-base);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.status {
+  margin: 0;
+  padding: 24px 32px;
+  font-size: 0.875em;
+  color: var(--muted-foreground);
+}
+
+.markdown-body {
+  box-sizing: border-box;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 32px 40px 48px;
+}
+
+/* 主题提供工作区背景时（html 上有 data-workspace-backdrop，见 shared/workspace-backdrop.ts），背景图形固定在窗口上不随
+   页面滚动，文档显示为卡片，四周留出背景。
+   When the theme provides a workspace backdrop (html has data-workspace-backdrop, see shared/workspace-backdrop.ts), it
+   stays fixed to the window as the page scrolls, and the document becomes a card with the backdrop showing around it. */
+:root[data-workspace-backdrop] body {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 32px 16px 48px;
+  background-image: var(--agw-workspace-backdrop);
+  background-attachment: fixed;
+}
+
+:root[data-workspace-backdrop] .markdown-body {
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
+    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+}
+
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 16px;
+}
+
+.markdown-body details {
+  margin-top: 0;
+  margin-bottom: var(--agw-prose-block-gap);
+}
+
+.markdown-body > details:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body a {
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+
+/* 任务列表。Task lists. */
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+
+.markdown-body .task-list-item input[type="checkbox"] {
+  margin: 0 0.2em 0.25em -1.4em;
+}
+
+/* 代码。Code. */
+.markdown-body code {
+  white-space: break-spaces;
+}
+
+.markdown-body pre {
+  overflow-wrap: normal;
+}
+
+/* 高亮样式只提供文字颜色，背景与间距沿用代码块。The highlight styles supply text colors; background and spacing follow the code block. */
+.markdown-body pre code,
+.markdown-body pre code.hljs {
+  display: inline;
+  padding: 0;
+  overflow: visible;
+  white-space: pre;
+  background: transparent;
+  border: 0;
+}
+
+/* Mermaid 代码块：图表渲染出来后隐藏源码；源码有错误时错误信息在源码下方。外间距取块间距，首尾块不留外间距。
+   Mermaid code blocks: the source hides once the diagram renders; an error shows below the source. The block gap is
+   the outer margin, and the first and last blocks carry none. */
+.markdown-body .mermaid-block {
+  margin-block: var(--agw-prose-block-gap);
+}
+
+.markdown-body > .mermaid-block:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > .mermaid-block:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body .mermaid-block > pre {
+  margin-block: 0;
+}
+
+.markdown-body .mermaid-block[data-diagram="rendered"] > pre {
+  display: none;
+}
+
+/* 点击图表由宿主预览。Clicking the diagram has the host preview it. */
+.markdown-body .mermaid-block[data-diagram="rendered"] .mermaid-diagram {
+  cursor: zoom-in;
+}
+
+.markdown-body .mermaid-block .mermaid-diagram-error {
+  margin-top: 0.5em;
+}
+
+/* 表格。Tables. */
+.markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  font-variant: tabular-nums;
+}
+
+.markdown-body tr {
+  background: var(--background);
+}
+
+.markdown-body tbody tr:nth-child(2n) {
+  background: color-mix(in srgb, var(--muted) 60%, var(--background));
+}
+
+/* 图片。Images. */
+.markdown-body img {
+  box-sizing: content-box;
+  background: var(--background);
+}
+
+.markdown-body .image-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 6px;
+  font-size: 0.85em;
+  color: var(--muted-foreground);
+  vertical-align: middle;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+.markdown-body .image-placeholder-alt {
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.markdown-body .image-placeholder-marker {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+/* 脚注。Footnotes. */
+.markdown-body [data-footnote-ref]::before {
+  content: "[";
+}
+
+.markdown-body [data-footnote-ref]::after {
+  content: "]";
+}
+
+.markdown-body .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 767px) {
+  .markdown-body {
+    padding: 16px;
+  }
+}

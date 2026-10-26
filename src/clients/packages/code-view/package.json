@@ -1,0 +1,33 @@
+{
+  "name": "@agw/code-view",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./text-model": "./src/text-model.ts",
+    "./code-view.css": "./src/code-view.css"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../.oxlintrc.json ./src ./browser-tests",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test:browser": "tsx --test browser-tests/*.test.ts",
+    "format": "oxfmt -c ../../.oxfmtrc.json ./src ./browser-tests *.json",
+    "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src ./browser-tests *.json"
+  },
+  "dependencies": {
+    "monaco-editor": "catalog:",
+    "prettier": "catalog:"
+  },
+  "devDependencies": {
+    "@agw/test-harness": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
+    "playwright": "catalog:",
+    "tailwindcss": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  }
+}

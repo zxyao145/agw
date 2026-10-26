@@ -140,6 +140,12 @@ public sealed class DurableExecutionRecord : BaseEntity
     public DateTimeOffset? LeaseExpiresAt { get; set; }
 
     /// <summary>
+    /// 中断时仍未过期的那份租约的 LeaseEpoch；持有这份租约的 worker 退出并确认用量结算后清空。
+    /// The LeaseEpoch of the lease still valid when the execution was interrupted; cleared once the worker holding that lease exits and confirms the usage settlement.
+    /// </summary>
+    public long? InterruptedLeaseEpoch { get; set; }
+
+    /// <summary>
     /// 本 Turn 已提交的最大事件序号，与对应事件在同一事务中递增和提交。
     /// The largest committed event sequence of the turn, incremented and committed in the same transaction as its events.
     /// </summary>

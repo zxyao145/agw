@@ -1,5 +1,5 @@
 import { MessageNode } from "../types";
-import MdCard from "./md-card";
+import { MarkdownView } from "./markdown-renderer";
 
 export default function TextContent({ node }: { node: MessageNode }) {
   if (!node.content) {
@@ -7,7 +7,7 @@ export default function TextContent({ node }: { node: MessageNode }) {
   }
   return (
     <div className="msg-content">
-      <MdCard mdText={node.content} />
+      <MarkdownView markdown={node.content} />
     </div>
   );
 }

@@ -6,8 +6,11 @@ import {
   CircleAlert,
   CircleSlash,
   LoaderCircle,
+  MessageCircleText,
+  MoreHorizontal,
   Pencil,
   Plus,
+  Puzzle,
   RotateCw,
   Trash2,
   type LucideIcon,
@@ -26,12 +29,20 @@ import {
   deleteProjectConversation,
   getProjectConversationDetails,
   getProjectConversations,
+  HOST_EXTENSION_ID,
   updateProjectConversationTitle,
   type ConversationActivityStatus,
   type ConversationPage,
   type ConversationSummary,
 } from "../../../services/task-client";
+import type { ConversationItemActionArgs, ExtensionMenuItem } from "../../../lib/extension-menu";
 import { Button } from "@agw/components";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@agw/components";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +72,8 @@ interface ConversationListProps {
   onConversationDeleted?: (conversationId: string) => void;
   onProjectConversationsCleared?: () => void;
   headerActions?: (currentConversation: ConversationSummary | null) => React.ReactNode;
+  /** 对话列表项的扩展菜单项，非空时在 Rename、Delete 旁显示。Extension items shown beside Rename and Delete when non-empty. */
+  itemActions?: readonly ExtensionMenuItem<ConversationItemActionArgs>[];
 }
 
 const CONVERSATION_PAGE_SIZE = 20;
@@ -76,7 +89,7 @@ const CONVERSATION_STATUS_DISPLAY: Record<
   running: {
     icon: LoaderCircle,
     label: "Running",
-    className: "animate-spin text-sidebar-ring",
+    className: "animate-spin text-(--agw-status-running)",
   },
   failed: { icon: CircleAlert, label: "Last turn failed", className: "text-destructive" },
   interrupted: {
@@ -85,6 +98,17 @@ const CONVERSATION_STATUS_DISPLAY: Record<
     className: "text-muted-foreground",
   },
 };
+
+/**
+ * 标题前的创建方图标；旧版 Server 不返回创建方时没有图标。
+ * The creator icon before the title; there is none when an older Server does not return the creator.
+ */
+function getCreatorDisplay(extensionId: string | null): { icon: LucideIcon; label: string } | null {
+  if (extensionId === null) return null;
+  return extensionId === HOST_EXTENSION_ID
+    ? { icon: MessageCircleText, label: "Created by Agw" }
+    : { icon: Puzzle, label: `Created by extension "${extensionId}"` };
+}
 
 export function ConversationList({
   projectId,
@@ -98,6 +122,7 @@ export function ConversationList({
   onConversationDeleted,
   onProjectConversationsCleared,
   headerActions,
+  itemActions,
 }: ConversationListProps) {
   const queryClient = useQueryClient();
   const [clearAllDialogOpen, setClearAllDialogOpen] = React.useState(false);
@@ -342,7 +367,7 @@ export function ConversationList({
 
   return (
     <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
-      <div className="p-2 pl-4 flex items-center justify-between">
+      <div className="p-3 pl-3 flex items-center justify-between">
         <h2 className="font-semibold text-sm">Conversations</h2>
         <div className="tools">
           {displayedConversations.length > 0 && (
@@ -408,17 +433,40 @@ export function ConversationList({
             const isActive = conversation.conversationId === currentConversationId;
             const status = conversationStatuses.get(conversation.conversationId) ?? "idle";
             const statusDisplay = status === "idle" ? null : CONVERSATION_STATUS_DISPLAY[status];
+            const creatorDisplay = getCreatorDisplay(conversation.extensionId);
 
             return (
               <div
                 key={conversation.conversationId}
                 onClick={() => onConversationSelect(conversation)}
                 className={cn(
-                  "group relative py-2.5 pl-4 pr-2 rounded-md cursor-pointer transition-colors",
-                  isActive ? "bg-accent" : "hover:bg-accent/80",
+                  "group relative py-2.5 pl-3 pr-3 rounded-md cursor-pointer transition-colors",
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent/80 hover:text-accent-foreground",
                 )}
               >
                 <div className="flex items-center">
+                  {/* 没有图标时保留位置，标题从同一位置开始。The slot stays without an icon so titles start at the same place. */}
+                  <div className="mr-1 flex h-3 w-3 shrink-0 items-center justify-center">
+                    {creatorDisplay ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            role="img"
+                            aria-label={creatorDisplay.label}
+                            className="flex h-3 w-3 items-center justify-center"
+                          >
+                            <creatorDisplay.icon
+                              aria-hidden="true"
+                              className="h-3 w-3 text-muted-foreground"
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{creatorDisplay.label}</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="text-sm truncate">{conversation.title || "Untitled"}</div>
                   </div>
@@ -442,9 +490,10 @@ export function ConversationList({
                     ) : null}
                   </div>
                   {/* Actions sit left of the status slot 操作按钮位于状态位置左侧 */}
+                  {/* An open menu keeps its trigger visible 菜单打开时保持触发按钮可见 */}
                   <div
                     className="absolute inset-y-1 right-0
-                        hidden group-hover:flex
+                        hidden group-hover:flex has-[[data-state=open]]:flex
                         items-center"
                   >
                     {/* Fade the title out before it reaches the actions
@@ -479,6 +528,43 @@ export function ConversationList({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      {itemActions && itemActions.length > 0 ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground"
+                              aria-label="More conversation actions"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          {/* Portal 中的点击仍沿 React 树冒泡，不能选中该对话。
+                              Clicks in the portal still bubble through the React tree and must not select the conversation. */}
+                          <DropdownMenuContent
+                            align="end"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {itemActions.map((action) => (
+                              <DropdownMenuItem
+                                key={action.id}
+                                className="cursor-pointer"
+                                onSelect={() =>
+                                  action.onSelect({
+                                    conversationId: conversation.conversationId,
+                                    title: conversation.title,
+                                  })
+                                }
+                              >
+                                {action.icon}
+                                {action.title}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
                     </div>
                   </div>
                 </div>

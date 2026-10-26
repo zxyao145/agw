@@ -260,7 +260,7 @@ function UserInputSuggestions({
 
   return (
     <div className="absolute z-99 bottom-full left-0 right-0 pointer-events-auto mb-0 py-2 px-1 rounded-xl border bg-background/95 shadow-sm backdrop-blur-sm">
-      <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center justify-between px-2 pb-1 text-11 font-semibold uppercase tracking-wide text-muted-foreground">
         Suggestions
       </div>
       <ItemGroup id={id} role="listbox" aria-label="Suggestions" className="gap-0">
@@ -280,7 +280,7 @@ function UserInputSuggestions({
               onMouseEnter={() => onActiveIndexChange(index)}
               variant="outline"
               size="sm"
-              className={`p-2 cursor-pointer rounded-sm text-xs text-foreground transition hover:border-border hover:bg-accent/50 ${activeIndex === index ? "border-border bg-accent/50" : "border-transparent bg-transparent"}`}
+              className={`p-2 cursor-pointer rounded-sm text-sm text-foreground transition hover:border-border hover:bg-accent/50 ${activeIndex === index ? "border-border bg-accent/50" : "border-transparent bg-transparent"}`}
             >
               <ItemContent className="min-w-0 flex-row items-center gap-1 overflow-hidden whitespace-nowrap">
                 {fileParts ? (
@@ -306,7 +306,7 @@ function UserInputSuggestions({
                 </span>
                 {description ? (
                   <span
-                    className="min-w-0 truncate text-[11px] text-muted-foreground"
+                    className="min-w-0 truncate text-11 text-muted-foreground"
                     title={description}
                   >
                     {description}

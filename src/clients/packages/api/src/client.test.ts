@@ -299,3 +299,143 @@ test("explicit OIDC mode never falls back to ambient cookies after Desktop logou
     assert.equal(new Headers(call.init?.headers).get("X-Agw-Explicit-Auth"), "1");
   }
 });
+
+test("apiDownload returns the body bytes with the runtime identity and no antiforgery request", async (t) => {
+  const { apiDownload, configureApiRuntime, resetApiRuntime } = await import("./client.ts");
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return new Response(new Uint8Array([0x00, 0x01, 0xfe, 0xff]), {
+      status: 200,
+      headers: { "content-type": "application/octet-stream" },
+    });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+  configureApiRuntime({
+    baseUrl: "http://127.0.0.1:30816",
+    token: "agw_desktop",
+    explicitAuth: true,
+  });
+
+  const bytes = await apiDownload("/api/files/download", {
+    params: { query: { projectId: "project-1", path: "assets/logo.png" } },
+  });
+
+  assert.ok(bytes instanceof Uint8Array);
+  assert.deepEqual([...bytes], [0x00, 0x01, 0xfe, 0xff]);
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0]?.url,
+    "http://127.0.0.1:30816/api/files/download?projectId=project-1&path=assets%2Flogo.png",
+  );
+  const headers = new Headers(calls[0]?.init?.headers);
+  assert.equal(calls[0]?.init?.method, "GET");
+  assert.equal(headers.get("Authorization"), "Bearer agw_desktop");
+  assert.equal(headers.get("X-Agw-Explicit-Auth"), "1");
+  assert.equal(headers.get("X-CSRF-TOKEN"), null);
+  assert.equal(calls[0]?.init?.credentials, "omit");
+});
+
+test("apiDownload throws ApiError whose body is the parsed ApiResult", async (t) => {
+  const { ApiError, apiDownload, resetApiRuntime } = await import("./client.ts");
+  const originalFetch = globalThis.fetch;
+  resetApiRuntime();
+  globalThis.fetch = (async () =>
+    Response.json(
+      { code: 4130001, title: "File exceeds the 100 MiB transfer limit." },
+      {
+        status: 413,
+        statusText: "Payload Too Large",
+      },
+    )) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+
+  await assert.rejects(
+    apiDownload("/api/files/download", {
+      params: { query: { projectId: "project-1", path: "a" } },
+    }),
+    (caught: unknown) => {
+      assert.ok(caught instanceof ApiError);
+      assert.equal(caught.status, 413);
+      assert.equal(caught.url, "/api/files/download?projectId=project-1&path=a");
+      assert.deepEqual(caught.body, {
+        code: 4130001,
+        title: "File exceeds the 100 MiB transfer limit.",
+      });
+      return true;
+    },
+  );
+});
+
+test("apiDownload wraps fetch failures in ApiTransportError", async (t) => {
+  const { ApiTransportError, apiDownload, resetApiRuntime } = await import("./client.ts");
+  const originalFetch = globalThis.fetch;
+  resetApiRuntime();
+  globalThis.fetch = (async () => {
+    throw new Error("network down");
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+
+  await assert.rejects(
+    apiDownload("/api/files/download", { params: { query: { projectId: "project-1" } } }),
+    (caught: unknown) => caught instanceof ApiTransportError,
+  );
+});
+
+test("Bearer API clients download bytes and report ApiResult failures", async (t) => {
+  const { ApiError, createBearerApiClient } = await import("./client.ts");
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return String(input).includes("path=missing")
+      ? Response.json({ code: 4040007, title: "File not found" }, { status: 404 })
+      : new Response(new Uint8Array([0x42, 0x00]), {
+          headers: { "content-type": "application/octet-stream" },
+        });
+  }) as typeof fetch;
+  t.after(() => (globalThis.fetch = originalFetch));
+  let unauthorized = 0;
+  const client = createBearerApiClient({
+    baseUrl: "https://mobile.example.com/",
+    token: "agw_mobile",
+    onUnauthorized: () => (unauthorized += 1),
+  });
+
+  const bytes = await client.apiDownload("/api/files/download", {
+    params: { query: { projectId: "project-1", path: "b.bin" } },
+  });
+  await assert.rejects(
+    client.apiDownload("/api/files/download", {
+      params: { query: { projectId: "project-1", path: "missing" } },
+    }),
+    (caught: unknown) => {
+      assert.ok(caught instanceof ApiError);
+      assert.equal(caught.status, 404);
+      assert.deepEqual(caught.body, { code: 4040007, title: "File not found" });
+      return true;
+    },
+  );
+
+  assert.deepEqual([...bytes], [0x42, 0x00]);
+  assert.equal(
+    requests[0]?.url,
+    "https://mobile.example.com/api/files/download?projectId=project-1&path=b.bin",
+  );
+  assert.equal(
+    (requests[0]?.init?.headers as Record<string, string> | undefined)?.Authorization,
+    "Bearer agw_mobile",
+  );
+  assert.equal(requests[0]?.init?.credentials, "omit");
+  assert.equal(unauthorized, 0);
+});

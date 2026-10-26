@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Infrastructure.Git;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -82,6 +81,96 @@ public class GitCommandServiceTests
 
         Assert.True(result.Success);
         Assert.Contains("+new content", result.Diff, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReadBlobAsync_PartiallyStagedFile_ReturnsHeadAndIndexText()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("mixed.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("mixed.txt", "base\nstaged\n");
+        repository.Git("add", "mixed.txt");
+        repository.Write("mixed.txt", "base\nstaged\nunstaged\n");
+
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+        var filePath = repository.GetPath("mixed.txt");
+        var head = await service.ReadBlobAsync(filePath, GitBlobSource.Head, TestContext.Current.CancellationToken);
+        var index = await service.ReadBlobAsync(filePath, GitBlobSource.Index, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new GitBlobResult(true, "base\n", null), head);
+        Assert.Equal(new GitBlobResult(true, "base\nstaged\n", null), index);
+    }
+
+    [Fact]
+    public async Task ReadBlobAsync_UntrackedFile_ReturnsNullContent()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("tracked.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("untracked.txt", "new\n");
+
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+        var filePath = repository.GetPath("untracked.txt");
+
+        Assert.Equal(
+            new GitBlobResult(true, null, null),
+            await service.ReadBlobAsync(filePath, GitBlobSource.Head, TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(
+            new GitBlobResult(true, null, null),
+            await service.ReadBlobAsync(filePath, GitBlobSource.Index, TestContext.Current.CancellationToken)
+        );
+    }
+
+    [Fact]
+    public async Task ReadBlobAsync_StagedNewFile_ReturnsNullHeadContentAndIndexText()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("tracked.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("added.txt", "added\n");
+        repository.Git("add", "added.txt");
+
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+        var filePath = repository.GetPath("added.txt");
+
+        Assert.Equal(
+            new GitBlobResult(true, null, null),
+            await service.ReadBlobAsync(filePath, GitBlobSource.Head, TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(
+            new GitBlobResult(true, "added\n", null),
+            await service.ReadBlobAsync(filePath, GitBlobSource.Index, TestContext.Current.CancellationToken)
+        );
+    }
+
+    [Fact]
+    public async Task ReadBlobAsync_RepositoryWithoutCommits_ReturnsNullHeadContent()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("first.txt", "first\n");
+        repository.Git("add", "first.txt");
+
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+        var result = await service.ReadBlobAsync(
+            repository.GetPath("first.txt"),
+            GitBlobSource.Head,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(new GitBlobResult(true, null, null), result);
+    }
+
+    [Fact]
+    public async Task ReadBlobAsync_FileOutsideRepository_ReturnsFailure()
+    {
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+        var outside = Path.Combine(Path.GetPathRoot(AppContext.BaseDirectory)!, "agw-not-a-repository.txt");
+
+        var result = await service.ReadBlobAsync(outside, GitBlobSource.Head, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new GitBlobResult(false, null, "File is not in a git repository"), result);
     }
 
     [Fact]
@@ -207,75 +296,5 @@ public class GitCommandServiceTests
         var status = changedFiles.FileStatuses[repository.GetPath(relativePath)];
         Assert.Equal(stagedStatus, status.StagedStatus);
         Assert.Equal(unstagedStatus, status.UnstagedStatus);
-    }
-
-    private sealed class TempGitRepository : IDisposable
-    {
-        private TempGitRepository(string path)
-        {
-            Path = path;
-        }
-
-        public string Path { get; }
-
-        public static TempGitRepository Create()
-        {
-            var path = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "agw-git-command-tests",
-                Guid.CreateVersion7().ToString("N")
-            );
-            Directory.CreateDirectory(path);
-            var repository = new TempGitRepository(path);
-            repository.Git("init");
-            repository.Git("config", "user.email", "tests@agw.local");
-            repository.Git("config", "user.name", "Agw Tests");
-            return repository;
-        }
-
-        public string GetPath(string relativePath) => System.IO.Path.Combine(Path, relativePath);
-
-        public void Write(string relativePath, string content)
-        {
-            File.WriteAllText(GetPath(relativePath), content);
-        }
-
-        public void CommitAll()
-        {
-            Git("add", ".");
-            Git("commit", "-m", "test fixture");
-        }
-
-        public void Git(params string[] arguments)
-        {
-            var startInfo = new ProcessStartInfo("git")
-            {
-                WorkingDirectory = Path,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-            };
-            foreach (var argument in arguments)
-            {
-                startInfo.ArgumentList.Add(argument);
-            }
-
-            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start git");
-            var standardOutput = process.StandardOutput.ReadToEnd();
-            var standardError = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            Assert.True(
-                process.ExitCode == 0,
-                $"git {string.Join(' ', arguments)} failed: {standardError}{standardOutput}"
-            );
-        }
-
-        public void Dispose()
-        {
-            if (Directory.Exists(Path))
-            {
-                Directory.Delete(Path, recursive: true);
-            }
-        }
     }
 }

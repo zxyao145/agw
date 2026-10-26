@@ -14,10 +14,12 @@ namespace Agw.Infrastructure.Projects;
 public sealed class InProcessTurnRecovery
 {
     private readonly IServiceScopeFactory _scopes;
+    private readonly TimeProvider _timeProvider;
 
-    public InProcessTurnRecovery(IServiceScopeFactory scopes)
+    public InProcessTurnRecovery(IServiceScopeFactory scopes, TimeProvider timeProvider)
     {
         _scopes = scopes;
+        _timeProvider = timeProvider;
     }
 
     public async Task RecoverAsync(CancellationToken cancellationToken)
@@ -38,9 +40,18 @@ public sealed class InProcessTurnRecovery
                 )
             );
             await using var scope = _scopes.CreateAsyncScope();
+            // 上次进程的执行已经不存在，用量从结束时间起结算。
+            // The previous process's execution no longer exists, so usage settles at the finish time.
             await scope
                 .ServiceProvider.GetRequiredService<IConversationTurnStore>()
-                .FinishAsync(id, ConversationTurnStatus.Interrupted, 0, null, cancellationToken);
+                .FinishAsync(
+                    id,
+                    ConversationTurnStatus.Interrupted,
+                    0,
+                    null,
+                    _timeProvider.GetUtcNow(),
+                    cancellationToken
+                );
         }
     }
 }

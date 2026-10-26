@@ -1,0 +1,21 @@
+{
+  "manifestVersion": 1,
+  "id": "01a173b5-526c-74d8-864c-0e2da2d0a21c",
+  "name": "Excalidraw",
+  "version": "1.0.0",
+  "description": "Opens and edits .excalidraw files in the Files view.",
+  "author": "Agw",
+  "icon": "icon.svg",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "editor",
+        "title": "Excalidraw",
+        "icon": "PenTool",
+        "patterns": ["*.excalidraw"],
+        "entry": "index.html"
+      }
+    ]
+  },
+  "permissions": ["fs.cloud.read", "fs.cloud.write"]
+}

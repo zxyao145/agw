@@ -28,7 +28,7 @@ export function AgentflowCheckpointCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium">{name}</span>
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge variant="secondary" className="text-2xs">
               Checkpoint
             </Badge>
           </div>

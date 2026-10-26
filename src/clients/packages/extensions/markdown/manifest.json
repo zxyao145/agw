@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "id": "01a173b5-526c-74d8-864c-2fa2035185e4",
+  "name": "Markdown",
+  "version": "1.0.0",
+  "description": "Renders Markdown files in the Files view.",
+  "author": "Agw",
+  "icon": "icon.svg",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "markdown",
+        "title": "Mixed",
+        "icon": "SquarePen",
+        "patterns": ["*.md", "*.markdown"],
+        "entry": "markdown.html"
+      },
+      {
+        "id": "preview",
+        "title": "Preview",
+        "icon": "BookOpen",
+        "patterns": ["*.md", "*.markdown"],
+        "entry": "preview.html"
+      }
+    ],
+    "settings": { "entry": "settings.html" }
+  },
+  "permissions": ["fs.cloud.read", "fs.cloud.write"]
+}

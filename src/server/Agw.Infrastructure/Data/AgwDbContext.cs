@@ -277,11 +277,15 @@ public partial class AgwDbContext
         }
         else
         {
-            // SQLite 不能比较文本形式的 DateTimeOffset；租约到期时间保存为可比较的 64 位整数。
-            // SQLite cannot compare DateTimeOffset text; the lease expiry is stored as a comparable 64-bit integer.
+            // SQLite 不能比较文本形式的 DateTimeOffset；租约到期时间与用量结算时间保存为可比较的 64 位整数。
+            // SQLite cannot compare DateTimeOffset text; the lease expiry and the usage settlement time are stored as comparable 64-bit integers.
             modelBuilder
                 .Entity<DurableExecutionRecord>()
                 .Property(execution => execution.LeaseExpiresAt)
+                .HasConversion(new DateTimeOffsetToBinaryConverter());
+            modelBuilder
+                .Entity<ProjectConversationTurn>()
+                .Property(turn => turn.UsageSettlesAt)
                 .HasConversion(new DateTimeOffsetToBinaryConverter());
         }
     }

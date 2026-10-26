@@ -188,7 +188,7 @@ export function DesktopProjectPicker({
             >
               <Plus className="size-3.5" />
             </button>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-11 font-medium text-muted-foreground">
               {projects.length}
             </span>
           </div>
@@ -211,9 +211,7 @@ export function DesktopProjectPicker({
 
               <div className="grid gap-3">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="desktop-project-name" className="text-xs">
-                    Name
-                  </Label>
+                  <Label htmlFor="desktop-project-name">Name</Label>
                   <Input
                     id="desktop-project-name"
                     ref={createNameInputRef}
@@ -230,7 +228,7 @@ export function DesktopProjectPicker({
                 </div>
 
                 <div className="grid gap-1.5">
-                  <Label htmlFor="desktop-project-workspace" className="text-xs">
+                  <Label htmlFor="desktop-project-workspace">
                     Workspace <span className="font-normal text-muted-foreground">(optional)</span>
                   </Label>
                   <Input
@@ -239,7 +237,7 @@ export function DesktopProjectPicker({
                     onChange={(event) => setCreateWorkspace(event.target.value)}
                     placeholder="~/.agw/my-project"
                     autoComplete="off"
-                    className="h-9 rounded-xl border-border/70 bg-background font-mono text-xs shadow-none"
+                    className="h-9 rounded-xl border-border/70 bg-background font-mono text-sm shadow-none"
                   />
                 </div>
 

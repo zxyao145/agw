@@ -57,7 +57,7 @@ export function EnvironmentVariablesEditor({
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_40px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_40px] gap-3 border-b bg-muted/40 px-3 py-2 text-sm font-medium text-muted-foreground">
             <div>Key</div>
             <div>Value</div>
             <span className="sr-only">Actions</span>
@@ -74,7 +74,7 @@ export function EnvironmentVariablesEditor({
                 placeholder="VARIABLE_NAME"
                 aria-label={`Environment variable ${index + 1} key`}
                 aria-invalid={Boolean(error)}
-                className="font-mono text-xs"
+                className="font-mono"
               />
               <Input
                 id={`${idPrefix}environment-variable-value-${index}`}
@@ -82,7 +82,7 @@ export function EnvironmentVariablesEditor({
                 onChange={(event) => updateEntry(index, "value", event.target.value)}
                 placeholder="value"
                 aria-label={`Environment variable ${index + 1} value`}
-                className="font-mono text-xs"
+                className="font-mono"
               />
               <Button
                 type="button"

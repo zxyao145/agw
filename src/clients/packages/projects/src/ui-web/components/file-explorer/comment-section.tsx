@@ -61,6 +61,8 @@ export interface CommentSectionProps {
   onUpdateComment: (commentId: string, newContent: string) => void;
   isDiffView?: boolean;
   commentSide?: CommentSide;
+  /** 新评论框中按 Esc 时调用。Called when Esc is pressed in the new-comment box. */
+  onCancelNewComment: () => void;
 }
 
 export function CommentSection({
@@ -71,6 +73,7 @@ export function CommentSection({
   onUpdateComment,
   isDiffView = false,
   commentSide = CommentSide.Current,
+  onCancelNewComment,
 }: CommentSectionProps) {
   const [editingCommentId, setEditingCommentId] = React.useState<string | null>(null);
   const [editContent, setEditContent] = React.useState("");
@@ -99,6 +102,7 @@ export function CommentSection({
   };
 
   const handleCancelEdit = () => {
+    if (editingCommentId === null) onCancelNewComment();
     setEditingCommentId(null);
     setEditContent("");
   };

@@ -69,11 +69,9 @@ function DesktopSettingsPanel() {
   };
 
   return (
-    <section id="appearance" className="scroll-mt-4 space-y-5">
+    <section id="window" className="scroll-mt-4 space-y-5">
       <div className="flex flex-col ">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-          Appearance & close
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Window</p>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="mt-1 text-2xl font-semibold">Desktop behavior</h1>
@@ -267,7 +265,7 @@ function DesktopAboutSection() {
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Server</dt>
-                <dd className="mt-0.5 font-medium">
+                <dd className="mt-0.5 font-medium break-all">
                   {desktop.serverInfo ? `v${desktop.serverInfo.serverVersion}` : "Unavailable"}
                 </dd>
               </div>
@@ -311,7 +309,7 @@ function DesktopAboutSection() {
                   {updateDescription}
                 </p>
                 {updateResult?.assetName ? (
-                  <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
+                  <p className="mt-1 truncate font-mono text-11 text-muted-foreground/80">
                     {updateResult.assetName}
                   </p>
                 ) : null}

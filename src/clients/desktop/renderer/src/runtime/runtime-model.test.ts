@@ -14,6 +14,10 @@ const settings: DesktopSettings = {
   closeBehavior: "minimize-to-tray",
   activeServerId: "local",
   projectTabsByServer: {},
+  extensions: {},
+  removedBundledExtensions: [],
+  fileViewerDefaults: {},
+  appearance: { baseFontSize: 16, chatFontSize: null, codeFontSize: null, theme: "default" },
   profiles: [
     {
       id: "local",
@@ -76,6 +80,7 @@ test("getEffectiveActiveServerProfile follows the bundled Server runtime port", 
     packageFlavor: "full",
     activeToken: null,
     settings,
+    extensionSafeMode: null,
     localServerRuntime: {
       schemaVersion: 1,
       pid: 42,

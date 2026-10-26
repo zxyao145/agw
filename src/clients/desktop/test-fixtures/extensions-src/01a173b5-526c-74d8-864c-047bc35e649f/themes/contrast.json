@@ -1,0 +1,48 @@
+{
+  "common": {
+    "--agw-image-backdrop": "rgb(10 20 30 / 90%)",
+    "--agw-image-toolbar": "#112233",
+    "--agw-image-toolbar-foreground": "#fafafa",
+    "--agw-image-toolbar-border": "#445566",
+    "--agw-image-toolbar-hover": "#334455",
+    "--agw-image-toolbar-focus": "#ff8800",
+    "--agw-image-toolbar-shadow": "rgb(1 2 3 / 50%)",
+    "--color-slate-400": "#111111",
+    "--color-amber-500": "#222222",
+    "--color-emerald-500": "#333333",
+    "--agw-status-running": "#444444",
+    "--agw-server-online-halo": "#555555",
+    "--agw-agentflow-edge": "#010203",
+    "--agw-agentflow-edge-fan-out": "#040506",
+    "--agw-agentflow-edge-fan-in": "#070809",
+    "--agw-agentflow-edge-switch-case": "#0a0b0c",
+    "--agw-agentflow-edge-switch-default": "#0d0e0f"
+  },
+  "light": {
+    "--popover": "#fff7ed",
+    "--accent": "#fed7aa",
+    "--primary": "#9a3412",
+    "--primary-foreground": "#ffffff",
+    "--ring": "#ea580c",
+    "--border": "#fdba74",
+    "--input": "#fb923c",
+    "--sidebar": "#17191d",
+    "--sidebar-foreground": "#ffffff",
+    "--agw-sidebar-muted-foreground": "#d1d5db",
+    "--sidebar-accent": "#303030",
+    "--sidebar-accent-foreground": "#ffffff",
+    "--sidebar-border": "#525252",
+    "--sidebar-ring": "#48aaff",
+    "--agw-prose-code-background": "#fde68a"
+  },
+  "dark": {
+    "--popover": "#1c1917",
+    "--accent": "#44403c",
+    "--primary": "#fdba74",
+    "--primary-foreground": "#1c1917",
+    "--ring": "#f97316",
+    "--border": "#57534e",
+    "--input": "#78716c",
+    "--agw-prose-code-background": "#3f3f46"
+  }
+}

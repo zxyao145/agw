@@ -4,6 +4,7 @@ import { setupDomEnvironment } from "@agw/test-harness";
 
 import type { AgentCommandSuggestion, CommandSource } from "../../../lib/chat/search-command";
 import type { AgentMode, PermissionMode } from "@agw/chat-runtime";
+import type { ExtensionMenuItem } from "./chat-extension-types";
 
 const { React, act, fireEvent, render, screen } = await setupDomEnvironment();
 const { ChatInputToolbar } = await import("./chat-input-toolbar.tsx");
@@ -38,6 +39,7 @@ type ToolbarOptions = {
   commands?: string[];
   permissionModes?: PermissionMode[];
   agentModes?: AgentMode[];
+  composerActions?: ExtensionMenuItem<Record<string, never>>[];
 };
 
 function renderToolbar(options: ToolbarOptions = {}) {
@@ -57,6 +59,7 @@ function renderToolbar(options: ToolbarOptions = {}) {
       onCommandSelect: (command: string) => options.commands?.push(command),
       onPermissionModeChange: (mode: PermissionMode) => options.permissionModes?.push(mode),
       onAgentModeChange: (mode: AgentMode) => options.agentModes?.push(mode),
+      composerActions: options.composerActions,
     }),
   );
 }
@@ -88,6 +91,52 @@ test("the Add menu groups plan mode, skills, and tools", async () => {
   assert.ok(screen.getByText("Tools"));
   assert.ok(screen.getByText("/review"));
   assert.ok(screen.getByText("/search"));
+});
+
+test("composer actions follow Skills and Tools as the Extensions group", async () => {
+  const selections: Record<string, never>[] = [];
+  renderToolbar({
+    composerActions: [
+      {
+        id: "extension:snippet",
+        title: "Insert snippet",
+        icon: null,
+        onSelect: (args) => selections.push(args),
+      },
+    ],
+  });
+  const menu = await openAddMenu();
+
+  assert.deepEqual(
+    Array.from(menu.querySelectorAll('[data-slot="dropdown-menu-label"]'), (label) =>
+      label.textContent?.trim(),
+    ),
+    ["Add", "Skills", "Tools", "Extensions"],
+  );
+  await act(async () => {
+    fireEvent.click(screen.getByText("Insert snippet"));
+  });
+  assert.deepEqual(selections, [{}]);
+});
+
+test("composer actions alone replace the empty-menu notice", async () => {
+  renderToolbar({
+    commandSource: { mode: "agent", suggestions: [] } as unknown as CommandSource,
+    composerActions: [
+      { id: "extension:snippet", title: "Insert snippet", icon: null, onSelect() {} },
+    ],
+  });
+  await openAddMenu();
+
+  assert.ok(screen.getByText("Insert snippet"));
+  assert.equal(screen.queryByText("No actions are available for this target."), null);
+});
+
+test("without composer actions the Add menu has no Extensions group", async () => {
+  renderToolbar();
+  const menu = await openAddMenu();
+
+  assert.equal(menu.textContent?.includes("Extensions"), false);
 });
 
 test("mode commands stay out of the tool list", async () => {

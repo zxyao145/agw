@@ -593,7 +593,8 @@ public class JobAppServiceTests : IDisposable
                 projectResolver,
                 new ConversationHistoryDomainService(),
                 timeProvider,
-                userInfo
+                userInfo,
+                new ConversationCreatorStore(dbContext)
             );
             var taskResolver = new TaskAppService(dbContext, projectResolver, taskService, userInfo);
             var service = new JobAppService(
@@ -729,7 +730,8 @@ public class JobAppServiceTests : IDisposable
                 projectResolver,
                 new ConversationHistoryDomainService(),
                 timeProvider,
-                userInfo
+                userInfo,
+                new ConversationCreatorStore(dbContext)
             );
             var taskAppService = new TaskAppService(dbContext, projectResolver, taskExecution, userInfo);
             var catalog = new AgentCatalogFacade(dbContext, userInfo);

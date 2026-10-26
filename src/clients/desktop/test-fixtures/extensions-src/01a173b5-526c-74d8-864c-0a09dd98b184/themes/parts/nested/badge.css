@@ -1,0 +1,4 @@
+/* 嵌套导入中的资源按这个文件所在目录解析。Resources in a nested import resolve against this file's directory. */
+.css-theme-badge {
+  background-image: url(../../../images/badge.svg);
+}

@@ -1,9 +1,11 @@
 using System.IO.Enumeration;
 using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using System.Text;
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32.SafeHandles;
 
 namespace Agw.Files.Infrastructure.Storage.Confined;
@@ -18,6 +20,7 @@ namespace Agw.Files.Infrastructure.Storage.Confined;
 /// an allowed root, and all IO afterwards uses the opened handles, so no path can be swapped between validation and
 /// access.
 /// </summary>
+[UnsupportedOSPlatform("windows")]
 internal sealed class UnixConfinedFileSystem : IAgwFileSystem
 {
     private const int MaxSymbolicLinkHops = 40;
@@ -27,12 +30,22 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     private readonly string _rootPath;
     private readonly string[] _prefix;
     private readonly FileIdentity[] _allowedRoots;
+    private readonly FilePathLocks _pathLocks;
+    private readonly ILogger _logger;
 
-    internal UnixConfinedFileSystem(string rootPath, string[] prefix, FileIdentity[] allowedRoots)
+    internal UnixConfinedFileSystem(
+        string rootPath,
+        string[] prefix,
+        FileIdentity[] allowedRoots,
+        FilePathLocks pathLocks,
+        ILogger logger
+    )
     {
         _rootPath = rootPath;
         _prefix = prefix;
         _allowedRoots = allowedRoots;
+        _pathLocks = pathLocks;
+        _logger = logger;
     }
 
     /// <summary>
@@ -127,7 +140,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     {
         using var walk = Locate(path, createDirectories: true);
         RequireFileName(walk);
-        using var pathLock = await LocalFilePathLocks.AcquireAsync(walk.FullPath, ct).ConfigureAwait(false);
+        await using var pathLock = await _pathLocks.AcquireContentAsync(walk.FullPath, ct).ConfigureAwait(false);
         using var handle = OpenOrCreateFile(walk, path, mustCreate: false)!;
         await HandleTextIO.WriteAllTextAsync(handle, content, ct).ConfigureAwait(false);
     }
@@ -136,7 +149,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     {
         using var walk = Locate(path, createDirectories: true);
         RequireFileName(walk);
-        using var pathLock = await LocalFilePathLocks.AcquireAsync(walk.FullPath, ct).ConfigureAwait(false);
+        await using var pathLock = await _pathLocks.AcquireContentAsync(walk.FullPath, ct).ConfigureAwait(false);
         using var handle = OpenOrCreateFile(walk, path, mustCreate: true);
         if (handle == null)
         {
@@ -170,7 +183,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     {
         using var walk = Locate(path, createDirectories: false);
         RequireFileName(walk);
-        using var pathLock = await LocalFilePathLocks.AcquireAsync(walk.FullPath, ct).ConfigureAwait(false);
+        await using var pathLock = await _pathLocks.AcquireContentAsync(walk.FullPath, ct).ConfigureAwait(false);
         using var handle = OpenExistingFile(walk, UnixNative.O_RDWR, path);
         var content = await HandleTextIO.ReadAllTextAsync(handle, ct).ConfigureAwait(false);
         var (newContent, count) = TextContentEditor.ApplyReplace(content, oldString, newString, replaceAll);
@@ -182,7 +195,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     {
         using var walk = Locate(path, createDirectories: false);
         RequireFileName(walk);
-        using var pathLock = await LocalFilePathLocks.AcquireAsync(walk.FullPath, ct).ConfigureAwait(false);
+        await using var pathLock = await _pathLocks.AcquireContentAsync(walk.FullPath, ct).ConfigureAwait(false);
         using var handle = OpenExistingFile(walk, UnixNative.O_RDWR, path);
         var content = await HandleTextIO.ReadAllTextAsync(handle, ct).ConfigureAwait(false);
         var newContent = TextContentEditor.ApplyReplaceLines(content, edits);
@@ -190,11 +203,18 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
     }
 
     public IAgwFileSystem GetSubFileSystem(string path) =>
-        new UnixConfinedFileSystem(_rootPath, [.. _prefix, .. NormalizeSegments(path)], _allowedRoots);
+        new UnixConfinedFileSystem(
+            _rootPath,
+            [.. _prefix, .. NormalizeSegments(path)],
+            _allowedRoots,
+            _pathLocks,
+            _logger
+        );
 
-    public Task CreateDirectoryAsync(string path, CancellationToken ct)
+    public async Task CreateDirectoryAsync(string path, CancellationToken ct)
     {
         using var walk = Locate(path, createDirectories: true);
+        await using var pathLock = await _pathLocks.AcquireEntryAsync(walk.FullPath, ct).ConfigureAwait(false);
         while (true)
         {
             RequireParent(walk, path);
@@ -202,12 +222,12 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
             // An empty name means the root itself (or a link that ends at the root), which necessarily exists.
             if (walk.FinalName == null)
             {
-                return Task.CompletedTask;
+                return;
             }
 
             if (UnixNative.MkDirAt(UnixNative.Fd(walk.Directory), walk.FinalName, DirectoryMode) == 0)
             {
-                return Task.CompletedTask;
+                return;
             }
 
             var errno = UnixNative.LastError;
@@ -221,7 +241,7 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
             using var opened = OpenFinal(walk, UnixNative.O_RDONLY | UnixNative.O_DIRECTORY, path);
             if (opened.Handle != null)
             {
-                return Task.CompletedTask;
+                return;
             }
 
             if (opened.Failure == OpenFailure.NotDirectory)
@@ -231,11 +251,11 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
         }
     }
 
-    public async Task DeleteAsync(string path, CancellationToken ct)
+    public async Task DeleteAsync(string path, bool recursive, CancellationToken ct)
     {
         using var walk = Locate(path, createDirectories: false);
         var name = RequireFileName(walk);
-        using var pathLock = await LocalFilePathLocks.AcquireAsync(walk.FullPath, ct).ConfigureAwait(false);
+        await using var pathLock = await _pathLocks.AcquireEntryAsync(walk.FullPath, ct).ConfigureAwait(false);
         if (!walk.Found)
         {
             return;
@@ -243,9 +263,11 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
 
         walk.RequireInside(path);
         var directory = UnixNative.Fd(walk.Directory);
-        // unlinkat 不跟随符号链接：文件和链接本身直接删除，目录则递归清空后移除。
-        // unlinkat never follows symbolic links: files and links themselves are removed directly, and a directory is
-        // emptied recursively before removal.
+        // unlinkat 不跟随符号链接：文件和链接本身直接删除；目录在递归时先清空再移除，非递归时只调用一次 AT_REMOVEDIR，
+        // 目录非空则失败，期间新建的文件不会被删除。
+        // unlinkat never follows symbolic links: files and links themselves are removed directly; a directory is
+        // emptied first when recursive, and otherwise removed by a single AT_REMOVEDIR call that fails when the
+        // directory has entries, so files created meanwhile are never deleted.
         if (UnixNative.UnlinkAt(directory, name, 0) == 0)
         {
             return;
@@ -262,8 +284,9 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
             throw UnixNative.CreateException(errno, $"Cannot delete '{path}'");
         }
 
-        using (var child = OpenChildDirectory(walk.Directory, name))
+        if (recursive)
         {
+            using var child = OpenChildDirectory(walk.Directory, name);
             if (child == null)
             {
                 return;
@@ -272,13 +295,190 @@ internal sealed class UnixConfinedFileSystem : IAgwFileSystem
             DeleteContents(child, ct);
         }
 
+        if (UnixNative.UnlinkAt(directory, name, UnixNative.AT_REMOVEDIR) == 0)
+        {
+            return;
+        }
+
+        errno = UnixNative.LastError;
+        if (errno == UnixNative.ENOENT)
+        {
+            return;
+        }
+
+        throw errno == UnixNative.ENOTEMPTY
+            ? new AgwException(ErrorCodes.DirectoryNotEmpty, $"Directory '{path}' is not empty.")
+            : UnixNative.CreateException(errno, $"Cannot delete '{path}'");
+    }
+
+    public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
+    {
+        using var walk = Locate(path, createDirectories: false);
+        var handle = OpenExistingFile(walk, UnixNative.O_RDONLY, path);
+        try
+        {
+            return Task.FromResult<Stream>(new FileStream(handle, FileAccess.Read));
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
+    }
+
+    public async Task WriteAsync(
+        string path,
+        Stream content,
+        bool overwrite,
+        bool createParents,
+        string? expectedSha256,
+        CancellationToken ct
+    )
+    {
+        using var walk = Locate(path, createDirectories: createParents);
+        RequireFileName(walk);
+        await using var pathLock = await _pathLocks.AcquireContentAsync(walk.FullPath, ct).ConfigureAwait(false);
+        using var existing = OpenWriteTarget(walk, overwrite, path);
+        RequireParent(walk, path);
+        FileVersion? expected = null;
+        if (expectedSha256 != null)
+        {
+            var handle = existing.Handle ?? throw AtomicFileWrite.FileChanged(path);
+            expected = existing.Status.Version;
+            var actualSha256 = await AtomicFileWrite.HashAsync(handle, ct).ConfigureAwait(false);
+            AtomicFileWrite.VerifyHash(expectedSha256, actualSha256, path);
+        }
+
+        var name = RequireFileName(walk);
+        DeleteStaleTemporaryFiles(walk.Directory, name);
+        var permissions = existing.Handle != null ? existing.Status.Permissions : (UnixFileMode?)null;
+        await UnixAtomicCommit
+            .WriteAsync(
+                walk.Directory,
+                name,
+                content,
+                permissions,
+                overwrite,
+                expected,
+                pathLock,
+                path,
+                walk.FullPath,
+                _logger
+            )
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 打开写入目标并执行现有检查：OpenFinal 沿允许范围内的符号链接解析，之后 walk 停在最终目标所在目录，临时文件与重命名都在
+    /// 这个目录句柄下进行。目标是目录、不是普通文件，或 <paramref name="overwrite"/> 为 false 而目标已存在时抛出；目标不存在时
+    /// 返回不含句柄的结果。
+    /// Opens the write target and runs the existing checks: OpenFinal follows symbolic links inside the allowed
+    /// directories, after which walk rests on the final target's directory, and the temporary file and rename both
+    /// happen under that directory handle. Throws when the target is a directory, is not a regular file, or exists
+    /// while <paramref name="overwrite"/> is false; returns a result without a handle when the target is missing.
+    /// </summary>
+    private static OpenedFile OpenWriteTarget(Walk walk, bool overwrite, string path)
+    {
+        var existing = OpenFinal(walk, UnixNative.O_RDONLY | UnixNative.O_NONBLOCK, path);
+        if (existing.Handle == null)
+        {
+            return existing.Failure == OpenFailure.Missing
+                ? existing
+                : throw new AgwException(ErrorCodes.FileNotFound, $"File '{path}' was not found.");
+        }
+
+        var status = existing.Status;
+        if (overwrite && status.IsRegularFile)
+        {
+            return existing;
+        }
+
+        existing.Dispose();
+        var occupied = !overwrite && (status.IsRegularFile || status.IsDirectory);
+        throw occupied
+            ? AtomicFileWrite.AlreadyExists(path)
+            : new AgwException(ErrorCodes.InvalidParam, $"'{path}' is not a regular file.");
+    }
+
+    /// <summary>
+    /// 删除同一目录中这个文件以前留下的临时文件；此时持有该文件的锁，这些临时文件都不再使用。
+    /// Deletes earlier temporary files of this file in the same directory; the file's lock is held now, so none of them
+    /// is in use.
+    /// </summary>
+    private static void DeleteStaleTemporaryFiles(SafeFileHandle directory, string name)
+    {
+        foreach (var (entryName, type) in ReadEntries(directory))
+        {
+            if (type != UnixNative.DT_DIR && AtomicFileWrite.IsTemporaryNameOf(entryName, name))
+            {
+                UnixAtomicCommit.DeleteTemporary(directory, entryName);
+            }
+        }
+    }
+
+    public async Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct)
+    {
+        using var source = Locate(sourcePath, createDirectories: false);
+        var sourceName = RequireFileName(source);
+        using var destination = Locate(destinationPath, createDirectories: false);
+        var destinationName = RequireFileName(destination);
+        await using var pathLock = await _pathLocks
+            .AcquireEntryAsync(source.FullPath, destination.FullPath, ct)
+            .ConfigureAwait(false);
+        if (!source.Found)
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"'{sourcePath}' was not found.");
+        }
+
+        source.RequireInside(sourcePath);
+        RequireParent(destination, destinationPath);
+        // 已存在的目录永远不被替换；renameat 在两个已校验的父目录句柄之间操作，源与目标的符号链接本身被移动或替换，不会被跟随。
+        // An existing directory is never replaced; renameat works between the two verified parent directory handles, and
+        // symbolic links at either end are moved or replaced themselves instead of being followed.
+        if (overwrite)
+        {
+            using var existingDirectory = OpenChildDirectory(destination.Directory, destinationName);
+            if (existingDirectory != null)
+            {
+                throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.");
+            }
+        }
+
         if (
-            UnixNative.UnlinkAt(directory, name, UnixNative.AT_REMOVEDIR) != 0
-            && UnixNative.LastError != UnixNative.ENOENT
+            UnixNative.RenameAt(
+                UnixNative.Fd(source.Directory),
+                sourceName,
+                UnixNative.Fd(destination.Directory),
+                destinationName,
+                replace: overwrite
+            ) == 0
         )
         {
-            throw UnixNative.CreateException(UnixNative.LastError, $"Cannot delete '{path}'");
+            return;
         }
+
+        var errno = UnixNative.LastError;
+        if (errno == UnixNative.ENOENT)
+        {
+            throw new AgwException(ErrorCodes.FileNotFound, $"'{sourcePath}' was not found.");
+        }
+
+        // EISDIR、ENOTDIR、ENOTEMPTY 来自源与目标类型不同或目标是目录，都表示目标已存在且不能被替换。
+        // EISDIR, ENOTDIR and ENOTEMPTY come from a source and destination of different types or a directory
+        // destination, all meaning the destination exists and cannot be replaced.
+        if (
+            errno == UnixNative.EEXIST
+            || errno == UnixNative.EISDIR
+            || errno == UnixNative.ENOTDIR
+            || errno == UnixNative.ENOTEMPTY
+        )
+        {
+            throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.");
+        }
+
+        throw errno == UnixNative.EINVAL
+            ? new AgwException(ErrorCodes.InvalidParam, $"'{sourcePath}' cannot be moved into itself.")
+            : UnixNative.CreateException(errno, $"Cannot move '{sourcePath}' to '{destinationPath}'");
     }
 
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(

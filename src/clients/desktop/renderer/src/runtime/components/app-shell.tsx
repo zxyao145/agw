@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@agw/components/query";
 import {
+  ALargeSmall,
+  AppWindow,
   ArrowLeft,
   Check,
   ChevronDown,
@@ -15,6 +17,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Puzzle,
   Server,
   Settings,
   Sparkles,
@@ -22,7 +25,6 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 import { apiGet, apiPost } from "@agw/api";
@@ -39,10 +41,13 @@ import {
   DropdownMenuTrigger,
 } from "@agw/components";
 import { Popover, PopoverContent, PopoverTrigger } from "@agw/components";
-import { buildChatHref, ChatSidebarVisibilityContext, useExecutionActivity } from "@agw/chat";
+import { buildChatHref, useExecutionActivity } from "@agw/chat";
 import type { ExecutionStatus } from "@agw/chat-runtime";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
+import { useDesktopTheme } from "../appearance/theme-provider";
+import { useExtensionRuntime } from "../extensions/extension-host-provider";
+import { DEFAULT_WORKSPACE_LAYOUT } from "../extensions/workspace-layout-store";
 import { useDesktopRuntime } from "../runtime-provider";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./app-shell-routing";
 import {
@@ -52,6 +57,8 @@ import {
 } from "./project-picker";
 
 type ProjectSummary = DesktopProjectOption;
+
+const noSubscription = () => () => undefined;
 
 type SettingsNavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -68,7 +75,17 @@ function settingsItem(
   };
 }
 
-const SETTINGS_GROUPS: ReadonlyArray<{ label: string; items: SettingsNavItem[] }> = [
+const SETTINGS_GROUPS: ReadonlyArray<{
+  label: string;
+  items: SettingsNavItem[];
+}> = [
+  {
+    label: "Desktop",
+    items: [
+      { href: "/settings/appearance/", label: "Appearance", icon: ALargeSmall },
+      { href: "/extensions/", label: "Extensions", icon: Puzzle },
+    ],
+  },
   {
     label: "Operations",
     items: [
@@ -97,7 +114,7 @@ const SETTINGS_GROUPS: ReadonlyArray<{ label: string; items: SettingsNavItem[] }
     items: [
       settingsItem(APP_ROUTES.quickPrompts, { icon: Sparkles }),
       settingsItem(APP_ROUTES.settings, { label: "Servers", icon: Server }),
-      { href: "/settings/#appearance", label: "Appearance & close", icon: Moon },
+      { href: "/settings/#window", label: "Window", icon: AppWindow },
       { href: "/settings/#about", label: "About", icon: Info },
     ],
   },
@@ -112,15 +129,22 @@ const STATUS_LABEL: Record<ExecutionStatus, string> = {
   detached: "Detached",
 };
 
+/** 在浅色与深色之间切换并保存 Mode；System 在 Appearance 页面选择。Toggles light and dark; System is on the Appearance page. */
 function ThemeButton() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+  const { kind, setMode } = useDesktopTheme();
+  const isDark = kind === "dark";
   return (
     <button
       type="button"
       className="agw-titlebar-button"
       aria-label={isDark ? "Use light theme" : "Use dark theme"}
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      onClick={() =>
+        setMode(isDark ? "light" : "dark").catch((error: unknown) =>
+          toast.error(
+            error instanceof Error ? error.message : "Unable to save appearance settings",
+          ),
+        )
+      }
     >
       {isDark ? <Sun /> : <Moon />}
     </button>
@@ -140,14 +164,20 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const desktop = useDesktopRuntime();
   const activity = useExecutionActivity();
   const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
-  const [sidebarVisible, setSidebarVisible] = React.useState(true);
+  const extensionHost = useExtensionRuntime()?.host ?? null;
+  const layoutStore = extensionHost?.layout ?? null;
+  const sidebarVisible = React.useSyncExternalStore(
+    layoutStore?.subscribe ?? noSubscription,
+    () => (layoutStore?.getSnapshot() ?? DEFAULT_WORKSPACE_LAYOUT).sidebarVisible,
+    () => DEFAULT_WORKSPACE_LAYOUT.sidebarVisible,
+  );
   const projectTabsRef = React.useRef<HTMLElement>(null);
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
   const chatReturnHref = buildChatHref("/desktop/chat", {
     projectId: activeProjectId,
     conversationId: searchParams.get("conversationId"),
   });
-  const settingsHref = buildSettingsHref("/dashboard/", chatReturnHref);
+  const settingsHref = buildSettingsHref("/settings/appearance/", chatReturnHref);
   const serverId = desktop.activeProfile?.id ?? "browser";
   const runtimeSettings = desktop.runtimeState?.settings;
   const serverProfiles = runtimeSettings?.profiles ?? [];
@@ -238,6 +268,27 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     [projects],
   );
 
+  // 离开当前文件（换 Project、换 Server、离开对话页面）前确认文件查看器的未保存修改。
+  // Leaving the current file (another Project or Server, or leaving the chat page) first confirms unsaved changes.
+  const afterUnsavedConfirmed = (action: () => void) => {
+    if (!extensionHost?.hasUnsavedChanges()) {
+      action();
+      return;
+    }
+    void extensionHost.confirmDiscardUnsaved().then((confirmed) => {
+      if (confirmed) action();
+    });
+  };
+  const confirmTitlebarLink = (event: React.MouseEvent) => {
+    if (!extensionHost?.hasUnsavedChanges()) return;
+    const anchor = (event.target as Element).closest("a[href]");
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const href = anchor.getAttribute("href")!;
+    afterUnsavedConfirmed(() => router.push(href));
+  };
+
   const closeTab = (projectId: string) => {
     const status = activity.getProjectStatus(projectId);
     if (
@@ -250,7 +301,10 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     persistTabs(nextTabs);
     if (activeProjectId === projectId) {
       router.push(
-        buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, conversationId: null }),
+        buildChatHref("/desktop/chat", {
+          projectId: DEFAULT_PROJECT_ID,
+          conversationId: null,
+        }),
       );
     }
   };
@@ -292,7 +346,10 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     setServerPickerOpen(false);
     if (!runtimeSettings || nextServerId === runtimeSettings.activeServerId) return;
     router.replace(
-      buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, conversationId: null }),
+      buildChatHref("/desktop/chat", {
+        projectId: DEFAULT_PROJECT_ID,
+        conversationId: null,
+      }),
     );
     void desktop.saveSettings({ activeServerId: nextServerId });
   };
@@ -301,14 +358,17 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const hasBackgroundConversations = tabs.some((id) => activity.getProjectStatus(id) !== "idle");
   return (
     <div className="agw-app-shell">
-      <header className={cn("agw-titlebar", `platform-${platform}`)}>
+      <header
+        className={cn("agw-titlebar", `platform-${platform}`)}
+        onClickCapture={confirmTitlebarLink}
+      >
         <button
           type="button"
           className="agw-titlebar-button agw-titlebar-control"
           title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
           aria-label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
           aria-expanded={sidebarVisible}
-          onClick={() => setSidebarVisible((visible) => !visible)}
+          onClick={() => layoutStore?.setSidebarVisible(!sidebarVisible)}
         >
           {sidebarVisible ? <PanelLeftClose /> : <PanelLeftOpen />}
         </button>
@@ -321,7 +381,12 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                   key={projectId}
                   className={cn("agw-project-tab", activeProjectId === projectId && "is-active")}
                 >
-                  <Link href={buildChatHref("/desktop/chat", { projectId, conversationId: null })}>
+                  <Link
+                    href={buildChatHref("/desktop/chat", {
+                      projectId,
+                      conversationId: null,
+                    })}
+                  >
                     <StatusDot status={status} />
                     <span>{projectById.get(projectId)?.name ?? projectId}</span>
                   </Link>
@@ -330,7 +395,11 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                       type="button"
                       className="cursor-pointer"
                       aria-label={`Close ${projectId}`}
-                      onClick={() => closeTab(projectId)}
+                      onClick={() =>
+                        projectId === activeProjectId
+                          ? afterUnsavedConfirmed(() => closeTab(projectId))
+                          : closeTab(projectId)
+                      }
                     >
                       <X />
                     </button>
@@ -344,7 +413,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
             activeProjectId={activeProjectId}
             isLoading={projectsQuery.isLoading}
             errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
-            onSelect={openProject}
+            onSelect={(projectId) => afterUnsavedConfirmed(() => openProject(projectId))}
             onCreate={createProject}
           />
         </nav>
@@ -353,7 +422,9 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           <DropdownMenuTrigger asChild>
             <button type="button" className="agw-task-button agw-titlebar-control">
               <LoaderCircle
-                className={cn(hasBackgroundConversations && "animate-spin text-sidebar-ring")}
+                className={cn(
+                  hasBackgroundConversations && "animate-spin text-(--agw-status-running)",
+                )}
               />
               <span>Conversations</span>
               {activity.activeCount > 0 ? <span>{activity.activeCount}</span> : null}
@@ -431,7 +502,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                       "hover:bg-muted/70 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40",
                       active && "bg-primary/8 text-foreground",
                     )}
-                    onClick={() => switchServer(profile.id)}
+                    onClick={() => afterUnsavedConfirmed(() => switchServer(profile.id))}
                   >
                     <span
                       className={cn(
@@ -467,11 +538,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           <Settings />
         </Link>
       </header>
-      <main className="agw-chat-workspace">
-        <ChatSidebarVisibilityContext value={sidebarVisible}>
-          {children}
-        </ChatSidebarVisibilityContext>
-      </main>
+      <main className="agw-chat-workspace">{children}</main>
     </div>
   );
 }

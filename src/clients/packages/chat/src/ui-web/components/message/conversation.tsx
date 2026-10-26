@@ -24,8 +24,6 @@ import {
   Badge,
   Button,
   Empty,
-  EmptyContent,
-  EmptyDescription,
   EmptyHeader,
   EmptyTitle,
   cn,
@@ -37,6 +35,7 @@ import { HumanGateApproval } from "./human-gate-approval";
 import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
 import { MessageActions } from "./message-actions";
+import type { ChatMessageActionArgs, ExtensionMenuItem } from "./chat-extension-types";
 import { PresentedMessageComponent } from "./presented-message";
 import { ToolState } from "./tool-state";
 import {
@@ -74,6 +73,8 @@ export interface ChatSessionProps {
   checkpointResumeDisabled?: boolean;
   onCheckpointResume?: (occurrenceId: string) => void;
   onHumanResponse?: (response: HumanResponseInput) => void;
+  /** 消息操作菜单的扩展菜单项。Extension items of the message action menu. */
+  messageActions?: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
 }
 
 export function Conversation({
@@ -99,6 +100,7 @@ export function Conversation({
   checkpointResumeDisabled = false,
   onCheckpointResume,
   onHumanResponse,
+  messageActions,
 }: ChatSessionProps) {
   const [imagePreview, setImagePreview] = React.useState<{
     image: ConversationImageSource;
@@ -242,15 +244,9 @@ export function Conversation({
   }
 
   if (items.length === 0 && !hasHistoryLoader && !previewOpen) {
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>No Message Yet</EmptyTitle>
-          <EmptyDescription>There are currently no messages.</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent className="flex-row justify-center gap-2" />
-      </Empty>
-    );
+    // 空对话只保留占位高度，让输入框停在底部。
+    // An empty conversation only keeps the filler height so the composer stays at the bottom.
+    return <div className="w-full flex-1" />;
   }
 
   return (
@@ -294,7 +290,7 @@ export function Conversation({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="rounded-full text-xs text-muted-foreground"
+                      className="rounded-full text-muted-foreground"
                       disabled={isLoadingOlderMessages}
                       onClick={onLoadOlderMessages}
                     >
@@ -320,6 +316,7 @@ export function Conversation({
                     checkpointResumeDisabled={checkpointResumeDisabled}
                     onCheckpointResume={onCheckpointResume}
                     onHumanResponse={onHumanResponse}
+                    messageActions={messageActions}
                   />
                 ) : null}
               </div>
@@ -349,6 +346,7 @@ function ConversationItem({
   checkpointResumeDisabled,
   onCheckpointResume,
   onHumanResponse,
+  messageActions,
 }: {
   item: ConversationRenderItem;
   workExpanded: boolean;
@@ -359,6 +357,7 @@ function ConversationItem({
   checkpointResumeDisabled: boolean;
   onCheckpointResume?: (occurrenceId: string) => void;
   onHumanResponse?: (response: HumanResponseInput) => void;
+  messageActions?: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
 }) {
   if (item.type === "work-summary") {
     return (
@@ -484,7 +483,7 @@ function ConversationItem({
 
   if (item.type === "tool-accordion") {
     return (
-      <div className="mx-4 min-w-0 w-full max-w-[80%]">
+      <div className="mx-4 min-w-0">
         <ToolAccordionRow tool={item} />
       </div>
     );
@@ -492,7 +491,7 @@ function ConversationItem({
 
   if (item.type === "tool-batch") {
     return (
-      <div className="mx-4 min-w-0 w-full max-w-[80%]">
+      <div className="mx-4 min-w-0">
         <ToolBatch tools={item.tools} batchKey={item.key} />
       </div>
     );
@@ -500,7 +499,7 @@ function ConversationItem({
 
   if (item.type === "tool-state") {
     return (
-      <div className="mx-4 max-w-[80%]">
+      <div className="mx-4 max-w-full">
         <ToolState message={item.message} />
       </div>
     );
@@ -519,8 +518,8 @@ function ConversationItem({
       {message.meta ? (
         <div
           className={cn(
-            "mb-1 flex max-w-[80%] items-center gap-1.5 text-xs text-muted-foreground",
-            message.alignment === "right" && "ml-auto justify-end",
+            "mb-1 flex items-center gap-1.5 text-xs text-muted-foreground",
+            message.alignment === "right" && "ml-auto max-w-[80%] justify-end",
           )}
         >
           {message.meta.name ? (
@@ -532,14 +531,14 @@ function ConversationItem({
             <span className="shrink-0 text-muted-foreground/60">/</span>
           ) : null}
           {message.meta.author ? (
-            <span className="min-w-0 truncate font-mono text-[11px]">{message.meta.author}</span>
+            <span className="min-w-0 truncate font-mono text-11">{message.meta.author}</span>
           ) : null}
           {(message.meta.name || message.meta.author) && message.meta.model ? (
             <span className="shrink-0 text-muted-foreground/60">/</span>
           ) : null}
           {message.meta.model ? (
             <span
-              className="min-w-0 truncate font-mono text-[11px] text-muted-foreground/80"
+              className="min-w-0 truncate font-mono text-11 text-muted-foreground/80"
               title={message.meta.model}
             >
               {message.meta.model}
@@ -555,7 +554,7 @@ function ConversationItem({
         }
       />
       {item.type === "result" || message.alignment === "right" ? (
-        <MessageActions message={message} />
+        <MessageActions message={message} actions={messageActions} />
       ) : null}
     </div>
   );
@@ -628,7 +627,7 @@ function ToolAccordionRow({ tool }: { tool: PresentedTool }) {
           {tool.messages.length > 0 ? (
             <div className="space-y-3 pl-6 pr-1">
               {tool.messages.map((message) => (
-                <PresentedMessageComponent key={message.identity} message={message} embedded />
+                <PresentedMessageComponent key={message.identity} message={message} />
               ))}
             </div>
           ) : (

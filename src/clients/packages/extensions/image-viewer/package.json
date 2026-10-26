@@ -1,0 +1,22 @@
+{
+  "name": "@agw/extension-image-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agw Desktop bundled extension that shows image files in the Files view",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../../.oxlintrc.json ./src ./vite.config.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "format": "oxfmt -c ../../../.oxfmtrc.json ./src ./vite.config.ts *.json *.html",
+    "format:check": "oxfmt -c ../../../.oxfmtrc.json --check ./src ./vite.config.ts *.json *.html"
+  },
+  "devDependencies": {
+    "@agw/extension-sdk": "workspace:*",
+    "@vitejs/plugin-react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "vite": "catalog:"
+  }
+}

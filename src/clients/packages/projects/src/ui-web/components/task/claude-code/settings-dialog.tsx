@@ -280,7 +280,7 @@ export function SettingsDialog({
               <div className="text-sm text-muted-foreground py-2">No environment variables set</div>
             ) : (
               <div className="border rounded-md">
-                <div className="grid grid-cols-12 gap-2 p-2 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
+                <div className="grid grid-cols-12 gap-2 p-2 border-b bg-muted/50 text-sm font-medium text-muted-foreground">
                   <div className="col-span-5">Key</div>
                   <div className="col-span-6">Value</div>
                   <div className="col-span-1"></div>
@@ -291,13 +291,13 @@ export function SettingsDialog({
                       value={env.key}
                       onChange={(e) => updateEnvVar(index, "key", e.target.value)}
                       placeholder="KEY"
-                      className="col-span-5 h-8 text-xs md:text-xs"
+                      className="col-span-5 h-8"
                     />
                     <Input
                       value={env.value}
                       onChange={(e) => updateEnvVar(index, "value", e.target.value)}
                       placeholder="value"
-                      className="col-span-6 h-8 text-xs md:text-xs"
+                      className="col-span-6 h-8"
                     />
                     <div className="col-span-1 flex items-center">
                       <Button

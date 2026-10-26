@@ -4,16 +4,20 @@ import * as React from "react";
 
 import type {
   AgwDesktopBridge,
+  AppearanceSettings,
   DesktopRuntimeState,
   DesktopSettingsUpdate,
   ServerProfile,
 } from "@desktop/shared/contracts";
+import { DEFAULT_APPEARANCE } from "@desktop/shared/appearance";
 import { configureApiRuntime, resetApiRuntime } from "@agw/api";
 import {
   ConversationImagePlatformProvider,
   ExecutionPlatformProvider,
+  MarkdownRendererProvider,
   type ImageContextMenuRequest,
 } from "@agw/chat";
+import { TiptapMarkdown } from "@agw/chat/markdown-tiptap";
 import { configureExecutionRuntime, executionSessionManager } from "@agw/chat-runtime";
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type InfiniteData, type QueryClient } from "@agw/components/query";
@@ -27,6 +31,10 @@ import {
   type ServerInfo,
 } from "./runtime-model";
 import { ServerQueryClientRegistry } from "./query-client-registry";
+import { AppearanceProvider } from "./appearance/appearance-provider";
+import { DesktopCodeViewAppearance } from "./appearance/code-view-appearance";
+import { ThemeProvider } from "./appearance/theme-provider";
+import { getExtensionRuntime } from "./extensions/extension-runtime";
 
 declare global {
   interface Window {
@@ -34,12 +42,21 @@ declare global {
   }
 }
 
+/** 当前连接的登录用户，来自 `/api/auth/session`。The signed-in user of the current connection, from `/api/auth/session`. */
+export type DesktopAuthUser = {
+  userId: string;
+  displayName: string | null;
+  loginProvider: string | null;
+  isAdmin: boolean;
+};
+
 type DesktopRuntimeContextValue = {
   isDesktop: boolean;
   status: DesktopConnectionStatus;
   runtimeState: DesktopRuntimeState | null;
   activeProfile: ServerProfile | null;
   serverInfo: ServerInfo | null;
+  authUser: DesktopAuthUser | null;
   error: string | null;
   refresh(): Promise<void>;
   saveSettings(settings: DesktopSettingsUpdate): Promise<void>;
@@ -50,7 +67,21 @@ const DesktopRuntimeContext = React.createContext<DesktopRuntimeContextValue | n
 
 type AuthSession = {
   accessMode?: string;
+  userId?: string | null;
+  displayName?: string | null;
+  loginProvider?: string | null;
+  isAdmin?: boolean;
 };
+
+function toAuthUser(session: AuthSession | null): DesktopAuthUser | null {
+  if (!session?.userId) return null;
+  return {
+    userId: session.userId,
+    displayName: session.displayName ?? null,
+    loginProvider: session.loginProvider ?? null,
+    isAdmin: session.isAdmin ?? false,
+  };
+}
 
 function showImageContextMenu(request: ImageContextMenuRequest): Promise<void> {
   return window.agwDesktop!.showImageContextMenu(request);
@@ -71,18 +102,19 @@ async function probeServer(
   return body.data;
 }
 
-async function hasBearerAccess(
+/** Bearer 校验通过时返回 session，否则为 null。Returns the session when Bearer access is valid, otherwise null. */
+async function readBearerSession(
   profile: ServerProfile,
   token: string,
   signal?: AbortSignal,
-): Promise<boolean> {
+): Promise<AuthSession | null> {
   const response = await fetch(`${profile.baseUrl.replace(/\/+$/u, "")}/api/auth/session`, {
     credentials: "omit",
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });
   const body = (await response.json()) as { data?: AuthSession };
-  return response.ok && body.data?.accessMode === "bearer";
+  return response.ok && body.data?.accessMode === "bearer" ? body.data : null;
 }
 
 function configureClients(
@@ -105,6 +137,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
   const [status, setStatus] = React.useState<DesktopConnectionStatus>("loading");
   const [runtimeState, setRuntimeState] = React.useState<DesktopRuntimeState | null>(null);
   const [serverInfo, setServerInfo] = React.useState<ServerInfo | null>(null);
+  const [authUser, setAuthUser] = React.useState<DesktopAuthUser | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const setupAttempted = React.useRef(new Set<string>());
   const platform = runtimeState?.platform ?? "browser";
@@ -238,13 +271,13 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
           info = await probeServer(profile, token, abortController.signal);
         }
 
-        if (
-          info.initialized &&
-          token &&
-          !(await hasBearerAccess(profile, token, abortController.signal))
-        ) {
-          token = null;
-          nextState = { ...nextState, activeToken: null };
+        let session: AuthSession | null = null;
+        if (info.initialized && token) {
+          session = await readBearerSession(profile, token, abortController.signal);
+          if (!session) {
+            token = null;
+            nextState = { ...nextState, activeToken: null };
+          }
         }
 
         if (
@@ -257,6 +290,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
           if (generation !== connectGenerationRef.current) return;
 
           nextState = { ...nextState, activeToken: token };
+          session = await readBearerSession(profile, token, abortController.signal);
         }
 
         if (generation !== connectGenerationRef.current) return;
@@ -266,6 +300,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
 
         setRuntimeState(nextState);
         setServerInfo(info);
+        setAuthUser(toAuthUser(session));
         setStatus(classifyDesktopConnection(profile, info, token));
       } catch (connectionError) {
         if (generation !== connectGenerationRef.current) return;
@@ -317,6 +352,17 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
     [connect, runtimeState],
   );
 
+  const saveAppearance = React.useCallback(
+    (appearance: AppearanceSettings) => saveSettings({ appearance }),
+    [saveSettings],
+  );
+  // ThemeProvider 从 extension 状态读取主题；静态导出预渲染阶段没有 window。
+  // ThemeProvider reads themes from the extension state; prerendering has no window.
+  const extensionHost = React.useMemo(
+    () => (typeof window === "undefined" ? null : getExtensionRuntime().host),
+    [],
+  );
+
   const saveToken = React.useCallback(
     async (profileId: string, token: string) => {
       const bridge = window.agwDesktop;
@@ -340,6 +386,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
       runtimeState,
       activeProfile,
       serverInfo,
+      authUser,
       error,
       refresh: connect,
       saveSettings,
@@ -347,6 +394,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
     }),
     [
       activeProfile,
+      authUser,
       connect,
       error,
       isDesktop,
@@ -367,18 +415,30 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
 
   return (
     <DesktopRuntimeContext.Provider value={value}>
-      <QueryClientProvider client={queryClient}>
-        <ExecutionPlatformProvider
-          serverId={activeProfile?.id ?? "browser"}
-          onActiveCountChange={handleActiveCountChange}
+      <AppearanceProvider appearance={runtimeState?.settings.appearance ?? DEFAULT_APPEARANCE}>
+        <ThemeProvider
+          appearance={runtimeState?.settings.appearance ?? null}
+          save={saveAppearance}
+          host={extensionHost}
         >
-          <ConversationImagePlatformProvider
-            onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
-          >
-            {children}
-          </ConversationImagePlatformProvider>
-        </ExecutionPlatformProvider>
-      </QueryClientProvider>
+          <DesktopCodeViewAppearance>
+            <QueryClientProvider client={queryClient}>
+              <ExecutionPlatformProvider
+                serverId={activeProfile?.id ?? "browser"}
+                onActiveCountChange={handleActiveCountChange}
+              >
+                <ConversationImagePlatformProvider
+                  onImageContextMenu={isDesktop ? showImageContextMenu : undefined}
+                >
+                  <MarkdownRendererProvider renderer={TiptapMarkdown}>
+                    {children}
+                  </MarkdownRendererProvider>
+                </ConversationImagePlatformProvider>
+              </ExecutionPlatformProvider>
+            </QueryClientProvider>
+          </DesktopCodeViewAppearance>
+        </ThemeProvider>
+      </AppearanceProvider>
     </DesktopRuntimeContext.Provider>
   );
 }

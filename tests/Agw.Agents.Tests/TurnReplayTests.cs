@@ -43,6 +43,7 @@ public sealed class TurnReplayTests
             ConversationTurnStatus.Completed,
             1,
             null,
+            kit.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken
         );
         await accepted.Broadcast.WriteAsync(
@@ -99,7 +100,14 @@ public sealed class TurnReplayTests
                 ],
                 token
             );
-        await turns.FinishAsync(accepted.Request.TurnId, ConversationTurnStatus.Completed, 3, null, token);
+        await turns.FinishAsync(
+            accepted.Request.TurnId,
+            ConversationTurnStatus.Completed,
+            3,
+            null,
+            kit.Clock.GetUtcNow(),
+            token
+        );
         accepted = accepted with { Broadcast = null, Turn = (await turns.GetAsync(accepted.Request.TurnId, token))! };
 
         // Act
@@ -155,7 +163,14 @@ public sealed class TurnReplayTests
         // Act and assert that execution can still complete and notify the other subscriber.
         await cancellation.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cancelled.MoveNextAsync());
-        await turns.FinishAsync(accepted.Request.TurnId, ConversationTurnStatus.Completed, 1, null, token);
+        await turns.FinishAsync(
+            accepted.Request.TurnId,
+            ConversationTurnStatus.Completed,
+            1,
+            null,
+            kit.Clock.GetUtcNow(),
+            token
+        );
         await accepted.Broadcast.WriteAsync(
             TurnMessageFactory.CreateFinished(accepted.Request.Envelope, AgwTurnStatus.Completed, 1, null),
             token

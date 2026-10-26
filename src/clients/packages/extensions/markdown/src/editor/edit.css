@@ -1,0 +1,474 @@
+/* Mixed 查看器（设计 5.7）：居中的内容列（最大宽度 760 px，左侧留出拖动手柄的位置）、Notion 风格的块与菜单。
+   颜色与等宽字体来自宿主主题变量（theme.apply），深色模式随之变化。Markdown 内容的字号、行高与间距来自 /__agw/typography.css
+   （.agw-prose，document 密度），这里只保留 node view、菜单与浮层的样式。
+   The Mixed viewer (design section 5.7): a centered content column (at most 760 px, with room for
+   the drag handle on its left), Notion-style blocks and menus. Colors and the monospace font come from the host theme
+   variables (theme.apply), so dark mode follows. Font sizes, line heights and spacing of the Markdown content come
+   from /__agw/typography.css (.agw-prose, document density); this file keeps only the styles of node views, menus and
+   popovers. */
+
+:root {
+  --code-background: var(--muted);
+  scrollbar-color: var(--border) transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: var(--agw-font-size-base);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.edit-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.status {
+  margin: 0;
+  padding: 24px 32px;
+  font-size: 0.875em;
+  color: var(--muted-foreground);
+}
+
+.edit-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.edit-column {
+  box-sizing: border-box;
+  max-width: calc(830px + 64px);
+  margin: 0 auto;
+  padding: 32px 32px 120px 32px;
+}
+
+/* 主题提供工作区背景时（html 上有 data-workspace-backdrop，见 shared/workspace-backdrop.ts），背景图形铺在滚动区域上且不
+   随内容滚动，内容列显示为卡片，四周留出背景。
+   When the theme provides a workspace backdrop (html has data-workspace-backdrop, see shared/workspace-backdrop.ts), it
+   covers the scroll area without scrolling with the content, and the content column becomes a card with the backdrop
+   showing around it. */
+:root[data-workspace-backdrop] .edit-scroll {
+  background-image: var(--agw-workspace-backdrop);
+}
+
+:root[data-workspace-backdrop] .edit-column {
+  max-width: min(calc(830px + 64px), calc(100% - 32px));
+  margin: 32px auto 48px;
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--border) 60%, transparent),
+    0 18px 48px -12px color-mix(in oklab, var(--color-black) 18%, transparent);
+}
+
+/* 编辑区与块。The editing area and blocks. */
+.edit-content .ProseMirror {
+  outline: none;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.edit-content a {
+  text-decoration: underline;
+  cursor: text;
+}
+
+/* 任务项与表格单元格中的 paragraph 不加块间距。Paragraphs in task items and table cells carry no block gap. */
+.edit-content :is(.task-content, th, td) > p {
+  margin-block: 0;
+}
+
+.edit-content .task-content > :is(ul, ol) {
+  margin-block: calc(var(--agw-prose-size) * 0.25);
+}
+
+.edit-content strong {
+  font-weight: 600;
+}
+
+.edit-content hr.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+}
+
+/* 列表与任务项。Lists and task items. */
+.edit-content li.task-item {
+  display: flex;
+  gap: 0.4em;
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.edit-content .task-checkbox {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: calc(1em * var(--agw-prose-line-height));
+  user-select: none;
+}
+
+.edit-content .task-checkbox input {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  accent-color: var(--sidebar-primary);
+  cursor: pointer;
+}
+
+.edit-content .task-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-content li.task-item[data-checked="true"] > .task-content > p {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+/* node view 的外间距取块间距，容器中第一个与最后一个块不留外间距。
+   Node views take the block gap as outer margin; the first and last blocks in the container carry none. */
+.edit-content :is(.code-block, .raw-block, .tableWrapper) {
+  margin-block: var(--agw-prose-block-gap);
+}
+
+.edit-content :is(.code-block, .raw-block, .tableWrapper):first-child {
+  margin-top: 0;
+}
+
+.edit-content :is(.code-block, .raw-block, .tableWrapper):last-child {
+  margin-bottom: 0;
+}
+
+/* 代码块：标题栏有语言选择与 Copy。Code blocks: a header with the language choice and Copy. */
+.edit-content .code-block {
+  border-radius: var(--radius-md);
+  background: var(--code-background);
+}
+
+.edit-content .code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 0;
+  font-size: 0.875em;
+  user-select: none;
+}
+
+.edit-content .code-block-header select,
+.edit-content .code-block-header button {
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.edit-content .code-block-header select:hover,
+.edit-content .code-block-header button:hover,
+.edit-content .code-block-header button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.edit-content .code-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.edit-content :is(.code-block, .raw-block) pre {
+  margin: 0;
+  padding: 0.5em 1em 0.75em;
+  white-space: pre;
+}
+
+/* Mermaid 代码块：图表在源码下方。默认视图中图表渲染出来并且光标不在代码块中时隐藏源码，点击图表进入源码；
+   "Diagram only" 视图始终隐藏源码，点击图表由宿主预览，代码块像图片一样整体选中。
+   Mermaid code blocks: the diagram sits below the source. In the default view the source hides once the diagram renders
+   unless the cursor is in the block, and clicking the diagram enters the source; the Diagram only view always hides the
+   source, clicking the diagram has the host preview it, and the block is selected as a whole like an image. */
+.edit-content .code-block[data-diagram="rendered"]:not([data-editing]) > pre,
+.edit-content .code-block[data-view="diagram"] > pre {
+  display: none;
+}
+
+.edit-content .code-block .mermaid-diagram {
+  padding: 0.5em 1em 0.75em;
+  cursor: text;
+}
+
+.edit-content .code-block[data-view="diagram"][data-diagram="rendered"] .mermaid-diagram {
+  cursor: zoom-in;
+}
+
+.edit-content
+  .code-block:not([data-view="diagram"]):is([data-editing], [data-diagram="failed"])
+  .mermaid-diagram {
+  border-top: 1px dashed var(--border);
+}
+
+.edit-content .code-block.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+}
+
+/* 原文块与 front matter：等宽字体，左上角的标签。Raw blocks and front matter: monospace with a top-left label. */
+.edit-content .raw-block {
+  position: relative;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.edit-content .raw-block-label {
+  display: block;
+  padding: 4px 8px 0;
+  font-size: 0.875em;
+  color: var(--muted-foreground);
+  user-select: none;
+}
+
+.edit-content .raw-block pre {
+  padding: 4px 8px 8px;
+  border-radius: 0;
+  background: transparent;
+  white-space: pre-wrap;
+}
+
+.edit-content code[data-raw-inline] {
+  border: 1px dashed var(--border);
+}
+
+/* 脚注引用、缺少定义的引用、图片。Footnote references, references without definitions, images. */
+.edit-content .footnote-reference {
+  color: var(--agw-prose-link);
+}
+
+.edit-content .missing-link-definition {
+  color: var(--destructive);
+  text-decoration: wavy underline;
+}
+
+.edit-content .edit-image img {
+  vertical-align: bottom;
+}
+
+.edit-content .edit-image.ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+}
+
+.edit-content .image-placeholder {
+  display: inline-flex;
+  gap: 0.5em;
+  padding: 0.1em 0.5em;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875em;
+  color: var(--muted-foreground);
+}
+
+.edit-content .image-placeholder-alt {
+  color: var(--foreground);
+}
+
+/* 表格。Tables. */
+.edit-content .tableWrapper {
+  overflow-x: auto;
+}
+
+.edit-content table {
+  margin: 0;
+}
+
+.edit-content :is(th, td) {
+  min-width: 4em;
+  vertical-align: top;
+}
+
+.edit-content th {
+  background: var(--muted);
+}
+
+.edit-content .selectedCell {
+  background: var(--accent);
+}
+
+/* 占位文字。Placeholders. */
+.edit-content :is(p, h1, h2, h3, h4, h5, h6).is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.edit-content .ProseMirror-gapcursor::after {
+  border-top-color: var(--foreground);
+}
+
+/* 菜单与浮层。Menus and popovers. */
+.slash-menu,
+.formatting-menu,
+.link-menu,
+.image-menu,
+.table-toolbar,
+.image-insert {
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16);
+  font-size: 0.875em;
+}
+
+.slash-menu {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.slash-menu-item {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.slash-menu-item[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.image-insert {
+  position: fixed;
+}
+
+.menu-button {
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu-button:hover:not(:disabled),
+.menu-button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.menu-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* 表格工具条的图标按钮。Icon buttons of the table toolbar. */
+.table-toolbar .menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  padding: 0;
+}
+
+/* 工具条按钮的 tooltip，配色与宿主的 tooltip 相同。Tooltips of toolbar buttons, colored like the host's tooltips. */
+.tooltip {
+  z-index: 30;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 0.875em;
+  white-space: nowrap;
+}
+
+.tooltip-arrow {
+  fill: var(--foreground);
+}
+
+.link-address {
+  max-width: 320px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.link-address.missing-link-definition {
+  color: var(--destructive);
+}
+
+.link-label {
+  padding-right: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+.address-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.address-form input {
+  width: 240px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+/* 块拖动手柄。The block drag handle. */
+.drag-handle {
+  z-index: 10;
+  padding-right: 4px;
+}
+
+/* 按钮按块显示，手柄的高度等于按钮高度，middleware 居中手柄即居中按钮；按行内显示时，较大的继承字号使行框高于按钮。
+   The button is a block, so the handle is exactly as tall as the button and centering the handle centers the button;
+   as an inline box, a larger inherited font size makes the line box taller than the button. */
+.drag-handle .chrome-button {
+  display: block;
+  padding: 0 4px;
+  color: var(--muted-foreground);
+  font-size: 1rem;
+  letter-spacing: -2px;
+  cursor: grab;
+}
+
+.drag-handle .popup-menu {
+  left: 0;
+  right: auto;
+  font-size: 0.875em;
+}

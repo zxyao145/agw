@@ -1,0 +1,11 @@
+/* namespace 的 URI 是标识符，不加载资源；端口占位符在测试中替换。The namespace URI is a name that loads nothing; the
+   port placeholder is replaced in the test. */
+@namespace svg url(http://127.0.0.1:__HTTP_PORT__/css-theme/namespace);
+
+svg|rect.css-theme-namespace {
+  fill: rgb(1, 2, 3);
+}
+
+:root:not(.dark) {
+  --background: #f4f8ff;
+}

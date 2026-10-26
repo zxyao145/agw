@@ -98,14 +98,21 @@ public interface IConversationTurnStore
     Task CompleteStepAsync(Guid turnId, int stepCount, CancellationToken cancellationToken);
 
     /// <summary>
-    /// 写入终态、Step 数、结束时间、错误码与本 Turn 的最大消息序号；已结束的 Turn 保持原结局。
-    /// Writes the terminal status, Step count, finish time, error code and the turn's largest message sequence; a finished turn keeps its outcome.
+    /// 写入终态、Step 数、结束时间、错误码、用量结算时间与本 Turn 的最大消息序号；已结束的 Turn 保持原结局。
+    /// Writes the terminal status, Step count, finish time, error code, usage settlement time and the turn's largest message sequence; a finished turn keeps its outcome.
     /// </summary>
     Task FinishAsync(
         Guid turnId,
         ConversationTurnStatus status,
         int stepCount,
         string? errorCode,
+        DateTimeOffset usageSettlesAt,
         CancellationToken cancellationToken
     );
+
+    /// <summary>
+    /// 持有被中断租约的 worker 退出后调用：Turn 已是终态且结算时间晚于当前时间时，把结算时间改为当前时间；其他情况（包括 Turn 行已经删除）不修改。
+    /// Called after the worker holding the interrupted lease exits: a finished turn whose settlement time is still ahead settles now; anything else, including a deleted turn row, is left unchanged.
+    /// </summary>
+    Task SettleUsageAsync(Guid turnId, CancellationToken cancellationToken);
 }

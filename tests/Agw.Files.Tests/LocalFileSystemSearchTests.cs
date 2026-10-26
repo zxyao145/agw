@@ -1,6 +1,5 @@
 using System.Text;
 using Agw.Files.Abstracts.Dtos;
-using Agw.Files.Infrastructure.Storage;
 
 namespace Agw.Files.Tests;
 
@@ -105,7 +104,7 @@ public sealed class LocalFileSystemSearchTests : IDisposable
     public async Task EnumerateAsync_Entries_ReportTypeSizeAndRelativePath()
     {
         await WriteAsync("docs/guide.md", "12345");
-        var fileSystem = new LocalFileSystem(_root);
+        var fileSystem = TestFileSystems.Local(_root);
 
         var entries = new List<FileEntry>();
         await foreach (
@@ -136,7 +135,7 @@ public sealed class LocalFileSystemSearchTests : IDisposable
 
     private async Task<List<(string Path, int LineNumber, string Line)>> SearchAsync(SearchOptions options)
     {
-        var fileSystem = new LocalFileSystem(_root);
+        var fileSystem = TestFileSystems.Local(_root);
         var hits = new List<(string, int, string)>();
         await foreach (var result in fileSystem.SearchAsync("", options, TestContext.Current.CancellationToken))
         {

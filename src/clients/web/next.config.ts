@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     "@agw/api",
     "@agw/auth",
     "@agw/chat",
+    "@agw/code-view",
     "@agw/components",
     "@agw/integrations",
     "@agw/jobs",

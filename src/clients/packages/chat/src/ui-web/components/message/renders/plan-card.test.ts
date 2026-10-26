@@ -31,6 +31,16 @@ test("the plan renders as parsed Markdown under a labelled section", () => {
   assert.doesNotMatch(view.container.innerHTML, /proposed_plan/);
 });
 
+test("the plan body sets its prose size through --agw-prose-font-size", () => {
+  const view = renderPlan();
+  const body = view.container.querySelector<HTMLElement>("section .msg-content");
+
+  assert.ok(body);
+  assert.equal(body.style.getPropertyValue("--agw-prose-font-size"), "var(--text-15)");
+  assert.equal(body.classList.contains("text-15"), false);
+  assert.equal(body.classList.contains("leading-7"), false);
+});
+
 test("surrounding text stays outside the plan section in reading order", () => {
   const view = renderPlan({
     leadingMarkdown: "Context before the plan",

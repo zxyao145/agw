@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="../TestFileSystems.cs" Link="TestFileSystems.cs" />
+  </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);MAAI001</NoWarn>
   </PropertyGroup>
@@ -19,5 +22,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

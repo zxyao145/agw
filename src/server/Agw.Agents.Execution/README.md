@@ -82,7 +82,7 @@ Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后�
 
 Web 与 Desktop 的输入队列只在收到 `turn-finished`、状态为 `completed`、且消息的 `turnId` 等于该条目发送时使用的 `turnId` 时发送下一条。连接关闭、或重连后没有活动执行而该条目尚未收到 `turn-start` 时，结果无法确认：条目带着原 `turnId` 回到队首并锁定编辑，队列暂停；重发沿用同一 `turnId`，服务端按 turnId 只受理一次。
 
-InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查询原连接，返回 `true` 表示仍在执行或释放资源。`connectionId` 必须是启动该轮执行时的原连接 ID，连续重连不得替换；服务端校验连接所有者，外来和不存在的连接均返回 `false`，且不会中断外来执行。恢复中的客户端每秒查询一次，原执行退出前保留停止按钮；停止时传入 `interrupt=true`，请求取消后仍等待服务端确认退出。此接口恢复执行状态和停止能力，不重放断线期间的 InProcess 消息。客户端与服务端应一起更新；恢复接口不可用时保留重试入口，不推断执行已结束。
+InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查询原连接，返回 `true` 表示仍在执行或释放资源。`connectionId` 必须是启动该轮执行时的原连接 ID，连续重连不得替换；服务端校验连接所有者，外来和不存在的连接均返回 `false`，且不会中断外来执行。恢复中的客户端每秒查询一次，原执行退出前保留停止按钮；停止时传入 `interrupt=true`，请求取消后仍等待服务端确认退出。停止按调用方连接的 `extensionId` 检查原连接的对话：只读的 extension 会话停止宿主的 Turn 时得到 `ConversationReadOnly`（4030008），执行继续运行，客户端继续每秒查询。此接口恢复执行状态和停止能力，不重放断线期间的 InProcess 消息。客户端与服务端应一起更新；恢复接口不可用时保留重试入口，不推断执行已结束。
 
 ## 两套执行提供者
 
@@ -195,7 +195,7 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 
 | Command | 作用 | 是否改变 connection 状态 |
 | --- | --- | --- |
-| `SettingCommand` | 绑定必填的 `conversationId`，并设置 project、环境变量和默认权限策略；配置草稿对话不会创建对话 | 是；settings 变化时清理旧 runtime、task 和 target |
+| `SettingCommand` | 绑定必填的 `conversationId`，并设置 project、环境变量和默认权限策略；配置草稿对话不会创建对话。可选的 `extensionId` 是连接代表的 Desktop extension | 是；settings 变化（包括 `extensionId`）时清理旧 runtime、task 和 target |
 | `ExecCommand` | 指定与连接配置一致的 conversation、Agent/Agentflow 目标和用户输入，启动一个 turn | 是；持久化 conversation/task 后创建或复用 runtime |
 | `InterruptCommand` | 请求中断当前 turn | 否；只转发给当前 `ActiveTurn` |
 | `SetModeCommand` | 切换支持 mode 的 Agent | 是；空闲时立即应用，活动 turn 结束后应用最后一次请求 |
@@ -205,6 +205,8 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 | `ResumeCheckpointCommand` | 从一个精确的 Agentflow checkpoint occurrence 创建新执行分支 | 是；校验并裁剪 checkpoint 之后的历史，再启动恢复 turn |
 
 `SettingCommand.Resume` 是服务端属性，带有 `[JsonIgnore]`。transport command 自身的等价性不包含 `Resume`；复制出的 `ExecutionSettings` 会包含它，因为 resume 变化需要使 connection-owned runtime 失效。
+
+`SettingCommandMapper` 校验 `extensionId`：没有值表示宿主；其他值必须是小写的 GUID v7（`Guid.TryParseExact` 按 `D` 格式解析成功，version 为 7，variant 为 RFC 9562，并且与 `ToString("D")` 相同），否则以 `InvalidParam` 拒绝，`host`（`ConversationCreators.Host`）同样被拒绝。`ExecutionSettings.ExtensionId` 参与相等判定，`DurableExecutionMapper` 不把它写入 Durable manifest。
 
 `ExecutionCommandDispatcher` 在构造时把内部 handler adapter 按 command CLR type 建成字典。重复注册同一命令会立即抛出 `AgwException`；运行时收到未注册命令也会失败，而不是落入默认分支。
 
@@ -228,6 +230,8 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 集群 provider 的持久 identity 与订阅生命周期由独立的 `DurableExecutionAttachment` 持有。Context 的普通启动统一调用 `IExecutionStarter`；订阅、中断、回答与 checkpoint 控制仍使用既有 Session 或 Runtime 路径。
 
 它通过 `ApplySettingsAsync`、`StartTurnAsync`、`InterruptTurnAsync`、`SubmitHumanDecisionAsync`、checkpoint 查询和 checkpoint 恢复提供原子操作，并以只读属性共享 project/context/workspace/agent/task/user 数据；它不公开 `RuntimeBase`、`ActiveTurn` 或状态 setter。`ExecCommand` 启动后台 turn 后会很快返回，command gate 随即释放，后续 interrupt 和 HumanGate response 才能进入。
+
+写入操作（`StartTurnAsync`、`ResumeCheckpointAsync`、`InterruptTurnAsync`、`SubmitHumanDecisionAsync`、`SetModeAsync`、`SetPermissionModeAsync`）首先调用 `IProjectConversationAccessFacade.EnsureWritableAsync(conversationId, Settings.ExtensionId)`：宿主（没有 `extensionId`）可以写入任何对话，extension 只能写入自己创建的对话、开放对话与草稿对话，其他情况以 `ConversationReadOnly`（4030008）拒绝。检查在解析任务、截断 checkpoint 之后的历史、写入 settings 与 Durable 请求之前；`StartTurnAsync` 对每个 `ExecCommand` 都检查，缓存的 task 不会跳过它。读取操作不检查。
 
 `Outbound` 定义 transport-neutral 的 `IExecutionMessageSink`。Connection 和 runtime 只面向该接口输出消息，`Outbound/SignalR` 与 `Outbound/Durable` 提供具体实现。
 
@@ -331,6 +335,7 @@ flowchart TB
     Checkpoint --> Context
     Context --> ProjectService["IProjectRuntimeFacade"]
     Context --> TaskService["IProjectTaskFacade"]
+    Context --> AccessService["IProjectConversationAccessFacade"]
     Context --> Starter["IExecutionStarter"]
     Starter --> InProcessStarter["InProcessExecutionStarter"]
     InProcessStarter --> Factory["RuntimeFactory"]
@@ -418,7 +423,7 @@ sequenceDiagram
 
 1. `ExecCommandHandler` 校验 `agentId`，然后把命令交给 connection context。
 2. Context 用 `ExecutionBusy` 拒绝同一条 connection 上的并发 turn；进程内 turn 已经通过广播写出结束消息时视为正在收尾，Context 等待它空闲后受理新命令，因此客户端收到 `turn-finished` 后立即发出的下一轮不会被拒绝。没有 settings 时创建内置 project 的默认快照，并绑定本命令的对话。
-3. `conversationId` 必须与连接配置的对话一致。`IProjectTaskFacade` 按当前用户和 Project 创建或读取该 conversation：已有对话沿用保存的 `ContextId`，新对话在首次受理时生成 UUIDv7 `ContextId`；同一次提交中写入初始 task record，提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。
+3. `conversationId` 必须与连接配置的对话一致，写入检查通过之后，`IProjectTaskFacade` 按当前用户和 Project 创建或读取该 conversation：已有对话沿用保存的 `ContextId`，新对话在首次受理时生成 UUIDv7 `ContextId`；同一次提交中写入初始 task record，提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。解析请求带 `RequesterExtensionId`（`Settings.ExtensionId`）：新对话的创建方 `ExtensionId` 记为请求方（宿主为 `host`），与这一轮之后是否受理成功无关；extension 在开放对话（创建方为 `host`、generation 为 0、没有已受理的 Turn）中解析任务时，`IConversationCreatorStore` 在对话行锁内重新判断并把创建方记为该 extension，后来的 extension 读到已确定的创建方而被拒绝。
 4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint。客户端不再发送它；Facade 与 A2A、Job 等内部入口仍可以按已知的 `contextId` 创建或定位对话，并校验它与对话一致。
 5. target 改变时释放旧 runtime；同一 Agent target 在每个新 turn 开始前查询当前用户的 definition 更新时间，只有项目、context、generation 和 definition 版本均匹配才复用。definition 版本包含 `background-agents` Tool Block 所允许的子 Agent definition，子 Agent 修改后父 runtime 同样重建。definition 修改后整体重建 runtime，使模型、provider、凭证、环境变量及 Extra 同步更新；保留 conversation 和外部 provider session 绑定，沿用恢复流程。当前运行或等待人工响应的 turn 不受影响，SignalR 连接无需断开。重建失败时清除已释放的 runtime 引用，后续请求可重试。
 6. Context 从当前 connection 状态创建 `ExecutionStartRequest`；`InProcessExecutionStarter` 结合绑定的用户、message sink 和回调生成 `RuntimeTurnContext`，再调用 RuntimeFactory。
@@ -493,11 +498,13 @@ Agentflow 中的 Agent 节点同样遵守所引用 Agent 的 `EnableSummary`：�
 
 总结文字可在有助于可读性时使用 Markdown（如标题、列表、强调或代码块），也可以保持纯文本；服务端除去首尾空白外不会改写模型返回的 Markdown。
 
-总结为空或模型调用失败时仍返回 `Summary generation failed.`，不会使已成功的主执行失败；取消则继续向上传播。Summary 的 token usage 会累计到当前 project/context。`result` 会持久化供历史展示，`AgwChatHistoryProvider` 在构造下一轮模型历史时会过滤它。
+总结为空或模型调用失败时仍返回 `Summary generation failed.`，不会使已成功的主执行失败；取消则继续向上传播。Summary 的 token usage 会累计到当前 project/context，并记录所属 Turn。`result` 会持久化供历史展示，`AgwChatHistoryProvider` 在构造下一轮模型历史时会过滤它。
+
+对话详情的 `usage` 只合计已结算的用量：不属于 Turn 的记录，以及已经结束、结算时间（`usage_settles_at`）已到的 Turn 的记录。受理后尚未结束或结算时间未到的 Turn 列在 `usage.unsettledTurnIds` 中，客户端用推送的 `UsageContent` 计入这些 Turn，结算之后再读取详情。Turn 结束时以结束时间作为结算时间，Distributed 中断的结算时间见“状态机与一致性边界”一节。
 
 ### Interrupt、HumanGate 与用户信息交互
 
-`InterruptCommandHandler` 只作用于当前活动 turn。`ActiveTurn.RequestInterrupt` 会先调用 runtime 专用 interrupt hook，再取消 linked cancellation source。没有活动 turn 时，服务端返回 system message。
+`InterruptCommandHandler` 只作用于当前活动 turn。`ActiveTurn.RequestInterrupt` 会先调用 runtime 专用 interrupt hook，再取消 linked cancellation source。没有活动 turn 时，服务端返回 system message。只读的 extension 请求方先被写入检查拒绝，不写出任何消息。
 
 工具审批、HumanGate 和用户输入分别使用类型化请求。`InProcessInteractionSession` 在一个操作内登记 pending、发布 `interaction-request` 并等待响应；连接等待状态来自整个 pending 集合。客户端提交 `HumanResponseCommand.response`，其中 `kind` 和 `interactionId` 必须匹配原请求。普通工具决定携带 `approved` / `scope`，HumanGate 携带 `approved` / 可选 `responseText`，用户输入携带 `cancelled` / `responseData`。命令 handler 只负责翻译和转发，交互模块负责响应校验与生命周期。完整场景和扩展示例见 [HumanInteraction](HumanInteraction/README.md)。
 
@@ -653,6 +660,7 @@ stateDiagram-v2
 - 客户端先生成稳定 `turnId`。同一 ID + 相同 manifest 重试是幂等；同一 ID + 不同 owner 或 manifest 返回 conflict。
 - Worker 只把 `Queued`、`Resuming` 和可能由旧 Server 遗留的 `Running` 当作候选；真正执行前必须获得相同 turnId 的 PostgreSQL advisory lock。
 - `StateVersion` 是乐观并发 token。中断会直接写入 `Interrupted` 并更新版本，已在运行的 segment 不能用迟到结果覆盖它。
+- 中断立即结束 Turn。中断前有 worker 持有未过期的租约时，用量的结算时间为结束时间加 `Execution:Distributed:LeaseSeconds`，使被中断的 segment 退出前写入的用量都能计入；持有被中断租约（按 `LeaseEpoch` 匹配）的 worker 退出该 segment 后，把结算时间提前到退出时间。中断前没有租约时，结算时间为结束时间。
 - checkpoint、pending、response 都通过 EF 加密拦截器落库；状态转换与对应 JSON 在一次 `SaveChanges` 中提交。
 - 两种 event stream 实现都以 `segment-sequence` 作为确定性位置，segment 重放不会在同一逻辑位置重复追加。消息缺失时，订阅端会根据 PostgreSQL 终态合成 `turn-finished`；Redis 额外使用 TTL 控制保留时间。
 - 执行语义是 at-least-once。若进程在有副作用的 Tool 已成功、但 segment result 尚未提交时退出，新 Server 会重放该 segment；Tool 必须使用 turnId/requestId 或业务键实现幂等，本实现不宣称 exactly-once。
@@ -825,7 +833,7 @@ public sealed class StopCommandHandler : IExecutionCommandHandler<StopCommand>
         StopCommand command,
         ExecutionConnectionContext context,
         CancellationToken cancellationToken) =>
-        context.InterruptTurnAsync(command.Reason, cancellationToken);
+        context.InterruptTurnAsync(turnId: null, command.Reason, cancellationToken);
 }
 ```
 

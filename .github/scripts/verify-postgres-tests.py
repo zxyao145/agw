@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("directory", type=Path)
-parser.add_argument("--suite", choices=("all", "agents", "jobs"), default="all")
+parser.add_argument("--suite", choices=("all", "agents", "jobs", "files"), default="all")
 args = parser.parse_args()
 
 agent_tests = (
@@ -13,6 +13,8 @@ agent_tests = (
     "Postgres_ConcurrentCommits_AssignContiguousSequences",
     "Postgres_UpgradeActiveExecutions_PreservesStateAndAllowsRecovery",
     "Postgres_ConcurrentStarts_ReserveCapacityBeforeLeasesAndReleaseOnFailure",
+    "Postgres_InterruptFromAnotherInstance_CountsUsageAfterWorkerExits",
+    "Postgres_InterruptWithStoppedHolder_CountsUsageAfterLeaseDuration",
 )
 job_tests = (
     "AcquireAsync_PostgresLeaseLoss_CancelsHeldOperation",
@@ -26,7 +28,12 @@ job_tests = (
     "Delete_ConcurrentMutableUpdate_ReturnsModificationConflictAndPreservesJobLogs",
     "Delete_ConcurrentProjectDeletion_ReturnsSameMissingResult",
 )
-required = agent_tests + job_tests if args.suite == "all" else agent_tests if args.suite == "agents" else job_tests
+file_tests = (
+    "WriteAsync_TwoHostsWithSameExpectedSha256_SerializesAndOnlyOneSucceeds",
+    "WriteAsync_LeaseLostBeforeCommit_StaleHolderFailsAndKeepsNewContent",
+)
+suites = {"agents": agent_tests, "jobs": job_tests, "files": file_tests}
+required = agent_tests + job_tests + file_tests if args.suite == "all" else suites[args.suite]
 results = [
     item
     for report in args.directory.glob("*.trx")

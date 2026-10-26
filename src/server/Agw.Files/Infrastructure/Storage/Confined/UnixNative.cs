@@ -26,17 +26,41 @@ internal static partial class UnixNative
     public static readonly int O_NOFOLLOW;
     public static readonly int AT_REMOVEDIR;
 
+    /// <summary>
+    /// faccessat 的写权限检查与“按有效用户检查”标志。The write-permission check of faccessat and its effective-ID flag.
+    /// </summary>
+    public const int W_OK = 2;
+    public static readonly int AT_EACCESS;
+
     public const int EPERM = 1;
     public const int ENOENT = 2;
+    public const int EACCES = 13;
     public const int EEXIST = 17;
     public const int ENOTDIR = 20;
     public const int EISDIR = 21;
     public const int EINVAL = 22;
+    public const int EROFS = 30;
     public static readonly int ELOOP;
+    public static readonly int ENOTEMPTY;
+
+    /// <summary>
+    /// renameat2 在 Linux 上的 RENAME_NOREPLACE，以及 renameatx_np 在 macOS 上的 RENAME_EXCL：目标已存在时以 EEXIST 失败。
+    /// RENAME_NOREPLACE of renameat2 on Linux and RENAME_EXCL of renameatx_np on macOS: fail with EEXIST when the
+    /// destination exists.
+    /// </summary>
+    private const uint LinuxRenameNoReplace = 0x1;
+    private const uint MacRenameExclusive = 0x4;
 
     public const int S_IFMT = 0xF000;
     public const int S_IFDIR = 0x4000;
     public const int S_IFREG = 0x8000;
+
+    /// <summary>
+    /// 替换文件时复制给新文件的权限位：所有者、组与其他用户的读、写、执行位，不含 setuid、setgid 与 sticky。
+    /// The permission bits copied to the new file when a file is replaced: read, write and execute for the owner, group
+    /// and others, excluding setuid, setgid and sticky.
+    /// </summary>
+    public const int PermissionMask = 0x1FF;
 
     public const int DT_DIR = 4;
     public const int DT_REG = 8;
@@ -60,7 +84,9 @@ internal static partial class UnixNative
             O_DIRECTORY = 0x100000;
             O_NOFOLLOW = 0x100;
             AT_REMOVEDIR = 0x80;
+            AT_EACCESS = 0x10;
             ELOOP = 62;
+            ENOTEMPTY = 66;
             UseInode64Symbols = RuntimeInformation.ProcessArchitecture == Architecture.X64;
             return;
         }
@@ -78,7 +104,9 @@ internal static partial class UnixNative
         O_NONBLOCK = 0x800;
         O_CLOEXEC = 0x80000;
         AT_REMOVEDIR = 0x200;
+        AT_EACCESS = 0x200;
         ELOOP = 40;
+        ENOTEMPTY = 39;
         switch (RuntimeInformation.ProcessArchitecture)
         {
             case Architecture.X64:
@@ -128,6 +156,8 @@ internal static partial class UnixNative
         public readonly FileIdentity Identity => new(Dev, Ino);
         public readonly DateTimeOffset LastModifiedUtc =>
             DateTimeOffset.FromUnixTimeSeconds(MTime).AddTicks(MTimeNsec / 100);
+        public readonly FileVersion Version => new(Identity, Size, LastModifiedUtc);
+        public readonly UnixFileMode Permissions => (UnixFileMode)(Mode & PermissionMask);
     }
 
     /// <summary>
@@ -153,6 +183,54 @@ internal static partial class UnixNative
 
     [LibraryImport(Library, EntryPoint = "unlinkat", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     public static partial int UnlinkAt(int directory, string name, int flags);
+
+    [LibraryImport(Library, EntryPoint = "faccessat", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    public static partial int FAccessAt(int directory, string name, int mode, int flags);
+
+    [LibraryImport(Library, EntryPoint = "renameat", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    private static partial int RenameAtReplacing(int fromDirectory, string fromName, int toDirectory, string toName);
+
+    [LibraryImport(Library, EntryPoint = "renameat2", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    private static partial int RenameAt2(
+        int fromDirectory,
+        string fromName,
+        int toDirectory,
+        string toName,
+        uint flags
+    );
+
+    [LibraryImport(
+        Library,
+        EntryPoint = "renameatx_np",
+        StringMarshalling = StringMarshalling.Utf8,
+        SetLastError = true
+    )]
+    private static partial int RenameAtxNp(
+        int fromDirectory,
+        string fromName,
+        int toDirectory,
+        string toName,
+        uint flags
+    );
+
+    /// <summary>
+    /// 在两个目录句柄之间重命名，不跟随两端的符号链接。<paramref name="replace"/> 为 false 时由内核原子地拒绝已存在的目标
+    /// （EEXIST）：Linux 使用 renameat2(RENAME_NOREPLACE)，macOS 使用 renameatx_np(RENAME_EXCL)。
+    /// Renames between two directory handles without following symbolic links at either end. When
+    /// <paramref name="replace"/> is false the kernel atomically rejects an existing destination (EEXIST): renameat2
+    /// with RENAME_NOREPLACE on Linux and renameatx_np with RENAME_EXCL on macOS.
+    /// </summary>
+    public static int RenameAt(int fromDirectory, string fromName, int toDirectory, string toName, bool replace)
+    {
+        if (replace)
+        {
+            return RenameAtReplacing(fromDirectory, fromName, toDirectory, toName);
+        }
+
+        return OperatingSystem.IsMacOS()
+            ? RenameAtxNp(fromDirectory, fromName, toDirectory, toName, MacRenameExclusive)
+            : RenameAt2(fromDirectory, fromName, toDirectory, toName, LinuxRenameNoReplace);
+    }
 
     /// <summary>
     /// 带 O_CREAT 的 openat。openat 在 C 中是可变参数函数，mode 属于可变部分：Apple arm64 把可变参数放在栈上，x86-64 与
@@ -198,6 +276,67 @@ internal static partial class UnixNative
 
     [LibraryImport(SystemNativeLibrary, EntryPoint = "SystemNative_ReadDir")]
     public static partial int ReadDir(IntPtr directory, out DirectoryEntry entry);
+
+    /// <summary>
+    /// realpath(path, NULL)：返回的字符串由 malloc 分配，生成的封送代码转换后用 free 释放。
+    /// realpath(path, NULL): the returned string is allocated with malloc, and the generated marshalling code frees it
+    /// with free after conversion.
+    /// </summary>
+    [LibraryImport(
+        SystemNativeLibrary,
+        EntryPoint = "SystemNative_RealPath",
+        StringMarshalling = StringMarshalling.Utf8,
+        SetLastError = true
+    )]
+    private static partial string? RealPathCore(string path);
+
+    [LibraryImport(
+        SystemNativeLibrary,
+        EntryPoint = "SystemNative_ReadLink",
+        StringMarshalling = StringMarshalling.Utf8,
+        SetLastError = true
+    )]
+    private static partial int ReadLinkPath(string path, [Out] byte[] buffer, int bufferSize);
+
+    /// <summary>
+    /// 解析路径中的全部符号链接，返回绝对物理路径；路径不存在时返回 null。
+    /// Resolves every symbolic link in the path and returns the absolute physical path; returns null when the path
+    /// does not exist.
+    /// </summary>
+    public static string? RealPath(string path)
+    {
+        var resolved = RealPathCore(path);
+        if (resolved != null)
+        {
+            return resolved;
+        }
+
+        var errno = LastError;
+        return errno is ENOENT or ENOTDIR ? null : throw CreateException(errno, $"realpath failed for '{path}'");
+    }
+
+    /// <summary>
+    /// 读取路径最后一段的符号链接目标；最后一段不是符号链接或不存在时返回 null。
+    /// Reads the symbolic link target of the path's last segment; returns null when the last segment is not a symbolic
+    /// link or does not exist.
+    /// </summary>
+    public static string? ReadLink(string path)
+    {
+        var buffer = new byte[4096];
+        var length = ReadLinkPath(path, buffer, buffer.Length);
+        if (length < 0)
+        {
+            var errno = LastError;
+            return errno is EINVAL or ENOENT or ENOTDIR ? null : throw CreateException(errno, "readlink failed");
+        }
+
+        if (length >= buffer.Length)
+        {
+            throw CreateException(EINVAL, "readlink failed: link target too long");
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffer, 0, length);
+    }
 
     [LibraryImport(SystemNativeLibrary, EntryPoint = "SystemNative_CloseDir")]
     public static partial int CloseDir(IntPtr directory);
@@ -250,8 +389,10 @@ internal static partial class UnixNative
 }
 
 /// <summary>
-/// 文件系统对象的身份：设备号与 inode 号，用于判断目录句柄是否就是某个允许的根目录，不受路径写法与大小写影响。
-/// The identity of a file system object: device and inode numbers, used to decide whether a directory handle is one of
-/// the allowed roots regardless of path spelling or letter case.
+/// 文件系统对象的身份：Unix 上为设备号与 inode 号，Windows 上为卷序列号与文件索引。用于判断目录句柄是否就是某个允许的
+/// 根目录，以及写入提交前目标文件是否被替换，不受路径写法与大小写影响。
+/// The identity of a file system object: device and inode numbers on Unix, volume serial number and file index on
+/// Windows. It decides whether a directory handle is one of the allowed roots, and whether the target file was
+/// replaced before a write commits, regardless of path spelling or letter case.
 /// </summary>
 internal readonly record struct FileIdentity(long Dev, long Ino);

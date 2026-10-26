@@ -112,6 +112,17 @@ test("questions without previews do not reserve a preview region", () => {
   assert.equal(screen.queryByRole("region", { name: "Option preview" }), null);
 });
 
+test("the preview scrolls inside a fixed-height region and sets its prose size", () => {
+  renderQuestions();
+
+  const previewRegion = screen.getByRole("region", { name: "Option preview" });
+  const scroller = previewRegion.querySelector<HTMLElement>(".overflow-auto");
+
+  assert.ok(previewRegion.classList.contains("h-48"));
+  assert.ok(scroller);
+  assert.equal(scroller.style.getPropertyValue("--agw-prose-font-size"), "var(--text-sm)");
+});
+
 test("focusing an option with a preview updates content without replacing the region", () => {
   renderQuestions();
 

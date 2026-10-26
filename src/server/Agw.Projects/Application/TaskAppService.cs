@@ -47,6 +47,7 @@ public class TaskAppService : ITaskAppService
             input,
             user,
             contextId,
+            requesterExtensionId: null,
             cancellationToken
         );
 
@@ -57,6 +58,7 @@ public class TaskAppService : ITaskAppService
         string input,
         string user,
         string? contextId,
+        string? requesterExtensionId,
         CancellationToken cancellationToken
     )
     {
@@ -73,7 +75,8 @@ public class TaskAppService : ITaskAppService
             conversationId,
             taskId,
             request,
-            user
+            user,
+            requesterExtensionId
         );
         if (result.Value == null)
         {
@@ -207,6 +210,7 @@ public class TaskAppService : ITaskAppService
                         request.ContextId,
                         request.Input,
                         ownerUserId,
+                        request.RequesterExtensionId,
                         cancellationToken
                     );
                 }
@@ -227,6 +231,7 @@ public class TaskAppService : ITaskAppService
                 request.ContextId,
                 request.Input,
                 ownerUserId,
+                request.RequesterExtensionId,
                 cancellationToken
             );
         }
@@ -241,6 +246,7 @@ public class TaskAppService : ITaskAppService
                 request.ContextId,
                 request.Input,
                 ownerUserId,
+                request.RequesterExtensionId,
                 cancellationToken
             );
         }
@@ -318,6 +324,7 @@ public class TaskAppService : ITaskAppService
         string? contextId,
         string input,
         string user,
+        string? requesterExtensionId,
         CancellationToken cancellationToken
     )
     {
@@ -328,6 +335,7 @@ public class TaskAppService : ITaskAppService
             input,
             user,
             contextId,
+            requesterExtensionId,
             cancellationToken
         );
         if (task == null)

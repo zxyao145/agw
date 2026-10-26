@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Conversations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -12,6 +13,7 @@ public class ProjectConversationConfiguration : IEntityTypeConfiguration<Project
         builder.Property(e => e.JobId);
         builder.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
         builder.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
+        builder.Property(e => e.ExtensionId).IsRequired().HasMaxLength(64).HasDefaultValue(ConversationCreators.Host);
 
         builder.HasIndex(e => new { e.ProjectId, e.ContextId }).IsUnique();
         builder.HasIndex(e => e.ProjectId);

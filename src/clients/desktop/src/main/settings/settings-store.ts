@@ -1,8 +1,63 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 
-import type { DesktopSettings, DesktopSettingsUpdate, PackageFlavor } from "../../shared/contracts";
+import type {
+  DesktopSettings,
+  DesktopSettingsUpdate,
+  ExtensionGrants,
+  ExtensionSettings,
+  PackageFlavor,
+} from "../../shared/contracts";
+import { APPEARANCE_MODES, DEFAULT_APPEARANCE, DEFAULT_THEME_ID } from "../../shared/appearance";
+import { HOST_PERMISSION_PATTERN } from "../../shared/extension-host-permissions";
+import { isExtensionId, isLocalId } from "../../shared/extension-manifest";
+import { EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
+import { writeJsonFile } from "./json-file";
 import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
+
+const extensionSettingsSchema = z.record(
+  z.string(),
+  z.strictObject({
+    enabled: z.boolean(),
+    grantedPermissions: z.array(z.enum(EXTENSION_PERMISSIONS)),
+    grantedHostPermissions: z.array(z.string().regex(HOST_PERMISSION_PATTERN)),
+    lastActivatedVersion: z.string().nullable(),
+  }),
+);
+
+// 主题 id：`default` 或 `{extensionId}:{themeId}`。A theme id: `default` or `{extensionId}:{themeId}`.
+function isThemeId(value: string): boolean {
+  if (value === DEFAULT_THEME_ID) return true;
+  const separator = value.indexOf(":");
+  return (
+    separator !== -1 &&
+    isExtensionId(value.slice(0, separator)) &&
+    isLocalId(value.slice(separator + 1))
+  );
+}
+
+// `mode` 缺失时保持缺失，由 renderer 迁移。A missing `mode` stays missing until the renderer migrates it.
+const appearanceSchema = z.strictObject({
+  baseFontSize: z.number().int().min(12).max(20),
+  chatFontSize: z.number().int().min(12).max(24).nullable(),
+  // 旧版本的设置没有这个字段，缺失时跟随基础字号。Older settings lack the field; missing follows the base size.
+  codeFontSize: z.number().int().min(12).max(28).nullable().default(null),
+  theme: z.string().refine(isThemeId, { message: "Invalid theme id." }).default(DEFAULT_THEME_ID),
+  mode: z.enum(APPEARANCE_MODES).optional(),
+});
+
+const fileTypeSchema = z.string().min(1);
+const fileViewerIdSchema = z.string().min(1);
+const fileViewerDefaultsSchema = z.record(fileTypeSchema, fileViewerIdSchema);
+
+/** 声明集合全部包含在已批准集合中。Every declared entry is already approved. */
+export function isGrantCovered(declared: ExtensionGrants, settings: ExtensionSettings): boolean {
+  return (
+    declared.permissions.every((permission) => settings.grantedPermissions.includes(permission)) &&
+    declared.hostPermissions.every((host) => settings.grantedHostPermissions.includes(host))
+  );
+}
 
 export type SecretCodec = {
   encrypt(value: string): Buffer;
@@ -21,7 +76,7 @@ export class DesktopSettingsStore {
   private pendingWrite: Promise<void> = Promise.resolve();
 
   public constructor(
-    private readonly directory: string,
+    directory: string,
     private readonly packageFlavor: PackageFlavor,
     private readonly secretCodec: SecretCodec,
   ) {
@@ -48,6 +103,10 @@ export class DesktopSettingsStore {
         profiles,
         activeServerId,
         projectTabsByServer: parsed.projectTabsByServer ?? {},
+        extensions: extensionSettingsSchema.parse(parsed.extensions ?? {}),
+        removedBundledExtensions: z.array(z.string()).parse(parsed.removedBundledExtensions ?? []),
+        fileViewerDefaults: fileViewerDefaultsSchema.parse(parsed.fileViewerDefaults ?? {}),
+        appearance: appearanceSchema.parse(parsed.appearance ?? DEFAULT_APPEARANCE),
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -86,14 +145,17 @@ export class DesktopSettingsStore {
             changed = true;
           }
         }
-        if (changed) await this.writeJson(this.secretsFile, secrets);
+        if (changed) await writeJsonFile(this.secretsFile, secrets);
       }
-      await this.writeJson(this.settingsFile, {
+      await writeJsonFile(this.settingsFile, {
         ...current,
         closeBehavior: update.closeBehavior ?? current.closeBehavior,
         profiles,
         activeServerId,
         projectTabsByServer,
+        appearance: update.appearance
+          ? appearanceSchema.parse(update.appearance)
+          : current.appearance,
       });
     });
   }
@@ -111,7 +173,168 @@ export class DesktopSettingsStore {
       secrets.oidcProfiles ??= {};
       if (source === "oidc") secrets.oidcProfiles[profileId] = true;
       else delete secrets.oidcProfiles[profileId];
-      await this.writeJson(this.secretsFile, secrets, beforeCommit);
+      await writeJsonFile(this.secretsFile, secrets, beforeCommit);
+    });
+  }
+
+  /** 启用时写入批准结果；停用时保留批准结果。Enabling stores the grants; disabling keeps them. */
+  public async setExtensionEnabled(
+    extensionId: string,
+    enabled: boolean,
+    grants?: ExtensionGrants,
+  ): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      const current = extensions[extensionId];
+      if (enabled) {
+        if (!grants) throw new Error("Enabling an extension requires its grants.");
+        extensions[extensionId] = {
+          enabled: true,
+          grantedPermissions: [...grants.permissions],
+          grantedHostPermissions: [...grants.hostPermissions],
+          lastActivatedVersion: current?.lastActivatedVersion ?? null,
+        };
+      } else if (current) {
+        extensions[extensionId] = { ...current, enabled: false };
+      }
+    });
+  }
+
+  public async recordExtensionActivation(extensionId: string, version: string): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      const current = extensions[extensionId];
+      if (!current) throw new Error(`Extension ${extensionId} has no settings.`);
+      extensions[extensionId] = { ...current, lastActivatedVersion: version };
+    });
+  }
+
+  /**
+   * 替换安装后按新声明更新：新声明都已批准时保持启用状态并收窄批准集合，否则停用等待重新批准。
+   * After a replacement install: keep the enabled state and narrow the grants when everything is approved; otherwise disable until approved again.
+   */
+  public async applyInstalledExtension(
+    extensionId: string,
+    declared: ExtensionGrants,
+  ): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      const current = extensions[extensionId];
+      if (!current) return;
+      extensions[extensionId] = isGrantCovered(declared, current)
+        ? {
+            ...current,
+            grantedPermissions: [...declared.permissions],
+            grantedHostPermissions: [...declared.hostPermissions],
+          }
+        : { ...current, enabled: false };
+    });
+  }
+
+  /**
+   * 保证"启用时批准集合等于当前声明"：声明增加时停用，声明减少时收窄。
+   * Keeps "enabled grants equal the current declaration": additions disable, removals narrow.
+   */
+  public async reconcileExtensionGrants(
+    declared: ReadonlyMap<string, ExtensionGrants>,
+  ): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      for (const [extensionId, grants] of declared) {
+        const current = extensions[extensionId];
+        if (!current?.enabled) continue;
+        extensions[extensionId] = isGrantCovered(grants, current)
+          ? {
+              ...current,
+              grantedPermissions: [...grants.permissions],
+              grantedHostPermissions: [...grants.hostPermissions],
+            }
+          : { ...current, enabled: false };
+      }
+    });
+  }
+
+  public async removeExtension(extensionId: string): Promise<void> {
+    await this.updateExtensions((extensions) => {
+      delete extensions[extensionId];
+    });
+  }
+
+  /**
+   * 内置 extension：没有设置项且未被卸载时默认启用并批准声明；已有设置项时把批准集合更新为当前声明，保持启用状态。
+   * Bundled extensions: without an entry and not uninstalled they are enabled with the declaration approved;
+   * existing entries get the current declaration approved and keep their enabled state.
+   */
+  public async applyBundledExtensions(
+    declared: ReadonlyMap<string, ExtensionGrants>,
+  ): Promise<void> {
+    await this.updateExtensionState((state) => {
+      for (const [extensionId, grants] of declared) {
+        if (state.removedBundledExtensions.includes(extensionId)) continue;
+        const current = state.extensions[extensionId];
+        state.extensions[extensionId] = {
+          enabled: current?.enabled ?? true,
+          grantedPermissions: [...grants.permissions],
+          grantedHostPermissions: [...grants.hostPermissions],
+          lastActivatedVersion: current?.lastActivatedVersion ?? null,
+        };
+      }
+    });
+  }
+
+  /** 卸载内置 extension：记录 id 并删除设置项。Uninstalling a bundled extension records its id and deletes its entry. */
+  public async removeBundledExtension(extensionId: string): Promise<void> {
+    await this.updateExtensionState((state) => {
+      delete state.extensions[extensionId];
+      if (!state.removedBundledExtensions.includes(extensionId)) {
+        state.removedBundledExtensions.push(extensionId);
+      }
+    });
+  }
+
+  /**
+   * 设置文件类型的默认查看器，`viewerId` 为 null 时删除该项；返回更新后的全部设置。
+   * Sets the default viewer of a file type, or removes the entry when `viewerId` is null; returns every setting after
+   * the change.
+   */
+  public async setFileViewerDefault(
+    fileType: string,
+    viewerId: string | null,
+  ): Promise<Record<string, string>> {
+    fileTypeSchema.parse(fileType);
+    fileViewerIdSchema.nullable().parse(viewerId);
+    let defaults: Record<string, string> = {};
+    await this.enqueueWrite(async () => {
+      const current = await this.load();
+      defaults = Object.fromEntries([
+        ...Object.entries(current.fileViewerDefaults).filter(([key]) => key !== fileType),
+        ...(viewerId === null ? [] : [[fileType, viewerId]]),
+      ]);
+      await writeJsonFile(this.settingsFile, { ...current, fileViewerDefaults: defaults });
+    });
+    return defaults;
+  }
+
+  private async updateExtensions(
+    change: (extensions: Record<string, ExtensionSettings>) => void,
+  ): Promise<void> {
+    await this.updateExtensionState((state) => change(state.extensions));
+  }
+
+  private async updateExtensionState(
+    change: (state: Pick<DesktopSettings, "extensions" | "removedBundledExtensions">) => void,
+  ): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const current = await this.load();
+      const state = structuredClone({
+        extensions: current.extensions,
+        removedBundledExtensions: current.removedBundledExtensions,
+      });
+      change(state);
+      if (
+        JSON.stringify(state.extensions) === JSON.stringify(current.extensions) &&
+        JSON.stringify(state.removedBundledExtensions) ===
+          JSON.stringify(current.removedBundledExtensions)
+      ) {
+        return;
+      }
+      await writeJsonFile(this.settingsFile, { ...current, ...state });
     });
   }
 
@@ -129,7 +352,7 @@ export class DesktopSettingsStore {
     await this.enqueueWrite(async () => {
       const secrets = await this.loadSecretFile();
       delete secrets.tokens[profileId];
-      await this.writeJson(this.secretsFile, secrets);
+      await writeJsonFile(this.secretsFile, secrets);
     });
   }
 
@@ -141,6 +364,10 @@ export class DesktopSettingsStore {
       profiles: [DEFAULT_LOCAL_PROFILE],
       activeServerId: "local",
       projectTabsByServer: {},
+      extensions: {},
+      removedBundledExtensions: [],
+      fileViewerDefaults: {},
+      appearance: DEFAULT_APPEARANCE,
     };
   }
 
@@ -162,24 +389,5 @@ export class DesktopSettingsStore {
     const pending = this.pendingWrite.then(write);
     this.pendingWrite = pending.catch(() => undefined);
     return pending;
-  }
-
-  private async writeJson(
-    file: string,
-    value: unknown,
-    beforeCommit?: () => Promise<void>,
-  ): Promise<void> {
-    await mkdir(this.directory, { recursive: true });
-    const temporaryFile = `${file}.${process.pid}.tmp`;
-    await writeFile(temporaryFile, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    try {
-      await beforeCommit?.();
-      await rename(temporaryFile, file);
-    } finally {
-      await rm(temporaryFile, { force: true });
-    }
   }
 }

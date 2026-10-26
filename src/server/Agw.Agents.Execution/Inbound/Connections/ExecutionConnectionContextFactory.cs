@@ -21,6 +21,7 @@ internal sealed class ExecutionConnectionContextFactory : IAsyncDisposable
     private readonly IServiceProvider _serviceProvider;
     private AsyncServiceScope? _runtimeScope;
     private readonly IProjectTaskFacade _projectTasks;
+    private readonly IProjectConversationAccessFacade _conversationAccess;
     private readonly ExecutionProvider _executionProvider;
     private readonly DurableExecutionCoordinator? _durableCoordinator;
     private readonly AgentflowCheckpointStore _checkpointStore;
@@ -33,6 +34,7 @@ internal sealed class ExecutionConnectionContextFactory : IAsyncDisposable
     /// </summary>
     public ExecutionConnectionContextFactory(
         IProjectTaskFacade projectTasks,
+        IProjectConversationAccessFacade conversationAccess,
         IProjectDefaultResolver projectDefaults,
         IOptions<ExecutionRuntimeOptions> executionOptions,
         TurnAcceptanceService acceptance,
@@ -42,6 +44,7 @@ internal sealed class ExecutionConnectionContextFactory : IAsyncDisposable
         _permissions = serviceProvider.GetRequiredService<ExecutionPermissionService>();
         _serviceProvider = serviceProvider;
         _projectTasks = projectTasks;
+        _conversationAccess = conversationAccess;
         _projectDefaults = projectDefaults;
         _executionProvider = executionOptions.Value.Provider;
         _durableCoordinator = serviceProvider.GetService<DurableExecutionCoordinator>();
@@ -84,6 +87,7 @@ internal sealed class ExecutionConnectionContextFactory : IAsyncDisposable
             hostToken,
             _acceptance,
             _projectTasks,
+            _conversationAccess,
             inProcessCoordinators,
             durableCoordinator,
             _checkpointStore,

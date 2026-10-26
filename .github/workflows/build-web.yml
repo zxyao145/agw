@@ -48,7 +48,10 @@ jobs:
       - run: pnpm exec turbo run lint --filter=@agw/web...
       - run: pnpm exec turbo run test --filter=@agw/web...
       - run: pnpm --filter @agw/chat test:browser
+      - run: pnpm --filter @agw/code-view test:browser
+      - run: pnpm --filter @agw/projects test:browser
       - run: pnpm --filter @agw/web test:e2e
+      - run: pnpm --filter @agw/web test:e2e:export
       - run: pnpm exec turbo run build --filter=@agw/web...
 
       # - uses: actions/upload-artifact@v4

@@ -11,10 +11,12 @@ export function DesktopConnectionGate({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const desktop = useDesktopRuntime();
 
+  // Settings 与 Extensions 在 Server 不可用时也能使用。Settings and Extensions work while the Server is unavailable.
   if (
     desktop.status === "ready" ||
     desktop.status === "authentication-required" ||
-    pathname.startsWith("/settings")
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/extensions")
   ) {
     return children;
   }

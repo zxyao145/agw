@@ -10,7 +10,6 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@agw/components/query";
 import { toast } from "sonner";
 
-import { apiGet } from "@agw/api";
 import {
   buildConversationRenderModel,
   getCurrentTurnTodoItems,
@@ -41,31 +40,30 @@ import {
   replaceStreamingScope,
   scopeStreamingMessage,
   type StreamingMessageBatcher,
+  chatHttpClient,
   EMPTY_EXECUTION_QUEUE,
   executionSessionManager,
   isSubmittableInput,
+  useConversationTokenUsage,
   type ManagedExecutionHandle,
   type ManagedExecutionHandlers,
   type QueuedExecution,
 } from "@agw/chat-runtime";
-import {
-  clearProjectConversationRecords,
-  getProjectConversationMessages,
-  getConversationTurnInputs,
-  type LineComment,
-  type ProjectDirectoryOption,
-} from "@agw/projects";
+import { type LineComment, type ProjectDirectoryOption } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
 import type { UserInputRef } from "./user-input";
+import type {
+  ChatComposerHandle,
+  ChatMessageActionArgs,
+  ExtensionMenuItem,
+} from "./chat-extension-types";
 import {
   getAgentSuggestionQueryParams,
   toCommandSource,
-  type AgentSuggestionsResponse,
 } from "../../../lib/chat/agent-suggestions";
 import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/ai-message-handlers";
-import { addTokenUsage, EMPTY_TOKEN_USAGE, getMessageTokenUsage, type TokenUsage } from "@agw/api";
 import { createUuidV7 } from "@agw/api";
 import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
@@ -84,7 +82,6 @@ export interface ChatSessionSeed {
   conversationId: string | null;
   messages: AiMessage[];
   historyTurns: ConversationHistoryTurn[];
-  usage: TokenUsage;
   olderMessagesCursor: string | null;
   hasOlderMessages: boolean;
   agentMode: AgentMode | null;
@@ -134,6 +131,12 @@ export interface ChatProps {
   /** 历史水合后查询服务端活动执行，并恢复 durable attachment。 */
   restoreExecution?: boolean;
   active?: boolean;
+  /** "+" 菜单 Extensions 分组的菜单项。Items of the Extensions group in the "+" menu. */
+  composerActions?: readonly ExtensionMenuItem<Record<string, never>>[];
+  /** 对话输入框句柄。Handle of the composer. */
+  composerRef?: React.Ref<ChatComposerHandle>;
+  /** 消息操作菜单的扩展菜单项。Extension items of the message action menu. */
+  messageActions?: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
 }
 
 const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
@@ -141,13 +144,6 @@ const EMPTY_PROJECT_DIRECTORIES: readonly ProjectDirectoryOption[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
   return prepareConversationHistory(messages);
-}
-
-function calculateConversationUsage(messages: AiMessage[]): TokenUsage {
-  return messages.reduce((usage, message) => {
-    const messageUsage = getMessageTokenUsage(message);
-    return messageUsage ? addTokenUsage(usage, messageUsage) : usage;
-  }, EMPTY_TOKEN_USAGE);
 }
 
 function truncateAtCheckpoint(
@@ -218,6 +214,9 @@ export function Chat({
   showUserInputNavigation = false,
   onReconnectStateChange,
   restoreExecution = false,
+  composerActions,
+  composerRef,
+  messageActions,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
   const queryClient = useQueryClient();
@@ -231,7 +230,6 @@ export function Chat({
   const [messages, setMessages] = React.useState<AiMessage[]>(initialHistory.messages);
   const messagesRef = React.useRef<AiMessage[]>(initialHistory.messages);
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
-  const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
   // 新对话在首次配置或发送前分配的草稿 ID；它不代表对话已经保存到服务端。
   // The draft ID a new conversation gets before its first configuration or send; it does not mean the conversation is saved.
   const [draftConversationId, setDraftConversationId] = React.useState<string | null>(null);
@@ -246,10 +244,12 @@ export function Chat({
   const permissionCapabilities = useQuery({
     queryKey: ["execution-permissions", executionServerId, target?.type, target?.id],
     enabled: Boolean(target),
-    queryFn: () =>
-      apiGet("/api/agents/permission-capabilities", {
-        params: { query: { type: target!.type === "agent" ? 0 : 1, id: target!.id } },
-      }),
+    queryFn: ({ signal }) =>
+      chatHttpClient.getPermissionCapabilities(
+        { serverId: executionServerId, projectId, conversationId: executionConversationId },
+        target!,
+        signal,
+      ),
   });
   const supportedPermissionModes = permissionCapabilities.data?.supportedPermissionModes ?? [];
   const permissionUnavailable = !supportedPermissionModes.includes(permissionMode)
@@ -287,6 +287,17 @@ export function Chat({
   const [userInputNavigationHost, setUserInputNavigationHost] =
     React.useState<HTMLDivElement | null>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
+  React.useImperativeHandle(
+    composerRef,
+    () => ({
+      insertText: (text: string) => {
+        const userInput = userInputRef.current;
+        if (!userInput) throw new Error("The composer is not mounted.");
+        userInput.insertText(text);
+      },
+    }),
+    [],
+  );
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
   const [restoredExecutionKey, setRestoredExecutionKey] = React.useState<string | null>(null);
@@ -386,14 +397,16 @@ export function Chat({
       suggestionQueryParams?.projectId,
       suggestionQueryParams?.agentId,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!suggestionQueryParams) {
         throw new Error("Agent suggestion query requires an agent.");
       }
 
-      return (await apiGet("/api/agents/suggestions", {
-        params: { query: suggestionQueryParams },
-      })) as AgentSuggestionsResponse;
+      return await chatHttpClient.getAgentSuggestions(
+        { serverId: executionServerId, projectId, conversationId: executionConversationId },
+        suggestionQueryParams,
+        signal,
+      );
     },
     enabled: suggestionQueryParams !== null,
     retry: false,
@@ -426,13 +439,26 @@ export function Chat({
       persistedConversationId,
       sessionSeed.revision,
     ],
-    enabled: showUserInputNavigation && persistedConversationId !== null && !isHydratingSession,
-    queryFn: ({ signal }) => getConversationTurnInputs(persistedConversationId!, signal),
+    enabled:
+      showUserInputNavigation &&
+      projectId !== null &&
+      persistedConversationId !== null &&
+      !isHydratingSession,
+    queryFn: ({ signal }) =>
+      chatHttpClient.getConversationTurnInputs(
+        {
+          serverId: executionServerId,
+          projectId: projectId!,
+          conversationId: persistedConversationId!,
+        },
+        signal,
+      ),
   });
   const queueKey =
     projectId && executionConversationId
       ? { serverId: executionServerId, projectId, conversationId: executionConversationId }
       : null;
+  const conversationUsage = useConversationTokenUsage(queueKey);
   React.useSyncExternalStore(
     executionSessionManager.subscribeQueue,
     executionSessionManager.getQueueVersion,
@@ -467,6 +493,11 @@ export function Chat({
       target?.type,
     ],
   );
+  // 已载入且没有任何消息的对话只显示输入框：对话列只包住输入框，并在聊天区域中垂直居中。
+  // A loaded conversation without any message shows only the composer: the column wraps just the composer and is
+  // vertically centered in the chat area.
+  const isEmptyConversation =
+    renderItems.length === 0 && !hasOlderMessages && !isHydratingSession && !isRestoringExecution;
   const unloadedWorkSummaryKeys = React.useMemo(
     () => getUnloadedWorkSummaryKeys(renderItems, messages),
     [renderItems, messages],
@@ -571,7 +602,6 @@ export function Chat({
     setHistoryTurns(sessionSeed.historyTurns);
     setExpandedWorkSummaryKeys(new Set());
     setClaudeCommands(preparedHistory.commands);
-    setConversationUsage(sessionSeed.usage);
     conversationIdRef.current = conversationId;
     setDraftConversationId(null);
     setAcceptedConversationId(null);
@@ -713,11 +743,6 @@ export function Chat({
         streamingMessageBatcherRef.current?.flush(generation);
         setClaudeCommands(initCommands);
         return;
-      }
-
-      const messageUsage = getMessageTokenUsage(message);
-      if (messageUsage) {
-        setConversationUsage((current) => addTokenUsage(current, messageUsage));
       }
 
       if (getAgentflowCheckpointMessage(message)) {
@@ -1418,7 +1443,6 @@ export function Chat({
           );
           messagesRef.current = retainedMessages;
           setMessages(retainedMessages);
-          setConversationUsage(calculateConversationUsage(retainedMessages));
           setCheckpointAvailability((current) =>
             current.filter(
               (checkpoint) => checkpoint.boundarySequence <= selectedCheckpoint.boundarySequence,
@@ -1536,7 +1560,11 @@ export function Chat({
     void (async () => {
       try {
         if (projectId && conversationToClear) {
-          const cleared = await clearProjectConversationRecords(projectId, conversationToClear);
+          const cleared = await chatHttpClient.clearConversationRecords({
+            serverId: executionServerId,
+            projectId,
+            conversationId: conversationToClear,
+          });
           if (!cleared) throw new Error("Conversation not found.");
           const imagesCleared = currentImageDraft.clear();
           executionSessionManager.conversationStatuses.reset(
@@ -1608,12 +1636,19 @@ export function Chat({
       setIsLoadingOlderMessages(true);
 
       try {
-        const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
-          direction: "older",
-          cursor: olderMessagesCursorRef.current,
-          pageSize: 50,
-          signal: abortController.signal,
-        });
+        const page = await chatHttpClient.getConversationMessages(
+          {
+            serverId: executionServerId,
+            projectId: activeProjectId,
+            conversationId: activeConversationId,
+          },
+          {
+            direction: "older",
+            cursor: olderMessagesCursorRef.current,
+            pageSize: 50,
+            signal: abortController.signal,
+          },
+        );
         if (abortController.signal.aborted || conversationIdRef.current !== activeConversationId) {
           return;
         }
@@ -1656,7 +1691,13 @@ export function Chat({
         }
       }
     },
-    [isJumpingToTop, notifyExecutionError, projectId, shouldAutoLoadOlderMessages],
+    [
+      executionServerId,
+      isJumpingToTop,
+      notifyExecutionError,
+      projectId,
+      shouldAutoLoadOlderMessages,
+    ],
   );
 
   // 返回历史是否已经加载到目标输入；没有目标时表示是否已经加载到对话开头。
@@ -1697,12 +1738,14 @@ export function Chat({
 
       try {
         while (hasMore && cursor) {
-          const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
-            direction: "older",
-            cursor,
-            pageSize: 50,
-            signal: abortController.signal,
-          });
+          const page = await chatHttpClient.getConversationMessages(
+            {
+              serverId: executionServerId,
+              projectId: activeProjectId,
+              conversationId: activeConversationId,
+            },
+            { direction: "older", cursor, pageSize: 50, signal: abortController.signal },
+          );
           if (
             abortController.signal.aborted ||
             conversationIdRef.current !== activeConversationId
@@ -1771,7 +1814,7 @@ export function Chat({
         }
       }
     },
-    [notifyExecutionError, projectId],
+    [executionServerId, notifyExecutionError, projectId],
   );
 
   const handleScrollToTop = React.useCallback(
@@ -1859,45 +1902,57 @@ export function Chat({
             />
           ) : null}
 
-          <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
+          {/* agw-chat-* 类名供 Desktop 的工作区背景样式使用。The agw-chat-* classes serve Desktop's workspace backdrop styles. */}
+          <div className="agw-chat-column-area relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表和输入框共用同一个宽度容器，保证两者严格对齐 */}
-            <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col">
+            <div
+              className={cn(
+                "agw-chat-column mx-auto flex w-full max-w-3xl flex-col",
+                isEmptyConversation ? "self-center" : "min-h-full",
+              )}
+            >
               <ToolDirectoriesContext.Provider value={directories}>
                 {/* 对话列表 */}
-                <Conversation
-                  items={renderItems}
-                  conversationKey={JSON.stringify([
-                    executionServerId,
-                    projectId,
-                    executionConversationId,
-                  ])}
-                  onWorkSummaryToggle={handleUserInputNavigate}
-                  onImagePreviewOpenChange={handleImagePreviewOpenChange}
-                  onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
-                  scrollElementRef={conversationScrollRef}
-                  userInputNavigationHost={userInputNavigationHost}
-                  onUserInputNavigate={handleAnchorNavigate}
-                  userInputs={userInputsQuery.data}
-                  onLoadUserInput={loadHistoryThroughInput}
-                  activeStreamingScopeId={activeStreamingScopeRef.current}
-                  hasOlderMessages={hasOlderMessages}
-                  isLoadingOlderMessages={isLoadingOlderMessages}
-                  isInitialLoading={isLoadingConversation}
-                  onLoadOlderMessages={() => void loadOlderMessages(true)}
-                  onAutoLoadOlderMessages={() => void loadOlderMessages()}
-                  autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
-                  permissionMode={activePermissionMode ?? undefined}
-                  onHumanResponse={submitInteractionResponse}
-                  showCheckpointResume={target?.type === "agentflow"}
-                  checkpointResumeDisabled={checkpointResumeDisabled}
-                  onCheckpointResume={handleResumeCheckpoint}
-                />
+                {isEmptyConversation ? null : (
+                  <Conversation
+                    items={renderItems}
+                    conversationKey={JSON.stringify([
+                      executionServerId,
+                      projectId,
+                      executionConversationId,
+                    ])}
+                    onWorkSummaryToggle={handleUserInputNavigate}
+                    onImagePreviewOpenChange={handleImagePreviewOpenChange}
+                    onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
+                    scrollElementRef={conversationScrollRef}
+                    userInputNavigationHost={userInputNavigationHost}
+                    onUserInputNavigate={handleAnchorNavigate}
+                    userInputs={userInputsQuery.data}
+                    onLoadUserInput={loadHistoryThroughInput}
+                    activeStreamingScopeId={activeStreamingScopeRef.current}
+                    hasOlderMessages={hasOlderMessages}
+                    isLoadingOlderMessages={isLoadingOlderMessages}
+                    isInitialLoading={isLoadingConversation}
+                    onLoadOlderMessages={() => void loadOlderMessages(true)}
+                    onAutoLoadOlderMessages={() => void loadOlderMessages()}
+                    autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
+                    permissionMode={activePermissionMode ?? undefined}
+                    onHumanResponse={submitInteractionResponse}
+                    showCheckpointResume={target?.type === "agentflow"}
+                    checkpointResumeDisabled={checkpointResumeDisabled}
+                    onCheckpointResume={handleResumeCheckpoint}
+                    messageActions={messageActions}
+                  />
+                )}
               </ToolDirectoriesContext.Provider>
 
               <div
                 inert={showReconnect}
                 aria-hidden={showReconnect}
-                className="pointer-events-none sticky bottom-0 z-10 min-h-30 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-2"
+                className={cn(
+                  "agw-chat-composer pointer-events-none sticky bottom-0 z-10 min-h-30 px-3 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent ",
+                  isEmptyConversation && "py-3",
+                )}
               >
                 {/* 输入框 */}
                 <div className="pointer-events-auto">
@@ -1953,6 +2008,7 @@ export function Chat({
                     topLeft={inputTopLeft}
                     userInputRef={userInputRef}
                     onInputDraftChange={handleInputDraftChange}
+                    composerActions={composerActions}
                   />
                 </div>
               </div>

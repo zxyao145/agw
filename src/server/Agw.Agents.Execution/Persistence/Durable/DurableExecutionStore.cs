@@ -403,18 +403,51 @@ internal sealed class DurableExecutionStore
     /// Writes an unfinished execution as Interrupted and clears its lease inside the caller's transaction; returns whether this write ended it. The conditional update locks the execution row,
     /// excluding lease-checked transactions, so every later write of a running instance is rejected.
     /// </summary>
-    internal async Task<bool> InterruptAsync(Guid turnId, string userId, CancellationToken cancellationToken)
+    /// <summary>
+    /// 写入 Interrupted 并清除租约，返回该 Turn 的用量结算时间；执行不在活动状态时返回空。调用方已经锁定执行行。
+    /// 中断前仍有有效租约时，持有者可能还在运行并写入用量：结算时间为一个租约时长之后，并记下这份租约的代次，持有者退出后据此提前结算。
+    /// Writes Interrupted and clears the lease, returning the turn's usage settlement time, or null when the execution is not active. The caller has locked the execution row.
+    /// When a valid lease is still held its holder may keep running and writing usage: usage settles one lease duration later, and the lease epoch is recorded so the holder can settle earlier once it exits.
+    /// </summary>
+    internal async Task<DateTimeOffset?> InterruptAsync(
+        Guid turnId,
+        string userId,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken
+    )
     {
         var now = _timeProvider.GetUtcNow();
-        var updatedCount = await _dbContext
+        var active = _dbContext
             .DurableExecutions.Where(item => item.Id == turnId && item.UserId == userId)
-            .Where(DurableExecutionQueries.Active)
+            .Where(DurableExecutionQueries.Active);
+        var lease = await active
+            .AsNoTracking()
+            .Select(item => new
+            {
+                item.WorkerId,
+                item.LeaseExpiresAt,
+                item.LeaseEpoch,
+            })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (lease == null)
+        {
+            _ =
+                await FindAsync(turnId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
+                ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+            return null;
+        }
+
+        var held = lease.WorkerId != null && lease.LeaseExpiresAt > now;
+        long? interruptedLeaseEpoch = held ? lease.LeaseEpoch : null;
+        await active
             .ExecuteUpdateAsync(
                 setters =>
                     setters
                         .SetProperty(item => item.Status, DurableExecutionStatus.Interrupted)
                         .SetProperty(item => item.WorkerId, (string?)null)
                         .SetProperty(item => item.LeaseExpiresAt, (DateTimeOffset?)null)
+                        .SetProperty(item => item.InterruptedLeaseEpoch, interruptedLeaseEpoch)
                         .SetProperty(item => item.CheckpointJson, (string?)null)
                         .SetProperty(item => item.TurnCheckpointJson, (string?)null)
                         .SetProperty(item => item.PendingInteractionsJson, (string?)null)
@@ -426,16 +459,34 @@ internal sealed class DurableExecutionStore
                 cancellationToken
             )
             .ConfigureAwait(false);
-        if (updatedCount > 0)
-        {
-            return true;
-        }
-
-        _ =
-            await FindAsync(turnId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
-            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        return false;
+        return held ? now + leaseDuration : now;
     }
+
+    /// <summary>
+    /// 中断时记下的是否正是这份租约。
+    /// Whether the interrupt recorded this very lease.
+    /// </summary>
+    internal Task<bool> IsInterruptedLeaseAsync(Guid turnId, long leaseEpoch, CancellationToken cancellationToken) =>
+        _dbContext
+            .DurableExecutions.AsNoTracking()
+            .AnyAsync(item => item.Id == turnId && item.InterruptedLeaseEpoch == leaseEpoch, cancellationToken);
+
+    /// <summary>
+    /// 持有被中断租约的 worker 退出时清空记下的租约代次；代次不同（例如接管之前的旧租约）时不修改，返回是否清空。调用方已经锁定执行行。
+    /// Clears the recorded lease epoch when the worker holding the interrupted lease exits; another epoch (for example an older lease from before a takeover) changes nothing. Returns whether it was cleared; the caller has locked the execution row.
+    /// </summary>
+    internal async Task<bool> ReleaseInterruptedLeaseAsync(
+        Guid turnId,
+        long leaseEpoch,
+        CancellationToken cancellationToken
+    ) =>
+        await _dbContext
+            .DurableExecutions.Where(item => item.Id == turnId && item.InterruptedLeaseEpoch == leaseEpoch)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(item => item.InterruptedLeaseEpoch, (long?)null),
+                cancellationToken
+            )
+            .ConfigureAwait(false) == 1;
 
     private Task<DurableExecutionRecord?> FindAsync(
         Guid turnId,

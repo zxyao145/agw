@@ -1,0 +1,28 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 8px;
+  gap: 8px;
+}
+
+#status {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+}
+
+#todo {
+  flex: 1;
+  font:
+    14px/1.5 ui-monospace,
+    monospace;
+  resize: none;
+}

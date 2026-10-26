@@ -1,0 +1,14 @@
+{
+  "manifestVersion": 1,
+  "id": "01a173b5-526c-74d8-864c-0a09dd98b184",
+  "name": "CSS Themes",
+  "version": "1.0.0",
+  "description": "Extension integration test fixture with CSS themes and no views.",
+  "contributes": {
+    "themes": [
+      { "id": "paper", "title": "Paper", "path": "themes/paper.css" },
+      { "id": "namespace", "title": "Namespace", "path": "themes/namespace.css" },
+      { "id": "cover", "title": "Cover", "path": "themes/cover.css" }
+    ]
+  }
+}

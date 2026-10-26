@@ -1,15 +1,29 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-geist-sans: "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-geist-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --agw-font-sans: "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --agw-font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+/* 字号 token 使用 static，保证 :root 中始终输出变量，后续可以在运行时缩放。 */
+/* Font-size tokens are static so the variables are always emitted on :root and can be scaled at runtime. */
+@theme static {
+  --text-3xs: 0.5625rem;
+  --text-2xs: 0.625rem;
+  --text-11: 0.6875rem;
+  --text-13: 0.8125rem;
+  --text-15: 0.9375rem;
+}
+
+/* 字体变量始终输出，extension 可以读取 --font-sans 与 --font-mono。The font variables are always emitted so extensions can read --font-sans and --font-mono. */
+@theme inline static {
+  --font-sans: var(--agw-font-sans);
+  --font-mono: var(--agw-font-mono);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -124,6 +138,27 @@
   --sidebar-accent-foreground: #17191d;
   --sidebar-border: #e4e7ec;
   --sidebar-ring: #006fee;
+  --agw-sidebar-muted-foreground: var(--muted-foreground);
+
+  /* 聊天与 Markdown。Chat and Markdown. */
+  --agw-user-message: #f3f5fc;
+  --agw-user-message-foreground: #17191d;
+  --agw-code-block: #f4f4f4;
+  --agw-code-block-foreground: #17191d;
+  --agw-code-block-muted: #5f6368;
+  --agw-code-block-border: color-mix(in oklab, var(--color-black) 10%, transparent);
+  --agw-code-block-button: #71757a;
+  --agw-code-block-button-hover: #17191d;
+  --agw-prose-code-background: oklch(0.95 0 0);
+
+  /* 其他宿主颜色；Server 光环与 Agentflow 边线在两个 Mode 下相同。Other host colors; the Server halo and Agentflow edges are the same in both modes. */
+  --agw-status-running: #006fee;
+  --agw-server-online-halo: #10b981;
+  --agw-agentflow-edge: #475569;
+  --agw-agentflow-edge-fan-out: #2563eb;
+  --agw-agentflow-edge-fan-in: #d97706;
+  --agw-agentflow-edge-switch-case: #7c3aed;
+  --agw-agentflow-edge-switch-default: #db2777;
 }
 
 .dark {
@@ -158,6 +193,18 @@
   --sidebar-accent-foreground: #f3f4f6;
   --sidebar-border: #272a31;
   --sidebar-ring: #338ef7;
+
+  --agw-user-message: #f3f5fc;
+  --agw-user-message-foreground: #17191d;
+  --agw-code-block: #202124;
+  --agw-code-block-foreground: #f1f3f4;
+  --agw-code-block-muted: #bdc1c6;
+  --agw-code-block-border: color-mix(in oklab, var(--color-white) 10%, transparent);
+  --agw-code-block-button: #aeb2b8;
+  --agw-code-block-button-hover: #ffffff;
+  --agw-prose-code-background: oklch(0.2 0 0);
+
+  --agw-status-running: #338ef7;
 }
 
 @layer base {
@@ -214,7 +261,7 @@ div[role="option"]:hover {
 
   .agw-titlebar {
     -webkit-app-region: drag;
-    @apply flex h-12 min-h-12 select-none items-center gap-2 border-b bg-card/92 px-3 backdrop-blur-xl;
+    @apply flex h-[48px] min-h-[48px] select-none items-center gap-2 border-b bg-card/92 px-3 backdrop-blur-xl;
   }
 
   .agw-titlebar.platform-darwin {
@@ -305,7 +352,7 @@ div[role="option"]:hover {
   }
 
   .agw-project-tab > a {
-    @apply flex min-w-0 flex-1 items-center gap-2 px-2.5 text-xs font-medium;
+    @apply flex min-w-0 flex-1 items-center gap-2 px-2.5 text-sm font-medium;
   }
 
   .agw-project-tab > a > span:nth-child(2) {
@@ -325,11 +372,11 @@ div[role="option"]:hover {
   }
 
   .agw-status-dot.is-running {
-    @apply bg-sidebar-ring shadow-[0_0_0_3px_color-mix(in_srgb,var(--sidebar-ring)_14%,transparent)];
+    @apply bg-(--agw-status-running) shadow-[0_0_0_3px_color-mix(in_srgb,var(--agw-status-running)_14%,transparent)];
   }
 
   .dark .agw-status-dot.is-running {
-    @apply shadow-[0_0_0_3px_color-mix(in_srgb,var(--sidebar-ring)_28%,transparent)];
+    @apply shadow-[0_0_0_3px_color-mix(in_srgb,var(--agw-status-running)_28%,transparent)];
   }
 
   .agw-status-dot.is-waiting-approval {
@@ -354,7 +401,7 @@ div[role="option"]:hover {
 
   .agw-server-pill,
   .agw-task-button {
-    @apply flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[10px] border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-muted;
+    @apply flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[10px] border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted;
   }
 
   .agw-task-button svg {
@@ -366,11 +413,89 @@ div[role="option"]:hover {
   }
 
   .agw-server-state.is-online {
-    @apply bg-emerald-500 shadow-[0_0_0_3px_color-mix(in_srgb,#10b981_14%,transparent)];
+    @apply bg-emerald-500 shadow-[0_0_0_3px_color-mix(in_srgb,var(--agw-server-online-halo)_14%,transparent)];
   }
 
   .agw-chat-workspace {
     @apply min-h-0 flex-1 overflow-hidden bg-card pb-2;
+  }
+
+  /* Desktop 侧栏：侧栏变量连接到容器内共享组件使用的界面变量；挂在 body 下的弹出层不受影响。
+     Desktop sidebars: the sidebar variables feed the interface variables used by shared components inside the
+     containers; overlays under body are not affected. */
+  .agw-ribbon,
+  .agw-left-sidebar,
+  .agw-settings-nav {
+    --foreground: var(--sidebar-foreground);
+    --muted-foreground: var(--agw-sidebar-muted-foreground);
+    --muted: var(--sidebar-accent);
+    --accent: var(--sidebar-accent);
+    --accent-foreground: var(--sidebar-accent-foreground);
+    --border: var(--sidebar-border);
+    --ring: var(--sidebar-ring);
+    @apply border-sidebar-border bg-sidebar text-sidebar-foreground;
+  }
+
+  /* 悬停或选中的项：普通文字使用侧栏强调色的前景。Hovered or selected items: plain text uses the sidebar accent foreground. */
+  .agw-ribbon-item:hover,
+  .agw-ribbon-item.is-active,
+  .agw-settings-nav section > a:hover,
+  .agw-settings-nav section > a.is-active {
+    --foreground: var(--sidebar-accent-foreground);
+  }
+
+  /* Desktop 工作区：Ribbon、Left Sidebar、Main Workspace 与 extension 视图。
+     Desktop workspace: Ribbon, Left Sidebar, Main Workspace and extension views. */
+  .agw-ribbon {
+    @apply flex w-11 shrink-0 flex-col items-center gap-1 border-r py-2;
+  }
+
+  .agw-ribbon-item {
+    @apply grid size-8 shrink-0 cursor-pointer place-items-center rounded-[9px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+  }
+
+  .agw-ribbon-item svg,
+  .agw-ribbon-item img {
+    @apply size-4;
+  }
+
+  .agw-ribbon-item.is-active {
+    @apply bg-muted text-foreground;
+  }
+
+  /* 内置项与 extension 项之间的分隔线。Separator between built-in and extension items. */
+  .agw-ribbon-separator {
+    @apply my-1 h-px w-6 shrink-0 bg-border;
+  }
+
+  .agw-left-sidebar {
+    @apply flex h-full min-h-0 w-full flex-col overflow-hidden;
+  }
+
+  .agw-main-workspace {
+    @apply relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .agw-extension-view-header {
+    @apply flex h-8 shrink-0 items-center gap-2 border-b px-2.5 text-sm text-muted-foreground;
+  }
+
+  .agw-extension-view-header svg,
+  .agw-extension-view-header img {
+    @apply size-4 shrink-0;
+  }
+
+  .agw-extension-view-slot {
+    @apply relative min-h-0 flex-1 overflow-hidden bg-background;
+  }
+
+  /* 宿主弹出层遮住视图时显示的截图。The snapshot shown while a host overlay covers the view. */
+  .agw-extension-view-slot.is-snapshot {
+    @apply select-none;
+  }
+
+  .agw-extension-view-slot.is-snapshot > img {
+    @apply pointer-events-none absolute inset-0 size-full object-fill;
   }
 
   .agw-settings-titlebar {
@@ -378,7 +503,7 @@ div[role="option"]:hover {
   }
 
   .agw-back-button {
-    @apply flex h-8 items-center gap-2 rounded-[9px] px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground;
+    @apply flex h-8 items-center gap-2 rounded-[9px] px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground;
   }
 
   .agw-back-button svg {
@@ -394,7 +519,7 @@ div[role="option"]:hover {
   }
 
   .agw-settings-nav {
-    @apply w-61 shrink-0 border-r bg-card px-2.5 py-4;
+    @apply w-61 shrink-0 border-r px-2.5 py-4;
   }
 
   .agw-settings-nav-heading {
@@ -406,11 +531,11 @@ div[role="option"]:hover {
   }
 
   .agw-settings-nav h2 {
-    @apply mb-1.5 px-2.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70;
+    @apply mb-1.5 px-2.5 text-3xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70;
   }
 
   .agw-settings-nav section > a {
-    @apply mb-0.5 flex h-8.5 items-center gap-2.5 rounded-lg px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground;
+    @apply mb-0.5 flex h-8.5 items-center gap-2.5 rounded-lg px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground;
   }
 
   .agw-settings-nav section > a.is-active {
@@ -436,7 +561,7 @@ div[role="option"]:hover {
   }
 
   .agw-settings-nav {
-    width: 210px;
+    width: 224px;
   }
 
   .agw-settings-main {
@@ -508,13 +633,8 @@ div[role="option"]:hover {
     font-family: var(--font-mono);
     font-size: 0.875em;
     padding: 0.125em 0.25em;
-    background-color: oklch(0.95 0 0);
+    background-color: var(--agw-prose-code-background);
     border-radius: 0.25rem;
-  }
-
-  .prose.dark :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)),
-  .dark .prose :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    background-color: oklch(0.2 0 0);
   }
 
   .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
@@ -525,13 +645,8 @@ div[role="option"]:hover {
     margin-bottom: 1em;
     padding: 0.75em 1em;
     overflow-x: auto;
-    background-color: oklch(0.95 0 0);
+    background-color: var(--agw-prose-code-background);
     border-radius: 0.375rem;
-  }
-
-  .prose.dark :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)),
-  .dark .prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    background-color: oklch(0.2 0 0);
   }
 
   .prose :where(pre code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
@@ -601,11 +716,11 @@ div[role="option"]:hover {
   @apply relative mx-auto w-full max-w-225;
 }
 
-.agw-conversation-list h1 {
+.agw-conversation-list h1:not(.agw-prose *) {
   @apply text-lg font-semibold;
 }
 
-.agw-conversation-list h2 {
+.agw-conversation-list h2:not(.agw-prose *) {
   @apply text-base font-semibold mt-2;
 }
 
@@ -614,7 +729,7 @@ div[role="option"]:hover {
 }
 
 .agw-msg-user {
-  @apply max-w-[80%] rounded-lg bg-[#f3f5fc] px-3 py-3 text-[#17191d];
+  @apply max-w-[80%] rounded-lg bg-(--agw-user-message) px-3 py-3 text-(--agw-user-message-foreground);
 }
 
 .agw-msg-user .agw-msg-body > * {
@@ -640,38 +755,48 @@ div[role="option"]:hover {
 
 .agw-msg-result .agw-msg-body,
 .agw-msg-result .agw-msg-body > p,
-.agw-msg-result .msg-content,
-.agw-msg-result .msg-content-md-ol,
-.agw-msg-result .msg-content-md-ul {
+.agw-msg-result .msg-content {
   @apply text-sm leading-relaxed;
-}
-
-.agw-msg-result :not(pre) > code.msg-content-md-code {
-  @apply text-sm;
 }
 
 .msg-content {
   @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-2;
 }
 
-.msg-content-md-code {
-  @apply max-w-full whitespace-pre-wrap wrap-anywhere rounded bg-[#f4f4f4] px-1 py-0.5 text-[#17191d];
+/* 排版容器内的块级内容不保留源码换行，只有段落内的软换行可见。
+   Block containers inside the prose wrapper ignore source newlines; only soft breaks inside paragraphs show. */
+.msg-content .agw-prose {
+  white-space: normal;
 }
 
-p > code.msg-content-md-code {
-  @apply text-xs;
+.msg-content-md-p {
+  white-space: pre-wrap;
+}
+
+.msg-content-md-code {
+  @apply max-w-full whitespace-pre-wrap wrap-anywhere;
 }
 
 .msg-content-md-code-block {
-  @apply max-w-full overflow-hidden rounded-lg bg-[#f4f4f4] text-[#17191d] shadow-xs whitespace-normal dark:bg-[#202124] dark:text-[#f1f3f4] my-1.5;
+  @apply max-w-full overflow-hidden rounded-lg bg-(--agw-code-block) text-(--agw-code-block-foreground) shadow-xs whitespace-normal;
 }
 
 .msg-content-md-code-header {
-  @apply flex min-h-11 items-center justify-between gap-3 border-b border-black/10 px-3 text-sm text-[#5f6368] dark:border-white/10 dark:text-[#bdc1c6];
+  @apply flex min-h-11 items-center justify-between gap-3 border-b border-(--agw-code-block-border) px-3 text-(--agw-code-block-muted);
+  font-size: 0.875em;
+}
+
+/* 外间距放在 components 层，首尾块的重置规则才能覆盖它。
+   Outer margins live in the components layer so the first/last block reset can override them. */
+@layer components {
+  .msg-content-md-code-block,
+  .msg-content-md-table-wrap {
+    margin-block: var(--agw-prose-block-gap);
+  }
 }
 
 pre.msg-content-md-code-block-body {
-  @apply m-0 max-w-full overflow-x-auto bg-transparent p-3 font-mono text-[13px] leading-5;
+  @apply m-0 max-w-full overflow-x-auto rounded-none bg-transparent font-mono;
   overflow-wrap: normal;
   tab-size: 2;
   white-space: pre;
@@ -691,15 +816,15 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 }
 
 .msg-content-md-ol {
-  @apply list-decimal list-outside pl-5 leading-normal whitespace-normal;
+  @apply list-decimal list-outside whitespace-normal;
 }
 
 .msg-content-md-ul {
-  @apply list-disc list-outside pl-5 leading-normal whitespace-normal;
+  @apply list-disc list-outside whitespace-normal;
 }
 
 .msg-content-md-li {
-  @apply my-1 whitespace-normal;
+  @apply whitespace-normal;
 }
 
 .msg-content-md-li > .msg-content-md-p:first-child {
@@ -707,11 +832,11 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 }
 
 .msg-content-md-table-wrap {
-  @apply my-3 max-w-full overflow-x-auto rounded-lg border border-border bg-background shadow-xs whitespace-normal outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px];
+  @apply max-w-full overflow-x-auto rounded-lg border border-border bg-background shadow-xs whitespace-normal outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px];
 }
 
 .msg-content-md-table {
-  @apply w-full min-w-[36rem] border-collapse text-left text-sm whitespace-normal;
+  @apply m-0 w-full min-w-[36rem] border-collapse text-left whitespace-normal;
 }
 
 .msg-content-md-table thead {
@@ -719,19 +844,38 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 }
 
 .msg-content-md-table th {
-  @apply border-b border-border px-3 py-2.5 align-middle text-xs font-semibold tracking-wide text-muted-foreground whitespace-nowrap;
+  @apply align-middle tracking-wide text-muted-foreground whitespace-nowrap;
 }
 
 .msg-content-md-table tbody tr {
-  @apply border-b border-border/70 transition-colors last:border-b-0 even:bg-muted/20 hover:bg-muted/40;
+  @apply transition-colors even:bg-muted/20 hover:bg-muted/40;
 }
 
 .msg-content-md-table td {
-  @apply px-3 py-2.5 align-top leading-relaxed text-foreground whitespace-normal wrap-break-word;
+  @apply align-top text-foreground whitespace-normal wrap-break-word;
+}
+
+/* 表格外框由 table wrap 绘制，去掉会与它重叠的单元格外边。
+   The table wrap draws the outer frame, so drop the cell edges that would double it. */
+.msg-content-md-table :is(th, td):first-child {
+  border-left-width: 0;
+}
+
+.msg-content-md-table :is(th, td):last-child {
+  border-right-width: 0;
+}
+
+.msg-content-md-table thead tr:first-child > * {
+  border-top-width: 0;
+}
+
+.msg-content-md-table tbody tr:last-child > * {
+  border-bottom-width: 0;
 }
 
 .msg-content .katex-display {
-  @apply my-3 overflow-x-auto py-1;
+  @apply overflow-x-auto py-1;
+  margin-block: var(--agw-prose-block-gap);
 }
 
 .msg-content .katex-display > .katex {
@@ -740,6 +884,18 @@ pre.msg-content-md-code-block-body > code.msg-content-md-code {
 
 .msg-content .katex {
   font-size: 1em;
+}
+
+.msg-content-md-footnotes {
+  @apply whitespace-normal;
+}
+
+.msg-content-md-footnotes ol {
+  @apply list-decimal list-outside;
+}
+
+.msg-content-md-footnotes li:focus-visible {
+  @apply rounded-sm outline-none ring-[3px] ring-ring/50;
 }
 
 .session-aside-row {

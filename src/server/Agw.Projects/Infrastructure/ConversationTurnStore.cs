@@ -172,6 +172,7 @@ public sealed class ConversationTurnStore : IConversationTurnStore
         ConversationTurnStatus status,
         int stepCount,
         string? errorCode,
+        DateTimeOffset usageSettlesAt,
         CancellationToken cancellationToken
     )
     {
@@ -185,9 +186,22 @@ public sealed class ConversationTurnStore : IConversationTurnStore
             stepCount,
             errorCode,
             _timeProvider.GetUtcNow(),
+            usageSettlesAt,
             lastSequence
         );
         if (!finished)
+            return;
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SettleUsageAsync(Guid turnId, CancellationToken cancellationToken)
+    {
+        // 清空对话记录会一起删除 Turn 行，这时没有需要结算的 Turn。
+        // Clearing the conversation records deletes the turn row, which leaves no turn to settle.
+        var turn = await _dbContext
+            .ProjectConversationTurns.SingleOrDefaultAsync(item => item.Id == turnId, cancellationToken)
+            .ConfigureAwait(false);
+        if (turn == null || !new ProjectConversationTurnBehavior(turn).TrySettleUsage(_timeProvider.GetUtcNow()))
             return;
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }

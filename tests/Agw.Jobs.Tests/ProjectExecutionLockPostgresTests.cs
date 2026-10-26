@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Jobs;
+using Agw.Infrastructure.Projects;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application;
@@ -118,7 +119,8 @@ public sealed class ProjectExecutionLockPostgresTests
             projectResolver,
             new ConversationHistoryDomainService(),
             timeProvider,
-            userInfo
+            userInfo,
+            new ConversationCreatorStore(outcomeContext)
         );
         var taskResolver = new TaskAppService(outcomeContext, projectResolver, taskExecution, userInfo);
         var recorder = new JobAttemptOutcomeRecorder(

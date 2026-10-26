@@ -1,0 +1,1223 @@
+import { apiGet } from "@agw/api";
+import type { ChatHttpClient } from "@agw/chat-runtime";
+import {
+  type ChatEvent,
+  type ChatEventFilter,
+  snapshotChatEvent,
+  validateChatEventFilter,
+} from "@agw/execution-core";
+import { getProjectDirectories } from "@agw/projects-core";
+import type {
+  AgwDesktopBridge,
+  ExtensionCaller,
+  ExtensionIpcResult,
+  ThemeStyleText,
+} from "@desktop/shared/contracts";
+import {
+  type ContextProject,
+  type ContextTarget,
+  createExtensionError,
+  type DocumentSaveStatus,
+  type ExtensionFrameKind,
+  type ExtensionManifest,
+  type ExtensionPermission,
+  type ExtensionWelcome,
+  type FileHeaderItem,
+  type FileHeaderMenuEntry,
+  fromExtensionErrorData,
+  type HostContext,
+  type PreviewImageType,
+  RpcEndpoint,
+  type RpcPort,
+  type ThemeChangedNotification,
+  type ThemeInfo,
+  type ThemeStyleUpdate,
+} from "@agw/extension-sdk";
+import {
+  type HostPermission,
+  matchesHostPermissionHttpUrl,
+} from "@desktop/shared/extension-host-permissions";
+import type { A2AService } from "./a2a-service";
+import { type CloudAccess, type CloudFileSystem, formatCloudUri } from "./cloud-file-system";
+import { type ContextService, filterContextForPermissions } from "./context-service";
+import type { ExecutionService, SessionOwner } from "./execution-service";
+import type { WorkspaceLayoutStore } from "./workspace-layout-store";
+import { resolveViewId } from "./workspace-ids";
+
+export const MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION = 16;
+/** `ui.previewImage` 的图片大小上限。The size limit of a `ui.previewImage` image. */
+export const MAX_PREVIEW_IMAGE_BYTES = 32 * 1024 * 1024;
+
+/** broker 需要的 extension 当前状态。The extension state the broker needs. */
+export type BrokerExtension = {
+  manifest: ExtensionManifest;
+  permissions: readonly ExtensionPermission[];
+  hostPermissions: readonly HostPermission[];
+  storageUri: string;
+};
+
+export type FrameConnectionInfo = {
+  extensionId: string;
+  frameId: string;
+  pageId: string;
+  kind: ExtensionFrameKind;
+  viewId: string | null;
+  params: unknown;
+};
+
+type FrameConnection = FrameConnectionInfo & {
+  endpoint: RpcEndpoint;
+  controllers: Set<AbortController>;
+  /** `chat.observe` 的 subscriptionId 与取消订阅的函数。`chat.observe` subscription ids and their unsubscribe functions. */
+  chatSubscriptions: Map<string, () => void>;
+  disposeContext: () => void;
+  /** 这个连接已经收到的主题样式文本标识。The theme style text id this connection already received. */
+  themeStyleId: string | null;
+};
+
+/**
+ * 宿主当前的主题：不含样式文本的 `ThemeInfo`，以及 CSS 主题的样式文本（JSON 主题与 Default 为 null）。
+ * The host's current theme: the `ThemeInfo` without style text, plus the CSS theme style text (null for JSON themes
+ * and Default).
+ */
+export type HostTheme = {
+  theme: Omit<ThemeInfo, "cssText">;
+  style: ThemeStyleText | null;
+};
+
+/** broker 使用的编码识别与转换，形状与 Desktop bridge 的同名方法相同。The codec the broker uses, shaped like the Desktop bridge methods. */
+export type ExtensionTextCodec = Pick<
+  AgwDesktopBridge,
+  "decodeText" | "encodeText" | "listTextEncodings"
+>;
+
+/** 检查后的 `dialog.showMessageBox` 参数。Checked `dialog.showMessageBox` options. */
+export type MessageBoxRequest = {
+  /** 未指定时为 null。Null when not given. */
+  type: "info" | "warning" | "error" | null;
+  message: string;
+  detail: string | null;
+  buttons: readonly string[];
+  /** 获得焦点的按钮；未指定时为 null。The focused button; null when not given. */
+  defaultId: number | null;
+  /** 按 `Esc` 或关闭对话框时返回的下标。The index returned for `Esc` or closing the dialog. */
+  cancelId: number;
+};
+
+export type ExtensionBridgeBrokerOptions = {
+  bridge(): AgwDesktopBridge;
+  /** 生产环境中为 Desktop bridge。The Desktop bridge in production. */
+  codec(): ExtensionTextCodec;
+  hostInstanceId: string;
+  context: ContextService;
+  layout: WorkspaceLayoutStore;
+  cloud: CloudFileSystem;
+  execution: ExecutionService;
+  a2a: A2AService;
+  /** `chat.observe` 订阅的通信入口。The traffic entry point `chat.observe` subscribes to. */
+  chat: Pick<ChatHttpClient, "subscribe">;
+  extension(extensionId: string): BrokerExtension | null;
+  theme(): HostTheme;
+  isFrameClosing(frameId: string): boolean;
+  insertComposerText(text: string): void;
+  notify(
+    extensionId: string,
+    notification: { type: "info" | "success" | "error"; message: string },
+  ): void;
+  onPong(frameId: string, pageId: string): void;
+  /** 在 Files 中打开当前 Project 的云端文件。Opens a cloud file of the current Project in the Files view. */
+  openFile(extensionId: string, uri: string): Promise<void>;
+  setUnsavedChanges(frameId: string, pageId: string, unsaved: boolean): void;
+  /** 文件查看器的文档会话报告保存状态。A file viewer's document session reports its save status. */
+  setSaveStatus(frameId: string, pageId: string, status: DocumentSaveStatus | null): void;
+  /** 文件查看器设置文件标题栏中的条目（已检查）。A file viewer sets its file header items (checked). */
+  setFileHeaderItems(frameId: string, pageId: string, items: readonly FileHeaderItem[]): void;
+  /** 打开未批准的地址前由用户确认。Asks the user before opening a URL outside the approved hosts. */
+  confirmOpenExternal(extensionId: string, url: string): Promise<boolean>;
+  /** 在宿主的确认队列中显示消息框，返回按钮下标。Shows a message box in the host's confirmation queue and returns the button index. */
+  showMessageBox(owner: SessionOwner, request: MessageBoxRequest): Promise<number>;
+  /** 在宿主窗口上显示图片预览，用户关闭时完成。Shows an image preview over the host window; settles when the user closes it. */
+  previewImage(owner: SessionOwner, request: ImagePreviewRequest): Promise<void>;
+};
+
+/** 检查后的 `ui.previewImage` 参数。Checked `ui.previewImage` options. */
+export type ImagePreviewRequest = {
+  data: Uint8Array<ArrayBuffer>;
+  type: PreviewImageType;
+  name: string;
+};
+
+type RequestHandler = (connection: FrameConnection, params: never, signal: AbortSignal) => unknown;
+
+/** broker 写入文件的请求。A file write the broker performs. */
+type WriteRequest = {
+  uri: string;
+  data: Uint8Array;
+  overwrite: boolean;
+  createParents: boolean;
+  expectedSha256?: string;
+};
+
+function unwrap<T>(result: ExtensionIpcResult<T>): T {
+  if (result.ok) return result.value;
+  throw fromExtensionErrorData(result.error);
+}
+
+function invalidArgument(message: string): Error {
+  return createExtensionError("ERR_INVALID_ARGUMENT", message);
+}
+
+const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+
+const SAVE_STATUSES: ReadonlySet<unknown> = new Set<DocumentSaveStatus>([
+  "saved",
+  "unsaved",
+  "saving",
+  "changed-on-disk",
+]);
+
+/**
+ * 执行会话的 projectId 与 conversationId 会进入请求路径，只接受 Server 使用的小写 UUID。
+ * The projectId and conversationId of an execution session go into request paths, so only the Server's lowercase UUIDs are accepted.
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+/** 检查写入前提（3.5 节）；只有 undefined 表示没有前提。Checks a write precondition (section 3.5); only undefined means none. */
+function checkExpectedSha256(expectedSha256: unknown, overwrite: unknown): void {
+  if (expectedSha256 === undefined) return;
+  if (typeof expectedSha256 !== "string" || !SHA256_PATTERN.test(expectedSha256)) {
+    throw invalidArgument("expectedSha256 must be 64 lowercase hexadecimal characters.");
+  }
+  if (overwrite !== true) {
+    throw invalidArgument("expectedSha256 can only be used with overwrite: true.");
+  }
+}
+
+function isText(value: unknown, minLength: number, maxLength: number): value is string {
+  return typeof value === "string" && value.length >= minLength && value.length <= maxLength;
+}
+
+function buttonIndex(value: unknown, buttonCount: number, name: string): number | null {
+  if (value === undefined) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value >= buttonCount) {
+    throw invalidArgument(`${name} must be the index of a button.`);
+  }
+  return value;
+}
+
+/** 检查 `dialog.showMessageBox` 的参数（9.5 节）。Checks the `dialog.showMessageBox` options (section 9.5). */
+export function toMessageBoxRequest(options: unknown): MessageBoxRequest {
+  if (typeof options !== "object" || options === null) {
+    throw invalidArgument("The message box options must be an object.");
+  }
+  const { type, message, detail, buttons, defaultId, cancelId } = options as Record<
+    string,
+    unknown
+  >;
+  if (type !== undefined && type !== "info" && type !== "warning" && type !== "error") {
+    throw invalidArgument('type must be "info", "warning" or "error".');
+  }
+  if (!isText(message, 1, 500)) throw invalidArgument("message must have 1 to 500 characters.");
+  if (detail !== undefined && !isText(detail, 0, 2000)) {
+    throw invalidArgument("detail must have at most 2000 characters.");
+  }
+  if (
+    !Array.isArray(buttons) ||
+    buttons.length < 1 ||
+    buttons.length > 4 ||
+    !buttons.every((button) => isText(button, 1, 40))
+  ) {
+    throw invalidArgument("buttons must have 1 to 4 labels of 1 to 40 characters.");
+  }
+  return {
+    type: type ?? null,
+    message,
+    detail: detail ?? null,
+    buttons: [...(buttons as string[])],
+    defaultId: buttonIndex(defaultId, buttons.length, "defaultId"),
+    cancelId: buttonIndex(cancelId, buttons.length, "cancelId") ?? buttons.length - 1,
+  };
+}
+
+const PREVIEW_IMAGE_TYPES: ReadonlySet<unknown> = new Set<PreviewImageType>([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/bmp",
+  "image/svg+xml",
+]);
+
+/** 检查 `ui.previewImage` 的图片。Checks the `ui.previewImage` image. */
+function toImagePreviewRequest(image: unknown): ImagePreviewRequest {
+  if (typeof image !== "object" || image === null) {
+    throw invalidArgument("The image must be an object.");
+  }
+  const { data, type, name } = image as Record<string, unknown>;
+  if (
+    !(data instanceof Uint8Array) ||
+    !(data.buffer instanceof ArrayBuffer) ||
+    data.byteLength < 1 ||
+    data.byteLength > MAX_PREVIEW_IMAGE_BYTES
+  ) {
+    throw invalidArgument("data must be a Uint8Array of 1 byte to 32 MiB.");
+  }
+  if (!PREVIEW_IMAGE_TYPES.has(type)) {
+    throw invalidArgument(`type must be one of ${[...PREVIEW_IMAGE_TYPES].join(", ")}.`);
+  }
+  if (!isText(name, 1, 255)) throw invalidArgument("name must have 1 to 255 characters.");
+  return { data: data as Uint8Array<ArrayBuffer>, type: type as PreviewImageType, name };
+}
+
+/** `workspace.setFileHeaderItems` 的数量限制。The count limits of `workspace.setFileHeaderItems`. */
+const MAX_FILE_HEADER_ITEMS = 16;
+const MAX_FILE_HEADER_MENU_ENTRIES = 100;
+const MAX_FILE_HEADER_TOTAL_ENTRIES = 500;
+
+function objectFields(value: unknown, path: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw invalidArgument(`${path} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+/**
+ * 检查条目与菜单项共有的字段（id、label、disabled、checked），返回只含这些字段中已提供者的对象；`checked` 不能与
+ * `menu` 同时提供。
+ * Checks the fields items and menu entries share (id, label, disabled, checked) and returns an object with the given
+ * ones only; `checked` is not allowed together with `menu`.
+ */
+function menuEntryFields(fields: Record<string, unknown>, path: string): FileHeaderMenuEntry {
+  const { id, label, disabled, checked, menu } = fields;
+  if (!isText(id, 1, 64)) throw invalidArgument(`${path}.id must have 1 to 64 characters.`);
+  if (!isText(label, 1, 80)) throw invalidArgument(`${path}.label must have 1 to 80 characters.`);
+  if (disabled !== undefined && typeof disabled !== "boolean") {
+    throw invalidArgument(`${path}.disabled must be a boolean.`);
+  }
+  if (checked !== undefined && typeof checked !== "boolean") {
+    throw invalidArgument(`${path}.checked must be a boolean.`);
+  }
+  if (checked !== undefined && menu !== undefined) {
+    throw invalidArgument(`${path} cannot have both checked and menu.`);
+  }
+  return {
+    id,
+    label,
+    ...(disabled === undefined ? {} : { disabled }),
+    ...(checked === undefined ? {} : { checked }),
+  };
+}
+
+/**
+ * 检查文件标题栏条目并复制为只含已知字段的对象（文件标题栏条目设计第 1 节）。
+ * Checks file header items and copies them into objects with only the known fields (file header items design,
+ * section 1).
+ */
+function toFileHeaderItems(items: unknown): FileHeaderItem[] {
+  if (!Array.isArray(items) || items.length > MAX_FILE_HEADER_ITEMS) {
+    throw invalidArgument(`items must be an array of at most ${MAX_FILE_HEADER_ITEMS} items.`);
+  }
+  const itemIds = new Set<string>();
+  let entryCount = 0;
+  return items.map((item: unknown, index) => {
+    const path = `items[${index}]`;
+    const fields = objectFields(item, path);
+    const shared = menuEntryFields(fields, path);
+    if (itemIds.has(shared.id)) {
+      throw invalidArgument(`${path}.id "${shared.id}" is used by another item.`);
+    }
+    itemIds.add(shared.id);
+    const { placement, menu } = fields;
+    if (placement !== "top" && placement !== "bottom") {
+      throw invalidArgument(`${path}.placement must be "top" or "bottom".`);
+    }
+    const entryIds = new Set<string>();
+    // 第 1 层为条目的菜单，第 2 层的菜单项不能再带菜单。Level 1 is the item's menu; level 2 entries hold no menu.
+    const toMenu = (value: unknown, menuPath: string, level: 1 | 2): FileHeaderMenuEntry[] => {
+      if (
+        !Array.isArray(value) ||
+        value.length < 1 ||
+        value.length > MAX_FILE_HEADER_MENU_ENTRIES
+      ) {
+        throw invalidArgument(
+          `${menuPath} must be an array of 1 to ${MAX_FILE_HEADER_MENU_ENTRIES} entries.`,
+        );
+      }
+      entryCount += value.length;
+      if (entryCount > MAX_FILE_HEADER_TOTAL_ENTRIES) {
+        throw invalidArgument(
+          `The items must have at most ${MAX_FILE_HEADER_TOTAL_ENTRIES} menu entries in total.`,
+        );
+      }
+      return value.map((entry: unknown, entryIndex) => {
+        const entryPath = `${menuPath}[${entryIndex}]`;
+        const entryFields = objectFields(entry, entryPath);
+        const checkedEntry = menuEntryFields(entryFields, entryPath);
+        if (entryIds.has(checkedEntry.id)) {
+          throw invalidArgument(
+            `${entryPath}.id "${checkedEntry.id}" is used by another entry of ${path}.`,
+          );
+        }
+        entryIds.add(checkedEntry.id);
+        if (entryFields.menu === undefined) return checkedEntry;
+        if (level === 2) {
+          throw invalidArgument(`${entryPath}.menu is nested deeper than two levels.`);
+        }
+        return { ...checkedEntry, menu: toMenu(entryFields.menu, `${entryPath}.menu`, 2) };
+      });
+    };
+    return menu === undefined
+      ? { ...shared, placement }
+      : { ...shared, placement, menu: toMenu(menu, `${path}.menu`, 1) };
+  });
+}
+
+function fileKind(uri: string): "local" | "cloud" {
+  if (typeof uri === "string" && uri.startsWith("file:")) return "local";
+  if (typeof uri === "string" && uri.startsWith("agw-cloud:")) return "cloud";
+  throw createExtensionError("ERR_INVALID_URI", `Unsupported URI: ${String(uri)}`);
+}
+
+function frameClosing(): Error {
+  return createExtensionError("ERR_FRAME_CLOSING", "The frame is closing.");
+}
+
+/**
+ * extension 收到的 SettingCommand request 与 response 事件不含命令的 `environmentVariables`，其他事件原样返回。
+ * SettingCommand request and response events reach extensions without the command's `environmentVariables`; other
+ * events are returned unchanged.
+ */
+function redactChatEventForExtension(event: ChatEvent): ChatEvent {
+  if (event.kind === "message" || event.channel !== "execution") return event;
+  const [command, ...rest] = event.request.args;
+  if (
+    event.request.method !== "DispatchCommand" ||
+    typeof command !== "object" ||
+    command === null ||
+    (command as { type?: unknown }).type !== "SettingCommand"
+  ) {
+    return event;
+  }
+  const redacted: Record<string, unknown> = { ...command };
+  delete redacted.environmentVariables;
+  return snapshotChatEvent({ ...event, request: { ...event.request, args: [redacted, ...rest] } });
+}
+
+const ENGINE_KINDS: Record<number, ContextTarget["externalAgentKind"]> = {
+  0: "maf",
+  1: "claudeCode",
+  2: "codex",
+  3: "pi",
+};
+
+type AgentDto = {
+  id: string;
+  name: string;
+  displayName?: string | null;
+  description?: string | null;
+  type?: number;
+  externalAgentKind?: number | null;
+};
+
+type AgentflowDto = { id: string; name: string; description?: string | null };
+
+type ProjectDto = {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace?: string | null;
+  additionalDirectories?: { id: string; path: string; name?: string | null }[] | null;
+};
+
+export function toContextTarget(
+  type: "agent" | "agentflow",
+  value: AgentDto | AgentflowDto,
+): ContextTarget {
+  const agent = value as AgentDto;
+  return {
+    type,
+    id: value.id,
+    name: value.name,
+    displayName: type === "agent" ? (agent.displayName ?? null) : null,
+    description: value.description ?? null,
+    externalAgentKind:
+      type === "agent" && agent.type === 1
+        ? (ENGINE_KINDS[agent.externalAgentKind ?? -1] ?? null)
+        : null,
+  };
+}
+
+export function toContextProject(serverId: string, project: ProjectDto): ContextProject {
+  return {
+    id: project.id,
+    name: project.name,
+    description: project.description ?? null,
+    directories: getProjectDirectories(project as Parameters<typeof getProjectDirectories>[0]).map(
+      (directory) => ({
+        directoryId: directory.id,
+        label: directory.name,
+        uri: formatCloudUri({
+          serverId,
+          projectId: project.id,
+          directoryId: directory.id,
+          path: "",
+        }),
+      }),
+    ),
+  };
+}
+
+/**
+ * 宿主中处理 extension 端口的 broker：按权限检查后在宿主完成操作，或交给主进程。
+ * The host-side broker for extension ports: checks permissions, then acts in the host or hands off to main.
+ */
+export class ExtensionBridgeBroker {
+  private readonly connections = new Map<string, FrameConnection>();
+  private readonly handlers: Record<string, RequestHandler>;
+
+  public constructor(private readonly options: ExtensionBridgeBrokerOptions) {
+    this.handlers = this.createHandlers();
+  }
+
+  /** 接入端口并发送 `welcome`。Attaches a port and sends `welcome`. */
+  public connect(info: FrameConnectionInfo, port: MessagePort): void {
+    this.disconnect(info.frameId);
+    const controllers = new Set<AbortController>();
+    const current = this.options.theme();
+    const connection = {
+      ...info,
+      controllers,
+      chatSubscriptions: new Map(),
+      themeStyleId: current.style?.styleId ?? null,
+    } as FrameConnection;
+    connection.endpoint = new RpcEndpoint(port as unknown as RpcPort, {
+      request: (method, params, signal) => this.handle(connection, method, params, signal),
+      pong: () => this.options.onPong(info.frameId, info.pageId),
+    });
+    connection.disposeContext = this.options.context.subscribe(() => this.sendContext(connection));
+    this.connections.set(info.frameId, connection);
+    const extension = this.requireExtension(info.extensionId);
+    const welcome: ExtensionWelcome = {
+      frame: { frameId: info.frameId, kind: info.kind, viewId: info.viewId, params: info.params },
+      manifest: extension.manifest,
+      context: this.contextFor(info.extensionId),
+      theme: current.style ? { ...current.theme, cssText: current.style.cssText } : current.theme,
+      themeStyleId: connection.themeStyleId,
+    };
+    connection.endpoint.emit("welcome", welcome);
+  }
+
+  public isConnected(frameId: string, pageId?: string): boolean {
+    const connection = this.connections.get(frameId);
+    return connection !== undefined && (pageId === undefined || connection.pageId === pageId);
+  }
+
+  /**
+   * 关闭端口，中止它进行中的云端文件、A2A、HTTP 请求，并取消它的通信事件订阅。
+   * Closes the port, aborts its in-flight requests and cancels its traffic event subscriptions.
+   */
+  public disconnect(frameId: string, pageId?: string): void {
+    const connection = this.connections.get(frameId);
+    if (!connection || (pageId !== undefined && connection.pageId !== pageId)) return;
+    this.connections.delete(frameId);
+    connection.disposeContext();
+    for (const unsubscribe of connection.chatSubscriptions.values()) unsubscribe();
+    connection.chatSubscriptions.clear();
+    for (const controller of connection.controllers) controller.abort(frameClosing());
+    connection.endpoint.close("ERR_FRAME_GONE", "The frame is gone.");
+  }
+
+  /** 宿主调用 frame 中的钩子或命令。The host calls a hook or command in the frame. */
+  public call(frameId: string, method: string, params: unknown): Promise<unknown> {
+    const connection = this.connections.get(frameId);
+    if (!connection)
+      return Promise.reject(createExtensionError("ERR_FRAME_GONE", "The frame is not connected."));
+    return connection.endpoint.request(method, params);
+  }
+
+  public ping(frameId: string, seq: number): void {
+    this.connections.get(frameId)?.endpoint.ping(seq);
+  }
+
+  public emit(frameId: string, pageId: string | null, name: string, data: unknown): void {
+    const connection = this.connections.get(frameId);
+    if (!connection || (pageId !== null && connection.pageId !== pageId)) return;
+    connection.endpoint.emit(name, data);
+  }
+
+  /**
+   * 推送主题：按连接比较已发送的样式标识，相同时为 `unchanged`，内容变化时 `replace` 携带完整文本，转入 JSON 或 Default 时 `clear`。
+   * Pushes the theme: compares the style id each connection received; equal ids send `unchanged`, changed content
+   * sends `replace` with the complete text, and moving to JSON or Default sends `clear`.
+   */
+  public broadcastTheme(current: HostTheme): void {
+    const styleId = current.style?.styleId ?? null;
+    for (const connection of this.connections.values()) {
+      const style: ThemeStyleUpdate =
+        connection.themeStyleId === styleId
+          ? { operation: "unchanged", styleId }
+          : current.style
+            ? {
+                operation: "replace",
+                styleId: current.style.styleId,
+                cssText: current.style.cssText,
+              }
+            : { operation: "clear", styleId: null };
+      connection.themeStyleId = styleId;
+      const notification: ThemeChangedNotification = { theme: current.theme, style };
+      connection.endpoint.emit("theme.changed", notification);
+    }
+  }
+
+  public deliverExecution(owner: SessionOwner, event: string, data: unknown): void {
+    this.emit(owner.frameId, owner.pageId, event, data);
+  }
+
+  private contextFor(extensionId: string): HostContext {
+    const extension = this.requireExtension(extensionId);
+    return filterContextForPermissions(
+      {
+        ...this.options.context.snapshot(),
+        extension: {
+          id: extensionId,
+          version: extension.manifest.version,
+          manifestVersion: extension.manifest.manifestVersion,
+          storageUri: extension.storageUri,
+        },
+      },
+      extension.permissions,
+    );
+  }
+
+  private sendContext(connection: FrameConnection): void {
+    if (!this.options.extension(connection.extensionId)) return;
+    connection.endpoint.emit("context.changed", this.contextFor(connection.extensionId));
+  }
+
+  private requireExtension(extensionId: string): BrokerExtension {
+    const extension = this.options.extension(extensionId);
+    if (!extension)
+      throw createExtensionError(
+        "ERR_EXTENSION_DISABLED",
+        `Extension ${extensionId} is not active.`,
+      );
+    return extension;
+  }
+
+  private caller(connection: FrameConnection): ExtensionCaller {
+    return {
+      hostInstanceId: this.options.hostInstanceId,
+      extensionId: connection.extensionId,
+      frameId: connection.frameId,
+      pageId: connection.pageId,
+    };
+  }
+
+  private owner(connection: FrameConnection): SessionOwner {
+    return {
+      extensionId: connection.extensionId,
+      frameId: connection.frameId,
+      pageId: connection.pageId,
+    };
+  }
+
+  private requirePermission(
+    connection: FrameConnection,
+    permission: ExtensionPermission,
+  ): BrokerExtension {
+    const extension = this.requireExtension(connection.extensionId);
+    if (!extension.permissions.includes(permission)) {
+      throw createExtensionError(
+        "ERR_PERMISSION_DENIED",
+        `This call requires the ${permission} permission.`,
+      );
+    }
+    return extension;
+  }
+
+  /** 该 extension 全部连接上的通信事件订阅数。The extension's traffic event subscriptions across all its connections. */
+  private chatSubscriptionCount(extensionId: string): number {
+    let count = 0;
+    for (const connection of this.connections.values()) {
+      if (connection.extensionId === extensionId) count += connection.chatSubscriptions.size;
+    }
+    return count;
+  }
+
+  private cloudAccess(connection: FrameConnection): CloudAccess {
+    return {
+      kind: "extension",
+      extensionId: connection.extensionId,
+      permissions: this.requireExtension(connection.extensionId).permissions,
+    };
+  }
+
+  /** 为一次性请求登记 AbortController，frame 关闭或页面替换时中止。Tracks a one-shot request for frame closing. */
+  private async tracked<T>(
+    connection: FrameConnection,
+    signal: AbortSignal,
+    operation: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const forward = () => controller.abort(signal.reason);
+    signal.addEventListener("abort", forward, { once: true });
+    connection.controllers.add(controller);
+    try {
+      return await operation(controller.signal);
+    } finally {
+      connection.controllers.delete(controller);
+      signal.removeEventListener("abort", forward);
+    }
+  }
+
+  private async handle(
+    connection: FrameConnection,
+    method: string,
+    params: unknown,
+    signal: AbortSignal,
+  ) {
+    const handler = this.handlers[method];
+    if (!handler) throw createExtensionError("ERR_UNKNOWN_METHOD", `Unknown method: ${method}`);
+    return handler(connection, (params ?? {}) as never, signal);
+  }
+
+  private createHandlers(): Record<string, RequestHandler> {
+    const { bridge, context, layout, cloud, execution, a2a } = this.options;
+    // bridge 按需取得：只有已连接的 frame 才会调用，普通浏览器中没有 frame。
+    // The bridge is resolved on use: only connected frames call it, and a browser has none.
+    const local = <T>(
+      connection: FrameConnection,
+      operation: (caller: ExtensionCaller) => Promise<ExtensionIpcResult<T>>,
+    ) => operation(this.caller(connection)).then(unwrap);
+    // 本地文件交给主进程，云端文件经 CloudFileSystem。Local files go to main, cloud files through CloudFileSystem.
+    const readBytes = (
+      connection: FrameConnection,
+      uri: string,
+      signal: AbortSignal,
+    ): Promise<Uint8Array> =>
+      fileKind(uri) === "local"
+        ? local(connection, (caller) =>
+            bridge().extensionFileSystem(caller, { operation: "readFile", uri }),
+          )
+        : this.tracked(connection, signal, (requestSignal) =>
+            cloud.readFile(this.cloudAccess(connection), uri, requestSignal),
+          );
+    const writeBytes = (
+      connection: FrameConnection,
+      { uri, data, overwrite, createParents, expectedSha256 }: WriteRequest,
+      signal: AbortSignal,
+    ): Promise<null> => {
+      // 没有写入前提时不带这个字段。The field is left out without a precondition.
+      const precondition = expectedSha256 === undefined ? {} : { expectedSha256 };
+      return fileKind(uri) === "local"
+        ? local(connection, (caller) =>
+            bridge().extensionFileSystem(caller, {
+              operation: "writeFile",
+              uri,
+              data,
+              overwrite,
+              createParents,
+              ...precondition,
+            }),
+          )
+        : this.tracked(connection, signal, (requestSignal) =>
+            cloud.writeFile(
+              this.cloudAccess(connection),
+              uri,
+              data,
+              { overwrite, createParents, ...precondition },
+              requestSignal,
+            ),
+          );
+    };
+
+    return {
+      "log.error": (connection, params: { message: string; stack: string | null }) => {
+        console.error(
+          `[extension ${connection.extensionId}/${connection.viewId ?? connection.kind}] ${params.message}`,
+          params.stack ?? "",
+        );
+        return null;
+      },
+
+      "context.listProjects": (connection, _params, signal) => {
+        this.requirePermission(connection, "context.project");
+        return this.tracked(connection, signal, (requestSignal) =>
+          context.request(async (contextSignal) => {
+            const projects = (await apiGet("/api/projects", {
+              signal: contextSignal,
+            })) as ProjectDto[];
+            return projects.map((project) =>
+              toContextProject(context.snapshot().server.id, project),
+            );
+          }, requestSignal),
+        );
+      },
+      "context.listTargets": (connection, _params, signal) => {
+        this.requirePermission(connection, "context.agent");
+        return this.tracked(connection, signal, (requestSignal) =>
+          context.request(async (contextSignal) => {
+            const [agents, agentflows] = await Promise.all([
+              apiGet("/api/agents", { signal: contextSignal }) as Promise<AgentDto[]>,
+              apiGet("/api/agentflows", { signal: contextSignal }) as Promise<AgentflowDto[]>,
+            ]);
+            return [
+              ...agents.map((agent) => toContextTarget("agent", agent)),
+              ...agentflows.map((agentflow) => toContextTarget("agentflow", agentflow)),
+            ];
+          }, requestSignal),
+        );
+      },
+
+      "workspace.showSidebarView": (connection, params: { id: string }) => {
+        layout.showSidebarView(resolveViewId(connection.extensionId, params.id));
+        return null;
+      },
+      "workspace.toggleSidebarView": (connection, params: { id: string }) => {
+        layout.toggleSidebarView(resolveViewId(connection.extensionId, params.id));
+        return null;
+      },
+      "workspace.setSidebarVisible": (_connection, params: { visible: boolean }) => {
+        layout.setSidebarVisible(Boolean(params.visible));
+        return null;
+      },
+      "workspace.openMainView": (connection, params: { id: string; params?: unknown }) => {
+        layout.openMainView(resolveViewId(connection.extensionId, params.id), params.params ?? {});
+        return null;
+      },
+      "workspace.openFile": async (connection, params: { uri: string }) => {
+        await this.options.openFile(connection.extensionId, params.uri);
+        return null;
+      },
+      "workspace.setUnsavedChanges": (connection, params: { unsaved: boolean }) => {
+        if (connection.kind !== "fileViewer") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only file viewers report unsaved changes.",
+          );
+        }
+        this.options.setUnsavedChanges(
+          connection.frameId,
+          connection.pageId,
+          params.unsaved === true,
+        );
+        return null;
+      },
+      "workspace.setFileHeaderItems": (connection, params: { items: unknown }) => {
+        if (connection.kind !== "fileViewer") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only file viewers set file header items.",
+          );
+        }
+        this.options.setFileHeaderItems(
+          connection.frameId,
+          connection.pageId,
+          toFileHeaderItems(params.items),
+        );
+        return null;
+      },
+      "documents.setSaveStatus": (connection, params: { status: unknown }) => {
+        if (connection.kind !== "fileViewer") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only file viewers report a save status.",
+          );
+        }
+        if (params.status !== null && !SAVE_STATUSES.has(params.status))
+          throw invalidArgument(`Unknown save status: ${String(params.status)}`);
+        this.options.setSaveStatus(
+          connection.frameId,
+          connection.pageId,
+          params.status as DocumentSaveStatus | null,
+        );
+        return null;
+      },
+
+      "fs.readFile": (connection, params: { uri: string }, signal) =>
+        readBytes(connection, params.uri, signal),
+      "fs.writeFile": (connection, params: WriteRequest, signal) => {
+        checkExpectedSha256(params.expectedSha256, params.overwrite);
+        return writeBytes(connection, params, signal);
+      },
+      // 字节的读写与 fs.readFile、fs.writeFile 相同，编码由主进程的 text-codec 处理（3.3、3.4 节）。
+      // Bytes are read and written like fs.readFile and fs.writeFile; the main-process text codec handles encodings.
+      "fs.readTextDocument": async (
+        connection,
+        params: { uri: string; encoding?: string },
+        signal,
+      ) => {
+        const bytes = await readBytes(connection, params.uri, signal);
+        return unwrap(await this.options.codec().decodeText(bytes, params.encoding));
+      },
+      "fs.writeTextDocument": async (
+        connection,
+        params: {
+          uri: string;
+          text: string;
+          encoding: string;
+          bom: boolean;
+          eol: "\n" | "\r\n";
+          expectedSha256: string | null;
+          createParents: boolean;
+        },
+        signal,
+      ) => {
+        // 不支持的 URI 在编码之前失败。An unsupported URI fails before encoding.
+        fileKind(params.uri);
+        const { expectedSha256 } = params;
+        if (expectedSha256 === undefined) {
+          throw invalidArgument("expectedSha256 must be a string or null.");
+        }
+        if (expectedSha256 !== null) checkExpectedSha256(expectedSha256, true);
+        const encoded = unwrap(
+          await this.options.codec().encodeText(params.text, {
+            encoding: params.encoding,
+            bom: params.bom,
+            eol: params.eol,
+          }),
+        );
+        // null 时创建文件，不覆盖已有文件。null creates the file and never overwrites one.
+        await writeBytes(
+          connection,
+          expectedSha256 === null
+            ? {
+                uri: params.uri,
+                data: encoded.bytes,
+                overwrite: false,
+                createParents: params.createParents,
+              }
+            : {
+                uri: params.uri,
+                data: encoded.bytes,
+                overwrite: true,
+                createParents: params.createParents,
+                expectedSha256,
+              },
+          signal,
+        );
+        return { sha256: encoded.sha256 };
+      },
+      "fs.listTextEncodings": () => this.options.codec().listTextEncodings(),
+      "fs.readDirectory": (connection, params: { uri: string }, signal) =>
+        fileKind(params.uri) === "local"
+          ? local(connection, (caller) =>
+              bridge().extensionFileSystem(caller, { operation: "readDirectory", uri: params.uri }),
+            )
+          : this.tracked(connection, signal, () =>
+              cloud.readDirectory(this.cloudAccess(connection), params.uri),
+            ),
+      "fs.stat": (connection, params: { uri: string }, signal) =>
+        fileKind(params.uri) === "local"
+          ? local(connection, (caller) =>
+              bridge().extensionFileSystem(caller, { operation: "stat", uri: params.uri }),
+            )
+          : this.tracked(connection, signal, () =>
+              cloud.stat(this.cloudAccess(connection), params.uri),
+            ),
+      "fs.exists": (connection, params: { uri: string }, signal) =>
+        fileKind(params.uri) === "local"
+          ? local(connection, (caller) =>
+              bridge().extensionFileSystem(caller, { operation: "exists", uri: params.uri }),
+            )
+          : this.tracked(connection, signal, () =>
+              cloud.exists(this.cloudAccess(connection), params.uri),
+            ),
+      "fs.createDirectory": (connection, params: { uri: string; recursive: boolean }, signal) =>
+        fileKind(params.uri) === "local"
+          ? local(connection, (caller) =>
+              bridge().extensionFileSystem(caller, {
+                operation: "createDirectory",
+                uri: params.uri,
+                recursive: params.recursive,
+              }),
+            )
+          : this.tracked(connection, signal, () =>
+              cloud.createDirectory(this.cloudAccess(connection), params.uri, params.recursive),
+            ),
+      "fs.delete": (connection, params: { uri: string; recursive: boolean }, signal) =>
+        fileKind(params.uri) === "local"
+          ? local(connection, (caller) =>
+              bridge().extensionFileSystem(caller, {
+                operation: "delete",
+                uri: params.uri,
+                recursive: params.recursive,
+              }),
+            )
+          : this.tracked(connection, signal, () =>
+              cloud.delete(this.cloudAccess(connection), params.uri, params.recursive),
+            ),
+      "fs.rename": (
+        connection,
+        params: { from: string; to: string; overwrite: boolean },
+        signal,
+      ) => {
+        const kind = fileKind(params.from);
+        if (kind !== fileKind(params.to)) {
+          throw createExtensionError(
+            "ERR_CROSS_DEVICE",
+            "Files can only move within one file system.",
+          );
+        }
+        return kind === "local"
+          ? local(connection, (caller) =>
+              bridge().extensionFileSystem(caller, {
+                operation: "rename",
+                from: params.from,
+                to: params.to,
+                overwrite: params.overwrite,
+              }),
+            )
+          : this.tracked(connection, signal, () =>
+              cloud.rename(this.cloudAccess(connection), params.from, params.to, params.overwrite),
+            );
+      },
+      "fs.watch": async (connection, params: { uri: string; recursive: boolean }) => {
+        if (this.options.isFrameClosing(connection.frameId)) throw frameClosing();
+        if (fileKind(params.uri) === "cloud") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only local files can be watched.",
+          );
+        }
+        const watchId = crypto.randomUUID();
+        await local(connection, (caller) =>
+          bridge().extensionWatch(caller, {
+            watchId,
+            uri: params.uri,
+            recursive: params.recursive,
+          }),
+        );
+        return { watchId };
+      },
+      "fs.unwatch": (connection, params: { watchId: string }) =>
+        local(connection, (caller) => bridge().extensionUnwatch(caller, params.watchId)),
+
+      "dialog.showOpenDialog": (connection, params) =>
+        local(connection, (caller) => bridge().showExtensionOpenDialog(caller, params)),
+      "dialog.showSaveDialog": (connection, params) =>
+        local(connection, (caller) => bridge().showExtensionSaveDialog(caller, params)),
+      "dialog.showMessageBox": (connection, params) => {
+        if (connection.kind === "background") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only views can show message boxes.",
+          );
+        }
+        return this.options.showMessageBox(this.owner(connection), toMessageBoxRequest(params));
+      },
+      "shell.revealInFileManager": (connection, params: { uri: string }) => {
+        if (fileKind(params.uri) === "cloud") {
+          throw createExtensionError(
+            "ERR_UNSUPPORTED_OPERATION",
+            "Only local files can be revealed.",
+          );
+        }
+        return local(connection, (caller) => bridge().revealExtensionPath(caller, params.uri));
+      },
+
+      "execution.createSession": (
+        connection,
+        params: Parameters<ExecutionService["createSession"]>[1],
+        signal,
+      ) => {
+        this.requirePermission(connection, "execution");
+        if (this.options.isFrameClosing(connection.frameId)) throw frameClosing();
+        if (!isUuid(params.projectId)) throw invalidArgument("projectId must be a lowercase UUID.");
+        if (params.conversationId !== undefined && !isUuid(params.conversationId)) {
+          throw invalidArgument("conversationId must be a lowercase UUID.");
+        }
+        return execution.createSession(this.owner(connection), params, signal);
+      },
+      "execution.send": (
+        connection,
+        params: { sessionId: string } & Parameters<ExecutionService["send"]>[2],
+      ) => {
+        this.requirePermission(connection, "execution");
+        return execution.send(this.owner(connection), params.sessionId, params);
+      },
+      "execution.interrupt": (connection, params: { sessionId: string }) => {
+        this.requirePermission(connection, "execution");
+        return execution.interrupt(this.owner(connection), params.sessionId);
+      },
+      "execution.respond": (
+        connection,
+        params: { sessionId: string; response: Parameters<ExecutionService["respond"]>[2] },
+      ) => {
+        this.requirePermission(connection, "execution");
+        return execution.respond(this.owner(connection), params.sessionId, params.response);
+      },
+      "execution.setPermissionMode": (
+        connection,
+        params: { sessionId: string; mode: Parameters<ExecutionService["setPermissionMode"]>[2] },
+      ) => {
+        this.requirePermission(connection, "execution");
+        return execution.setPermissionMode(this.owner(connection), params.sessionId, params.mode);
+      },
+      "execution.dispose": (connection, params: { sessionId: string }) => {
+        this.requirePermission(connection, "execution");
+        return execution.dispose(this.owner(connection), params.sessionId);
+      },
+
+      "a2a.listAgents": (connection, _params, signal) => {
+        this.requirePermission(connection, "a2a");
+        return this.tracked(connection, signal, (requestSignal) => a2a.listAgents(requestSignal));
+      },
+      "a2a.getAgentCard": (connection, params: { agentName: string }, signal) => {
+        this.requirePermission(connection, "a2a");
+        return this.tracked(connection, signal, (requestSignal) =>
+          a2a.getAgentCard(params.agentName, requestSignal),
+        );
+      },
+      "a2a.request": (
+        connection,
+        params: { agentName: string; method: string; params?: unknown },
+        signal,
+      ) => {
+        this.requirePermission(connection, "a2a");
+        return this.tracked(connection, signal, (requestSignal) =>
+          a2a.request(params.agentName, params.method, params.params, requestSignal),
+        );
+      },
+      "a2a.stream": (
+        connection,
+        params: { streamId: string; agentName: string; method: string; params?: unknown },
+        signal,
+      ) => {
+        this.requirePermission(connection, "a2a");
+        return this.tracked(connection, signal, (requestSignal) =>
+          a2a.stream(
+            params.agentName,
+            params.method,
+            params.params,
+            (event) => connection.endpoint.emit("a2a.event", { streamId: params.streamId, event }),
+            requestSignal,
+          ),
+        );
+      },
+
+      "http.request": async (
+        connection,
+        params: {
+          url: string;
+          method?: string;
+          headers?: Record<string, string>;
+          body?: string | Uint8Array;
+        },
+        signal,
+      ) => {
+        const extension = this.requireExtension(connection.extensionId);
+        if (!matchesHostPermissionHttpUrl(extension.hostPermissions, params.url)) {
+          throw createExtensionError(
+            "ERR_HOST_NOT_PERMITTED",
+            `${params.url} does not match an approved host permission.`,
+          );
+        }
+        const requestId = crypto.randomUUID();
+        const cancel = () => void bridge().cancelExtensionHttpRequest(requestId);
+        signal.addEventListener("abort", cancel, { once: true });
+        try {
+          return await local(connection, (caller) =>
+            bridge().extensionHttpRequest(caller, { requestId, ...params }),
+          );
+        } finally {
+          signal.removeEventListener("abort", cancel);
+        }
+      },
+
+      "chat.composer.insertText": (connection, params: { text: string }) => {
+        this.requirePermission(connection, "chat.composer");
+        this.options.insertComposerText(String(params.text));
+        return null;
+      },
+      "chat.observe": (connection, params: { subscriptionId: unknown; filter: unknown }) => {
+        if (this.options.isFrameClosing(connection.frameId)) throw frameClosing();
+        this.requirePermission(connection, "chat.observe");
+        const { subscriptionId, filter } = params;
+        if (!isText(subscriptionId, 1, 64) || connection.chatSubscriptions.has(subscriptionId)) {
+          throw invalidArgument("subscriptionId must be an unused string of 1 to 64 characters.");
+        }
+        const problem = validateChatEventFilter(filter);
+        if (problem !== null) throw invalidArgument(problem);
+        if (
+          this.chatSubscriptionCount(connection.extensionId) >= MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION
+        ) {
+          throw createExtensionError(
+            "ERR_TOO_MANY_SUBSCRIPTIONS",
+            `An extension can hold at most ${MAX_CHAT_SUBSCRIPTIONS_PER_EXTENSION} chat subscriptions.`,
+          );
+        }
+        const unsubscribe = this.options.chat.subscribe(
+          filter as ChatEventFilter,
+          (event, identity) => {
+            // 只发送属于当前连接的事件：profile、地址与 token 都相同。
+            // Only events of the current connection are sent: the same profile, address and token.
+            const current = context.connection;
+            if (
+              !current ||
+              event.scope.serverId !== current.profileId ||
+              identity.baseUrl !== current.baseUrl ||
+              identity.token !== current.token
+            ) {
+              return;
+            }
+            connection.endpoint.emit("chat.event", {
+              subscriptionId,
+              event: redactChatEventForExtension(event),
+            });
+          },
+        );
+        connection.chatSubscriptions.set(subscriptionId, unsubscribe);
+        return null;
+      },
+      "chat.unobserve": (connection, params: { subscriptionId: string }) => {
+        connection.chatSubscriptions.get(params.subscriptionId)?.();
+        connection.chatSubscriptions.delete(params.subscriptionId);
+        return null;
+      },
+
+      "ui.notify": (
+        connection,
+        params: { type: "info" | "success" | "error"; message: string },
+      ) => {
+        this.options.notify(connection.extensionId, params);
+        return null;
+      },
+      "ui.openExternal": async (connection, params: { url: string }) => {
+        const extension = this.requireExtension(connection.extensionId);
+        let protocol: string;
+        try {
+          protocol = new URL(params.url).protocol;
+        } catch {
+          throw createExtensionError("ERR_INVALID_URL", `Invalid URL: ${params.url}`);
+        }
+        if (protocol !== "http:" && protocol !== "https:") {
+          throw createExtensionError(
+            "ERR_INVALID_URL",
+            `Only HTTP(S) URLs can be opened: ${params.url}`,
+          );
+        }
+        // 已批准的域名直接打开，其他地址由用户确认。Approved hosts open directly; other URLs need the user's confirmation.
+        if (
+          !matchesHostPermissionHttpUrl(extension.hostPermissions, params.url) &&
+          !(await this.options.confirmOpenExternal(connection.extensionId, params.url))
+        ) {
+          throw createExtensionError("ERR_CANCELED", "The user did not open the link.");
+        }
+        await bridge().openExternal(params.url);
+        return null;
+      },
+      "ui.previewImage": (connection, params) => {
+        if (connection.kind === "background") {
+          throw createExtensionError("ERR_UNSUPPORTED_OPERATION", "Only views can preview images.");
+        }
+        return this.options.previewImage(this.owner(connection), toImagePreviewRequest(params));
+      },
+    };
+  }
+}

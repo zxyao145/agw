@@ -92,7 +92,13 @@ test("unavailable directories display the API detail", async () => {
       body: { code: 1, detail: "Project directory is unavailable: '/data/extra'." },
     });
   };
-  const service = createProjectFilesService({ apiGet: fail, apiPost: fail, apiDelete: fail });
+  const service = createProjectFilesService({
+    apiGet: fail,
+    apiPost: fail,
+    apiPut: fail,
+    apiDelete: fail,
+    apiDownload: fail,
+  });
   await assert.rejects(
     service.listFiles("project", "", false, false, "extra"),
     /unavailable: '\/data\/extra'/,

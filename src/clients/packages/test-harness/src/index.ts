@@ -6,9 +6,22 @@ import type * as TestingLibrary from "@testing-library/react";
 import { installBrowserApis, type ObserverRegistry } from "./browser-apis";
 
 export { installLayoutMetrics } from "./browser-apis";
-export type { LayoutMetrics, ObserverRegistry } from "./browser-apis";
-export { startApiServer } from "./api-server";
-export type { ApiRequestRecord, ApiRouteHandler, ApiRoutes, ApiServer } from "./api-server";
+export type {
+  FontRegistry,
+  LayoutMetrics,
+  MediaQueryRegistry,
+  ObserverRegistry,
+} from "./browser-apis";
+export { RawApiResponse, rawApiResponse, startApiServer } from "./api-server";
+export { replaceExecutionHub, TestHubConnection } from "./execution-hub";
+export type { HubInvocation, TestHubOptions } from "./execution-hub";
+export type {
+  ApiRequestRecord,
+  ApiRouteHandler,
+  ApiRoutes,
+  ApiServer,
+  RawApiResponseInit,
+} from "./api-server";
 
 export type DomEnvironmentOptions = {
   html?: string;
@@ -18,6 +31,8 @@ export type DomEnvironmentOptions = {
 export type DomEnvironment = {
   window: JSDOM["window"];
   observers: ObserverRegistry;
+  /** `URL.createObjectURL` 登记的 Blob URL 与 Blob；释放后移除。Blob URLs from `URL.createObjectURL` and their Blobs, until revoked. */
+  objectUrls: ReadonlyMap<string, Blob>;
   React: typeof ReactNamespace;
   act: typeof TestingLibrary.act;
   cleanup: typeof TestingLibrary.cleanup;
@@ -140,9 +155,29 @@ export async function setupDomEnvironment(
   });
   after(() => window.close());
 
+  // jsdom 没有 Blob URL：像浏览器一样把 Blob URL 登记到它的 Blob，测试通过 `objectUrls` 读取 URL 指向的 Blob。
+  // jsdom has no Blob URLs: register each one to its Blob the way a browser does; tests read the Blob a URL points at
+  // through `objectUrls`.
+  const objectUrls = new Map<string, Blob>();
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: (blob: Blob) => {
+      const url = `blob:${window.location.origin}/${crypto.randomUUID()}`;
+      objectUrls.set(url, blob);
+      return url;
+    },
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: (url: string) => {
+      objectUrls.delete(url);
+    },
+  });
+
   return {
     window,
     observers,
+    objectUrls,
     React,
     act: testingLibrary.act,
     cleanup: testingLibrary.cleanup,

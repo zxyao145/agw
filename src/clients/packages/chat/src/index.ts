@@ -5,17 +5,41 @@ export * from "./lib/chat/search-command";
 export * from "./lib/chat/search-file";
 export * from "./ui-web/components/agent-selector";
 export * from "./ui-web/components/message/chat";
+export * from "./ui-web/components/message/chat-extension-types";
 export {
   ConversationImagePlatformProvider,
+  type ConversationImageSource,
   type ImageContextMenuRequest,
 } from "./ui-web/components/message/conversation-image";
+export {
+  IMAGE_PREVIEW_SLOT,
+  ImagePreview,
+} from "./ui-web/components/message/conversation-image-preview";
+export {
+  MarkdownRendererProvider,
+  type MarkdownRenderer,
+  type MarkdownRendererProps,
+} from "./ui-web/components/message/renders/markdown-renderer";
 export * from "./ui-web/components/message/suggestion-trigger";
 export * from "./ui-web/components/message/user-input";
 export * from "./ui-web/execution-activity";
 export * from "./ui-web/execution-platform";
 export { default as ChatPage } from "./ui-web/pages/chat/page";
 export {
-  ChatSidebarVisibilityContext,
+  ChatConversationPane,
+  ChatConversationSidebar,
+  ChatFilePane,
+  ChatFilesSidebar,
   ChatWorkspace,
+  ChatWorkspaceProvider,
+  useChatWorkspace,
+  type ChatConversationPaneProps,
+  type ChatConversationSidebarProps,
+  type ChatFilePaneProps,
+  type ChatFilesSidebarProps,
+  type ChatWorkspaceContextValue,
+  type ChatWorkspaceProject,
   type ChatWorkspaceProps,
+  type ChatWorkspaceProviderProps,
 } from "./ui-web/pages/chat/chat-workspace";
+export { default as ColResizeSplit } from "./ui-web/pages/chat/components/split-layout";

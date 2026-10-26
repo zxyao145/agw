@@ -1,7 +1,7 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Application.Files;
-using Agw.Files.Infrastructure.Storage;
+using Agw.Files.Infrastructure.Git;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Files.Tests;
@@ -140,7 +140,7 @@ public class FileAppServiceTests
             "content",
             TestContext.Current.CancellationToken
         );
-        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(new LocalFileSystem(scope.Path)));
+        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(TestFileSystems.Local(scope.Path)));
 
         var result = await service.ReadAsync(ProjectId, "read.txt", TestContext.Current.CancellationToken);
 
@@ -149,89 +149,124 @@ public class FileAppServiceTests
     }
 
     [Fact]
-    public async Task DiffAsync_ChangedFile_ReturnsDiff()
+    public async Task DiffAsync_StagedScope_ReturnsHeadAndIndexText()
     {
-        using var scope = TempDirectoryScope.Create();
-        var filePath = Path.Combine(scope.Path, "changed.txt");
-        await File.WriteAllTextAsync(filePath, "content", TestContext.Current.CancellationToken);
-        var git = new FakeGitCommandService { DiffResult = new GitDiffResult(true, "diff content", false, null, null) };
-        var service = CreateService(scope.Path, git);
+        using var repository = PartiallyStagedRepository();
 
-        var result = await service.DiffAsync(ProjectId, "changed.txt", null, TestContext.Current.CancellationToken);
+        var result = await DiffAsync(repository, "mixed.txt", "staged");
 
-        Assert.Equal(FileOperationStatus.Success, result.Status);
-        Assert.False(result.Value!.Unchanged);
-        Assert.Equal("diff content", result.Value.Diff);
+        AssertDiff(result, unchanged: false, original: "base\n", modified: "base\nstaged\n");
+        Assert.Contains("+staged", result.Diff, StringComparison.Ordinal);
+        Assert.DoesNotContain("+unstaged", result.Diff, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task DiffAsync_UnchangedFile_ReturnsOriginalContent()
+    public async Task DiffAsync_UnstagedScope_ReturnsIndexAndWorkingTreeText()
     {
-        using var scope = TempDirectoryScope.Create();
-        var filePath = Path.Combine(scope.Path, "unchanged.txt");
-        await File.WriteAllTextAsync(filePath, "content", TestContext.Current.CancellationToken);
-        var git = new FakeGitCommandService { DiffResult = new GitDiffResult(true, "", true, "original", null) };
-        var service = CreateService(scope.Path, git);
+        using var repository = PartiallyStagedRepository();
 
-        var result = await service.DiffAsync(ProjectId, "unchanged.txt", null, TestContext.Current.CancellationToken);
+        var result = await DiffAsync(repository, "mixed.txt", "unstaged");
 
-        Assert.Equal(FileOperationStatus.Success, result.Status);
-        Assert.True(result.Value!.Unchanged);
-        Assert.Equal("original", result.Value.OriginalContent);
+        AssertDiff(result, unchanged: false, original: "base\nstaged\n", modified: "base\nstaged\nunstaged\n");
+        Assert.Contains("+unstaged", result.Diff, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task DiffAsync_GitFails_ReturnsInvalidRequest()
+    public async Task DiffAsync_AllScope_ReturnsHeadAndWorkingTreeText()
     {
-        using var scope = TempDirectoryScope.Create();
-        var filePath = Path.Combine(scope.Path, "changed.txt");
-        await File.WriteAllTextAsync(filePath, "content", TestContext.Current.CancellationToken);
-        var git = new FakeGitCommandService { DiffResult = new GitDiffResult(false, "", false, null, "git failed") };
-        var service = CreateService(scope.Path, git);
+        using var repository = PartiallyStagedRepository();
 
-        var result = await service.DiffAsync(ProjectId, "changed.txt", null, TestContext.Current.CancellationToken);
+        var result = await DiffAsync(repository, "mixed.txt", null);
+
+        AssertDiff(result, unchanged: false, original: "base\n", modified: "base\nstaged\nunstaged\n");
+    }
+
+    [Fact]
+    public async Task DiffAsync_UntrackedFile_ReturnsNullOriginal()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("tracked.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("new.txt", "new\n");
+
+        var result = await DiffAsync(repository, "new.txt", "unstaged");
+
+        AssertDiff(result, unchanged: false, original: null, modified: "new\n");
+        Assert.Contains("+new", result.Diff, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DiffAsync_DeletedInWorkingTree_ReturnsNullModified()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("gone.txt", "gone\n");
+        repository.CommitAll();
+        repository.Delete("gone.txt");
+
+        var result = await DiffAsync(repository, "gone.txt", "unstaged");
+
+        AssertDiff(result, unchanged: false, original: "gone\n", modified: null);
+        Assert.Contains("-gone", result.Diff, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DiffAsync_StagedDeletedFile_ReturnsHeadTextAndNullModified()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("deleted.txt", "deleted\n");
+        repository.CommitAll();
+        repository.Git("rm", "--quiet", "deleted.txt");
+
+        var result = await DiffAsync(repository, "deleted.txt", "staged");
+
+        AssertDiff(result, unchanged: false, original: "deleted\n", modified: null);
+    }
+
+    [Fact]
+    public async Task DiffAsync_BinaryFile_ReturnsBinaryWithoutContent()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.WriteBytes("image.bin", [0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]);
+        repository.CommitAll();
+        repository.WriteBytes("image.bin", [0x89, 0x50, 0x4e, 0x47, 0x00, 0x02]);
+
+        var result = await DiffAsync(repository, "image.bin", "unstaged");
+
+        Assert.False(result.Unchanged);
+        Assert.True(result.IsBinary);
+        Assert.Null(result.OriginalContent);
+        Assert.Null(result.ModifiedContent);
+        Assert.Contains("Binary files", result.Diff, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DiffAsync_UnchangedFile_ReturnsUnchangedWithContent()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("same.txt", "same\n");
+        repository.CommitAll();
+
+        var result = await DiffAsync(repository, "same.txt", "unstaged");
+
+        AssertDiff(result, unchanged: true, original: "same\n", modified: "same\n");
+        Assert.Equal(string.Empty, result.Diff);
+    }
+
+    [Fact]
+    public async Task DiffAsync_BrokenGitDirectory_ReturnsInvalidRequest()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("file.txt", "content");
+        // .git 改为指向不存在目录的文件。.git becomes a file pointing at a missing directory.
+        Directory.Delete(repository.GetPath(".git"), recursive: true);
+        repository.Write(".git", "gitdir: missing-git-directory\n");
+        var service = CreateService(repository.Path, new GitCommandService(NullLogger<GitCommandService>.Instance));
+
+        var result = await service.DiffAsync(ProjectId, "file.txt", null, TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
         Assert.Equal("Git diff failed", result.Message);
-        Assert.Equal("git failed", result.Details);
-    }
-
-    [Fact]
-    public async Task DiffAsync_StagedScope_ForwardsScopeToGitService()
-    {
-        using var scope = TempDirectoryScope.Create();
-        var filePath = Path.Combine(scope.Path, "changed.txt");
-        await File.WriteAllTextAsync(filePath, "content", TestContext.Current.CancellationToken);
-        var git = new FakeGitCommandService();
-        var service = CreateService(scope.Path, git);
-
-        var result = await service.DiffAsync(ProjectId, "changed.txt", "staged", TestContext.Current.CancellationToken);
-
-        Assert.Equal(FileOperationStatus.Success, result.Status);
-        Assert.Equal(GitDiffScope.Staged, git.LastDiffScope);
-    }
-
-    [Fact]
-    public async Task DiffAsync_StagedDeletedFile_ReturnsGitDiffWithoutPhysicalFile()
-    {
-        using var scope = TempDirectoryScope.Create();
-        var deletedFile = Path.Combine(scope.Path, "deleted.txt");
-        var git = new FakeGitCommandService
-        {
-            ChangedFiles = new GitChangedFiles(
-                new Dictionary<string, GitFileStatus>(StringComparer.OrdinalIgnoreCase)
-                {
-                    [deletedFile] = new GitFileStatus("deleted", null),
-                },
-                new HashSet<string>([deletedFile], StringComparer.OrdinalIgnoreCase)
-            ),
-        };
-        var service = CreateService(scope.Path, git);
-
-        var result = await service.DiffAsync(ProjectId, "deleted.txt", "staged", TestContext.Current.CancellationToken);
-
-        Assert.Equal(FileOperationStatus.Success, result.Status);
-        Assert.Equal(GitDiffScope.Staged, git.LastDiffScope);
+        Assert.False(string.IsNullOrWhiteSpace(result.Details));
     }
 
     [Fact]
@@ -255,7 +290,7 @@ public class FileAppServiceTests
     public async Task DiffAsync_NonLocalFileSystem_ReturnsInvalidRequest()
     {
         using var scope = TempDirectoryScope.Create();
-        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(new LocalFileSystem(scope.Path)));
+        var service = CreateService(scope.Path, fileSystem: new NonLocalFileSystem(TestFileSystems.Local(scope.Path)));
 
         var result = await service.DiffAsync(ProjectId, "file.txt", null, TestContext.Current.CancellationToken);
 
@@ -300,6 +335,7 @@ public class FileAppServiceTests
         var result = await service.DeleteAsync(
             ProjectId,
             isDirectory ? "directory" : "file.txt",
+            recursive: true,
             TestContext.Current.CancellationToken
         );
 
@@ -315,7 +351,12 @@ public class FileAppServiceTests
         using var scope = TempDirectoryScope.Create();
         var service = CreateService(scope.Path);
 
-        var result = await service.DeleteAsync(ProjectId, "missing.txt", TestContext.Current.CancellationToken);
+        var result = await service.DeleteAsync(
+            ProjectId,
+            "missing.txt",
+            recursive: true,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(FileOperationStatus.NotFound, result.Status);
         Assert.Equal("File or directory not found", result.Message);
@@ -327,7 +368,7 @@ public class FileAppServiceTests
         using var scope = TempDirectoryScope.Create();
         var service = CreateService(scope.Path);
 
-        var result = await service.DeleteAsync(ProjectId, "", TestContext.Current.CancellationToken);
+        var result = await service.DeleteAsync(ProjectId, "", recursive: true, TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
         Assert.Equal("Path parameter is required", result.Message);
@@ -577,14 +618,45 @@ public class FileAppServiceTests
         AssertSearchEntry(entry, "direct-target/", "directory");
     }
 
+    /// <summary>
+    /// mixed.txt：HEAD 为 "base"，暂存区多一行 "staged"，工作区再多一行 "unstaged"。mixed.txt is "base" in HEAD, adds
+    /// "staged" in the index and "unstaged" in the working tree.
+    /// </summary>
+    private static TempGitRepository PartiallyStagedRepository()
+    {
+        var repository = TempGitRepository.Create();
+        repository.Write("mixed.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("mixed.txt", "base\nstaged\n");
+        repository.Git("add", "mixed.txt");
+        repository.Write("mixed.txt", "base\nstaged\nunstaged\n");
+        return repository;
+    }
+
+    private static async Task<FileDiffOutput> DiffAsync(TempGitRepository repository, string path, string? scope)
+    {
+        var service = CreateService(repository.Path, new GitCommandService(NullLogger<GitCommandService>.Instance));
+        var result = await service.DiffAsync(ProjectId, path, scope, TestContext.Current.CancellationToken);
+        Assert.Equal(FileOperationStatus.Success, result.Status);
+        return result.Value!;
+    }
+
+    private static void AssertDiff(FileDiffOutput diff, bool unchanged, string? original, string? modified)
+    {
+        Assert.Equal(unchanged, diff.Unchanged);
+        Assert.False(diff.IsBinary);
+        Assert.Equal(original, diff.OriginalContent);
+        Assert.Equal(modified, diff.ModifiedContent);
+    }
+
     private static FileAppService CreateService(
         string rootPath,
-        FakeGitCommandService? git = null,
+        IGitCommandService? git = null,
         IAgwFileSystem? fileSystem = null
     )
     {
         return new FileAppService(
-            new FakeFileSystemResolver(fileSystem ?? new LocalFileSystem(rootPath)),
+            new FakeFileSystemResolver(fileSystem ?? TestFileSystems.Local(rootPath)),
             git ?? new FakeGitCommandService(),
             NullLogger<FileAppService>.Instance
         );
@@ -617,7 +689,22 @@ public class FileAppServiceTests
 
         public Task CreateDirectoryAsync(string path, CancellationToken ct) => _inner.CreateDirectoryAsync(path, ct);
 
-        public Task DeleteAsync(string path, CancellationToken ct) => _inner.DeleteAsync(path, ct);
+        public Task DeleteAsync(string path, bool recursive, CancellationToken ct) =>
+            _inner.DeleteAsync(path, recursive, ct);
+
+        public Task<Stream> OpenReadAsync(string path, CancellationToken ct) => _inner.OpenReadAsync(path, ct);
+
+        public Task WriteAsync(
+            string path,
+            Stream content,
+            bool overwrite,
+            bool createParents,
+            string? expectedSha256,
+            CancellationToken ct
+        ) => _inner.WriteAsync(path, content, overwrite, createParents, expectedSha256, ct);
+
+        public Task MoveAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken ct) =>
+            _inner.MoveAsync(sourcePath, destinationPath, overwrite, ct);
 
         public IAsyncEnumerable<Agw.Files.Abstracts.Dtos.FileEntry> EnumerateAsync(
             string path,
@@ -700,13 +787,9 @@ public class FileAppServiceTests
     {
         public GitChangedFiles? ChangedFiles { get; set; }
 
-        public GitDiffResult DiffResult { get; set; } = new(true, "diff", false, null, null);
-
         public GitResetResult ResetResult { get; set; } = new(true, "File reset successfully", null, false);
 
         public GitIndexResult IndexResult { get; set; } = new(true, "Changes staged successfully", null, false);
-
-        public GitDiffScope LastDiffScope { get; private set; } = GitDiffScope.All;
 
         public string? LastIndexPath { get; private set; }
 
@@ -726,8 +809,16 @@ public class FileAppServiceTests
             GitDiffScope scope = GitDiffScope.All
         )
         {
-            LastDiffScope = scope;
-            return Task.FromResult(DiffResult);
+            return Task.FromResult(new GitDiffResult(false, string.Empty, "Not implemented by test fake."));
+        }
+
+        public Task<GitBlobResult> ReadBlobAsync(
+            string filePath,
+            GitBlobSource source,
+            CancellationToken cancellationToken = default
+        )
+        {
+            return Task.FromResult(new GitBlobResult(false, null, "Not implemented by test fake."));
         }
 
         public Task<GitResetResult> ResetFileAsync(string filePath, CancellationToken cancellationToken = default)

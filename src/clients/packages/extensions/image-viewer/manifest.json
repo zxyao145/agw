@@ -1,0 +1,33 @@
+{
+  "manifestVersion": 1,
+  "id": "01a173b5-526c-74d8-864c-116f66ff919e",
+  "name": "Image Viewer",
+  "version": "1.0.0",
+  "description": "Shows image files in the Files view.",
+  "author": "Agw",
+  "icon": "icon.svg",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "image",
+        "title": "Image",
+        "icon": "Image",
+        "patterns": [
+          "*.png",
+          "*.apng",
+          "*.jpg",
+          "*.jpeg",
+          "*.jfif",
+          "*.gif",
+          "*.webp",
+          "*.avif",
+          "*.bmp",
+          "*.ico",
+          "*.svg"
+        ],
+        "entry": "index.html"
+      }
+    ]
+  },
+  "permissions": ["fs.cloud.read"]
+}

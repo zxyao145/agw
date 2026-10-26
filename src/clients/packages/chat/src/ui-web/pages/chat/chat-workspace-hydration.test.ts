@@ -13,21 +13,20 @@ import { conversationComposerStorage } from "../../../lib/chat/conversation-comp
 import * as sessionRouting from "./lib/session-routing";
 import { getTargetValue } from "./lib/target-options";
 import type { ChatProps } from "../../components/message/chat";
-import type { ChatWorkspaceProps } from "./chat-workspace";
+import type { ChatWorkspaceContextValue } from "./chat-workspace";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@agw/components/query";
-import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import * as chatRuntime from "@agw/chat-runtime";
 import type { ExecutionHubHandlers, ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime";
 
 async function checkConversationSession(kind: string, strictMode = false) {
   const failHistory = kind === "restore-failure";
-  let hasAdditionalDirectory = kind === "directories";
+  let hasAdditionalDirectory = kind === "directories" || kind === "desktop-confirm-file-change";
   const fileReads: unknown[][] = [];
+  let diskContent = "contents";
   const conversation = {
     conversationId: "conversation-1",
     contextId: "original-context",
-    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
     resumeState: { targetType: 0, targetId: "agent-1" },
   };
   const messages: import("@agw/api").AiMessage[] = [
@@ -68,7 +67,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
     });
   }
   const dom = new JSDOM("<div id='root'></div>", {
-    url: "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
+    url:
+      kind === "desktop-cached-project"
+        ? "http://localhost/desktop/chat/?projectId=project-1"
+        : "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
   });
   const refreshTimers = new Map<number, () => void>();
   if (kind === "history-refresh") {
@@ -104,13 +106,18 @@ async function checkConversationSession(kind: string, strictMode = false) {
   let reconnectHandlers: ExecutionHubHandlers | undefined;
   let detailsRequests = 0;
   let messageRequests = 0;
+  const detailsScopes: chatRuntime.ChatConversationScope[] = [];
   const observed: {
     explorer?: {
       directoryId?: string | null;
       onDirectoryChange: (value: string | null) => void;
       onFileSelected: (path: string) => void;
+      refreshSignal?: number;
     };
-    file?: { selectedFile: string | null };
+    file?: {
+      selectedFile: string | null;
+      setComments: React.Dispatch<React.SetStateAction<import("@agw/projects").LineComment[]>>;
+    };
     chat?: ChatProps;
     items?: import("@agw/chat-core").ConversationRenderItem[];
     input?: {
@@ -125,6 +132,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
     };
     inputValue?: string;
     newChat?: () => void;
+    selectConversation?: (conversation: import("@agw/projects").ConversationSummary) => void;
     refreshSignal?: number;
     conversationStatuses?: ReadonlyMap<string, string>;
     currentConversationTurnId?: string | null;
@@ -287,30 +295,21 @@ async function checkConversationSession(kind: string, strictMode = false) {
       },
       readFile: async (...args: unknown[]) => {
         fileReads.push(args);
-        return "contents";
+        return diskContent;
       },
       getFileDiff: async (...args: unknown[]) => {
         fileReads.push(args);
-        return { diff: "", unchanged: true };
+        return {
+          diff: "",
+          unchanged: true,
+          isBinary: false,
+          originalContent: diskContent,
+          modifiedContent: diskContent,
+        };
       },
-      clearProjectConversationRecords: async () => true,
       getConversationActivity: async () => {
         activityRequests += 1;
         return [];
-      },
-      getProjectConversationDetails: async (_project: string, id: string) => {
-        if (id !== "conversation-1") return pending.get(id)!.promise;
-        detailsRequests += 1;
-        await historyReady;
-        if (failHistory) throw new Error("History unavailable");
-        return conversation;
-      },
-      getProjectConversationMessages: async (_project: string, id: string) => {
-        if (id !== "conversation-1")
-          return { items: [], hasMore: false, nextCursor: null, turns: [] };
-        messageRequests += 1;
-        await historyReady;
-        return { items: messages, nextCursor: null, hasMore: false, turns: [] };
       },
       // A cached sidebar publishes its summary in the child's effect, before the
       // workspace's route hydration effect. A summary is not a hydrated session.
@@ -319,12 +318,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
         conversationStatuses?: ReadonlyMap<string, string>;
         currentConversationTurnId?: string | null;
         onNewConversation?: () => void;
+        onConversationSelect?: typeof observed.selectConversation;
         onActiveConversationResolved?: (value: unknown) => void;
       }) => {
         observed.refreshSignal = props.refreshSignal;
         observed.conversationStatuses = props.conversationStatuses;
         observed.currentConversationTurnId = props.currentConversationTurnId;
         observed.newChat = props.onNewConversation;
+        observed.selectConversation = props.onConversationSelect;
         React.useEffect(() => {
           props.onActiveConversationResolved?.(conversation);
         }, [props.onActiveConversationResolved]);
@@ -350,6 +351,26 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "./lib/session-routing": sessionRouting,
     "@agw/chat-runtime": {
       ...chatRuntime,
+      chatHttpClient: {
+        getConversation: async (scope: chatRuntime.ChatConversationScope) => {
+          detailsScopes.push(scope);
+          if (scope.conversationId !== "conversation-1") {
+            return pending.get(scope.conversationId)!.promise;
+          }
+          detailsRequests += 1;
+          await historyReady;
+          if (failHistory) throw new Error("History unavailable");
+          return conversation;
+        },
+        getConversationMessages: async (scope: chatRuntime.ChatConversationScope) => {
+          if (scope.conversationId !== "conversation-1")
+            return { items: [], hasMore: false, nextCursor: null, turns: [] };
+          messageRequests += 1;
+          await historyReady;
+          return { items: messages, nextCursor: null, hasMore: false, turns: [] };
+        },
+        clearConversationRecords: async () => true,
+      },
       executionSessionManager: {
         conversationStatuses,
         subscribe: manager.subscribe,
@@ -433,7 +454,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       "./conversation": {
         Conversation: ({ items }: { items: NonNullable<typeof observed.items> }) => {
           observed.items = items;
-          return null;
+          return React.createElement("div", { "data-testid": "conversation" });
         },
       },
     },
@@ -447,9 +468,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
   modules["../../conversation-statuses"] = await loadComponent(
     new URL("../../conversation-statuses.ts", import.meta.url),
   );
-  const { ChatWorkspace } = await loadComponent<ChatWorkspaceProps>(
+  const workspaceModule = (await loadComponent(
     new URL("./chat-workspace.tsx", import.meta.url),
-  );
+  )) as unknown as typeof import("./chat-workspace");
+  const { ChatWorkspace } = workspaceModule;
   const root = createRoot(dom.window.document.getElementById("root")!);
   const queryClient = new QueryClient();
   const renderWithQueries = (children: React.ReactNode) =>
@@ -475,7 +497,6 @@ async function checkConversationSession(kind: string, strictMode = false) {
         conversationId: null,
         messages: [],
         historyTurns: [],
-        usage: EMPTY_TOKEN_USAGE,
         olderMessagesCursor: null,
         hasOlderMessages: false,
         agentMode: null,
@@ -532,6 +553,258 @@ async function checkConversationSession(kind: string, strictMode = false) {
         "execute:third turn",
       ]);
       assert.equal(observed.input?.isTransitioning, false);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "desktop-cached-project") {
+      // 从 Settings 回到对话：查询已有缓存，路由只带 projectId。Back from Settings: queries are cached and the route has only projectId.
+      const { ChatWorkspaceProvider, useChatWorkspace } = workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat" },
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      assert.equal(workspace?.selectedProject?.id, "project-1");
+      assert.equal(workspace?.conversationId, null);
+      assert.equal(workspace?.selectedTarget?.id, "agent-1", "the first target is selected");
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "desktop-confirm-file-change") {
+      // Desktop 在当前文件改变前确认（文件查看器有未保存修改）。Desktop confirms before the current file changes.
+      const { ChatFilePane, ChatFilesSidebar, ChatWorkspaceProvider, useChatWorkspace } =
+        workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      let allowChange = true;
+      let confirmations = 0;
+      const confirmFileChange = async () => {
+        confirmations += 1;
+        return allowChange;
+      };
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat", confirmFileChange },
+            React.createElement(ChatFilesSidebar),
+            React.createElement(ChatFilePane),
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      await React.act(async () => finishHistory());
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(confirmations, 1);
+      assert.equal(observed.file?.selectedFile, "README.md");
+      const readCount = fileReads.length;
+
+      allowChange = false;
+      await React.act(async () => observed.explorer!.onFileSelected("guide.md"));
+      assert.equal(
+        await React.act(async () => workspace!.openFile("extra", "notes.md")),
+        false,
+        "openFile reports the cancel",
+      );
+      await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
+      await React.act(async () => workspace!.selectProject("project-2"));
+      assert.equal(confirmations, 5);
+      assert.equal(observed.file?.selectedFile, "README.md");
+      assert.equal(workspace?.selectedDirectory?.id, null);
+      assert.equal(workspace?.selectedProject?.id, "project-1");
+      assert.equal(fileReads.length, readCount, "nothing is read after a cancel");
+
+      allowChange = true;
+      assert.equal(await React.act(async () => workspace!.openFile("extra", "notes.md")), true);
+      assert.equal(workspace?.selectedDirectory?.id, "extra");
+      assert.equal(observed.file?.selectedFile, "notes.md");
+      assert.equal(fileReads.at(-1)?.at(-1), "extra");
+      await React.act(async () => workspace!.selectProject("project-2"));
+      assert.equal(workspace?.selectedProject?.id, "project-2");
+      assert.equal(observed.file?.selectedFile, null);
+      assert.equal(confirmations, 7);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "file-written") {
+      // 文件被写入：当前文件的 Source 重新读取并保留行评论，其他文件只刷新文件树，Only diff 模式不读取。
+      // A file write rereads the current file's Source and keeps line comments, other files only refresh the tree, and Only diff does not read.
+      const { ChatFilePane, ChatFilesSidebar, ChatWorkspaceProvider, useChatWorkspace } =
+        workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat" },
+            React.createElement(ChatFilesSidebar),
+            React.createElement(ChatFilePane),
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      await React.act(async () => finishHistory());
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(workspace?.fileContent, "contents");
+      const comment: import("@agw/projects").LineComment = {
+        id: "comment-1",
+        side: "current",
+        filePath: "README.md",
+        lineNumber: 1,
+        content: "Keep me",
+        timestamp: new Date(0),
+      };
+      await React.act(async () => workspace!.setComments([comment]));
+      const initialSignal = observed.explorer!.refreshSignal!;
+      assert.equal(initialSignal, 0);
+      let readCount = fileReads.length;
+
+      diskContent = "written";
+      await React.act(async () => workspace!.handleFileWritten(null, "README.md"));
+      assert.equal(fileReads.length, readCount + 1);
+      assert.equal(workspace?.fileContent, "written");
+      assert.deepEqual(workspace?.comments, [comment]);
+      assert.equal(observed.explorer!.refreshSignal, initialSignal + 1);
+
+      readCount = fileReads.length;
+      diskContent = "other";
+      await React.act(async () => workspace!.handleFileWritten(null, "guide.md"));
+      await React.act(async () => workspace!.handleFileWritten("extra", "README.md"));
+      assert.equal(fileReads.length, readCount, "other files and directories are not read");
+      assert.equal(workspace?.fileContent, "written");
+      assert.equal(observed.explorer!.refreshSignal, initialSignal + 3);
+
+      await React.act(async () => workspace!.setOnlyDiff(true));
+      const diffReadCount = fileReads.length;
+      await React.act(async () => workspace!.handleFileWritten(null, "README.md"));
+      assert.equal(fileReads.length, diffReadCount, "Only diff mode does not read the file");
+      assert.equal(observed.explorer!.refreshSignal, initialSignal + 4);
+      assert.deepEqual(errors, []);
+      return;
+    }
+    if (kind === "desktop") {
+      // Desktop 用 Provider 组合分别导出的组件，不经过 Tabs 布局。
+      // Desktop composes the Provider with the separately exported panes, without the Tabs layout.
+      const {
+        ChatConversationPane,
+        ChatConversationSidebar,
+        ChatFilePane,
+        ChatFilesSidebar,
+        ChatWorkspaceProvider,
+        useChatWorkspace,
+      } = workspaceModule;
+      let workspace: ChatWorkspaceContextValue | undefined;
+      function WorkspaceProbe() {
+        workspace = useChatWorkspace();
+        return null;
+      }
+      let conversationsOpened = 0;
+      let filesOpened = 0;
+      await React.act(async () =>
+        renderWithQueries(
+          React.createElement(
+            ChatWorkspaceProvider,
+            { routeBasePath: "/desktop/chat" },
+            React.createElement(ChatConversationSidebar, {
+              onConversationOpened: () => (conversationsOpened += 1),
+            }),
+            React.createElement(ChatFilesSidebar, { onFileOpened: () => (filesOpened += 1) }),
+            React.createElement(ChatConversationPane, {
+              compact: true,
+              showUserInputNavigation: true,
+            }),
+            React.createElement(ChatFilePane),
+            React.createElement(WorkspaceProbe),
+          ),
+        ),
+      );
+      await React.act(async () => finishHistory());
+
+      assert.equal(detailsRequests, 1);
+      // 作用范围在 vm 上下文中创建，复制到本上下文后再比较。The scope is created in the vm context, so it is copied into this one before comparing.
+      assert.deepEqual(
+        { ...detailsScopes[0] },
+        { serverId: "local", projectId: "project-1", conversationId: "conversation-1" },
+      );
+      assert.equal("usage" in observed.chat!.sessionSeed, false);
+      assert.equal(workspace?.selectedProject?.id, "project-1");
+      assert.equal(workspace?.conversationId, "conversation-1");
+      assert.equal(workspace?.selectedTarget?.id, "agent-1", "the server's target is restored");
+      assert.equal(observed.chat?.conversationId, "conversation-1");
+      assert.deepEqual(observed.chat?.sessionSeed.messages, messages);
+      assert.equal(observed.chat?.composerRef, workspace?.composerRef);
+      assert.equal(observed.input?.isTransitioning, false);
+
+      const refreshSignal = observed.refreshSignal!;
+      await React.act(async () => workspace!.refreshConversations());
+      assert.equal(
+        observed.refreshSignal,
+        refreshSignal + 1,
+        "refreshConversations refreshes the list",
+      );
+
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(observed.file?.selectedFile, "README.md");
+      assert.equal(filesOpened, 1);
+      const fileReadCount = fileReads.length;
+      await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+      assert.equal(filesOpened, 2, "selecting the current file again still opens the file view");
+      assert.equal(fileReads.length, fileReadCount, "the unchanged file is not read again");
+
+      const comment: import("@agw/projects").LineComment = {
+        id: "comment-1",
+        side: "current",
+        filePath: "README.md",
+        lineNumber: 3,
+        content: "Explain this line",
+        timestamp: new Date(0),
+      };
+      await React.act(async () => observed.file!.setComments([comment]));
+      assert.deepEqual(observed.chat?.pendingFileComments, [comment]);
+
+      await React.act(async () =>
+        observed.selectConversation!({
+          projectId: "project-1",
+          conversationId: "conversation-2",
+          contextId: "context-2",
+          title: "Second",
+          executionCount: 1,
+          messageCount: 0,
+          createTime: "2026-10-17T00:00:00Z",
+          extensionId: "host",
+          openToExtensions: false,
+        }),
+      );
+      assert.equal(conversationsOpened, 0, "the conversation opens once its history loads");
+      await React.act(async () =>
+        pending
+          .get("conversation-2")!
+          .resolve({ ...conversation, conversationId: "conversation-2", contextId: "context-2" }),
+      );
+      assert.equal(conversationsOpened, 1);
+      assert.equal(observed.chat?.conversationId, "conversation-2");
+      assert.equal(
+        new URLSearchParams(dom.window.location.search).get("conversationId"),
+        "conversation-2",
+      );
+      await React.act(async () => observed.newChat!());
+      assert.equal(conversationsOpened, 2, "starting a new conversation opens it");
       assert.deepEqual(errors, []);
       return;
     }
@@ -963,6 +1236,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return;
       }
       if (["new-chat", "project-switch", "clear-history"].includes(kind)) {
+        const conversationShown = () =>
+          dom.window.document.querySelector('[data-testid="conversation"]') !== null;
         if (kind === "new-chat") {
           assert.ok(observed.newChat);
           await React.act(async () => observed.newChat!());
@@ -986,8 +1261,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
           assert.deepEqual(queryClient.getQueryData(inputQueryKey), []);
         }
         assert.equal(observed.input?.isTransitioning, false);
+        assert.equal(conversationShown(), false, "an empty conversation shows only the composer");
         await React.act(async () => observed.input!.onExecute("next turn", []));
         assert.equal(executions.length, 1);
+        assert.equal(conversationShown(), true, "the first message shows the conversation");
         if (kind === "clear-history") {
           assert.equal(executions[0].conversationId, "conversation-1");
         } else {
@@ -1108,3 +1385,11 @@ test("Chat stays interactive during silent retries and blocks only for the visib
 test("Chat accepts input during silent retries", () => checkConversationSession("reconnect-send"));
 test("switching the browsing directory clears preview and removal restores primary without changing the conversation", () =>
   checkConversationSession("directories"));
+test("the Provider mounted with cached queries and only a projectId selects a default target", () =>
+  checkConversationSession("desktop-cached-project"));
+test("the Provider with separately composed panes restores the conversation and reports openings, comments and refreshes", () =>
+  checkConversationSession("desktop"));
+test("a file write rereads the current Source with its comments, refreshes the tree, and skips Only diff", () =>
+  checkConversationSession("file-written"));
+test("a declined file change keeps the current file, directory and Project", () =>
+  checkConversationSession("desktop-confirm-file-change"));
