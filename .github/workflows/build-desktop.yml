@@ -86,7 +86,7 @@ jobs:
             arch: x64
             flavor: client
           - platform: macos
-            runner: macos-15
+            runner: macos-15-intel
             arch: x64
             flavor: full
           - platform: macos
@@ -94,7 +94,7 @@ jobs:
             arch: arm64
             flavor: full
           - platform: macos
-            runner: macos-15
+            runner: macos-15-intel
             arch: x64
             flavor: client
           - platform: macos
