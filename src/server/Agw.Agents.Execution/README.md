@@ -253,6 +253,8 @@ Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 
 
 External Agent 通过持久化的 `Agent.ExternalAgentKind` 选择 Claude Code、Codex 或 Pi，`Agent.Name` 只是用户定义的稳定标识，不参与运行时分派。同一种外部实现可以有多个独立定义。三种 SDK 配置统一从 `Agent.Extra` 解析；创建时为空或空 JSON 对象会保存该实现的默认配置，运行时仍保留同样的兜底行为。`Project.ExtraSetting` 不参与外部 Agent 配置，也不作为回退来源。工作目录继续由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
 
+Codex 的 `Agent.Extra` 保留 `codexOptions`、`threadOptions` 和 `turnOptions` 字段，由 `CodexAgentSettings` 解析并转换为 app-server 请求。已有工具环境配置映射到 `shell_environment_policy.set`；模型 Endpoint 和凭据通过当前 thread 的 provider 配置传递。`CODEX_HOME` 需要在运行 Agw 的主机配置；在 Extra 或执行环境中提供该字段会返回 `InvalidParam`。`skipGitRepoCheck=false` 和 app-server 不支持的 `onFailure` 审批配置也会明确失败。
+
 ### Project 目录快照
 
 每轮执行入口捕获主目录、附加目录和配置指纹，保存在 `RuntimeTurnContext.WorkspaceSnapshot`，并通过 `ProjectWorkspaceContext` 传到 Agent、Agentflow、工具和后台子执行。目录设置保存后文件面板立即刷新，本轮不变，下一轮按新指纹重建 runtime；conversation ID、provider session ID 与持久化历史沿用原值。
@@ -377,7 +379,7 @@ flowchart TB
 
 内置 Agent 与 Claude Code 支持三种权限；Codex/Pi 当前 SDK 接入仅开放 Full access，显式选择其他模式会失败。未指定权限的既有调用保留原配置。Claude Code 通过 `CanUseTool` 将原生工具审批接入统一交互，Always ask 每次决定，Allow same arguments 仅复用当前存活会话中相同用户、项目会话、Agent/节点、工作目录和参数的授权。授权不写入永久白名单或数据库，重启后重新询问。普通工具审批与 AskUserQuestion/HumanGate 分开处理。
 
-Codex 保持 `CodexSdk.MAF → CodexSdk → codex exec`，没有 app-server 接入或 SDK 审批响应扩展。Pi 的 ProjectTrust 仍只控制项目配置信任。Full access 的外部执行权限作用于运行 Agw 的主机，仍受操作系统权限约束；Files API 的项目路径和用户归属限制不变。
+Codex 使用 `CodexSdk.AppServer.MAF → CodexSdk.AppServer → codex app-server`。Agw 的 Runtime 持有本地 stdio 连接，并在释放时结束其创建的进程。Codex 的权限范围继续由 `ExecutionPermissionService` 控制。Pi 的 ProjectTrust 控制项目配置信任。Full access 的外部执行权限作用于运行 Agw 的主机，仍受操作系统权限约束；Files API 继续检查项目路径和用户归属。
 
 ### 执行 Agent 或 Agentflow
 
@@ -432,9 +434,11 @@ sequenceDiagram
 9. 后台任务进入 `RuntimeTurnContextAccessor` 作用域，并把输出交给 `TurnPipeline`。
 10. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍由连接内的 `InProcessExecutionStarter` 持有，供下一轮复用。
 
-Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 不持久化通用 SDK session state；Claude Code 与 Codex 通过 project conversation 作用域内的 task-session binding 保存 provider session id。Codex 从 `OnThreadStartedAsync` 获取 thread id，并以 `ThreadId + IsResume` 恢复；Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认真实 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
+Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 通过 project conversation 作用域内的 provider session binding 恢复原生会话。Codex 使用 app-server 的 `thread/start` 或 `thread/resume`。首次观察到模型内容时，Agw 在交付响应前保存 thread ID；后续 Runtime 使用该 ID 恢复 `CodexAppServerAgentSession`。Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认实际 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
 
 Claude Code、Codex 和 Pi 的外层历史记录统一使用 `HistoryRecordingAgent`。原始输入在注入记忆上下文前暂存；流式增量通过 Engine 适配器归并到 `HistoryRecording`，再由 Projects 的 `ConversationHistoryStore` 按 `ConversationHistory` 配置缓冲和提交。运行完成、取消、异常或消费方提前释放时完成本次记录。External Agent 返回的 System/User 展示消息标记为 `modelHistoryExcluded`，可在 UI 历史中显示，模型上下文与跨目标 handoff 会过滤这些消息。
+
+Codex 的标准 `imageGeneration` 和 `imageView` 完成事件由 SDK 转换为持有图片字节的 `DataContent`。历史保存这些字节及 thread、turn、item、内容索引和 `imageSource`，实时输出与历史读取均通过 `AgwDataContent` 提供 data URI。相同路径的不同查看事件分别保存当时读取的内容；文件后续变化不会修改已经保存的图片。历史中只有文件路径的旧记录仍按其原有内容读取。
 
 ### External Agent 模型配置
 
@@ -510,7 +514,7 @@ Agentflow 中的 Agent 节点同样遵守所引用 Agent 的 `EnableSummary`：�
 
 Claude Code External Agent 的原生 `AskUserQuestion` 通过 SDK stdio `can_use_tool` 回调接入同一套 channel。Agw 在每次 Agent run 内显式绑定当前 channel，把原生 `tool_use_id` 作为 `callId` 发出问卷 control message，并将客户端提交的 `answers` 作为 `updatedInput` 返回 Claude Code。后台执行和没有活动 channel 的调用会被拒绝；External Agent 仍不进入 Distributed HITL 恢复流程。
 
-Claude Code External Agent 默认启用 SDK partial messages。适配器读取原生 `StreamEvent` 的内容块索引，SDK 后续补充的工具内容继续追加到同一条消息。Codex 按 item ID 保持消息身份，文本、thinking 和 System 内容按收到的顺序追加。Pi 输出文本增量和新增内容块，每个内容只通过流式路径交付一次。usage 继续走计量链路，Result 使用独立消息 ID。
+Claude Code External Agent 默认启用 SDK partial messages。适配器读取原生 `StreamEvent` 的内容块索引，SDK 后续补充的工具内容继续追加到同一条消息。Codex 按 thread、turn 和 item ID 保持消息身份，文本、thinking、工具和图片内容按收到的顺序保存；reasoning summary 与正文通过 `reasoningKind` 和内容索引分别归并。Pi 输出文本增量和新增内容块，每个内容只通过流式路径交付一次。usage 继续走计量链路，Result 使用独立消息 ID。
 
 实时消息通过 `ReceiveMessage(AgwMessage)` 追加内容。`additionalProperties` 携带 `sourceMessageId`、`producerScopeId`、`conversationGeneration` 等来源信息；`@agw/execution-core` 按消息和内容块身份累积正文。服务器在持久化边界读取完整历史快照，SDK 流式历史回调只参与调用收尾。取消或失败时保存已经收到的正文，后续模型历史继续保留这些正文，并过滤未配对的工具调用。执行状态由 turn 和 execution 管理。
 

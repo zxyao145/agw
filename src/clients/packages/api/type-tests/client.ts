@@ -1,6 +1,7 @@
 import {
   apiDelete,
   apiDownload,
+  apiDownloadBlob,
   apiGet,
   apiPost,
   apiRequest,
@@ -37,6 +38,13 @@ function checkContract() {
   const bytes: Promise<Uint8Array> = apiDownload("/api/files/download", {
     params: { query: { projectId: "project-1", path: "assets/logo.png" } },
   });
+  const blob: Promise<Blob> = apiDownloadBlob("/api/files/download", {
+    params: { query: { projectId: "project-1", path: "assets/logo.png" } },
+  });
+  // @ts-expect-error Blob downloads require the GET query parameters. Blob 下载要求提供 GET 查询参数。
+  apiDownloadBlob("/api/files/download");
+  // @ts-expect-error Blob downloads support GET only. Blob 下载仅支持 GET。
+  apiDownloadBlob("/api/files/move", { params: { query: { projectId: "project-1" } } });
   // @ts-expect-error Downloads require the query parameters of the GET operation.
   apiDownload("/api/files/download");
   // @ts-expect-error Downloads are GET requests only.
@@ -48,6 +56,7 @@ function checkContract() {
     params: { query: { projectId: "project-1" } },
   });
   void bytes;
+  void blob;
   void bearerBytes;
 }
 

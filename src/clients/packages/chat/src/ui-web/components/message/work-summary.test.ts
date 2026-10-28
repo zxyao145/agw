@@ -94,6 +94,61 @@ test("completed work defaults closed, preserves Result actions and toggles proce
   assert.equal(screen.queryByText("Checking implementation"), null);
 });
 
+test("a Codex image in completed work appears when the Result summary expands", async () => {
+  const imageUri =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const history: AiMessage[] = [
+    {
+      messageId: "user-image",
+      role: "user",
+      createdAt: "2026-10-24T00:00:00Z",
+      contents: [{ type: "TextContent", content: "Review this image" }],
+    },
+    {
+      messageId: "codex-image",
+      role: "assistant",
+      author: "codex",
+      createdAt: "2026-10-24T00:00:00.500Z",
+      additionalProperties: { threadId: "thread-1", turnId: "turn-1", itemId: "codex-image" },
+      contents: [
+        {
+          type: "DataContent",
+          uri: imageUri,
+          name: "generated.png",
+          additionalProperties: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            itemId: "codex-image",
+            contentIndex: 0,
+          },
+        },
+      ],
+    },
+    {
+      messageId: "codex-result",
+      role: "assistant",
+      author: "codex",
+      createdAt: "2026-10-24T00:00:01Z",
+      additionalProperties: { type: "result", turnId: "turn-1" },
+      contents: [{ type: "TextContent", content: "Image generated" }],
+    },
+  ];
+
+  for (const replayedHistory of [history, JSON.parse(JSON.stringify(history)) as AiMessage[]]) {
+    const view = render(React.createElement(Harness, { history: replayedHistory }));
+    const summary = await screen.findByRole("button", { name: "codex Worked for 1s" });
+
+    assert.equal(summary.getAttribute("aria-expanded"), "false");
+    assert.equal(view.container.querySelector("img"), null);
+    fireEvent.click(summary);
+
+    const image = view.container.querySelector("img");
+    assert.equal(image?.getAttribute("src"), imageUri);
+    assert.equal(image?.getAttribute("alt"), "generated.png");
+    view.unmount();
+  }
+});
+
 test("the work summary shows the Agent name before the duration", async () => {
   const history = [messages[0], messages[1], { ...messages[2], author: "claude-code" }];
   render(React.createElement(Harness, { history }));

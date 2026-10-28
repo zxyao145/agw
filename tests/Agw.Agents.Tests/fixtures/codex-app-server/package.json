@@ -1,0 +1,7 @@
+{
+  "name": "agw-codex-app-server-test-fixture",
+  "private": true,
+  "dependencies": {
+    "@openai/codex": "0.163.0"
+  }
+}

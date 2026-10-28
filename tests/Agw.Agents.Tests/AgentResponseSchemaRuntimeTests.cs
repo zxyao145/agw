@@ -4,8 +4,10 @@ using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using OpenAI.CodexSdk.MAF;
+using OpenAI.CodexSdk.AppServer.MAF;
+using OpenAI.CodexSdk.AppServer.Protocol;
 
 namespace Agw.Agents.Tests;
 
@@ -101,37 +103,46 @@ public sealed class AgentResponseSchemaRuntimeTests
     }
 
     [Fact]
-    public void ApplyCodexResponseSchema_PreservesThreadResumeState()
+    public void ApplyCodexResponseSchema_PreservesSessionHooks()
     {
-        var threadId = Guid.CreateVersion7();
-        var options = new CodexAIAgentOptions { ThreadId = threadId, IsResume = true };
+        ValueTask OnResponseUpdateAsync(AgentResponseUpdate update, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+        var updateCallback = (Func<AgentResponseUpdate, CancellationToken, ValueTask>)OnResponseUpdateAsync;
+        var resumeCallback = (Func<ThreadResumeParams, ThreadResumeParams>)(parameters => parameters);
+        var options = new CodexAppServerAIAgentOptions
+        {
+            OnResponseUpdateAsync = updateCallback,
+            ConfigureThreadResume = resumeCallback,
+        };
 
         var updated = AgentRuntimeFactory.ApplyCodexResponseSchema(options, Schema);
 
-        Assert.Equal(threadId, updated.ThreadId);
-        Assert.True(updated.IsResume);
-        Assert.NotNull(updated.TurnOptions?.OutputSchema);
+        Assert.Same(updateCallback, updated.OnResponseUpdateAsync);
+        Assert.Same(resumeCallback, updated.ConfigureThreadResume);
+        Assert.NotNull(updated.ConfigureTurnStart);
     }
 
     [Fact]
-    public void ApplyCodexResponseSchema_SetsOutputSchemaOnTurnOptions()
+    public void ApplyCodexResponseSchema_SetsOutputSchemaOnTurnStart()
     {
-        var options = AgentRuntimeFactory.ApplyCodexResponseSchema(new CodexAIAgentOptions(), Schema);
+        var options = AgentRuntimeFactory.ApplyCodexResponseSchema(new CodexAppServerAIAgentOptions(), Schema);
 
-        Assert.NotNull(options.TurnOptions);
-        var outputSchema = options.TurnOptions!.OutputSchema;
-        Assert.NotNull(outputSchema);
-        Assert.Equal("object", Assert.IsType<JsonElement>(outputSchema!["type"]).GetString());
-        Assert.Equal(JsonValueKind.Object, Assert.IsType<JsonElement>(outputSchema["properties"]).ValueKind);
+        var configure = Assert.IsType<Func<AgentRunOptions?, TurnStartParams, TurnStartParams>>(
+            options.ConfigureTurnStart
+        );
+        var turnStart = configure(null, new TurnStartParams { ThreadId = "thread-1", Input = [] });
+        var outputSchema = turnStart.OutputSchema.GetValueOrDefault();
+        Assert.Equal("object", outputSchema.GetProperty("type").GetString());
+        Assert.Equal(JsonValueKind.Object, outputSchema.GetProperty("properties").ValueKind);
     }
 
     [Fact]
-    public void ApplyCodexResponseSchema_BlankSchema_KeepsTurnOptionsUnset()
+    public void ApplyCodexResponseSchema_BlankSchema_KeepsTurnConfigurationUnset()
     {
-        var options = new CodexAIAgentOptions();
+        var options = new CodexAppServerAIAgentOptions();
 
         Assert.Same(options, AgentRuntimeFactory.ApplyCodexResponseSchema(options, " "));
-        Assert.Null(options.TurnOptions);
+        Assert.Null(options.ConfigureTurnStart);
     }
 
     [Theory]
@@ -142,7 +153,7 @@ public sealed class AgentResponseSchemaRuntimeTests
             ErrorCodes.InvalidParam.Code,
             Assert
                 .Throws<AgwException>(() =>
-                    AgentRuntimeFactory.ApplyCodexResponseSchema(new CodexAIAgentOptions(), schema)
+                    AgentRuntimeFactory.ApplyCodexResponseSchema(new CodexAppServerAIAgentOptions(), schema)
                 )
                 .Code
         );

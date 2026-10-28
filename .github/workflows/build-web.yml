@@ -5,6 +5,8 @@ on:
     paths:
       - "src/clients/web/**"
       - "src/clients/packages/**"
+      - "src/server/Agw.Files/**"
+      - "src/server/Agw.Projects/**"
       - "src/clients/package.json"
       - "src/clients/pnpm-workspace.yaml"
       - "src/clients/pnpm-lock.yaml"
@@ -15,6 +17,8 @@ on:
     paths:
       - "src/clients/web/**"
       - "src/clients/packages/**"
+      - "src/server/Agw.Files/**"
+      - "src/server/Agw.Projects/**"
       - "src/clients/package.json"
       - "src/clients/pnpm-workspace.yaml"
       - "src/clients/pnpm-lock.yaml"
@@ -41,6 +45,10 @@ jobs:
           cache: pnpm
           cache-dependency-path: src/clients/pnpm-lock.yaml
 
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:boundaries
       - run: pnpm --filter @agw/web exec playwright install --with-deps chromium
@@ -48,6 +56,10 @@ jobs:
       - run: pnpm exec turbo run lint --filter=@agw/web...
       - run: pnpm exec turbo run test --filter=@agw/web...
       - run: pnpm --filter @agw/chat test:browser
+      - name: Build image test Server
+        run: dotnet build src/server/Agw.Standalone.Host
+        working-directory: .
+      - run: pnpm --filter @agw/chat test:server-images
       - run: pnpm --filter @agw/code-view test:browser
       - run: pnpm --filter @agw/projects test:browser
       - run: pnpm --filter @agw/web test:e2e

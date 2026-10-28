@@ -1,9 +1,9 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.Execution.Agents.ExternalAgents.Codex;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Approval;
@@ -20,8 +20,8 @@ using ClaudeCodeSdk.MAF;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using OpenAI.CodexSdk;
-using OpenAI.CodexSdk.MAF;
+using OpenAI.CodexSdk.AppServer;
+using OpenAI.CodexSdk.AppServer.MAF;
 using PiAgentSdk;
 using PiAgentSdk.MAF;
 
@@ -61,6 +61,7 @@ public partial class AgentRuntimeFactory
             )
             .ConfigureAwait(false);
         AIAgent? aiAgent = null;
+        IAsyncDisposable? externalAgentResource = null;
         try
         {
             var userMemoryProvider = capabilities
@@ -99,22 +100,25 @@ public partial class AgentRuntimeFactory
                 EngineKinds.Resolve(request.Agent),
                 structuredResult: hasResponseSchema
             );
-            if (
-                !TryCreateExternalAgent(
+            var creation = await CreateExternalAgentWithDecoratorsAsync(
                     request,
                     project,
                     environmentVariables,
                     historyProvider,
                     createMemoryContextAsync,
-                    out aiAgent,
                     isBackground,
-                    modelConfiguration
+                    modelConfiguration,
+                    cancellationToken
                 )
-            )
+                .ConfigureAwait(false);
+            if (creation == null)
             {
                 await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
                 return null;
             }
+
+            aiAgent = creation.Agent;
+            externalAgentResource = creation.OwnedResource;
 
             if (hasResponseSchema)
             {
@@ -126,6 +130,12 @@ public partial class AgentRuntimeFactory
                 );
             }
 
+            if (externalAgentResource != null)
+            {
+                aiAgent = new ResourceOwningAIAgent(aiAgent!, externalAgentResource);
+                externalAgentResource = null;
+            }
+
             return new ResourceOwningAIAgent(aiAgent!, capabilities);
         }
         catch
@@ -135,81 +145,119 @@ public partial class AgentRuntimeFactory
                 await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
             }
 
+            if (externalAgentResource != null)
+            {
+                await DisposeResourceWithoutThrowingAsync(externalAgentResource).ConfigureAwait(false);
+            }
+
             await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
             throw;
         }
     }
 
-    private bool TryCreateExternalAgent(
+    private async Task<ExternalAgentCreation?> CreateExternalAgentWithDecoratorsAsync(
         CreateAiAgentRequest request,
         Project project,
         IReadOnlyDictionary<string, string> environmentVariables,
         AgwChatHistoryProvider historyProvider,
         Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync,
-        [NotNullWhen(true)] out AIAgent? aiAgent,
         bool isBackground,
-        AgentModelRuntimeConfiguration? modelConfiguration
+        AgentModelRuntimeConfiguration? modelConfiguration,
+        CancellationToken cancellationToken
     )
     {
         ExecutionPermissionService.Validate(request.Agent, request.PermissionMode);
         var kind = EngineKinds.Resolve(request.Agent);
-        aiAgent = kind switch
+        AIAgent? aiAgent;
+        IAsyncDisposable? ownedResource = null;
+        switch (kind)
         {
-            EngineKind.ClaudeCode => CreateClaudeCodeAgent(
-                request.Agent,
-                project,
-                request.ProviderSessionId,
-                request.IsResume,
-                environmentVariables,
-                isBackground,
-                historyProvider,
-                request.PermissionMode,
-                modelConfiguration
-            ),
-            EngineKind.Codex => CreateCodexAgent(
-                request.Agent,
-                project,
-                request.ProviderSessionId,
-                request.IsResume,
-                environmentVariables,
-                request.OnExternalSessionStartedAsync,
-                request.PermissionMode,
-                modelConfiguration
-            ),
-            EngineKind.Pi => CreatePiAgent(
-                request.Agent,
-                project,
-                request.ProviderSessionId,
-                request.IsResume,
-                environmentVariables,
-                request.OnExternalSessionStartedAsync,
-                isBackground,
-                historyProvider,
-                createMemoryContextAsync,
-                modelConfiguration
-            ),
-            _ => null,
-        };
+            case EngineKind.ClaudeCode:
+                aiAgent = CreateClaudeCodeAgent(
+                    request.Agent,
+                    project,
+                    request.ProviderSessionId,
+                    request.IsResume,
+                    environmentVariables,
+                    isBackground,
+                    historyProvider,
+                    request.PermissionMode,
+                    modelConfiguration
+                );
+                break;
+            case EngineKind.Codex:
+                var codexCreation = await CreateCodexAgentAsync(
+                        request.Agent,
+                        project,
+                        request.ProviderSessionId,
+                        request.IsResume,
+                        environmentVariables,
+                        request.OnExternalSessionStartedAsync,
+                        request.PermissionMode,
+                        modelConfiguration,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (codexCreation == null)
+                {
+                    return null;
+                }
+                aiAgent = codexCreation.Agent;
+                ownedResource = codexCreation.OwnedResource;
+                break;
+            case EngineKind.Pi:
+                aiAgent = CreatePiAgent(
+                    request.Agent,
+                    project,
+                    request.ProviderSessionId,
+                    request.IsResume,
+                    environmentVariables,
+                    request.OnExternalSessionStartedAsync,
+                    isBackground,
+                    historyProvider,
+                    createMemoryContextAsync,
+                    modelConfiguration
+                );
+                break;
+            default:
+                return null;
+        }
 
         if (aiAgent == null)
         {
-            return false;
+            return null;
         }
 
-        aiAgent = kind switch
+        try
         {
-            EngineKind.ClaudeCode => WrapClaudeCodeAgent(
-                aiAgent,
-                historyProvider,
-                isBackground,
-                request.OnExternalSessionStartedAsync,
-                createMemoryContextAsync
-            ),
-            EngineKind.Codex => WrapExternalAgent(aiAgent, historyProvider, isBackground, createMemoryContextAsync),
-            EngineKind.Pi => aiAgent,
-            _ => null,
-        };
-        return aiAgent != null;
+            aiAgent = kind switch
+            {
+                EngineKind.ClaudeCode => WrapClaudeCodeAgent(
+                    aiAgent,
+                    historyProvider,
+                    isBackground,
+                    request.OnExternalSessionStartedAsync,
+                    createMemoryContextAsync
+                ),
+                EngineKind.Codex => WrapExternalAgent(aiAgent, historyProvider, isBackground, createMemoryContextAsync),
+                EngineKind.Pi => aiAgent,
+                _ => null,
+            };
+            return aiAgent == null ? null : new ExternalAgentCreation(aiAgent, ownedResource);
+        }
+        catch
+        {
+            if (aiAgent != null)
+            {
+                await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
+            }
+
+            if (ownedResource != null)
+            {
+                await DisposeResourceWithoutThrowingAsync(ownedResource).ConfigureAwait(false);
+            }
+            throw;
+        }
     }
 
     internal AIAgent WrapExternalAgent(
@@ -452,35 +500,70 @@ public partial class AgentRuntimeFactory
         return options with { ExtraArgs = extraArgs };
     }
 
-    private AIAgent? CreateCodexAgent(
+    private async Task<ExternalAgentCreation?> CreateCodexAgentAsync(
         Agent agent,
         Project project,
-        Guid? threadId,
+        Guid? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync,
         AgwPermissionMode? permissionMode,
-        AgentModelRuntimeConfiguration? modelConfiguration
+        AgentModelRuntimeConfiguration? modelConfiguration,
+        CancellationToken cancellationToken
     )
     {
-        var options = BuildCodexAIAgentOptions(
+        var runtimeOptions = BuildCodexAgentRuntimeOptions(
             agent,
             project,
-            threadId,
+            providerSessionId,
             isResume,
             environmentVariables,
             onThreadStartedAsync,
             permissionMode
         );
-        if (options == null)
+        if (runtimeOptions == null)
         {
             _logger.LogError("agent.Extra Deserialize to options error");
             return null;
         }
 
-        options = ExternalAgentModelOptions.ApplyCodex(options, modelConfiguration);
-        options = DisableExternalSdkChatHistoryPersistence(options);
-        return new CodexAIAgent(options, _logger);
+        var options = ExternalAgentModelOptions.ApplyCodex(runtimeOptions.AgentOptions, modelConfiguration);
+        options = ApplyCodexResponseSchema(options, agent.ResponseSchema);
+        var binding = new CodexProviderSessionBinding(runtimeOptions.OnThreadStartedAsync, runtimeOptions.IsResume);
+        var onResponseUpdate = options.OnResponseUpdateAsync;
+        options = options with
+        {
+            OnResponseUpdateAsync = async (update, token) =>
+            {
+                if (onResponseUpdate != null)
+                {
+                    await onResponseUpdate(update, token).ConfigureAwait(false);
+                }
+
+                await binding.OnResponseUpdateAsync(update, token).ConfigureAwait(false);
+            },
+        };
+
+        var client = await CodexAppServerClient
+            .StartAsync(runtimeOptions.ClientOptions, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            var codexAgent = new CodexAppServerAIAgent(client, options);
+            return new ExternalAgentCreation(
+                new CodexProviderSessionTrackingAgent(
+                    codexAgent,
+                    runtimeOptions.ProviderSessionId,
+                    runtimeOptions.IsResume
+                ),
+                client
+            );
+        }
+        catch
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     private AIAgent? CreatePiAgent(
@@ -609,18 +692,10 @@ public partial class AgentRuntimeFactory
         }
     }
 
-    internal static CodexAIAgentOptions DisableExternalSdkChatHistoryPersistence(CodexAIAgentOptions options) =>
-        options with
-        {
-            ChatHistoryProvider = null,
-        };
-
-    #region CodexAgentOptions
-
-    private static CodexAIAgentOptions? BuildCodexAIAgentOptions(
+    private static CodexAgentRuntimeOptions? BuildCodexAgentRuntimeOptions(
         Agent agent,
         Project project,
-        Guid? threadId,
+        Guid? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
@@ -634,62 +709,28 @@ public partial class AgentRuntimeFactory
         }
 
         ExecutionPermissionService.Validate(agent, permissionMode);
-        var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);
-        if (options == null)
-        {
-            return null;
-        }
-
-        var workspace = PathUtil.ExpandTilde(project.Workspace);
-        if (!string.IsNullOrWhiteSpace(workspace) || permissionMode == AgwPermissionMode.FullAccess)
-        {
-            options = options with
-            {
-                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(
-                    options.ThreadOptions,
-                    workspace,
-                    permissionMode,
-                    project.AdditionalDirectories
-                ),
-            };
-        }
-
-        if (threadId != null)
-        {
-            options = options with { ThreadId = threadId.Value, IsResume = isResume };
-        }
-
-        if (onThreadStartedAsync != null)
-        {
-            options = options with { OnThreadStartedAsync = onThreadStartedAsync };
-        }
-
-        if (environmentVariables is { Count: > 0 })
-        {
-            options = options with
-            {
-                CodexOptions = CreateCodexOptionsWithEnvironmentVariables(options.CodexOptions, environmentVariables),
-            };
-        }
-
-        options = ApplyCodexResponseSchema(options, agent.ResponseSchema);
-        return options;
+        return CodexAgentRuntimeOptionsMapper.Build(
+            extra,
+            project,
+            providerSessionId,
+            isResume,
+            environmentVariables,
+            onThreadStartedAsync,
+            permissionMode
+        );
     }
 
-    /// <summary>
-    /// Maps the configured response schema to Codex <see cref="TurnOptions.OutputSchema"/> on both the
-    /// buffered and streaming turn paths. The SDK forwards the schema to the CLI through a temporary
-    /// file that it cleans up itself; a CLI that rejects the schema fails the turn instead of
-    /// degrading to plain text.
-    /// </summary>
-    internal static CodexAIAgentOptions ApplyCodexResponseSchema(CodexAIAgentOptions options, string? responseSchema)
+    internal static CodexAppServerAIAgentOptions ApplyCodexResponseSchema(
+        CodexAppServerAIAgentOptions options,
+        string? responseSchema
+    )
     {
         if (string.IsNullOrWhiteSpace(responseSchema))
         {
             return options;
         }
 
-        Dictionary<string, object?> outputSchema;
+        JsonElement outputSchema;
         try
         {
             using var document = JsonDocument.Parse(responseSchema);
@@ -698,19 +739,21 @@ public partial class AgentRuntimeFactory
                 throw new AgwException(ErrorCodes.InvalidParam, "Agent responseSchema must be a JSON object.");
             }
 
-            // Clone each property so the dictionary stays valid after the document is disposed.
-            outputSchema = document
-                .RootElement.EnumerateObject()
-                .ToDictionary(property => property.Name, property => (object?)property.Value.Clone());
+            outputSchema = document.RootElement.Clone();
         }
         catch (JsonException)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Agent responseSchema is not valid JSON.");
         }
 
+        var configureTurnStart = options.ConfigureTurnStart;
         return options with
         {
-            TurnOptions = new TurnOptions { OutputSchema = outputSchema },
+            ConfigureTurnStart = (runOptions, parameters) =>
+            {
+                var configured = configureTurnStart?.Invoke(runOptions, parameters) ?? parameters;
+                return configured with { OutputSchema = outputSchema };
+            },
         };
     }
 
@@ -746,36 +789,6 @@ public partial class AgentRuntimeFactory
         };
     }
 
-    private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(
-        ThreadOptions? options,
-        string? workspace,
-        AgwPermissionMode? permissionMode = null,
-        IReadOnlyList<ProjectDirectory>? additionalDirectories = null
-    )
-    {
-        options ??= new ThreadOptions();
-
-        return new ThreadOptions
-        {
-            Model = options.Model,
-            SandboxMode =
-                permissionMode == AgwPermissionMode.FullAccess ? SandboxMode.DangerFullAccess : options.SandboxMode,
-            WorkingDirectory = string.IsNullOrWhiteSpace(workspace) ? options.WorkingDirectory : workspace,
-            SkipGitRepoCheck = options.SkipGitRepoCheck,
-            ModelReasoningEffort = options.ModelReasoningEffort,
-            NetworkAccessEnabled = options.NetworkAccessEnabled,
-            WebSearchMode = options.WebSearchMode,
-            WebSearchEnabled = options.WebSearchEnabled,
-            ApprovalPolicy =
-                permissionMode == AgwPermissionMode.FullAccess ? ApprovalMode.Never : options.ApprovalPolicy,
-            AdditionalDirectories = MergeAdditionalDirectories(
-                options.AdditionalDirectories,
-                additionalDirectories ?? [],
-                workspace
-            ),
-        };
-    }
-
     internal static IReadOnlyList<string> MergeAdditionalDirectories(
         IEnumerable<string>? configured,
         IReadOnlyList<ProjectDirectory> directories,
@@ -792,48 +805,7 @@ public partial class AgentRuntimeFactory
             .ToArray();
     }
 
-    private static CodexOptions CreateCodexOptionsWithEnvironmentVariables(
-        CodexOptions? options,
-        IReadOnlyDictionary<string, string> environmentVariables
-    )
-    {
-        options ??= new CodexOptions();
-
-        var merged = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (options.Env != null)
-        {
-            foreach (var (key, value) in options.Env)
-            {
-                merged[key] = value;
-            }
-        }
-        else
-        {
-            foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
-            {
-                if (entry.Key is string key && entry.Value is string value)
-                {
-                    merged[key] = value;
-                }
-            }
-        }
-
-        foreach (var (key, value) in environmentVariables)
-        {
-            merged[key] = value;
-        }
-
-        return new CodexOptions
-        {
-            CodexPathOverride = options.CodexPathOverride,
-            BaseUrl = options.BaseUrl,
-            ApiKey = options.ApiKey,
-            Config = options.Config,
-            Env = merged,
-        };
-    }
-
-    #endregion
+    private sealed record ExternalAgentCreation(AIAgent Agent, IAsyncDisposable? OwnedResource);
 
     private static bool IsEmptyJsonObject(string value)
     {

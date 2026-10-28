@@ -93,6 +93,56 @@ public class FilesController : ControllerBase
             : MapError(result);
     }
 
+    /// <summary>
+    /// 成功时响应体是图像内容；失败时与其他接口一样返回 ApiResult。
+    /// On success the body is the image content; failures return an ApiResult like every other endpoint.
+    /// </summary>
+    [HttpGet("image")]
+    [ProducesResponseType(
+        typeof(Stream),
+        StatusCodes.Status200OK,
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/svg+xml",
+        "image/webp",
+        "image/avif",
+        "image/bmp",
+        "image/tiff",
+        "image/x-icon",
+        "image/pjpeg",
+        "image/ief",
+        "image/cis-cod",
+        "image/x-jg",
+        "image/x-cmx",
+        "image/x-portable-bitmap",
+        "image/x-portable-graymap",
+        "image/x-portable-anymap",
+        "image/x-portable-pixmap",
+        "image/x-cmu-raster",
+        "image/vnd.rn-realflash",
+        "image/x-rgb",
+        "image/vnd.wap.wbmp",
+        "image/x-xbitmap",
+        "image/x-xpixmap",
+        "image/x-xwindowdump"
+    )]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status413RequestEntityTooLarge)]
+    public async Task<IActionResult> ImageAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path,
+        [FromQuery] Guid? directoryId = null
+    )
+    {
+        var result = await _fileAppService.OpenImageAsync(projectId, path, RequestCancellationToken, directoryId);
+        return result.Status == FileOperationStatus.Success
+            ? File(result.Value!.Stream, result.Value.ContentType, Path.GetFileName(path))
+            : MapError(result);
+    }
+
     [HttpPut("write")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(MaxWriteRequestBytes)]

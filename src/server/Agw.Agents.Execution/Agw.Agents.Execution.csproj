@@ -11,7 +11,7 @@
     />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="CodexSdk.MAF" />
+    <PackageReference Include="CodexSdk.AppServer.MAF" />
     <PackageReference Include="ClaudeCodeSdk.MAF" />
     <ProjectReference Include="../../sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
   </ItemGroup>

@@ -53,6 +53,7 @@ import { type LineComment, type ProjectDirectoryOption } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
+import { ConversationImageFileProvider } from "./conversation-image-file";
 import type { UserInputRef } from "./user-input";
 import type {
   ChatComposerHandle,
@@ -1914,35 +1915,43 @@ export function Chat({
               <ToolDirectoriesContext.Provider value={directories}>
                 {/* 对话列表 */}
                 {isEmptyConversation ? null : (
-                  <Conversation
-                    items={renderItems}
-                    conversationKey={JSON.stringify([
-                      executionServerId,
-                      projectId,
-                      executionConversationId,
-                    ])}
-                    onWorkSummaryToggle={handleUserInputNavigate}
-                    onImagePreviewOpenChange={handleImagePreviewOpenChange}
-                    onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
-                    scrollElementRef={conversationScrollRef}
-                    userInputNavigationHost={userInputNavigationHost}
-                    onUserInputNavigate={handleAnchorNavigate}
-                    userInputs={userInputsQuery.data}
-                    onLoadUserInput={loadHistoryThroughInput}
-                    activeStreamingScopeId={activeStreamingScopeRef.current}
-                    hasOlderMessages={hasOlderMessages}
-                    isLoadingOlderMessages={isLoadingOlderMessages}
-                    isInitialLoading={isLoadingConversation}
-                    onLoadOlderMessages={() => void loadOlderMessages(true)}
-                    onAutoLoadOlderMessages={() => void loadOlderMessages()}
-                    autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
-                    permissionMode={activePermissionMode ?? undefined}
-                    onHumanResponse={submitInteractionResponse}
-                    showCheckpointResume={target?.type === "agentflow"}
-                    checkpointResumeDisabled={checkpointResumeDisabled}
-                    onCheckpointResume={handleResumeCheckpoint}
-                    messageActions={messageActions}
-                  />
+                  <ConversationImageFileProvider
+                    projectId={projectId}
+                    serverId={executionServerId}
+                    conversationId={executionConversationId}
+                    directories={directories}
+                    messages={messages}
+                  >
+                    <Conversation
+                      items={renderItems}
+                      conversationKey={JSON.stringify([
+                        executionServerId,
+                        projectId,
+                        executionConversationId,
+                      ])}
+                      onWorkSummaryToggle={handleUserInputNavigate}
+                      onImagePreviewOpenChange={handleImagePreviewOpenChange}
+                      onWorkSummaryExpansionChange={handleWorkSummaryExpansionChange}
+                      scrollElementRef={conversationScrollRef}
+                      userInputNavigationHost={userInputNavigationHost}
+                      onUserInputNavigate={handleAnchorNavigate}
+                      userInputs={userInputsQuery.data}
+                      onLoadUserInput={loadHistoryThroughInput}
+                      activeStreamingScopeId={activeStreamingScopeRef.current}
+                      hasOlderMessages={hasOlderMessages}
+                      isLoadingOlderMessages={isLoadingOlderMessages}
+                      isInitialLoading={isLoadingConversation}
+                      onLoadOlderMessages={() => void loadOlderMessages(true)}
+                      onAutoLoadOlderMessages={() => void loadOlderMessages()}
+                      autoLoadBlockedSummaryKeys={unloadedWorkSummaryKeys}
+                      permissionMode={activePermissionMode ?? undefined}
+                      onHumanResponse={submitInteractionResponse}
+                      showCheckpointResume={target?.type === "agentflow"}
+                      checkpointResumeDisabled={checkpointResumeDisabled}
+                      onCheckpointResume={handleResumeCheckpoint}
+                      messageActions={messageActions}
+                    />
+                  </ConversationImageFileProvider>
                 )}
               </ToolDirectoriesContext.Provider>
 
