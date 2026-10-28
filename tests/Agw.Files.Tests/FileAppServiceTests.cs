@@ -495,7 +495,7 @@ public class FileAppServiceTests
         Assert.Equal(FileOperationStatus.Success, result.Status);
         Assert.True(result.Value!.Success);
         Assert.False(git.LastStaged);
-        Assert.Equal(Path.Combine(scope.Path, "src/features"), git.LastIndexPath);
+        Assert.Equal(Path.Combine(scope.Path, "src", "features"), git.LastIndexPath);
     }
 
     [Theory]
@@ -859,21 +859,12 @@ public class FileAppServiceTests
 
         public static TempDirectoryScope Create()
         {
-            return new TempDirectoryScope(
-                System.IO.Path.Combine(
-                    System.IO.Path.GetTempPath(),
-                    "agw-file-app-service-tests",
-                    Guid.CreateVersion7().ToString("N")
-                )
-            );
+            return new TempDirectoryScope(TestDirectoryHelper.Create("file-app-service-tests"));
         }
 
         public void Dispose()
         {
-            if (Directory.Exists(Path))
-            {
-                Directory.Delete(Path, recursive: true);
-            }
+            TestDirectoryHelper.Delete(Path);
         }
     }
 }

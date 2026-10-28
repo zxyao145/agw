@@ -824,8 +824,9 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
         var separator = relativePath.LastIndexOf('/');
         var parent = OpenExisting(
             separator < 0 ? string.Empty : relativePath[..separator],
-            WindowsNative.FILE_READ_ATTRIBUTES,
-            WindowsNative.FILE_FLAG_BACKUP_SEMANTICS
+            WindowsNative.FILE_TRAVERSE | WindowsNative.FILE_READ_ATTRIBUTES,
+            WindowsNative.FILE_FLAG_BACKUP_SEMANTICS,
+            WindowsNative.ShareReadWrite
         );
         if (parent is { IsDirectory: true })
         {
@@ -929,7 +930,7 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
     private VerifiedHandle OpenExistingFile(string path, uint access)
     {
         ResolveFilePath(path);
-        var opened = OpenExisting(path, access, 0);
+        var opened = OpenExisting(path, access, WindowsNative.FILE_FLAG_BACKUP_SEMANTICS);
         if (opened == null || opened.IsDirectory)
         {
             opened?.Dispose();
@@ -999,9 +1000,17 @@ internal sealed class WindowsConfinedFileSystem : IAgwFileSystem
     /// 打开已有对象并校验句柄；不存在时返回 null。
     /// Opens an existing object and verifies the handle; returns null when it does not exist.
     /// </summary>
-    private VerifiedHandle? OpenExisting(string path, uint access, uint flags)
+    private VerifiedHandle? OpenExisting(string path, uint access, uint flags, uint share = WindowsNative.ShareAll)
     {
-        var opened = Open(ResolveLexicalPath(path), path, access, WindowsNative.OPEN_EXISTING, flags, out var error);
+        var opened = Open(
+            ResolveLexicalPath(path),
+            path,
+            access,
+            share,
+            WindowsNative.OPEN_EXISTING,
+            flags,
+            out var error
+        );
         if (opened != null)
         {
             return opened;
