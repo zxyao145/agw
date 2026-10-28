@@ -13,7 +13,7 @@ namespace Agw.Files.Tests;
 
 public sealed class ProjectDirectoryTests : IDisposable
 {
-    private readonly string _root = Directory.CreateTempSubdirectory("agw-directories-").FullName;
+    private readonly string _root = TestDirectoryHelper.Create("agw-directories");
     private readonly Guid _projectId = Guid.NewGuid();
     private readonly Guid _directoryId = Guid.NewGuid();
     private readonly ConfigurationProvider _configuration;
@@ -203,7 +203,7 @@ public sealed class ProjectDirectoryTests : IDisposable
     public void Dispose()
     {
         _services.Dispose();
-        Directory.Delete(_root, recursive: true);
+        TestDirectoryHelper.Delete(_root);
     }
 
     private sealed class ConfigurationProvider : IProjectFileSystemConfigurationProvider
