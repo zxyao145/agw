@@ -193,10 +193,7 @@ public sealed class CodexHistoryAdapterTests : IDisposable
 
         var completeNotificationImage = Image("complete-source", 0, imageBytes, "complete.png");
         var unmatchedCompleteImage = Image("complete-unmatched", 1, imageBytes, "complete-unmatched.png");
-        var completeMessage = new ChatMessage(
-            ChatRole.Assistant,
-            [completeNotificationImage, unmatchedCompleteImage]
-        )
+        var completeMessage = new ChatMessage(ChatRole.Assistant, [completeNotificationImage, unmatchedCompleteImage])
         {
             MessageId = "complete-source",
             AdditionalProperties = ContentMetadata("complete-source", null),
@@ -212,7 +209,8 @@ public sealed class CodexHistoryAdapterTests : IDisposable
         await recording.FinishAsync(completed: true, token);
 
         var messages = await fixture.ReadMessagesAsync();
-        var streamedImages = Assert.Single(messages, message => ItemId(message) == "stream-content")
+        var streamedImages = Assert
+            .Single(messages, message => ItemId(message) == "stream-content")
             .Contents.OfType<DataContent>()
             .ToDictionary(image => image.AdditionalProperties!["itemId"]!.ToString()!);
         Assert.Equal(
