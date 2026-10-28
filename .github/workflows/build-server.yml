@@ -54,13 +54,16 @@ jobs:
     - name: Audit dependencies
       run: dotnet restore Agw.slnx -p:NuGetAudit=true -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1903%3BNU1904
 
-    - name: Setup Node.js for Pi CLI startup tests
+    - name: Setup Node.js for external CLI tests
       uses: actions/setup-node@v6
       with:
         node-version: 24
 
     - name: Install Pi CLI startup test dependency
       run: npm ci --prefix src/sdks/pi-agent-sdk-csharp/tests/fixtures/pi-cli --ignore-scripts --no-audit --no-fund
+
+    - name: Install Codex app-server test dependency
+      run: npm ci --prefix tests/Agw.Agents.Tests/fixtures/codex-app-server --ignore-scripts --no-audit --no-fund
 
     - name: build
       run: |

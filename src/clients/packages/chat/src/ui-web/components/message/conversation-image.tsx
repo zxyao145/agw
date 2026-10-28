@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@agw/components";
 import { toast } from "sonner";
+import { useConversationImageFileSource } from "./conversation-image-file";
 
 export type ConversationImageSource = {
   src: string;
@@ -68,6 +69,8 @@ export function ConversationImage({
 }: ConversationImageSource & { title?: string; className?: string }) {
   const openImage = React.useContext(ConversationImageContext);
   const onContextMenu = useImageContextMenu(name);
+  const imageSource = useConversationImageFileSource(src);
+  const displayedSrc = imageSource.src;
   const [failedSource, setFailedSource] = React.useState<string | null>(null);
   const open = (image: HTMLImageElement) => {
     image.focus({ preventScroll: true });
@@ -85,38 +88,50 @@ export function ConversationImage({
 
   return (
     <>
-      <img
-        src={src}
-        alt={alt}
-        title={title}
-        className={cn(
-          "inline-block max-h-70 max-w-full rounded-lg border bg-muted object-contain shadow-xs",
-          openImage && "cursor-zoom-in focus-visible:outline-2 focus-visible:outline-ring",
-          className,
-        )}
-        loading="lazy"
-        decoding="async"
-        role={openImage ? "button" : undefined}
-        tabIndex={openImage ? 0 : undefined}
-        aria-label={openImage ? `Preview image: ${alt}` : undefined}
-        aria-haspopup={openImage ? "dialog" : undefined}
-        onClick={(event) => {
-          if (!openImage) return;
-          event.preventDefault();
-          event.stopPropagation();
-          open(event.currentTarget);
-        }}
-        onKeyDown={(event) => {
-          if (!openImage || (event.key !== "Enter" && event.key !== " ")) return;
-          event.preventDefault();
-          event.stopPropagation();
-          open(event.currentTarget);
-        }}
-        onContextMenu={onContextMenu}
-        onError={() => setFailedSource(src)}
-        onLoad={() => setFailedSource(null)}
-      />
-      {failedSource === src ? (
+      {displayedSrc ? (
+        <img
+          src={displayedSrc}
+          alt={alt}
+          title={title}
+          className={cn(
+            "inline-block max-h-70 max-w-full rounded-lg border bg-muted object-contain shadow-xs",
+            openImage && "cursor-zoom-in focus-visible:outline-2 focus-visible:outline-ring",
+            className,
+          )}
+          loading="lazy"
+          decoding="async"
+          role={openImage ? "button" : undefined}
+          tabIndex={openImage ? 0 : undefined}
+          aria-label={openImage ? `Preview image: ${alt}` : undefined}
+          aria-haspopup={openImage ? "dialog" : undefined}
+          onClick={(event) => {
+            if (!openImage) return;
+            event.preventDefault();
+            event.stopPropagation();
+            open(event.currentTarget);
+          }}
+          onKeyDown={(event) => {
+            if (!openImage || (event.key !== "Enter" && event.key !== " ")) return;
+            event.preventDefault();
+            event.stopPropagation();
+            open(event.currentTarget);
+          }}
+          onContextMenu={onContextMenu}
+          onError={() => setFailedSource(displayedSrc)}
+          onLoad={() => setFailedSource(null)}
+        />
+      ) : null}
+      {imageSource.isLoading ? (
+        <span role="status" className="block text-sm text-muted-foreground">
+          Loading image…
+        </span>
+      ) : null}
+      {imageSource.error ? (
+        <span role="alert" className="block text-sm text-destructive">
+          Unable to load image: {alt}. {imageSource.error}
+        </span>
+      ) : null}
+      {displayedSrc && failedSource === displayedSrc ? (
         <span role="status" className="block text-sm text-destructive">
           Unable to load image: {alt}
         </span>

@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.Workspace;
+using Agw.Agents.Execution.Agents.ExternalAgents.Codex;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
@@ -59,6 +60,7 @@ public static class DependencyInjection
             ?? new ExecutionRuntimeOptions();
         services.Configure<ExecutionRuntimeOptions>(configuration.GetSection(ExecutionRuntimeOptions.SectionName));
         services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<ICodexImagePathReader, CodexImagePathReader>();
         services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
         services.AddScoped<IAgentflowMermaidProvider, AgentflowMermaidProvider>();
         services.AddSingleton<AgentflowCheckpointStore>();

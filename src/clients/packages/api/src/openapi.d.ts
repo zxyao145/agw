@@ -2167,6 +2167,117 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/files/image": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 成功时响应体是图像内容；失败时与其他接口一样返回 ApiResult。
+     *     On success the body is the image content; failures return an ApiResult like every other endpoint.
+     */
+    get: {
+      parameters: {
+        query: {
+          projectId: string;
+          path?: string;
+          directoryId?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "image/png": components["schemas"]["Stream"];
+            "image/jpeg": components["schemas"]["Stream"];
+            "image/gif": components["schemas"]["Stream"];
+            "image/svg+xml": components["schemas"]["Stream"];
+            "image/webp": components["schemas"]["Stream"];
+            "image/avif": components["schemas"]["Stream"];
+            "image/bmp": components["schemas"]["Stream"];
+            "image/tiff": components["schemas"]["Stream"];
+            "image/x-icon": components["schemas"]["Stream"];
+            "image/pjpeg": components["schemas"]["Stream"];
+            "image/ief": components["schemas"]["Stream"];
+            "image/cis-cod": components["schemas"]["Stream"];
+            "image/x-jg": components["schemas"]["Stream"];
+            "image/x-cmx": components["schemas"]["Stream"];
+            "image/x-portable-bitmap": components["schemas"]["Stream"];
+            "image/x-portable-graymap": components["schemas"]["Stream"];
+            "image/x-portable-anymap": components["schemas"]["Stream"];
+            "image/x-portable-pixmap": components["schemas"]["Stream"];
+            "image/x-cmu-raster": components["schemas"]["Stream"];
+            "image/vnd.rn-realflash": components["schemas"]["Stream"];
+            "image/x-rgb": components["schemas"]["Stream"];
+            "image/vnd.wap.wbmp": components["schemas"]["Stream"];
+            "image/x-xbitmap": components["schemas"]["Stream"];
+            "image/x-xpixmap": components["schemas"]["Stream"];
+            "image/x-xwindowdump": components["schemas"]["Stream"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Forbidden */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Payload Too Large */
+        413: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/files/write": {
     parameters: {
       query?: never;
@@ -3504,6 +3615,48 @@ export interface paths {
             "text/plain": components["schemas"]["ApiResultOfConversationActivityResponse"];
             "application/json": components["schemas"]["ApiResultOfConversationActivityResponse"];
             "text/json": components["schemas"]["ApiResultOfConversationActivityResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/conversation-image": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          projectId?: string;
+          conversationId?: string;
+          messageId?: string;
+          path?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfProjectConversationImageResponse"];
+            "application/json": components["schemas"]["ApiResultOfProjectConversationImageResponse"];
+            "text/json": components["schemas"]["ApiResultOfProjectConversationImageResponse"];
           };
         };
       };
@@ -5905,6 +6058,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfProjectConversationImageResponse: {
+      data?: null | components["schemas"]["ProjectConversationImageResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfProjectConversationMessagePageResponse: {
       data?: null | components["schemas"]["ProjectConversationMessagePageResponse"];
       /** Format: int32 */
@@ -6740,6 +6900,9 @@ export interface components {
       projectId: string;
       /** Format: uuid */
       connectionId: string;
+    };
+    ProjectConversationImageResponse: {
+      dataUri: null | string;
     };
     /** @enum {unknown} */
     ProjectConversationMessageDirection: "newer" | "older";

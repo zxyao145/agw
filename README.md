@@ -116,6 +116,7 @@ Unattended deployments inject the initial password through `Setup__AdminPassword
 - Chat on Web, Desktop, and Mobile accepts text plus up to five JPEG, PNG, GIF, or WebP images. Each image may be at most 5 MB, with a 10 MB combined limit per message.
 - Management tables can copy Agents, complete Agentflow graphs, and non-built-in Projects.
 - Claude Code, Codex, and Pi may optionally select a Model Provider. Claude Code requires Anthropic, Codex requires OpenAI Responses, and Pi supports OpenAI Chat Completions, OpenAI Responses, and Anthropic; clearing the selection uses the external tool's own configuration.
+- Codex uses `CodexSdk.AppServer.MAF` with the local Codex app-server. Generated images and completed image views are saved as byte-backed `DataContent` in chat history and displayed in Web and Desktop chat. Development package setup is documented in the [development guide](docs/1.Development.md#codex-app-server-packages).
 - Agent definition edits take effect at the next turn while preserving the conversation.
 - Chat offers only the permission modes the target supports. Claude Code and custom agents support Always ask, Allow same arguments, and Full access; Codex and Pi support Full access only. See the [execution protocol](docs/ws-flow.md) for permission capabilities, the input queue, and reconnect behavior.
 

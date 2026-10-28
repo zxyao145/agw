@@ -3,6 +3,8 @@ using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using OpenAI.CodexSdk.AppServer;
+using OpenAI.CodexSdk.AppServer.Protocol;
 
 namespace Agw.Agents.Execution.Agents.History;
 
@@ -39,7 +41,7 @@ internal class ModelMessageAdapter : IAgentMessageAdapter<AgentResponseUpdate>
         var message = ToMessage(update);
         if (IsExcluded(message))
             return null;
-        var id = SourceId(message);
+        var id = GetSourceId(message);
         var headerKey = (id, AgentMessageProjection.GetPurpose(message));
         if (_headers.TryGetValue(headerKey, out var previous))
         {
@@ -86,7 +88,7 @@ internal class ModelMessageAdapter : IAgentMessageAdapter<AgentResponseUpdate>
             var message = AgentMessageProjection.Clone(source);
             message.RawRepresentation = null;
             message.Contents = contents;
-            var sourceId = SourceId(message);
+            var sourceId = GetSourceId(message);
             var key = $"{sourceId}:{AgentMessageProjection.GetPurpose(message)}";
             var occurrence = occurrences.GetValueOrDefault(key);
             occurrences[key] = occurrence + 1;
@@ -127,6 +129,8 @@ internal class ModelMessageAdapter : IAgentMessageAdapter<AgentResponseUpdate>
         _tails[key] = tail;
         return FormatBlockId(tail.Index);
     }
+
+    protected virtual string GetSourceId(ChatMessage message) => SourceId(message);
 
     /// <summary>
     /// 常用的块序号复用预先生成的字符串。
@@ -210,12 +214,427 @@ internal sealed class PiMessageAdapter : ModelMessageAdapter
 /// </summary>
 internal sealed class CodexMessageAdapter : ModelMessageAdapter
 {
+    private readonly HashSet<ItemIdentity> _completedFinalAnswers = [];
+
     protected override bool IsExternalEngine => true;
 
-    public override ChatMessage? Map(AgentResponseUpdate update) =>
-        update.AdditionalProperties?.GetValueOrDefault("type")?.ToString() is "turn.started" or "turn.completed"
-            ? null
-            : base.Map(update);
+    public override ChatMessage? Map(AgentResponseUpdate update)
+    {
+        if (update.AdditionalProperties?.GetValueOrDefault("type")?.ToString() is "turn.started" or "turn.completed")
+            return null;
+
+        foreach (var (notification, item) in GetFinalAnswers(update.RawRepresentation))
+        {
+            if (string.IsNullOrWhiteSpace(item.Text))
+                continue;
+
+            var identity = new ItemIdentity(
+                notification.ThreadId ?? GetPropertyString(update.AdditionalProperties, "threadId"),
+                notification.TurnId ?? GetPropertyString(update.AdditionalProperties, "turnId"),
+                item.Id
+            );
+            if (!_completedFinalAnswers.Add(identity))
+                return null;
+            var messageProperties = CopyProperties(update.AdditionalProperties);
+            SetIdentityProperties(messageProperties, identity);
+            messageProperties[AgwMessageClassifier.TypeKey] = AgwMessageClassifier.ResultType;
+            messageProperties[AgwMessageClassifier.ResultSourceMessageIdKey] = FormatSourceId(identity);
+            return base.Map(
+                new AgentResponseUpdate(
+                    ChatRole.Assistant,
+                    [new TextContent(item.Text) { AdditionalProperties = CreateContentProperties(identity, 0) }]
+                )
+                {
+                    MessageId = update.MessageId,
+                    AuthorName = update.AuthorName,
+                    CreatedAt = update.CreatedAt,
+                    AdditionalProperties = messageProperties,
+                }
+            );
+        }
+
+        var message = base.Map(update);
+        if (message != null)
+            PreserveImagePathMetadata(update.Contents, message.Contents, update.RawRepresentation);
+        return message;
+    }
+
+    public override IReadOnlyList<ChatMessage> MapComplete(IEnumerable<ChatMessage> messages)
+    {
+        List<ChatMessage> completeMessages = [];
+        var sourceIndex = 0;
+        foreach (var source in messages)
+        {
+            Dictionary<string, ChatMessage> groupsByKey = new(StringComparer.Ordinal);
+            List<ChatMessage> groups = [];
+            foreach (
+                var content in source
+                    .Contents.Where(Records)
+                    .Where(content => content is not TextContent text || !string.IsNullOrWhiteSpace(text.Text))
+            )
+            {
+                var identity = GetIdentity(source, content);
+                var key = GetGroupKey(identity, sourceIndex);
+                if (!groupsByKey.TryGetValue(key, out var group))
+                {
+                    group = CreateGroup(source, identity);
+                    groupsByKey.Add(key, group);
+                    groups.Add(group);
+                }
+
+                var copy = AgentMessageProjection.CloneContent(content);
+                if (content is DataContent sourceImage && copy is DataContent copiedImage)
+                    PreserveImagePathMetadata(sourceImage, copiedImage, source.RawRepresentation);
+                AddIndexedBlockId(
+                    copy,
+                    GetContentIndex(content.AdditionalProperties),
+                    GetPropertyString(content.AdditionalProperties, "reasoningKind")
+                );
+                group.Contents.Add(copy);
+            }
+
+            HashSet<string> completedItems = new(StringComparer.Ordinal);
+            Dictionary<string, ChatMessage> resultsByGroupKey = new(StringComparer.Ordinal);
+            foreach (var (notification, item) in GetFinalAnswers(source.RawRepresentation))
+            {
+                if (string.IsNullOrWhiteSpace(item.Text))
+                    continue;
+
+                var identity = new ItemIdentity(
+                    notification.ThreadId ?? GetPropertyString(source.AdditionalProperties, "threadId"),
+                    notification.TurnId ?? GetPropertyString(source.AdditionalProperties, "turnId"),
+                    item.Id
+                );
+                var key = GetGroupKey(identity, sourceIndex);
+                if (!completedItems.Add(key))
+                    continue;
+                if (!groupsByKey.TryGetValue(key, out var group))
+                {
+                    group = CreateGroup(source, identity);
+                    groupsByKey.Add(key, group);
+                    groups.Add(group);
+                }
+
+                group.AdditionalProperties ??= [];
+                SetIdentityProperties(group.AdditionalProperties, identity);
+                ReplaceFinalText(group, item.Text, identity);
+                resultsByGroupKey[key] = CreateResult(group, item.Text, identity);
+            }
+
+            foreach (var group in groups)
+            {
+                var key = GetGroupKey(GetIdentity(group, group.Contents.FirstOrDefault()), sourceIndex);
+                completeMessages.Add(CoalesceCompleteContents(group));
+                if (resultsByGroupKey.TryGetValue(key, out var result))
+                    completeMessages.Add(result);
+            }
+            sourceIndex++;
+        }
+
+        return base.MapComplete(completeMessages);
+    }
+
+    protected override string GetSourceId(ChatMessage message)
+    {
+        var content = message.Contents.FirstOrDefault(content =>
+            !string.IsNullOrWhiteSpace(GetPropertyString(content.AdditionalProperties, "itemId"))
+        );
+        var identity = GetIdentity(message, content);
+        return identity.ItemId is { Length: > 0 } ? FormatSourceId(identity) : base.GetSourceId(message);
+    }
+
+    protected override string GetBlockId(
+        AgentResponseUpdate update,
+        AIContent content,
+        string sourceId,
+        ChatMessage header
+    )
+    {
+        var explicitId = GetPropertyString(content.AdditionalProperties, "blockId");
+        if (explicitId is { Length: > 0 })
+            return explicitId;
+
+        var contentIndex =
+            GetContentIndex(content.AdditionalProperties) ?? GetContentIndex(update.AdditionalProperties);
+        var reasoningKind =
+            GetPropertyString(content.AdditionalProperties, "reasoningKind")
+            ?? GetPropertyString(update.AdditionalProperties, "reasoningKind");
+        return contentIndex.HasValue ? FormatCodexBlockId(contentIndex.Value, reasoningKind)
+            : reasoningKind is { Length: > 0 } ? FormatCodexBlockId(0, reasoningKind)
+            : base.GetBlockId(update, content, sourceId, header);
+    }
+
+    private static ChatMessage CreateGroup(ChatMessage source, ItemIdentity identity)
+    {
+        var properties = CopyProperties(source.AdditionalProperties);
+        SetIdentityProperties(properties, identity);
+        return new ChatMessage(source.Role, [])
+        {
+            MessageId = source.MessageId,
+            AuthorName = source.AuthorName,
+            CreatedAt = source.CreatedAt,
+            AdditionalProperties = properties,
+        };
+    }
+
+    private ChatMessage CoalesceCompleteContents(ChatMessage message)
+    {
+        Dictionary<(string BlockId, Type ContentType), AIContent> textBlocks = [];
+        List<AIContent> contents = [];
+        foreach (var content in message.Contents)
+        {
+            var blockId = GetPropertyString(content.AdditionalProperties, "blockId");
+            if (
+                blockId is not { Length: > 0 }
+                || content is not (TextContent or TextReasoningContent { ProtectedData: null })
+            )
+            {
+                contents.Add(content);
+                continue;
+            }
+
+            var key = (blockId, content.GetType());
+            if (!textBlocks.TryGetValue(key, out var existing))
+            {
+                textBlocks.Add(key, content);
+                contents.Add(content);
+                continue;
+            }
+
+            if (existing is TextContent targetText && content is TextContent nextText)
+                targetText.Text += nextText.Text;
+            else if (existing is TextReasoningContent targetReasoning && content is TextReasoningContent nextReasoning)
+                targetReasoning.Text += nextReasoning.Text;
+
+            existing.AdditionalProperties ??= [];
+            foreach (var (name, value) in content.AdditionalProperties ?? [])
+                existing.AdditionalProperties[name] = value;
+            if (content.Annotations?.Count > 0)
+                existing.Annotations = [.. existing.Annotations ?? [], .. content.Annotations];
+        }
+
+        message.Contents = contents;
+        return message;
+    }
+
+    private static void ReplaceFinalText(ChatMessage message, string text, ItemIdentity identity)
+    {
+        var firstTextIndex = message.Contents.ToList().FindIndex(content => content is TextContent);
+        var properties =
+            firstTextIndex >= 0
+                ? CopyProperties(message.Contents[firstTextIndex].AdditionalProperties)
+                : CreateContentProperties(identity, 0);
+        for (var index = message.Contents.Count - 1; index >= 0; index--)
+        {
+            if (message.Contents[index] is TextContent)
+                message.Contents.RemoveAt(index);
+        }
+
+        if (GetContentIndex(properties) == null)
+            properties["contentIndex"] = 0;
+        var finalText = new TextContent(text) { AdditionalProperties = properties };
+        AddIndexedBlockId(finalText, GetContentIndex(properties));
+        message.Contents.Insert(
+            firstTextIndex < 0 ? message.Contents.Count : Math.Min(firstTextIndex, message.Contents.Count),
+            finalText
+        );
+    }
+
+    private static ChatMessage CreateResult(ChatMessage source, string text, ItemIdentity identity)
+    {
+        var properties = CopyProperties(source.AdditionalProperties);
+        SetIdentityProperties(properties, identity);
+        properties[AgwMessageClassifier.TypeKey] = AgwMessageClassifier.ResultType;
+        properties[AgwMessageClassifier.ResultSourceMessageIdKey] = FormatSourceId(identity);
+        var content = new TextContent(text) { AdditionalProperties = CreateContentProperties(identity, 0) };
+        AddIndexedBlockId(content, 0);
+        return new ChatMessage(source.Role, [content])
+        {
+            MessageId = source.MessageId,
+            AuthorName = source.AuthorName,
+            CreatedAt = source.CreatedAt,
+            AdditionalProperties = properties,
+        };
+    }
+
+    private static ItemIdentity GetIdentity(ChatMessage message, AIContent? content) =>
+        new(
+            GetPropertyString(content?.AdditionalProperties, "threadId")
+                ?? GetPropertyString(message.AdditionalProperties, "threadId"),
+            GetPropertyString(content?.AdditionalProperties, "turnId")
+                ?? GetPropertyString(message.AdditionalProperties, "turnId"),
+            GetPropertyString(content?.AdditionalProperties, "itemId")
+                ?? GetPropertyString(message.AdditionalProperties, "itemId")
+        );
+
+    private static ItemIdentity GetIdentity(DataContent content) =>
+        new(
+            GetPropertyString(content.AdditionalProperties, "threadId"),
+            GetPropertyString(content.AdditionalProperties, "turnId"),
+            GetPropertyString(content.AdditionalProperties, "itemId")
+        );
+
+    private static void PreserveImagePathMetadata(
+        IEnumerable<AIContent> sourceContents,
+        IEnumerable<AIContent> mappedContents,
+        object? sourceRawRepresentation
+    )
+    {
+        var mappedImages = mappedContents.OfType<DataContent>().ToList();
+        foreach (var sourceImage in sourceContents.OfType<DataContent>())
+        {
+            var identity = GetIdentity(sourceImage);
+            if (!HasCompleteIdentity(identity))
+                continue;
+
+            var imagePath = GetImagePath(identity, sourceImage.RawRepresentation, sourceRawRepresentation);
+            if (imagePath == null)
+                continue;
+
+            foreach (var mappedImage in mappedImages.Where(image => GetIdentity(image) == identity))
+            {
+                mappedImage.AdditionalProperties ??= [];
+                mappedImage.AdditionalProperties["imagePath"] = imagePath;
+            }
+        }
+    }
+
+    private static void PreserveImagePathMetadata(
+        DataContent sourceImage,
+        DataContent mappedImage,
+        object? sourceRawRepresentation
+    )
+    {
+        var identity = GetIdentity(sourceImage);
+        if (!HasCompleteIdentity(identity) || GetIdentity(mappedImage) != identity)
+            return;
+
+        var imagePath = GetImagePath(identity, sourceImage.RawRepresentation, sourceRawRepresentation);
+        if (imagePath == null)
+            return;
+
+        mappedImage.AdditionalProperties ??= [];
+        mappedImage.AdditionalProperties["imagePath"] = imagePath;
+    }
+
+    private static string? GetImagePath(
+        ItemIdentity identity,
+        object? contentRawRepresentation,
+        object? sourceRawRepresentation
+    )
+    {
+        foreach (
+            var notification in GetNotifications(contentRawRepresentation)
+                .Concat(GetNotifications(sourceRawRepresentation))
+        )
+        {
+            if (
+                notification.Method == "item/completed"
+                && string.Equals(notification.ThreadId, identity.ThreadId, StringComparison.Ordinal)
+                && string.Equals(notification.TurnId, identity.TurnId, StringComparison.Ordinal)
+                && notification.Parameters is ItemCompletedNotification { Item: ImageViewThreadItem item }
+                && string.Equals(item.Id, identity.ItemId, StringComparison.Ordinal)
+            )
+                return item.Path;
+        }
+
+        return null;
+    }
+
+    private static bool HasCompleteIdentity(ItemIdentity identity) =>
+        !string.IsNullOrWhiteSpace(identity.ThreadId)
+        && !string.IsNullOrWhiteSpace(identity.TurnId)
+        && !string.IsNullOrWhiteSpace(identity.ItemId);
+
+    private static IEnumerable<(AppServerNotification Notification, AgentMessageThreadItem Item)> GetFinalAnswers(
+        object? rawRepresentation
+    )
+    {
+        foreach (var notification in GetNotifications(rawRepresentation))
+        {
+            if (
+                notification.Method == "item/completed"
+                && notification.Parameters is ItemCompletedNotification { Item: AgentMessageThreadItem item }
+                && item.Phase.GetValueOrDefault()
+                    is StringMessagePhase083A0BEF { Value: StringMessagePhaseValue083A0BEF.FinalAnswer }
+            )
+                yield return (notification, item);
+        }
+    }
+
+    private static IEnumerable<AppServerNotification> GetNotifications(object? rawRepresentation)
+    {
+        if (rawRepresentation is AppServerNotification notification)
+        {
+            yield return notification;
+            yield break;
+        }
+
+        if (rawRepresentation is not IEnumerable<AppServerNotification> notifications)
+            yield break;
+
+        foreach (var item in notifications)
+            yield return item;
+    }
+
+    private static string GetGroupKey(ItemIdentity identity, int sourceIndex) =>
+        identity.ItemId is { Length: > 0 } ? FormatSourceId(identity) : $"message:{sourceIndex}";
+
+    private static string FormatSourceId(ItemIdentity identity) =>
+        JsonSerializer.Serialize(new string?[] { "codex", identity.ThreadId, identity.TurnId, identity.ItemId });
+
+    private static void SetIdentityProperties(AdditionalPropertiesDictionary properties, ItemIdentity identity)
+    {
+        if (identity.ThreadId != null)
+            properties["threadId"] = identity.ThreadId;
+        if (identity.TurnId != null)
+            properties["turnId"] = identity.TurnId;
+        if (identity.ItemId != null)
+            properties["itemId"] = identity.ItemId;
+    }
+
+    private static AdditionalPropertiesDictionary CreateContentProperties(ItemIdentity identity, int contentIndex)
+    {
+        AdditionalPropertiesDictionary properties = [];
+        SetIdentityProperties(properties, identity);
+        properties["contentIndex"] = contentIndex;
+        return properties;
+    }
+
+    private static void AddIndexedBlockId(AIContent content, int? contentIndex, string? reasoningKind = null)
+    {
+        if (
+            (!contentIndex.HasValue && reasoningKind is not { Length: > 0 })
+            || GetPropertyString(content.AdditionalProperties, "blockId") is { Length: > 0 }
+        )
+            return;
+
+        content.AdditionalProperties ??= [];
+        content.AdditionalProperties["blockId"] = FormatCodexBlockId(contentIndex ?? 0, reasoningKind);
+    }
+
+    private static string FormatCodexBlockId(int contentIndex, string? reasoningKind) =>
+        reasoningKind is { Length: > 0 } ? $"block:{reasoningKind}:{contentIndex}" : FormatBlockId(contentIndex);
+
+    private static int? GetContentIndex(AdditionalPropertiesDictionary? properties)
+    {
+        var value = properties?.GetValueOrDefault("contentIndex");
+        if (value is int index)
+            return index;
+        if (value is long longIndex && longIndex is >= int.MinValue and <= int.MaxValue)
+            return (int)longIndex;
+        if (value is JsonElement { ValueKind: JsonValueKind.Number } element && element.TryGetInt32(out var jsonIndex))
+            return jsonIndex;
+        return null;
+    }
+
+    private static string? GetPropertyString(AdditionalPropertiesDictionary? properties, string key) =>
+        properties?.GetValueOrDefault(key)?.ToString() is { Length: > 0 } value ? value : null;
+
+    private static AdditionalPropertiesDictionary CopyProperties(AdditionalPropertiesDictionary? properties) =>
+        properties == null ? [] : new(properties);
+
+    private readonly record struct ItemIdentity(string? ThreadId, string? TurnId, string? ItemId);
 }
 
 /// <summary>

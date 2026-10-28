@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectRuntimeFacade, ProjectRuntimeFacade>();
         services.AddScoped<IProjectMetricsFacade, ProjectMetricsFacade>();
         services.AddScoped<ProjectConversationAppService>();
+        services.AddScoped<ProjectConversationImageAppService>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<IConversationHandoffProvider, ConversationHandoffProvider>();
 

@@ -19,173 +19,101 @@ public sealed class ProviderSessionExecutionTests : IDisposable
 
     public static bool CanRunFakeCli => !OperatingSystem.IsWindows();
 
+    public static bool CanRunCodexFixture => CodexAppServerFixture.IsAvailable;
+
+    public static bool CanRunCodexLive =>
+        CanRunCodexFixture && CodexLiveTestOptions.Current is { RunProviderSessionTests: true };
+
     public void Dispose() => _user.Dispose();
 
-    [Fact(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
-    public async Task StartAsync_CodexNewThread_SavesBindingAndReusesRuntime()
+    [Fact(SkipUnless = nameof(CanRunCodexLive), Skip = "Set RunProviderSessionTests in test-data/codex-live.json.")]
+    public async Task StartAsync_CodexThreadLifecycle_PersistsResumesAndReplacesArchivedThread()
     {
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex);
+        var options = Assert.IsType<CodexLiveTestOptions>(CodexLiveTestOptions.Current);
+        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(
+            EngineKind.Codex,
+            codexOptions: options
+        );
 
-        var first = await harness.RunTurnAsync();
-        var runtime = harness.Runtime;
-        var second = await harness.RunTurnAsync();
+        var firstTurnId = await harness.StartTurnAsync("Reply with one word: FIRST", stream: true);
+        Assert.NotNull(await harness.WaitForAssistantTextAsync(firstTurnId));
+        var firstBinding = Assert.Single(await harness.ReadBindingsAsync());
+        Assert.True(firstBinding.IsActive);
+        Assert.Equal(firstBinding.ProviderSessionId, harness.Runtime.ProviderSession!.PersistedProviderSessionId);
+        await harness.WaitIdleAsync();
+        Assert.Equal(ProjectConversationTurnStatus.Completed, (await harness.ReadTurnAsync(firstTurnId)).Status);
+        var firstRuntime = harness.Runtime;
+        Assert.Equal(harness.AgentName, firstBinding.ExternalAgentName);
 
-        Assert.Equal(ProjectConversationTurnStatus.Completed, first.Status);
-        Assert.Equal(ProjectConversationTurnStatus.Completed, second.Status);
-        Assert.Same(runtime, harness.Runtime);
-        var invocations = harness.Cli.CodexInvocations;
-        Assert.Equal(2, invocations.Count);
-        Assert.Null(invocations[0].Resumed);
-        Assert.Equal(invocations[0].SessionId, invocations[1].Resumed);
-        var binding = Assert.Single(await harness.ReadBindingsAsync());
-        Assert.True(binding.IsActive);
-        Assert.Equal(invocations[0].SessionId, binding.ProviderSessionId);
-        Assert.Equal(harness.AgentName, binding.ExternalAgentName);
-        Assert.Null(binding.UpdateTime);
-        Assert.Empty(harness.Commands.BindingWrites.Where(command => command.Contains("UPDATE")));
-    }
+        await harness.RebuildCoordinatorAsync();
+        Assert.True(firstRuntime.IsDisposed);
 
-    [Fact(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
-    public async Task StartAsync_AfterArchive_RebuildsRuntimeAndStartsNewThread()
-    {
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex);
-        await harness.RunTurnAsync("first question before archive");
-        var archivedRuntime = harness.Runtime;
-        var archived = Assert.Single(await harness.ReadBindingsAsync());
+        var resumed = await harness.RunTurnAsync("Reply with one word: RESUMED");
+        Assert.Equal(ProjectConversationTurnStatus.Completed, resumed.Status);
+        Assert.NotSame(firstRuntime, harness.Runtime);
+        var resumedBinding = Assert.Single(await harness.ReadBindingsAsync());
+        Assert.Equal(firstBinding.ProviderSessionId, resumedBinding.ProviderSessionId);
+        Assert.Equal(firstBinding.ProviderSessionId, harness.Runtime.ProviderSession!.PersistedProviderSessionId);
 
-        await harness.ArchiveAsync(archived.Id);
-        var next = await harness.RunTurnAsync("second question after archive");
+        await harness.ArchiveAsync(resumedBinding.Id);
+        var afterArchive = await harness.RunTurnAsync("Reply with one word: FRESH");
 
-        Assert.Equal(ProjectConversationTurnStatus.Completed, next.Status);
-        Assert.True(archivedRuntime.IsDisposed);
-        Assert.NotSame(archivedRuntime, harness.Runtime);
-        var invocations = harness.Cli.CodexInvocations;
-        Assert.Equal(2, invocations.Count);
-        Assert.Null(invocations[1].Resumed);
-        Assert.NotEqual(invocations[0].SessionId, invocations[1].SessionId);
-        // 新 session 只收到本次输入，该 Agent 之前的对话不会重放。
-        // The new session receives only this input; the Agent's earlier conversation is not replayed.
-        Assert.Contains("second question after archive", invocations[1].Input, StringComparison.Ordinal);
-        Assert.DoesNotContain("first question before archive", invocations[1].Input, StringComparison.Ordinal);
-        Assert.DoesNotContain("reply from", invocations[1].Input, StringComparison.Ordinal);
+        Assert.Equal(ProjectConversationTurnStatus.Completed, afterArchive.Status);
+        Assert.True(harness.Runtime.ProviderSession!.PersistedProviderSessionId is not null);
         var bindings = await harness.ReadBindingsAsync();
-        Assert.False(Assert.Single(bindings, binding => binding.Id == archived.Id).IsActive);
-        Assert.Equal(invocations[1].SessionId, Assert.Single(bindings, binding => binding.IsActive).ProviderSessionId);
-        Assert.Equal(invocations[1].SessionId, harness.Runtime.ProviderSession!.PersistedProviderSessionId);
+        Assert.False(Assert.Single(bindings, binding => binding.Id == firstBinding.Id).IsActive);
+        var activeBinding = Assert.Single(bindings, binding => binding.IsActive);
+        Assert.NotEqual(firstBinding.ProviderSessionId, activeBinding.ProviderSessionId);
+        Assert.Equal(activeBinding.ProviderSessionId, harness.Runtime.ProviderSession.PersistedProviderSessionId);
     }
 
-    [Fact(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
-    public async Task StartAsync_CodexResumeWithoutThreadStarted_SavesIdempotentlyAtRunEnd()
+    [Fact(SkipUnless = nameof(CanRunCodexLive), Skip = "Set RunProviderSessionTests in test-data/codex-live.json.")]
+    public async Task StartAsync_CodexBindingSaveFails_BeforeResponseUpdates()
     {
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex);
-        var existing = Guid.CreateVersion7().ToString("D");
-        await harness.SaveBindingAsync(existing);
-        harness.Cli.Configure(threadStartedOnResume: false);
-        var loadsBefore = harness.Commands.BindingLoads.Count;
-
-        var outcome = await harness.RunTurnAsync();
-
-        Assert.Equal(ProjectConversationTurnStatus.Completed, outcome.Status);
-        Assert.Equal(existing, Assert.Single(harness.Cli.CodexInvocations).Resumed);
-        // 恢复的 thread 没有 ThreadStartedEvent，SDK 在执行结束时用已知的 thread ID 通知一次。
-        // The resumed thread has no ThreadStartedEvent, so the SDK notifies once with the known thread ID at the end of the run.
-        Assert.Equal(loadsBefore + 1, harness.Commands.BindingLoads.Count);
-        var binding = Assert.Single(await harness.ReadBindingsAsync());
-        Assert.True(binding.IsActive);
-        Assert.Equal(existing, binding.ProviderSessionId);
-        Assert.Null(binding.UpdateTime);
-    }
-
-    [Fact(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
-    public async Task StartAsync_CodexSaveFails_FailsTurnOnceAndRebuildsRuntime()
-    {
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex);
+        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(
+            EngineKind.Codex,
+            codexOptions: CodexLiveTestOptions.Current
+        );
         await harness.ExecuteSqlAsync(FailBindingInsert);
 
-        var failed = await harness.RunTurnAsync();
+        var turnId = await harness.StartTurnAsync("Reply with one word: READY", stream: true);
+        await harness.WaitIdleAsync();
+        var failed = await harness.ReadTurnAsync(turnId);
         var failedRuntime = harness.Runtime;
 
         Assert.Equal(ProjectConversationTurnStatus.Failed, failed.Status);
         Assert.Contains(failed.Errors, error => error.Contains("saving the entity changes", StringComparison.Ordinal));
-        // 通知在事件阶段失败后，SDK 在结束阶段再次通知；回调直接传播首次异常，数据库只收到一次写入。
-        // After the event-time notification fails the SDK notifies again at the end; the callback propagates the first exception and the database sees one write.
         Assert.Single(harness.Commands.BindingWrites);
         Assert.Single(harness.Commands.BindingLoads);
         Assert.True(failedRuntime.ProviderSession!.HasFailed);
         Assert.Null(failedRuntime.ProviderSession.PersistedProviderSessionId);
         Assert.Empty(await harness.ReadBindingsAsync());
-
-        await harness.ExecuteSqlAsync("DROP TRIGGER fail_binding_insert;");
-        var next = await harness.RunTurnAsync();
-
-        Assert.Equal(ProjectConversationTurnStatus.Completed, next.Status);
-        Assert.True(failedRuntime.IsDisposed);
-        Assert.NotSame(failedRuntime, harness.Runtime);
-        var invocations = harness.Cli.CodexInvocations;
-        Assert.Equal(2, invocations.Count);
-        Assert.Null(invocations[1].Resumed);
-        Assert.Equal(invocations[1].SessionId, Assert.Single(await harness.ReadBindingsAsync()).ProviderSessionId);
+        Assert.DoesNotContain(
+            harness.ReadMessages(turnId),
+            message =>
+                message.Role == AiRole.Assistant
+                && message.Contents.OfType<AgwTextContent>().Any(content => !string.IsNullOrWhiteSpace(content.Content))
+        );
     }
 
-    [Theory(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task StartAsync_InterruptedCodexResume_SaveAtRunEndDecidesOutcome(bool saveFails)
-    {
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex);
-        var existing = Guid.CreateVersion7().ToString("D");
-        await harness.SaveBindingAsync(existing);
-        harness.Cli.Configure(threadStartedOnResume: false, hold: true);
-
-        var turnId = await harness.StartTurnAsync();
-        await harness.Cli.WaitForCodexRunsAsync(1);
-        if (saveFails)
-        {
-            await harness.ExecuteSqlAsync(
-                "ALTER TABLE project_conversation_binding RENAME TO project_conversation_binding_hidden;"
-            );
-        }
-
-        harness.Host.RequestInterrupt();
-        await harness.WaitIdleAsync();
-        var outcome = await harness.ReadTurnAsync(turnId);
-        var runtime = harness.Runtime;
-        if (saveFails)
-        {
-            await harness.ExecuteSqlAsync(
-                "ALTER TABLE project_conversation_binding_hidden RENAME TO project_conversation_binding;"
-            );
-        }
-
-        Assert.Equal(existing, Assert.Single(harness.Cli.CodexInvocations).Resumed);
-        if (saveFails)
-        {
-            Assert.Equal(ProjectConversationTurnStatus.Failed, outcome.Status);
-            Assert.Contains(outcome.Errors, error => error.Contains("no such table", StringComparison.Ordinal));
-            Assert.True(runtime.ProviderSession!.HasFailed);
-        }
-        else
-        {
-            Assert.Equal(ProjectConversationTurnStatus.Interrupted, outcome.Status);
-            Assert.False(runtime.ProviderSession!.HasFailed);
-        }
-
-        var binding = Assert.Single(await harness.ReadBindingsAsync());
-        Assert.True(binding.IsActive);
-        Assert.Equal(existing, binding.ProviderSessionId);
-    }
-
-    [Fact(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
+    [Fact(SkipUnless = nameof(CanRunCodexLive), Skip = "Set RunProviderSessionTests in test-data/codex-live.json.")]
     public async Task StartAsync_ArchiveBeforeExecutionLock_RebuildsRuntimeForNextTurn()
     {
         var gate = new PausingConversationGate();
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex, gate.Wrap);
-        await harness.RunTurnAsync();
+        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(
+            EngineKind.Codex,
+            gate.Wrap,
+            CodexLiveTestOptions.Current
+        );
+        await harness.RunTurnAsync("Reply with one short word: FIRST");
         var archivedRuntime = harness.Runtime;
         var archived = Assert.Single(await harness.ReadBindingsAsync());
         var pause = gate.PauseBeforeAcquire();
 
-        var start = Task.Run(() => harness.StartTurnAsync(), TestContext.Current.CancellationToken);
+        var start = Task.Run(
+            () => harness.StartTurnAsync("Reply with one short word: FRESH"),
+            TestContext.Current.CancellationToken
+        );
         await pause.Arrived.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
         await harness.ArchiveAsync(archived.Id);
         pause.Continue();
@@ -195,24 +123,31 @@ public sealed class ProviderSessionExecutionTests : IDisposable
         Assert.Equal(ProjectConversationTurnStatus.Completed, (await harness.ReadTurnAsync(turnId)).Status);
         Assert.True(archivedRuntime.IsDisposed);
         Assert.NotSame(archivedRuntime, harness.Runtime);
-        var invocations = harness.Cli.CodexInvocations;
-        Assert.Null(invocations[1].Resumed);
         var bindings = await harness.ReadBindingsAsync();
         Assert.False(Assert.Single(bindings, binding => binding.Id == archived.Id).IsActive);
-        Assert.Equal(invocations[1].SessionId, Assert.Single(bindings, binding => binding.IsActive).ProviderSessionId);
+        var activeBinding = Assert.Single(bindings, binding => binding.IsActive);
+        Assert.NotEqual(archived.ProviderSessionId, activeBinding.ProviderSessionId);
+        Assert.Equal(activeBinding.ProviderSessionId, harness.Runtime.ProviderSession!.PersistedProviderSessionId);
     }
 
-    [Fact(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
+    [Fact(SkipUnless = nameof(CanRunCodexLive), Skip = "Set RunProviderSessionTests in test-data/codex-live.json.")]
     public async Task StartAsync_TurnHoldsExecutionLock_ArchiveConflictsUntilTurnEnds()
     {
         var gate = new PausingConversationGate();
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex, gate.Wrap);
-        await harness.RunTurnAsync();
+        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(
+            EngineKind.Codex,
+            gate.Wrap,
+            CodexLiveTestOptions.Current
+        );
+        await harness.RunTurnAsync("Reply with one short word: FIRST");
         var runtime = harness.Runtime;
         var binding = Assert.Single(await harness.ReadBindingsAsync());
         var pause = gate.PauseAfterAcquire();
 
-        var start = Task.Run(() => harness.StartTurnAsync(), TestContext.Current.CancellationToken);
+        var start = Task.Run(
+            () => harness.StartTurnAsync("Reply with one short word: SECOND"),
+            TestContext.Current.CancellationToken
+        );
         await pause.Arrived.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
         var conflict = await Assert.ThrowsAsync<AgwException>(() => harness.ArchiveAsync(binding.Id));
         pause.Continue();
@@ -222,7 +157,7 @@ public sealed class ProviderSessionExecutionTests : IDisposable
         Assert.Equal(ErrorCodes.ConversationSessionConflict.Code, conflict.Code);
         Assert.Equal(ProjectConversationTurnStatus.Completed, (await harness.ReadTurnAsync(turnId)).Status);
         Assert.Same(runtime, harness.Runtime);
-        Assert.Equal(binding.ProviderSessionId, harness.Cli.CodexInvocations[1].Resumed);
+        Assert.Equal(binding.ProviderSessionId, harness.Runtime.ProviderSession!.PersistedProviderSessionId);
         Assert.True(Assert.Single(await harness.ReadBindingsAsync()).IsActive);
 
         await harness.ArchiveAsync(binding.Id);
@@ -292,10 +227,13 @@ public sealed class ProviderSessionExecutionTests : IDisposable
         Assert.Equal(invocations[1].SessionId, Assert.Single(await harness.ReadBindingsAsync()).ProviderSessionId);
     }
 
-    [Fact(SkipUnless = nameof(CanRunFakeCli), Skip = "The command-line stand-ins are Node scripts with a shebang.")]
-    public async Task CreateAgentflowNodeAgentAsync_ExternalAgent_DoesNotSaveProviderSession()
+    [Fact(SkipUnless = nameof(CanRunCodexLive), Skip = "Set RunProviderSessionTests in test-data/codex-live.json.")]
+    public async Task CreateAgentflowNodeAgentAsync_CodexExternal_DoesNotSaveProviderSession()
     {
-        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(EngineKind.Codex);
+        await using var harness = await ProviderSessionExecutionHarness.CreateAsync(
+            EngineKind.Codex,
+            codexOptions: CodexLiveTestOptions.Current
+        );
         var node = await harness.RuntimeFactory.CreateAgentflowNodeAgentAsync(
             harness.AgentId,
             harness.ProjectId,
@@ -305,17 +243,22 @@ public sealed class ProviderSessionExecutionTests : IDisposable
             TestContext.Current.CancellationToken
         );
         Assert.NotNull(node);
+        await using var nodeResource = Assert.IsAssignableFrom<IAsyncDisposable>(node.Agent);
         var session = await node.Agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
         await foreach (
             var _ in node.Agent.RunStreamingAsync(
-                [new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "node input")],
+                [
+                    new Microsoft.Extensions.AI.ChatMessage(
+                        Microsoft.Extensions.AI.ChatRole.User,
+                        "Reply with one word: NODE"
+                    ),
+                ],
                 session,
                 cancellationToken: TestContext.Current.CancellationToken
             )
         ) { }
 
-        Assert.Null(Assert.Single(harness.Cli.CodexInvocations).Resumed);
         Assert.Empty(await harness.ReadBindingsAsync());
         Assert.Empty(harness.Commands.BindingLoads);
     }

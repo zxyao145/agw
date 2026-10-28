@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.Execution.Agents.ExternalAgents.Codex;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.ExternalAgents;
+using Agw.Agents.ExternalAgents.Codex;
 using Agw.Projects.Contracts.History;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -19,9 +21,12 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using OpenAI.CodexSdk.MAF;
+using OpenAI.CodexSdk.AppServer;
+using OpenAI.CodexSdk.AppServer.MAF;
+using OpenAI.CodexSdk.AppServer.Protocol;
 using PiAgentSdk;
 using PiAgentSdk.MAF;
+using Project = Agw.Shared.Data.Entities.Projects.Project;
 
 namespace Agw.Agents.Tests;
 
@@ -45,7 +50,7 @@ public class AgentRuntimeFactoryCompositionTests
             true,
             additionalDirectories: directories
         )!;
-        var codex = BuildCodexAIAgentOptions(
+        var codex = BuildCodexAgentRuntimeOptions(
             JsonSerializer.Serialize(
                 new { threadOptions = new { additionalDirectories = new[] { configured, additional + "/." } } }
             ),
@@ -56,11 +61,17 @@ public class AgentRuntimeFactoryCompositionTests
         )!;
 
         Assert.Equal(new[] { configured, additional }, claude.AddDirectories);
-        Assert.Equal(new[] { configured, additional }, codex.ThreadOptions!.AdditionalDirectories);
+        Assert.Equal(
+            new[] { configured, additional },
+            codex
+                .AgentOptions.ThreadStartParams.Config.GetValueOrDefault()!["sandbox_workspace_write.writable_roots"]
+                .EnumerateArray()
+                .Select(path => path.GetString())
+        );
         Assert.Equal(workspace, claude.WorkingDirectory);
-        Assert.Equal(workspace, codex.ThreadOptions.WorkingDirectory);
+        Assert.Equal(workspace, codex.AgentOptions.ThreadStartParams.Cwd.GetValueOrDefault());
         Assert.Equal(sessionId.Normalize(), claude.Resume);
-        Assert.Equal(sessionId, codex.ThreadId);
+        Assert.Equal(sessionId, codex.ProviderSessionId);
         Assert.True(codex.IsResume);
     }
 
@@ -138,11 +149,11 @@ public class AgentRuntimeFactoryCompositionTests
 
         Assert.Equal(EngineKind.Codex, codexAgent.ExternalAgentKind);
         Assert.False(string.IsNullOrWhiteSpace(codexAgent.Extra));
-        var options = JsonUtil.Deserialize<CodexAIAgentOptions>(codexAgent.Extra!);
+        var options = JsonUtil.Deserialize<CodexAgentSettings>(codexAgent.Extra!);
 
         Assert.NotNull(options);
-        Assert.NotNull(options.CodexOptions);
-        Assert.NotNull(options.ThreadOptions);
+        Assert.Equal(CodexSandboxMode.DangerFullAccess, options.ThreadOptions.SandboxMode);
+        Assert.True(options.ThreadOptions.SkipGitRepoCheck);
     }
 
     [Theory]
@@ -158,13 +169,12 @@ public class AgentRuntimeFactoryCompositionTests
     )
     {
         // Arrange
-        const string agentExtra = """
-            {
-              "model": "agent-model",
-              "threadOptions": { "model": "agent-model" },
-              "sessionOptions": { "model": "agent-model" }
-            }
-            """;
+        var agentExtra = agentName switch
+        {
+            "Codex" => """{"threadOptions":{"model":"agent-model"}}""",
+            "Pi" => """{"sessionOptions":{"model":"agent-model"}}""",
+            _ => """{"model":"agent-model"}""",
+        };
         var projectExtra = malformedProjectExtra
             ? "invalid project JSON"
             : agentExtra.Replace("agent-model", "project-model");
@@ -578,15 +588,9 @@ public class AgentRuntimeFactoryCompositionTests
     }
 
     [Fact]
-    public void DisableExternalSdkChatHistoryPersistence_ForCodex_ClearsProvider()
+    public void CodexAppServerAgentOptions_Default_DoesNotPersistAgwHistory()
     {
-        var historyProvider = new InMemoryChatHistoryProvider();
-
-        var codexOptions = AgentRuntimeFactory.DisableExternalSdkChatHistoryPersistence(
-            new CodexAIAgentOptions { ChatHistoryProvider = historyProvider }
-        );
-
-        Assert.Null(codexOptions.ChatHistoryProvider);
+        Assert.Null(new CodexAppServerAIAgentOptions().ChatHistoryProvider);
     }
 
     [Fact]
@@ -796,11 +800,11 @@ public class AgentRuntimeFactoryCompositionTests
     }
 
     [Fact]
-    public void BuildCodexAIAgentOptions_WhenWorkspaceProvided_SetsThreadWorkingDirectory()
+    public void BuildCodexAgentRuntimeOptions_WhenWorkspaceProvided_MapsThreadSettings()
     {
-        var options = BuildCodexAIAgentOptions(
+        var options = BuildCodexAgentRuntimeOptions(
             """
-            {"threadOptions":{"model":"gpt-5-codex","skipGitRepoCheck":true}}
+            {"threadOptions":{"model":"gpt-5-codex","skipGitRepoCheck":true,"sandboxMode":"workspaceWrite"}}
             """,
             "D:\\source\\workspace",
             threadId: null,
@@ -808,33 +812,34 @@ public class AgentRuntimeFactoryCompositionTests
         );
 
         Assert.NotNull(options);
-        Assert.Equal("D:\\source\\workspace", options.ThreadOptions.WorkingDirectory);
-        Assert.Equal("gpt-5-codex", options.ThreadOptions.Model);
-        Assert.True(options.ThreadOptions.SkipGitRepoCheck);
+        Assert.Equal("D:\\source\\workspace", options.ClientOptions.WorkingDirectory);
+        Assert.Equal("D:\\source\\workspace", options.AgentOptions.ThreadStartParams.Cwd.GetValueOrDefault());
+        Assert.Equal("gpt-5-codex", options.AgentOptions.ThreadStartParams.Model.GetValueOrDefault());
+        Assert.Equal(SandboxMode.WorkspaceWrite, options.AgentOptions.ThreadStartParams.Sandbox.GetValueOrDefault());
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BuildCodexAIAgentOptions_WhenProviderSessionProvided_UsesThreadId(bool resume)
+    public void BuildCodexAgentRuntimeOptions_WhenProviderSessionProvided_PreservesSessionChoice(bool resume)
     {
         var threadId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-        var options = BuildCodexAIAgentOptions("{}", workspace: null, threadId, resume);
+        var options = BuildCodexAgentRuntimeOptions("{}", workspace: null, threadId, resume);
 
         Assert.NotNull(options);
-        Assert.Equal(threadId, options.ThreadId);
+        Assert.Equal(threadId, options.ProviderSessionId);
         Assert.Equal(resume, options.IsResume);
     }
 
     [Fact]
-    public void BuildCodexAIAgentOptions_WhenThreadStartedCallbackProvided_PreservesCallback()
+    public void BuildCodexAgentRuntimeOptions_WhenThreadStartedCallbackProvided_PreservesCallback()
     {
         ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
         Func<string, CancellationToken, ValueTask> callback = OnThreadStartedAsync;
 
-        var options = BuildCodexAIAgentOptions(
+        var options = BuildCodexAgentRuntimeOptions(
             "{}",
             workspace: null,
             threadId: null,
@@ -848,20 +853,15 @@ public class AgentRuntimeFactoryCompositionTests
     }
 
     [Fact]
-    public void BuildCodexAIAgentOptions_WhenEnvironmentVariablesProvided_InheritsProcessEnvironment()
+    public void BuildCodexAgentRuntimeOptions_WhenEnvironmentVariablesProvided_SetsToolEnvironment()
     {
         const string inheritedEnvName = "AGW_TEST_INHERITED_ENV";
         Environment.SetEnvironmentVariable(inheritedEnvName, "inherited");
 
         try
         {
-            var options = BuildCodexAIAgentOptions(
-                JsonUtil.Serialize(
-                    new CodexAIAgentOptions
-                    {
-                        CodexOptions = new OpenAI.CodexSdk.CodexOptions { CodexPathOverride = "/opt/codex/bin/codex" },
-                    }
-                ),
+            var options = BuildCodexAgentRuntimeOptions(
+                """{"codexOptions":{"codexPathOverride":"/opt/codex/bin/codex"}}""",
                 workspace: null,
                 threadId: null,
                 resume: false,
@@ -869,10 +869,12 @@ public class AgentRuntimeFactoryCompositionTests
             );
 
             Assert.NotNull(options);
-            Assert.NotNull(options.CodexOptions.Env);
-            Assert.Equal("inherited", options.CodexOptions.Env[inheritedEnvName]);
-            Assert.Equal("secret", options.CodexOptions.Env["AGW_TOKEN"]);
-            Assert.Equal("/opt/codex/bin/codex", options.CodexOptions.CodexPathOverride);
+            var environment = options.AgentOptions.ThreadStartParams.Config.GetValueOrDefault()![
+                "shell_environment_policy.set"
+            ];
+            Assert.Equal("secret", environment.GetProperty("AGW_TOKEN").GetString());
+            Assert.Equal("/opt/codex/bin/codex", options.ClientOptions.ExecutablePath);
+            Assert.False(environment.TryGetProperty(inheritedEnvName, out _));
         }
         finally
         {
@@ -881,31 +883,24 @@ public class AgentRuntimeFactoryCompositionTests
     }
 
     [Fact]
-    public void BuildCodexAIAgentOptions_WhenEnvConfigured_UsesEnvAsCompleteEnvironment()
+    public void BuildCodexAgentRuntimeOptions_WhenEnvConfigured_MapsEnvAndPreservesExplicitSettings()
     {
         const string hostOnlyEnvName = "AGW_TEST_HOST_ONLY_ENV";
         Environment.SetEnvironmentVariable(hostOnlyEnvName, "host");
 
         try
         {
-            var options = BuildCodexAIAgentOptions(
-                JsonUtil.Serialize(
-                    new CodexAIAgentOptions
-                    {
-                        CodexOptions = new OpenAI.CodexSdk.CodexOptions
-                        {
-                            CodexPathOverride = "/opt/codex/bin/codex",
-                            BaseUrl = "https://codex.invalid/v1",
-                            ApiKey = "configured-key",
-                            Env = new Dictionary<string, string>
-                            {
-                                ["PATH"] = "/usr/bin:/bin",
-                                ["SHELL"] = "/bin/zsh",
-                                ["SHARED"] = "configured",
-                            },
-                        },
-                    }
-                ),
+            var options = BuildCodexAgentRuntimeOptions(
+                """
+                {
+                  "codexOptions": {
+                    "codexPathOverride": "/opt/codex/bin/codex",
+                    "baseUrl": "https://codex.invalid/v1",
+                    "apiKey": "configured-key",
+                    "env": { "PATH": "/usr/bin:/bin", "SHELL": "/bin/zsh", "SHARED": "configured" }
+                  }
+                }
+                """,
                 workspace: null,
                 threadId: null,
                 resume: false,
@@ -913,22 +908,15 @@ public class AgentRuntimeFactoryCompositionTests
             );
 
             Assert.NotNull(options);
-            var codexOptions = options.CodexOptions;
-            // 已配置的 Env 是完整基础环境，宿主独有变量不会补入。
-            // The configured Env is the complete base environment; host-only variables are not added.
-            Assert.Equal(
-                new Dictionary<string, string>
-                {
-                    ["PATH"] = "/usr/bin:/bin",
-                    ["SHELL"] = "/bin/zsh",
-                    ["SHARED"] = "execution",
-                    ["AGW_TOKEN"] = "secret",
-                },
-                codexOptions.Env
-            );
-            Assert.Equal("/opt/codex/bin/codex", codexOptions.CodexPathOverride);
-            Assert.Equal("https://codex.invalid/v1", codexOptions.BaseUrl);
-            Assert.Equal("configured-key", codexOptions.ApiKey);
+            var config = options.AgentOptions.ThreadStartParams.Config.GetValueOrDefault()!;
+            var environment = config["shell_environment_policy.set"];
+            Assert.Equal("/usr/bin:/bin", environment.GetProperty("PATH").GetString());
+            Assert.Equal("/bin/zsh", environment.GetProperty("SHELL").GetString());
+            Assert.Equal("execution", environment.GetProperty("SHARED").GetString());
+            Assert.Equal("secret", environment.GetProperty("AGW_TOKEN").GetString());
+            Assert.Equal("/opt/codex/bin/codex", options.ClientOptions.ExecutablePath);
+            Assert.Equal("https://codex.invalid/v1", config["model_providers.agw.base_url"].GetString());
+            Assert.Equal("configured-key", config["model_providers.agw.experimental_bearer_token"].GetString());
         }
         finally
         {
@@ -939,15 +927,12 @@ public class AgentRuntimeFactoryCompositionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BuildCodexAIAgentOptions_WhenEnvironmentVariablesMissing_KeepsEnvForSdkInheritance(bool emptyVariables)
+    public void BuildCodexAgentRuntimeOptions_WhenEnvironmentVariablesMissing_KeepsProcessEnvironmentInheritance(
+        bool emptyVariables
+    )
     {
-        var options = BuildCodexAIAgentOptions(
-            JsonUtil.Serialize(
-                new CodexAIAgentOptions
-                {
-                    CodexOptions = new OpenAI.CodexSdk.CodexOptions { CodexPathOverride = "/opt/codex/bin/codex" },
-                }
-            ),
+        var options = BuildCodexAgentRuntimeOptions(
+            """{"codexOptions":{"codexPathOverride":"/opt/codex/bin/codex"}}""",
             workspace: null,
             threadId: null,
             resume: false,
@@ -955,10 +940,8 @@ public class AgentRuntimeFactoryCompositionTests
         );
 
         Assert.NotNull(options);
-        // Env 保持 null，由 SDK 复制宿主环境用于查找和启动。
-        // Env stays null so the SDK copies the host environment for lookup and startup.
-        Assert.Null(options.CodexOptions.Env);
-        Assert.Equal("/opt/codex/bin/codex", options.CodexOptions.CodexPathOverride);
+        Assert.False(options.AgentOptions.ThreadStartParams.Config.IsDefined);
+        Assert.Equal("/opt/codex/bin/codex", options.ClientOptions.ExecutablePath);
     }
 
     [Fact]
@@ -982,13 +965,14 @@ public class AgentRuntimeFactoryCompositionTests
                 isResume: false,
                 projectExtra: projectExtra
             )!.Model,
-            "Codex" => BuildCodexAIAgentOptions(
+            "Codex" => BuildCodexAgentRuntimeOptions(
                 agentExtra,
                 workspace: "/project",
                 threadId: null,
                 resume: false,
                 projectExtra: projectExtra
-            )!.ThreadOptions.Model,
+            )!
+                .AgentOptions.ThreadStartParams.Model.GetValueOrDefault(),
             "Pi" => AgentRuntimeFactory
                 .BuildPiAgentAIAgentOptions(
                     new Agent { Extra = agentExtra },
@@ -1009,17 +993,8 @@ public class AgentRuntimeFactoryCompositionTests
     [Fact]
     public void FullAccess_ExternalOptions_DisableApprovalAndSandboxAndPreserveWorkspace()
     {
-        var codex = BuildCodexAIAgentOptions(
-            JsonUtil.Serialize(
-                new CodexAIAgentOptions
-                {
-                    ThreadOptions = new OpenAI.CodexSdk.ThreadOptions
-                    {
-                        ApprovalPolicy = OpenAI.CodexSdk.ApprovalMode.OnRequest,
-                        SandboxMode = OpenAI.CodexSdk.SandboxMode.WorkspaceWrite,
-                    },
-                }
-            ),
+        var codex = BuildCodexAgentRuntimeOptions(
+            """{"threadOptions":{"approvalPolicy":"onRequest","sandboxMode":"workspaceWrite"}}""",
             "/workspace",
             null,
             false,
@@ -1033,9 +1008,18 @@ public class AgentRuntimeFactoryCompositionTests
             permissionMode: Agw.Agents.Contracts.Execution.AgwPermissionMode.FullAccess
         );
 
-        Assert.Equal(OpenAI.CodexSdk.ApprovalMode.Never, codex!.ThreadOptions!.ApprovalPolicy);
-        Assert.Equal(OpenAI.CodexSdk.SandboxMode.DangerFullAccess, codex.ThreadOptions.SandboxMode);
-        Assert.Equal("/workspace", codex.ThreadOptions.WorkingDirectory);
+        Assert.Equal(SandboxMode.DangerFullAccess, codex!.AgentOptions.ThreadStartParams.Sandbox.GetValueOrDefault());
+        Assert.Equal(
+            "never",
+            JsonSerializer
+                .SerializeToElement(
+                    codex.AgentOptions.ThreadStartParams,
+                    CodexAppServerClient.CreateSerializerOptions()
+                )
+                .GetProperty("approvalPolicy")
+                .GetString()
+        );
+        Assert.Equal("/workspace", codex.AgentOptions.ThreadStartParams.Cwd.GetValueOrDefault());
         Assert.Equal(ClaudeCodeSdk.Types.PermissionMode.bypassPermissions, claude!.PermissionMode);
         Assert.Equal("/workspace", claude.WorkingDirectory);
     }
@@ -1049,7 +1033,7 @@ public class AgentRuntimeFactoryCompositionTests
         Assert.Equal(ClaudeCodeSdk.Types.PermissionMode.@default, options!.PermissionMode);
     }
 
-    private static CodexAIAgentOptions? BuildCodexAIAgentOptions(
+    private static CodexAgentRuntimeOptions BuildCodexAgentRuntimeOptions(
         string? extra,
         string? workspace,
         Guid? threadId,
@@ -1062,12 +1046,12 @@ public class AgentRuntimeFactoryCompositionTests
     )
     {
         var method = typeof(AgentRuntimeFactory).GetMethod(
-            "BuildCodexAIAgentOptions",
+            "BuildCodexAgentRuntimeOptions",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic
         );
 
         Assert.NotNull(method);
-        return Assert.IsType<CodexAIAgentOptions>(
+        return Assert.IsType<CodexAgentRuntimeOptions>(
             method.Invoke(
                 null,
                 [

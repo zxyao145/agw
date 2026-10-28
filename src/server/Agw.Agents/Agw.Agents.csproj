@@ -3,7 +3,6 @@
     <NoWarn>$(NoWarn);MAAI001</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="CodexSdk.MAF" />
     <PackageReference Include="ClaudeCodeSdk.MAF" />
     <ProjectReference Include="../../sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
     <!--    <ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk.MAF\ClaudeCodeSdk.MAF.csproj" />-->

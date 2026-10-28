@@ -126,6 +126,39 @@ test("image content renders the attachment with its name as alternative text", (
   assert.equal(image?.getAttribute("alt"), "screen.png");
 });
 
+test("a Codex DataContent item reaches the image renderer with its recorded name", () => {
+  const items = buildConversationRenderModel([
+    {
+      messageId: "codex-image",
+      role: "assistant",
+      author: "codex",
+      additionalProperties: { threadId: "thread-1", turnId: "turn-1", itemId: "codex-image" },
+      contents: [
+        {
+          type: "DataContent",
+          uri: IMAGE_DATA_URL,
+          name: "generated.png",
+          additionalProperties: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            itemId: "codex-image",
+            contentIndex: 0,
+          },
+        },
+      ],
+    },
+  ]);
+  const item = items[0];
+
+  assert.equal(item?.type, "message");
+  if (item?.type !== "message") throw new Error("Expected a Codex image message");
+  const view = render(React.createElement(PresentedMessageComponent, { message: item.message }));
+  const image = view.container.querySelector("img");
+
+  assert.equal(image?.getAttribute("src"), IMAGE_DATA_URL);
+  assert.equal(image?.getAttribute("alt"), "generated.png");
+});
+
 test("an unsupported image payload renders nothing", () => {
   const view = renderMessage(
     presented([{ type: "image", uri: "data:text/plain;base64,QUJD", name: null }]),

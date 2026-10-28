@@ -152,6 +152,27 @@ export class ChatHttpClient {
     return getProjectConversationDetails(scope.projectId, scope.conversationId, client, signal);
   }
 
+  public async getConversationImage(
+    scope: ChatConversationScope,
+    query: { messageId: string; path: string; signal?: AbortSignal },
+    origin: ChatEventOrigin = CLIENT_ORIGIN,
+  ): Promise<{ dataUri: string | null }> {
+    const { client } = this.createApi(scope, origin);
+    const response = await client.apiGet("/api/projects/conversation-image", {
+      params: {
+        query: {
+          projectId: scope.projectId,
+          conversationId: scope.conversationId,
+          messageId: query.messageId,
+          path: query.path,
+        },
+      },
+      signal: query.signal,
+    });
+    if (response === null) throw new Error("The conversation image response was empty.");
+    return response;
+  }
+
   /**
    * 读取一页历史；response 事件之后，为 `items` 中的每条消息按顺序派发 history 消息事件。
    * Reads one history page; after its response event, a history message event is dispatched for each message of `items` in order.

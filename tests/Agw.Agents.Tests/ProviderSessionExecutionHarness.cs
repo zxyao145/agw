@@ -10,6 +10,7 @@ using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
+using Agw.Agents.ExternalAgents.Codex;
 using Agw.Auth.Extensions;
 using Agw.Files;
 using Agw.Files.Abstracts;
@@ -34,16 +35,14 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using OpenAI.CodexSdk;
-using OpenAI.CodexSdk.MAF;
 using PiAgentSdk;
 using PiAgentSdk.MAF;
 
 namespace Agw.Agents.Tests;
 
 /// <summary>
-/// 用全部模块的真实注册组装执行环境：真实 AgentRuntimeFactory、InProcessExecutionCoordinator、绑定持久化与 SQLite 数据库；External Agent 进程由 <see cref="FakeExternalAgentCli"/> 提供。
-/// Assembles the execution environment from every module's real registrations: the real AgentRuntimeFactory, InProcessExecutionCoordinator, binding persistence and a SQLite database; the External Agent processes come from <see cref="FakeExternalAgentCli"/>.
+/// 用全部模块的真实注册组装执行环境：真实 AgentRuntimeFactory、InProcessExecutionCoordinator、绑定持久化与 SQLite 数据库；Codex 使用固定版本的 app-server，Pi 使用命令行替身。
+/// Assembles the execution environment from every module's real registrations: the real AgentRuntimeFactory, InProcessExecutionCoordinator, binding persistence and a SQLite database; Codex uses its pinned app-server fixture, and Pi uses a command-line stand-in.
 /// </summary>
 internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
 {
@@ -55,19 +54,22 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
     private readonly string _root;
     private readonly ServiceProvider _services;
     private readonly CancellationTokenSource _host = new();
+    private readonly Func<IConversationExecutionGate, IConversationExecutionGate>? _wrapGate;
     private AsyncServiceScope _connection;
 
     private ProviderSessionExecutionHarness(
         string root,
         ServiceProvider services,
         FakeExternalAgentCli cli,
-        BindingCommandLog commands
+        BindingCommandLog commands,
+        Func<IConversationExecutionGate, IConversationExecutionGate>? wrapGate
     )
     {
         _root = root;
         _services = services;
         Cli = cli;
         Commands = commands;
+        _wrapGate = wrapGate;
         _connection = services.CreateAsyncScope();
     }
 
@@ -84,6 +86,8 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
     public string AgentName { get; } = "provider-session-agent";
 
     public string DatabasePath => Path.Combine(_root, "agw.db");
+
+    public string WorkspacePath => Path.Combine(_root, "workspace");
 
     public InProcessExecutionCoordinator Coordinator { get; private set; } = null!;
 
@@ -149,12 +153,13 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
     }
 
     /// <summary>
-    /// 创建环境与一个使用替身命令行的 External Agent；调用方在同步代码中建立 <see cref="UserId"/> 的用户上下文。
-    /// Creates the environment and an External Agent backed by the stand-in command line; callers establish the <see cref="UserId"/> user context in synchronous code.
+    /// 创建环境与一个 External Agent；调用方在同步代码中建立 <see cref="UserId"/> 的用户上下文。
+    /// Creates the environment and an External Agent; callers establish the <see cref="UserId"/> user context in synchronous code.
     /// </summary>
     public static async Task<ProviderSessionExecutionHarness> CreateAsync(
         EngineKind kind,
-        Func<IConversationExecutionGate, IConversationExecutionGate>? wrapGate = null
+        Func<IConversationExecutionGate, IConversationExecutionGate>? wrapGate = null,
+        CodexLiveTestOptions? codexOptions = null
     )
     {
         var root = Path.Combine(AppContext.BaseDirectory, "test-data", $"provider-session-{Guid.NewGuid():N}");
@@ -200,8 +205,14 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
             .AddSettings()
             .AddIntegrations(configuration);
 
-        var harness = new ProviderSessionExecutionHarness(root, services.BuildServiceProvider(), cli, commands);
-        await harness.SeedAsync(kind);
+        var harness = new ProviderSessionExecutionHarness(
+            root,
+            services.BuildServiceProvider(),
+            cli,
+            commands,
+            wrapGate
+        );
+        await harness.SeedAsync(kind, codexOptions);
         harness.Coordinator = harness.CreateCoordinator(wrapGate);
         return harness;
     }
@@ -215,7 +226,7 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
     /// 以真实受理事务登记一个 Turn 后交给协调器；返回受理请求，调用方决定等待方式。
     /// Registers a turn through the real acceptance transaction and hands it to the coordinator; returns the accepted request so the caller decides how to wait.
     /// </summary>
-    public async Task<Guid> StartTurnAsync(string text = "hello")
+    public async Task<Guid> StartTurnAsync(string text = "hello", bool stream = false)
     {
         var acceptance = _connection.ServiceProvider.GetRequiredService<TurnAcceptanceService>();
         var accepted = await acceptance.AcceptAsync(
@@ -226,7 +237,7 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
                 ConversationId,
                 TurnPersistenceTestKit.CreateInput(text),
                 SettingCommandMapper.FromCommand(new SettingCommand(ProjectId, ConversationId)),
-                Stream: false
+                Stream: stream
             ),
             TestContext.Current.CancellationToken
         );
@@ -244,15 +255,110 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
         return accepted.Request.TurnId;
     }
 
-    public async Task<ProviderSessionTurnResult> RunTurnAsync(string text = "hello")
+    public async Task<ProviderSessionTurnResult> RunTurnAsync(string text = "hello", bool stream = false)
     {
-        var turnId = await StartTurnAsync(text);
+        var turnId = await StartTurnAsync(text, stream);
         await WaitIdleAsync();
         return await ReadTurnAsync(turnId);
     }
 
+    public async Task RebuildCoordinatorAsync()
+    {
+        await Coordinator.ReleaseAsync();
+        Coordinator = CreateCoordinator(_wrapGate);
+    }
+
+    public IReadOnlyList<AgwDataContent> ReadImageContents(Guid turnId)
+    {
+        var broadcast = _services.GetRequiredService<TurnBroadcastRegistry>().Find(turnId, UserId);
+        return broadcast
+                ?.ReadAfter(0, out _)
+                .SelectMany(entry => entry.Message.Contents.OfType<AgwDataContent>())
+                .ToList()
+            ?? [];
+    }
+
+    public IReadOnlyList<AgwMessage> ReadMessages(Guid turnId)
+    {
+        var broadcast = _services.GetRequiredService<TurnBroadcastRegistry>().Find(turnId, UserId);
+        return broadcast?.ReadAfter(0, out _).Select(entry => entry.Message).ToList() ?? [];
+    }
+
+    public async Task<IReadOnlyList<AgwDataContent>> WaitForImageContentsAsync(Guid turnId)
+    {
+        var broadcast =
+            _services.GetRequiredService<TurnBroadcastRegistry>().Find(turnId, UserId)
+            ?? throw new InvalidOperationException($"Turn '{turnId}' has no registered broadcast.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(3));
+        var contents = new List<AgwDataContent>();
+        long cursor = 0;
+        while (contents.Count == 0)
+        {
+            var entries = broadcast.ReadAfter(cursor, out var changed);
+            foreach (var entry in entries)
+            {
+                cursor = entry.Sequence;
+                contents.AddRange(entry.Message.Contents.OfType<AgwDataContent>());
+            }
+
+            if (contents.Count == 0)
+            {
+                if (broadcast.IsFinished)
+                    break;
+                await changed.WaitAsync(timeout.Token);
+            }
+        }
+
+        return contents;
+    }
+
+    public async Task<AgwMessage> WaitForAssistantTextAsync(Guid turnId)
+    {
+        var broadcast =
+            _services.GetRequiredService<TurnBroadcastRegistry>().Find(turnId, UserId)
+            ?? throw new InvalidOperationException($"Turn '{turnId}' has no registered broadcast.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(3));
+        long cursor = 0;
+        while (true)
+        {
+            var entries = broadcast.ReadAfter(cursor, out var changed);
+            foreach (var entry in entries)
+            {
+                cursor = entry.Sequence;
+                if (
+                    entry.Message.Role == AiRole.Assistant
+                    && entry
+                        .Message.Contents.OfType<AgwTextContent>()
+                        .Any(content => !string.IsNullOrWhiteSpace(content.Content))
+                )
+                {
+                    return entry.Message;
+                }
+            }
+
+            if (broadcast.IsFinished)
+                break;
+            await changed.WaitAsync(timeout.Token);
+        }
+
+        throw new InvalidOperationException($"Turn '{turnId}' finished without assistant text.");
+    }
+
+    public async Task<List<ProjectConversationChatHistory>> ReadHistoryAsync()
+    {
+        var history = await QueryAsync(context =>
+            context
+                .ProjectConversationChatHistories.AsNoTracking()
+                .Where(record => record.ConversationId == ConversationId)
+                .ToListAsync(TestContext.Current.CancellationToken)
+        );
+        return history.OrderBy(record => record.CreateTime).ThenBy(record => record.Id).ToList();
+    }
+
     public Task WaitIdleAsync() =>
-        Host.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        Host.WhenIdleAsync().WaitAsync(TimeSpan.FromMinutes(3), TestContext.Current.CancellationToken);
 
     public async Task<ProviderSessionTurnResult> ReadTurnAsync(Guid turnId)
     {
@@ -342,13 +448,13 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
             services.GetRequiredService<IAgwFileSystemResolver>(),
             services.GetRequiredService<TurnBroadcastRegistry>(),
             services.GetRequiredService<IServiceScopeFactory>(),
-            wrapGate == null ? gate : wrapGate(gate)
+            wrapGate is null ? gate : wrapGate(gate)
         ).Create(_host.Token);
     }
 
-    private async Task SeedAsync(EngineKind kind)
+    private async Task SeedAsync(EngineKind kind, CodexLiveTestOptions? codexOptions)
     {
-        var workspace = Directory.CreateDirectory(Path.Combine(_root, "workspace")).FullName;
+        var workspace = Directory.CreateDirectory(WorkspacePath).FullName;
         await using var scope = _services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
         await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
@@ -384,7 +490,7 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
                 Type = AgentType.External,
                 ExternalAgentKind = kind,
                 Enable = true,
-                Extra = CreateExtra(kind),
+                Extra = CreateExtra(kind, codexOptions),
                 CreateBy = UserId,
                 CreateTime = now,
             }
@@ -392,14 +498,17 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private string CreateExtra(EngineKind kind) =>
+    private string CreateExtra(EngineKind kind, CodexLiveTestOptions? codexOptions) =>
         kind switch
         {
             EngineKind.Codex => JsonUtil.Serialize(
-                new CodexAIAgentOptions
+                new CodexAgentSettings
                 {
-                    CodexOptions = new CodexOptions { CodexPathOverride = Cli.CodexPath },
-                    ThreadOptions = new ThreadOptions { SkipGitRepoCheck = true },
+                    CodexOptions = new CodexClientSettings
+                    {
+                        CodexPathOverride = CodexAppServerFixture.ExecutablePath(codexOptions?.CodexPath),
+                    },
+                    ThreadOptions = new CodexThreadSettings { SkipGitRepoCheck = true, Model = codexOptions?.Model },
                 }
             ),
             EngineKind.Pi => JsonUtil.Serialize(

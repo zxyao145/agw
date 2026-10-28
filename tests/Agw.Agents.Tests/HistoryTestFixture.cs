@@ -33,14 +33,16 @@ internal sealed class HistoryTestFixture : DbTransactionInterceptor, IAsyncDispo
 {
     public const string ContextId = "streaming";
     public const string UserId = "tester";
+    private static readonly string TestDataDirectory = Path.Combine(AppContext.BaseDirectory, "test-data");
 
-    private readonly string _path = Path.Combine(Path.GetTempPath(), $"agw-history-{Guid.NewGuid():N}.db");
+    private readonly string _path = Path.Combine(TestDataDirectory, $"agw-history-{Guid.NewGuid():N}.db");
     private readonly DbContextOptions<AgwDbContext> _options;
     private readonly Channel<bool> _commits = Channel.CreateUnbounded<bool>();
     private int _commitCount;
 
     private HistoryTestFixture(ConversationHistoryWriteMode mode, long capacity)
     {
+        Directory.CreateDirectory(TestDataDirectory);
         _options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite($"Data Source={_path};Pooling=False")
             .AddInterceptors(this)
@@ -162,7 +164,10 @@ internal sealed class HistoryTestFixture : DbTransactionInterceptor, IAsyncDispo
     /// 直接创建一次运行的历史记录，由测试按 SDK 的回调顺序驱动。
     /// Creates the history recording of one run directly, driven by the test in the SDK's callback order.
     /// </summary>
-    public HistoryRecording CreateRecording(IAgentMessageAdapter<AgentResponseUpdate> adapter) =>
+    public HistoryRecording CreateRecording(
+        IAgentMessageAdapter<AgentResponseUpdate> adapter,
+        bool structuredResult = false
+    ) =>
         new(
             new ConversationMessageWriteScope
             {
@@ -176,7 +181,7 @@ internal sealed class HistoryTestFixture : DbTransactionInterceptor, IAsyncDispo
             Clock,
             "test",
             transient: false,
-            structuredResult: false
+            structuredResult
         );
 
     public async Task<List<ChatMessage>> ReadMessagesAsync() =>

@@ -5,9 +5,10 @@ using Agw.Agents.ExternalAgents;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using ClaudeCodeSdk.MAF;
-using OpenAI.CodexSdk;
-using OpenAI.CodexSdk.MAF;
+using OpenAI.CodexSdk.AppServer.MAF;
+using OpenAI.CodexSdk.AppServer.Protocol;
 using PiAgentSdk;
 using PiAgentSdk.MAF;
 
@@ -90,12 +91,23 @@ public class ExternalAgentModelOptionsTests
                 );
             case EngineKind.Codex:
                 var codex = ExternalAgentModelOptions.ApplyCodex(
-                    new CodexAIAgentOptions { ThreadId = sessionId, IsResume = true },
+                    new CodexAppServerAIAgentOptions
+                    {
+                        ThreadStartParams = new ThreadStartParams { Model = configuration?.Model.Name },
+                    },
                     configuration
                 );
-                Assert.Equal(sessionId, codex.ThreadId);
-                Assert.True(codex.IsResume);
-                return (codex.ThreadOptions?.Model, codex.CodexOptions?.BaseUrl, codex.CodexOptions?.ApiKey);
+                var resume = new ThreadResumeParams { ThreadId = sessionId.Normalize() };
+                var codexResume = codex.ConfigureThreadResume?.Invoke(resume) ?? resume;
+                Assert.Equal(sessionId.Normalize(), codexResume.ThreadId);
+                var codexConfig = codexResume.Config.GetValueOrDefault();
+                if (codexConfig == null)
+                    return (codexResume.Model.GetValueOrDefault(), null, null);
+                return (
+                    codexResume.Model.GetValueOrDefault(),
+                    codexConfig["model_providers.agw.base_url"].GetString(),
+                    codexConfig["model_providers.agw.experimental_bearer_token"].GetString()
+                );
             case EngineKind.Pi:
                 var pi = ExternalAgentModelOptions.ApplyPi(
                     new PiAgentAIAgentOptions { SessionId = sessionId.ToString("D"), IsResume = true },
@@ -158,7 +170,10 @@ public class ExternalAgentModelOptionsTests
     public void Apply_NoSelection_PreservesOriginalOptions()
     {
         var claude = new ClaudeCodeAIAgentOptions { Model = "extra-model", ApiKey = "extra-key" };
-        var codex = new CodexAIAgentOptions { ThreadOptions = new ThreadOptions { Model = "extra-model" } };
+        var codex = new CodexAppServerAIAgentOptions
+        {
+            ThreadStartParams = new ThreadStartParams { Model = "extra-model" },
+        };
         var pi = new PiAgentAIAgentOptions
         {
             SessionOptions = new PiSessionOptions { Model = "extra-model", Provider = "local" },
@@ -206,63 +221,49 @@ public class ExternalAgentModelOptionsTests
         Assert.Equal("old", original.EnvironmentVariables!["ANTHROPIC_API_KEY"]);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ApplyCodex_SelectedProvider_OverridesRoutingAndPreservesThread(bool resume)
+    [Fact]
+    public void ApplyCodex_SelectedProvider_OverridesRoutingAndPreservesThreadSettings()
     {
-        var original = new CodexAIAgentOptions
+        var original = new CodexAppServerAIAgentOptions
         {
-            ThreadId = Guid.CreateVersion7(),
-            IsResume = resume,
-            ThreadOptions = new ThreadOptions
+            ThreadStartParams = new ThreadStartParams
             {
                 Model = "extra",
-                WorkingDirectory = "/workspace",
-                SandboxMode = SandboxMode.WorkspaceWrite,
-                ApprovalPolicy = ApprovalMode.Never,
-            },
-            CodexOptions = new CodexOptions
-            {
-                ApiKey = "old",
-                BaseUrl = "https://old.invalid",
-                Env = new Dictionary<string, string>
+                Cwd = "/workspace",
+                Sandbox = SandboxMode.WorkspaceWrite,
+                Config = new Dictionary<string, System.Text.Json.JsonElement>
                 {
-                    ["KEEP"] = "value",
-                    [ExternalAgentModelOptions.ApiKeyEnvironmentVariable] = "old",
-                },
-                Config = new Dictionary<string, CodexConfigValue>
-                {
-                    ["model_provider"] = "local",
-                    ["model_providers.agw.base_url"] = "https://old.invalid",
-                    ["keep"] = true,
+                    ["model_provider"] = JsonSerializer.SerializeToElement("local"),
+                    ["model_providers.agw.base_url"] = JsonSerializer.SerializeToElement("https://old.invalid"),
+                    ["keep"] = JsonSerializer.SerializeToElement(true),
                 },
             },
+            ConfigureThreadResume = parameters => parameters with { Model = "extra", ModelProvider = "local" },
         };
         var result = ExternalAgentModelOptions.ApplyCodex(original, Configuration(ProviderType.OpenAIResponses));
-        Assert.Equal("selected-model", result.ThreadOptions!.Model);
-        Assert.Equal("selected-key", result.CodexOptions!.ApiKey);
-        Assert.Equal("https://selected.invalid/v1", result.CodexOptions.BaseUrl);
-        Assert.Equal("selected-key", result.CodexOptions.Env![ExternalAgentModelOptions.ApiKeyEnvironmentVariable]);
-        Assert.Equal(
-            "agw",
-            Assert.IsType<CodexConfigValue.StringValue>(result.CodexOptions.Config!["model_provider"]).Value
+        var resultConfig = result.ThreadStartParams.Config.GetValueOrDefault()!;
+        Assert.Equal("selected-model", result.ThreadStartParams.Model.GetValueOrDefault());
+        Assert.Equal("agw", result.ThreadStartParams.ModelProvider.GetValueOrDefault());
+        Assert.Equal("https://selected.invalid/v1", resultConfig["model_providers.agw.base_url"].GetString());
+        Assert.Equal("selected-key", resultConfig["model_providers.agw.experimental_bearer_token"].GetString());
+        Assert.DoesNotContain(
+            "model_providers.agw.experimental_bearer_token",
+            original.ThreadStartParams.Config.GetValueOrDefault()!.Keys
         );
-        var providers = Assert.IsType<CodexConfigValue.ObjectValue>(result.CodexOptions.Config["model_providers"]);
-        var provider = Assert.IsType<CodexConfigValue.ObjectValue>(providers.Properties["agw"]);
-        Assert.Equal("responses", Assert.IsType<CodexConfigValue.StringValue>(provider.Properties["wire_api"]).Value);
+        Assert.True(resultConfig["keep"].GetBoolean());
+        Assert.Equal("/workspace", result.ThreadStartParams.Cwd.GetValueOrDefault());
+        Assert.Equal(SandboxMode.WorkspaceWrite, result.ThreadStartParams.Sandbox.GetValueOrDefault());
+        var resumed = result.ConfigureThreadResume!(new ThreadResumeParams { ThreadId = "thread-1" });
+        var resumedConfig = resumed.Config.GetValueOrDefault()!;
+        Assert.Equal("selected-model", resumed.Model.GetValueOrDefault());
+        Assert.Equal("agw", resumed.ModelProvider.GetValueOrDefault());
+        Assert.Equal("https://selected.invalid/v1", resumedConfig["model_providers.agw.base_url"].GetString());
+        Assert.Equal("selected-key", resumedConfig["model_providers.agw.experimental_bearer_token"].GetString());
+        Assert.Equal("thread-1", resumed.ThreadId);
         Assert.Equal(
-            "https://selected.invalid/v1",
-            Assert.IsType<CodexConfigValue.StringValue>(provider.Properties["base_url"]).Value
+            "https://old.invalid",
+            original.ThreadStartParams.Config.GetValueOrDefault()!["model_providers.agw.base_url"].GetString()
         );
-        Assert.DoesNotContain("model_providers.agw.base_url", result.CodexOptions.Config.Keys);
-        Assert.True(Assert.IsType<CodexConfigValue.BoolValue>(result.CodexOptions.Config["keep"]).Value);
-        Assert.Equal("value", result.CodexOptions.Env["KEEP"]);
-        Assert.Equal(original.ThreadId, result.ThreadId);
-        Assert.Equal(resume, result.IsResume);
-        Assert.Equal(SandboxMode.WorkspaceWrite, result.ThreadOptions.SandboxMode);
-        Assert.Equal(ApprovalMode.Never, result.ThreadOptions.ApprovalPolicy);
-        Assert.Equal("old", original.CodexOptions.ApiKey);
     }
 
     [Theory]

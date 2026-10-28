@@ -92,6 +92,63 @@ test("visible messages remove usage and controls before collapsing ordinary syst
   );
 });
 
+test("Codex image items remain in completed work after the final Result", () => {
+  const imageUri =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const live: AiMessage[] = [
+    {
+      messageId: "user-1",
+      role: "user",
+      contents: [{ type: "TextContent", content: "Review this image" }],
+    },
+    {
+      messageId: "image-1",
+      role: "assistant",
+      author: "codex",
+      additionalProperties: { threadId: "thread-1", turnId: "turn-1", itemId: "image-1" },
+      contents: [
+        {
+          type: "DataContent",
+          uri: imageUri,
+          name: "generated.png",
+          additionalProperties: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            itemId: "image-1",
+            contentIndex: 0,
+          },
+        },
+      ],
+    },
+    {
+      messageId: "result-1",
+      role: "assistant",
+      author: "codex",
+      additionalProperties: { type: "result", turnId: "turn-1" },
+      contents: [{ type: "TextContent", content: "Image generated" }],
+    },
+  ];
+
+  for (const history of [live, JSON.parse(JSON.stringify(live)) as AiMessage[]]) {
+    const items = buildConversationRenderModel(history);
+    assert.deepEqual(
+      items.map((item) => item.type),
+      ["message", "work-summary", "result"],
+    );
+    const work = items[1];
+    assert.equal(work?.type, "work-summary");
+    if (work?.type !== "work-summary") throw new Error("Expected folded completed work");
+    const image = work.items.find(
+      (item) => item.type === "message" && item.message.source.messageId === "image-1",
+    );
+    assert.equal(image?.type, "message");
+    if (image?.type !== "message") throw new Error("Expected the Codex image item");
+    assert.deepEqual(image.message.contents, [
+      { type: "image", uri: imageUri, name: "generated.png" },
+    ]);
+  }
+});
+
 test("visible messages keep Claude SessionStart and results while hiding other Claude system messages", () => {
   const sessionStart = claudeSystemMessage(
     "session-start",
