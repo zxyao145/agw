@@ -31,16 +31,19 @@ public sealed class FileAppService
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly IGitCommandService _gitCommandService;
     private readonly ILogger<FileAppService> _logger;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
 
     public FileAppService(
         IAgwFileSystemResolver fileSystemResolver,
         IGitCommandService gitCommandService,
-        ILogger<FileAppService> logger
+        ILogger<FileAppService> logger,
+        IProjectWorkspaceAccess workspaceAccess
     )
     {
         _fileSystemResolver = fileSystemResolver;
         _gitCommandService = gitCommandService;
         _logger = logger;
+        _workspaceAccess = workspaceAccess;
     }
 
     public async Task<FileOperationResult<FileListOutput>> ListAsync(
@@ -78,7 +81,7 @@ public sealed class FileAppService
 
         if (recursive && diff)
         {
-            return await GetAllChangedFilesAsync((ILocalFileSystem)fileSystem, path, cancellationToken);
+            return await GetAllChangedFilesAsync(projectId, (ILocalFileSystem)fileSystem, path, cancellationToken);
         }
 
         GitChangedFiles? changedFiles = null;
@@ -87,6 +90,7 @@ public sealed class FileAppService
         {
             local = (ILocalFileSystem)fileSystem;
             var physicalPath = local.ResolvePhysicalPath(path);
+            await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
             changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalPath, cancellationToken);
             if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
             {
@@ -239,6 +243,7 @@ public sealed class FileAppService
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
         if (!await fileSystem.ExistsFileAsync(path, cancellationToken))
         {
+            await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
             var changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalPath, cancellationToken);
             if (
                 changedFiles == null
@@ -250,6 +255,7 @@ public sealed class FileAppService
             }
         }
 
+        await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
         var diff = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken, diffScope);
         if (!diff.Success)
         {
@@ -354,9 +360,12 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Invalid("Project directory root cannot be deleted");
         }
 
-        var isFile = await fileSystem.ExistsFileAsync(path, cancellationToken);
-        var isDirectory = !isFile && await fileSystem.ExistsDirectoryAsync(path, cancellationToken);
-        if (!isFile && !isDirectory)
+        var isSymbolicLink =
+            fileSystem is ILocalFileSystem localFileSystem
+            && await localFileSystem.IsSymbolicLinkAsync(path, cancellationToken).ConfigureAwait(false);
+        var isFile = !isSymbolicLink && await fileSystem.ExistsFileAsync(path, cancellationToken);
+        var isDirectory = !isSymbolicLink && !isFile && await fileSystem.ExistsDirectoryAsync(path, cancellationToken);
+        if (!isSymbolicLink && !isFile && !isDirectory)
         {
             return FileOperationResult<FileMutationOutput>.Missing("File or directory not found");
         }
@@ -693,8 +702,13 @@ public sealed class FileAppService
             return FileOperationResult<FileListEntry>.Invalid(invalid);
         }
 
+        var localFileSystem = fileSystem as ILocalFileSystem;
+        var isSymbolicLink =
+            localFileSystem is not null
+            && await localFileSystem.IsSymbolicLinkAsync(sourcePath!, cancellationToken).ConfigureAwait(false);
         if (
-            !await fileSystem.ExistsFileAsync(sourcePath!, cancellationToken)
+            !isSymbolicLink
+            && !await fileSystem.ExistsFileAsync(sourcePath!, cancellationToken)
             && !await fileSystem.ExistsDirectoryAsync(sourcePath!, cancellationToken)
         )
         {
@@ -713,6 +727,26 @@ public sealed class FileAppService
             destinationPath,
             projectId
         );
+        if (isSymbolicLink)
+        {
+            var symbolicLinkIsDirectory = await localFileSystem!
+                .GetSymbolicLinkDirectoryAsync(destinationPath!, cancellationToken)
+                .ConfigureAwait(false);
+            var normalizedPath = NormalizePath(destinationPath!);
+            return FileOperationResult<FileListEntry>.Succeeded(
+                new FileListEntry(
+                    GetFileName(normalizedPath),
+                    normalizedPath,
+                    symbolicLinkIsDirectory is true ? "directory" : "file",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            );
+        }
+
         return await StatEntryAsync(fileSystem, destinationPath!, cancellationToken);
     }
 
@@ -752,6 +786,7 @@ public sealed class FileAppService
         }
 
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
+        await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
         var result = await _gitCommandService.ResetFileAsync(physicalPath, cancellationToken);
         if (!result.Success && result.IsClientError)
         {
@@ -911,6 +946,7 @@ public sealed class FileAppService
         }
 
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
+        await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
         var result = await _gitCommandService.SetStagedAsync(physicalPath, staged, cancellationToken);
         if (!result.Success && result.IsClientError)
         {
@@ -933,12 +969,14 @@ public sealed class FileAppService
     }
 
     private async Task<FileOperationResult<FileListOutput>> GetAllChangedFilesAsync(
+        Guid projectId,
         ILocalFileSystem fileSystem,
         string directoryPath,
         CancellationToken cancellationToken
     )
     {
         var physicalDirectory = fileSystem.ResolvePhysicalPath(directoryPath);
+        await ValidateGitPathAsync(projectId, physicalDirectory, cancellationToken).ConfigureAwait(false);
         var changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalDirectory, cancellationToken);
         if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
         {
@@ -978,6 +1016,9 @@ public sealed class FileAppService
         var sortedItems = items.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList();
         return FileOperationResult<FileListOutput>.Succeeded(new FileListOutput(sortedItems));
     }
+
+    private Task ValidateGitPathAsync(Guid projectId, string path, CancellationToken cancellationToken) =>
+        _workspaceAccess.ValidateAsync([path, $"~/.agw/projects/{projectId:N}"], cancellationToken: cancellationToken);
 
     private static async Task<FileOperationResult<FileListEntry>> StatEntryAsync(
         IAgwFileSystem fileSystem,

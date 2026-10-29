@@ -325,7 +325,7 @@ public sealed partial class ExecutionWorkspaceProvisioningTests : IDisposable
                 admin.ConnectionString,
                 database,
                 provider,
-                Host.CreateApplicationBuilder().Build()
+                Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder().Build()
             );
         }
 

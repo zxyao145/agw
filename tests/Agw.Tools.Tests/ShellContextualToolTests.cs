@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -8,6 +9,7 @@ using Agw.Tools.Impl.ContextualTools.Shell;
 using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Tests;
 
@@ -192,10 +194,13 @@ public sealed class ShellContextualToolTests
         CancellationToken ct
     )
     {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Agents:Shell:Backend"] = backend })
+            .Build();
+        var workspaceServices = ProjectWorkspaceAccessTestServices.Create();
         var tool = new ShellContextualTool(
-            new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?> { ["Agents:Shell:Backend"] = backend })
-                .Build()
+            configuration,
+            workspaceServices.GetRequiredService<IProjectWorkspaceAccess>()
         );
         var projectId = Guid.CreateVersion7();
         var project = new Project { Id = projectId, Workspace = workspace };
@@ -207,7 +212,9 @@ public sealed class ShellContextualToolTests
             WorkspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(projectId, workspace, additionalDirectories),
             DefaultMode = "execute",
         };
-        return await tool.MaterializeAsync(new RunShellToolDefinition(), context, ct);
+        var contribution = await tool.MaterializeAsync(new RunShellToolDefinition(), context, ct);
+        contribution.AddResource(workspaceServices);
+        return contribution;
     }
 
     private static string CreateWorkspace() =>

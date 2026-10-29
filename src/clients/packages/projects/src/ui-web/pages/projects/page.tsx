@@ -37,7 +37,7 @@ import type {
   ProjectResponse,
   ProjectUpdateMutationVariables,
 } from "./components/types";
-import { syncDefaultProjectWorkspace, toProjectCapabilityFormState } from "./project-form";
+import { toProjectCapabilityFormState } from "./project-form";
 import { type ToolLiteInfo, type ToolValueObject } from "@agw/tools";
 
 function toggleSelection(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
@@ -87,20 +87,6 @@ export default function ProjectsPage() {
   const [environmentVariables, setEnvironmentVariables] = React.useState<
     EnvironmentVariableEntry[]
   >([]);
-
-  const handleCreateNameChange = React.useCallback(
-    (nextName: string) => {
-      setWorkspace((currentWorkspace) =>
-        syncDefaultProjectWorkspace({
-          previousName: name,
-          nextName,
-          currentWorkspace,
-        }),
-      );
-      setName(nextName);
-    },
-    [name],
-  );
 
   const createProjectMutation = useMutation({
     mutationFn: async (body: ProjectCreateRequest) => {
@@ -258,7 +244,7 @@ export default function ProjectsPage() {
             open={createOpen}
             setOpen={setCreateOpen}
             name={name}
-            setName={handleCreateNameChange}
+            setName={setName}
             description={description}
             setDescription={setDescription}
             additionalDirectories={additionalDirectories}

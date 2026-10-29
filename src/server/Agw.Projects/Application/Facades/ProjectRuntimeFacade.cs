@@ -1,3 +1,4 @@
+using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
@@ -7,10 +8,12 @@ namespace Agw.Projects.Application.Facades;
 public sealed class ProjectRuntimeFacade : IProjectRuntimeFacade
 {
     private readonly IProjectAppService _projectService;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
 
-    public ProjectRuntimeFacade(IProjectAppService projectService)
+    public ProjectRuntimeFacade(IProjectAppService projectService, IProjectWorkspaceAccess workspaceAccess)
     {
         _projectService = projectService;
+        _workspaceAccess = workspaceAccess;
     }
 
     public async Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
@@ -32,11 +35,14 @@ public sealed class ProjectRuntimeFacade : IProjectRuntimeFacade
     {
         cancellationToken.ThrowIfCancellationRequested();
         var project = await _projectService.GetAsync(projectId).ConfigureAwait(false);
-        return project == null
-            ? null
-            : ProjectWorkspacePaths.EnsureCreated(
-                ProjectWorkspacePaths.CreateSnapshot(project.Id, project.Workspace).Workspace
-            );
+        if (project == null)
+            return null;
+
+        var workspace = ProjectWorkspacePaths.CreateSnapshot(project.Id, project.Workspace).Workspace;
+        await _workspaceAccess
+            .ValidateAsync([workspace], creatingProjectId: null, cancellationToken)
+            .ConfigureAwait(false);
+        return ProjectWorkspacePaths.EnsureCreated(workspace);
     }
 
     private static ProjectRuntimeSnapshot Map(Agw.Shared.Data.Entities.Projects.Project project) =>

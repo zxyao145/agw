@@ -10,6 +10,18 @@ public static class ProjectDefaults
 
     public static string GetDefaultWorkspace(Guid projectId) => $"~/.agw/projects/{projectId:N}";
 
+    public static string GetDefaultWorkspace(
+        Guid projectId,
+        string normalizedName,
+        bool isolationEnabled,
+        string userHomeDirectory
+    ) =>
+        Path.GetFullPath(
+            isolationEnabled
+                ? Path.Combine(userHomeDirectory, ".agw", "projects", projectId.ToString("N"))
+                : Path.Combine(userHomeDirectory, ".agw", normalizedName)
+        );
+
     public static Guid GetDefaultProjectIdentifier(Guid? projectId) =>
         projectId == null ? DefaultBuiltInId : projectId.Value;
 }

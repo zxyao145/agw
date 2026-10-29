@@ -473,6 +473,7 @@ internal sealed class ProviderSessionExecutionHarness : IAsyncDisposable
             services.GetRequiredService<AgentflowTurnExecutor>(),
             services.GetRequiredService<ExecutionContextFactory>(),
             services.GetRequiredService<IAgwFileSystemResolver>(),
+            services.GetRequiredService<IProjectWorkspaceAccess>(),
             services.GetRequiredService<TurnBroadcastRegistry>(),
             services.GetRequiredService<IServiceScopeFactory>(),
             wrapGate is null ? gate : wrapGate(gate)

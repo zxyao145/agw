@@ -14,6 +14,7 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
     private readonly ILogger<ProjectScopedFileSystemResolver> _logger;
     private readonly ILogger<LocalFileSystem> _fileSystemLogger;
     private readonly TimeProvider _timeProvider;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
     private readonly ConcurrentDictionary<(Guid ProjectId, Guid? DirectoryId, string Path), CachedEntry> _cache = new();
 
     public ProjectScopedFileSystemResolver(
@@ -21,7 +22,8 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
         FilePathLocks pathLocks,
         ILogger<ProjectScopedFileSystemResolver> logger,
         ILogger<LocalFileSystem> fileSystemLogger,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IProjectWorkspaceAccess workspaceAccess
     )
     {
         _scopeFactory = scopeFactory;
@@ -29,6 +31,7 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
         _logger = logger;
         _fileSystemLogger = fileSystemLogger;
         _timeProvider = timeProvider;
+        _workspaceAccess = workspaceAccess;
     }
 
     public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
@@ -71,19 +74,21 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
         }
 
         var directories = snapshot?.AdditionalDirectories ?? project?.AdditionalDirectories ?? [];
+        var workspacePath = GetWorkspacePath(snapshot?.Workspace ?? project?.Workspace, projectId);
+        string[] declaredRoots = [workspacePath, .. directories.Select(static directory => directory.Path)];
+        await _workspaceAccess.ValidateAsync(declaredRoots, cancellationToken: ct).ConfigureAwait(false);
+
         var rootPath = directoryId.HasValue
             ? directories.FirstOrDefault(directory => directory.Id == directoryId.Value)?.Path
-            : snapshot?.Workspace ?? project?.Workspace;
-        if (directoryId.HasValue && rootPath == null)
+            : workspacePath;
+        if (rootPath is null)
         {
             return null;
         }
         // 每次解析都准备实际选中的目录；目录重新创建后物理身份改变，缓存的文件系统随之重建。
         // Every resolution prepares the selected directory; a recreated directory has a new physical identity, so the
         // cached file system is rebuilt.
-        rootPath = ProjectWorkspacePaths.EnsureCreated(
-            string.IsNullOrWhiteSpace(rootPath) ? $"~/.agw/projects/{projectId:N}" : rootPath
-        );
+        rootPath = ProjectWorkspacePaths.EnsureCreated(rootPath);
 
         var key = (projectId, directoryId, rootPath);
         if (
@@ -96,7 +101,12 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
         }
 
         var directory = DirectoryIdentitySnapshot.Capture([rootPath]);
-        var fileSystem = new LocalFileSystem(rootPath, _pathLocks, _fileSystemLogger);
+        var localFileSystem = new LocalFileSystem(rootPath, _pathLocks, _fileSystemLogger);
+        IAgwFileSystem fileSystem = localFileSystem;
+        if (_workspaceAccess.IsolationEnabled)
+        {
+            fileSystem = new AuthorizedLocalFileSystem(localFileSystem, localFileSystem, _workspaceAccess, projectId);
+        }
         _logger.LogDebug(
             "Project {ProjectId} directory {DirectoryId} resolved to {Path}",
             projectId,
@@ -114,6 +124,9 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
             _cache.TryRemove(key, out _);
         }
     }
+
+    private static string GetWorkspacePath(string? workspacePath, Guid projectId) =>
+        string.IsNullOrWhiteSpace(workspacePath) ? $"~/.agw/projects/{projectId:N}" : workspacePath;
 
     private sealed record CachedEntry(
         IAgwFileSystem FileSystem,

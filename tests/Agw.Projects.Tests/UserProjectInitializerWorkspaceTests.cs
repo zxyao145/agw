@@ -1,15 +1,20 @@
 using System.Security.Claims;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Configuration;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Runtime;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Projects.Tests;
 
 /// <summary>
-/// OIDC 用户的默认项目在保存前创建有效主目录；数据库保存空 <c>Workspace</c>，<c>~</c> 按注入的路径上下文中的用户目录展开。
-/// An OIDC user's default Projects get their effective primary directories before saving; the database keeps an empty
-/// <c>Workspace</c>, and <c>~</c> expands with the user home of the injected path context.
+/// OIDC 用户的默认项目在保存前设置绝对主目录并创建目录。创建路径按用户目录持久化。
+/// An OIDC user's default Projects store absolute primary directories and create them before saving.
 /// </summary>
 public sealed class UserProjectInitializerWorkspaceTests : IDisposable
 {
@@ -46,9 +51,10 @@ public sealed class UserProjectInitializerWorkspaceTests : IDisposable
         var token = TestContext.Current.CancellationToken;
         await using var connection = await OpenAsync(token);
         await using var context = await CreateContextAsync(connection, token);
+        var paths = CreatePaths();
 
         // Act
-        await new UserProjectInitializer(context, CreatePaths()).EnsureDefaultsAsync(token);
+        await new UserProjectInitializer(context, paths, CreateWorkspaceAccess(paths)).EnsureDefaultsAsync(token);
 
         // Assert
         var projects = await context.Projects.ToListAsync(token);
@@ -60,10 +66,60 @@ public sealed class UserProjectInitializerWorkspaceTests : IDisposable
             projects,
             project =>
             {
-                Assert.Null(project.Workspace);
-                Assert.True(Directory.Exists(Path.Combine(Home, ".agw", "projects", project.Id.ToString("N"))));
+                var workspace = Path.Combine(Home, ".agw", project.Name);
+                Assert.Equal(workspace, project.Workspace);
+                Assert.True(Path.IsPathFullyQualified(project.Workspace!));
+                Assert.True(Directory.Exists(workspace));
             }
         );
+    }
+
+    [Fact]
+    public async Task EnsureDefaultsAsync_IsolationEnabled_UsesProjectIdDirectories()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync(token);
+        await using var context = await CreateContextAsync(connection, token);
+        var paths = CreatePaths();
+        var initializer = new UserProjectInitializer(context, paths, CreateWorkspaceAccess(paths, true));
+
+        await initializer.EnsureDefaultsAsync(token);
+
+        var projects = await context.Projects.ToListAsync(token);
+        Assert.All(
+            projects,
+            project =>
+            {
+                var workspace = Path.Combine(Home, ".agw", "projects", project.Id.ToString("N"));
+                Assert.Equal(workspace, project.Workspace);
+                Assert.True(Path.IsPathFullyQualified(project.Workspace!));
+                Assert.True(Directory.Exists(workspace));
+            }
+        );
+    }
+
+    [Fact]
+    public async Task EnsureDefaultsAsync_ExistingNullWorkspace_PreservesLegacyFallback()
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync(token);
+        await using var context = await CreateContextAsync(connection, token);
+        var legacyProject = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = ProjectDefaults.DefaultBuiltInName,
+            Type = ProjectType.DefaultBuiltIn,
+            CreateBy = "10000",
+        };
+        context.Projects.Add(legacyProject);
+        await context.SaveChangesAsync(token);
+        var paths = CreatePaths();
+
+        await new UserProjectInitializer(context, paths, CreateWorkspaceAccess(paths)).EnsureDefaultsAsync(token);
+
+        var persisted = await context.Projects.SingleAsync(project => project.Id == legacyProject.Id, token);
+        Assert.Null(persisted.Workspace);
+        Assert.Equal($"~/.agw/projects/{legacyProject.Id:N}", ProjectDefaults.GetDefaultWorkspace(legacyProject.Id));
     }
 
     [Fact]
@@ -73,15 +129,16 @@ public sealed class UserProjectInitializerWorkspaceTests : IDisposable
         var token = TestContext.Current.CancellationToken;
         await using var connection = await OpenAsync(token);
         await using var context = await CreateContextAsync(connection, token);
+        var paths = CreatePaths();
         await context.Database.ExecuteSqlRawAsync(FailProjectInsert, token);
 
         // Act
         await Assert.ThrowsAsync<DbUpdateException>(() =>
-            new UserProjectInitializer(context, CreatePaths()).EnsureDefaultsAsync(token)
+            new UserProjectInitializer(context, paths, CreateWorkspaceAccess(paths)).EnsureDefaultsAsync(token)
         );
 
         // Assert
-        Assert.Equal(2, Directory.EnumerateDirectories(Path.Combine(Home, ".agw", "projects")).Count());
+        Assert.Equal(2, Directory.EnumerateDirectories(Path.Combine(Home, ".agw")).Count());
         await using var verification = new AgwDbContext(CreateOptions(connection));
         Assert.Equal(0, await verification.Projects.CountAsync(token));
     }
@@ -93,11 +150,10 @@ public sealed class UserProjectInitializerWorkspaceTests : IDisposable
         var token = TestContext.Current.CancellationToken;
         await using var connection = await OpenAsync(token);
         await using var context = await CreateContextAsync(connection, token);
-        var initializer = new UserProjectInitializer(context, CreatePaths());
+        var paths = CreatePaths();
+        var initializer = new UserProjectInitializer(context, paths, CreateWorkspaceAccess(paths));
         await initializer.EnsureDefaultsAsync(token);
-        var directories = (await context.Projects.ToListAsync(token))
-            .Select(project => Path.Combine(Home, ".agw", "projects", project.Id.ToString("N")))
-            .ToArray();
+        var directories = (await context.Projects.ToListAsync(token)).Select(project => project.Workspace!).ToArray();
         foreach (var directory in directories)
         {
             File.WriteAllText(Path.Combine(directory, "keep.txt"), directory);
@@ -115,6 +171,24 @@ public sealed class UserProjectInitializerWorkspaceTests : IDisposable
     }
 
     private AgwDataPaths CreatePaths() => AgwDataPaths.Resolve(Path.Combine(_root, "data"), Home);
+
+    private IProjectWorkspaceAccess CreateWorkspaceAccess(AgwDataPaths paths, bool isolationEnabled = false)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    [$"{ProjectWorkspaceOptions.SectionName}:IsolationEnabled"] = isolationEnabled.ToString(),
+                }
+            )
+            .Build();
+        var services = new ServiceCollection();
+        services.AddSingleton(paths);
+        services.AddFiles(configuration);
+        services.AddProjects(configuration);
+        using var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IProjectWorkspaceAccess>();
+    }
 
     private static async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
     {

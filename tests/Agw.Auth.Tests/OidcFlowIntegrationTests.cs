@@ -8,8 +8,11 @@ using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Auth.Security;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
+using Agw.Projects;
 using Agw.Projects.Application;
 using Agw.Projects.Contracts;
 using Agw.Shared.Results;
@@ -228,6 +231,7 @@ public sealed class OidcFlowIntegrationTests
                     ["Auth:Oidc:Providers:second:Authority"] = "https://idp.example",
                     ["Auth:Oidc:Providers:second:ClientId"] = "agw-test",
                     ["Auth:Oidc:Providers:second:ClientSecret"] = "test-secret",
+                    ["Projects:Workspace:IsolationEnabled"] = "false",
                 }
             );
             builder.Services.AddAuth().AddOidcAuthentication(builder.Configuration, builder.Environment);
@@ -247,6 +251,9 @@ public sealed class OidcFlowIntegrationTests
             builder.Services.AddSingleton<IServerInitializationState>(new Initialized());
             builder.Services.AddSingleton<IAuthenticationStateReader>(new AuthState());
             builder.Services.AddSingleton<IAuthenticationStateStore>(new AuthState());
+            builder.Services.AddSingleton(database.Paths);
+            builder.Services.AddFiles(builder.Configuration);
+            builder.Services.AddProjects(builder.Configuration);
             builder.Services.AddScoped(_ => database.Context());
             builder.Services.AddScoped<Agw.Projects.Application.Persistence.IProjectsDbContext>(sp =>
                 sp.GetRequiredService<AgwDbContext>()
@@ -255,9 +262,14 @@ public sealed class OidcFlowIntegrationTests
                 failProvisioning
                     ? new OidcIdentityStoreTests.FailingProjectInitializer(
                         sp.GetRequiredService<AgwDbContext>(),
-                        database.Paths
+                        database.Paths,
+                        sp.GetRequiredService<IProjectWorkspaceAccess>()
                     )
-                    : new UserProjectInitializer(sp.GetRequiredService<AgwDbContext>(), database.Paths)
+                    : new UserProjectInitializer(
+                        sp.GetRequiredService<AgwDbContext>(),
+                        database.Paths,
+                        sp.GetRequiredService<IProjectWorkspaceAccess>()
+                    )
             );
             builder.Services.AddScoped<IAuthDbContext>(sp => sp.GetRequiredService<AgwDbContext>());
             builder.Services.AddScoped<IApiTokenCredentialReader, EfApiTokenCredentialReader>();

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using Agw.Auth.Extensions;
+using Agw.Files;
 using Agw.Host.Hosting;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
@@ -191,6 +192,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
     {
         services.AddLogging();
         services.AddSingleton(_paths);
+        services.AddFiles(configuration);
         services.AddSingleton<IConfiguration>(configuration);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IEntityAuditUserIdProvider, AuditUserIdProvider>();

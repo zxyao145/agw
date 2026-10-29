@@ -9,6 +9,7 @@ using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Auth.Security;
+using Agw.Files;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application;
@@ -275,6 +276,7 @@ public sealed class OAuth2FlowIntegrationTests
             builder.Services.AddSingleton<IAuthenticationStateReader>(new AuthState());
             builder.Services.AddSingleton<IAuthenticationStateStore>(new AuthState());
             builder.Services.AddScoped(_ => database.Context());
+            builder.Services.AddFiles(builder.Configuration);
             builder.Services.AddScoped<Agw.Projects.Application.Persistence.IProjectsDbContext>(sp =>
                 sp.GetRequiredService<AgwDbContext>()
             );

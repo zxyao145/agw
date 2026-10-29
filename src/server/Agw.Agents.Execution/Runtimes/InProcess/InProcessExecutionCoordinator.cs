@@ -29,6 +29,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
     private readonly AgentflowTurnExecutor _agentflowTurns;
     private readonly ExecutionContextFactory _executionContexts;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
     private readonly IConversationExecutionGate? _conversationGate;
     private readonly TurnBroadcastRegistry _broadcasts;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -41,6 +42,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         AgentflowTurnExecutor agentflowTurns,
         ExecutionContextFactory executionContexts,
         IAgwFileSystemResolver fileSystemResolver,
+        IProjectWorkspaceAccess workspaceAccess,
         IConversationExecutionGate? conversationGate,
         TurnBroadcastRegistry broadcasts,
         IServiceScopeFactory scopeFactory,
@@ -53,6 +55,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         _agentflowTurns = agentflowTurns;
         _executionContexts = executionContexts;
         _fileSystemResolver = fileSystemResolver;
+        _workspaceAccess = workspaceAccess;
         _conversationGate = conversationGate;
         _broadcasts = broadcasts;
         _scopeFactory = scopeFactory;
@@ -100,6 +103,16 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             new TurnRecord(_scopeFactory, request.TurnId, request.InputMessageId, writeGuard: null)
         );
         using var executionScope = scope.Push();
+        await _workspaceAccess
+            .ValidateAsync(
+                [
+                    request.WorkspaceSnapshot.Workspace,
+                    .. request.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
+                ],
+                creatingProjectId: null,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         ProjectWorkspacePaths.EnsureAvailable(request.WorkspaceSnapshot);
         // 先取得对话执行锁再判断复用：归档 provider session 与复用检查按执行锁排序，归档后的 Turn 一定重建 Runtime。
         // The conversation execution lock is taken before the reuse check: archiving a provider session and the reuse check are ordered by it, so a turn after an archive always rebuilds the Runtime.

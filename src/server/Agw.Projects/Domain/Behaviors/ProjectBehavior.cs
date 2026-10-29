@@ -42,7 +42,7 @@ public sealed class ProjectBehavior
         _project = project;
     }
 
-    public bool TryPrepareForCreate()
+    public bool TryPrepareForCreate(bool isolationEnabled, string userHomeDirectory)
     {
         var project = _project;
         EnsureToolsAreValid(project);
@@ -54,7 +54,7 @@ public sealed class ProjectBehavior
         project.Name = projectName;
         project.Id = project.Id == Guid.Empty ? Guid.CreateVersion7() : project.Id;
         project.Workspace = string.IsNullOrWhiteSpace(project.Workspace)
-            ? ProjectDefaults.GetDefaultWorkspace(project.Id)
+            ? ProjectDefaults.GetDefaultWorkspace(project.Id, project.Name, isolationEnabled, userHomeDirectory)
             : project.Workspace.Trim();
         NormalizeEnvironmentVariables(project);
         NormalizeAdditionalDirectories(project, []);

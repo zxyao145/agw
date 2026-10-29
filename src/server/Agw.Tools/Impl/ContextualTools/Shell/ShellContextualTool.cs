@@ -11,10 +11,12 @@ namespace Agw.Tools.Impl.ContextualTools.Shell;
 public sealed class ShellContextualTool : IContextualTool
 {
     private readonly IConfiguration _configuration;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
 
-    public ShellContextualTool(IConfiguration configuration)
+    public ShellContextualTool(IConfiguration configuration, IProjectWorkspaceAccess workspaceAccess)
     {
         _configuration = configuration;
+        _workspaceAccess = workspaceAccess;
     }
 
     /// <summary>
@@ -33,7 +35,7 @@ public sealed class ShellContextualTool : IContextualTool
 
     public AgwToolPermission RequiredPermission => AgwToolPermission.Execute;
 
-    public ValueTask<ToolContribution> MaterializeAsync(
+    public async ValueTask<ToolContribution> MaterializeAsync(
         ToolDefinition definition,
         ToolMaterializationContext context,
         CancellationToken cancellationToken
@@ -48,6 +50,15 @@ public sealed class ShellContextualTool : IContextualTool
         }
 
         var workspace = Path.GetFullPath(PathUtil.ExpandTilde(context.Workspace));
+        string[] directories =
+        [
+            workspace,
+            .. GetAdditionalDirectories(context)
+                .Select(static directory => ProjectWorkspacePaths.Normalize(directory.Path)),
+        ];
+        await _workspaceAccess
+            .ValidateAsync(directories, creatingProjectId: null, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
         var backend = _configuration["Agents:Shell:Backend"]?.Trim().ToLowerInvariant() ?? "local";
         Func<ShellExecutor> createExecutor = backend switch
         {
@@ -59,11 +70,8 @@ public sealed class ShellContextualTool : IContextualTool
             ),
         };
         var executor = new ProjectDirectoryShellExecutor(
-            [
-                workspace,
-                .. GetAdditionalDirectories(context)
-                    .Select(static directory => ProjectWorkspacePaths.Normalize(directory.Path)),
-            ],
+            directories,
+            ct => _workspaceAccess.ValidateAsync(directories, creatingProjectId: null, cancellationToken: ct),
             createExecutor
         );
 
@@ -83,7 +91,7 @@ public sealed class ShellContextualTool : IContextualTool
             contribution.ContextProviders.Add(new DockerDirectoryProvider(context));
         }
         contribution.AddResource(executor);
-        return ValueTask.FromResult(contribution);
+        return contribution;
     }
 
     private static LocalShellExecutor CreateLocalExecutor(ToolMaterializationContext context, string workspace)

@@ -1,17 +1,23 @@
 using System.Security.Claims;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Domain.Services;
+using Agw.Shared.Configuration;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Skills.Application.Facades;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Projects.Tests;
 
@@ -36,6 +42,9 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
 
     private string Root => _home.Root;
 
+    private Task<Scope> CreateScopeAsync(CancellationToken cancellationToken) =>
+        Scope.CreateAsync(cancellationToken, Root);
+
     public void Dispose()
     {
         _userScope.Dispose();
@@ -46,7 +55,7 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task CreateAsync_MissingCustomWorkspaceAndAdditionalDirectories_CreatesAllDirectories()
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var workspace = Path.Combine(Root, "custom", "workspace");
         var first = Path.Combine(Root, "additional", "first");
         var second = Path.Combine(Root, "additional", "nested", "second");
@@ -66,7 +75,7 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task UpdateAsync_ChangedWorkspaceAndAdditionalDirectories_CreatesTargetsAndPreservesFiles()
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var workspace = Path.Combine(Root, "workspace");
         var kept = Path.Combine(Root, "kept");
         var changed = Path.Combine(Root, "changed");
@@ -120,7 +129,7 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task UpdateAsync_SameConfigurationAfterDirectoriesMoved_RecreatesDirectoriesAndKeepsIds()
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var workspace = Path.Combine(Root, "workspace");
         var additional = Path.Combine(Root, "additional");
         var created = (await scope.Service.CreateAsync(Project(workspace, additional), null, null, null))!;
@@ -162,7 +171,7 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task CreateAsync_InvalidAdditionalDirectory_RejectsBeforeCreatingDirectories(string scenario)
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var workspace = Path.Combine(Root, "workspace");
         var extra = Path.Combine(Root, "extra");
         var project = new Project
@@ -197,7 +206,7 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task UpdateAsync_DirectoryCreationFails_DoesNotSaveConfiguration(string occupied)
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var workspace = Path.Combine(Root, "workspace");
         var created = (await scope.Service.CreateAsync(Project(workspace), null, null, null))!;
         File.WriteAllText(Path.Combine(workspace, "workspace.txt"), "workspace");
@@ -233,7 +242,7 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task UpdateAsync_OtherUser_DoesNotCreateDirectories()
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var created = (await scope.Service.CreateAsync(Project(Path.Combine(Root, "workspace")), null, null, null))!;
         var target = Path.Combine(Root, "foreign");
         var foreignService = scope.CreateService(new TestUserInfoService("intruder"));
@@ -260,10 +269,10 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task GetWorkspaceAsync_MissingWorkspace_CreatesAndReturnsAbsolutePathEachTime()
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var workspace = Path.Combine(Root, "facade", "workspace");
         var created = (await scope.Service.CreateAsync(Project(workspace), null, null, null))!;
-        var facade = new ProjectRuntimeFacade(scope.Service);
+        var facade = new ProjectRuntimeFacade(scope.Service, scope.WorkspaceAccess);
         Directory.Move(workspace, Path.Combine(Root, "facade", "backup"));
 
         // Act
@@ -281,9 +290,9 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task GetWorkspaceAsync_EmptyWorkspace_CreatesProjectDefaultDirectory()
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var projectId = await scope.AddProjectWithoutWorkspaceAsync();
-        var facade = new ProjectRuntimeFacade(scope.Service);
+        var facade = new ProjectRuntimeFacade(scope.Service, scope.WorkspaceAccess);
         var expected = Path.Combine(Root, ".agw", "projects", projectId.ToString("N"));
 
         // Act
@@ -299,11 +308,14 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
     public async Task GetWorkspaceAsync_OtherUser_ReturnsNullWithoutCreatingDirectory()
     {
         // Arrange
-        await using var scope = await Scope.CreateAsync(TestContext.Current.CancellationToken);
+        await using var scope = await CreateScopeAsync(TestContext.Current.CancellationToken);
         var workspace = Path.Combine(Root, "owned");
         var created = (await scope.Service.CreateAsync(Project(workspace), null, null, null))!;
         Directory.Delete(workspace);
-        var facade = new ProjectRuntimeFacade(scope.CreateService(new TestUserInfoService("intruder")));
+        var facade = new ProjectRuntimeFacade(
+            scope.CreateService(new TestUserInfoService("intruder")),
+            scope.WorkspaceAccess
+        );
 
         // Act
         var result = await facade.GetWorkspaceAsync(created.Id, TestContext.Current.CancellationToken);
@@ -327,18 +339,31 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
         private readonly SqliteConnection _connection;
         private readonly DbContextOptions<AgwDbContext> _options;
         private readonly AgwDbContext _context;
+        private readonly AgwDataPaths _dataPaths;
+        private readonly ServiceProvider _workspaceServices;
 
-        private Scope(SqliteConnection connection, DbContextOptions<AgwDbContext> options, AgwDbContext context)
+        private Scope(
+            SqliteConnection connection,
+            DbContextOptions<AgwDbContext> options,
+            AgwDbContext context,
+            AgwDataPaths dataPaths,
+            ServiceProvider workspaceServices
+        )
         {
             _connection = connection;
             _options = options;
             _context = context;
+            _dataPaths = dataPaths;
+            _workspaceServices = workspaceServices;
             Service = CreateService(new TestUserInfoService());
         }
 
         public ProjectAppService Service { get; }
 
-        public static async Task<Scope> CreateAsync(CancellationToken cancellationToken)
+        public IProjectWorkspaceAccess WorkspaceAccess =>
+            _workspaceServices.GetRequiredService<IProjectWorkspaceAccess>();
+
+        public static async Task<Scope> CreateAsync(CancellationToken cancellationToken, string userHomeDirectory)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync(cancellationToken);
@@ -352,7 +377,17 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
                 .Options;
             var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(cancellationToken);
-            return new Scope(connection, options, context);
+            var dataPaths = AgwDataPaths.Resolve(
+                Path.Combine(userHomeDirectory, "data"),
+                userHomeDirectory,
+                Path.Combine(userHomeDirectory, "logs")
+            );
+            var configuration = new ConfigurationBuilder().Build();
+            var services = new ServiceCollection();
+            services.AddSingleton(dataPaths);
+            services.Configure<ProjectWorkspaceOptions>(static _ => { });
+            services.AddFiles(configuration);
+            return new Scope(connection, options, context, dataPaths, services.BuildServiceProvider());
         }
 
         public ProjectAppService CreateService(TestUserInfoService userInfo) =>
@@ -365,7 +400,9 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
                 ),
                 TestProjectPersistence.CreateDeletionCoordinator(_context),
                 new ProjectResolver(_context, userInfo),
-                userInfo
+                userInfo,
+                _dataPaths,
+                WorkspaceAccess
             );
 
         public async Task<Guid> AddProjectWithoutWorkspaceAsync()
@@ -400,6 +437,7 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
 
         public async ValueTask DisposeAsync()
         {
+            await _workspaceServices.DisposeAsync();
             await _context.DisposeAsync();
             await _connection.DisposeAsync();
         }

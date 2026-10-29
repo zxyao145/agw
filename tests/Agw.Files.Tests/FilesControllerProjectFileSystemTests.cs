@@ -69,9 +69,14 @@ public class FilesControllerProjectFileSystemTests
     private static FilesController CreateController()
     {
         var fileAppService = new FileAppService(
-            new FakeFileSystemResolver(TestFileSystems.Local(Path.GetTempPath())),
+            new FakeFileSystemResolver(
+                TestFileSystems.Local(
+                    Path.Combine(AppContext.BaseDirectory, ".scratch", "files-controller-project-file-system")
+                )
+            ),
             new FakeGitCommandService(),
-            NullLogger<FileAppService>.Instance
+            NullLogger<FileAppService>.Instance,
+            TestProjectWorkspaceAccess.Disabled
         );
         return new FilesController(fileAppService);
     }

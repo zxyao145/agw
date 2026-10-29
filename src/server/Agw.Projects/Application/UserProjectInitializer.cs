@@ -1,4 +1,5 @@
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Runtime;
@@ -11,11 +12,17 @@ public sealed class UserProjectInitializer : IUserProjectInitializer
 {
     private readonly IProjectsDbContext _context;
     private readonly AgwDataPaths _dataPaths;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
 
-    public UserProjectInitializer(IProjectsDbContext context, AgwDataPaths dataPaths)
+    public UserProjectInitializer(
+        IProjectsDbContext context,
+        AgwDataPaths dataPaths,
+        IProjectWorkspaceAccess workspaceAccess
+    )
     {
         _context = context;
         _dataPaths = dataPaths;
+        _workspaceAccess = workspaceAccess;
     }
 
     public async Task EnsureDefaultsAsync(CancellationToken cancellationToken = default)
@@ -37,27 +44,36 @@ public sealed class UserProjectInitializer : IUserProjectInitializer
                 Type = ProjectType.DefaultBuiltIn,
                 CreateBy = owner,
             };
-            EnsureDirectoriesCreated(project);
+            project.Workspace = ProjectDefaults.GetDefaultWorkspace(
+                project.Id,
+                project.Name,
+                _workspaceAccess.IsolationEnabled,
+                _dataPaths.UserHomeDirectory
+            );
+            await EnsureDirectoriesCreatedAsync(project, cancellationToken).ConfigureAwait(false);
             _context.Projects.Add(project);
         }
         await _context.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
-    /// <para>保存前创建项目的有效主目录和配置中的附加目录；<c>Workspace</c> 为空时按项目 ID 使用默认路径，<c>~</c> 用本实例的用户目录展开。</para>
-    /// <para>Creates the Project's effective primary directory and configured additional directories before saving; an
-    /// empty <c>Workspace</c> uses the default path for the Project ID, and <c>~</c> expands with this instance's user
-    /// home.</para>
+    /// <para>保存前验证项目的主目录和附加目录，并创建缺失目录；默认主目录使用本实例用户目录下的绝对路径。</para>
+    /// <para>Validates the primary and additional directories before creating missing directories; a default primary
+    /// directory is stored as an absolute path under this instance's user home.</para>
     /// </summary>
-    private void EnsureDirectoriesCreated(Project project)
+    private async Task EnsureDirectoriesCreatedAsync(Project project, CancellationToken cancellationToken)
     {
-        var workspace = string.IsNullOrWhiteSpace(project.Workspace)
-            ? ProjectDefaults.GetDefaultWorkspace(project.Id)
-            : project.Workspace;
-        ProjectWorkspacePaths.EnsureCreated(PathUtil.ExpandTilde(workspace, _dataPaths.UserHomeDirectory));
-        foreach (var directory in project.AdditionalDirectories)
+        string[] paths =
+        [
+            PathUtil.ExpandTilde(project.Workspace!, _dataPaths.UserHomeDirectory),
+            .. project.AdditionalDirectories.Select(directory =>
+                PathUtil.ExpandTilde(directory.Path, _dataPaths.UserHomeDirectory)
+            ),
+        ];
+        await _workspaceAccess.ValidateAsync(paths, project.Id, cancellationToken).ConfigureAwait(false);
+        foreach (var path in paths)
         {
-            ProjectWorkspacePaths.EnsureCreated(PathUtil.ExpandTilde(directory.Path, _dataPaths.UserHomeDirectory));
+            ProjectWorkspacePaths.EnsureCreated(path);
         }
     }
 }

@@ -45,12 +45,14 @@ public sealed class ProjectDirectoryTests : IDisposable
             TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
             NullLogger<LocalFileSystem>.Instance,
-            TimeProvider.System
+            TimeProvider.System,
+            TestProjectWorkspaceAccess.Disabled
         );
         _files = new FileAppService(
             _resolver,
             new GitCommandService(NullLogger<GitCommandService>.Instance),
-            NullLogger<FileAppService>.Instance
+            NullLogger<FileAppService>.Instance,
+            TestProjectWorkspaceAccess.Disabled
         );
     }
 

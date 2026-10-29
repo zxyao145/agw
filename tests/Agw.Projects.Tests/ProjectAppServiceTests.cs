@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
@@ -6,16 +7,20 @@ using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
+using Agw.Shared.Configuration;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Skills.Application.Facades;
 using Agw.Skills.Contracts;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Projects.Tests;
 
@@ -631,7 +636,7 @@ public class ProjectAppServiceTests : IDisposable
     public async Task CreateAsync_WhenWorkspaceDoesNotExist_CreatesWorkspaceDirectory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var tempRoot = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.CreateVersion7().ToString("N"));
+        var tempRoot = CreateScratchRoot("missing-workspace");
         var workspace = Path.Combine(tempRoot, "workspace");
 
         try
@@ -677,6 +682,69 @@ public class ProjectAppServiceTests : IDisposable
             {
                 Directory.Delete(tempRoot, recursive: true);
             }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateAsync_BlankWorkspace_PersistsAndCreatesConfiguredDefault(bool isolationEnabled)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateScratchRoot("project-default-workspace");
+        var home = Path.Combine(root, "home");
+        var paths = AgwDataPaths.Resolve(Path.Combine(root, "data"), home);
+        try
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync(cancellationToken);
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite(connection)
+                .AddInterceptors(
+                    new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                    new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+                )
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(cancellationToken);
+            var service = CreateService(
+                context,
+                workspaceOptions: new ProjectWorkspaceOptions { IsolationEnabled = isolationEnabled },
+                dataPaths: paths
+            );
+
+            var created = await service.CreateAsync(
+                new Project
+                {
+                    Name = "Demo Project: Alpha?",
+                    Type = ProjectType.UserDefined,
+                    Workspace = "  ",
+                },
+                null,
+                null,
+                null
+            );
+
+            Assert.NotNull(created);
+            var expectedWorkspace = isolationEnabled
+                ? Path.Combine(home, ".agw", "projects", created.Id.ToString("N"))
+                : Path.Combine(home, ".agw", "Demo_Project_Alpha");
+            Assert.Equal(Path.GetFullPath(expectedWorkspace), created.Workspace);
+            Assert.True(Path.IsPathFullyQualified(created.Workspace!));
+            Assert.True(Directory.Exists(expectedWorkspace));
+            Assert.Equal(
+                expectedWorkspace,
+                await context
+                    .Projects.Where(project => project.Id == created.Id)
+                    .Select(project => project.Workspace)
+                    .SingleAsync(cancellationToken)
+            );
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
         }
     }
 
@@ -767,10 +835,32 @@ public class ProjectAppServiceTests : IDisposable
         AgwDbContext dbContext,
         TestUserInfoService? userInfo = null,
         IProjectFileSystemCacheInvalidator? fileSystemCache = null,
-        IProjectDeletionCoordinator? deletionCoordinator = null
+        IProjectDeletionCoordinator? deletionCoordinator = null,
+        ProjectWorkspaceOptions? workspaceOptions = null,
+        AgwDataPaths? dataPaths = null
     )
     {
         userInfo ??= new TestUserInfoService();
+        workspaceOptions ??= new ProjectWorkspaceOptions();
+        dataPaths ??= AgwDataPaths.Resolve(
+            Path.Combine(AppContext.BaseDirectory, ".scratch", "project-app-service-data"),
+            Path.Combine(AppContext.BaseDirectory, ".scratch", "project-app-service-home")
+        );
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    [$"{ProjectWorkspaceOptions.SectionName}:IsolationEnabled"] =
+                        workspaceOptions.IsolationEnabled.ToString(),
+                }
+            )
+            .Build();
+        var services = new ServiceCollection();
+        services.AddSingleton(dataPaths);
+        services.AddFiles(configuration);
+        services.AddProjects(configuration);
+        using var provider = services.BuildServiceProvider();
+        var workspaceAccess = provider.GetRequiredService<IProjectWorkspaceAccess>();
 
         return new ProjectAppService(
             dbContext,
@@ -782,6 +872,8 @@ public class ProjectAppServiceTests : IDisposable
             deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             new ProjectResolver(dbContext, userInfo),
             userInfo,
+            dataPaths,
+            workspaceAccess,
             fileSystemCache
         );
     }

@@ -44,41 +44,9 @@ export function formatProjectFolderName(value: string): string {
   return formatted;
 }
 
-export function getDefaultProjectWorkspace(projectName: string): string {
-  const folderName = formatProjectFolderName(projectName);
-  return folderName ? `~/.agw/${folderName}` : "";
-}
-
-export function syncDefaultProjectWorkspace({
-  previousName,
-  nextName,
-  currentWorkspace,
-}: {
-  previousName: string;
-  nextName: string;
-  currentWorkspace: string;
-}): string {
-  const previousDefaultWorkspace = getDefaultProjectWorkspace(previousName);
-  const nextDefaultWorkspace = getDefaultProjectWorkspace(nextName);
-  const currentWorkspaceValue = currentWorkspace.trim();
-
-  if (!currentWorkspaceValue || currentWorkspaceValue === previousDefaultWorkspace) {
-    return nextDefaultWorkspace;
-  }
-
-  return currentWorkspace;
-}
-
-export function resolveCreateProjectWorkspace(
-  projectName: string,
-  workspace: string,
-): string | null {
+export function resolveCreateProjectWorkspace(workspace: string): string | null {
   const workspaceValue = workspace.trim();
-  if (workspaceValue) {
-    return workspaceValue;
-  }
-
-  return getDefaultProjectWorkspace(projectName) || null;
+  return workspaceValue || null;
 }
 
 interface ProjectCapabilitiesInput {

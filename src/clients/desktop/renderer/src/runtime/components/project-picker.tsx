@@ -7,11 +7,7 @@ import { getApiErrorMessage } from "@agw/api";
 import { Button, Input, Label } from "@agw/components";
 import { Popover, PopoverContent, PopoverTrigger } from "@agw/components";
 import { cn } from "@agw/components";
-import {
-  formatProjectFolderName,
-  resolveCreateProjectWorkspace,
-  syncDefaultProjectWorkspace,
-} from "@agw/projects";
+import { formatProjectFolderName, resolveCreateProjectWorkspace } from "@agw/projects";
 
 export type DesktopProjectOption = {
   id: string;
@@ -96,17 +92,6 @@ export function DesktopProjectPicker({
     setSearch("");
   };
 
-  const handleCreateNameChange = (nextName: string) => {
-    setCreateWorkspace((currentWorkspace) =>
-      syncDefaultProjectWorkspace({
-        previousName: createName,
-        nextName,
-        currentWorkspace,
-      }),
-    );
-    setCreateName(nextName);
-  };
-
   const handleCancelCreate = () => {
     if (isCreating) return;
     resetCreateForm();
@@ -122,7 +107,7 @@ export function DesktopProjectPicker({
     try {
       await onCreate({
         name: normalizedName,
-        workspace: resolveCreateProjectWorkspace(normalizedName, createWorkspace),
+        workspace: resolveCreateProjectWorkspace(createWorkspace),
       });
       resetCreateForm();
       setCreateMode(false);
@@ -205,7 +190,7 @@ export function DesktopProjectPicker({
               <div className="mb-3">
                 <div className="text-sm font-semibold tracking-tight">New project</div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Start with a name and workspace.
+                  Start with a name and optional workspace.
                 </p>
               </div>
 
@@ -216,7 +201,7 @@ export function DesktopProjectPicker({
                     id="desktop-project-name"
                     ref={createNameInputRef}
                     value={createName}
-                    onChange={(event) => handleCreateNameChange(event.target.value)}
+                    onChange={(event) => setCreateName(event.target.value)}
                     placeholder="my-project"
                     autoComplete="off"
                     aria-invalid={invalidCreateName}

@@ -18,6 +18,8 @@ public class ProjectAppService : IProjectAppService
     private readonly IProjectDeletionCoordinator _deletionCoordinator;
     private readonly ProjectResolver _projectResolver;
     private readonly IUserInfoService _userInfoService;
+    private readonly AgwDataPaths _dataPaths;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
     private readonly IProjectFileSystemCacheInvalidator? _fileSystemCache;
 
     public ProjectAppService(
@@ -26,6 +28,8 @@ public class ProjectAppService : IProjectAppService
         IProjectDeletionCoordinator deletionCoordinator,
         ProjectResolver projectResolver,
         IUserInfoService userInfoService,
+        AgwDataPaths dataPaths,
+        IProjectWorkspaceAccess workspaceAccess,
         IProjectFileSystemCacheInvalidator? fileSystemCache = null
     )
     {
@@ -34,6 +38,8 @@ public class ProjectAppService : IProjectAppService
         _deletionCoordinator = deletionCoordinator;
         _projectResolver = projectResolver;
         _userInfoService = userInfoService;
+        _dataPaths = dataPaths;
+        _workspaceAccess = workspaceAccess;
         _fileSystemCache = fileSystemCache;
     }
 
@@ -98,12 +104,14 @@ public class ProjectAppService : IProjectAppService
     {
         _ = _userInfoService.RequiredUserId;
         var behavior = new ProjectBehavior(project);
-        if (!behavior.TryPrepareForCreate())
+        if (!behavior.TryPrepareForCreate(_workspaceAccess.IsolationEnabled, _dataPaths.UserHomeDirectory))
         {
             return null;
         }
 
-        EnsureDirectoriesCreated(project);
+        var workspaceSnapshot = CreateWorkspaceSnapshot(project);
+        await _workspaceAccess.ValidateAsync(GetWorkspacePaths(workspaceSnapshot), project.Id).ConfigureAwait(false);
+        ProjectWorkspacePaths.EnsureAvailable(workspaceSnapshot);
         await _dbContext.Projects.AddAsync(project);
         await SyncProjectMcpToolServerRelationsAsync(project.Id, mcpToolServerIds);
         await SyncProjectSkillRelationsAsync(project.Id, skillIds);
@@ -137,7 +145,9 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
-        EnsureDirectoriesCreated(existing);
+        var workspaceSnapshot = CreateWorkspaceSnapshot(existing);
+        await _workspaceAccess.ValidateAsync(GetWorkspacePaths(workspaceSnapshot)).ConfigureAwait(false);
+        ProjectWorkspacePaths.EnsureAvailable(workspaceSnapshot);
         // Preserve audit stamping even when only bindings change or the update is a no-op.
         _dbContext.Projects.Entry(existing).Property(project => project.Name).IsModified = true;
         if (mcpToolServerIds != null)
@@ -193,21 +203,21 @@ public class ProjectAppService : IProjectAppService
     }
 
     /// <summary>
-    /// <para>在保存目录配置前创建项目有效主目录和全部附加目录中缺失的目录，任一目录创建失败时不保存配置。</para>
-    /// <para>Creates the missing directories among the Project's effective primary directory and all additional
-    /// directories before the configuration is saved; any creation failure leaves the configuration unsaved.</para>
+    /// <para>构造项目有效主目录和全部附加目录的规范化快照。</para>
+    /// <para>Builds a normalized snapshot of the Project's effective primary directory and all additional directories.</para>
     /// </summary>
-    private static void EnsureDirectoriesCreated(Project project) =>
-        ProjectWorkspacePaths.EnsureAvailable(
-            ProjectWorkspacePaths.CreateSnapshot(
-                project.Id,
-                project.Workspace,
-                project.AdditionalDirectories.Select(directory => new ProjectWorkspaceDirectory(
-                    directory.Id,
-                    directory.Path
-                ))
-            )
+    private static ProjectWorkspaceSnapshot CreateWorkspaceSnapshot(Project project) =>
+        ProjectWorkspacePaths.CreateSnapshot(
+            project.Id,
+            project.Workspace,
+            project.AdditionalDirectories.Select(directory => new ProjectWorkspaceDirectory(
+                directory.Id,
+                directory.Path
+            ))
         );
+
+    private static IReadOnlyList<string> GetWorkspacePaths(ProjectWorkspaceSnapshot snapshot) =>
+        [snapshot.Workspace, .. snapshot.AdditionalDirectories.Select(directory => directory.Path)];
 
     private async Task SyncProjectMcpToolServerRelationsAsync(Guid projectId, IEnumerable<Guid>? mcpToolServerIds)
     {

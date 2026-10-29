@@ -67,12 +67,14 @@ public sealed class FilesEndpointErrorEnvelopeTests : IDisposable
             new WorkspaceConfigurationProvider(new ProjectFileSystemConfiguration("Project", _workspace, "owner", []))
         );
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton(TestProjectWorkspaceAccess.Disabled);
         builder.Services.AddSingleton<IAgwFileSystemResolver>(provider => new ProjectScopedFileSystemResolver(
             provider.GetRequiredService<IServiceScopeFactory>(),
             TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
             NullLogger<LocalFileSystem>.Instance,
-            TimeProvider.System
+            TimeProvider.System,
+            provider.GetRequiredService<IProjectWorkspaceAccess>()
         ));
         builder.Services.AddSingleton<IGitCommandService>(
             new GitCommandService(NullLogger<GitCommandService>.Instance)

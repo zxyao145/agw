@@ -87,6 +87,24 @@ public sealed class LocalFileSystem : ILocalFileSystem
         return ToRelativePath(fullPath);
     }
 
+    public Task<bool> IsSymbolicLinkAsync(string path, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(GetLinkTarget(ResolvePath(path)) is not null);
+    }
+
+    public Task<bool?> GetSymbolicLinkDirectoryAsync(string path, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var fullPath = ResolvePath(path);
+        if (Directory.Exists(fullPath))
+        {
+            return Task.FromResult<bool?>(true);
+        }
+
+        return Task.FromResult<bool?>(File.Exists(fullPath) ? false : null);
+    }
+
     public IAgwFileSystem Confine(IReadOnlyList<string> allowedRoots) =>
         ConfinedFileSystem.Create(_rootFullPath, allowedRoots, _pathLocks, _logger);
 
@@ -245,6 +263,17 @@ public sealed class LocalFileSystem : ILocalFileSystem
                 throw new AgwException(ErrorCodes.DirectoryNotEmpty, $"Directory '{path}' is not empty.", exception);
             }
         }
+        else if (GetLinkTarget(fullPath) is not null)
+        {
+            if (OperatingSystem.IsWindows() && (File.GetAttributes(fullPath) & FileAttributes.Directory) != 0)
+            {
+                Directory.Delete(fullPath, recursive);
+            }
+            else
+            {
+                File.Delete(fullPath);
+            }
+        }
     }
 
     public Task<Stream> OpenReadAsync(string path, CancellationToken ct)
@@ -317,8 +346,9 @@ public sealed class LocalFileSystem : ILocalFileSystem
             .AcquireEntryAsync(sourceFullPath, destinationFullPath, ct)
             .ConfigureAwait(false);
 
-        var sourceIsFile = File.Exists(sourceFullPath);
-        if (!sourceIsFile && !Directory.Exists(sourceFullPath))
+        var sourceIsDirectory = Directory.Exists(sourceFullPath);
+        var sourceIsSymbolicLink = GetLinkTarget(sourceFullPath) is not null;
+        if (!File.Exists(sourceFullPath) && !sourceIsDirectory && !sourceIsSymbolicLink)
         {
             throw new AgwException(ErrorCodes.FileNotFound, $"'{sourcePath}' was not found.");
         }
@@ -331,13 +361,19 @@ public sealed class LocalFileSystem : ILocalFileSystem
             );
         }
 
-        var destinationIsFile = File.Exists(destinationFullPath);
-        if (Directory.Exists(destinationFullPath) || (destinationIsFile && (!overwrite || !sourceIsFile)))
+        var destinationIsDirectory = Directory.Exists(destinationFullPath);
+        var destinationIsSymbolicLink = GetLinkTarget(destinationFullPath) is not null;
+        var destinationIsDirectoryEntry =
+            destinationIsDirectory || IsDirectorySymbolicLink(destinationFullPath, destinationIsSymbolicLink);
+        var destinationIsFileEntry =
+            File.Exists(destinationFullPath) || (destinationIsSymbolicLink && !destinationIsDirectoryEntry);
+        var sourceIsDirectoryEntry = sourceIsDirectory || IsDirectorySymbolicLink(sourceFullPath, sourceIsSymbolicLink);
+        if (destinationIsDirectoryEntry || (destinationIsFileEntry && (!overwrite || sourceIsDirectoryEntry)))
         {
             throw new AgwException(ErrorCodes.FileAlreadyExists, $"'{destinationPath}' already exists.");
         }
 
-        if (sourceIsFile)
+        if (!sourceIsDirectoryEntry)
         {
             File.Move(sourceFullPath, destinationFullPath, overwrite);
         }
@@ -346,6 +382,12 @@ public sealed class LocalFileSystem : ILocalFileSystem
             Directory.Move(sourceFullPath, destinationFullPath);
         }
     }
+
+    private static string? GetLinkTarget(string path) =>
+        new FileInfo(path).LinkTarget ?? new DirectoryInfo(path).LinkTarget;
+
+    private static bool IsDirectorySymbolicLink(string path, bool isSymbolicLink) =>
+        OperatingSystem.IsWindows() && isSymbolicLink && (File.GetAttributes(path) & FileAttributes.Directory) != 0;
 
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(
         string path,

@@ -1,8 +1,13 @@
 using Agw.Agents.Contracts.Execution;
 using Agw.Auth.Contracts;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
+using Agw.Projects;
+using Agw.Projects.Contracts;
 using Agw.Providers.Contracts;
 using Agw.Shared;
+using Agw.Shared.Configuration;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
@@ -13,6 +18,8 @@ using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -49,6 +56,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -212,8 +220,10 @@ public class DbSeederTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task SeedAsync_BuiltInProjects_CreatesWorkspaceDirectoriesAndPreservesFiles()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeedAsync_BuiltInProjects_CreatesWorkspaceDirectoriesAndPreservesFiles(bool isolationEnabled)
     {
         // Arrange
         var paths = CreatePaths();
@@ -230,17 +240,25 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths, isolationEnabled),
                 [new TestSkillRegistration()]
             );
-            var existingA2A = Path.Combine(paths.UserHomeDirectory, ".agw", "a2a");
+            var existingA2A = isolationEnabled
+                ? Path.Combine(paths.UserHomeDirectory, ".agw", "projects", ProjectDefaults.A2AId.ToString("N"))
+                : Path.Combine(paths.UserHomeDirectory, ".agw", "a2a");
             Directory.CreateDirectory(existingA2A);
             File.WriteAllText(Path.Combine(existingA2A, "existing.txt"), "existing");
 
             // Act
             await seeder.SeedAsync();
+            var workspaces = await context.Projects.ToDictionaryAsync(
+                project => project.Name,
+                project => project.Workspace,
+                TestContext.Current.CancellationToken
+            );
             foreach (var name in new[] { "default-built-in", "a2a" })
             {
-                File.WriteAllText(Path.Combine(paths.UserHomeDirectory, ".agw", name, "seeded.txt"), name);
+                File.WriteAllText(Path.Combine(workspaces[name]!, "seeded.txt"), name);
             }
 
             await seeder.SeedAsync();
@@ -251,8 +269,11 @@ public class DbSeederTests : IDisposable
             foreach (var name in new[] { "default-built-in", "a2a" })
             {
                 var project = Assert.Single(projects, project => project.Name == name);
-                Assert.Equal($"~/.agw/{name}", project.Workspace);
-                Assert.Equal(name, File.ReadAllText(Path.Combine(paths.UserHomeDirectory, ".agw", name, "seeded.txt")));
+                var expectedWorkspace = isolationEnabled
+                    ? Path.Combine(paths.UserHomeDirectory, ".agw", "projects", project.Id.ToString("N"))
+                    : Path.Combine(paths.UserHomeDirectory, ".agw", name);
+                Assert.Equal(expectedWorkspace, project.Workspace);
+                Assert.Equal(name, File.ReadAllText(Path.Combine(expectedWorkspace, "seeded.txt")));
             }
 
             Assert.Equal("existing", File.ReadAllText(Path.Combine(existingA2A, "existing.txt")));
@@ -292,6 +313,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -344,6 +366,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -399,6 +422,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -462,6 +486,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -505,6 +530,24 @@ public class DbSeederTests : IDisposable
         }
 
         return tools;
+    }
+
+    private static IProjectWorkspaceAccess CreateWorkspaceAccess(AgwDataPaths paths, bool isolationEnabled = false)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    [$"{ProjectWorkspaceOptions.SectionName}:IsolationEnabled"] = isolationEnabled.ToString(),
+                }
+            )
+            .Build();
+        var services = new ServiceCollection();
+        services.AddSingleton(paths);
+        services.AddFiles(configuration);
+        services.AddProjects(configuration);
+        using var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IProjectWorkspaceAccess>();
     }
 
     /// <summary>

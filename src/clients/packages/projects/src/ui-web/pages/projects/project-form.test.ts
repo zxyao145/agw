@@ -23,42 +23,16 @@ test("formatProjectFolderName returns an empty value when no valid folder name r
   assert.equal(formatProjectFolderName(' <>:"/\\|?* '), "");
 });
 
-test("getDefaultProjectWorkspace builds the project workspace from the formatted name", async () => {
-  const { getDefaultProjectWorkspace } = await importProjectFormModule();
-
-  assert.equal(getDefaultProjectWorkspace("Demo Project: Alpha?"), "~/.agw/Demo_Project_Alpha");
-});
-
-test("syncDefaultProjectWorkspace follows project name changes while workspace is untouched", async () => {
-  const { syncDefaultProjectWorkspace } = await importProjectFormModule();
-
-  assert.equal(
-    syncDefaultProjectWorkspace({
-      previousName: "Demo Project",
-      nextName: "Demo Project: Alpha?",
-      currentWorkspace: "~/.agw/Demo_Project",
-    }),
-    "~/.agw/Demo_Project_Alpha",
-  );
-});
-
-test("syncDefaultProjectWorkspace preserves a custom workspace", async () => {
-  const { syncDefaultProjectWorkspace } = await importProjectFormModule();
-
-  assert.equal(
-    syncDefaultProjectWorkspace({
-      previousName: "Demo Project",
-      nextName: "Demo Project: Alpha?",
-      currentWorkspace: "~/custom",
-    }),
-    "~/custom",
-  );
-});
-
-test("resolveCreateProjectWorkspace uses the default when workspace is blank", async () => {
+test("resolveCreateProjectWorkspace returns null when workspace is blank", async () => {
   const { resolveCreateProjectWorkspace } = await importProjectFormModule();
 
-  assert.equal(resolveCreateProjectWorkspace("Demo Project", "  "), "~/.agw/Demo_Project");
+  assert.equal(resolveCreateProjectWorkspace("  "), null);
+});
+
+test("resolveCreateProjectWorkspace preserves a custom path and trims surrounding whitespace", async () => {
+  const { resolveCreateProjectWorkspace } = await importProjectFormModule();
+
+  assert.equal(resolveCreateProjectWorkspace("  ~/custom  "), "~/custom");
 });
 
 test("serializeProjectCapabilities always sends explicit empty capability values", async () => {

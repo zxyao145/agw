@@ -15,14 +15,20 @@ namespace Agw.Tools.Impl.ContextualTools.Shell;
 internal sealed class ProjectDirectoryShellExecutor : ShellExecutor
 {
     private readonly IReadOnlyList<string> _directories;
+    private readonly Func<CancellationToken, Task> _validateDirectories;
     private readonly Func<ShellExecutor> _createExecutor;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private ShellExecutor _executor;
     private DirectoryIdentitySnapshot _boundDirectories;
 
-    public ProjectDirectoryShellExecutor(IReadOnlyList<string> directories, Func<ShellExecutor> createExecutor)
+    public ProjectDirectoryShellExecutor(
+        IReadOnlyList<string> directories,
+        Func<CancellationToken, Task> validateDirectories,
+        Func<ShellExecutor> createExecutor
+    )
     {
         _directories = directories;
+        _validateDirectories = validateDirectories;
         _createExecutor = createExecutor;
         EnsureDirectoriesCreated();
         _boundDirectories = DirectoryIdentitySnapshot.Capture(_directories);
@@ -34,7 +40,7 @@ internal sealed class ProjectDirectoryShellExecutor : ShellExecutor
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var executor = await PrepareAsync().ConfigureAwait(false);
+            var executor = await PrepareAsync(cancellationToken).ConfigureAwait(false);
             await executor.InitializeAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -48,7 +54,7 @@ internal sealed class ProjectDirectoryShellExecutor : ShellExecutor
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var executor = await PrepareAsync().ConfigureAwait(false);
+            var executor = await PrepareAsync(cancellationToken).ConfigureAwait(false);
             return await executor.RunAsync(command, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -87,8 +93,9 @@ internal sealed class ProjectDirectoryShellExecutor : ShellExecutor
     /// Creates missing bound directories; when any directory's physical identity changed, the old executor is disposed
     /// and recreated over the current directories. The caller holds <see cref="_gate"/>.
     /// </summary>
-    private async Task<ShellExecutor> PrepareAsync()
+    private async Task<ShellExecutor> PrepareAsync(CancellationToken cancellationToken)
     {
+        await _validateDirectories(cancellationToken).ConfigureAwait(false);
         EnsureDirectoriesCreated();
         if (!_boundDirectories.IsCurrent())
         {
@@ -146,7 +153,7 @@ internal sealed class ProjectDirectoryShellExecutor : ShellExecutor
             await _owner._gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var executor = await _owner.PrepareAsync().ConfigureAwait(false);
+                var executor = await _owner.PrepareAsync(cancellationToken).ConfigureAwait(false);
                 if (!ReferenceEquals(executor, _functionExecutor))
                 {
                     _function = executor.AsAIFunction(_name, _description, _requireApproval);

@@ -1,8 +1,12 @@
 using System.Text.Json;
+using Agw.Files;
 using Agw.Files.Abstracts;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Tools.Impl.ContextualTools.Shell;
 using Agw.Tools.Impl.ContextualTools.WebSearch;
 using Agw.Tools.Impl.ToolBlocks.Todo;
@@ -31,6 +35,12 @@ public class ToolRegistryServiceTests
         services.AddLogging();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
+        var dataRoot = Path.Combine(AppContext.BaseDirectory, ".scratch", "tool-registry-workspace");
+        services.AddSingleton(
+            AgwDataPaths.Resolve(Path.Combine(dataRoot, "data"), dataRoot, Path.Combine(dataRoot, "logs"))
+        );
+        services.AddFiles(new ConfigurationBuilder().Build());
         services.AddSingleton<IAgwFileSystemResolver, MissingFileSystemResolver>();
         using var serviceProvider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
@@ -337,11 +347,15 @@ public class ToolRegistryServiceTests
     public void ValidateDefinitionCoverage_AllDeclaredDefinitionsHaveExecutableImplementations()
     {
         var services = CreateToolServices();
+        using var workspaceServices = ProjectWorkspaceAccessTestServices.Create();
         using var serviceProvider = services.BuildServiceProvider();
         var contextualTools = new IContextualTool[]
         {
             new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>()),
-            new ShellContextualTool(new ConfigurationBuilder().Build()),
+            new ShellContextualTool(
+                new ConfigurationBuilder().Build(),
+                workspaceServices.GetRequiredService<IProjectWorkspaceAccess>()
+            ),
         };
         var toolBlocks = ToolBlockDefinitionNames
             .All.Select(static name => new DefinitionCoverageToolBlock(name))
@@ -399,11 +413,17 @@ public class ToolRegistryServiceTests
     public async Task MaterializeAsync_ContextualExecuteTool_RequiresApprovalAtRuntime()
     {
         // Arrange
+        using var workspaceServices = ProjectWorkspaceAccessTestServices.Create();
         await using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new ShellContextualTool(new ConfigurationBuilder().Build())]
+            [
+                new ShellContextualTool(
+                    new ConfigurationBuilder().Build(),
+                    workspaceServices.GetRequiredService<IProjectWorkspaceAccess>()
+                ),
+            ]
         );
         var workspace = Path.Combine(
             AppContext.BaseDirectory,

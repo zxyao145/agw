@@ -10,15 +10,18 @@ using Agw.Agents.Execution.Agents.Middleware.Approval;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
+using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI.CodexSdk.AppServer;
 using OpenAI.CodexSdk.AppServer.MAF;
@@ -46,14 +49,33 @@ public partial class AgentRuntimeFactory
         bool isBackground = false
     )
     {
-        // 外部 Agent 进程使用 WorkingDirectory 和附加目录前，创建本次执行中缺失的目录。
-        // Missing directories of this execution are created before the external Agent process uses WorkingDirectory
-        // and the additional directories.
-        ProjectWorkspacePaths.EnsureCreated(project.Workspace!);
-        foreach (var directory in project.AdditionalDirectories)
-        {
-            ProjectWorkspacePaths.EnsureCreated(directory.Path);
-        }
+        var workspace =
+            ExecutionContextSlot.GetWorkspaceSnapshot(project.Id)
+            ?? ProjectWorkspacePaths.CreateSnapshot(
+                project.Id,
+                project.Workspace,
+                project.AdditionalDirectories.Select(directory => new ProjectWorkspaceDirectory(
+                    directory.Id,
+                    directory.Path
+                ))
+            );
+        project.Workspace = workspace.Workspace;
+        project.AdditionalDirectories = workspace
+            .AdditionalDirectories.Select(directory => new ProjectDirectory
+            {
+                Id = directory.Id,
+                Path = directory.Path,
+            })
+            .ToList();
+        await _services
+            .GetRequiredService<IProjectWorkspaceAccess>()
+            .ValidateAsync(
+                [workspace.Workspace, .. workspace.AdditionalDirectories.Select(static directory => directory.Path)],
+                creatingProjectId: null,
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+        ProjectWorkspacePaths.EnsureAvailable(workspace);
 
         var modelConfiguration = await _agentAppService
             .GetExternalModelRuntimeConfigurationAsync(request.Agent.ExternalAgentKind, request.Agent.ModelProviderId)
