@@ -3,8 +3,8 @@ using System.Diagnostics;
 namespace Agw.Files.Tests;
 
 /// <summary>
-/// 测试用的 git 仓库，位于测试输出目录中，释放时删除。
-/// A git repository for tests, inside the test output directory and deleted on dispose.
+/// 测试用的 git 仓库，位于仓库的 .scratch 目录中，释放时删除。
+/// A git repository for tests under the repository .scratch directory and deleted on dispose.
 /// </summary>
 internal sealed class TempGitRepository : IDisposable
 {
@@ -17,12 +17,7 @@ internal sealed class TempGitRepository : IDisposable
 
     public static TempGitRepository Create()
     {
-        var path = System.IO.Path.Combine(
-            AppContext.BaseDirectory,
-            "git-repositories",
-            Guid.CreateVersion7().ToString("N")
-        );
-        Directory.CreateDirectory(path);
+        var path = TestDirectoryHelper.Create("git-repositories");
         return InitializeIn(path);
     }
 
@@ -38,7 +33,8 @@ internal sealed class TempGitRepository : IDisposable
         return repository;
     }
 
-    public string GetPath(string relativePath) => System.IO.Path.Combine(Path, relativePath);
+    public string GetPath(string relativePath) =>
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(Path, relativePath));
 
     public void Write(string relativePath, string content)
     {
@@ -87,9 +83,6 @@ internal sealed class TempGitRepository : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(Path))
-        {
-            Directory.Delete(Path, recursive: true);
-        }
+        TestDirectoryHelper.Delete(Path);
     }
 }

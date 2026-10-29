@@ -20,6 +20,7 @@ internal sealed class InProcessExecutionCoordinatorFactory
     private readonly AgentflowTurnExecutor _agentflowTurns;
     private readonly ExecutionContextFactory _executionContexts;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
     private readonly TurnBroadcastRegistry _broadcasts;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConversationExecutionGate? _conversationGate;
@@ -30,6 +31,7 @@ internal sealed class InProcessExecutionCoordinatorFactory
         AgentflowTurnExecutor agentflowTurns,
         ExecutionContextFactory executionContexts,
         IAgwFileSystemResolver fileSystemResolver,
+        IProjectWorkspaceAccess workspaceAccess,
         TurnBroadcastRegistry broadcasts,
         IServiceScopeFactory scopeFactory,
         IConversationExecutionGate? conversationGate = null
@@ -40,6 +42,7 @@ internal sealed class InProcessExecutionCoordinatorFactory
         _agentflowTurns = agentflowTurns;
         _executionContexts = executionContexts;
         _fileSystemResolver = fileSystemResolver;
+        _workspaceAccess = workspaceAccess;
         _broadcasts = broadcasts;
         _scopeFactory = scopeFactory;
         _conversationGate = conversationGate;
@@ -55,6 +58,7 @@ internal sealed class InProcessExecutionCoordinatorFactory
             _agentflowTurns,
             _executionContexts,
             _fileSystemResolver,
+            _workspaceAccess,
             _conversationGate,
             _broadcasts,
             _scopeFactory,

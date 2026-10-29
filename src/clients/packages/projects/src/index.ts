@@ -6,7 +6,6 @@ export * from "./services/task-client";
 export {
   formatProjectFolderName,
   resolveCreateProjectWorkspace,
-  syncDefaultProjectWorkspace,
 } from "./ui-web/pages/projects/project-form";
 export * from "./ui-web/components/file-explorer";
 export { ConversationList } from "./ui-web/components/task/conversation-list";

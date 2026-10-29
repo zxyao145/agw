@@ -29,6 +29,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
     private readonly AgentflowTurnExecutor _agentflowTurns;
     private readonly ExecutionContextFactory _executionContexts;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
     private readonly IConversationExecutionGate? _conversationGate;
     private readonly TurnBroadcastRegistry _broadcasts;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -41,6 +42,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         AgentflowTurnExecutor agentflowTurns,
         ExecutionContextFactory executionContexts,
         IAgwFileSystemResolver fileSystemResolver,
+        IProjectWorkspaceAccess workspaceAccess,
         IConversationExecutionGate? conversationGate,
         TurnBroadcastRegistry broadcasts,
         IServiceScopeFactory scopeFactory,
@@ -53,6 +55,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         _agentflowTurns = agentflowTurns;
         _executionContexts = executionContexts;
         _fileSystemResolver = fileSystemResolver;
+        _workspaceAccess = workspaceAccess;
         _conversationGate = conversationGate;
         _broadcasts = broadcasts;
         _scopeFactory = scopeFactory;
@@ -100,7 +103,17 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             new TurnRecord(_scopeFactory, request.TurnId, request.InputMessageId, writeGuard: null)
         );
         using var executionScope = scope.Push();
-        ProjectWorkspacePaths.EnsureAvailable(request.Task.ProjectId, request.WorkspaceSnapshot);
+        await _workspaceAccess
+            .ValidateAsync(
+                [
+                    request.WorkspaceSnapshot.Workspace,
+                    .. request.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
+                ],
+                creatingProjectId: null,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        ProjectWorkspacePaths.EnsureAvailable(request.WorkspaceSnapshot);
         // 先取得对话执行锁再判断复用：归档 provider session 与复用检查按执行锁排序，归档后的 Turn 一定重建 Runtime。
         // The conversation execution lock is taken before the reuse check: archiving a provider session and the reuse check are ordered by it, so a turn after an archive always rebuilds the Runtime.
         var lease =
@@ -296,6 +309,10 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         CancellationToken cancellationToken
     )
     {
+        var workspaceDirectories = DirectoryIdentitySnapshot.Capture([
+            request.WorkspaceSnapshot.Workspace,
+            .. request.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
+        ]);
         IAsyncDisposable? runtime = request.Target.AgentType switch
         {
             AgentRuntimeType.Agent => await _agentRuntimes.CreateRuntimeAsync(
@@ -321,6 +338,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
                 request.Target,
                 runtime,
                 request.WorkspaceSnapshot.Fingerprint,
+                workspaceDirectories,
                 request.Settings.PermissionVersion
             );
     }
@@ -364,8 +382,8 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             };
 
     /// <summary>
-    /// 判断保留的 Runtime 能否执行本 Turn：目标、工作目录与定义版本都不变，Agent 还要求项目、归一化 context 与 Generation 相同，External Agent 的 provider session 快照仍是生效记录。
-    /// Decides whether the retained Runtime can run this turn: the target, workspace and definition version are unchanged, an Agent also needs the same project, normalized context and generation, and an External Agent's provider session snapshot must still be the active record.
+    /// 判断保留的 Runtime 能否执行本 Turn：目标、工作目录、工作目录的物理身份与定义版本都不变，Agent 还要求项目、归一化 context 与 Generation 相同，External Agent 的 provider session 快照仍是生效记录。
+    /// Decides whether the retained Runtime can run this turn: the target, workspace, the workspace directories' physical identities and definition version are unchanged, an Agent also needs the same project, normalized context and generation, and an External Agent's provider session snapshot must still be the active record.
     /// </summary>
     private async Task<bool> CanReuseAsync(
         InProcessTurnHost host,
@@ -373,7 +391,11 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         CancellationToken cancellationToken
     )
     {
-        if (host.Target != request.Target || host.WorkspaceFingerprint != request.WorkspaceSnapshot.Fingerprint)
+        if (
+            host.Target != request.Target
+            || host.WorkspaceFingerprint != request.WorkspaceSnapshot.Fingerprint
+            || !host.WorkspaceDirectories.IsCurrent()
+        )
         {
             return false;
         }

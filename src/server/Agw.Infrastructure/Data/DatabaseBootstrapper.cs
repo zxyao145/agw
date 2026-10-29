@@ -1,3 +1,4 @@
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
@@ -15,6 +16,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
     private readonly ILoggerFactory _loggerFactory;
     private readonly TimeProvider _timeProvider;
     private readonly AgwDataPaths _paths;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
     private readonly IOptionsMonitor<DatabaseSettings> _databaseSettings;
     private readonly IEncryptedDataProtector _encryptedDataProtector;
     private readonly EntityCreatorInterceptor _entityCreatorInterceptor;
@@ -26,6 +28,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
         ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         AgwDataPaths paths,
+        IProjectWorkspaceAccess workspaceAccess,
         IOptionsMonitor<DatabaseSettings> databaseSettings,
         IEncryptedDataProtector encryptedDataProtector,
         EntityCreatorInterceptor entityCreatorInterceptor,
@@ -37,6 +40,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
         _loggerFactory = loggerFactory;
         _timeProvider = timeProvider;
         _paths = paths;
+        _workspaceAccess = workspaceAccess;
         _databaseSettings = databaseSettings;
         _encryptedDataProtector = encryptedDataProtector;
         _entityCreatorInterceptor = entityCreatorInterceptor;
@@ -66,6 +70,7 @@ public sealed class DatabaseBootstrapper : IDatabaseBootstrapper
             _loggerFactory.CreateLogger<DbSeeder>(),
             _timeProvider,
             _paths,
+            _workspaceAccess,
             _skillRegistrations
         );
         await seeder.SeedAsync();

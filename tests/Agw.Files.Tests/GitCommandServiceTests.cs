@@ -202,16 +202,18 @@ public class GitCommandServiceTests
         AssertStatus(unstagedFiles, repository, "changed.txt", null, "modified");
     }
 
-    [Fact]
-    public async Task SetStagedAsync_Directory_MovesAllDescendantChanges()
+    [Theory]
+    [InlineData("src/first.txt", "src/second.txt")]
+    [InlineData("./src/first.txt", "./src/second.txt")]
+    public async Task SetStagedAsync_Directory_MovesAllDescendantChanges(string firstPath, string secondPath)
     {
         using var repository = TempGitRepository.Create();
         Directory.CreateDirectory(repository.GetPath("src"));
-        repository.Write("src/first.txt", "base\n");
-        repository.Write("src/second.txt", "base\n");
+        repository.Write(firstPath, "base\n");
+        repository.Write(secondPath, "base\n");
         repository.CommitAll();
-        repository.Write("src/first.txt", "first change\n");
-        repository.Write("src/second.txt", "second change\n");
+        repository.Write(firstPath, "first change\n");
+        repository.Write(secondPath, "second change\n");
         var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
 
         var result = await service.SetStagedAsync(
@@ -223,8 +225,8 @@ public class GitCommandServiceTests
 
         Assert.True(result.Success, $"{result.Message}: {result.Error}");
         Assert.NotNull(changedFiles);
-        AssertStatus(changedFiles, repository, "src/first.txt", "modified", null);
-        AssertStatus(changedFiles, repository, "src/second.txt", "modified", null);
+        AssertStatus(changedFiles, repository, firstPath, "modified", null);
+        AssertStatus(changedFiles, repository, secondPath, "modified", null);
 
         var unstageResult = await service.SetStagedAsync(
             repository.GetPath("src"),
@@ -235,8 +237,8 @@ public class GitCommandServiceTests
 
         Assert.True(unstageResult.Success, $"{unstageResult.Message}: {unstageResult.Error}");
         Assert.NotNull(unstagedFiles);
-        AssertStatus(unstagedFiles, repository, "src/first.txt", null, "modified");
-        AssertStatus(unstagedFiles, repository, "src/second.txt", null, "modified");
+        AssertStatus(unstagedFiles, repository, firstPath, null, "modified");
+        AssertStatus(unstagedFiles, repository, secondPath, null, "modified");
     }
 
     [Theory]
@@ -293,7 +295,7 @@ public class GitCommandServiceTests
         string? unstagedStatus
     )
     {
-        var status = changedFiles.FileStatuses[repository.GetPath(relativePath)];
+        var status = changedFiles.FileStatuses[Path.GetFullPath(repository.GetPath(relativePath))];
         Assert.Equal(stagedStatus, status.StagedStatus);
         Assert.Equal(unstagedStatus, status.UnstagedStatus);
     }

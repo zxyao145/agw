@@ -17,6 +17,7 @@ import Reasoning from "./renders/reasoning";
 import TextContent from "./renders/text-content";
 import UriContent from "./renders/uri-content";
 import { ToolDirectoryInfo } from "./tool-directory";
+import { ConversationImageMessageProvider } from "./conversation-image-file";
 
 function PresentedContentView({ content }: { content: PresentedContent }) {
   if (content.type === "json") {
@@ -160,24 +161,26 @@ function PresentedMessageView({
   );
 
   return (
-    <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "min-w-0 max-w-full",
-          isUser ? "agw-msg-user" : "msg-pos-left w-full",
-          isResult ? "agw-msg-result" : "",
-          message.width === "full" ? "w-full" : "",
-        )}
-      >
-        {isResult ? (
-          messageContent
-        ) : (
-          <MessageScrollArea followOutput={streaming && !isUser}>
-            {messageContent}
-          </MessageScrollArea>
-        )}
+    <ConversationImageMessageProvider message={message.source}>
+      <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
+        <div
+          className={cn(
+            "min-w-0 max-w-full",
+            isUser ? "agw-msg-user" : "msg-pos-left w-full",
+            isResult ? "agw-msg-result" : "",
+            message.width === "full" ? "w-full" : "",
+          )}
+        >
+          {isResult ? (
+            messageContent
+          ) : (
+            <MessageScrollArea followOutput={streaming && !isUser}>
+              {messageContent}
+            </MessageScrollArea>
+          )}
+        </div>
       </div>
-    </div>
+    </ConversationImageMessageProvider>
   );
 }
 

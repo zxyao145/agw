@@ -11,6 +11,16 @@ public interface ILocalFileSystem : IAgwFileSystem
     string GetRelativePath(string fullPath);
 
     /// <summary>
+    /// 检查目录项是否为符号链接，不读取链接目标。Checks whether the entry is a symbolic link without reading its target.
+    /// </summary>
+    Task<bool> IsSymbolicLinkAsync(string path, CancellationToken ct);
+
+    /// <summary>
+    /// 获取链接目标的目录类型；目标不存在或无法访问时返回 null。Gets the target directory type; null means absent or inaccessible.
+    /// </summary>
+    Task<bool?> GetSymbolicLinkDirectoryAsync(string path, CancellationToken ct);
+
+    /// <summary>
     /// 返回同一根目录上的受限文件系统：每个操作都绑定到经过校验的目录或文件句柄，路径经过符号链接后的物理位置必须位于
     /// <paramref name="allowedRoots"/>（物理目录路径）之一内，否则抛出 <c>FilePathOutsideRoot</c>。
     /// Returns a confined file system over the same root: every operation is bound to verified directory or file

@@ -4,6 +4,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../IsolatedUserHome.cs" Link="IsolatedUserHome.cs" />
     <Compile Include="../ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
     <Compile Include="../RecordingHttpClientFactory.cs" Link="RecordingHttpClientFactory.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -23,6 +24,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content
+      Include="../Agw.Agents.Tests/fixtures/CodexAppServer/image-view-1.png"
+      Link="fixtures/CodexAppServer/image-view-1.png"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
+      Include="../Agw.Agents.Tests/fixtures/CodexAppServer/image-view-2.png"
+      Link="fixtures/CodexAppServer/image-view-2.png"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
     <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
     <ProjectReference Include="../../src/server/Agw.Integrations/Agw.Integrations.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />

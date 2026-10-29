@@ -1,8 +1,13 @@
 using Agw.Agents.Contracts.Execution;
 using Agw.Auth.Contracts;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
+using Agw.Projects;
+using Agw.Projects.Contracts;
 using Agw.Providers.Contracts;
 using Agw.Shared;
+using Agw.Shared.Configuration;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
@@ -13,6 +18,8 @@ using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -49,6 +56,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -212,6 +220,70 @@ public class DbSeederTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeedAsync_BuiltInProjects_CreatesWorkspaceDirectoriesAndPreservesFiles(bool isolationEnabled)
+    {
+        // Arrange
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "seed.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                CreateWorkspaceAccess(paths, isolationEnabled),
+                [new TestSkillRegistration()]
+            );
+            var existingA2A = isolationEnabled
+                ? Path.Combine(paths.UserHomeDirectory, ".agw", "projects", ProjectDefaults.A2AId.ToString("N"))
+                : Path.Combine(paths.UserHomeDirectory, ".agw", "a2a");
+            Directory.CreateDirectory(existingA2A);
+            File.WriteAllText(Path.Combine(existingA2A, "existing.txt"), "existing");
+
+            // Act
+            await seeder.SeedAsync();
+            var workspaces = await context.Projects.ToDictionaryAsync(
+                project => project.Name,
+                project => project.Workspace,
+                TestContext.Current.CancellationToken
+            );
+            foreach (var name in new[] { "default-built-in", "a2a" })
+            {
+                File.WriteAllText(Path.Combine(workspaces[name]!, "seeded.txt"), name);
+            }
+
+            await seeder.SeedAsync();
+
+            // Assert
+            var projects = await context.Projects.ToListAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(2, projects.Count);
+            foreach (var name in new[] { "default-built-in", "a2a" })
+            {
+                var project = Assert.Single(projects, project => project.Name == name);
+                var expectedWorkspace = isolationEnabled
+                    ? Path.Combine(paths.UserHomeDirectory, ".agw", "projects", project.Id.ToString("N"))
+                    : Path.Combine(paths.UserHomeDirectory, ".agw", name);
+                Assert.Equal(expectedWorkspace, project.Workspace);
+                Assert.Equal(name, File.ReadAllText(Path.Combine(expectedWorkspace, "seeded.txt")));
+            }
+
+            Assert.Equal("existing", File.ReadAllText(Path.Combine(existingA2A, "existing.txt")));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task SeedAsync_LegacyJobManagementSkill_RenamesFixedBuiltInSkill()
     {
@@ -241,6 +313,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -293,6 +366,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -348,6 +422,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -411,6 +486,7 @@ public class DbSeederTests : IDisposable
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
+                CreateWorkspaceAccess(paths),
                 [new TestSkillRegistration()]
             );
 
@@ -456,10 +532,33 @@ public class DbSeederTests : IDisposable
         return tools;
     }
 
+    private static IProjectWorkspaceAccess CreateWorkspaceAccess(AgwDataPaths paths, bool isolationEnabled = false)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    [$"{ProjectWorkspaceOptions.SectionName}:IsolationEnabled"] = isolationEnabled.ToString(),
+                }
+            )
+            .Build();
+        var services = new ServiceCollection();
+        services.AddSingleton(paths);
+        services.AddFiles(configuration);
+        services.AddProjects(configuration);
+        using var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IProjectWorkspaceAccess>();
+    }
+
+    /// <summary>
+    /// 数据目录与用户目录都位于测试输出目录的 .scratch 下；用户目录在数据目录内，随数据目录一起删除。
+    /// Both the data root and the user home live under .scratch in the test output directory; the home is inside the
+    /// data root and is deleted with it.
+    /// </summary>
     private static AgwDataPaths CreatePaths()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"agw-seeder-{Guid.CreateVersion7():N}");
-        var paths = AgwDataPaths.Resolve(root, "/unused");
+        var root = Path.Combine(AppContext.BaseDirectory, ".scratch", "db-seeder", Guid.CreateVersion7().ToString("N"));
+        var paths = AgwDataPaths.Resolve(root, Path.Combine(root, "home"));
         paths.EnsureCreated();
         return paths;
     }

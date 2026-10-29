@@ -1,4 +1,6 @@
 using Agw.Agents.Definitions.Facades;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Integrations.Application.Facades;
@@ -6,9 +8,12 @@ using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Runtime;
 using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Agw.Host.Tests;
@@ -200,6 +205,14 @@ public class ProjectTraceCleanupTests
     private static ProjectAppService CreateProjectService(AgwDbContext dbContext)
     {
         var userInfo = new TestUserInfoService();
+        var dataPaths = AgwDataPaths.Resolve(
+            Path.Combine(AppContext.BaseDirectory, ".scratch", "project-trace-cleanup-data"),
+            Path.Combine(AppContext.BaseDirectory, ".scratch", "project-trace-cleanup-home")
+        );
+        var services = new ServiceCollection();
+        services.AddSingleton(dataPaths);
+        services.AddFiles(new ConfigurationBuilder().Build());
+        using var provider = services.BuildServiceProvider();
         return new ProjectAppService(
             dbContext,
             new ProjectResourceBindingDomainService(
@@ -223,7 +236,9 @@ public class ProjectTraceCleanupTests
                 TimeProvider.System
             ),
             new ProjectResolver(dbContext, userInfo),
-            userInfo
+            userInfo,
+            dataPaths,
+            provider.GetRequiredService<IProjectWorkspaceAccess>()
         );
     }
 }

@@ -20,6 +20,7 @@ using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.History;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Agents;
@@ -567,7 +568,6 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 ownershipLost
             )
             .ConfigureAwait(false);
-        ProjectWorkspacePaths.EnsureAvailable(manifest.Task.ProjectId, manifest.WorkspaceSnapshot!);
         await using var sink = new DurableEventSink(
             guard,
             lease,
@@ -608,6 +608,18 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         try
         {
             using var executionScope = scope.Push();
+            await services
+                .GetRequiredService<IProjectWorkspaceAccess>()
+                .ValidateAsync(
+                    [
+                        manifest.WorkspaceSnapshot!.Workspace,
+                        .. manifest.WorkspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
+                    ],
+                    creatingProjectId: null,
+                    cancellationToken: ownershipLost
+                )
+                .ConfigureAwait(false);
+            ProjectWorkspacePaths.EnsureAvailable(manifest.WorkspaceSnapshot);
             await turn.MarkRunningAsync(ownershipLost).ConfigureAwait(false);
             return manifest.AgentType switch
             {

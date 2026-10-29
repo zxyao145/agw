@@ -9,6 +9,7 @@ using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
+using Agw.Files;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
@@ -35,6 +36,7 @@ using Agw.Settings.Application.Persistence;
 using Agw.Setup.Services;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
+using Agw.Shared.Runtime;
 using Agw.Skills.Application.Facades;
 using Agw.Skills.Application.Persistence;
 using Agw.Skills.Contracts.References;
@@ -90,6 +92,14 @@ internal static class JobTestServices
         IProjectExecutionLock executionLock
     )
     {
+        var configuration = new ConfigurationBuilder().Build();
+        var dataPaths = AgwDataPaths.Resolve(
+            Path.Combine(AppContext.BaseDirectory, ".scratch", "job-test-services", "data"),
+            Path.Combine(AppContext.BaseDirectory, ".scratch", "job-test-services", "home")
+        );
+        dataPaths.EnsureCreated();
+        services.AddSingleton(dataPaths);
+        services.AddFiles(configuration);
         services.AddLogging();
         services.AddSingleton<TimeProvider>(clock);
         services.AddAuth();
@@ -103,7 +113,7 @@ internal static class JobTestServices
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddSettings();
         services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();
-        services.AddSetup(new ConfigurationBuilder().Build());
+        services.AddSetup(configuration);
         services.AddScoped<IJobStore, JobRepo>();
         services.AddScoped<IJobOutcomeTransaction, JobOutcomeTransaction>();
         services.AddScoped<ProjectResolver>();
@@ -113,6 +123,6 @@ internal static class JobTestServices
         services.AddScoped<TaskAppService>();
         services.AddScoped<ITaskAppService>(provider => provider.GetRequiredService<TaskAppService>());
         services.AddScoped<IProjectTaskFacade, ProjectTaskFacade>();
-        services.AddJobs(new ConfigurationBuilder().Build(), new DependencyInjection.RegistrationOptions());
+        services.AddJobs(configuration, new DependencyInjection.RegistrationOptions());
     }
 }

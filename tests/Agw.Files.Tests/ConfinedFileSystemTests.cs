@@ -92,7 +92,7 @@ public sealed class ConfinedFileSystemTests
         {
             var workspace = CreateDirectory(root, "workspace");
             await File.WriteAllTextAsync(Path.Combine(root, "secret.txt"), "secret", ct);
-            File.CreateSymbolicLink(Path.Combine(workspace, "link.txt"), "../secret.txt");
+            File.CreateSymbolicLink(Path.Combine(workspace, "link.txt"), Path.Combine("..", "secret.txt"));
             var fileSystem = Confine(workspace);
 
             var exception = await Assert.ThrowsAsync<AgwException>(() => fileSystem.ReadAllTextAsync("link.txt", ct));
@@ -482,13 +482,8 @@ public sealed class ConfinedFileSystemTests
         Directory.CreateDirectory(Path.Combine(root, name)).FullName;
 
     /// <summary>
-    /// 在测试输出目录下创建一个独立的根目录，符号链接测试的所有目录都放在其中。
-    /// Creates an isolated root under the test output directory that holds every directory of a symbolic-link test.
+    /// 在仓库 .scratch 目录下创建一个独立根目录，保存当前符号链接测试的临时文件。
+    /// Creates an isolated root under the repository .scratch directory for the symbolic-link test's temporary files.
     /// </summary>
-    private static string CreateTestRoot() =>
-        Directory
-            .CreateDirectory(
-                Path.Combine(AppContext.BaseDirectory, "confined-file-system", Guid.CreateVersion7().ToString("N"))
-            )
-            .FullName;
+    private static string CreateTestRoot() => TestDirectoryHelper.Create("confined-file-system");
 }

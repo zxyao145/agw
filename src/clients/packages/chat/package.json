@@ -14,6 +14,7 @@
     "lint": "oxlint -c ../../.oxlintrc.json ./src ./browser-tests",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "test:browser": "tsx --test browser-tests/*.test.ts",
+    "test:server-images": "tsx --test browser-tests/conversation-image-files.integration.ts",
     "format": "oxfmt -c ../../.oxfmtrc.json ./src ./browser-tests *.json",
     "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src ./browser-tests *.json"
   },

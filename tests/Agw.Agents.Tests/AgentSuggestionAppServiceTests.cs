@@ -4,6 +4,7 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.ExternalAgents;
+using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
@@ -12,6 +13,7 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 using Agw.Tools.Impl.ContextualTools.Shell;
 using Agw.Tools.Impl.ContextualTools.WebSearch;
@@ -342,13 +344,25 @@ public class AgentSuggestionAppServiceTests : IDisposable
             skill.CreateBy ??= "tester";
         }
 
-        using var serviceProvider = new ServiceCollection().AddHttpClient().BuildServiceProvider();
+        var configuration = new ConfigurationBuilder().Build();
+        var workspaceRoot = Path.Combine(AppContext.BaseDirectory, ".scratch", "agent-suggestion-workspace");
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddSingleton(
+            AgwDataPaths.Resolve(
+                Path.Combine(workspaceRoot, "data"),
+                workspaceRoot,
+                Path.Combine(workspaceRoot, "logs")
+            )
+        );
+        services.AddFiles(configuration);
+        using var serviceProvider = services.BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
             [
                 new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>()),
-                new ShellContextualTool(new ConfigurationBuilder().Build()),
+                new ShellContextualTool(configuration, serviceProvider.GetRequiredService<IProjectWorkspaceAccess>()),
             ],
             new ToolBlockRegistry([
                 new TodoToolBlock(),

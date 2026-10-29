@@ -1,11 +1,12 @@
 using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Execution.Agents.ExternalAgents.Codex;
 using Agw.Agents.ExternalAgents;
 using Agw.Providers.Contracts;
 using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
-using OpenAI.CodexSdk;
-using OpenAI.CodexSdk.MAF;
+using OpenAI.CodexSdk.AppServer;
+using OpenAI.CodexSdk.AppServer.MAF;
 using PiAgentSdk.MAF;
 
 namespace Agw.Agents.Execution.Agents.ExternalAgents;
@@ -49,8 +50,8 @@ internal static class ExternalAgentModelOptions
         };
     }
 
-    internal static CodexAIAgentOptions ApplyCodex(
-        CodexAIAgentOptions options,
+    internal static CodexAppServerAIAgentOptions ApplyCodex(
+        CodexAppServerAIAgentOptions options,
         AgentModelRuntimeConfiguration? configuration
     )
     {
@@ -60,30 +61,10 @@ internal static class ExternalAgentModelOptions
         }
 
         var apiKey = GetApiKey(configuration, EngineKind.Codex);
-        var original = options.CodexOptions ?? new CodexOptions();
-        var environment = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (original.Env != null)
-        {
-            foreach (var (key, value) in original.Env)
-            {
-                environment[key] = value;
-            }
-        }
-        else
-        {
-            foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
-            {
-                if (entry.Key is string key && entry.Value is string value)
-                {
-                    environment[key] = value;
-                }
-            }
-        }
-        environment[ApiKeyEnvironmentVariable] = apiKey;
-
-        // Use a dedicated provider so a local model_provider does not redirect this request.
-        var config = new Dictionary<string, CodexConfigValue>(
-            original.Config ?? new Dictionary<string, CodexConfigValue>()
+        var threadStartParams = options.ThreadStartParams;
+        var config = new Dictionary<string, JsonElement>(
+            threadStartParams.Config.GetValueOrDefault() ?? new Dictionary<string, JsonElement>(),
+            StringComparer.Ordinal
         );
         foreach (
             var key in config
@@ -93,48 +74,26 @@ internal static class ExternalAgentModelOptions
         {
             config.Remove(key);
         }
-        var providers =
-            config.TryGetValue("model_providers", out var configuredProviders)
-            && configuredProviders is CodexConfigValue.ObjectValue providerObject
-                ? new Dictionary<string, CodexConfigValue>(providerObject.Properties)
-                : new Dictionary<string, CodexConfigValue>();
-        providers["agw"] = new CodexConfigValue.ObjectValue(
-            new Dictionary<string, CodexConfigValue>
-            {
-                ["name"] = "Agw",
-                ["base_url"] = configuration.Provider.Endpoint,
-                ["wire_api"] = "responses",
-                ["env_key"] = ApiKeyEnvironmentVariable,
-                ["requires_openai_auth"] = false,
-            }
+
+        var routedConfig = CodexAgentRuntimeOptionsMapper.MergeProviderConfig(
+            config,
+            configuration.Provider.Endpoint,
+            apiKey
         );
-        config.Remove("model_providers.agw");
-        config["model_providers"] = new CodexConfigValue.ObjectValue(providers);
-        config["model_provider"] = "agw";
-        config["model"] = configuration.Model.Name;
-        var thread = options.ThreadOptions ?? new ThreadOptions();
+        var selectedThreadStartParams = threadStartParams with
+        {
+            Model = configuration.Model.Name,
+            ModelProvider = "agw",
+            Config = new Optional<IReadOnlyDictionary<string, JsonElement>?>(routedConfig),
+        };
+        var configureThreadResume = options.ConfigureThreadResume;
         return options with
         {
-            CodexOptions = new CodexOptions
+            ThreadStartParams = selectedThreadStartParams,
+            ConfigureThreadResume = parameters =>
             {
-                CodexPathOverride = original.CodexPathOverride,
-                BaseUrl = configuration.Provider.Endpoint,
-                ApiKey = apiKey,
-                Env = environment,
-                Config = config,
-            },
-            ThreadOptions = new ThreadOptions
-            {
-                Model = configuration.Model.Name,
-                SandboxMode = thread.SandboxMode,
-                WorkingDirectory = thread.WorkingDirectory,
-                SkipGitRepoCheck = thread.SkipGitRepoCheck,
-                ModelReasoningEffort = thread.ModelReasoningEffort,
-                NetworkAccessEnabled = thread.NetworkAccessEnabled,
-                WebSearchMode = thread.WebSearchMode,
-                WebSearchEnabled = thread.WebSearchEnabled,
-                ApprovalPolicy = thread.ApprovalPolicy,
-                AdditionalDirectories = thread.AdditionalDirectories,
+                var configured = configureThreadResume?.Invoke(parameters) ?? parameters;
+                return CodexAgentRuntimeOptionsMapper.ConfigureThreadResume(configured, selectedThreadStartParams);
             },
         };
     }

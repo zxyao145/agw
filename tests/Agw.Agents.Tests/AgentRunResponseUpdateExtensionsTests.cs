@@ -12,7 +12,7 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     public void ToAiMessage_MediaBlock_PreservesMetadataInLiveAndHistory(bool embedded)
     {
         AIContent content = embedded
-            ? new DataContent(new byte[] { 1, 2, 3 }, "image/png")
+            ? new DataContent(new byte[] { 1, 2, 3 }, "image/png") { Name = "screen.png" }
             : new UriContent(new Uri("https://example.test/image.png"), "image/png");
         content.AdditionalProperties = new() { ["blockId"] = "block:0", ["detail"] = "high" };
         var update = new AgentResponseUpdate(ChatRole.Assistant, [content]);
@@ -28,6 +28,13 @@ public sealed class AgentRunResponseUpdateExtensionsTests
             Assert.Equal("block:0", converted.AdditionalProperties!["blockId"]);
             Assert.Equal("high", converted.AdditionalProperties["detail"]);
             Assert.NotSame(content.AdditionalProperties, converted.AdditionalProperties);
+            if (converted is AgwDataContent data)
+            {
+                Assert.Equal("image/png", data.MediaType);
+                Assert.Equal("data:image/png;base64,AQID", data.Uri);
+                Assert.Equal(new byte[] { 1, 2, 3 }, data.Data.ToArray());
+                Assert.Equal("screen.png", data.Name);
+            }
         }
     }
 

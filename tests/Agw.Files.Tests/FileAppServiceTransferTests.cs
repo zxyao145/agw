@@ -29,7 +29,8 @@ public sealed class FileAppServiceTransferTests : IDisposable
         _service = new FileAppService(
             new ProjectFileSystemResolver(ProjectId, TestFileSystems.Local(Workspace)),
             new GitCommandService(NullLogger<GitCommandService>.Instance),
-            NullLogger<FileAppService>.Instance
+            NullLogger<FileAppService>.Instance,
+            TestProjectWorkspaceAccess.Disabled
         );
     }
 

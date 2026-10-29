@@ -1,6 +1,8 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Files.Application.Files;
@@ -20,6 +22,8 @@ public sealed class FileAppService
     private const string GitRequiresLocalFileSystem =
         "Git operations are only supported for local project file systems";
 
+    private static readonly FileExtensionContentTypeProvider ContentTypeProvider = new();
+
     private static readonly HashSet<string> IgnoreDirectories = new() { "node_modules", "obj", "bin" };
 
     private static readonly HashSet<string> IgnoreFiles = new() { "tmpclaude*" };
@@ -27,16 +31,19 @@ public sealed class FileAppService
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly IGitCommandService _gitCommandService;
     private readonly ILogger<FileAppService> _logger;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
 
     public FileAppService(
         IAgwFileSystemResolver fileSystemResolver,
         IGitCommandService gitCommandService,
-        ILogger<FileAppService> logger
+        ILogger<FileAppService> logger,
+        IProjectWorkspaceAccess workspaceAccess
     )
     {
         _fileSystemResolver = fileSystemResolver;
         _gitCommandService = gitCommandService;
         _logger = logger;
+        _workspaceAccess = workspaceAccess;
     }
 
     public async Task<FileOperationResult<FileListOutput>> ListAsync(
@@ -74,7 +81,7 @@ public sealed class FileAppService
 
         if (recursive && diff)
         {
-            return await GetAllChangedFilesAsync((ILocalFileSystem)fileSystem, path, cancellationToken);
+            return await GetAllChangedFilesAsync(projectId, (ILocalFileSystem)fileSystem, path, cancellationToken);
         }
 
         GitChangedFiles? changedFiles = null;
@@ -83,6 +90,7 @@ public sealed class FileAppService
         {
             local = (ILocalFileSystem)fileSystem;
             var physicalPath = local.ResolvePhysicalPath(path);
+            await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
             changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalPath, cancellationToken);
             if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
             {
@@ -235,6 +243,7 @@ public sealed class FileAppService
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
         if (!await fileSystem.ExistsFileAsync(path, cancellationToken))
         {
+            await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
             var changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalPath, cancellationToken);
             if (
                 changedFiles == null
@@ -246,6 +255,7 @@ public sealed class FileAppService
             }
         }
 
+        await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
         var diff = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken, diffScope);
         if (!diff.Success)
         {
@@ -350,9 +360,12 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Invalid("Project directory root cannot be deleted");
         }
 
-        var isFile = await fileSystem.ExistsFileAsync(path, cancellationToken);
-        var isDirectory = !isFile && await fileSystem.ExistsDirectoryAsync(path, cancellationToken);
-        if (!isFile && !isDirectory)
+        var isSymbolicLink =
+            fileSystem is ILocalFileSystem localFileSystem
+            && await localFileSystem.IsSymbolicLinkAsync(path, cancellationToken).ConfigureAwait(false);
+        var isFile = !isSymbolicLink && await fileSystem.ExistsFileAsync(path, cancellationToken);
+        var isDirectory = !isSymbolicLink && !isFile && await fileSystem.ExistsDirectoryAsync(path, cancellationToken);
+        if (!isSymbolicLink && !isFile && !isDirectory)
         {
             return FileOperationResult<FileMutationOutput>.Missing("File or directory not found");
         }
@@ -426,6 +439,73 @@ public sealed class FileAppService
             return FileOperationResult<Stream>.Invalid("Path parameter is required");
         }
 
+        return await OpenReadCoreAsync(fileSystem, path, cancellationToken);
+    }
+
+    /// <summary>
+    /// Opens an image under the selected project directory; the caller disposes the returned stream.
+    /// 打开选定项目目录中的图像；返回的流由调用方释放。
+    /// </summary>
+    public async Task<FileOperationResult<(Stream Stream, string ContentType)>> OpenImageAsync(
+        Guid projectId,
+        string? path,
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
+    )
+    {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<(Stream Stream, string ContentType)>.Invalid("Project ID is required");
+        }
+
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
+        if (fileSystem == null)
+        {
+            return FileOperationResult<(Stream Stream, string ContentType)>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return FileOperationResult<(Stream Stream, string ContentType)>.Invalid("Path parameter is required");
+        }
+
+        if (
+            !ContentTypeProvider.TryGetContentType(path, out var contentType)
+            || !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return FileOperationResult<(Stream Stream, string ContentType)>.Invalid("Path must refer to an image file");
+        }
+
+        if (fileSystem is not ILocalFileSystem localFileSystem)
+        {
+            return FileOperationResult<(Stream Stream, string ContentType)>.Invalid(
+                "Image files require a local project file system"
+            );
+        }
+
+        var relativePath = ResolveImagePath(localFileSystem, path);
+        var root = localFileSystem.ResolvePhysicalPath(string.Empty);
+        var confinedFileSystem = localFileSystem.Confine([root]);
+        var result = await OpenReadCoreAsync(confinedFileSystem, relativePath, cancellationToken);
+        return result.Status == FileOperationStatus.Success
+            ? FileOperationResult<(Stream Stream, string ContentType)>.Succeeded((result.Value!, contentType))
+            : new FileOperationResult<(Stream Stream, string ContentType)>(
+                result.Status,
+                default,
+                result.Message,
+                result.Details
+            );
+    }
+
+    private static async Task<FileOperationResult<Stream>> OpenReadCoreAsync(
+        IAgwFileSystem fileSystem,
+        string path,
+        CancellationToken cancellationToken
+    )
+    {
         if (!await fileSystem.ExistsFileAsync(path, cancellationToken))
         {
             return FileOperationResult<Stream>.Missing("File not found");
@@ -441,6 +521,30 @@ public sealed class FileAppService
         }
 
         return FileOperationResult<Stream>.Succeeded(stream);
+    }
+
+    private static string ResolveImagePath(ILocalFileSystem fileSystem, string path)
+    {
+        var expandedPath = PathUtil.ExpandTilde(path);
+        if (!Path.IsPathRooted(expandedPath))
+        {
+            return path;
+        }
+
+        var fullPath = Path.GetFullPath(expandedPath);
+        var rootPath = Path.GetFullPath(fileSystem.ResolvePhysicalPath(string.Empty));
+        var relativePath = Path.GetRelativePath(rootPath, fullPath);
+        if (
+            Path.IsPathRooted(relativePath)
+            || relativePath.Equals("..", StringComparison.Ordinal)
+            || relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", PathComparison)
+            || relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", PathComparison)
+        )
+        {
+            throw new AgwException(ErrorCodes.FilePathOutsideRoot, $"Path '{path}' is outside the project directory.");
+        }
+
+        return fileSystem.GetRelativePath(fullPath);
     }
 
     public async Task<FileOperationResult<FileListEntry>> WriteAsync(
@@ -598,8 +702,13 @@ public sealed class FileAppService
             return FileOperationResult<FileListEntry>.Invalid(invalid);
         }
 
+        var localFileSystem = fileSystem as ILocalFileSystem;
+        var isSymbolicLink =
+            localFileSystem is not null
+            && await localFileSystem.IsSymbolicLinkAsync(sourcePath!, cancellationToken).ConfigureAwait(false);
         if (
-            !await fileSystem.ExistsFileAsync(sourcePath!, cancellationToken)
+            !isSymbolicLink
+            && !await fileSystem.ExistsFileAsync(sourcePath!, cancellationToken)
             && !await fileSystem.ExistsDirectoryAsync(sourcePath!, cancellationToken)
         )
         {
@@ -618,6 +727,26 @@ public sealed class FileAppService
             destinationPath,
             projectId
         );
+        if (isSymbolicLink)
+        {
+            var symbolicLinkIsDirectory = await localFileSystem!
+                .GetSymbolicLinkDirectoryAsync(destinationPath!, cancellationToken)
+                .ConfigureAwait(false);
+            var normalizedPath = NormalizePath(destinationPath!);
+            return FileOperationResult<FileListEntry>.Succeeded(
+                new FileListEntry(
+                    GetFileName(normalizedPath),
+                    normalizedPath,
+                    symbolicLinkIsDirectory is true ? "directory" : "file",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            );
+        }
+
         return await StatEntryAsync(fileSystem, destinationPath!, cancellationToken);
     }
 
@@ -657,6 +786,7 @@ public sealed class FileAppService
         }
 
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
+        await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
         var result = await _gitCommandService.ResetFileAsync(physicalPath, cancellationToken);
         if (!result.Success && result.IsClientError)
         {
@@ -816,6 +946,7 @@ public sealed class FileAppService
         }
 
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
+        await ValidateGitPathAsync(projectId, physicalPath, cancellationToken).ConfigureAwait(false);
         var result = await _gitCommandService.SetStagedAsync(physicalPath, staged, cancellationToken);
         if (!result.Success && result.IsClientError)
         {
@@ -838,12 +969,14 @@ public sealed class FileAppService
     }
 
     private async Task<FileOperationResult<FileListOutput>> GetAllChangedFilesAsync(
+        Guid projectId,
         ILocalFileSystem fileSystem,
         string directoryPath,
         CancellationToken cancellationToken
     )
     {
         var physicalDirectory = fileSystem.ResolvePhysicalPath(directoryPath);
+        await ValidateGitPathAsync(projectId, physicalDirectory, cancellationToken).ConfigureAwait(false);
         var changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalDirectory, cancellationToken);
         if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
         {
@@ -883,6 +1016,9 @@ public sealed class FileAppService
         var sortedItems = items.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList();
         return FileOperationResult<FileListOutput>.Succeeded(new FileListOutput(sortedItems));
     }
+
+    private Task ValidateGitPathAsync(Guid projectId, string path, CancellationToken cancellationToken) =>
+        _workspaceAccess.ValidateAsync([path, $"~/.agw/projects/{projectId:N}"], cancellationToken: cancellationToken);
 
     private static async Task<FileOperationResult<FileListEntry>> StatEntryAsync(
         IAgwFileSystem fileSystem,

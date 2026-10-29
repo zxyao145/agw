@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Files.Abstracts;
 
 namespace Agw.Agents.Execution.Runtimes.InProcess;
 
@@ -22,12 +23,14 @@ internal sealed class InProcessTurnHost : IAsyncDisposable
         ExecutionTarget target,
         IAsyncDisposable runtime,
         string workspaceFingerprint,
+        DirectoryIdentitySnapshot workspaceDirectories,
         long permissionVersion
     )
     {
         Target = target;
         _runtime = runtime;
         WorkspaceFingerprint = workspaceFingerprint;
+        WorkspaceDirectories = workspaceDirectories;
         PermissionVersion = permissionVersion;
     }
 
@@ -38,6 +41,13 @@ internal sealed class InProcessTurnHost : IAsyncDisposable
     public AgentflowRuntime? AgentflowRuntime => _runtime as AgentflowRuntime;
 
     public string WorkspaceFingerprint { get; }
+
+    /// <summary>
+    /// 创建 Runtime 前捕获的主目录与附加目录物理身份；外部 Engine 进程与 persistent shell 绑定在这些目录上。
+    /// The physical identities of the primary and additional directories captured before the Runtime was created;
+    /// external Engine processes and persistent shells are bound to these directories.
+    /// </summary>
+    public DirectoryIdentitySnapshot WorkspaceDirectories { get; }
 
     /// <summary>
     /// 创建 Runtime 时的权限版本；外部 Engine 进程在启动时接收权限模式。

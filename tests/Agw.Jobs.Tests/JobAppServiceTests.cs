@@ -3,6 +3,8 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Definitions.Facades;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Jobs;
@@ -25,11 +27,14 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Skills.Application.Facades;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Jobs.Tests;
@@ -740,6 +745,14 @@ public class JobAppServiceTests : IDisposable
                 new SkillReferenceFacade(dbContext, userInfo),
                 new ConnectionReferenceFacade(dbContext, userInfo)
             );
+            var dataPaths = AgwDataPaths.Resolve(
+                Path.Combine(AppContext.BaseDirectory, ".scratch", "job-app-service-data"),
+                Path.Combine(AppContext.BaseDirectory, ".scratch", "job-app-service-home")
+            );
+            var workspaceServices = new ServiceCollection();
+            workspaceServices.AddSingleton(dataPaths);
+            workspaceServices.AddFiles(new ConfigurationBuilder().Build());
+            using var workspaceProvider = workspaceServices.BuildServiceProvider();
             var projectAppService = new ProjectAppService(
                 dbContext,
                 projectResourceBindings,
@@ -754,14 +767,19 @@ public class JobAppServiceTests : IDisposable
                     timeProvider
                 ),
                 projectResolver,
-                userInfo
+                userInfo,
+                dataPaths,
+                workspaceProvider.GetRequiredService<IProjectWorkspaceAccess>()
             );
             var service = new JobAppService(
                 dbContext,
                 new ProjectTaskFacade(taskExecution, dbContext, taskAppService, userInfo),
                 new JobDefinitionDomainService(
                     new JobRepository(dbContext),
-                    new ProjectRuntimeFacade(projectAppService),
+                    new ProjectRuntimeFacade(
+                        projectAppService,
+                        workspaceProvider.GetRequiredService<IProjectWorkspaceAccess>()
+                    ),
                     catalog
                 ),
                 new JobSchedulerWakeSignal(timeProvider),

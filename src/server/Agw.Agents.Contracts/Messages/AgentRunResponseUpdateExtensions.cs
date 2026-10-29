@@ -114,6 +114,7 @@ public static class AgentRunResponseUpdateExtensions
             },
             DataContent dataContent => new AgwDataContent(dataContent.Uri, dataContent.MediaType)
             {
+                Name = dataContent.Name,
                 AdditionalProperties = additionalProps,
             },
             _ => null,

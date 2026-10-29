@@ -333,6 +333,23 @@ export async function apiDownload(
   return readBinaryBody(response, url);
 }
 
+/** Downloads authenticated bytes with their response MIME type. 下载经过认证的文件并保留响应的 MIME 类型。 */
+export function apiDownloadBlob<P extends PathsWith<"get">>(
+  path: P,
+  ...args: RequestArguments<P, "get">
+): Promise<Blob>;
+export async function apiDownloadBlob(
+  path: keyof paths,
+  options?: UntypedRequestOptions,
+): Promise<Blob> {
+  const { response, url } = await sendRuntimeRequest(String(path), "get", options);
+  try {
+    return await response.blob();
+  } catch (caught) {
+    throw new ApiTransportError({ url, cause: caught });
+  }
+}
+
 export function apiGet<P extends PathsWith<"get">>(
   path: P,
   ...args: RequestArguments<P, "get">

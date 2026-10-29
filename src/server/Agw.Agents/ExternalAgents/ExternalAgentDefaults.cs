@@ -1,9 +1,9 @@
 using System.Text.Json;
+using Agw.Agents.ExternalAgents.Codex;
 using Agw.Providers.Contracts;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
-using OpenAI.CodexSdk.MAF;
 using PiAgentSdk.MAF;
 using PermissionMode = ClaudeCodeSdk.Types.PermissionMode;
 
@@ -49,7 +49,7 @@ public static class ExternalAgentDefaults
             EngineKind.ClaudeCode => JsonUtil.Serialize(
                 new ClaudeCodeAIAgentOptions { PermissionMode = PermissionMode.bypassPermissions }
             ),
-            EngineKind.Codex => JsonUtil.Serialize(new CodexAIAgentOptions()),
+            EngineKind.Codex => JsonUtil.Serialize(new CodexAgentSettings()),
             EngineKind.Pi => JsonUtil.Serialize(new PiAgentAIAgentOptions()),
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"External agent kind '{kind}' is not supported."),
         };

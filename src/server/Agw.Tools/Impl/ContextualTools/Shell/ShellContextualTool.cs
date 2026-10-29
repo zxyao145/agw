@@ -11,10 +11,12 @@ namespace Agw.Tools.Impl.ContextualTools.Shell;
 public sealed class ShellContextualTool : IContextualTool
 {
     private readonly IConfiguration _configuration;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
 
-    public ShellContextualTool(IConfiguration configuration)
+    public ShellContextualTool(IConfiguration configuration, IProjectWorkspaceAccess workspaceAccess)
     {
         _configuration = configuration;
+        _workspaceAccess = workspaceAccess;
     }
 
     /// <summary>
@@ -33,7 +35,7 @@ public sealed class ShellContextualTool : IContextualTool
 
     public AgwToolPermission RequiredPermission => AgwToolPermission.Execute;
 
-    public ValueTask<ToolContribution> MaterializeAsync(
+    public async ValueTask<ToolContribution> MaterializeAsync(
         ToolDefinition definition,
         ToolMaterializationContext context,
         CancellationToken cancellationToken
@@ -48,16 +50,30 @@ public sealed class ShellContextualTool : IContextualTool
         }
 
         var workspace = Path.GetFullPath(PathUtil.ExpandTilde(context.Workspace));
+        string[] directories =
+        [
+            workspace,
+            .. GetAdditionalDirectories(context)
+                .Select(static directory => ProjectWorkspacePaths.Normalize(directory.Path)),
+        ];
+        await _workspaceAccess
+            .ValidateAsync(directories, creatingProjectId: null, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
         var backend = _configuration["Agents:Shell:Backend"]?.Trim().ToLowerInvariant() ?? "local";
-        ShellExecutor executor = backend switch
+        Func<ShellExecutor> createExecutor = backend switch
         {
-            "local" => CreateLocalExecutor(context, workspace),
-            "docker" => CreateDockerExecutor(context, workspace),
+            "local" => () => CreateLocalExecutor(context, workspace),
+            "docker" => () => CreateDockerExecutor(context, workspace),
             _ => throw new AgwException(
                 ErrorCodes.InvalidParam,
                 "Agents:Shell:Backend must be either 'docker' or 'local'."
             ),
         };
+        var executor = new ProjectDirectoryShellExecutor(
+            directories,
+            ct => _workspaceAccess.ValidateAsync(directories, creatingProjectId: null, cancellationToken: ct),
+            createExecutor
+        );
 
         var contribution = new ToolContribution();
         // 文件访问约束在函数层与执行器策略两处生效：函数层给模型带错误码的说明，执行器策略拦住其他任何调用路径。
@@ -75,7 +91,7 @@ public sealed class ShellContextualTool : IContextualTool
             contribution.ContextProviders.Add(new DockerDirectoryProvider(context));
         }
         contribution.AddResource(executor);
-        return ValueTask.FromResult(contribution);
+        return contribution;
     }
 
     private static LocalShellExecutor CreateLocalExecutor(ToolMaterializationContext context, string workspace)
@@ -101,21 +117,26 @@ public sealed class ShellContextualTool : IContextualTool
         );
     }
 
+    /// <summary>
+    /// 生成附加目录的 Docker 挂载参数；挂载前创建缺失的目录。
+    /// Builds the Docker mount arguments of the additional directories, creating missing directories before mounting.
+    /// </summary>
     internal static IReadOnlyList<string> CreateAdditionalDirectoryMounts(ToolMaterializationContext context)
     {
         var args = new List<string>();
-        var directories =
-            context.WorkspaceSnapshot == null
-                ? context.Project.AdditionalDirectories.Select(directory => (directory.Id, directory.Path))
-                : context.WorkspaceSnapshot.AdditionalDirectories.Select(directory => (directory.Id, directory.Path));
-        foreach (var (id, directoryPath) in directories)
+        foreach (var (id, directoryPath) in GetAdditionalDirectories(context))
         {
-            var path = ProjectWorkspacePaths.Normalize(directoryPath);
+            var path = ProjectWorkspacePaths.EnsureCreated(directoryPath);
             args.Add("--volume");
             args.Add($"{path}:/project-directories/{id:D}:rw");
         }
         return args;
     }
+
+    private static IEnumerable<(Guid Id, string Path)> GetAdditionalDirectories(ToolMaterializationContext context) =>
+        context.WorkspaceSnapshot == null
+            ? context.Project.AdditionalDirectories.Select(directory => (directory.Id, directory.Path))
+            : context.WorkspaceSnapshot.AdditionalDirectories.Select(directory => (directory.Id, directory.Path));
 
     private sealed class DockerDirectoryProvider : AIContextProvider
     {

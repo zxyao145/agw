@@ -2,6 +2,7 @@ using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
 using Agw.Files.Infrastructure.Git;
 using Agw.Files.Infrastructure.Storage;
+using Agw.Shared.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -12,6 +13,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddFiles(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddOptions<ProjectWorkspaceOptions>();
+        services.TryAddSingleton<IProjectWorkspaceAccess, ProjectWorkspaceAccess>();
         services.AddSingleton<FileAppService>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<FilePathLocks>();
