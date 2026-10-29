@@ -33,7 +33,8 @@ internal sealed class TempGitRepository : IDisposable
         return repository;
     }
 
-    public string GetPath(string relativePath) => System.IO.Path.Combine(Path, relativePath);
+    public string GetPath(string relativePath) =>
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(Path, relativePath));
 
     public void Write(string relativePath, string content)
     {
