@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Blocks, FileText, Wrench } from "lucide-react";
+import { ArrowUp, Blocks, FileText, Maximize2, Minimize2, Wrench } from "lucide-react";
 import { Button } from "@agw/components";
 import { Textarea } from "@agw/components";
 import {
@@ -33,7 +33,7 @@ export interface UserInputProps {
   canSubmitWithoutText?: boolean;
 
   // Actions
-  /** 提交当前文字；返回 true 表示已受理，此时清空输入并保持焦点。Submits the current text; true means it was accepted, so the input clears and keeps focus. */
+  /** 提交当前文字；受理后清空并收起输入框，保持焦点。Submits the text; acceptance clears and collapses the input while keeping focus. */
   onExecute?: (value: string) => boolean;
   onStop?: () => void;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -47,6 +47,8 @@ export interface UserInputProps {
   placeholder?: string;
   rows?: number;
   maxHeight?: string;
+  /** 展开时保持原有占位并向上覆盖显示。Keeps the layout footprint and expands upward as an overlay. */
+  expandOverlay?: boolean;
 
   // Children
   children?: ReactNode;
@@ -63,6 +65,9 @@ interface UserInputSlots {
 }
 
 interface UserInputRootProps {
+  isExpanded: boolean;
+  expandOverlay: boolean;
+  onToggleExpanded: () => void;
   isExecuting: boolean;
   isDisabled: boolean;
   isSubmitDisabled: boolean;
@@ -85,6 +90,9 @@ interface UserInputRootProps {
 }
 
 function UserInputRoot({
+  isExpanded,
+  expandOverlay,
+  onToggleExpanded,
   isExecuting,
   isDisabled,
   isSubmitDisabled,
@@ -119,11 +127,31 @@ function UserInputRoot({
     }
     onSend();
   };
+  const expandButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className="size-7 rounded-full"
+      onClick={onToggleExpanded}
+      aria-label={isExpanded ? "Collapse input" : "Expand input"}
+      aria-expanded={isExpanded}
+      title={isExpanded ? "Collapse input" : "Expand input"}
+    >
+      {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+    </Button>
+  );
 
   return (
-    <div className="relative">
+    <div
+      className={
+        isExpanded && expandOverlay
+          ? "absolute inset-x-0 bottom-0 flex max-h-[100cqh] flex-col"
+          : "relative"
+      }
+    >
       {/* Top bar with tools and actions */}
-      <div className="flex mb-2 gap-2 pointer-events-auto">
+      <div className="flex shrink-0 mb-2 gap-2 pointer-events-auto">
         <div className="bg-background rounded-md flex items-center p-0">
           {topLeft.length > 0 && <>{topLeft}</>}
         </div>
@@ -134,13 +162,27 @@ function UserInputRoot({
           {topRight.length > 0 && <>{topRight}</>}
         </div>
       </div>
-      {queue.length > 0 ? <div className="agw-input-queue">{queue}</div> : null}
+      {queue.length > 0 ? (
+        <div
+          className={`agw-input-queue ${isExpanded && expandOverlay ? "agw-scrollbar min-h-0 overflow-y-auto bg-background" : ""}`}
+        >
+          {queue}
+        </div>
+      ) : null}
       {/* Input area with textarea and action button */}
-      <div className="relative">
+      <div className="relative shrink-0">
         {suggestions}
 
-        <div className="pointer-events-auto relative px-2 pt-2 pb-11 rounded-xl border bg-background shadow-sm">
-          {context.length > 0 ? <div className="mb-2">{context}</div> : null}
+        <div
+          className={`pointer-events-auto relative px-2 pt-2 pb-11 rounded-xl border bg-background shadow-sm ${isExpanded ? "flex h-[70cqh] min-h-0 flex-col" : ""}`}
+        >
+          {context.length > 0 ? (
+            <div
+              className={`mb-2 ${isExpanded ? "agw-scrollbar max-h-[35%] shrink-0 overflow-y-auto" : ""}`}
+            >
+              {context}
+            </div>
+          ) : null}
           <Textarea
             ref={textareaRef}
             value={input}
@@ -155,7 +197,7 @@ function UserInputRoot({
             aria-activedescendant={hasSuggestions ? activeSuggestionId : undefined}
             placeholder={placeholder}
             rows={rows}
-            className={`${maxHeight} agw-scrollbar min-h-[1lh] resize-none overflow-x-hidden
+            className={`${isExpanded ? "h-0 flex-1 field-sizing-fixed" : maxHeight} agw-scrollbar min-h-[1lh] resize-none overflow-x-hidden
             overflow-y-auto rounded-none 
             border-0 p-0 mb-4
             shadow-none 
@@ -167,22 +209,25 @@ function UserInputRoot({
           {/* Action button - comment mode or regular send */}
           <div className="absolute left-2 right-2 bottom-2 h-7 flex justify-between">
             <div className="flex min-w-0 items-center">{bottomLeft}</div>
-            <Button
-              size="icon-sm"
-              className="rounded-full size-7"
-              onClick={handleClick}
-              disabled={isSendDisabled}
-              aria-label={isStopAction ? "Stop execution" : "Send message"}
-            >
-              {isStopAction && sender.length > 0 ? <>{sender}</> : <ArrowUp className="size-5" />}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              {expandButton}
+              <Button
+                size="icon-sm"
+                className="rounded-full size-7"
+                onClick={handleClick}
+                disabled={isSendDisabled}
+                aria-label={isStopAction ? "Stop execution" : "Send message"}
+              >
+                {isStopAction && sender.length > 0 ? <>{sender}</> : <ArrowUp className="size-5" />}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
       {/* Helper text */}
-      <div className="text-xs text-muted-foreground mt-2">
-        {help.length > 0 ? <>{help}</> : "Press Enter for new line • Ctrl/Shift+Enter to send"}
-      </div>
+      {help.length > 0 ? (
+        <div className="grid shrink-0 text-xs text-muted-foreground mt-2">{help}</div>
+      ) : null}
     </div>
   );
 }
@@ -336,6 +381,7 @@ function getFileSuggestionParts(suggestion: SuggestionItem): { name: string; dir
 
 export interface UserInputRef {
   value: string;
+  /** 载入草稿并收起输入框。Loads a draft and collapses the input. */
   setInput: (value: string) => void;
   insertText: (text: string) => void;
 }
@@ -360,15 +406,19 @@ function UserInputContainer({
   placeholder = "Type your message...",
   rows = 1,
   maxHeight = "max-h-60",
+  expandOverlay = false,
   children,
   onSuggestion,
   inputRef,
 }: UserInputProps & { inputRef: React.Ref<UserInputRef> }) {
   const [input, setInput] = React.useState("");
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [collapsedHeight, setCollapsedHeight] = React.useState(0);
   const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
   const slots = getUserInputSlots(children);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const layoutRef = useRef<HTMLDivElement>(null);
   const suggestionRequestRef = useRef(0);
   const suggestionCaretRef = useRef(0);
   const suggestionListId = React.useId();
@@ -382,6 +432,7 @@ function UserInputContainer({
       setInput: (value: string) => {
         suggestionRequestRef.current += 1;
         setInput(value);
+        setIsExpanded(false);
         setSuggestions([]);
         setActiveSuggestionIndex(0);
       },
@@ -473,8 +524,8 @@ function UserInputContainer({
     />
   );
 
-  // 按钮发送与 Ctrl/Shift+Enter 共用这个入口；被拒绝时保留草稿。
-  // The send button and Ctrl/Shift+Enter share this entry; a rejected submission keeps the draft.
+  // 发送按钮与键盘快捷键共用这个入口；被拒绝时保留草稿。
+  // The send button and keyboard shortcuts share this entry; a rejected submission keeps the draft.
   const handleSend = () => {
     if (isDisabled || isSubmitDisabled || !hasSubmittableInput(input, canSubmitWithoutText)) {
       return;
@@ -484,6 +535,7 @@ function UserInputContainer({
     }
     suggestionRequestRef.current += 1;
     setInput("");
+    setIsExpanded(false);
     onValueChange?.("");
     setSuggestions([]);
     setActiveSuggestionIndex(0);
@@ -495,7 +547,17 @@ function UserInputContainer({
       return;
     }
 
-    if (event.key === "Enter" && (event.ctrlKey || event.shiftKey)) {
+    if (isExpanded && event.key === "Enter") {
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        event.preventDefault();
+        const textarea = event.currentTarget;
+        textarea.setRangeText("\n", textarea.selectionStart, textarea.selectionEnd, "end");
+        handleInputChange(textarea.value, textarea.selectionStart);
+      }
+      return;
+    }
+
+    if (event.key === "Enter" && event.ctrlKey && !event.shiftKey) {
       event.preventDefault();
       handleSend();
       return;
@@ -523,33 +585,60 @@ function UserInputContainer({
       if (suggestion) {
         handleSuggestionClick(suggestion);
       }
+      return;
+    }
+
+    if (
+      !isExpanded &&
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey
+    ) {
+      event.preventDefault();
+      handleSend();
     }
   };
 
   return (
-    <UserInputRoot
-      isExecuting={isExecuting}
-      isDisabled={isDisabled}
-      isSubmitDisabled={isSubmitDisabled}
-      canSubmitWithoutText={canSubmitWithoutText}
-      placeholder={placeholder}
-      rows={rows}
-      maxHeight={maxHeight}
-      input={input}
-      suggestions={suggestionContent}
-      activeSuggestionId={
-        suggestions.length > 0 ? `${suggestionListId}-option-${activeSuggestionIndex}` : undefined
-      }
-      suggestionListId={suggestionListId}
-      hasSuggestions={suggestions.length > 0}
-      slots={slots}
-      onInputChange={handleInputChange}
-      onKeyDown={handleKeyDown}
-      onPaste={onPaste}
-      onSend={handleSend}
-      onStop={onStop}
-      textareaRef={textareaRef}
-    />
+    <div
+      ref={layoutRef}
+      className="relative"
+      style={{ height: isExpanded && expandOverlay ? collapsedHeight : undefined }}
+    >
+      <UserInputRoot
+        isExpanded={isExpanded}
+        expandOverlay={expandOverlay}
+        onToggleExpanded={() => {
+          if (!isExpanded) {
+            setCollapsedHeight(layoutRef.current!.getBoundingClientRect().height);
+          }
+          setIsExpanded((expanded) => !expanded);
+          textareaRef.current?.focus({ preventScroll: true });
+        }}
+        isExecuting={isExecuting}
+        isDisabled={isDisabled}
+        isSubmitDisabled={isSubmitDisabled}
+        canSubmitWithoutText={canSubmitWithoutText}
+        placeholder={placeholder}
+        rows={rows}
+        maxHeight={maxHeight}
+        input={input}
+        suggestions={suggestionContent}
+        activeSuggestionId={
+          suggestions.length > 0 ? `${suggestionListId}-option-${activeSuggestionIndex}` : undefined
+        }
+        suggestionListId={suggestionListId}
+        hasSuggestions={suggestions.length > 0}
+        slots={slots}
+        onInputChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+        onPaste={onPaste}
+        onSend={handleSend}
+        onStop={onStop}
+        textareaRef={textareaRef}
+      />
+    </div>
   );
 }
 

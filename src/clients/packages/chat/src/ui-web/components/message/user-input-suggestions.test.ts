@@ -185,7 +185,7 @@ test("IME composition does not select or confirm a suggestion", () => {
   assert.deepEqual(sent, []);
 });
 
-test("Ctrl+Enter and Shift+Enter still send while suggestions are open", () => {
+test("Ctrl+Enter sends and Shift+Enter keeps editing while suggestions are open", () => {
   for (const modifier of ["ctrlKey", "shiftKey"] as const) {
     const sent: string[] = [];
     const textarea = renderComposer(
@@ -193,20 +193,39 @@ test("Ctrl+Enter and Shift+Enter still send while suggestions are open", () => {
       (value) => sent.push(value),
     );
 
-    assert.equal(fireEvent.keyDown(textarea, { key: "Enter", [modifier]: true }), false);
-    assert.deepEqual(sent, ["/x"]);
-    assert.equal(screen.queryByRole("listbox"), null);
+    assert.equal(
+      fireEvent.keyDown(textarea, { key: "Enter", [modifier]: true }),
+      modifier === "shiftKey",
+    );
+    assert.deepEqual(sent, modifier === "ctrlKey" ? ["/x"] : []);
+    assert.equal(screen.queryByRole("listbox") === null, modifier === "ctrlKey");
     cleanup();
   }
 });
 
-test("Enter without suggestions remains available for a newline", () => {
+test("Enter without suggestions sends from the collapsed composer", () => {
   const sent: string[] = [];
   const textarea = renderComposer(
     () => [],
     (value) => sent.push(value),
   );
 
+  assert.equal(fireEvent.keyDown(textarea, { key: "Enter" }), false);
+  assert.deepEqual(sent, ["/x"]);
+});
+
+test("Enter in the expanded composer keeps newline editing while suggestions are open", () => {
+  const sent: string[] = [];
+  const textarea = renderComposer(
+    () => suggestions,
+    (value) => sent.push(value),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Expand input" }));
+
   assert.equal(fireEvent.keyDown(textarea, { key: "Enter" }), true);
+  assert.equal(textarea.value, "/x");
+  assert.ok(screen.getByRole("listbox"));
   assert.deepEqual(sent, []);
+  fireEvent.keyDown(textarea, { key: "Tab" });
+  assert.equal(textarea.value, "/alpha ");
 });

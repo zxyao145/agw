@@ -178,6 +178,31 @@ test("submission acceptance clears only submitted images and rejection keeps the
   assert.deepEqual(await names(page), ["next.png"]);
 });
 
+test("expanded input preserves pasted images through collapse and submission", async (t) => {
+  const { page } = await openFixture(t);
+  await paste(page, "before.png");
+  await page.getByRole("button", { name: "Expand input" }).click();
+  await paste(page, "expanded.png");
+  await page.locator("textarea").fill("Send both images");
+  await page.getByRole("button", { name: "Collapse input" }).click();
+  assert.deepEqual(await names(page), ["before.png", "expanded.png"]);
+  assert.equal(await page.locator("textarea").inputValue(), "Send both images");
+  await page.getByRole("button", { name: "Expand input" }).click();
+  await page.getByRole("button", { name: "Send message" }).click();
+  await ready(page);
+  assert.ok(await page.getByRole("button", { name: "Expand input" }).isVisible());
+  assert.deepEqual(await names(page), []);
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.imageDraftFixture.submissions.map((item) => ({
+        text: item.text,
+        images: item.images.map((image) => image.name),
+      })),
+    ),
+    [{ text: "Send both images", images: ["before.png", "expanded.png"] }],
+  );
+});
+
 test("a paste started before switching finishes in its original conversation", async (t) => {
   const { page } = await openFixture(t);
   await page.evaluate(async () => {

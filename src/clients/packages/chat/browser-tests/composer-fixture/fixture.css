@@ -1,0 +1,18 @@
+@import "tailwindcss";
+@import "@agw/components/ui-tokens.css";
+
+@source "../../src";
+@source "../../../components/src";
+
+body {
+  margin: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: calc(100dvh - 120px);
+  margin-top: 120px;
+  margin-inline: 40px;
+}

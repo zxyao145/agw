@@ -161,6 +161,7 @@ export function ChatInput({
   return (
     <UserInput
       ref={userInputRef}
+      expandOverlay={hasMessages}
       isExecuting={isExecuting}
       isDisabled={isTransitioning}
       isSubmitDisabled={isImageDraftBusy || Boolean(permissionUnavailable)}

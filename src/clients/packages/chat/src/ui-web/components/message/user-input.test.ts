@@ -28,6 +28,7 @@ function renderComposer(options: ComposerOptions = {}) {
       UserInput,
       {
         ref,
+        expandOverlay: true,
         isExecuting: options.isExecuting,
         isDisabled: options.isDisabled,
         isSubmitDisabled: options.isSubmitDisabled,
@@ -78,19 +79,75 @@ test("typing text enables sending and clears the draft after execution", () => {
   assert.equal(composer().value, "");
 });
 
-test("Ctrl+Enter and Shift+Enter send while a plain Enter keeps editing", () => {
+test("Enter sends from the collapsed composer", () => {
   const executed: string[] = [];
   renderComposer({ executed });
 
-  type("first");
-  fireEvent.keyDown(composer(), { key: "Enter" });
+  type("send with Enter");
+  assert.equal(fireEvent.keyDown(composer(), { key: "Enter" }), false);
+
+  assert.deepEqual(executed, ["send with Enter"]);
+  assert.equal(composer().value, "");
+});
+
+test("the expanded composer keeps Enter combinations as editing actions", () => {
+  const executed: string[] = [];
+  renderComposer({ executed });
+  fireEvent.click(screen.getByRole("button", { name: "Expand input" }));
+
+  for (const modifiers of [
+    {},
+    { shiftKey: true },
+    { ctrlKey: true },
+    { ctrlKey: true, shiftKey: true },
+  ]) {
+    type("draft");
+    fireEvent.keyDown(composer(), { key: "Enter", ...modifiers });
+    assert.deepEqual(executed, []);
+    assert.ok(screen.getByRole("button", { name: "Collapse input" }));
+  }
+});
+
+test("expanding and collapsing preserve the draft, selection, context, and toolbar", () => {
+  const executed: string[] = [];
+  renderComposer({
+    executed,
+    children: [
+      React.createElement(UserInput.Context, { key: "context", children: "attached image" }),
+      React.createElement(UserInput.BottomLeft, { key: "bottom", children: "toolbar" }),
+    ],
+  });
+  const textarea = composer();
+  type("keep this draft");
+  textarea.setSelectionRange(5, 9);
+
+  for (const name of ["Expand input", "Collapse input"]) {
+    const toggle = screen.getByRole("button", { name });
+    assert.equal(toggle.getAttribute("aria-expanded"), String(name === "Collapse input"));
+    fireEvent.click(toggle);
+
+    assert.equal(composer() === textarea, true);
+    assert.equal(textarea.value, "keep this draft");
+    assert.equal(textarea.selectionStart, 5);
+    assert.equal(textarea.selectionEnd, 9);
+    assert.equal(window.document.activeElement, textarea);
+    assert.ok(screen.getByText("attached image"));
+    assert.ok(screen.getByText("toolbar"));
+  }
+
+  fireEvent.keyDown(textarea, { key: "Enter" });
+  assert.deepEqual(executed, ["keep this draft"]);
+});
+
+test("Shift+Enter inserts a newline and Ctrl+Enter sends from the collapsed composer", () => {
+  const executed: string[] = [];
+  renderComposer({ executed });
+
+  type("draft");
+  assert.equal(fireEvent.keyDown(composer(), { key: "Enter", shiftKey: true }), true);
   assert.deepEqual(executed, []);
-
   fireEvent.keyDown(composer(), { key: "Enter", ctrlKey: true });
-  type("second");
-  fireEvent.keyDown(composer(), { key: "Enter", shiftKey: true });
-
-  assert.deepEqual(executed, ["first", "second"]);
+  assert.deepEqual(executed, ["draft"]);
 });
 
 test("an in-progress composition does not send", () => {
@@ -109,6 +166,28 @@ test("an in-progress composition does not send", () => {
   });
 
   assert.deepEqual(executed, []);
+});
+
+test("plain Enter during IME composition or keyCode 229 keeps the collapsed draft", () => {
+  const executed: string[] = [];
+  renderComposer({ executed });
+  type("中文");
+
+  for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+    const event = new window.KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+      ...composition,
+    });
+    act(() => {
+      composer().dispatchEvent(event);
+    });
+    assert.equal(event.defaultPrevented, false);
+  }
+
+  assert.deepEqual(executed, []);
+  assert.equal(composer().value, "中文");
 });
 
 test("code comments alone can be submitted without text", () => {
@@ -132,28 +211,32 @@ test("blank text is empty content and is not submitted", () => {
   assert.deepEqual(executed, []);
 });
 
-test("a rejected submission keeps the draft", () => {
+test("a rejected submission keeps the draft and expanded state", () => {
   const executed: string[] = [];
   const values: string[] = [];
   renderComposer({ executed, values, accept: false });
+  fireEvent.click(screen.getByRole("button", { name: "Expand input" }));
 
   type("keep me");
   fireEvent.click(sendButton());
   fireEvent.keyDown(composer(), { key: "Enter", shiftKey: true });
 
-  assert.deepEqual(executed, ["keep me", "keep me"]);
+  assert.deepEqual(executed, ["keep me"]);
   assert.equal(composer().value, "keep me");
   assert.deepEqual(values, ["keep me"]);
+  assert.ok(screen.getByRole("button", { name: "Collapse input" }));
 });
 
-test("an accepted submission clears the draft and keeps focus on the input", () => {
+test("an accepted submission clears the draft, collapses the input and keeps focus", () => {
   renderComposer();
+  fireEvent.click(screen.getByRole("button", { name: "Expand input" }));
 
   type("queued");
   fireEvent.click(sendButton());
 
   assert.equal(composer().value, "");
   assert.equal(window.document.activeElement, composer());
+  assert.ok(screen.getByRole("button", { name: "Expand input" }));
 });
 
 test("a submit-only block keeps the textarea editable", () => {
@@ -267,16 +350,20 @@ test("insertText appends when the caret sits at the end", async () => {
   assert.equal(composer().value, "read@file.ts ");
 });
 
-test("setInput replaces the whole draft", async () => {
+test("setInput replaces the draft and starts collapsed", async () => {
   const { ref } = renderComposer();
 
   type("old draft");
+  fireEvent.click(screen.getByRole("button", { name: "Expand input" }));
   await act(async () => {
     ref.current?.setInput("new draft");
   });
 
   assert.equal(composer().value, "new draft");
   assert.equal(ref.current?.value, "new draft");
+  assert.ok(screen.getByRole("button", { name: "Expand input" }));
+  fireEvent.click(screen.getByRole("button", { name: "Expand input" }));
+  assert.ok(screen.getByRole("button", { name: "Collapse input" }));
 });
 
 test("user edits and the clear after sending report the value while setInput stays silent", async () => {
@@ -310,11 +397,4 @@ test("the composer hosts context, toolbar, and help slots", () => {
   assert.ok(screen.getByText("attached image"));
   assert.ok(screen.getByText("toolbar"));
   assert.ok(screen.getByText("custom help"));
-  assert.equal(screen.queryByText(/Ctrl\/Shift\+Enter to send/), null);
-});
-
-test("without a help slot the composer explains its send shortcut", () => {
-  renderComposer();
-
-  assert.ok(screen.getByText("Press Enter for new line • Ctrl/Shift+Enter to send"));
 });
