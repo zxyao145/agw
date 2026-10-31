@@ -14,19 +14,16 @@ internal sealed class AuthorizedLocalFileSystem : ILocalFileSystem
     private readonly LocalFileSystem _localFileSystem;
     private readonly IAgwFileSystem _fileSystem;
     private readonly IProjectWorkspaceAccess _workspaceAccess;
-    private readonly Guid _projectId;
 
     public AuthorizedLocalFileSystem(
         LocalFileSystem localFileSystem,
         IAgwFileSystem fileSystem,
-        IProjectWorkspaceAccess workspaceAccess,
-        Guid projectId
+        IProjectWorkspaceAccess workspaceAccess
     )
     {
         _localFileSystem = localFileSystem;
         _fileSystem = fileSystem;
         _workspaceAccess = workspaceAccess;
-        _projectId = projectId;
     }
 
     public string ResolvePhysicalPath(string path) => _localFileSystem.ResolvePhysicalPath(path);
@@ -69,12 +66,7 @@ internal sealed class AuthorizedLocalFileSystem : ILocalFileSystem
     }
 
     public IAgwFileSystem Confine(IReadOnlyList<string> allowedRoots) =>
-        new AuthorizedLocalFileSystem(
-            _localFileSystem,
-            _localFileSystem.Confine(allowedRoots),
-            _workspaceAccess,
-            _projectId
-        );
+        new AuthorizedLocalFileSystem(_localFileSystem, _localFileSystem.Confine(allowedRoots), _workspaceAccess);
 
     public async Task<bool> ExistsFileAsync(string path, CancellationToken ct)
     {
@@ -161,7 +153,12 @@ internal sealed class AuthorizedLocalFileSystem : ILocalFileSystem
             var entry in _fileSystem.EnumerateAsync(path, searchPattern, recursive, ct).ConfigureAwait(false)
         )
         {
-            await ValidateContentPathAsync(entry.Path, ct).ConfigureAwait(false);
+            // 目录本身已校验；只有符号链接项可能逃逸到其他物理位置，普通项无需逐个解析。
+            // The directory itself is validated; only symbolic links can escape, so plain entries are skipped.
+            if (entry.IsSymbolicLink)
+            {
+                await ValidateContentPathAsync(entry.Path, ct).ConfigureAwait(false);
+            }
             yield return entry;
         }
     }
@@ -218,8 +215,7 @@ internal sealed class AuthorizedLocalFileSystem : ILocalFileSystem
         new AuthorizedLocalFileSystem(
             (LocalFileSystem)_localFileSystem.GetSubFileSystem(path),
             _fileSystem.GetSubFileSystem(path),
-            _workspaceAccess,
-            _projectId
+            _workspaceAccess
         );
 
     private Task ValidateContentPathAsync(string path, CancellationToken ct)
@@ -256,6 +252,6 @@ internal sealed class AuthorizedLocalFileSystem : ILocalFileSystem
 
     private Task ValidatePhysicalPathsAsync(IReadOnlyList<string> paths, CancellationToken ct)
     {
-        return _workspaceAccess.ValidateAsync([.. paths, $"~/.agw/projects/{_projectId:N}"], cancellationToken: ct);
+        return _workspaceAccess.ValidateAsync(paths, cancellationToken: ct);
     }
 }

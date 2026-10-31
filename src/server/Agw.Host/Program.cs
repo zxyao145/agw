@@ -399,6 +399,19 @@ public static class AgwHostApplication
 
             Log.Information("Agw Host configured successfully");
 
+            if (
+                !app.Services.GetRequiredService<IOptions<ProjectWorkspaceOptions>>().Value.IsolationEnabled
+                && app.Configuration.GetSection("Auth:Oidc:Providers")
+                    .GetChildren()
+                    .Any(provider => provider.GetValue<bool>("Enabled"))
+            )
+            {
+                Log.Warning(
+                    "Projects:Workspace:IsolationEnabled is disabled while OIDC providers are enabled; "
+                        + "users share ~/.agw/projects and project directory isolation is not enforced"
+                );
+            }
+
             if (app.Services.GetRequiredService<IServerInitializationState>().IsInitialized)
             {
                 await using var upgradeScope = app.Services.CreateAsyncScope();

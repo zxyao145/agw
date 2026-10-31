@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Agw.Files.Abstracts;
+using Agw.Files.Infrastructure.Storage.Confined;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Microsoft.Extensions.DependencyInjection;
@@ -105,7 +106,7 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IP
         IAgwFileSystem fileSystem = localFileSystem;
         if (_workspaceAccess.IsolationEnabled)
         {
-            fileSystem = new AuthorizedLocalFileSystem(localFileSystem, localFileSystem, _workspaceAccess, projectId);
+            fileSystem = new AuthorizedLocalFileSystem(localFileSystem, localFileSystem, _workspaceAccess);
         }
         _logger.LogDebug(
             "Project {ProjectId} directory {DirectoryId} resolved to {Path}",

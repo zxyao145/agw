@@ -49,7 +49,7 @@ public sealed class ShellContextualTool : IContextualTool
             );
         }
 
-        var workspace = Path.GetFullPath(PathUtil.ExpandTilde(context.Workspace));
+        var workspace = ProjectWorkspacePaths.Normalize(context.Workspace);
         string[] directories =
         [
             workspace,

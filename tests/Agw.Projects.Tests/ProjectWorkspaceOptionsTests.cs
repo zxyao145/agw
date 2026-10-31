@@ -1,3 +1,4 @@
+using Agw.Files;
 using Agw.Shared.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,7 +9,7 @@ namespace Agw.Projects.Tests;
 public sealed class ProjectWorkspaceOptionsTests
 {
     [Fact]
-    public void AddProjects_BindsWorkspaceOptions()
+    public void AddFiles_BindsWorkspaceOptions()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -19,7 +20,7 @@ public sealed class ProjectWorkspaceOptionsTests
             )
             .Build();
         var services = new ServiceCollection();
-        services.AddProjects(configuration);
+        services.AddFiles(configuration);
         using var provider = services.BuildServiceProvider();
 
         var options = provider.GetRequiredService<IOptions<ProjectWorkspaceOptions>>().Value;
@@ -28,10 +29,10 @@ public sealed class ProjectWorkspaceOptionsTests
     }
 
     [Fact]
-    public void AddProjects_DefaultWorkspaceOptions_DisableIsolation()
+    public void AddFiles_DefaultWorkspaceOptions_DisableIsolation()
     {
         var services = new ServiceCollection();
-        services.AddProjects(new ConfigurationBuilder().Build());
+        services.AddFiles(new ConfigurationBuilder().Build());
         using var provider = services.BuildServiceProvider();
 
         var options = provider.GetRequiredService<IOptions<ProjectWorkspaceOptions>>().Value;

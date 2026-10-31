@@ -5,7 +5,6 @@ using Agw.Projects.Contracts.Metrics;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Projects.Domain.Services;
 using Agw.Projects.Infrastructure;
-using Agw.Shared.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,10 +14,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddProjects(this IServiceCollection services, IConfiguration configuration)
     {
-        services
-            .AddOptions<ProjectWorkspaceOptions>()
-            .Bind(configuration.GetSection(ProjectWorkspaceOptions.SectionName))
-            .ValidateOnStart();
         services.AddScoped<
             Agw.Projects.Contracts.IUserProjectInitializer,
             Agw.Projects.Application.UserProjectInitializer

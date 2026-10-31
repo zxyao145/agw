@@ -413,7 +413,10 @@ public sealed class LocalFileSystem : ILocalFileSystem
                     IsDirectory: entry.IsDirectory,
                     Size: entry.IsDirectory ? 0 : entry.Length,
                     LastModifiedUtc: entry.LastWriteTimeUtc
-                ),
+                )
+                {
+                    IsSymbolicLink = entry.Attributes.HasFlag(FileAttributes.ReparsePoint),
+                },
             new EnumerationOptions
             {
                 AttributesToSkip = recursive ? FileAttributes.ReparsePoint : (FileAttributes)0,

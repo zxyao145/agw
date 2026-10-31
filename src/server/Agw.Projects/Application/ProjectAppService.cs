@@ -138,6 +138,7 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
+        var originalPaths = CaptureWorkspacePaths(existing);
         var originalDirectories = existing.AdditionalDirectories.ToArray();
         var behavior = new ProjectBehavior(existing);
         if (!behavior.TryApplyUpdate(updateAction, originalDirectories))
@@ -146,8 +147,12 @@ public class ProjectAppService : IProjectAppService
         }
 
         var workspaceSnapshot = CreateWorkspaceSnapshot(existing);
-        await _workspaceAccess.ValidateAsync(GetWorkspacePaths(workspaceSnapshot)).ConfigureAwait(false);
-        ProjectWorkspacePaths.EnsureAvailable(workspaceSnapshot);
+        if (WorkspacePathsChanged(originalPaths, existing))
+        {
+            await _workspaceAccess.ValidateAsync(GetWorkspacePaths(workspaceSnapshot)).ConfigureAwait(false);
+            ProjectWorkspacePaths.EnsureAvailable(workspaceSnapshot);
+        }
+
         // Preserve audit stamping even when only bindings change or the update is a no-op.
         _dbContext.Projects.Entry(existing).Property(project => project.Name).IsModified = true;
         if (mcpToolServerIds != null)
@@ -218,6 +223,23 @@ public class ProjectAppService : IProjectAppService
 
     private static IReadOnlyList<string> GetWorkspacePaths(ProjectWorkspaceSnapshot snapshot) =>
         [snapshot.Workspace, .. snapshot.AdditionalDirectories.Select(directory => directory.Path)];
+
+    /// <summary>
+    /// <para>记录更新前的目录配置，用于判断本次更新是否真的改动了工作区路径。</para>
+    /// <para>Captures the directory configuration before an update to tell whether workspace paths changed.</para>
+    /// </summary>
+    private static (string Workspace, string[] AdditionalDirectories) CaptureWorkspacePaths(Project project) =>
+        (project.Workspace ?? string.Empty, [.. project.AdditionalDirectories.Select(directory => directory.Path)]);
+
+    private static bool WorkspacePathsChanged(
+        (string Workspace, string[] AdditionalDirectories) original,
+        Project project
+    ) =>
+        !string.Equals(original.Workspace, project.Workspace ?? string.Empty, StringComparison.Ordinal)
+        || !original.AdditionalDirectories.SequenceEqual(
+            project.AdditionalDirectories.Select(directory => directory.Path),
+            StringComparer.Ordinal
+        );
 
     private async Task SyncProjectMcpToolServerRelationsAsync(Guid projectId, IEnumerable<Guid>? mcpToolServerIds)
     {

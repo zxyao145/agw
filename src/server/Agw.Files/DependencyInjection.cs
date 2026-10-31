@@ -13,7 +13,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddFiles(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddOptions<ProjectWorkspaceOptions>();
+        services
+            .AddOptions<ProjectWorkspaceOptions>()
+            .Bind(configuration.GetSection(ProjectWorkspaceOptions.SectionName));
         services.TryAddSingleton<IProjectWorkspaceAccess, ProjectWorkspaceAccess>();
         services.AddSingleton<FileAppService>();
         services.TryAddSingleton(TimeProvider.System);
