@@ -462,7 +462,7 @@ Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内
 
 运行时使用 `ContextWindowCompactionPipeline` 构建两阶段策略，不调用额外的总结模型：
 
-- 达到有效输入预算的 50% 时，`ToolResultEvictionCompactionStrategy` 由旧到新把 Tool call 组中的每个 result 正文替换为占位文本 `[Tool result removed from context by compaction]`，直到回到阈值以下；Assistant 消息中的推理、调用和 `CallId` 配对原样保留，最近 2 个非 System 组不处理；
+- 达到有效输入预算的 50% 时，`ToolResultEvictionCompactionStrategy` 由旧到新把 Tool call 组中的普通 result 正文替换为占位文本 `[Tool result removed from context by compaction]`，直到回到阈值以下；`ask_user_question` 按 `CallId` 保留完整交互结果，包括答案、备注和取消状态。Assistant 消息中的推理、调用和 `CallId` 配对原样保留，最近 2 个非 System 组不处理；
 - 达到 80% 时，MAF 的 `TruncationCompactionStrategy` 截断较旧的消息组，同样保留最近 2 个组；
 - Tool call 与对应 result 始终作为原子消息组处理。
 
