@@ -157,6 +157,7 @@ function RepositorySidebar({
           setCheckout(value.checkout);
           setTreeError("");
         }
+        return value;
       } catch (caught) {
         if (gen !== generation.current) return;
         if (path === "") setTreeError(errorMessage(caught));
@@ -197,21 +198,20 @@ function RepositorySidebar({
     void loadDirectory("", gen);
   }, [loadDirectory]);
 
-  useEffect(() => {
-    if (!checkout) return;
-    void loadChanges();
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void loadChanges();
-    }, CHANGES_POLL_MS);
-    return () => clearInterval(timer);
-  }, [checkout, loadChanges]);
-
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const gen = generation.current;
     await loadState();
     await Promise.all(["", ...expanded].map((path) => loadDirectory(path, gen)));
     await loadChanges();
-  }
+  }, [loadState, expanded, loadDirectory, loadChanges]);
+
+  useEffect(() => {
+    void loadChanges();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, CHANGES_POLL_MS);
+    return () => clearInterval(timer);
+  }, [refresh, loadChanges]);
 
   function toggle(path: string) {
     if (expanded.has(path)) {
@@ -230,8 +230,10 @@ function RepositorySidebar({
     if (!repo) return;
     setSelectedPath(path);
     try {
-      if (checkout)
-        await api.workspace.openFile(cloudUri(serverId, project.id, `${checkout}/${path}`));
+      const root = await loadDirectory("", generation.current);
+      if (!root) return;
+      if (root.checkout)
+        await api.workspace.openFile(cloudUri(serverId, project.id, `${root.checkout}/${path}`));
       else
         await api.workspace.openMainView("file", {
           repository: repo.name,

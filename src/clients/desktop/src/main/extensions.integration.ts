@@ -690,25 +690,93 @@ async function bareRepositoryWorkflow(): Promise<void> {
       "Bare Repository clones two default branches, creates feature worktrees, switches a worktree branch and merges with two parents through the extension UI",
     );
 
-    const choose = (label: string, value: string) =>
-      evalFrame(
+    const choose = async (label: string, value: string) => {
+      const trigger = `document.querySelector('button[aria-label="${label}"]')`;
+      await until(
+        () =>
+          evalFrame<boolean>(
+            sidebar,
+            `Boolean(${trigger}) && !document.querySelector('[data-slot="select-content"]')`,
+          ),
+        `the ${label} picker`,
+      );
+      await evalFrame(
         sidebar,
         `(() => {
-        const select = document.querySelector('select[aria-label="${label}"]');
-        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, ${JSON.stringify(value)});
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      })()`,
+          ${trigger}.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, ctrlKey: false, pointerType: "mouse" }));
+          return true;
+        })()`,
       );
+      const option = `[...document.querySelectorAll('[data-slot="select-content"][data-state="open"] [role="option"]')].find((item) => item.textContent === ${JSON.stringify(value)} || item.textContent.startsWith(${JSON.stringify(`${value} — `)}))`;
+      await until(() => evalFrame<boolean>(sidebar, `Boolean(${option})`), `the ${value} option`);
+      await evalFrame(
+        sidebar,
+        `(() => {
+          const option = ${option};
+          option.focus();
+          option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          return true;
+        })()`,
+      );
+      await until(
+        () =>
+          evalFrame<boolean>(
+            sidebar,
+            `${trigger}.textContent.startsWith(${JSON.stringify(value)}) && ${trigger}.getAttribute("aria-expanded") === "false"`,
+          ),
+        `${value} selected`,
+      );
+    };
     await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await choose("Repository", "module-beta");
+    await choose("Repository", "module-alpha");
+    await choose("Branch", "alternate-feature");
     await until(
       () =>
         evalFrame<boolean>(
           sidebar,
-          'document.querySelectorAll("select[aria-label=Repository] option").length === 2',
+          '!document.querySelector(".location") && !document.querySelectorAll("[role=tab]")[1].disabled && Boolean(document.querySelector(\'.tree-item[data-path="feature.txt"]\'))',
         ),
-      "both repositories in the sidebar",
+      "the selected worktree before switching its branch",
     );
-    await choose("Repository", "module-alpha");
+    await clickInFrame(frame, `${row}.querySelector(".actions button")`);
+    await fill({ branch: "sidebar-other" });
+    await submitDialog("the selected worktree switched from the management view");
+    await writeFile(join(tree, "feature.txt"), "other branch content\n");
+    git(tree, "commit", "-am", "Change the other branch");
+    await clickInFrame(sidebar, "document.querySelector('.tree-item[data-path=\"feature.txt\"]')");
+    const switchedFile = await untilViewerFrame(EXTENSION_IDS.bareRepository, "file");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          switchedFile,
+          'document.querySelector(".badge")?.textContent.includes("alternate-feature") && [...document.querySelectorAll(".line")].some((line) => line.textContent === "feature content")',
+        ),
+      "the original branch opened read-only after its worktree switched",
+    );
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector(".location")?.textContent.includes("Read-only") && document.querySelectorAll("[role=tab]")[1].disabled',
+        ),
+      "the sidebar refreshed after the branch left its worktree",
+    );
+    await api(
+      switchedFile,
+      `await api.repositories.switchBranch(${JSON.stringify({ projectId: config.projectId, feature, repository: "module-alpha", branch: "alternate-feature" })});`,
+    );
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          '!document.querySelector(".location") && !document.querySelectorAll("[role=tab]")[1].disabled',
+        ),
+      "the sidebar refreshed after its branch was checked out again",
+    );
+    pass(
+      "the sidebar opens the selected branch read-only after a management switch and refreshes when its checkout changes",
+    );
     await choose("Branch", feature);
     await until(
       () =>
@@ -733,7 +801,7 @@ async function bareRepositoryWorkflow(): Promise<void> {
       () =>
         evalFrame<boolean>(
           sidebar,
-          `document.querySelector(".location code")?.textContent === ${JSON.stringify(`.worktrees/${feature}/module-alpha`)}`,
+          '!document.querySelector(".location") && !document.querySelectorAll("[role=tab]")[1].disabled',
         ),
       "the checked-out worktree in the sidebar",
     );
