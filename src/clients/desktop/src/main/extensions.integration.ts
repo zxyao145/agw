@@ -558,6 +558,7 @@ async function bareRepositoryWorkflow(): Promise<void> {
       { cwd, encoding: "utf8" },
     ).trim();
   git(seed, "init", "-b", "trunk");
+  await writeFile(join(seed, ".gitattributes"), "* text eol=lf\n");
   await writeFile(join(seed, "README.md"), "base\n");
   git(seed, "add", ".");
   git(seed, "commit", "-m", "Initial");
@@ -590,19 +591,28 @@ async function bareRepositoryWorkflow(): Promise<void> {
         }),
       "the Git test remote",
     );
-    // 受控输入框需要原生 setter 加 input 事件。Controlled inputs need the native setter plus an input event.
-    const fill = (fields: Record<string, string>) =>
-      evalFrame(
+    // 等待弹窗输入框出现，再用原生 setter 加 input 事件填写。Wait for the dialog inputs, then fill them with the native setter and input events.
+    const fill = async (fields: Record<string, string>) => {
+      await until(
+        () =>
+          evalFrame<boolean>(
+            frame,
+            `${JSON.stringify(Object.keys(fields))}.every((name) => document.querySelector(\`dialog[open] input[name="\${name}"]\`) instanceof HTMLInputElement)`,
+          ),
+        `the repository dialog inputs: ${Object.keys(fields).join(", ")}`,
+      );
+      await evalFrame(
         frame,
         `(() => {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
         for (const [name, value] of Object.entries(${JSON.stringify(fields)})) {
-          const input = document.querySelector(\`dialog input[name="\${name}"]\`);
+          const input = document.querySelector(\`dialog[open] input[name="\${name}"]\`);
           setter.call(input, value);
           input.dispatchEvent(new Event("input", { bubbles: true }));
         }
       })()`,
       );
+    };
     const submitDialog = async (label: string) => {
       await evalFrame(frame, 'document.querySelector("dialog form").requestSubmit()');
       await until(
@@ -762,10 +772,12 @@ async function bareRepositoryWorkflow(): Promise<void> {
         ),
       "the sidebar refreshed after the branch left its worktree",
     );
-    await api(
-      switchedFile,
-      `await api.repositories.switchBranch(${JSON.stringify({ projectId: config.projectId, feature, repository: "module-alpha", branch: "alternate-feature" })});`,
-    );
+    await hostSend("POST", "/api/files/repositories/switch", {
+      projectId: config.projectId,
+      feature,
+      repository: "module-alpha",
+      branch: "alternate-feature",
+    });
     await until(
       () =>
         evalFrame<boolean>(
