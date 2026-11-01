@@ -1,0 +1,234 @@
+/* 布局 Layout */
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 16px;
+}
+.nav-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 4px;
+  padding-left: 12px;
+  color: var(--muted-foreground);
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.nav-item {
+  width: 100%;
+  border-color: transparent;
+  text-align: left;
+}
+.nav-item > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-item small {
+  color: var(--muted-foreground);
+}
+.nav-item[aria-current="page"] {
+  background: var(--muted);
+  font-weight: 600;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex: none;
+}
+
+/* 面板 Panels */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+}
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+.row-main {
+  min-width: 0;
+}
+.row-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.row-dir {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.row-dir svg {
+  flex: none;
+}
+.welcome,
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.welcome p {
+  max-width: 560px;
+}
+.welcome pre {
+  text-align: left;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--muted);
+}
+
+/* 弹窗 Dialogs */
+dialog {
+  width: min(480px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--popover-foreground);
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+dialog form > header,
+dialog footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+}
+dialog footer {
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+dialog fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 0;
+  margin: 0;
+  padding: 0 20px 16px;
+  min-width: 0;
+}
+dialog form > .error {
+  margin: 0 20px 12px;
+}
+dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 500;
+}
+dialog small {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+.preview {
+  margin: 0;
+}
+.choices {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.choices > p {
+  padding: 8px 12px;
+}
+label.choice {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-weight: 400;
+}
+label.choice + label.choice {
+  border-top: 1px solid var(--border);
+}
+label.choice.all {
+  color: var(--muted-foreground);
+}
+label.choice input {
+  width: auto;
+}
+label.choice span {
+  flex: 1;
+}
+label.choice code {
+  color: var(--muted-foreground);
+}
+
+@media (max-width: 720px) {
+  main {
+    padding: 16px;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  nav {
+    position: static;
+  }
+  .row,
+  .panel-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

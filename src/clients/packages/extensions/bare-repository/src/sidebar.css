@@ -1,0 +1,336 @@
+/* 与 Tailwind 的 text-sm 一致。Matches Tailwind's text-sm. */
+body {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+main.sidebar {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+.sidebar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 4px 12px;
+}
+.sidebar-head h1 {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.sidebar-head .actions {
+  gap: 0;
+}
+.sidebar-head button.icon {
+  padding: 4px;
+}
+.inset {
+  margin: 4px 12px;
+}
+.sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+}
+.pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 12px 0;
+}
+/* 宿主 shadcn Select 的 Tailwind 样式在扩展 iframe 里不生效，这里按 data-slot 复刻。
+   The host's shadcn Select styles are Tailwind classes that do not resolve inside the
+   extension frame, so they are re-created here through the data-slot hooks. */
+[data-slot="select-trigger"] {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  text-align: left;
+  font: inherit;
+  white-space: nowrap;
+}
+[data-slot="select-trigger"]:hover:not(:disabled) {
+  background: transparent;
+  color: var(--foreground);
+}
+[data-slot="select-trigger"] svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted-foreground);
+}
+[data-slot="select-trigger"] > svg {
+  opacity: 0.5;
+}
+[data-slot="select-value"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-slot="select-content"] {
+  z-index: 50;
+  max-height: var(--radix-select-content-available-height, 260px);
+  min-width: max(8rem, var(--radix-select-trigger-width));
+  overflow: hidden auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.1),
+    0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+[data-radix-select-viewport] {
+  padding: 4px;
+}
+[data-slot="select-label"] {
+  padding: 6px 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+[data-slot="select-item"] {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border-radius: 4px;
+  padding: 6px 32px 6px 8px;
+  font-size: 0.875rem;
+  cursor: default;
+  user-select: none;
+  outline: none;
+}
+[data-slot="select-item"][data-highlighted] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+[data-slot="select-item"][data-disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+[data-slot="select-item"] > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-slot="select-item-indicator"] {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-slot="select-item-indicator"] svg {
+  width: 16px;
+  height: 16px;
+}
+[data-slot="select-separator"] {
+  height: 1px;
+  margin: 4px -4px;
+  background: var(--border);
+  pointer-events: none;
+}
+[data-slot="select-scroll-up-button"],
+[data-slot="select-scroll-down-button"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+  cursor: default;
+}
+[data-slot="select-scroll-up-button"] svg,
+[data-slot="select-scroll-down-button"] svg {
+  width: 16px;
+  height: 16px;
+}
+
+.location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 12px 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.location svg {
+  flex: none;
+}
+.location code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-head button.icon {
+  position: relative;
+}
+.icon-count {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.tabs button[aria-selected="true"] {
+  border-bottom-color: var(--primary);
+  color: var(--foreground);
+  font-weight: 600;
+}
+.tabs button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--foreground);
+}
+.count {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.tree,
+.changes {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 4px 0 12px;
+  list-style: none;
+}
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 2px 10px 2px 8px;
+  background: transparent;
+  text-align: left;
+}
+.tree-item svg {
+  flex: none;
+  color: var(--muted-foreground);
+}
+.tree-item[aria-current="true"] {
+  background: var(--muted);
+}
+.tree-item:disabled {
+  opacity: 0.6;
+}
+.chevron-space {
+  width: 14px;
+  flex: none;
+}
+.tree-item .name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-item .dir {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.status {
+  flex: none;
+  width: 14px;
+  margin-left: auto;
+  font: 600 11px var(--font-mono, monospace);
+  text-align: center;
+}
+.changes .status {
+  margin-left: 0;
+}
+.status.modified,
+.name.modified {
+  color: #d97706;
+}
+.status.added,
+.status.untracked,
+.name.added,
+.name.untracked {
+  color: #16a34a;
+}
+.status.deleted,
+.status.conflicted,
+.name.deleted,
+.name.conflicted {
+  color: var(--destructive);
+}
+.status.renamed,
+.name.renamed {
+  color: #2563eb;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.dot.modified {
+  color: #d97706;
+}
+.dot.added,
+.dot.untracked {
+  color: #16a34a;
+}
+.dot.deleted,
+.dot.conflicted {
+  color: var(--destructive);
+}
+.dot.renamed {
+  color: #2563eb;
+}

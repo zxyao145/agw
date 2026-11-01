@@ -2,11 +2,11 @@
 // Full-flow extension integration test: runs the production main process and renderer, drives the host page through
 // the DOM, and reads the main-process frame registry.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
-import { connect } from "node:net";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { connect, createServer } from "node:net";
 import { basename, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
@@ -111,8 +111,19 @@ function snapshotLoaded(frameId: string): string {
   })()`;
 }
 
-function evalHost<T>(code: string): Promise<T> {
-  return host().executeJavaScript(code, true) as Promise<T>;
+async function evalHost<T>(code: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("The host script did not finish within 60 seconds.")),
+      60_000,
+    );
+  });
+  try {
+    return await Promise.race([host().executeJavaScript(code, true) as Promise<T>, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
 }
 
 function untilHost(code: string, label: string, timeoutMs?: number) {
@@ -398,6 +409,10 @@ async function enable(id: string, name: string): Promise<string> {
 async function disable(id: string): Promise<void> {
   await goToExtensions();
   await clickHost(`[data-extension-id="${id}"] button[role="switch"]`);
+  await untilHost(
+    `document.querySelector('[data-extension-id="${id}"] button[role="switch"]')?.getAttribute("aria-checked") === "false"`,
+    `${id} enable switch to finish turning off`,
+  );
 }
 
 async function reloadExtension(id: string): Promise<void> {
@@ -447,10 +462,18 @@ async function boot(): Promise<void> {
 }
 
 async function beforeEnabling(): Promise<void> {
+  await untilHost(
+    `Boolean(document.querySelector('.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]'))`,
+    "the bundled repository extension ribbon entry",
+  );
   const entries = await evalHost<string[]>(
     `[...document.querySelectorAll('.agw-ribbon [data-entry-id]')].map((item) => item.dataset.entryId)`,
   );
-  assert.deepEqual(entries, ["agw.ribbon.conversations", "agw.ribbon.files"]);
+  assert.deepEqual(entries, [
+    "agw.ribbon.conversations",
+    "agw.ribbon.files",
+    `${EXTENSION_IDS.bareRepository}:repositories`,
+  ]);
   const hostInstanceId = runtime().registry.hostInstanceId;
   assert.ok(hostInstanceId);
   const result = await evalHost<{ ok: boolean; error?: { code: string } }>(
@@ -503,6 +526,323 @@ async function textCodecBridge(): Promise<void> {
   assert.equal(result.encodingCount, 38);
   assert.equal(result.gb18030Label, "Chinese Simplified (GB18030)");
   pass("the host page decodes, encodes and lists text encodings through the Desktop bridge");
+}
+
+async function bareRepositoryWorkflow(): Promise<void> {
+  await goToChat();
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]`);
+  const sidebar = await untilFrame(EXTENSION_IDS.bareRepository, "sidebarView");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        sidebar,
+        'Boolean(document.querySelector(".sidebar-empty button.primary"))',
+      ),
+    "the empty repository sidebar",
+  );
+  let frame!: FrameHandle;
+  const seed = resolve(".scratch/extension-tests/repository-seed");
+  await mkdir(seed, { recursive: true });
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Agw Tests",
+        "-c",
+        "user.email=tests@agw.local",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd, encoding: "utf8" },
+    ).trim();
+  git(seed, "init", "-b", "trunk");
+  await writeFile(join(seed, ".gitattributes"), "* text eol=lf\n");
+  await writeFile(join(seed, "README.md"), "base\n");
+  git(seed, "add", ".");
+  git(seed, "commit", "-m", "Initial");
+  const probe = createServer();
+  await new Promise<void>((done) => probe.listen(0, "127.0.0.1", done));
+  const port = (probe.address() as { port: number }).port;
+  await new Promise<void>((done) => probe.close(() => done()));
+  const daemon = spawn(
+    "git",
+    [
+      "daemon",
+      "--reuseaddr",
+      "--export-all",
+      "--listen=127.0.0.1",
+      `--port=${port}`,
+      `--base-path=${resolve(".scratch/extension-tests")}`,
+    ],
+    { stdio: "ignore" },
+  );
+  try {
+    await until(
+      () =>
+        new Promise<boolean>((done) => {
+          const socket = connect(port, "127.0.0.1");
+          socket.once("connect", () => {
+            socket.destroy();
+            done(true);
+          });
+          socket.once("error", () => done(false));
+        }),
+      "the Git test remote",
+    );
+    // 等待弹窗输入框出现，再用原生 setter 加 input 事件填写。Wait for the dialog inputs, then fill them with the native setter and input events.
+    const fill = async (fields: Record<string, string>) => {
+      await until(
+        () =>
+          evalFrame<boolean>(
+            frame,
+            `${JSON.stringify(Object.keys(fields))}.every((name) => document.querySelector(\`dialog[open] input[name="\${name}"]\`) instanceof HTMLInputElement)`,
+          ),
+        `the repository dialog inputs: ${Object.keys(fields).join(", ")}`,
+      );
+      await evalFrame(
+        frame,
+        `(() => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+        for (const [name, value] of Object.entries(${JSON.stringify(fields)})) {
+          const input = document.querySelector(\`dialog[open] input[name="\${name}"]\`);
+          setter.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      })()`,
+      );
+    };
+    const submitDialog = async (label: string) => {
+      await evalFrame(frame, 'document.querySelector("dialog form").requestSubmit()');
+      await until(
+        () =>
+          evalFrame<boolean>(
+            frame,
+            '!document.querySelector("dialog") && document.querySelector("main").getAttribute("aria-busy") === "false"',
+          ),
+        label,
+      );
+    };
+    const url = `git://127.0.0.1:${port}/repository-seed`;
+    // 侧边栏的 Clone 打开管理视图并显示 Clone 弹窗。The sidebar's Clone opens the management view with its dialog.
+    await clickInFrame(sidebar, 'document.querySelector(".sidebar-empty button.primary")');
+    frame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "repositories");
+    await until(
+      () => evalFrame<boolean>(frame, 'Boolean(document.querySelector("dialog input[name=url]"))'),
+      "the clone dialog opened from the sidebar",
+    );
+    await fill({ url, name: "module-alpha" });
+    await submitDialog("module-alpha cloned through the extension");
+    await clickInFrame(frame, 'document.querySelector(".panel-head .actions button")');
+    await fill({ url, name: "module-beta" });
+    await submitDialog("module-beta cloned through the extension");
+    assert.deepEqual(
+      await evalFrame<string[]>(
+        frame,
+        '[...document.querySelectorAll("li[data-repository]")].map((item) => item.dataset.repository)',
+      ),
+      ["module-alpha", "module-beta"],
+    );
+    for (const name of ["module-alpha", "module-beta"]) {
+      git(join(config.projectDirectory, name), "config", "user.name", "Agw Tests");
+      git(join(config.projectDirectory, name), "config", "user.email", "tests@agw.local");
+    }
+    await clickInFrame(frame, "document.querySelector('button[aria-label=\"New feature\"]')");
+    await fill({ name: "add-extensions" });
+    await clickInFrame(frame, 'document.querySelector("label.choice.all input")');
+    await submitDialog("two feature worktrees");
+    const feature = await evalFrame<string>(
+      frame,
+      'document.querySelector(".nav-item[data-feature][aria-current=page]").dataset.feature',
+    );
+    assert.match(feature, /^\d{6}-add-extensions$/u);
+    assert.equal(
+      await evalFrame<number>(frame, 'document.querySelectorAll("li[data-repository]").length'),
+      2,
+    );
+    const tree = join(config.projectDirectory, ".worktrees", feature, "module-alpha");
+    await writeFile(join(tree, "feature.txt"), "feature content\n");
+    git(tree, "add", ".");
+    git(tree, "commit", "-m", "Add feature");
+    const row = "document.querySelector('li[data-repository=\"module-alpha\"]')";
+    await clickInFrame(frame, `${row}.querySelector(".actions button")`);
+    await fill({ branch: "alternate-feature" });
+    await submitDialog("the worktree branch switched");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          frame,
+          `${row}.querySelector(".badges").textContent.includes("alternate-feature") && !${row}.querySelector("button.primary").disabled`,
+        ),
+      "the switched branch ready to merge",
+    );
+    await clickInFrame(frame, `${row}.querySelector("button.primary")`);
+    await expectConfirmation(
+      "message",
+      ["Bare Repository", "Merge alternate-feature into module-alpha/trunk?"],
+      "the merge confirmation",
+    );
+    await answerConfirmation("Merge");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          frame,
+          'document.querySelector("[role=status]").textContent.includes("Merged alternate-feature into module-alpha/trunk")',
+        ),
+      "the merge completed",
+    );
+    const main = join(config.projectDirectory, "module-alpha");
+    assert.equal(await readFile(join(main, "feature.txt"), "utf8"), "feature content\n");
+    assert.equal(git(main, "show", "-s", "--format=%P", "HEAD").split(" ").length, 2);
+    assert.equal(git(main, "branch", "--show-current"), "trunk");
+    pass(
+      "Bare Repository clones two default branches, creates feature worktrees, switches a worktree branch and merges with two parents through the extension UI",
+    );
+
+    const choose = async (label: string, value: string) => {
+      const trigger = `document.querySelector('button[aria-label="${label}"]')`;
+      await until(
+        () =>
+          evalFrame<boolean>(
+            sidebar,
+            `Boolean(${trigger}) && !document.querySelector('[data-slot="select-content"]')`,
+          ),
+        `the ${label} picker`,
+      );
+      await evalFrame(
+        sidebar,
+        `(() => {
+          ${trigger}.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, ctrlKey: false, pointerType: "mouse" }));
+          return true;
+        })()`,
+      );
+      const option = `[...document.querySelectorAll('[data-slot="select-content"][data-state="open"] [role="option"]')].find((item) => item.textContent === ${JSON.stringify(value)} || item.textContent.startsWith(${JSON.stringify(`${value} — `)}))`;
+      await until(() => evalFrame<boolean>(sidebar, `Boolean(${option})`), `the ${value} option`);
+      await evalFrame(
+        sidebar,
+        `(() => {
+          const option = ${option};
+          option.focus();
+          option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          return true;
+        })()`,
+      );
+      await until(
+        () =>
+          evalFrame<boolean>(
+            sidebar,
+            `${trigger}.textContent.startsWith(${JSON.stringify(value)}) && ${trigger}.getAttribute("aria-expanded") === "false"`,
+          ),
+        `${value} selected`,
+      );
+    };
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await choose("Repository", "module-beta");
+    await choose("Repository", "module-alpha");
+    await choose("Branch", "alternate-feature");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          '!document.querySelector(".location") && !document.querySelectorAll("[role=tab]")[1].disabled && Boolean(document.querySelector(\'.tree-item[data-path="feature.txt"]\'))',
+        ),
+      "the selected worktree before switching its branch",
+    );
+    await clickInFrame(frame, `${row}.querySelector(".actions button")`);
+    await fill({ branch: "sidebar-other" });
+    await submitDialog("the selected worktree switched from the management view");
+    await writeFile(join(tree, "feature.txt"), "other branch content\n");
+    git(tree, "commit", "-am", "Change the other branch");
+    await clickInFrame(sidebar, "document.querySelector('.tree-item[data-path=\"feature.txt\"]')");
+    const switchedFile = await untilViewerFrame(EXTENSION_IDS.bareRepository, "file");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          switchedFile,
+          'document.querySelector(".badge")?.textContent.includes("alternate-feature") && [...document.querySelectorAll(".line")].some((line) => line.textContent === "feature content")',
+        ),
+      "the original branch opened read-only after its worktree switched",
+    );
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector(".location")?.textContent.includes("Read-only") && document.querySelectorAll("[role=tab]")[1].disabled',
+        ),
+      "the sidebar refreshed after the branch left its worktree",
+    );
+    await hostSend("POST", "/api/files/repositories/switch", {
+      projectId: config.projectId,
+      feature,
+      repository: "module-alpha",
+      branch: "alternate-feature",
+    });
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          '!document.querySelector(".location") && !document.querySelectorAll("[role=tab]")[1].disabled',
+        ),
+      "the sidebar refreshed after its branch was checked out again",
+    );
+    pass(
+      "the sidebar opens the selected branch read-only after a management switch and refreshes when its checkout changes",
+    );
+    await choose("Branch", feature);
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector(".location").textContent.includes("Read-only") && Boolean(document.querySelector(\'.tree-item[data-path="feature.txt"]\'))',
+        ),
+      "the committed tree of a branch that is not checked out",
+    );
+    await clickInFrame(sidebar, "document.querySelector('.tree-item[data-path=\"feature.txt\"]')");
+    const fileFrame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "file");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          fileFrame,
+          '[...document.querySelectorAll(".line")].some((line) => line.textContent === "feature content")',
+        ),
+      "the read-only file view",
+    );
+    await choose("Branch", "alternate-feature");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          '!document.querySelector(".location") && !document.querySelectorAll("[role=tab]")[1].disabled',
+        ),
+      "the checked-out worktree in the sidebar",
+    );
+    await writeFile(join(tree, "draft.md"), "draft\n");
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector("[role=tab] .count")?.textContent === "1"',
+        ),
+      "one uncommitted change",
+    );
+    await clickInFrame(sidebar, '[...document.querySelectorAll("[role=tab]")][1]');
+    assert.equal(
+      await evalFrame<string>(
+        sidebar,
+        'document.querySelector(".changes .tree-item .name").textContent',
+      ),
+      "draft.md",
+    );
+    pass(
+      "the Bare Repository sidebar browses a branch that is not checked out read-only and lists a worktree's uncommitted changes",
+    );
+  } finally {
+    daemon.kill();
+  }
+  await disable(EXTENSION_IDS.bareRepository);
+  await untilStatus(EXTENSION_IDS.bareRepository, "Disabled");
 }
 
 type SettingsFile = {
@@ -8499,6 +8839,7 @@ async function run(): Promise<void> {
   await beforeEnabling();
   await textCodecBridge();
   await bundledDefaults();
+  await bareRepositoryWorkflow();
   await enableSample();
   await processIsolation();
   await viewsAndLayout();

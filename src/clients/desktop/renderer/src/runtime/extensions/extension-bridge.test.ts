@@ -403,6 +403,36 @@ test("Uint8Array contents are transferred in both directions", async () => {
   assert.equal(outgoing.byteLength, 0);
 });
 
+test("repository operations require their approved permission before reaching the Server", async () => {
+  const { api } = await createHarness(["context.project", "fs.cloud.write"]);
+  const input = { projectId: PROJECT, repository: "alpha", feature: "261127-feature" };
+  for (const operation of [
+    () => api.repositories.get(PROJECT),
+    () =>
+      api.repositories.clone({ projectId: PROJECT, url: "https://github.com/example/alpha.git" }),
+    () =>
+      api.repositories.createFeature({
+        projectId: PROJECT,
+        name: "feature",
+        repositories: ["alpha"],
+      }),
+    () => api.repositories.switchBranch({ ...input, branch: "other" }),
+    () => api.repositories.merge(input),
+    () => api.repositories.sync({ projectId: PROJECT, repository: "alpha" }),
+    () => api.repositories.restoreDefaultBranch({ projectId: PROJECT, repository: "alpha" }),
+    () => api.repositories.tree({ projectId: PROJECT, repository: "alpha", branch: "main" }),
+    () => api.repositories.changes({ projectId: PROJECT, repository: "alpha", branch: "main" }),
+    () =>
+      api.repositories.blob({
+        projectId: PROJECT,
+        repository: "alpha",
+        branch: "main",
+        path: "README.md",
+      }),
+  ])
+    await assert.rejects(operation, { code: "ERR_PERMISSION_DENIED" });
+});
+
 test("failures are rebuilt as ExtensionError and missing permissions are denied", async () => {
   const { api, uri } = await createHarness([]);
   const error = await api.fs.readFile(uri("a.bin")).catch((caught: unknown) => caught);
