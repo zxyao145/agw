@@ -12,7 +12,7 @@ public class ProjectBehaviorTests
     {
         var project = new Project { Name = "  " };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.False(result);
         Assert.Equal(Guid.Empty, project.Id);
@@ -24,7 +24,7 @@ public class ProjectBehaviorTests
     {
         var project = new Project { Name = "Project A" };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.True(result);
         Assert.NotEqual(Guid.Empty, project.Id);
@@ -38,11 +38,23 @@ public class ProjectBehaviorTests
     {
         var project = new Project { Name = "  Demo Project: Alpha?  ", Workspace = "  " };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.True(result);
         Assert.Equal("Demo_Project_Alpha", project.Name);
-        Assert.Equal($"~/.agw/projects/{project.Id:N}", project.Workspace);
+        Assert.Equal(Path.Combine(UserHome, ".agw", "Demo_Project_Alpha"), project.Workspace);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_IsolationEnabled_UsesGeneratedProjectIdInWorkspacePath()
+    {
+        var project = new Project { Name = "Project A", Workspace = "  " };
+
+        var result = new ProjectBehavior(project).TryPrepareForCreate(true, UserHome);
+
+        Assert.True(result);
+        Assert.NotEqual(Guid.Empty, project.Id);
+        Assert.Equal(Path.Combine(UserHome, ".agw", "projects", project.Id.ToString("N")), project.Workspace);
     }
 
     [Fact]
@@ -50,7 +62,7 @@ public class ProjectBehaviorTests
     {
         var project = new Project { Name = "Project A", Workspace = "  ~/custom/project-a  " };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.True(result);
         Assert.Equal("Project_A", project.Name);
@@ -62,7 +74,7 @@ public class ProjectBehaviorTests
     {
         var project = new Project { Name = " <>:\"/\\|?* " };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.False(result);
         Assert.Equal(Guid.Empty, project.Id);
@@ -105,7 +117,7 @@ public class ProjectBehaviorTests
     {
         var project = new Project { Name = "Project A", EnvironmentVariables = null! };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.True(result);
         Assert.Empty(project.EnvironmentVariables);
@@ -120,7 +132,7 @@ public class ProjectBehaviorTests
             EnvironmentVariables = new Dictionary<string, string> { ["EMPTY"] = string.Empty },
         };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.True(result);
         Assert.Equal(string.Empty, project.EnvironmentVariables["EMPTY"]);
@@ -135,7 +147,7 @@ public class ProjectBehaviorTests
             EnvironmentVariables = new Dictionary<string, string> { ["  API_KEY  "] = "secret" },
         };
 
-        var result = new ProjectBehavior(project).TryPrepareForCreate();
+        var result = PrepareForCreate(project);
 
         Assert.True(result);
         var environmentVariables = project.EnvironmentVariables;
@@ -155,7 +167,7 @@ public class ProjectBehaviorTests
             EnvironmentVariables = new Dictionary<string, string> { [name] = "value" },
         };
 
-        var exception = Assert.Throws<AgwException>(() => new ProjectBehavior(project).TryPrepareForCreate());
+        var exception = Assert.Throws<AgwException>(() => PrepareForCreate(project));
 
         Assert.Equal(ErrorCodes.InvalidProjectEnvironmentVariableName.Code, exception.Code);
     }
@@ -169,7 +181,7 @@ public class ProjectBehaviorTests
             EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "first", [" API_KEY "] = "second" },
         };
 
-        var exception = Assert.Throws<AgwException>(() => new ProjectBehavior(project).TryPrepareForCreate());
+        var exception = Assert.Throws<AgwException>(() => PrepareForCreate(project));
 
         Assert.Equal(ErrorCodes.InvalidProjectEnvironmentVariableName.Code, exception.Code);
     }
@@ -201,7 +213,7 @@ public class ProjectBehaviorTests
             Tools = [new ToolBlockValue { Definition = new BackgroundAgentsToolBlockDefinition() }],
         };
 
-        var exception = Assert.Throws<AgwException>(() => new ProjectBehavior(project).TryPrepareForCreate());
+        var exception = Assert.Throws<AgwException>(() => PrepareForCreate(project));
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
@@ -239,4 +251,9 @@ public class ProjectBehaviorTests
 
         Assert.Equal(expected, deletable);
     }
+
+    private static string UserHome => Path.Combine(AppContext.BaseDirectory, ".scratch", "project-behavior-home");
+
+    private static bool PrepareForCreate(Project project) =>
+        new ProjectBehavior(project).TryPrepareForCreate(false, UserHome);
 }

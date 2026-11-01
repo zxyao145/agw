@@ -4,6 +4,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../IsolatedUserHome.cs" Link="IsolatedUserHome.cs" />
     <Compile Include="../ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
     <Compile Include="../RecordingHttpClientFactory.cs" Link="RecordingHttpClientFactory.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

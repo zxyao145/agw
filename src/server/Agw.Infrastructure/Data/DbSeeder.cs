@@ -3,6 +3,7 @@ using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts;
 using Agw.Projects.Contracts;
 using Agw.Providers.Contracts;
 using Agw.Settings.Contracts;
@@ -17,6 +18,7 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
+using Agw.Shared.Utils;
 using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.EntityFrameworkCore;
@@ -70,6 +72,7 @@ public class DbSeeder
     private readonly ILogger<DbSeeder> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly AgwDataPaths _dataPaths;
+    private readonly IProjectWorkspaceAccess _workspaceAccess;
     private readonly IReadOnlyList<IAgentSkillRegistration> _skillRegistrations;
 
     public DbSeeder(
@@ -77,6 +80,7 @@ public class DbSeeder
         ILogger<DbSeeder> logger,
         TimeProvider timeProvider,
         AgwDataPaths dataPaths,
+        IProjectWorkspaceAccess workspaceAccess,
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null
     )
     {
@@ -84,6 +88,7 @@ public class DbSeeder
         _logger = logger;
         _timeProvider = timeProvider;
         _dataPaths = dataPaths;
+        _workspaceAccess = workspaceAccess;
         _skillRegistrations = (skillRegistrations ?? []).ToArray();
     }
 
@@ -233,7 +238,9 @@ public class DbSeeder
             if (existingProject == null)
             {
                 _logger.LogInformation("Seeding built-in project {ProjectName}", definition.Name);
-                _context.Projects.Add(CreateBuiltInProject(definition));
+                var project = CreateBuiltInProject(definition);
+                await EnsureBuiltInProjectDirectoriesAsync(project).ConfigureAwait(false);
+                _context.Projects.Add(project);
                 continue;
             }
 
@@ -248,7 +255,12 @@ public class DbSeeder
     {
         var now = _timeProvider.GetUtcNow();
         var workspace = string.IsNullOrWhiteSpace(definition.Workspace)
-            ? $"~/.agw/{definition.Name}"
+            ? ProjectDefaults.GetDefaultWorkspace(
+                definition.Id,
+                definition.Name,
+                _workspaceAccess.IsolationEnabled,
+                _dataPaths.UserHomeDirectory
+            )
             : definition.Workspace;
         return new Project
         {
@@ -263,6 +275,27 @@ public class DbSeeder
             UpdateBy = Constants.AdminUserId,
             UpdateTime = now,
         };
+    }
+
+    /// <summary>
+    /// <para>用本实例的用户目录展开内置项目路径，验证全部路径后再创建主目录和附加目录。</para>
+    /// <para>Expands built-in Project paths with this instance's user home, validates all paths, then creates the
+    /// primary and additional directories.</para>
+    /// </summary>
+    private async Task EnsureBuiltInProjectDirectoriesAsync(Project project)
+    {
+        string[] paths =
+        [
+            PathUtil.ExpandTilde(project.Workspace, _dataPaths.UserHomeDirectory),
+            .. project.AdditionalDirectories.Select(directory =>
+                PathUtil.ExpandTilde(directory.Path, _dataPaths.UserHomeDirectory)
+            ),
+        ];
+        await _workspaceAccess.ValidateAsync(paths, project.Id).ConfigureAwait(false);
+        foreach (var path in paths)
+        {
+            ProjectWorkspacePaths.EnsureCreated(path);
+        }
     }
 
     private async Task SeedExternalAgentsAsync()

@@ -45,6 +45,7 @@ export interface ProjectFormFieldsProps {
   toggleMcpToolServer: (mcpToolServerId: string) => void;
   projectType?: "User Defined" | "BuiltIn";
   nameReadOnly?: boolean;
+  workspaceRequired?: boolean;
   idPrefix?: string;
 }
 
@@ -73,9 +74,10 @@ export function ProjectFormFields({
   toggleMcpToolServer,
   projectType = "User Defined",
   nameReadOnly = false,
+  workspaceRequired = true,
   idPrefix = "",
 }: ProjectFormFieldsProps) {
-  const primaryDirectoryMissing = Boolean(name.trim()) && !workspace.trim();
+  const primaryDirectoryMissing = workspaceRequired && Boolean(name.trim()) && !workspace.trim();
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
@@ -104,12 +106,17 @@ export function ProjectFormFields({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}workspace`}>Primary directory</Label>
+            <Label htmlFor={`${idPrefix}workspace`}>
+              Primary directory
+              {!workspaceRequired && (
+                <span className="font-normal text-muted-foreground"> (optional)</span>
+              )}
+            </Label>
             <Input
               id={`${idPrefix}workspace`}
               value={workspace}
               onChange={(event) => setWorkspace(event.target.value)}
-              required
+              required={workspaceRequired}
               aria-invalid={primaryDirectoryMissing}
               placeholder="~/.agw/demo-project"
             />

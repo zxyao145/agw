@@ -19,7 +19,7 @@ internal sealed class FakeExternalAgentCli
         const sessionIndex = args.indexOf('--session');
         const resumed = sessionIndex >= 0 ? args[sessionIndex + 1] : null;
         const sessionId = resumed ?? crypto.randomUUID();
-        fs.appendFileSync(path.join(__dirname, 'pi-invocations.jsonl'), JSON.stringify({ args, sessionId, resumed }) + '\n');
+        fs.appendFileSync(path.join(__dirname, 'pi-invocations.jsonl'), JSON.stringify({ args, sessionId, resumed, cwd: fs.realpathSync(process.cwd()) }) + '\n');
         const emit = event => process.stdout.write(JSON.stringify(event) + '\n');
         readline.createInterface({ input: process.stdin }).on('line', line => {
           const command = JSON.parse(line);
@@ -73,7 +73,8 @@ internal sealed class FakeExternalAgentCli
                     root.GetProperty("sessionId").GetString()!,
                     root.GetProperty("resumed").GetString(),
                     root.GetProperty("args").EnumerateArray().Select(arg => arg.GetString()!).ToArray(),
-                    root.TryGetProperty("input", out var input) ? input.GetString() : null
+                    root.TryGetProperty("input", out var input) ? input.GetString() : null,
+                    root.GetProperty("cwd").GetString()!
                 );
             })
             .ToList();
@@ -95,11 +96,13 @@ internal sealed class FakeExternalAgentCli
 }
 
 /// <summary>
-/// 一次 Pi RPC 命令行调用。A Pi RPC command-line invocation.
+/// 一次 Pi RPC 命令行调用；WorkingDirectory 为进程启动后工作目录的物理路径。
+/// A Pi RPC command-line invocation; WorkingDirectory is the physical path of the process working directory after start.
 /// </summary>
 internal sealed record FakeInvocation(
     string SessionId,
     string? Resumed,
     IReadOnlyList<string> Arguments,
-    string? Input
+    string? Input,
+    string WorkingDirectory
 );

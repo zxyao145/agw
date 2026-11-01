@@ -15,7 +15,7 @@ namespace Agw.Agents.Execution.Agents.Middleware.History;
 /// </remarks>
 internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClient
 {
-    private const string CompactionIndexVersion = "tool-result-eviction-v5";
+    private const string CompactionIndexVersion = "tool-result-eviction-v6";
 
     private readonly string? _compactionStateKey;
     private readonly string? _compactionVersionStateKey;

@@ -45,12 +45,14 @@ public sealed class ProjectDirectoryTests : IDisposable
             TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
             NullLogger<LocalFileSystem>.Instance,
-            TimeProvider.System
+            TimeProvider.System,
+            TestProjectWorkspaceAccess.Disabled
         );
         _files = new FileAppService(
             _resolver,
             new GitCommandService(NullLogger<GitCommandService>.Instance),
-            NullLogger<FileAppService>.Instance
+            NullLogger<FileAppService>.Instance,
+            TestProjectWorkspaceAccess.Disabled
         );
     }
 
@@ -116,22 +118,31 @@ public sealed class ProjectDirectoryTests : IDisposable
         _resolver.Invalidate(_projectId);
 
         Assert.Null(await _resolver.ResolveAsync(_projectId, _directoryId, Token));
-        Assert.NotNull(await _resolver.ResolveSnapshotAsync(_projectId, snapshot, _directoryId, Token));
+        Directory.Delete(Additional);
+        Assert.Null(await _resolver.ResolveAsync(_projectId, _directoryId, Token));
+        Assert.False(Directory.Exists(Additional));
+        var captured = await _resolver.ResolveSnapshotAsync(_projectId, snapshot, _directoryId, Token);
+        Assert.NotNull(captured);
+        Assert.True(Directory.Exists(Additional));
+        await captured.WriteAllTextAsync("captured.txt", "captured", Token);
+        Assert.Equal("captured", await File.ReadAllTextAsync(Path.Combine(Additional, "captured.txt"), Token));
         Assert.NotNull(original);
         _configuration.Value = null;
         Assert.Null(await _resolver.ResolveSnapshotAsync(_projectId, snapshot, _directoryId, Token));
     }
 
     [Fact]
-    public async Task ResolveAsync_UnavailableAdditionalDirectory_FailsWithoutPrimaryFallback()
+    public async Task ResolveAsync_MissingAdditionalDirectory_RecreatesSelectedDirectory()
     {
         await _resolver.ResolveAsync(_projectId, _directoryId, Token);
         Directory.Delete(Additional);
-        var error = await Assert.ThrowsAsync<AgwException>(() =>
-            _resolver.ResolveAsync(_projectId, _directoryId, Token)
-        );
-        Assert.Contains(Additional, error.Message);
-        Assert.True(Directory.Exists(Primary));
+        Directory.Delete(Primary);
+
+        var fileSystem = await _resolver.ResolveAsync(_projectId, _directoryId, Token);
+        await fileSystem!.WriteAllTextAsync("README.md", "additional", Token);
+
+        Assert.Equal("additional", await File.ReadAllTextAsync(Path.Combine(Additional, "README.md"), Token));
+        Assert.False(Directory.Exists(Primary));
     }
 
     [Fact]

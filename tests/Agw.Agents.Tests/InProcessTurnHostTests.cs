@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.InProcess;
+using Agw.Files.Abstracts;
 
 namespace Agw.Agents.Tests;
 
@@ -153,6 +154,7 @@ public class InProcessTurnHostTests
             new ExecutionTarget(runtime.AgentflowId, AgentRuntimeType.Agentflow),
             runtime,
             "fingerprint",
+            DirectoryIdentitySnapshot.Capture([AppContext.BaseDirectory]),
             permissionVersion: 0
         );
         var turnEnded = false;
@@ -191,6 +193,7 @@ public class InProcessTurnHostTests
             new ExecutionTarget(runtime.AgentflowId, AgentRuntimeType.Agentflow),
             runtime,
             "fingerprint",
+            DirectoryIdentitySnapshot.Capture([AppContext.BaseDirectory]),
             permissionVersion: 0
         );
     }

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using Agw.Auth.Extensions;
+using Agw.Files;
 using Agw.Host.Hosting;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
@@ -29,11 +30,17 @@ namespace Agw.Host.Tests;
 
 public sealed class SetupInitializationIntegrationTests : IDisposable
 {
+    private readonly string _root = Path.Combine(
+        AppContext.BaseDirectory,
+        ".scratch",
+        "setup-initialization",
+        Guid.NewGuid().ToString("N")
+    );
     private readonly AgwDataPaths _paths;
 
     public SetupInitializationIntegrationTests()
     {
-        _paths = AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), $"agw-setup-{Guid.NewGuid():N}"), "/unused");
+        _paths = AgwDataPaths.Resolve(Path.Combine(_root, "data"), Path.Combine(_root, "home"));
         _paths.EnsureCreated();
     }
 
@@ -185,6 +192,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
     {
         services.AddLogging();
         services.AddSingleton(_paths);
+        services.AddFiles(configuration);
         services.AddSingleton<IConfiguration>(configuration);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IEntityAuditUserIdProvider, AuditUserIdProvider>();
@@ -198,7 +206,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         services.AddSingleton(new SetupCodeService("TEST-CODE"));
     }
 
-    public void Dispose() => Directory.Delete(_paths.Root, recursive: true);
+    public void Dispose() => Directory.Delete(_root, recursive: true);
 
     private sealed class AuditUserIdProvider : IEntityAuditUserIdProvider
     {

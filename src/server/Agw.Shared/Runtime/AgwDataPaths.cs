@@ -13,9 +13,10 @@ public sealed class AgwDataPaths
 {
     private readonly string? _legacyRoot;
 
-    private AgwDataPaths(string root, string logsDirectory, string? legacyRoot)
+    private AgwDataPaths(string root, string logsDirectory, string? legacyRoot, string userHomeDirectory)
     {
         _legacyRoot = legacyRoot;
+        UserHomeDirectory = userHomeDirectory;
         Root = root;
         DatabaseFile = Path.Combine(root, "database", "agw.db");
         SkillsDirectory = Path.Combine(root, "skills");
@@ -31,6 +32,12 @@ public sealed class AgwDataPaths
     /// 获取 Server 的持久数据根目录。
     /// </summary>
     public string Root { get; }
+
+    /// <summary>
+    /// Gets the absolute user home used to expand <c>~</c> in paths resolved for this Server instance.
+    /// 获取本 Server 实例展开路径中 <c>~</c> 时使用的绝对用户目录。
+    /// </summary>
+    public string UserHomeDirectory { get; }
 
     /// <summary>
     /// Gets the path to the persisted Server setup and initialization state.
@@ -98,7 +105,8 @@ public sealed class AgwDataPaths
         return new AgwDataPaths(
             root,
             ResolvePath(logsDirectory, userHome),
-            usesDefaultRoot ? Path.GetFullPath(Path.Combine(userHome, "agw")) : null
+            usesDefaultRoot ? Path.GetFullPath(Path.Combine(userHome, "agw")) : null,
+            userHome
         );
     }
 

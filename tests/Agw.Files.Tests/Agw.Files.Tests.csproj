@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="../IsolatedUserHome.cs" Link="IsolatedUserHome.cs" />
     <Compile Include="../TestFileSystems.cs" Link="TestFileSystems.cs" />
   </ItemGroup>
   <PropertyGroup>

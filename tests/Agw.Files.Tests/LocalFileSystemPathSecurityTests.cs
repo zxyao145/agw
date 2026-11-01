@@ -68,7 +68,8 @@ public class LocalFileSystemPathSecurityTests
         {
             return new TempDirectoryScope(
                 System.IO.Path.Combine(
-                    System.IO.Path.GetTempPath(),
+                    AppContext.BaseDirectory,
+                    ".scratch",
                     "agw-local-filesystem-tests",
                     Guid.CreateVersion7().ToString("N")
                 )

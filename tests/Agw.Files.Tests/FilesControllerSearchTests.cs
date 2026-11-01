@@ -82,7 +82,8 @@ public class FilesControllerSearchTests
         var fileAppService = new FileAppService(
             new FakeFileSystemResolver(TestFileSystems.Local(rootPath)),
             new FakeGitCommandService(),
-            NullLogger<FileAppService>.Instance
+            NullLogger<FileAppService>.Instance,
+            TestProjectWorkspaceAccess.Disabled
         );
         return new FilesController(fileAppService);
     }
@@ -117,7 +118,12 @@ public class FilesControllerSearchTests
 
     private static string CreateTempDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), "agw-files-search-tests", Guid.CreateVersion7().ToString("N"));
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "agw-files-search-tests",
+            Guid.CreateVersion7().ToString("N")
+        );
         Directory.CreateDirectory(path);
         return path;
     }

@@ -10,6 +10,7 @@ using Agw.Agents.Execution.Agents.Middleware.Approval;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -19,6 +20,7 @@ using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI.CodexSdk.AppServer;
 using OpenAI.CodexSdk.AppServer.MAF;
@@ -46,6 +48,17 @@ public partial class AgentRuntimeFactory
         bool isBackground = false
     )
     {
+        var workspace = AgentRuntimeFactoryUtil.ApplyWorkspaceSnapshot(project);
+        await _services
+            .GetRequiredService<IProjectWorkspaceAccess>()
+            .ValidateAsync(
+                [workspace.Workspace, .. workspace.AdditionalDirectories.Select(static directory => directory.Path)],
+                creatingProjectId: null,
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+        ProjectWorkspacePaths.EnsureAvailable(workspace);
+
         var modelConfiguration = await _agentAppService
             .GetExternalModelRuntimeConfigurationAsync(request.Agent.ExternalAgentKind, request.Agent.ModelProviderId)
             .ConfigureAwait(false);

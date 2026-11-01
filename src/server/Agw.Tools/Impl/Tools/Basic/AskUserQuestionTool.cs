@@ -158,7 +158,7 @@ internal class AskUserQuestionTool : IAgwTool
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 
-    public string Name => "ask_user_question";
+    public string Name => ToolDefinitionNames.AskUserQuestion;
 
     public string Category => "Interaction";
 

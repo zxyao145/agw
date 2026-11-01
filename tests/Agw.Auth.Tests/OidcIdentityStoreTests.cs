@@ -1,6 +1,8 @@
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Auth.Security;
+using Agw.Files;
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
@@ -8,7 +10,10 @@ using Agw.Projects.Application;
 using Agw.Projects.Contracts;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
 
@@ -53,7 +58,10 @@ public sealed class OidcIdentityStoreTests
                 project =>
                 {
                     Assert.Equal(first.UserId, project.CreateBy);
-                    Assert.Null(project.Workspace);
+                    var workspace = Path.Combine(database.Paths.UserHomeDirectory, ".agw", project.Name);
+                    Assert.Equal(workspace, project.Workspace);
+                    Assert.True(Path.IsPathFullyQualified(project.Workspace!));
+                    Assert.True(Directory.Exists(workspace));
                 }
             );
             Assert.Single(await context.AuthUsers.ToArrayAsync(TestContext.Current.CancellationToken));
@@ -75,7 +83,7 @@ public sealed class OidcIdentityStoreTests
         {
             var failing = new EfOidcIdentityStore(
                 context,
-                new FailingProjectInitializer(context),
+                new FailingProjectInitializer(context, database.Paths, CreateWorkspaceAccess(database.Paths)),
                 TestApiTokenStore.Create(context),
                 database.Clock,
                 database.Options
@@ -107,15 +115,23 @@ public sealed class OidcIdentityStoreTests
     internal sealed class FailingProjectInitializer : IUserProjectInitializer
     {
         private readonly AgwDbContext _context;
+        private readonly AgwDataPaths _paths;
+        private readonly IProjectWorkspaceAccess _workspaceAccess;
 
-        public FailingProjectInitializer(AgwDbContext context)
+        public FailingProjectInitializer(
+            AgwDbContext context,
+            AgwDataPaths paths,
+            IProjectWorkspaceAccess workspaceAccess
+        )
         {
             _context = context;
+            _paths = paths;
+            _workspaceAccess = workspaceAccess;
         }
 
         public async Task EnsureDefaultsAsync(CancellationToken cancellationToken = default)
         {
-            await new UserProjectInitializer(_context).EnsureDefaultsAsync(cancellationToken);
+            await new UserProjectInitializer(_context, _paths, _workspaceAccess).EnsureDefaultsAsync(cancellationToken);
             Assert.Equal(2, await _context.Projects.CountAsync(cancellationToken));
             throw new AgwException(ErrorCodes.InvalidParam);
         }
@@ -317,10 +333,29 @@ public sealed class OidcIdentityStoreTests
 
     internal sealed class TestDatabase : IAsyncDisposable
     {
-        private readonly string _path = Path.Combine(Path.GetTempPath(), $"agw-oidc-{Guid.NewGuid():N}.db");
+        private readonly string _root = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "oidc-identity-store",
+            Guid.NewGuid().ToString("N")
+        );
+        private readonly string _path;
         private string? _postgresConnection;
         private string? _postgresAdmin;
         private string? _databaseName;
+
+        private TestDatabase()
+        {
+            _path = Path.Combine(_root, "agw.db");
+            Paths = AgwDataPaths.Resolve(Path.Combine(_root, "data"), Path.Combine(_root, "home"));
+        }
+
+        /// <summary>
+        /// 隔离的数据目录与用户目录，用户默认项目的目录创建在其中。
+        /// Isolated data and home directories that receive the user's default Project directories.
+        /// </summary>
+        public AgwDataPaths Paths { get; }
+
         public MutableClock Clock { get; } = new();
         public OidcOptions Options { get; } =
             new() { Providers = new() { ["company"] = new OidcProviderOptions { Enabled = true } } };
@@ -342,6 +377,7 @@ public sealed class OidcIdentityStoreTests
                     Pooling = false,
                 }.ConnectionString;
             }
+            Directory.CreateDirectory(database._root);
             await using var context = database.Context();
             if (applyMigrations)
                 await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
@@ -377,7 +413,7 @@ public sealed class OidcIdentityStoreTests
         public EfOidcIdentityStore Store(AgwDbContext context, IApiTokenStore? tokens = null) =>
             new(
                 context,
-                new UserProjectInitializer(context),
+                new UserProjectInitializer(context, Paths, CreateWorkspaceAccess(Paths)),
                 tokens ?? TestApiTokenStore.Create(context),
                 Clock,
                 Options
@@ -398,7 +434,20 @@ public sealed class OidcIdentityStoreTests
             File.Delete(_path);
             File.Delete(_path + "-wal");
             File.Delete(_path + "-shm");
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, recursive: true);
+            }
         }
+    }
+
+    private static IProjectWorkspaceAccess CreateWorkspaceAccess(AgwDataPaths paths)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(paths);
+        services.AddFiles(new ConfigurationBuilder().Build());
+        using var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IProjectWorkspaceAccess>();
     }
 
     internal sealed class MutableClock : TimeProvider

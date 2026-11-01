@@ -41,7 +41,7 @@ public sealed class FilesEndpointErrorEnvelopeTests : IDisposable
     }
 
     [Fact]
-    public async Task Read_UnavailableProjectDirectory_ReturnsNotFoundEnvelopeWithSharedCode()
+    public async Task Read_DeletedProjectDirectory_RecreatesDirectoryAndReturnsNotFoundEnvelope()
     {
         await using var app = await StartAsync();
         using var client = app.GetTestClient();
@@ -55,6 +55,7 @@ public sealed class FilesEndpointErrorEnvelopeTests : IDisposable
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         var payload = await ReadJsonAsync(response);
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, payload.GetProperty("code").GetInt32());
+        Assert.True(Directory.Exists(_workspace));
     }
 
     private async Task<WebApplication> StartAsync()
@@ -66,12 +67,14 @@ public sealed class FilesEndpointErrorEnvelopeTests : IDisposable
             new WorkspaceConfigurationProvider(new ProjectFileSystemConfiguration("Project", _workspace, "owner", []))
         );
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton(TestProjectWorkspaceAccess.Disabled);
         builder.Services.AddSingleton<IAgwFileSystemResolver>(provider => new ProjectScopedFileSystemResolver(
             provider.GetRequiredService<IServiceScopeFactory>(),
             TestFileSystems.PathLocks,
             NullLogger<ProjectScopedFileSystemResolver>.Instance,
             NullLogger<LocalFileSystem>.Instance,
-            TimeProvider.System
+            TimeProvider.System,
+            provider.GetRequiredService<IProjectWorkspaceAccess>()
         ));
         builder.Services.AddSingleton<IGitCommandService>(
             new GitCommandService(NullLogger<GitCommandService>.Instance)

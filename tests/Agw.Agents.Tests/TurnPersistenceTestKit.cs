@@ -11,6 +11,7 @@ using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Application;
+using Agw.Files;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
@@ -27,8 +28,10 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Runtime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -64,6 +67,11 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(clock);
+        var dataRoot = Path.Combine(AppContext.BaseDirectory, ".scratch", "turn-persistence");
+        services.AddSingleton(
+            AgwDataPaths.Resolve(Path.Combine(dataRoot, "data"), dataRoot, Path.Combine(dataRoot, "logs"))
+        );
+        services.AddFiles(new ConfigurationBuilder().Build());
         services.AddSingleton<IApplicationLock>(Locks);
         services.AddScoped(_ => new AgwDbContext(DbOptions));
         services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());

@@ -1,3 +1,4 @@
+using Agw.Shared.Tooling;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -7,8 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Agw.Agents.Execution.Agents.History;
 
 /// <summary>
-/// <para>清空较旧 Tool call 组中的结果正文，原样保留 Assistant 消息里的推理和调用。</para>
-/// <para>Evicts result bodies from older tool-call groups while keeping the reasoning and calls in assistant messages intact.</para>
+/// <para>清空历史 Tool call 组中的 Tool result 正文，保留 ask_user_question 的结果以及 Assistant 消息里的推理和调用。</para>
+/// <para>Evicts tool result bodies from older tool-call groups while preserving ask_user_question results and the reasoning and calls in assistant messages.</para>
 /// </summary>
 /// <remarks>
 /// <para>模型服务按各自协议校验回放的 Assistant 输出：DeepSeek thinking 模式要求本轮 Assistant 输出附带 reasoning_text，OpenAI Responses 要求推理条目后紧跟原始条目。只改写 Tool result 正文时，请求在所有协议下都保持合法，调用与结果的配对也不变。</para>
@@ -76,6 +77,14 @@ internal sealed class ToolResultEvictionCompactionStrategy : CompactionStrategy
         CancellationToken cancellationToken
     )
     {
+        // ask_user_question 的结果包含用户答案和后续执行的要求，按 CallId 完整保留。
+        // ask_user_question results carry the user's answers and requirements for later steps; keep them whole by CallId.
+        var askUserQuestionCallIds = index
+            .GetIncludedMessages()
+            .SelectMany(message => message.Contents.OfType<FunctionCallContent>())
+            .Where(call => call.Name == ToolDefinitionNames.AskUserQuestion)
+            .Select(call => call.CallId)
+            .ToHashSet(StringComparer.Ordinal);
         var activeGroups = index
             .Groups.Where(group => !group.IsExcluded && group.Kind != CompactionGroupKind.System)
             .ToList();
@@ -87,7 +96,11 @@ internal sealed class ToolResultEvictionCompactionStrategy : CompactionStrategy
                 !group.IsExcluded
                 && group.Kind == CompactionGroupKind.ToolCall
                 && !preservedGroups.Contains(group)
-                && group.Messages.Any(message => message.Contents.OfType<FunctionResultContent>().Any())
+                && group.Messages.Any(message =>
+                    message
+                        .Contents.OfType<FunctionResultContent>()
+                        .Any(result => !askUserQuestionCallIds.Contains(result.CallId))
+                )
             )
             .ToList();
 
@@ -102,7 +115,7 @@ internal sealed class ToolResultEvictionCompactionStrategy : CompactionStrategy
             index.InsertGroup(
                 position + 1,
                 CompactionGroupKind.Summary,
-                group.Messages.Select(EvictResults).ToList(),
+                group.Messages.Select(message => EvictResults(message, askUserQuestionCallIds)).ToList(),
                 group.TurnIndex
             );
             compacted = true;
@@ -116,20 +129,28 @@ internal sealed class ToolResultEvictionCompactionStrategy : CompactionStrategy
     }
 
     /// <summary>
-    /// <para>把消息中的每个 Tool result 正文替换为占位文本，其他消息原样返回。</para>
-    /// <para>Replaces every tool result body in the message with the placeholder text, returning other messages unchanged.</para>
+    /// <para>保留 ask_user_question 的结果，将其他 Tool result 正文替换为占位文本。</para>
+    /// <para>Preserves ask_user_question results and replaces other tool result bodies with placeholder text.</para>
     /// </summary>
     /// <param name="message">
     /// <para>待处理的消息。</para>
     /// <para>Message to process.</para>
     /// </param>
+    /// <param name="askUserQuestionCallIds">
+    /// <para>需要保留完整结果的 ask_user_question 调用。</para>
+    /// <para>ask_user_question calls whose complete results must be preserved.</para>
+    /// </param>
     /// <returns>
-    /// <para>结果正文已替换的消息副本，或无 Tool result 时的原消息。</para>
-    /// <para>Message copy with replaced result bodies, or the original message when it has no tool result.</para>
+    /// <para>其他结果正文已替换的消息副本，或无需替换时的原消息。</para>
+    /// <para>Message copy with other result bodies replaced, or the original message when no replacement is needed.</para>
     /// </returns>
-    private static ChatMessage EvictResults(ChatMessage message)
+    private static ChatMessage EvictResults(ChatMessage message, IReadOnlySet<string> askUserQuestionCallIds)
     {
-        if (!message.Contents.OfType<FunctionResultContent>().Any())
+        if (
+            !message
+                .Contents.OfType<FunctionResultContent>()
+                .Any(result => !askUserQuestionCallIds.Contains(result.CallId))
+        )
         {
             return message;
         }
@@ -137,7 +158,7 @@ internal sealed class ToolResultEvictionCompactionStrategy : CompactionStrategy
         var copy = message.Clone();
         copy.Contents = message
             .Contents.Select(content =>
-                content is FunctionResultContent result
+                content is FunctionResultContent result && !askUserQuestionCallIds.Contains(result.CallId)
                     ? new FunctionResultContent(result.CallId, EvictedResultText)
                     : content
             )

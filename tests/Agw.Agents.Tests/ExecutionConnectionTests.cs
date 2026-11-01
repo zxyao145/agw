@@ -20,6 +20,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Application;
+using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application;
@@ -31,11 +32,13 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -77,6 +80,11 @@ public class ExecutionConnectionTests
         services.AddScoped<IProjectDefaultResolver, ProjectDefaultResolver>();
         services.AddScoped<ExecutionPermissionService>();
         services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
+        var dataRoot = Path.Combine(AppContext.BaseDirectory, ".scratch", "execution-connection");
+        services.AddSingleton(
+            AgwDataPaths.Resolve(Path.Combine(dataRoot, "data"), dataRoot, Path.Combine(dataRoot, "logs"))
+        );
+        services.AddFiles(new ConfigurationBuilder().Build());
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<AgentflowCheckpointStore>();
         services.AddSingleton<IProjectTaskFacade>(provider => new FakeProjectTaskFacade(

@@ -9,6 +9,7 @@ using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
+using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Contracts.Runtime;
@@ -24,6 +25,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -327,7 +329,7 @@ public sealed class RuntimeDefinitionRefreshTests
     private sealed class Fixture : IAsyncDisposable, IAgwFileSystemResolver
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
-        private readonly ServiceProvider _services = new ServiceCollection().BuildServiceProvider();
+        private readonly ServiceProvider _services = CreateServices();
         public TestUserInfoService User { get; } = new();
         public TestProviders Providers { get; } = new();
         public TestProjects Projects { get; } = new();
@@ -436,6 +438,7 @@ public sealed class RuntimeDefinitionRefreshTests
                 new AgentflowTurnExecutor(null!, null!, NullLogger<AgentflowTurnExecutor>.Instance),
                 new ExecutionContextFactory(Db),
                 this,
+                _services.GetRequiredService<IProjectWorkspaceAccess>(),
                 conversationGate: null,
                 _persistence.Broadcasts,
                 _persistence.Services.GetRequiredService<IServiceScopeFactory>(),
@@ -491,6 +494,16 @@ public sealed class RuntimeDefinitionRefreshTests
             await _services.DisposeAsync();
             if (_persistence != null)
                 await _persistence.DisposeAsync();
+        }
+
+        private static ServiceProvider CreateServices()
+        {
+            var root = Path.Combine(AppContext.BaseDirectory, ".scratch", "runtime-definition-refresh");
+            var dataPaths = AgwDataPaths.Resolve(Path.Combine(root, "data"), root, Path.Combine(root, "logs"));
+            var services = new ServiceCollection();
+            services.AddSingleton(dataPaths);
+            services.AddFiles(new ConfigurationBuilder().Build());
+            return services.BuildServiceProvider();
         }
     }
 

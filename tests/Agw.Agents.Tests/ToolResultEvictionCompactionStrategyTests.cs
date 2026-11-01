@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Agw.Agents.Execution.Agents.History;
+using Agw.Tools.Impl.Tools.Basic;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 
@@ -9,6 +11,77 @@ namespace Agw.Agents.Tests;
 public sealed class ToolResultEvictionCompactionStrategyTests
 {
     private const int ResultLength = 20_000;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Create_UserAnswerBeforeInjectedContext_PreservesAnswerAndEvictsOtherResults(bool restoreFromJson)
+    {
+        const string question = "How should the work be delivered?";
+        const string answer = "Write a design only; do not implement.";
+        var tool = new AskUserQuestionTool();
+        var result = tool.Execute(
+            new AskUserQuestionToolParams
+            {
+                Questions =
+                [
+                    new()
+                    {
+                        Question = question,
+                        Header = "Delivery",
+                        Options =
+                        [
+                            new() { Label = "Design", Description = "Write the design." },
+                            new() { Label = "Implement", Description = "Implement the design." },
+                        ],
+                    },
+                ],
+                Answers = new() { [question] = answer },
+                Annotations = new() { [question] = new() { Notes = "Wait for my review." } },
+            }
+        );
+        var humanResult = new FunctionResultContent(
+            "human-call",
+            restoreFromJson ? JsonSerializer.SerializeToElement(result) : result
+        );
+        var ordinaryResult = new FunctionResultContent("lookup-call", new string('x', ResultLength));
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.System, new string('s', 90_000)),
+            new(ChatRole.User, "Prepare the work."),
+            new(
+                ChatRole.Assistant,
+                [
+                    new TextReasoningContent("Ask for the delivery requirements."),
+                    new FunctionCallContent("human-call", tool.Name),
+                    new FunctionCallContent("lookup-call", "lookup"),
+                ]
+            ),
+            new(ChatRole.Tool, [humanResult, ordinaryResult]),
+            new(ChatRole.User, "Workspace context"),
+            new(ChatRole.User, "Current mode context"),
+        ];
+
+        var compacted = (
+            await CompactionProvider.CompactAsync(
+                ContextWindowCompactionPipeline.Create(maxContextWindowTokens: 40_000, maxOutputTokens: 0),
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ).ToList();
+
+        var results = compacted.SelectMany(message => message.Contents.OfType<FunctionResultContent>()).ToList();
+        var retainedAnswer = Assert.Single(results, item => item.CallId == "human-call");
+        Assert.Equal(JsonSerializer.Serialize(humanResult.Result), JsonSerializer.Serialize(retainedAnswer.Result));
+        Assert.Same(humanResult, retainedAnswer);
+        Assert.Equal(
+            ToolResultEvictionCompactionStrategy.EvictedResultText,
+            Assert.Single(results, item => item.CallId == "lookup-call").Result
+        );
+        Assert.Equal(ResultLength, Assert.IsType<string>(ordinaryResult.Result).Length);
+        Assert.Equal(messages.Count, compacted.Count);
+        Assert.Same(messages[2], compacted[2]);
+    }
 
     [Fact]
     public async Task CompactAsync_OverBudget_EvictsOldestResultsUntilTargetAndKeepsAssistantOutput()

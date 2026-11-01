@@ -658,7 +658,8 @@ public class FileAppServiceTests
         return new FileAppService(
             new FakeFileSystemResolver(fileSystem ?? TestFileSystems.Local(rootPath)),
             git ?? new FakeGitCommandService(),
-            NullLogger<FileAppService>.Instance
+            NullLogger<FileAppService>.Instance,
+            TestProjectWorkspaceAccess.Disabled
         );
     }
 

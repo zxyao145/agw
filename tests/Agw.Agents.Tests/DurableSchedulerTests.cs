@@ -39,7 +39,7 @@ public sealed class DurableSchedulerTests
             Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING")!,
             options
         );
-        using var host = Host.CreateApplicationBuilder().Build();
+        using var host = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder().Build();
         var scheduler = new DurableSegmentScheduler(
             kit.Services,
             host.Services.GetRequiredService<IHostApplicationLifetime>(),

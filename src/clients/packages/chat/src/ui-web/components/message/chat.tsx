@@ -1885,7 +1885,12 @@ export function Chat({
   }, [handleUserInputNavigate]);
 
   return (
-    <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
+    <div
+      className={cn(
+        "[container-type:size] relative h-full min-h-0 w-full overflow-hidden",
+        className,
+      )}
+    >
       <div
         ref={conversationScrollRef}
         tabIndex={-1}

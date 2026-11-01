@@ -43,6 +43,7 @@ internal sealed class InProcessCoordinatorTestKit : IAgwFileSystemResolver
             new AgentflowTurnExecutor(null!, null!, NullLogger<AgentflowTurnExecutor>.Instance),
             executionContexts,
             this,
+            persistence.Services.GetRequiredService<IProjectWorkspaceAccess>(),
             persistence.Broadcasts,
             persistence.Services.GetRequiredService<IServiceScopeFactory>(),
             conversationGate

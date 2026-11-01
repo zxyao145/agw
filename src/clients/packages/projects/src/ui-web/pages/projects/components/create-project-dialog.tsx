@@ -49,7 +49,7 @@ export function CreateProjectDialog({
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
   const handleCreate = () => {
-    if (!normalizedName || !workspace.trim() || environmentVariablesError) {
+    if (!normalizedName || environmentVariablesError) {
       return;
     }
 
@@ -64,7 +64,7 @@ export function CreateProjectDialog({
     createProjectMutation.mutate({
       name: normalizedName,
       description: description.length ? description : null,
-      workspace: resolveCreateProjectWorkspace(normalizedName, workspace),
+      workspace: resolveCreateProjectWorkspace(workspace),
       additionalDirectories,
       extraSetting: null,
       ...capabilities,
@@ -121,7 +121,6 @@ export function CreateProjectDialog({
                   className="cursor-pointer"
                   disabled={
                     !normalizedName ||
-                    !workspace.trim() ||
                     Boolean(environmentVariablesError) ||
                     createProjectMutation.isPending
                   }
@@ -137,6 +136,7 @@ export function CreateProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
+            workspaceRequired={false}
             additionalDirectories={additionalDirectories}
             environmentVariables={environmentVariables}
             tools={tools}

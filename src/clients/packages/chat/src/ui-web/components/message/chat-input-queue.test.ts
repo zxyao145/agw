@@ -12,6 +12,7 @@ import {
 
 const { React, act, fireEvent, render, screen } = await setupDomEnvironment();
 const { ChatInputQueue } = await import("./chat-input-queue.tsx");
+const { UserInput } = await import("./user-input.tsx");
 
 const key = { serverId: "local", projectId: "project-1", conversationId: "conversation-1" };
 
@@ -36,7 +37,7 @@ function submission(text: string, fileCommentCount = 0, imageCount = 0): Executi
  * 用真实的会话管理器队列渲染列表：组件回调直接操作队列，队列变化后重新渲染。
  * Renders the list over a real session manager queue: component callbacks act on the queue, and each change re-renders.
  */
-async function renderQueue() {
+async function renderQueue(withComposer = false) {
   let handlers!: ExecutionHubHandlers;
   let active = false;
   const executed: ExecutionRequest[] = [];
@@ -65,7 +66,7 @@ async function renderQueue() {
 
   function Harness() {
     React.useSyncExternalStore(manager.subscribeQueue, manager.getQueueVersion);
-    return React.createElement(ChatInputQueue, {
+    const queue = React.createElement(ChatInputQueue, {
       queue: handle.getQueue(),
       onEditStart: (itemId: string) => {
         handle.setEditingQueuedItem(itemId);
@@ -83,6 +84,13 @@ async function renderQueue() {
       onRemove: (itemId: string) => handle.removeQueuedItem(itemId),
       onResume: () => handle.resumeQueue(),
     });
+    return withComposer
+      ? React.createElement(
+          UserInput,
+          { expandOverlay: true },
+          React.createElement(UserInput.Queue, { children: queue }),
+        )
+      : queue;
   }
   render(React.createElement(Harness));
   const finish = (status: "completed" | "failed") =>
@@ -160,6 +168,32 @@ test("saving blank text keeps the editor open and cancel restores the entry", as
   fireEvent.keyDown(editor, { key: "Escape" });
   assert.equal(screen.queryByRole("textbox", { name: "Edit queued message" }), null);
   assert.match(screen.getByRole("listitem").textContent ?? "", /keep/);
+});
+
+test("expanding and collapsing preserve an unsaved queue edit before sending it", async () => {
+  const { handle, executed, finish, text } = await renderQueue(true);
+  await act(async () => {
+    handle.submit(submission("running"));
+    handle.submit(submission("original"));
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Edit queued message 1" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Edit queued message" }), {
+    target: { value: "edited queue draft" },
+  });
+
+  for (const name of ["Expand input", "Collapse input"]) {
+    fireEvent.click(screen.getByRole("button", { name }));
+    assert.equal(
+      (screen.getByRole("textbox", { name: "Edit queued message" }) as HTMLTextAreaElement).value,
+      "edited queue draft",
+    );
+  }
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await finish("completed");
+  });
+  assert.deepEqual(executed.map(text), ["running", "edited queue draft"]);
 });
 
 test("removing an entry drops it from the list", async () => {

@@ -4,19 +4,24 @@ using Agw.Files.Application.Files;
 using Agw.Files.Infrastructure.Storage;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
+using Agw.Shared.Runtime;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Files.Tests;
 
+[Collection(nameof(IsolatedUserHomeCollection))]
 public class DependencyInjectionTests
 {
+    public static bool CanRedirectUserHome => IsolatedUserHome.IsSupported;
+
     [Fact]
     public async Task AddFiles_RegistersFileAppService()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
+        AddTestDataPaths(services);
         services.AddFiles(new ConfigurationBuilder().Build());
 
         await using var serviceProvider = services.BuildServiceProvider();
@@ -43,7 +48,12 @@ public class DependencyInjectionTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var projectId = Guid.CreateVersion7();
-        var workspace = Path.Combine(Path.GetTempPath(), "agw-files-tests", Guid.CreateVersion7().ToString("N"));
+        var workspace = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "agw-files-tests",
+            Guid.CreateVersion7().ToString("N")
+        );
         Directory.CreateDirectory(workspace);
 
         try
@@ -51,6 +61,7 @@ public class DependencyInjectionTests
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
+            AddTestDataPaths(services);
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(
                 new TestProjectFileSystemConfigurationProvider(workspace)
             );
@@ -61,11 +72,11 @@ public class DependencyInjectionTests
             var fileSystem = await resolver.ResolveAsync(projectId, cancellationToken);
             var cachedFileSystem = await resolver.ResolveAsync(projectId, cancellationToken);
 
-            var localFileSystem = Assert.IsType<LocalFileSystem>(fileSystem);
+            var localFileSystem = Assert.IsAssignableFrom<ILocalFileSystem>(fileSystem);
             Assert.Same(fileSystem, cachedFileSystem);
             Assert.Equal(
                 Path.GetFullPath(workspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                localFileSystem.NormalizedRoot
+                localFileSystem.ResolvePhysicalPath("") + Path.DirectorySeparatorChar
             );
         }
         finally
@@ -79,7 +90,12 @@ public class DependencyInjectionTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var projectId = Guid.CreateVersion7();
-        var root = Path.Combine(Path.GetTempPath(), "agw-files-tests", Guid.CreateVersion7().ToString("N"));
+        var root = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "agw-files-tests",
+            Guid.CreateVersion7().ToString("N")
+        );
         var firstWorkspace = Path.Combine(root, "first");
         var secondWorkspace = Path.Combine(root, "second");
         Directory.CreateDirectory(firstWorkspace);
@@ -91,6 +107,7 @@ public class DependencyInjectionTests
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
+            AddTestDataPaths(services);
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(configuration);
             services.AddFiles(new ConfigurationBuilder().Build());
 
@@ -104,7 +121,7 @@ public class DependencyInjectionTests
             Assert.NotSame(first, second);
             Assert.Equal(
                 Path.GetFullPath(secondWorkspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                Assert.IsType<LocalFileSystem>(second).NormalizedRoot
+                Assert.IsAssignableFrom<ILocalFileSystem>(second).ResolvePhysicalPath("") + Path.DirectorySeparatorChar
             );
         }
         finally
@@ -113,24 +130,21 @@ public class DependencyInjectionTests
         }
     }
 
-    [Fact]
+    [Fact(SkipUnless = nameof(CanRedirectUserHome), Skip = "The user profile does not follow HOME on Windows.")]
     public async Task ResolveAsync_ProjectWithoutWorkspace_CreatesDefaultWorkspaceDirectory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var projectId = Guid.CreateVersion7();
         var projectName = $"agw-files-tests-{Guid.CreateVersion7():N}";
-        var expectedWorkspace = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".agw",
-            "projects",
-            projectId.ToString("N")
-        );
+        using var home = new IsolatedUserHome("di-default-project");
+        var expectedWorkspace = Path.Combine(home.Root, ".agw", "projects", projectId.ToString("N"));
 
         try
         {
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
+            AddTestDataPaths(services, home.Root);
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(
                 new TestProjectFileSystemConfigurationProvider(null, projectName)
             );
@@ -141,11 +155,11 @@ public class DependencyInjectionTests
 
             var fileSystem = await resolver.ResolveAsync(projectId, cancellationToken);
 
-            var localFileSystem = Assert.IsType<LocalFileSystem>(fileSystem);
+            var localFileSystem = Assert.IsAssignableFrom<ILocalFileSystem>(fileSystem);
             Assert.True(Directory.Exists(expectedWorkspace));
             Assert.Equal(
                 Path.GetFullPath(expectedWorkspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                localFileSystem.NormalizedRoot
+                localFileSystem.ResolvePhysicalPath("") + Path.DirectorySeparatorChar
             );
         }
         finally
@@ -155,6 +169,12 @@ public class DependencyInjectionTests
                 Directory.Delete(expectedWorkspace, recursive: true);
             }
         }
+    }
+
+    private static void AddTestDataPaths(IServiceCollection services, string? userHome = null)
+    {
+        var root = userHome ?? Path.Combine(AppContext.BaseDirectory, ".scratch", "agw-files-data");
+        services.AddSingleton(AgwDataPaths.Resolve(Path.Combine(root, "data"), root));
     }
 
     private sealed class TestProjectFileSystemConfigurationProvider : IProjectFileSystemConfigurationProvider

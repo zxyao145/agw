@@ -44,6 +44,7 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
     private readonly Guid? _directoryId;
     private IAgwFileSystem? _confinedSource;
     private IAgwFileSystem? _confined;
+    private DirectoryIdentitySnapshot? _confinedDirectories;
 
     public ProjectAgentFileStore(IAgwFileSystemResolver resolver, Guid projectId)
         : this(resolver, projectId, null) { }
@@ -277,10 +278,12 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
 
     /// <summary>
     /// 解析 Project 目录的文件系统，并把它限制在 workspace 与 additional directories 之内；没有 workspace 快照时只允许
-    /// 该 Project 目录本身。受限文件系统按解析得到的实例缓存，resolver 返回新实例时重新创建。
+    /// 该 Project 目录本身。每次解析都先创建缺失的允许目录；受限文件系统按解析得到的实例与允许目录的物理身份缓存，resolver 返回
+    /// 新实例或任一允许目录被重新创建时重新创建。
     /// Resolves the Project directory's file system and confines it to the workspace and additional directories; without
-    /// a workspace snapshot only that Project directory itself is allowed. The confined file system is cached per
-    /// resolved instance and recreated when the resolver returns a new one.
+    /// a workspace snapshot only that Project directory itself is allowed. Every resolution first creates missing allowed
+    /// directories; the confined file system is cached per resolved instance and the physical identities of the allowed
+    /// directories, and is recreated when the resolver returns a new instance or any allowed directory was recreated.
     /// </summary>
     private async Task<IAgwFileSystem> ResolveAsync(CancellationToken cancellationToken)
     {
@@ -292,22 +295,32 @@ public sealed class ProjectAgentFileStore : AgwAgentFileStore
                         .ResolveSnapshotAsync(_projectId, _workspaceSnapshot, _directoryId, cancellationToken)
                         .ConfigureAwait(false)
             ) ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
-        if (!ReferenceEquals(_confinedSource, projectFileSystem) || _confined == null)
+        var localFileSystem =
+            projectFileSystem as ILocalFileSystem
+            ?? throw new AgwException(
+                ErrorCodes.FilePathOutsideRoot,
+                "Project directory access can only be confined on a local file system."
+            );
+        IReadOnlyList<string> allowedRoots =
+            _workspaceSnapshot == null
+                ? [localFileSystem.ResolvePhysicalPath(string.Empty)]
+                :
+                [
+                    _workspaceSnapshot.Workspace,
+                    .. _workspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
+                ];
+        foreach (var root in allowedRoots)
         {
-            var localFileSystem =
-                projectFileSystem as ILocalFileSystem
-                ?? throw new AgwException(
-                    ErrorCodes.FilePathOutsideRoot,
-                    "Project directory access can only be confined on a local file system."
-                );
-            IReadOnlyList<string> allowedRoots =
-                _workspaceSnapshot == null
-                    ? [localFileSystem.ResolvePhysicalPath(string.Empty)]
-                    :
-                    [
-                        _workspaceSnapshot.Workspace,
-                        .. _workspaceSnapshot.AdditionalDirectories.Select(static directory => directory.Path),
-                    ];
+            ProjectWorkspacePaths.EnsureCreated(root);
+        }
+
+        if (
+            !ReferenceEquals(_confinedSource, projectFileSystem)
+            || _confined == null
+            || _confinedDirectories?.IsCurrent() != true
+        )
+        {
+            _confinedDirectories = DirectoryIdentitySnapshot.Capture(allowedRoots);
             _confined = localFileSystem.Confine(allowedRoots);
             _confinedSource = projectFileSystem;
         }
