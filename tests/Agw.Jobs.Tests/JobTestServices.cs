@@ -63,6 +63,8 @@ internal static class JobTestServices
         services.AddScoped<ISkillReferenceFacade, SkillReferenceFacade>();
         services.AddScoped<IConnectionReferenceFacade, ConnectionReferenceFacade>();
         services.AddScoped<ProjectResourceBindingDomainService>();
+        services.AddHybridCache();
+        services.AddSingleton<ProjectOwnershipCache>();
         services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
         services.AddScoped<IProjectRuntimeFacade, ProjectRuntimeFacade>();
