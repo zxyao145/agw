@@ -3031,6 +3031,263 @@ export interface paths {
             "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
           };
         };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/tree": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          projectId: string;
+          repository: string;
+          branch: string;
+          path?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryTree"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryTree"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryTree"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/changes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          projectId: string;
+          repository: string;
+          branch: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryChange[]"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryChange[]"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryChange[]"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/blob": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          projectId: string;
+          repository: string;
+          branch: string;
+          path: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryBlob"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryBlob"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryBlob"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
       };
     };
     put?: never;
@@ -3059,9 +3316,9 @@ export interface paths {
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/json": components["schemas"]["CloneRepositoryRequest"];
+          "text/json": components["schemas"]["CloneRepositoryRequest"];
+          "application/*+json": components["schemas"]["CloneRepositoryRequest"];
         };
       };
       responses: {
@@ -3074,6 +3331,50 @@ export interface paths {
             "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Bad Gateway */
+        502: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -3102,9 +3403,9 @@ export interface paths {
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/json": components["schemas"]["CreateFeatureRequest"];
+          "text/json": components["schemas"]["CreateFeatureRequest"];
+          "application/*+json": components["schemas"]["CreateFeatureRequest"];
         };
       };
       responses: {
@@ -3117,6 +3418,39 @@ export interface paths {
             "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -3145,9 +3479,9 @@ export interface paths {
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/json": components["schemas"]["SwitchWorktreeBranchRequest"];
+          "text/json": components["schemas"]["SwitchWorktreeBranchRequest"];
+          "application/*+json": components["schemas"]["SwitchWorktreeBranchRequest"];
         };
       };
       responses: {
@@ -3160,6 +3494,39 @@ export interface paths {
             "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -3188,9 +3555,9 @@ export interface paths {
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
-          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/json": components["schemas"]["WorktreeRequest"];
+          "text/json": components["schemas"]["WorktreeRequest"];
+          "application/*+json": components["schemas"]["WorktreeRequest"];
         };
       };
       responses: {
@@ -3203,6 +3570,202 @@ export interface paths {
             "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
             "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RootRepositoryRequest"];
+          "text/json": components["schemas"]["RootRepositoryRequest"];
+          "application/*+json": components["schemas"]["RootRepositoryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Bad Gateway */
+        502: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/restore": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RootRepositoryRequest"];
+          "text/json": components["schemas"]["RootRepositoryRequest"];
+          "application/*+json": components["schemas"]["RootRepositoryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -6332,6 +6895,27 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfRepositoryBlob: {
+      data?: null | components["schemas"]["RepositoryBlob"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfRepositoryChange[]": {
+      data?: null | components["schemas"]["RepositoryChange"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfRepositoryTree: {
+      data?: null | components["schemas"]["RepositoryTree"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfRepositoryWorkspaceState: {
       data?: null | components["schemas"]["RepositoryWorkspaceState"];
       /** Format: int32 */
@@ -6409,6 +6993,13 @@ export interface components {
     ChangePasswordRequest: {
       currentPassword: null | string;
       newPassword: string;
+    };
+    CloneRepositoryRequest: {
+      /** Format: uuid */
+      projectId: string;
+      url: string;
+      /** @description 目录名；省略时从 URL 推导。Directory name; derived from the URL when omitted. */
+      name?: null | string;
     };
     ConnectionCreateRequest: {
       pluginId: string;
@@ -6558,6 +7149,20 @@ export interface components {
       inputMessageId: string;
       inputSummary: string;
     };
+    CreateFeatureRequest: {
+      /** Format: uuid */
+      projectId: string;
+      /** @description 新 feature 的名称，前面会加上 `yyMMdd-`。The new feature name, prefixed with `yyMMdd-`. */
+      name?: null | string;
+      /** @description 已有 feature 的完整名称；设置时向其添加仓库。An existing feature's full name; adds repositories to it when set. */
+      feature?: null | string;
+      /**
+       * Format: date
+       * @description 客户端当地日期；省略时使用 UTC 日期。The client's local date; defaults to the UTC date.
+       */
+      date?: null | string;
+      repositories?: string[];
+    };
     CreateTokenRequest: {
       name: string;
     };
@@ -6621,11 +7226,19 @@ export interface components {
       defaultExtra: string;
       supportedProviderTypes: components["schemas"]["ProviderType"][];
     };
+    /** @description `.worktrees/&lt;feature&gt;/&lt;repo&gt;` 下的一个 worktree。A worktree at `.worktrees/&lt;feature&gt;/&lt;repo&gt;`. */
     FeatureRepository: {
       name: string;
       branch: string;
       dirty: boolean;
-      branches?: string[];
+      /**
+       * Format: int32
+       * @description 相对主工作副本默认分支的领先、落后提交数。Commits ahead of and behind the root checkout's default branch.
+       */
+      ahead: number;
+      /** Format: int32 */
+      behind: number;
+      error?: null | string;
     };
     /**
      * @description 文件在 diff 范围内的改动：unified diff 文字与两侧全文。
@@ -7411,17 +8024,39 @@ export interface components {
       version: null | number | string;
       items: components["schemas"]["QuickPromptItem"][];
     };
-    RepositoryWorkspaceRequest: {
-      /** Format: uuid */
-      projectId: string;
+    /**
+     * @description 分支中文件的已提交内容；二进制或超过大小上限时 string? RepositoryBlob.Content 为 null。A file's committed content in a branch;
+     *     string? RepositoryBlob.Content is null for binary files or above the size limit.
+     */
+    RepositoryBlob: {
+      content: null | string;
+      /** Format: int64 */
+      size: number | string;
+      isBinary: boolean;
+      tooLarge: boolean;
+    };
+    /**
+     * @description 未提交的改动；string RepositoryChange.Status 为 modified、added、deleted、renamed、untracked 或 conflicted。An uncommitted
+     *     change; string RepositoryChange.Status is modified, added, deleted, renamed, untracked or conflicted.
+     */
+    RepositoryChange: {
+      path: string;
+      status: string;
+    };
+    /**
+     * @description 分支的一层目录。string? RepositoryTree.Checkout 为检出该分支的目录（相对 Project 根目录），此时条目来自磁盘；为 null 时条目来自
+     *     提交。One directory level of a branch. string? RepositoryTree.Checkout is the directory where the branch is checked out
+     *     (relative to the Project root), and the entries then come from the disk; when null they come from the commit.
+     */
+    RepositoryTree: {
+      checkout: null | string;
+      entries: components["schemas"]["RepositoryTreeEntry"][];
+    };
+    /** @description 分支中的一个目录项；路径相对仓库根目录。A directory entry of a branch; the path is relative to the repository. */
+    RepositoryTreeEntry: {
       name: string;
-      url: string;
-      feature: string;
-      branch: string;
-      createBranch: boolean;
-      /** Format: date */
-      date?: null | string;
-      repositories?: string[];
+      path: string;
+      isDirectory: boolean;
     };
     RepositoryWorkspaceState: {
       repositories: components["schemas"]["WorkspaceRepository"][];
@@ -7432,6 +8067,11 @@ export interface components {
      * @enum {unknown}
      */
     ResultFormat: "markdown" | "json";
+    RootRepositoryRequest: {
+      /** Format: uuid */
+      projectId: string;
+      repository: string;
+    };
     SecretFieldStateResponse: {
       configured: boolean;
     };
@@ -7462,6 +8102,14 @@ export interface components {
     };
     /** Format: binary */
     Stream: string;
+    SwitchWorktreeBranchRequest: {
+      /** Format: uuid */
+      projectId: string;
+      feature: string;
+      repository: string;
+      branch: string;
+      createBranch: boolean;
+    };
     TaskExecutionStatus: number;
     ToolBlockDefinition:
       | components["schemas"]["ToolBlockDefinitionTodoToolBlockDefinition"]
@@ -7634,11 +8282,32 @@ export interface components {
       name: string;
       repositories: components["schemas"]["FeatureRepository"][];
     };
+    /** @description 项目根目录下的主工作副本（含 `.git` 目录的子目录）。A root checkout: a project subdirectory with a `.git` directory. */
     WorkspaceRepository: {
       name: string;
+      /** @description 远程默认分支；没有 `origin/HEAD` 时为当前分支。The remote default branch, or the current branch without `origin/HEAD`. */
       defaultBranch: string;
+      /** @description 当前分支；分离 HEAD 时为空。The current branch; empty when HEAD is detached. */
       branch: string;
       dirty: boolean;
+      /**
+       * Format: int32
+       * @description 相对上游分支的领先、落后提交数；没有上游时为 null。Commits ahead of and behind the upstream; null without one.
+       */
+      ahead?: number;
+      /** Format: int32 */
+      behind?: number;
+      branches?: string[];
+      /** @description 远程跟踪分支，例如 `origin/main`。Remote-tracking branches such as `origin/main`. */
+      remoteBranches?: string[];
+      /** @description 读取失败的原因；非空时其他状态字段不可信。Why reading failed; other status fields are unreliable when set. */
+      error?: null | string;
+    };
+    WorktreeRequest: {
+      /** Format: uuid */
+      projectId: string;
+      feature: string;
+      repository: string;
     };
   };
   responses: never;

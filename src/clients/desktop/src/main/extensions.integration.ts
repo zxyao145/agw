@@ -531,15 +531,16 @@ async function textCodecBridge(): Promise<void> {
 async function bareRepositoryWorkflow(): Promise<void> {
   await goToChat();
   await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]`);
-  const frame = await untilFrame(EXTENSION_IDS.bareRepository, "mainView");
+  const sidebar = await untilFrame(EXTENSION_IDS.bareRepository, "sidebarView");
   await until(
     () =>
       evalFrame<boolean>(
-        frame,
-        'document.querySelector("main")?.getAttribute("aria-busy") === "false"',
+        sidebar,
+        'Boolean(document.querySelector(".sidebar-empty button.primary"))',
       ),
-    "the repository workspace",
+    "the empty repository sidebar",
   );
+  let frame!: FrameHandle;
   const seed = resolve(".scratch/extension-tests/repository-seed");
   await mkdir(seed, { recursive: true });
   const git = (cwd: string, ...args: string[]) =>
@@ -589,71 +590,84 @@ async function bareRepositoryWorkflow(): Promise<void> {
         }),
       "the Git test remote",
     );
-    for (const name of ["module-alpha", "module-beta"]) {
-      await evalFrame(
+    // 受控输入框需要原生 setter 加 input 事件。Controlled inputs need the native setter plus an input event.
+    const fill = (fields: Record<string, string>) =>
+      evalFrame(
         frame,
         `(() => {
-        const form = document.querySelector('input[name="url"]').form;
-        form.elements.name.value = ${JSON.stringify(name)};
-        form.elements.url.value = ${JSON.stringify(`git://127.0.0.1:${port}/repository-seed`)};
-        form.requestSubmit();
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+        for (const [name, value] of Object.entries(${JSON.stringify(fields)})) {
+          const input = document.querySelector(\`dialog input[name="\${name}"]\`);
+          setter.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
       })()`,
       );
+    const submitDialog = async (label: string) => {
+      await evalFrame(frame, 'document.querySelector("dialog form").requestSubmit()');
       await until(
         () =>
           evalFrame<boolean>(
             frame,
-            `document.querySelector('main').getAttribute('aria-busy') === 'false' && [...document.querySelectorAll('li strong')].some(e => e.textContent === ${JSON.stringify(name)})`,
+            '!document.querySelector("dialog") && document.querySelector("main").getAttribute("aria-busy") === "false"',
           ),
-        `${name} cloned through the extension`,
+        label,
       );
+    };
+    const url = `git://127.0.0.1:${port}/repository-seed`;
+    // 侧边栏的 Clone 打开管理视图并显示 Clone 弹窗。The sidebar's Clone opens the management view with its dialog.
+    await clickInFrame(sidebar, 'document.querySelector(".sidebar-empty button.primary")');
+    frame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "repositories");
+    await until(
+      () => evalFrame<boolean>(frame, 'Boolean(document.querySelector("dialog input[name=url]"))'),
+      "the clone dialog opened from the sidebar",
+    );
+    await fill({ url, name: "module-alpha" });
+    await submitDialog("module-alpha cloned through the extension");
+    await clickInFrame(frame, 'document.querySelector(".panel-head .actions button")');
+    await fill({ url, name: "module-beta" });
+    await submitDialog("module-beta cloned through the extension");
+    assert.deepEqual(
+      await evalFrame<string[]>(
+        frame,
+        '[...document.querySelectorAll("li[data-repository]")].map((item) => item.dataset.repository)',
+      ),
+      ["module-alpha", "module-beta"],
+    );
+    for (const name of ["module-alpha", "module-beta"]) {
       git(join(config.projectDirectory, name), "config", "user.name", "Agw Tests");
       git(join(config.projectDirectory, name), "config", "user.email", "tests@agw.local");
     }
-    await evalFrame(
-      frame,
-      `(() => {
-      const form = document.querySelector('input[name="repositories"]').form;
-      form.elements.name.value = 'add-extensions';
-      for (const input of form.querySelectorAll('input[name="repositories"]')) input.checked = true;
-      form.requestSubmit();
-    })()`,
-    );
-    await until(
-      () =>
-        evalFrame<boolean>(
-          frame,
-          'document.querySelectorAll(".worktree").length === 2 && document.querySelector("main").getAttribute("aria-busy") === "false"',
-        ),
-      "two feature worktrees",
-    );
+    await clickInFrame(frame, "document.querySelector('button[aria-label=\"New feature\"]')");
+    await fill({ name: "add-extensions" });
+    await clickInFrame(frame, 'document.querySelector("label.choice.all input")');
+    await submitDialog("two feature worktrees");
     const feature = await evalFrame<string>(
       frame,
-      'document.querySelector("article h3").textContent',
+      'document.querySelector(".nav-item[data-feature][aria-current=page]").dataset.feature',
     );
     assert.match(feature, /^\d{6}-add-extensions$/u);
+    assert.equal(
+      await evalFrame<number>(frame, 'document.querySelectorAll("li[data-repository]").length'),
+      2,
+    );
     const tree = join(config.projectDirectory, ".worktrees", feature, "module-alpha");
     await writeFile(join(tree, "feature.txt"), "feature content\n");
     git(tree, "add", ".");
     git(tree, "commit", "-m", "Add feature");
-    await evalFrame(
-      frame,
-      `(() => {
-      const form = document.querySelector('.worktree input[name="branch"]').form;
-      form.elements.branch.value = 'alternate-feature';
-      form.elements.create.checked = true;
-      form.requestSubmit();
-    })()`,
-    );
+    const row = "document.querySelector('li[data-repository=\"module-alpha\"]')";
+    await clickInFrame(frame, `${row}.querySelector(".actions button")`);
+    await fill({ branch: "alternate-feature" });
+    await submitDialog("the worktree branch switched");
     await until(
       () =>
         evalFrame<boolean>(
           frame,
-          'document.querySelector(".worktree p").textContent.includes("alternate-feature") && document.querySelector("main").getAttribute("aria-busy") === "false"',
+          `${row}.querySelector(".badges").textContent.includes("alternate-feature") && !${row}.querySelector("button.primary").disabled`,
         ),
-      "the worktree branch switched",
+      "the switched branch ready to merge",
     );
-    await clickInFrame(frame, `[...document.querySelectorAll('.worktree > button')][0]`);
+    await clickInFrame(frame, `${row}.querySelector("button.primary")`);
     await expectConfirmation(
       "message",
       ["Bare Repository", "Merge alternate-feature into module-alpha/trunk?"],
@@ -664,7 +678,7 @@ async function bareRepositoryWorkflow(): Promise<void> {
       () =>
         evalFrame<boolean>(
           frame,
-          'document.querySelector("[role=status]").textContent.includes("Merged module-alpha into trunk")',
+          'document.querySelector("[role=status]").textContent.includes("Merged alternate-feature into module-alpha/trunk")',
         ),
       "the merge completed",
     );
@@ -672,15 +686,77 @@ async function bareRepositoryWorkflow(): Promise<void> {
     assert.equal(await readFile(join(main, "feature.txt"), "utf8"), "feature content\n");
     assert.equal(git(main, "show", "-s", "--format=%P", "HEAD").split(" ").length, 2);
     assert.equal(git(main, "branch", "--show-current"), "trunk");
-    assert.equal(
-      await evalFrame<number>(
-        frame,
-        'document.querySelectorAll("section:first-of-type input[name=branch]").length',
-      ),
-      0,
-    );
     pass(
       "Bare Repository clones two default branches, creates feature worktrees, switches a worktree branch and merges with two parents through the extension UI",
+    );
+
+    const choose = (label: string, value: string) =>
+      evalFrame(
+        sidebar,
+        `(() => {
+        const select = document.querySelector('select[aria-label="${label}"]');
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, ${JSON.stringify(value)});
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+      );
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelectorAll("select[aria-label=Repository] option").length === 2',
+        ),
+      "both repositories in the sidebar",
+    );
+    await choose("Repository", "module-alpha");
+    await choose("Branch", feature);
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector(".location").textContent.includes("Read-only") && Boolean(document.querySelector(\'.tree-item[data-path="feature.txt"]\'))',
+        ),
+      "the committed tree of a branch that is not checked out",
+    );
+    await clickInFrame(sidebar, "document.querySelector('.tree-item[data-path=\"feature.txt\"]')");
+    const fileFrame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "file");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          fileFrame,
+          '[...document.querySelectorAll(".line")].some((line) => line.textContent === "feature content")',
+        ),
+      "the read-only file view",
+    );
+    await choose("Branch", "alternate-feature");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          `document.querySelector(".location code")?.textContent === ${JSON.stringify(`.worktrees/${feature}/module-alpha`)}`,
+        ),
+      "the checked-out worktree in the sidebar",
+    );
+    await writeFile(join(tree, "draft.md"), "draft\n");
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector("[role=tab] .count")?.textContent === "1"',
+        ),
+      "one uncommitted change",
+    );
+    await clickInFrame(sidebar, '[...document.querySelectorAll("[role=tab]")][1]');
+    assert.equal(
+      await evalFrame<string>(
+        sidebar,
+        'document.querySelector(".changes .tree-item .name").textContent',
+      ),
+      "draft.md",
+    );
+    pass(
+      "the Bare Repository sidebar browses a branch that is not checked out read-only and lists a worktree's uncommitted changes",
     );
   } finally {
     daemon.kill();

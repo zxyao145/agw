@@ -11,7 +11,15 @@
         "id": "repositories",
         "title": "Bare Repository",
         "icon": "GitBranch",
-        "action": { "type": "openMainView", "view": "repositories" }
+        "action": { "type": "toggleSidebarView", "view": "explorer" }
+      }
+    ],
+    "sidebarViews": [
+      {
+        "id": "explorer",
+        "title": "Repositories",
+        "icon": "GitBranch",
+        "entry": "sidebar.html"
       }
     ],
     "mainViews": [
@@ -20,6 +28,12 @@
         "title": "Bare Repository",
         "icon": "GitBranch",
         "entry": "index.html"
+      },
+      {
+        "id": "file",
+        "title": "Repository File",
+        "icon": "FileCode",
+        "entry": "file.html"
       }
     ]
   },

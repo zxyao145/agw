@@ -3928,6 +3928,66 @@
           }
         ],
         "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -3944,6 +4004,369 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/tree": {
+      "get": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryTree"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryTree"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryTree"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/changes": {
+      "get": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryChange[]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryChange[]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryChange[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/blob": {
+      "get": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repository",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryBlob"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryBlob"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryBlob"
                 }
               }
             }
@@ -3960,23 +4383,83 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/CloneRepositoryRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/CloneRepositoryRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/CloneRepositoryRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -3996,6 +4479,26 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
           }
         }
       }
@@ -4009,23 +4512,83 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/CreateFeatureRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/CreateFeatureRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/CreateFeatureRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -4058,23 +4621,83 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/SwitchWorktreeBranchRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/SwitchWorktreeBranchRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/SwitchWorktreeBranchRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -4107,23 +4730,321 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/WorktreeRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/WorktreeRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+                "$ref": "#/components/schemas/WorktreeRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/sync": {
+      "post": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootRepositoryRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootRepositoryRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootRepositoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/restore": {
+      "post": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootRepositoryRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootRepositoryRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootRepositoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -10538,6 +11459,101 @@
           }
         }
       },
+      "ApiResultOfRepositoryBlob": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepositoryBlob"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfRepositoryChange[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RepositoryChange"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfRepositoryTree": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepositoryTree"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfRepositoryWorkspaceState": {
         "required": [
           "code",
@@ -10890,6 +11906,29 @@
           },
           "newPassword": {
             "type": "string"
+          }
+        }
+      },
+      "CloneRepositoryRequest": {
+        "required": [
+          "projectId",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "目录名；省略时从 URL 推导。Directory name; derived from the URL when omitted."
           }
         }
       },
@@ -11322,6 +12361,46 @@
         },
         "description": "一个 Turn 的摘要。Status 取 accepted / running / completed / failed / interrupted，AgentType 取 agent / agentflow。\nThe summary of one turn. Status is accepted / running / completed / failed / interrupted, AgentType is agent / agentflow."
       },
+      "CreateFeatureRequest": {
+        "required": [
+          "projectId"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "新 feature 的名称，前面会加上 `yyMMdd-`。The new feature name, prefixed with `yyMMdd-`."
+          },
+          "feature": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "已有 feature 的完整名称；设置时向其添加仓库。An existing feature's full name; adds repositories to it when set."
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "客户端当地日期；省略时使用 UTC 日期。The client's local date; defaults to the UTC date.",
+            "format": "date"
+          },
+          "repositories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "CreateTokenRequest": {
         "required": [
           "name"
@@ -11545,7 +12624,9 @@
         "required": [
           "name",
           "branch",
-          "dirty"
+          "dirty",
+          "ahead",
+          "behind"
         ],
         "type": "object",
         "properties": {
@@ -11558,13 +12639,23 @@
           "dirty": {
             "type": "boolean"
           },
-          "branches": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "ahead": {
+            "type": "integer",
+            "description": "相对主工作副本默认分支的领先、落后提交数。Commits ahead of and behind the root checkout's default branch.",
+            "format": "int32"
+          },
+          "behind": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
-        }
+        },
+        "description": "`.worktrees/&lt;feature&gt;/&lt;repo&gt;` 下的一个 worktree。A worktree at `.worktrees/&lt;feature&gt;/&lt;repo&gt;`."
       },
       "FileDiffResponse": {
         "required": [
@@ -14547,50 +15638,95 @@
           }
         }
       },
-      "RepositoryWorkspaceRequest": {
+      "RepositoryBlob": {
         "required": [
-          "projectId",
-          "name",
-          "url",
-          "feature",
-          "branch",
-          "createBranch"
+          "content",
+          "size",
+          "isBinary",
+          "tooLarge"
         ],
         "type": "object",
         "properties": {
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "feature": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "createBranch": {
-            "type": "boolean"
-          },
-          "date": {
+          "content": {
             "type": [
               "null",
               "string"
-            ],
-            "format": "date"
+            ]
           },
-          "repositories": {
+          "size": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "isBinary": {
+            "type": "boolean"
+          },
+          "tooLarge": {
+            "type": "boolean"
+          }
+        },
+        "description": "分支中文件的已提交内容；二进制或超过大小上限时 string? RepositoryBlob.Content 为 null。A file's committed content in a branch;\nstring? RepositoryBlob.Content is null for binary files or above the size limit."
+      },
+      "RepositoryChange": {
+        "required": [
+          "path",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "description": "未提交的改动；string RepositoryChange.Status 为 modified、added、deleted、renamed、untracked 或 conflicted。An uncommitted\nchange; string RepositoryChange.Status is modified, added, deleted, renamed, untracked or conflicted."
+      },
+      "RepositoryTree": {
+        "required": [
+          "checkout",
+          "entries"
+        ],
+        "type": "object",
+        "properties": {
+          "checkout": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entries": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RepositoryTreeEntry"
             }
           }
-        }
+        },
+        "description": "分支的一层目录。string? RepositoryTree.Checkout 为检出该分支的目录（相对 Project 根目录），此时条目来自磁盘；为 null 时条目来自\n提交。One directory level of a branch. string? RepositoryTree.Checkout is the directory where the branch is checked out\n(relative to the Project root), and the entries then come from the disk; when null they come from the commit."
+      },
+      "RepositoryTreeEntry": {
+        "required": [
+          "name",
+          "path",
+          "isDirectory"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "isDirectory": {
+            "type": "boolean"
+          }
+        },
+        "description": "分支中的一个目录项；路径相对仓库根目录。A directory entry of a branch; the path is relative to the repository."
       },
       "RepositoryWorkspaceState": {
         "required": [
@@ -14619,6 +15755,22 @@
           "json"
         ],
         "description": "The presentation format of an Agent's final Result."
+      },
+      "RootRepositoryRequest": {
+        "required": [
+          "projectId",
+          "repository"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": "string"
+          }
+        }
       },
       "SecretFieldStateResponse": {
         "required": [
@@ -14749,6 +15901,34 @@
         ],
         "type": "string",
         "format": "binary"
+      },
+      "SwitchWorktreeBranchRequest": {
+        "required": [
+          "projectId",
+          "feature",
+          "repository",
+          "branch",
+          "createBranch"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "feature": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "createBranch": {
+            "type": "boolean"
+          }
+        }
       },
       "TaskExecutionStatus": {
         "type": "integer"
@@ -15433,13 +16613,65 @@
             "type": "string"
           },
           "defaultBranch": {
-            "type": "string"
+            "type": "string",
+            "description": "远程默认分支；没有 `origin/HEAD` 时为当前分支。The remote default branch, or the current branch without `origin/HEAD`."
           },
           "branch": {
-            "type": "string"
+            "type": "string",
+            "description": "当前分支；分离 HEAD 时为空。The current branch; empty when HEAD is detached."
           },
           "dirty": {
             "type": "boolean"
+          },
+          "ahead": {
+            "type": "integer",
+            "description": "相对上游分支的领先、落后提交数；没有上游时为 null。Commits ahead of and behind the upstream; null without one.",
+            "format": "int32"
+          },
+          "behind": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "remoteBranches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "远程跟踪分支，例如 `origin/main`。Remote-tracking branches such as `origin/main`."
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "读取失败的原因；非空时其他状态字段不可信。Why reading failed; other status fields are unreliable when set."
+          }
+        },
+        "description": "项目根目录下的主工作副本（含 `.git` 目录的子目录）。A root checkout: a project subdirectory with a `.git` directory."
+      },
+      "WorktreeRequest": {
+        "required": [
+          "projectId",
+          "feature",
+          "repository"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "feature": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
           }
         }
       }

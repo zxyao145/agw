@@ -232,6 +232,11 @@ export function createExtensionApi(
       createFeature: (input) => call("repositories.feature", input),
       switchBranch: (input) => call("repositories.switch", input),
       merge: (input) => call("repositories.merge", input),
+      sync: (input) => call("repositories.sync", input),
+      restoreDefaultBranch: (input) => call("repositories.restore", input),
+      tree: (input) => call("repositories.tree", input),
+      changes: (input) => call("repositories.changes", input),
+      blob: (input) => call("repositories.blob", input),
     },
     a2a: {
       listAgents: (options) => call("a2a.listAgents", {}, options?.signal),

@@ -759,23 +759,35 @@ export class ExtensionBridgeBroker {
         );
       },
       ...Object.fromEntries(
-        (["clone", "feature", "switch", "merge"] as const).map((operation) => [
+        (["clone", "feature", "switch", "merge", "sync", "restore"] as const).map((operation) => [
           `repositories.${operation}`,
-          ((connection, params, signal) => {
+          ((connection, params: Record<string, unknown>, signal) => {
             this.requirePermission(connection, "project.repositories");
             return this.tracked(connection, signal, (requestSignal) =>
               context.request(
                 (contextSignal) =>
+                  // 请求体由 Server 按操作校验。The Server validates each operation's body.
                   apiPost(`/api/files/repositories/${operation}`, {
-                    body: {
-                      projectId: "",
-                      name: "",
-                      url: "",
-                      feature: "",
-                      branch: "",
-                      createBranch: false,
-                      ...(params as Record<string, unknown>),
-                    },
+                    body: params as never,
+                    signal: contextSignal,
+                  }),
+                requestSignal,
+              ),
+            );
+          }) satisfies RequestHandler,
+        ]),
+      ),
+      ...Object.fromEntries(
+        (["tree", "changes", "blob"] as const).map((operation) => [
+          `repositories.${operation}`,
+          ((connection, params: Record<string, string>, signal) => {
+            this.requirePermission(connection, "project.repositories");
+            return this.tracked(connection, signal, (requestSignal) =>
+              context.request(
+                (contextSignal) =>
+                  // 查询参数由 Server 校验。The Server validates the query.
+                  apiGet(`/api/files/repositories/${operation}`, {
+                    params: { query: params as never },
                     signal: contextSignal,
                   }),
                 requestSignal,

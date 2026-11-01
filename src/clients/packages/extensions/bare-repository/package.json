@@ -13,6 +13,8 @@
   "devDependencies": {
     "@agw/extension-sdk": "workspace:*",
     "@vitejs/plugin-react": "catalog:",
+    "lucide-react": "catalog:",
+    "radix-ui": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "vite": "catalog:"

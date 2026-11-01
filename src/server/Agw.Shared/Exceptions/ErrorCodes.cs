@@ -557,6 +557,16 @@ public static class ErrorCodes
         "File changed since it was read. Reload it and try again.",
         HttpStatusCode.Conflict
     );
+    public static readonly ErrorCode RepositoryStateConflict = new(
+        409_0025,
+        "The repository state does not allow this operation.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode RepositoryMergeConflict = new(
+        409_0026,
+        "The merge has conflicts. Merge the default branch into the feature branch and resolve them first.",
+        HttpStatusCode.Conflict
+    );
 
     public static readonly ErrorCode FileTooLarge = new(
         413_0001,
@@ -771,6 +781,11 @@ public static class ErrorCodes
     public static readonly ErrorCode RemoteSkillResponseInvalid = new(
         502_0005,
         "The remote skill ZIP archive is invalid.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode GitRemoteOperationFailed = new(
+        502_0006,
+        "The Git remote operation failed.",
         HttpStatusCode.BadGateway
     );
 
