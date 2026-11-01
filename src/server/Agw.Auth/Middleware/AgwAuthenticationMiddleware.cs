@@ -38,15 +38,20 @@ public sealed class AgwAuthenticationMiddleware
         if (context.User.Identity?.IsAuthenticated != true)
         {
             var bearerToken = ResolveBearerToken(context);
+            var snapshot = stateStore.GetAuthenticationSnapshot();
+            // 首次 Setup 完成后才查询 API Token。
+            // Query API tokens after the initial Setup has completed.
             var tokenIdentity =
-                bearerToken == null ? null : await tokenStore.ValidateTokenAsync(bearerToken, context.RequestAborted);
+                bearerToken != null && snapshot is { PasswordHash: not null, SessionVersion: > 0 }
+                    ? await tokenStore.ValidateTokenAsync(bearerToken, context.RequestAborted)
+                    : null;
             if (tokenIdentity != null)
             {
                 context.User = CreatePrincipal(
                     tokenIdentity.UserId,
                     tokenIdentity.DisplayName ?? Constants.ApiTokenUserName,
                     AgwAuthDefaults.BearerScheme,
-                    stateStore.GetAuthenticationSnapshot().SessionVersion
+                    snapshot.SessionVersion
                 );
                 if (tokenIdentity.LoginProvider is { } provider)
                     ((ClaimsIdentity)context.User.Identity!).AddClaim(new Claim(OidcPrincipal.ProviderClaim, provider));
@@ -69,7 +74,7 @@ public sealed class AgwAuthenticationMiddleware
                     Constants.AdminUserId,
                     Constants.AdminUserName,
                     AgwAuthDefaults.LocalTrustedScheme,
-                    stateStore.GetAuthenticationSnapshot().SessionVersion
+                    snapshot.SessionVersion
                 );
             }
         }

@@ -1,7 +1,14 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using Agw.Auth.Api;
+using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Files;
+using Agw.Host.Controllers;
+using Agw.Host.Data;
 using Agw.Host.Hosting;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
@@ -12,11 +19,15 @@ using Agw.Projects.Infrastructure;
 using Agw.Settings;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
+using Agw.Setup.Middleware;
 using Agw.Setup.Services;
+using Agw.Shared;
 using Agw.Shared.Contracts.Persistence;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Results;
 using Agw.Shared.Runtime;
+using Bens.Results;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -42,6 +53,61 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
     {
         _paths = AgwDataPaths.Resolve(Path.Combine(_root, "data"), Path.Combine(_root, "home"));
         _paths.EnsureCreated();
+    }
+
+    [Fact]
+    public async Task ServerInfo_BearerTokenBeforeSetup_ReturnsUninitialized()
+    {
+        await using var app = await CreateAuthenticationAppAsync();
+        using var client = app.GetTestClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            "agw_previous-server-token"
+        );
+
+        using var response = await client.GetAsync("/api/server-info", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.False(body.RootElement.GetProperty("data").GetProperty("initialized").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Authentication_SetupCompleted_ValidatesPersistedBearerToken()
+    {
+        await using var app = await CreateAuthenticationAppAsync();
+        using var client = app.GetTestClient();
+        using var beforeSetup = await client.GetAsync("/api/server-info", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, beforeSetup.StatusCode);
+        await using var scope = app.Services.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<ISetupInitializationService>()
+            .InitializeAsync(
+                new SetupRequest { AdminPassword = "administrator-password" },
+                TestContext.Current.CancellationToken
+            );
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(
+                new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Constants.AdminUserId)], "Test")
+            )
+        );
+        var token = await scope
+            .ServiceProvider.GetRequiredService<IApiTokenStore>()
+            .CreateTokenAsync("setup-test", TestContext.Current.CancellationToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+
+        using var response = await client.GetAsync("/api/auth/session", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+        );
+        var session = body.RootElement.GetProperty("data");
+        Assert.True(session.GetProperty("authenticated").GetBoolean());
+        Assert.Equal("bearer", session.GetProperty("accessMode").GetString());
+        Assert.Equal(Constants.AdminUserId, session.GetProperty("userId").GetString());
     }
 
     [Fact]
@@ -182,6 +248,33 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         Assert.Equal(1, bootstrapper.Invocations);
         Assert.False(provider.GetRequiredService<IServerInitializationState>().IsInitialized);
         Assert.False(File.Exists(Path.Combine(_paths.Root, "server-state.json")));
+    }
+
+    private async Task<WebApplication> CreateAuthenticationAppAsync()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Configuration.Sources.Clear();
+        ServerDeploymentConfiguration.Apply(builder.Configuration);
+        ConfigureServices(builder.Services, builder.Configuration);
+        builder.Services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
+        builder.Services.AddApiResult();
+        builder
+            .Services.AddControllers()
+            .AddApplicationPart(typeof(ServerInfoController).Assembly)
+            .AddApplicationPart(typeof(AuthController).Assembly);
+        var app = builder.Build();
+        await app
+            .Services.GetRequiredService<DatabaseInitializationStateStore>()
+            .RefreshAsync(TestContext.Current.CancellationToken);
+        app.UseMiddleware<InitializationGuardMiddleware>();
+        app.UseMiddleware<AgwApiExceptionMiddleware>();
+        app.UseAgwAuth();
+        app.UseRouting();
+        app.UseAuthorization();
+        app.MapControllers();
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        return app;
     }
 
     private void ConfigureServices(
