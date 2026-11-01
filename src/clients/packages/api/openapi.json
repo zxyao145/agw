@@ -3911,6 +3911,242 @@
         }
       }
     },
+    "/api/files/repositories": {
+      "get": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/clone": {
+      "post": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/feature": {
+      "post": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/switch": {
+      "post": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/repositories/merge": {
+      "post": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/dashboard/stats": {
       "get": {
         "tags": [
@@ -10302,6 +10538,38 @@
           }
         }
       },
+      "ApiResultOfRepositoryWorkspaceState": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepositoryWorkspaceState"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfSkillResponse": {
         "required": [
           "code",
@@ -11269,6 +11537,31 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProviderType"
+            }
+          }
+        }
+      },
+      "FeatureRepository": {
+        "required": [
+          "name",
+          "branch",
+          "dirty"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -14254,6 +14547,72 @@
           }
         }
       },
+      "RepositoryWorkspaceRequest": {
+        "required": [
+          "projectId",
+          "name",
+          "url",
+          "feature",
+          "branch",
+          "createBranch"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "feature": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "createBranch": {
+            "type": "boolean"
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "repositories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RepositoryWorkspaceState": {
+        "required": [
+          "repositories",
+          "features"
+        ],
+        "type": "object",
+        "properties": {
+          "repositories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceRepository"
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceFeature"
+            }
+          }
+        }
+      },
       "ResultFormat": {
         "enum": [
           "markdown",
@@ -15042,6 +15401,47 @@
             "type": "string"
           }
         }
+      },
+      "WorkspaceFeature": {
+        "required": [
+          "name",
+          "repositories"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "repositories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeatureRepository"
+            }
+          }
+        }
+      },
+      "WorkspaceRepository": {
+        "required": [
+          "name",
+          "defaultBranch",
+          "branch",
+          "dirty"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "defaultBranch": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "dirty": {
+            "type": "boolean"
+          }
+        }
       }
     }
   },
@@ -15081,6 +15481,9 @@
     },
     {
       "name": "Files"
+    },
+    {
+      "name": "RepositoryWorkspace"
     },
     {
       "name": "Dashboard"

@@ -3,6 +3,7 @@ export const EXTENSION_PERMISSIONS = [
   "context.user",
   "context.project",
   "context.agent",
+  "project.repositories",
   "fs.local.read",
   "fs.local.write",
   "fs.cloud.read",
@@ -19,6 +20,7 @@ export type ExtensionPermission = (typeof EXTENSION_PERMISSIONS)[number];
 
 /** 批准弹窗中用警告色显示的权限。Permissions shown with a warning color in the approval dialog. */
 export const HIGH_RISK_EXTENSION_PERMISSIONS: ReadonlySet<ExtensionPermission> = new Set([
+  "project.repositories",
   "fs.local.read",
   "fs.local.write",
   "fs.cloud.write",

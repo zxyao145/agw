@@ -226,6 +226,13 @@ export function createExtensionApi(
         return createSession(sessionId, conversationId, readOnly);
       },
     },
+    repositories: {
+      get: (projectId) => call("repositories.get", { projectId }),
+      clone: (input) => call("repositories.clone", input),
+      createFeature: (input) => call("repositories.feature", input),
+      switchBranch: (input) => call("repositories.switch", input),
+      merge: (input) => call("repositories.merge", input),
+    },
     a2a: {
       listAgents: (options) => call("a2a.listAgents", {}, options?.signal),
       getAgentCard: (agentName, options) =>

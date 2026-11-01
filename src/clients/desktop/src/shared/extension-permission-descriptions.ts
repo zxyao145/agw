@@ -5,6 +5,8 @@ export const PERMISSION_DESCRIPTIONS: Record<ExtensionPermission, string> = {
   "context.user": "Read your user information.",
   "context.project": "Read the current Project and conversation, and list your Projects.",
   "context.agent": "Read the current Agent or Agentflow, and list available Agents and Agentflows.",
+  "project.repositories":
+    "Clone repositories, create worktrees, switch feature branches and merge into default branches in your Projects.",
   "fs.local.read": "Read any file or folder on this computer.",
   "fs.local.write": "Create, change, delete or move any file or folder on this computer.",
   "fs.cloud.read": "Read files in your Projects on the current Server.",
@@ -21,6 +23,7 @@ export const PERMISSION_DESCRIPTIONS: Record<ExtensionPermission, string> = {
 
 /** 读取用户数据的权限；与网络访问同时声明时提示数据可能被发送。Permissions that read user data; with network access the data may leave. */
 export const READ_PERMISSIONS: readonly ExtensionPermission[] = [
+  "project.repositories",
   "fs.local.read",
   "fs.cloud.read",
   "clipboard.read",

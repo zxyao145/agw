@@ -1,4 +1,4 @@
-import { apiGet } from "@agw/api";
+import { apiGet, apiPost } from "@agw/api";
 import type { ChatHttpClient } from "@agw/chat-runtime";
 import {
   type ChatEvent,
@@ -744,6 +744,46 @@ export class ExtensionBridgeBroker {
         );
         return null;
       },
+
+      "repositories.get": (connection, params: { projectId: string }, signal) => {
+        this.requirePermission(connection, "project.repositories");
+        return this.tracked(connection, signal, (requestSignal) =>
+          context.request(
+            (contextSignal) =>
+              apiGet("/api/files/repositories", {
+                params: { query: { projectId: params.projectId } },
+                signal: contextSignal,
+              }),
+            requestSignal,
+          ),
+        );
+      },
+      ...Object.fromEntries(
+        (["clone", "feature", "switch", "merge"] as const).map((operation) => [
+          `repositories.${operation}`,
+          ((connection, params, signal) => {
+            this.requirePermission(connection, "project.repositories");
+            return this.tracked(connection, signal, (requestSignal) =>
+              context.request(
+                (contextSignal) =>
+                  apiPost(`/api/files/repositories/${operation}`, {
+                    body: {
+                      projectId: "",
+                      name: "",
+                      url: "",
+                      feature: "",
+                      branch: "",
+                      createBranch: false,
+                      ...(params as Record<string, unknown>),
+                    },
+                    signal: contextSignal,
+                  }),
+                requestSignal,
+              ),
+            );
+          }) satisfies RequestHandler,
+        ]),
+      ),
 
       "context.listProjects": (connection, _params, signal) => {
         this.requirePermission(connection, "context.project");

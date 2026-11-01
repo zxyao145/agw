@@ -2,11 +2,11 @@
 // Full-flow extension integration test: runs the production main process and renderer, drives the host page through
 // the DOM, and reads the main-process frame registry.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
-import { connect } from "node:net";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { connect, createServer } from "node:net";
 import { basename, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
@@ -111,8 +111,19 @@ function snapshotLoaded(frameId: string): string {
   })()`;
 }
 
-function evalHost<T>(code: string): Promise<T> {
-  return host().executeJavaScript(code, true) as Promise<T>;
+async function evalHost<T>(code: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("The host script did not finish within 60 seconds.")),
+      60_000,
+    );
+  });
+  try {
+    return await Promise.race([host().executeJavaScript(code, true) as Promise<T>, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
 }
 
 function untilHost(code: string, label: string, timeoutMs?: number) {
@@ -398,6 +409,10 @@ async function enable(id: string, name: string): Promise<string> {
 async function disable(id: string): Promise<void> {
   await goToExtensions();
   await clickHost(`[data-extension-id="${id}"] button[role="switch"]`);
+  await untilHost(
+    `document.querySelector('[data-extension-id="${id}"] button[role="switch"]')?.getAttribute("aria-checked") === "false"`,
+    `${id} enable switch to finish turning off`,
+  );
 }
 
 async function reloadExtension(id: string): Promise<void> {
@@ -447,10 +462,18 @@ async function boot(): Promise<void> {
 }
 
 async function beforeEnabling(): Promise<void> {
+  await untilHost(
+    `Boolean(document.querySelector('.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]'))`,
+    "the bundled repository extension ribbon entry",
+  );
   const entries = await evalHost<string[]>(
     `[...document.querySelectorAll('.agw-ribbon [data-entry-id]')].map((item) => item.dataset.entryId)`,
   );
-  assert.deepEqual(entries, ["agw.ribbon.conversations", "agw.ribbon.files"]);
+  assert.deepEqual(entries, [
+    "agw.ribbon.conversations",
+    "agw.ribbon.files",
+    `${EXTENSION_IDS.bareRepository}:repositories`,
+  ]);
   const hostInstanceId = runtime().registry.hostInstanceId;
   assert.ok(hostInstanceId);
   const result = await evalHost<{ ok: boolean; error?: { code: string } }>(
@@ -503,6 +526,167 @@ async function textCodecBridge(): Promise<void> {
   assert.equal(result.encodingCount, 38);
   assert.equal(result.gb18030Label, "Chinese Simplified (GB18030)");
   pass("the host page decodes, encodes and lists text encodings through the Desktop bridge");
+}
+
+async function bareRepositoryWorkflow(): Promise<void> {
+  await goToChat();
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]`);
+  const frame = await untilFrame(EXTENSION_IDS.bareRepository, "mainView");
+  await until(
+    () =>
+      evalFrame<boolean>(
+        frame,
+        'document.querySelector("main")?.getAttribute("aria-busy") === "false"',
+      ),
+    "the repository workspace",
+  );
+  const seed = resolve(".scratch/extension-tests/repository-seed");
+  await mkdir(seed, { recursive: true });
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Agw Tests",
+        "-c",
+        "user.email=tests@agw.local",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd, encoding: "utf8" },
+    ).trim();
+  git(seed, "init", "-b", "trunk");
+  await writeFile(join(seed, "README.md"), "base\n");
+  git(seed, "add", ".");
+  git(seed, "commit", "-m", "Initial");
+  const probe = createServer();
+  await new Promise<void>((done) => probe.listen(0, "127.0.0.1", done));
+  const port = (probe.address() as { port: number }).port;
+  await new Promise<void>((done) => probe.close(() => done()));
+  const daemon = spawn(
+    "git",
+    [
+      "daemon",
+      "--reuseaddr",
+      "--export-all",
+      "--listen=127.0.0.1",
+      `--port=${port}`,
+      `--base-path=${resolve(".scratch/extension-tests")}`,
+    ],
+    { stdio: "ignore" },
+  );
+  try {
+    await until(
+      () =>
+        new Promise<boolean>((done) => {
+          const socket = connect(port, "127.0.0.1");
+          socket.once("connect", () => {
+            socket.destroy();
+            done(true);
+          });
+          socket.once("error", () => done(false));
+        }),
+      "the Git test remote",
+    );
+    for (const name of ["module-alpha", "module-beta"]) {
+      await evalFrame(
+        frame,
+        `(() => {
+        const form = document.querySelector('input[name="url"]').form;
+        form.elements.name.value = ${JSON.stringify(name)};
+        form.elements.url.value = ${JSON.stringify(`git://127.0.0.1:${port}/repository-seed`)};
+        form.requestSubmit();
+      })()`,
+      );
+      await until(
+        () =>
+          evalFrame<boolean>(
+            frame,
+            `document.querySelector('main').getAttribute('aria-busy') === 'false' && [...document.querySelectorAll('li strong')].some(e => e.textContent === ${JSON.stringify(name)})`,
+          ),
+        `${name} cloned through the extension`,
+      );
+      git(join(config.projectDirectory, name), "config", "user.name", "Agw Tests");
+      git(join(config.projectDirectory, name), "config", "user.email", "tests@agw.local");
+    }
+    await evalFrame(
+      frame,
+      `(() => {
+      const form = document.querySelector('input[name="repositories"]').form;
+      form.elements.name.value = 'add-extensions';
+      for (const input of form.querySelectorAll('input[name="repositories"]')) input.checked = true;
+      form.requestSubmit();
+    })()`,
+    );
+    await until(
+      () =>
+        evalFrame<boolean>(
+          frame,
+          'document.querySelectorAll(".worktree").length === 2 && document.querySelector("main").getAttribute("aria-busy") === "false"',
+        ),
+      "two feature worktrees",
+    );
+    const feature = await evalFrame<string>(
+      frame,
+      'document.querySelector("article h3").textContent',
+    );
+    assert.match(feature, /^\d{6}-add-extensions$/u);
+    const tree = join(config.projectDirectory, ".worktrees", feature, "module-alpha");
+    await writeFile(join(tree, "feature.txt"), "feature content\n");
+    git(tree, "add", ".");
+    git(tree, "commit", "-m", "Add feature");
+    await evalFrame(
+      frame,
+      `(() => {
+      const form = document.querySelector('.worktree input[name="branch"]').form;
+      form.elements.branch.value = 'alternate-feature';
+      form.elements.create.checked = true;
+      form.requestSubmit();
+    })()`,
+    );
+    await until(
+      () =>
+        evalFrame<boolean>(
+          frame,
+          'document.querySelector(".worktree p").textContent.includes("alternate-feature") && document.querySelector("main").getAttribute("aria-busy") === "false"',
+        ),
+      "the worktree branch switched",
+    );
+    await clickInFrame(frame, `[...document.querySelectorAll('.worktree > button')][0]`);
+    await expectConfirmation(
+      "message",
+      ["Bare Repository", "Merge alternate-feature into module-alpha/trunk?"],
+      "the merge confirmation",
+    );
+    await answerConfirmation("Merge");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          frame,
+          'document.querySelector("[role=status]").textContent.includes("Merged module-alpha into trunk")',
+        ),
+      "the merge completed",
+    );
+    const main = join(config.projectDirectory, "module-alpha");
+    assert.equal(await readFile(join(main, "feature.txt"), "utf8"), "feature content\n");
+    assert.equal(git(main, "show", "-s", "--format=%P", "HEAD").split(" ").length, 2);
+    assert.equal(git(main, "branch", "--show-current"), "trunk");
+    assert.equal(
+      await evalFrame<number>(
+        frame,
+        'document.querySelectorAll("section:first-of-type input[name=branch]").length',
+      ),
+      0,
+    );
+    pass(
+      "Bare Repository clones two default branches, creates feature worktrees, switches a worktree branch and merges with two parents through the extension UI",
+    );
+  } finally {
+    daemon.kill();
+  }
+  await disable(EXTENSION_IDS.bareRepository);
+  await untilStatus(EXTENSION_IDS.bareRepository, "Disabled");
 }
 
 type SettingsFile = {
@@ -8499,6 +8683,7 @@ async function run(): Promise<void> {
   await beforeEnabling();
   await textCodecBridge();
   await bundledDefaults();
+  await bareRepositoryWorkflow();
   await enableSample();
   await processIsolation();
   await viewsAndLayout();

@@ -20,6 +20,8 @@ import type {
   PermissionMode,
 } from "@agw/execution-core";
 import type { ExtensionPermission } from "./permissions";
+import type { RepositoryWorkspaceApi } from "./repositories";
+export type * from "./repositories";
 
 export type { ExecutionMessage, InteractionResponse, PermissionMode, ExtensionPermission };
 export type {
@@ -291,6 +293,7 @@ export interface ExtensionApi {
     revealInFileManager(uri: string): Promise<void>;
   };
   readonly execution: ExecutionApi;
+  readonly repositories: RepositoryWorkspaceApi;
   readonly a2a: A2AApi;
   readonly http: HttpApi;
   readonly chat: {

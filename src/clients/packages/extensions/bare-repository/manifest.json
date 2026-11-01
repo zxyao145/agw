@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 1,
+  "id": "019a3c78-3400-70a0-8000-92e2e6c877bd",
+  "name": "Bare Repository",
+  "version": "1.0.0",
+  "description": "Develop features across repositories using default-branch checkouts and feature worktrees.",
+  "author": "Agw",
+  "contributes": {
+    "ribbon": [
+      {
+        "id": "repositories",
+        "title": "Bare Repository",
+        "icon": "GitBranch",
+        "action": { "type": "openMainView", "view": "repositories" }
+      }
+    ],
+    "mainViews": [
+      {
+        "id": "repositories",
+        "title": "Bare Repository",
+        "icon": "GitBranch",
+        "entry": "index.html"
+      }
+    ]
+  },
+  "permissions": ["context.project", "project.repositories"]
+}

@@ -18,6 +18,8 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(ProjectWorkspaceOptions.SectionName));
         services.TryAddSingleton<IProjectWorkspaceAccess, ProjectWorkspaceAccess>();
         services.AddSingleton<FileAppService>();
+        services.AddSingleton<RepositoryWorkspaceAppService>();
+        services.AddSingleton<IRepositoryWorkspace, RepositoryWorkspace>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<FilePathLocks>();
         services.AddSingleton<ProjectScopedFileSystemResolver>();

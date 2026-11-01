@@ -3002,6 +3002,217 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/files/repositories": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          projectId: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/clone": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/feature": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/switch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/files/repositories/merge": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "text/json": components["schemas"]["RepositoryWorkspaceRequest"];
+          "application/*+json": components["schemas"]["RepositoryWorkspaceRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/dashboard/stats": {
     parameters: {
       query?: never;
@@ -6121,6 +6332,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfRepositoryWorkspaceState: {
+      data?: null | components["schemas"]["RepositoryWorkspaceState"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfSkillResponse: {
       data?: null | components["schemas"]["SkillResponse"];
       /** Format: int32 */
@@ -6402,6 +6620,12 @@ export interface components {
       displayName: string;
       defaultExtra: string;
       supportedProviderTypes: components["schemas"]["ProviderType"][];
+    };
+    FeatureRepository: {
+      name: string;
+      branch: string;
+      dirty: boolean;
+      branches?: string[];
     };
     /**
      * @description 文件在 diff 范围内的改动：unified diff 文字与两侧全文。
@@ -7187,6 +7411,22 @@ export interface components {
       version: null | number | string;
       items: components["schemas"]["QuickPromptItem"][];
     };
+    RepositoryWorkspaceRequest: {
+      /** Format: uuid */
+      projectId: string;
+      name: string;
+      url: string;
+      feature: string;
+      branch: string;
+      createBranch: boolean;
+      /** Format: date */
+      date?: null | string;
+      repositories?: string[];
+    };
+    RepositoryWorkspaceState: {
+      repositories: components["schemas"]["WorkspaceRepository"][];
+      features: components["schemas"]["WorkspaceFeature"][];
+    };
     /**
      * @description The presentation format of an Agent's final Result.
      * @enum {unknown}
@@ -7389,6 +7629,16 @@ export interface components {
       name: string;
       description: null | string;
       content: string;
+    };
+    WorkspaceFeature: {
+      name: string;
+      repositories: components["schemas"]["FeatureRepository"][];
+    };
+    WorkspaceRepository: {
+      name: string;
+      defaultBranch: string;
+      branch: string;
+      dirty: boolean;
     };
   };
   responses: never;
