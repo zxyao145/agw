@@ -33,6 +33,7 @@ using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -769,7 +770,13 @@ public class JobAppServiceTests : IDisposable
                 projectResolver,
                 userInfo,
                 dataPaths,
-                workspaceProvider.GetRequiredService<IProjectWorkspaceAccess>()
+                workspaceProvider.GetRequiredService<IProjectWorkspaceAccess>(),
+                new ProjectOwnershipCache(
+                    new ServiceCollection()
+                        .AddHybridCache()
+                        .Services.BuildServiceProvider()
+                        .GetRequiredService<HybridCache>()
+                )
             );
             var service = new JobAppService(
                 dbContext,

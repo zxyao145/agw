@@ -402,7 +402,8 @@ public sealed class ProjectWorkspaceProvisioningTests : IDisposable
                 new ProjectResolver(_context, userInfo),
                 userInfo,
                 _dataPaths,
-                WorkspaceAccess
+                WorkspaceAccess,
+                TestProjectOwnershipCache.Create(TimeProvider.System)
             );
 
         public async Task<Guid> AddProjectWithoutWorkspaceAsync()

@@ -23,6 +23,8 @@ public static class DependencyInjection
         services.AddScoped<ITaskAppService, TaskAppService>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
         services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();
+        services.AddHybridCache();
+        services.AddSingleton<ProjectOwnershipCache>();
         services.AddScoped<IProjectDefaultResolver, ProjectDefaultResolver>();
         services.AddScoped<IProjectOwnershipFacade, ProjectOwnershipFacade>();
         services.AddScoped<ITaskSessionBindingService, TaskSessionBindingService>();

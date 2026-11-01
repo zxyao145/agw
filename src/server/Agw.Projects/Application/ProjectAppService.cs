@@ -20,6 +20,7 @@ public class ProjectAppService : IProjectAppService
     private readonly IUserInfoService _userInfoService;
     private readonly AgwDataPaths _dataPaths;
     private readonly IProjectWorkspaceAccess _workspaceAccess;
+    private readonly ProjectOwnershipCache _ownershipCache;
     private readonly IProjectFileSystemCacheInvalidator? _fileSystemCache;
 
     public ProjectAppService(
@@ -30,6 +31,7 @@ public class ProjectAppService : IProjectAppService
         IUserInfoService userInfoService,
         AgwDataPaths dataPaths,
         IProjectWorkspaceAccess workspaceAccess,
+        ProjectOwnershipCache ownershipCache,
         IProjectFileSystemCacheInvalidator? fileSystemCache = null
     )
     {
@@ -40,6 +42,7 @@ public class ProjectAppService : IProjectAppService
         _userInfoService = userInfoService;
         _dataPaths = dataPaths;
         _workspaceAccess = workspaceAccess;
+        _ownershipCache = ownershipCache;
         _fileSystemCache = fileSystemCache;
     }
 
@@ -192,6 +195,7 @@ public class ProjectAppService : IProjectAppService
         }
 
         _fileSystemCache?.Invalidate(id);
+        await _ownershipCache.InvalidateAsync(id);
         return true;
     }
 

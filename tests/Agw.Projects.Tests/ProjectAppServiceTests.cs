@@ -190,7 +190,11 @@ public class ProjectAppServiceTests : IDisposable
     public async Task ProjectFileSystemConfigurationProvider_WhenCanceled_StopsBeforeLookup()
     {
         await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);
-        IProjectFileSystemConfigurationProvider provider = new ProjectFileSystemConfigurationProvider(scope.Service);
+        IProjectFileSystemConfigurationProvider provider = new ProjectFileSystemConfigurationProvider(
+            scope.Service,
+            scope.UserInfo,
+            scope.OwnershipCache
+        );
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             provider.GetAsync(Guid.CreateVersion7(), new CancellationToken(canceled: true))
@@ -210,7 +214,9 @@ public class ProjectAppServiceTests : IDisposable
             project.ExtraSetting = "{\"fileStorage\":{\"type\":\"local\"}}";
             var created = await scope.Service.CreateAsync(project, null, null, null);
             IProjectFileSystemConfigurationProvider provider = new ProjectFileSystemConfigurationProvider(
-                scope.Service
+                scope.Service,
+                scope.UserInfo,
+                scope.OwnershipCache
             );
             var configuration = await provider.GetAsync(created!.Id, cancellationToken);
 
@@ -633,6 +639,28 @@ public class ProjectAppServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteAsync_AfterOwnershipVerified_ProviderReturnsNoOwner()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await ProjectAppServiceTestScope.CreateAsync(cancellationToken);
+        var created = (await scope.Service.CreateAsync(CreateProject("Project A"), null, null, null))!;
+        IProjectFileSystemConfigurationProvider provider = new ProjectFileSystemConfigurationProvider(
+            scope.Service,
+            scope.UserInfo,
+            scope.OwnershipCache
+        );
+        Assert.Equal(scope.UserInfo.UserId, await provider.GetOwnerUserIdAsync(created.Id, cancellationToken));
+
+        // Act
+        var deleted = await scope.Service.DeleteAsync(created.Id);
+
+        // Assert
+        Assert.True(deleted);
+        Assert.Null(await provider.GetOwnerUserIdAsync(created.Id, cancellationToken));
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenWorkspaceDoesNotExist_CreatesWorkspaceDirectory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -837,7 +865,8 @@ public class ProjectAppServiceTests : IDisposable
         IProjectFileSystemCacheInvalidator? fileSystemCache = null,
         IProjectDeletionCoordinator? deletionCoordinator = null,
         ProjectWorkspaceOptions? workspaceOptions = null,
-        AgwDataPaths? dataPaths = null
+        AgwDataPaths? dataPaths = null,
+        ProjectOwnershipCache? ownershipCache = null
     )
     {
         userInfo ??= new TestUserInfoService();
@@ -874,6 +903,7 @@ public class ProjectAppServiceTests : IDisposable
             userInfo,
             dataPaths,
             workspaceAccess,
+            ownershipCache ?? TestProjectOwnershipCache.Create(TimeProvider.System),
             fileSystemCache
         );
     }
@@ -946,11 +976,13 @@ public class ProjectAppServiceTests : IDisposable
             _options = options;
             _dbContext = dbContext;
             UserInfo = new TestUserInfoService();
-            Service = CreateService(dbContext, UserInfo);
+            OwnershipCache = TestProjectOwnershipCache.Create(TimeProvider.System);
+            Service = CreateService(dbContext, UserInfo, ownershipCache: OwnershipCache);
         }
 
         public ProjectAppService Service { get; }
         public TestUserInfoService UserInfo { get; }
+        public ProjectOwnershipCache OwnershipCache { get; }
         public Guid FirstMcpToolServerId { get; } = Guid.CreateVersion7();
         public Guid SecondMcpToolServerId { get; } = Guid.CreateVersion7();
         public Guid FirstSkillId { get; } = Guid.CreateVersion7();

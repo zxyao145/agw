@@ -12,6 +12,7 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -238,7 +239,13 @@ public class ProjectTraceCleanupTests
             new ProjectResolver(dbContext, userInfo),
             userInfo,
             dataPaths,
-            provider.GetRequiredService<IProjectWorkspaceAccess>()
+            provider.GetRequiredService<IProjectWorkspaceAccess>(),
+            new ProjectOwnershipCache(
+                new ServiceCollection()
+                    .AddHybridCache()
+                    .Services.BuildServiceProvider()
+                    .GetRequiredService<HybridCache>()
+            )
         );
     }
 }

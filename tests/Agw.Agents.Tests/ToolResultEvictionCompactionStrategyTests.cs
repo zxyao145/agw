@@ -19,7 +19,8 @@ public sealed class ToolResultEvictionCompactionStrategyTests
     {
         const string question = "How should the work be delivered?";
         const string answer = "Write a design only; do not implement.";
-        var result = new AskUserQuestionTool().Execute(
+        var tool = new AskUserQuestionTool();
+        var result = tool.Execute(
             new AskUserQuestionToolParams
             {
                 Questions =
@@ -52,7 +53,7 @@ public sealed class ToolResultEvictionCompactionStrategyTests
                 ChatRole.Assistant,
                 [
                     new TextReasoningContent("Ask for the delivery requirements."),
-                    new FunctionCallContent("human-call", "ask_user_question"),
+                    new FunctionCallContent("human-call", tool.Name),
                     new FunctionCallContent("lookup-call", "lookup"),
                 ]
             ),
