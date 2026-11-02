@@ -34,6 +34,8 @@ import { formatLocalDateTime } from "@agw/components";
 import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
 
+import { readSkillArchiveDescription } from "./skill-archive";
+
 type SkillDto = {
   id: string;
   name: string;
@@ -55,6 +57,7 @@ type SkillFormState = {
   kind: Exclude<SkillKind, "BuiltIn">;
   name: string;
   description: string;
+  defaultDescription: string;
   archive: File | null;
   remoteUrl: string;
 };
@@ -78,6 +81,7 @@ function createDefaultFormState(): SkillFormState {
     kind: "Local",
     name: "",
     description: "",
+    defaultDescription: "",
     archive: null,
     remoteUrl: "",
   };
@@ -88,6 +92,7 @@ function createEditFormState(skill: SkillDto): SkillFormState {
     kind: skill.kind === "Remote" ? "Remote" : "Local",
     name: skill.name,
     description: skill.description,
+    defaultDescription: skill.description,
     archive: null,
     remoteUrl: skill.remoteUrl ?? "",
   };
@@ -658,9 +663,9 @@ function SkillDialog({
                   id={`${mode}-skill-archive`}
                   type="file"
                   accept=".zip,application/zip"
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const archive = event.target.files?.[0] ?? null;
                     setForm((current) => {
-                      const archive = event.target.files?.[0] ?? null;
                       if (mode !== "create" || !archive) {
                         return {
                           ...current,
@@ -680,8 +685,20 @@ function SkillDialog({
                         archive,
                         name: shouldUpdateName && nextDefaultName ? nextDefaultName : current.name,
                       };
-                    })
-                  }
+                    });
+                    if (!archive) return;
+
+                    void readSkillArchiveDescription(archive).then((description) => {
+                      if (!description) return;
+                      setForm((current) =>
+                        current.archive === archive &&
+                        (!current.description.trim() ||
+                          current.description === current.defaultDescription)
+                          ? { ...current, description, defaultDescription: description }
+                          : current,
+                      );
+                    });
+                  }}
                 />
               </div>
 
@@ -707,8 +724,9 @@ function SkillDialog({
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor={`${mode}-skill-description`}>Description</Label>
                 <p className="text-xs text-muted-foreground">
-                  If the frontmatter in SKILL.md does not include a &quot;description&quot; field,
-                  the value of this field will be used.
+                  Filled in from the SKILL.md frontmatter when you choose an archive. If the
+                  frontmatter does not include a &quot;description&quot; field, the value of this
+                  field will be used.
                 </p>
                 <Textarea
                   id={`${mode}-skill-description`}
