@@ -104,6 +104,8 @@ pnpm fmt:check
 
 `pnpm --filter @agw/desktop build:main` bundles the Electron main and preload entry points with esbuild into `dist/`, so the packaged application carries no runtime `node_modules`.
 
+Tray icons are raster files because Electron's `nativeImage` decodes only PNG, JPEG and (on Windows) ICO; an SVG loads as an empty image and leaves a blank tray slot. `assets/tray-icon.svg` is the source, and `pnpm --filter @agw/desktop build:tray-icons` renders the committed files from it: `tray-icon-Template.png` and `tray-icon-Template@2x.png` (macOS template images that the menu bar tints), `tray-icon.ico` (brand blue, 16–256 px, so the Windows tray loads the small-icon size for each display scale), and `tray-icon.png` (brand blue, 64 px, scaled down by Linux panels). `src/main/tray-icon.ts` chooses the file per platform. The tray is created from the file path, so Electron throws, and Desktop reports the error, when the image cannot be decoded.
+
 For a Desktop-only check, use `pnpm exec turbo run <task> --filter=@agw/desktop`.
 
 Shared business UI is not duplicated in Desktop. Web and Desktop each own a thin route shell and independently compose domain packages under `../packages/`.

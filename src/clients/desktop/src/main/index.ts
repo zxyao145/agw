@@ -12,7 +12,6 @@ import {
   dialog,
   ipcMain,
   Menu,
-  nativeImage,
   net,
   Notification,
   protocol,
@@ -64,6 +63,7 @@ import { getServerDataDirectory } from "./runtime/server-data-directory";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
 import { getTurnNotificationText, normalizeTurnNotificationRequest } from "./turn-notification";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
+import { trayIconFileName } from "./tray-icon";
 import { checkForDesktopUpdate } from "./update/github-release-updater";
 
 protocol.registerSchemesAsPrivileged([
@@ -169,9 +169,10 @@ function bundledExtensionsRoot(): string {
 }
 
 function trayIconPath(): string {
+  const fileName = trayIconFileName(process.platform);
   return app.isPackaged
-    ? join(process.resourcesPath, "assets", "tray-icon.svg")
-    : resolve(__dirname, "..", "..", "assets", "tray-icon.svg");
+    ? join(process.resourcesPath, "assets", fileName)
+    : resolve(__dirname, "..", "..", "assets", fileName);
 }
 
 function appIconPath(): string {
@@ -539,9 +540,14 @@ function rebuildTrayMenu(): void {
 }
 
 function createTray(): void {
-  const image = nativeImage.createFromPath(trayIconPath());
-  if (process.platform === "darwin") image.setTemplateImage(true);
-  tray = new Tray(image);
+  try {
+    // 传入路径而非 NativeImage：图像无法解码时 Electron 会抛错，而不是显示空白托盘。A path, unlike a NativeImage, makes
+    // Electron throw when the image cannot be decoded instead of showing a blank tray icon.
+    tray = new Tray(trayIconPath());
+  } catch (error) {
+    reportMainProcessError("Unable to show the Agw Desktop tray icon", error);
+    return;
+  }
   tray.setToolTip("Agw Desktop");
   tray.on("click", () => showWindowSafely("/desktop/chat/"));
   rebuildTrayMenu();
