@@ -9,6 +9,7 @@
     "build": "pnpm build:main && pnpm build:renderer",
     "build:main": "node scripts/build-main.mjs",
     "build:extension-sdk": "node scripts/build-extension-sdk.mjs",
+    "build:tray-icons": "node scripts/build-tray-icons.mjs",
     "build:renderer": "next build renderer --webpack && node scripts/check-theme-tokens.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p renderer/tsconfig.json",
     "dev": "node scripts/dev.mjs",
