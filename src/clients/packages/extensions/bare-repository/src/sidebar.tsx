@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ManageParams } from "./project-workspace";
+import { readProxyUrl } from "./proxy-settings";
 import { errorMessage, startView, type FileParams, type OpenRequest } from "./view";
 import "./base.css";
 import "./sidebar.css";
@@ -344,8 +345,12 @@ function RepositorySidebar({
             : `Sync with origin/${repo.defaultBranch}${repo.behind ? ` (${repo.behind} behind)` : ""}`
         }
         onClick={() =>
-          void operate(() =>
-            api.repositories.sync({ projectId: project.id, repository: repo.name }),
+          void operate(async () =>
+            api.repositories.sync({
+              projectId: project.id,
+              repository: repo.name,
+              proxyUrl: await readProxyUrl(api),
+            }),
           )
         }
       >

@@ -416,6 +416,7 @@ test("repository operations require their approved permission before reaching th
         name: "feature",
         repositories: ["alpha"],
       }),
+    () => api.repositories.deleteFeature({ projectId: PROJECT, feature: input.feature }),
     () => api.repositories.switchBranch({ ...input, branch: "other" }),
     () => api.repositories.merge(input),
     () => api.repositories.sync({ projectId: PROJECT, repository: "alpha" }),

@@ -76,7 +76,7 @@ public interface IRepositoryWorkspace
     Task<RepositoryWorkspaceState> ReadAsync(string root, CancellationToken ct);
 
     /// <summary><paramref name="name"/> 为空时从 URL 推导。Derives the name from the URL when <paramref name="name"/> is empty.</summary>
-    Task CloneAsync(string root, string url, string? name, CancellationToken ct);
+    Task CloneAsync(string root, string url, string? name, CancellationToken ct, string? proxyUrl = null);
 
     /// <summary>
     /// 从各仓库的默认分支创建名为 <paramref name="feature"/> 的分支和 worktree。Creates a <paramref name="feature"/>
@@ -89,6 +89,9 @@ public interface IRepositoryWorkspace
         bool addToExisting,
         CancellationToken ct
     );
+
+    /// <summary>删除 feature 的 worktrees 及其 Git 登记信息，保留分支。Removes the feature's worktrees and Git registrations, preserving branches.</summary>
+    Task DeleteFeatureAsync(string root, string feature, CancellationToken ct);
 
     Task SwitchBranchAsync(
         string root,
@@ -106,7 +109,7 @@ public interface IRepositoryWorkspace
     Task MergeAsync(string root, string feature, string repository, CancellationToken ct);
 
     /// <summary>拉取 origin 并快进默认分支。Fetches origin and fast-forwards the default branch.</summary>
-    Task SyncAsync(string root, string repository, CancellationToken ct);
+    Task SyncAsync(string root, string repository, CancellationToken ct, string? proxyUrl = null);
 
     Task RestoreDefaultBranchAsync(string root, string repository, CancellationToken ct);
 

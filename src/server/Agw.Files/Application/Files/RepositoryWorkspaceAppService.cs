@@ -24,8 +24,13 @@ public sealed class RepositoryWorkspaceAppService
     public async Task<RepositoryWorkspaceState> ReadAsync(Guid projectId, CancellationToken ct) =>
         await _workspace.ReadAsync(await ResolveRootAsync(projectId, ct), ct);
 
-    public Task<RepositoryWorkspaceState> CloneAsync(Guid projectId, string url, string? name, CancellationToken ct) =>
-        RunAsync(projectId, root => _workspace.CloneAsync(root, url, name, ct), ct);
+    public Task<RepositoryWorkspaceState> CloneAsync(
+        Guid projectId,
+        string url,
+        string? name,
+        CancellationToken ct,
+        string? proxyUrl = null
+    ) => RunAsync(projectId, root => _workspace.CloneAsync(root, url, name, ct, proxyUrl), ct);
 
     /// <summary>
     /// <paramref name="feature"/> 非空时向已有 feature 添加仓库，否则以 <c>yyMMdd-name</c> 新建；<paramref name="date"/>
@@ -49,6 +54,9 @@ public sealed class RepositoryWorkspaceAppService
         return RunAsync(projectId, root => _workspace.CreateFeatureAsync(root, branch, repositories, existing, ct), ct);
     }
 
+    public Task<RepositoryWorkspaceState> DeleteFeatureAsync(Guid projectId, string feature, CancellationToken ct) =>
+        RunAsync(projectId, root => _workspace.DeleteFeatureAsync(root, feature, ct), ct);
+
     public Task<RepositoryWorkspaceState> SwitchBranchAsync(
         Guid projectId,
         string feature,
@@ -70,8 +78,12 @@ public sealed class RepositoryWorkspaceAppService
         CancellationToken ct
     ) => RunAsync(projectId, root => _workspace.MergeAsync(root, feature, repository, ct), ct);
 
-    public Task<RepositoryWorkspaceState> SyncAsync(Guid projectId, string repository, CancellationToken ct) =>
-        RunAsync(projectId, root => _workspace.SyncAsync(root, repository, ct), ct);
+    public Task<RepositoryWorkspaceState> SyncAsync(
+        Guid projectId,
+        string repository,
+        CancellationToken ct,
+        string? proxyUrl = null
+    ) => RunAsync(projectId, root => _workspace.SyncAsync(root, repository, ct, proxyUrl), ct);
 
     public Task<RepositoryWorkspaceState> RestoreDefaultBranchAsync(
         Guid projectId,

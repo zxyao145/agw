@@ -36,7 +36,7 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         return new(repositories, features.ToArray());
     }
 
-    public async Task CloneAsync(string root, string url, string? name, CancellationToken ct)
+    public async Task CloneAsync(string root, string url, string? name, CancellationToken ct, string? proxyUrl = null)
     {
         var derived = ValidateUrl(url);
         name = string.IsNullOrWhiteSpace(name) ? derived : name.Trim();
@@ -45,7 +45,34 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         var destination = SafePath(root, name);
         if (Directory.Exists(destination) || File.Exists(destination))
             throw Conflict($"{name} already exists in the project.");
-        await GitAsync(root, ["clone", "--", url, destination], ct, ErrorCodes.GitRemoteOperationFailed);
+        try
+        {
+            await GitAsync(root, ["clone", "--", url, destination], ct, ErrorCodes.GitRemoteOperationFailed, proxyUrl);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            DeletePartialClone(destination);
+            throw;
+        }
+    }
+
+    private static void DeletePartialClone(string destination)
+    {
+        if (!Directory.Exists(destination))
+            return;
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            IgnoreInaccessible = false,
+        };
+        foreach (var file in Directory.EnumerateFiles(destination, "*", options))
+        {
+            var attributes = File.GetAttributes(file);
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+        }
+        Directory.Delete(destination, recursive: true);
     }
 
     public async Task CreateFeatureAsync(
@@ -85,6 +112,48 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             await GitAsync(main, ["worktree", "add", "-b", feature, "--", target, defaultBranch], ct);
         }
+    }
+
+    public async Task DeleteFeatureAsync(string root, string feature, CancellationToken ct)
+    {
+        ValidateName(feature);
+        await using var lease = await LockAsync(root, ct);
+        var directory = SafePath(root, $"{WorktreesDirectory}/{feature}");
+        if (!Directory.Exists(directory))
+            throw new AgwException(ErrorCodes.ResourceNotFound, $"Feature {feature} was not found.");
+        var targets = new List<(string Main, string Worktree)>();
+        // 删除前检查全部 worktrees。Check every worktree before removing any.
+        foreach (var entry in Directory.EnumerateFileSystemEntries(directory).Order(StringComparer.Ordinal))
+        {
+            var name = Path.GetFileName(entry);
+            var target = SafePath(root, $"{WorktreesDirectory}/{feature}/{name}");
+            if (!Directory.Exists(target))
+                throw Conflict($"Move files outside the worktrees before deleting feature {feature}: {name}.");
+            var main = await MainPathAsync(root, name, ct);
+            var worktree = await WorktreePathAsync(root, feature, name, ct);
+            await RequireRemovableWorktreeAsync(worktree, ct);
+            targets.Add((main, worktree));
+        }
+        foreach (var (main, worktree) in targets)
+            await GitAsync(main, ["worktree", "remove", "--", worktree], ct);
+        Directory.Delete(directory);
+    }
+
+    private static async Task RequireRemovableWorktreeAsync(string worktree, CancellationToken ct)
+    {
+        await RequireCleanAsync(worktree, ct);
+        var changes = await GitAsync(
+            worktree,
+            ["--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"],
+            ct
+        );
+        if (changes.Length > 0)
+            throw Conflict($"Commit or stash local changes before deleting this worktree: {worktree}.");
+        if (await HasGitPathAsync(worktree, "locked", ct))
+            throw Conflict($"Unlock this worktree before deleting its feature: {worktree}.");
+        var submodules = await GitAsync(worktree, ["submodule", "foreach", "--quiet", "echo initialized"], ct);
+        if (submodules.Length > 0)
+            throw Conflict($"Deinitialize submodules before deleting this worktree: {worktree}.");
     }
 
     public async Task SwitchBranchAsync(
@@ -133,12 +202,12 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         );
     }
 
-    public async Task SyncAsync(string root, string repository, CancellationToken ct)
+    public async Task SyncAsync(string root, string repository, CancellationToken ct, string? proxyUrl = null)
     {
         await using var lease = await LockAsync(root, ct);
         var main = await RequireOnDefaultBranchAsync(root, repository, ct);
         var defaultBranch = await DefaultBranchAsync(main, ct);
-        await GitAsync(main, ["fetch", "--prune", "origin"], ct, ErrorCodes.GitRemoteOperationFailed);
+        await GitAsync(main, ["fetch", "--prune", "origin"], ct, ErrorCodes.GitRemoteOperationFailed, proxyUrl);
         await GitAsync(main, ["merge", "--ff-only", $"refs/remotes/origin/{defaultBranch}"], ct);
     }
 
@@ -581,10 +650,11 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         string directory,
         string[] arguments,
         CancellationToken ct,
-        ErrorCode? failure = null
+        ErrorCode? failure = null,
+        string? proxyUrl = null
     )
     {
-        var result = await RunGitAsync(directory, arguments, ct);
+        var result = await RunGitAsync(directory, arguments, ct, proxyUrl);
         if (!result.IsSuccess)
             throw Failure(
                 failure ?? ErrorCodes.RepositoryStateConflict,
@@ -597,12 +667,15 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
     private static Task<BufferedCommandResult> RunGitAsync(
         string directory,
         string[] arguments,
-        CancellationToken ct
+        CancellationToken ct,
+        string? proxyUrl = null
     ) =>
         Cli.Wrap("git")
             .WithWorkingDirectory(directory)
             .WithArguments(
-                new[] { "-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never" }.Concat(arguments)
+                new[] { "-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never" }
+                    .Concat(ProxyArguments(proxyUrl))
+                    .Concat(arguments)
             )
             .WithEnvironmentVariables(
                 new Dictionary<string, string?> { ["GIT_TERMINAL_PROMPT"] = "0", ["GIT_EDITOR"] = "true" }
@@ -610,6 +683,23 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
             .WithValidation(CommandResultValidation.None)
             .ExecuteBufferedAsync(ct)
             .Task;
+
+    private static string[] ProxyArguments(string? proxyUrl)
+    {
+        if (string.IsNullOrWhiteSpace(proxyUrl))
+            return [];
+        proxyUrl = proxyUrl.Trim();
+        if (
+            proxyUrl.Any(char.IsControl)
+            || !Uri.TryCreate(proxyUrl, UriKind.Absolute, out var uri)
+            || uri.Host.Length == 0
+            || uri.Query.Length > 0
+            || uri.Fragment.Length > 0
+            || uri.Scheme is not ("http" or "https" or "socks4" or "socks4a" or "socks5" or "socks5h")
+        )
+            throw Invalid("Use an HTTP, HTTPS or SOCKS proxy URL with a host and optional port.");
+        return ["-c", $"http.proxy={proxyUrl}", "-c", $"remote.origin.proxy={proxyUrl}"];
+    }
 
     [GeneratedRegex(@"^[\p{L}\p{N}][\p{L}\p{N}._-]{0,99}$")]
     private static partial Regex ValidName();

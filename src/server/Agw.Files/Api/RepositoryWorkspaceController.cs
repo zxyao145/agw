@@ -57,7 +57,7 @@ public sealed class RepositoryWorkspaceController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status502BadGateway)]
     public async Task<IActionResult> CloneAsync([FromBody] CloneRepositoryRequest request, CancellationToken ct) =>
-        ApiResult.Ok(await _service.CloneAsync(request.ProjectId, request.Url, request.Name, ct));
+        ApiResult.Ok(await _service.CloneAsync(request.ProjectId, request.Url, request.Name, ct, request.ProxyUrl));
 
     [HttpPost("feature")]
     [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]
@@ -75,6 +75,13 @@ public sealed class RepositoryWorkspaceController : ControllerBase
                 ct
             )
         );
+
+    [HttpPost("delete-feature")]
+    [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DeleteFeatureAsync(
+        [FromBody] DeleteFeatureRequest request,
+        CancellationToken ct
+    ) => ApiResult.Ok(await _service.DeleteFeatureAsync(request.ProjectId, request.Feature, ct));
 
     [HttpPost("switch")]
     [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]
@@ -101,8 +108,8 @@ public sealed class RepositoryWorkspaceController : ControllerBase
     [HttpPost("sync")]
     [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status502BadGateway)]
-    public async Task<IActionResult> SyncAsync([FromBody] RootRepositoryRequest request, CancellationToken ct) =>
-        ApiResult.Ok(await _service.SyncAsync(request.ProjectId, request.Repository, ct));
+    public async Task<IActionResult> SyncAsync([FromBody] SyncRepositoryRequest request, CancellationToken ct) =>
+        ApiResult.Ok(await _service.SyncAsync(request.ProjectId, request.Repository, ct, request.ProxyUrl));
 
     [HttpPost("restore")]
     [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]

@@ -4612,6 +4612,115 @@
         }
       }
     },
+    "/api/files/repositories/delete-feature": {
+      "post": {
+        "tags": [
+          "RepositoryWorkspace"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteFeatureRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteFeatureRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteFeatureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRepositoryWorkspaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/repositories/switch": {
       "post": {
         "tags": [
@@ -4839,17 +4948,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootRepositoryRequest"
+                "$ref": "#/components/schemas/SyncRepositoryRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootRepositoryRequest"
+                "$ref": "#/components/schemas/SyncRepositoryRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RootRepositoryRequest"
+                "$ref": "#/components/schemas/SyncRepositoryRequest"
               }
             }
           },
@@ -11929,6 +12038,12 @@
               "string"
             ],
             "description": "目录名；省略时从 URL 推导。Directory name; derived from the URL when omitted."
+          },
+          "proxyUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -12521,6 +12636,22 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "DeleteFeatureRequest": {
+        "required": [
+          "projectId",
+          "feature"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "feature": {
+            "type": "string"
           }
         }
       },
@@ -15927,6 +16058,28 @@
           },
           "createBranch": {
             "type": "boolean"
+          }
+        }
+      },
+      "SyncRepositoryRequest": {
+        "required": [
+          "projectId",
+          "repository"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "proxyUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

@@ -79,11 +79,10 @@ export interface RepositoryWorkspaceApi {
   /** 这些方法需要 project.repositories；项目所有权由 Server 校验。Requires project.repositories; the Server checks project ownership. */
   get(projectId: string): Promise<RepositoryWorkspaceState>;
   /** `name` 省略时从 URL 推导。`name` is derived from the URL when omitted. */
-  clone(input: {
-    projectId: string;
-    url: string;
-    name?: string;
-  }): Promise<RepositoryWorkspaceState>;
+  clone(
+    input: { projectId: string; url: string; name?: string; proxyUrl?: string },
+    options?: { signal?: AbortSignal },
+  ): Promise<RepositoryWorkspaceState>;
   createFeature(input: {
     projectId: string;
     /** 新 feature 名称，前缀 `yyMMdd-`。The new feature name, prefixed with `yyMMdd-`. */
@@ -94,6 +93,8 @@ export interface RepositoryWorkspaceApi {
     date?: string;
     repositories: string[];
   }): Promise<RepositoryWorkspaceState>;
+  /** 删除 feature 的 worktrees 及其 Git 登记信息，保留分支。Removes a feature's worktrees and Git registrations, preserving branches. */
+  deleteFeature(input: { projectId: string; feature: string }): Promise<RepositoryWorkspaceState>;
   switchBranch(input: {
     projectId: string;
     feature: string;
@@ -108,7 +109,11 @@ export interface RepositoryWorkspaceApi {
     repository: string;
   }): Promise<RepositoryWorkspaceState>;
   /** fetch origin 并快进默认分支。Fetches origin and fast-forwards the default branch. */
-  sync(input: { projectId: string; repository: string }): Promise<RepositoryWorkspaceState>;
+  sync(input: {
+    projectId: string;
+    repository: string;
+    proxyUrl?: string;
+  }): Promise<RepositoryWorkspaceState>;
   /** 把主工作副本切回默认分支。Switches the root checkout back to its default branch. */
   restoreDefaultBranch(input: {
     projectId: string;

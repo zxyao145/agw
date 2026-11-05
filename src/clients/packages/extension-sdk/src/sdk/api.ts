@@ -228,8 +228,9 @@ export function createExtensionApi(
     },
     repositories: {
       get: (projectId) => call("repositories.get", { projectId }),
-      clone: (input) => call("repositories.clone", input),
+      clone: (input, options) => call("repositories.clone", input, options?.signal),
       createFeature: (input) => call("repositories.feature", input),
+      deleteFeature: (input) => call("repositories.delete-feature", input),
       switchBranch: (input) => call("repositories.switch", input),
       merge: (input) => call("repositories.merge", input),
       sync: (input) => call("repositories.sync", input),

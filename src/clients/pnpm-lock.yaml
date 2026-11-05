@@ -1277,6 +1277,9 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   packages/extensions/excalidraw:
     devDependencies:

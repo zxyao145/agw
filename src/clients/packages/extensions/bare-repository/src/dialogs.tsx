@@ -23,6 +23,7 @@ function nameFromUrl(url: string): string {
 function Modal({
   title,
   busy,
+  cancellable = false,
   error,
   submitLabel,
   submitDisabled,
@@ -32,6 +33,7 @@ function Modal({
 }: {
   title: string;
   busy: boolean;
+  cancellable?: boolean;
   error: string | undefined;
   submitLabel: string;
   submitDisabled?: boolean;
@@ -52,7 +54,7 @@ function Modal({
       ref={ref}
       onCancel={(event) => {
         event.preventDefault();
-        if (!busy) onClose();
+        if (!busy || cancellable) onClose();
       }}
     >
       <form onSubmit={submit} aria-busy={busy}>
@@ -62,7 +64,7 @@ function Modal({
             type="button"
             className="icon"
             aria-label="Close"
-            disabled={busy}
+            disabled={busy && !cancellable}
             onClick={onClose}
           >
             <X size={16} />
@@ -75,7 +77,7 @@ function Modal({
           </p>
         )}
         <footer>
-          <button type="button" disabled={busy} onClick={onClose}>
+          <button type="button" disabled={busy && !cancellable} onClick={onClose}>
             Cancel
           </button>
           <button type="submit" className="primary" disabled={busy || submitDisabled}>
@@ -95,20 +97,31 @@ export function CloneDialog({
 }: {
   busy: boolean;
   error: string | undefined;
-  onSubmit: (input: { url: string; name?: string }) => void;
+  onSubmit: (input: { url: string; name?: string }, signal: AbortSignal) => void;
   onClose: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const operation = useRef<AbortController | null>(null);
+  useEffect(() => () => operation.current?.abort(), []);
+  function close() {
+    operation.current?.abort();
+    onClose();
+  }
   return (
     <Modal
       title="Clone repository"
       busy={busy}
+      cancellable
       error={error}
       submitLabel="Clone"
       submitDisabled={!url.trim()}
-      onSubmit={() => onSubmit({ url: url.trim(), name: name.trim() || undefined })}
-      onClose={onClose}
+      onSubmit={() => {
+        const controller = new AbortController();
+        operation.current = controller;
+        onSubmit({ url: url.trim(), name: name.trim() || undefined }, controller.signal);
+      }}
+      onClose={close}
     >
       <label>
         Repository URL
