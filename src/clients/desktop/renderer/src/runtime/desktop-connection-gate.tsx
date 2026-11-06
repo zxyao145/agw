@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LoaderCircle } from "lucide-react";
 
 import { AgwLogo, Button } from "@agw/components";
 import { useDesktopRuntime } from "./runtime-provider";
@@ -21,7 +22,18 @@ export function DesktopConnectionGate({ children }: { children: React.ReactNode 
     return children;
   }
 
-  if (desktop.status === "loading" || desktop.status === "setup-required") {
+  if (desktop.status === "loading") {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-foreground">
+        <div role="status" className="flex items-center gap-3 text-sm text-muted-foreground">
+          <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
+          <span>Connecting to Agw Server…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (desktop.status === "setup-required") {
     return <div className="min-h-screen bg-background" />;
   }
 
