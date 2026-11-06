@@ -129,6 +129,7 @@ interface FileContentProps extends ProjectFileScope {
    * When set, the "More" menu can set the selected viewer (Source included) as the default, or pass null to remove the setting.
    */
   onSetDefaultFileViewer?: (viewerId: string | null) => void;
+  renderSourceAccessory?: () => React.ReactNode;
 }
 
 export default function FileContent({
@@ -154,6 +155,7 @@ export default function FileContent({
   onSelectFileViewerItem,
   defaultFileViewerId,
   onSetDefaultFileViewer,
+  renderSourceAccessory,
 }: FileContentProps) {
   // Word wrap 在切换文件后保持。Word wrap stays across files.
   const [wordWrap, setWordWrap] = React.useState(false);
@@ -419,7 +421,8 @@ export default function FileContent({
               ) : (
                 // Source 与 diff 铺满标题行以下的区域，Monaco 自己滚动。Source and the diff fill the area below the title row;
                 // Monaco scrolls by itself.
-                <div className="agw-file-source flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+                <div className="agw-file-source relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+                  {renderSourceAccessory?.()}
                   {isLoadingContent ? (
                     <FileLoading />
                   ) : contentError ? (

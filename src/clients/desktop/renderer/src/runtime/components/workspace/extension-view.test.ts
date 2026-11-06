@@ -56,6 +56,7 @@ function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHost
     saveStatuses: {},
     fileHeaderItems: {},
     imagePreview: null,
+    floatingChat: null,
     ...overrides,
   };
 }

@@ -298,6 +298,7 @@ export interface ExtensionApi {
   readonly http: HttpApi;
   readonly chat: {
     composer: { insertText(text: string): Promise<void> };
+    createFloatingChat(options?: FloatingChatOptions): Promise<FloatingChatHandle>;
     /**
      * 订阅当前 Server 上全部对话的通信事件；需要 chat.observe。宿主接受订阅后返回，`listener` 可能在返回之前收到事件。
      * Subscribes to the traffic events of every conversation on the current Server; requires chat.observe.
@@ -326,6 +327,7 @@ export interface ExtensionApi {
      */
     previewImage(image: PreviewImage): Promise<void>;
   };
+
   readonly theme: {
     /** 当前主题的完整状态，CSS 主题包含 `cssText`。The complete current theme; CSS themes include `cssText`. */
     get(): ThemeInfo;
@@ -351,6 +353,17 @@ export interface ExtensionApi {
      */
     apply(): Disposable;
   };
+}
+
+export interface FloatingChatOptions {
+  context?: Record<string, string>;
+}
+
+export interface FloatingChatHandle {
+  setContext(context: Record<string, string>): Promise<void>;
+  open(): Promise<void>;
+  close(): Promise<void>;
+  dispose(): Promise<void>;
 }
 
 /** `ui.previewImage` 支持的图片类型。The image types `ui.previewImage` supports. */

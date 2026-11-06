@@ -1583,6 +1583,7 @@ export type ChatConversationPaneProps = {
   showUserInputNavigation?: boolean;
   composerActions?: readonly ExtensionMenuItem<Record<string, never>>[];
   messageActions?: readonly ExtensionMenuItem<ChatMessageActionArgs>[];
+  context?: Readonly<Record<string, string>>;
 };
 
 /** 当前对话与 Agent 选择器。The current conversation with the Agent selector. */
@@ -1591,6 +1592,7 @@ export function ChatConversationPane({
   showUserInputNavigation = false,
   composerActions,
   messageActions,
+  context,
 }: ChatConversationPaneProps) {
   const workspace = useChatWorkspace();
   const { selectedProjectId, selectedTarget } = workspace;
@@ -1634,6 +1636,7 @@ export function ChatConversationPane({
       directories={workspace.projectDirectories}
       pendingFileComments={workspace.comments}
       onPendingFileCommentsRemove={workspace.removePendingFileComments}
+      context={context}
       onReconnectStateChange={workspace.handleReconnectStateChange}
       composerRef={workspace.composerRef}
       composerActions={composerActions}
@@ -1654,6 +1657,7 @@ export type ChatFilePaneProps = {
    * "More" 菜单顶部的查看器说明，选中 Source 时也显示。The viewer info at the top of the "More" menu, also with Source.
    */
   renderFileViewerInfo?: (viewerId: string) => React.ReactNode;
+  renderSourceAccessory?: () => React.ReactNode;
   /** 用户选择了查看器在 "More" 菜单中的条目。The user chose one of the viewer's items in the "More" menu. */
   onSelectFileViewerItem?: (viewerId: string, itemId: string, entryId: string | null) => void;
   /** 用户为当前文件类型设置的默认查看器 id，或 "source"。The user's default viewer id for the file type, or "source". */
@@ -1671,6 +1675,7 @@ export function ChatFilePane({
   onReloadFileViewer,
   onReloadFileViewerDocument,
   renderFileViewerInfo,
+  renderSourceAccessory,
   onSelectFileViewerItem,
   defaultFileViewerId,
   onSetDefaultFileViewer,
@@ -1704,6 +1709,7 @@ export function ChatFilePane({
       onReloadSource={() => workspace.handleFileReset(workspace.selectedFile)}
       editableSource={editableSource}
       renderFileViewerInfo={renderFileViewerInfo}
+      renderSourceAccessory={renderSourceAccessory}
       onSelectFileViewerItem={onSelectFileViewerItem}
       defaultFileViewerId={defaultFileViewerId}
       onSetDefaultFileViewer={onSetDefaultFileViewer}

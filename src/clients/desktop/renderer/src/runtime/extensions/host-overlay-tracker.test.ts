@@ -74,6 +74,11 @@ const PREVIEW_IMAGE = {
 
 const cases: Case[] = [
   {
+    name: "FloatingChatPanel",
+    element: () => h("div", { "data-slot": "floating-chat-panel" }, "Chat"),
+    expected: ["floating-chat-panel"],
+  },
+  {
     name: "ImagePreview",
     element: () => h(chat.ImagePreview, { image: PREVIEW_IMAGE, onClose: () => undefined }),
     expected: ["image-preview"],
