@@ -1,0 +1,5 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "jsx": "react-jsx", "types": ["node", "vite/client"] },
+  "include": ["main.tsx", "../bare-repository-workspace.test.mts"]
+}
