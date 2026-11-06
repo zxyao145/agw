@@ -110,6 +110,94 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         Assert.Equal(Constants.AdminUserId, session.GetProperty("userId").GetString());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Start_DeletedSeedData_PreservesUserChangesAcrossRestarts(bool deleteAll)
+    {
+        await using var app = await CreateAuthenticationAppAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await scope
+            .ServiceProvider.GetRequiredService<ISetupInitializationService>()
+            .InitializeAsync(new SetupRequest { AdminPassword = "administrator-password" }, cancellationToken);
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        var database = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        await database.AgentflowEdges.ExecuteDeleteAsync(cancellationToken);
+        await database.AgentflowNodes.ExecuteDeleteAsync(cancellationToken);
+        await database.Agentflows.ExecuteDeleteAsync(cancellationToken);
+        await database.AgentSkillRelations.ExecuteDeleteAsync(cancellationToken);
+        await database.AgentMcpToolServers.ExecuteDeleteAsync(cancellationToken);
+        await database.Skills.ExecuteDeleteAsync(cancellationToken);
+        Directory.Delete(Path.Combine(_paths.SkillsDirectory, "xhs-explore"), recursive: true);
+        if (deleteAll)
+        {
+            await database.Agents.ExecuteDeleteAsync(cancellationToken);
+            await database.ModelProviders.ExecuteDeleteAsync(cancellationToken);
+            await database.Models.ExecuteDeleteAsync(cancellationToken);
+            await database.Providers.ExecuteDeleteAsync(cancellationToken);
+            await database.McpToolServers.ExecuteDeleteAsync(cancellationToken);
+            await database.Settings.Where(setting => setting.Key != "auth").ExecuteDeleteAsync(cancellationToken);
+        }
+        else
+        {
+            await database.Agents.Where(agent => agent.Name == "Pi").ExecuteDeleteAsync(cancellationToken);
+            var provider = await database.Providers.FirstAsync(cancellationToken);
+            provider.Endpoint = "https://custom.example.test";
+            var agent = await database.Agents.FirstAsync(item => item.Name == "general-agent", cancellationToken);
+            agent.DisplayName = "My customized Agent";
+            await database.SaveChangesAsync(cancellationToken);
+        }
+        database.ChangeTracker.Clear();
+
+        for (var restart = 0; restart < 2; restart++)
+        {
+            using var server = ServerStartupTests.ServerProcess.Start(
+                _root,
+                AppContext.BaseDirectory,
+                ["serve", $"--AgwDataDir={_paths.Root}"]
+            );
+            await server.WaitUntilReadyAsync(_paths.ServerRuntimeFile);
+            Assert.True(await server.IsInitializedAsync());
+            await server.StopAsync();
+            Assert.Equal(0, server.ExitCode);
+
+            Assert.Empty(await database.Agentflows.ToListAsync(cancellationToken));
+            Assert.Empty(await database.AgentflowNodes.ToListAsync(cancellationToken));
+            Assert.Empty(await database.AgentflowEdges.ToListAsync(cancellationToken));
+            Assert.Empty(await database.AgentSkillRelations.ToListAsync(cancellationToken));
+            Assert.Empty(await database.AgentMcpToolServers.ToListAsync(cancellationToken));
+            Assert.False(await database.Skills.AnyAsync(skill => skill.Name == "xhs-explore", cancellationToken));
+            Assert.False(Directory.Exists(Path.Combine(_paths.SkillsDirectory, "xhs-explore")));
+            Assert.False(await database.Agents.AnyAsync(agent => agent.Name == "Pi", cancellationToken));
+            if (deleteAll)
+            {
+                Assert.Empty(await database.Agents.ToListAsync(cancellationToken));
+                Assert.Empty(await database.ModelProviders.ToListAsync(cancellationToken));
+                Assert.Empty(await database.Models.ToListAsync(cancellationToken));
+                Assert.Empty(await database.Providers.ToListAsync(cancellationToken));
+                Assert.Empty(await database.McpToolServers.ToListAsync(cancellationToken));
+                Assert.False(await database.Settings.AnyAsync(setting => setting.Key != "auth", cancellationToken));
+            }
+            else
+            {
+                Assert.True(
+                    await database.Providers.AnyAsync(
+                        provider => provider.Endpoint == "https://custom.example.test",
+                        cancellationToken
+                    )
+                );
+                Assert.Equal(
+                    "My customized Agent",
+                    await database
+                        .Agents.Where(agent => agent.Name == "general-agent")
+                        .Select(agent => agent.DisplayName)
+                        .SingleAsync(cancellationToken)
+                );
+            }
+        }
+    }
+
     [Fact]
     public async Task BrowserSetup_UsesConfiguredDatabaseAndRequiresAntiforgeryToken()
     {

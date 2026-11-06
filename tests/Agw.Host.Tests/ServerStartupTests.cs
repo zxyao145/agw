@@ -311,7 +311,7 @@ public sealed class ServerStartupTests : IDisposable
         return command.ExecuteScalar();
     }
 
-    private sealed class ServerProcess : IDisposable
+    internal sealed class ServerProcess : IDisposable
     {
         private readonly Process _process;
         private readonly StringBuilder _output = new();

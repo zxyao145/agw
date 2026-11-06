@@ -27,7 +27,8 @@ using Microsoft.Extensions.Logging;
 namespace Agw.Infrastructure.Data;
 
 /// <summary>
-/// Database seeder for initializing default data on application startup.
+/// 创建初始默认数据并维护系统定义。
+/// Creates initial default data and maintains system-owned definitions.
 /// </summary>
 public class DbSeeder
 {
@@ -93,7 +94,8 @@ public class DbSeeder
     }
 
     /// <summary>
-    /// Seeds the database with default data.
+    /// 首次 Setup 时创建默认数据。
+    /// Seeds default data during first-run Setup.
     /// </summary>
     public async Task SeedAsync()
     {
@@ -125,6 +127,17 @@ public class DbSeeder
             _logger.LogError(ex, "Error occurred during database seeding");
             throw;
         }
+    }
+
+    /// <summary>
+    /// 维护系统提供的内置技能定义。
+    /// Maintains system-provided built-in skill definitions.
+    /// </summary>
+    public async Task MaintainSystemDataAsync()
+    {
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        await SeedBuiltInClassSkillsAsync();
+        await _context.SaveChangesAsync();
     }
 
     /// <summary>
