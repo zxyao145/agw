@@ -1,11 +1,14 @@
 namespace Agw.Files.Abstracts;
 
 /// <summary>
-/// 项目根目录下的主工作副本（含 <c>.git</c> 目录的子目录）。A root checkout: a project subdirectory with a <c>.git</c> directory.
+/// 项目根目录或其子目录中的主工作副本。A main checkout at the project root or in a subdirectory.
 /// </summary>
 public sealed record WorkspaceRepository
 {
     public string Name { get; init; } = "";
+
+    /// <summary>相对项目根目录的路径；空字符串表示项目根目录。Project-relative path; empty for the project root.</summary>
+    public string Path { get; init; } = "";
 
     /// <summary>远程默认分支；没有 <c>origin/HEAD</c> 时为当前分支。The remote default branch, or the current branch without <c>origin/HEAD</c>.</summary>
     public string DefaultBranch { get; init; } = "";
@@ -27,11 +30,14 @@ public sealed record WorkspaceRepository
 }
 
 /// <summary>
-/// <c>.worktrees/&lt;feature&gt;/&lt;repo&gt;</c> 下的一个 worktree。A worktree at <c>.worktrees/&lt;feature&gt;/&lt;repo&gt;</c>.
+/// feature 中的一个 worktree。A worktree belonging to a feature.
 /// </summary>
 public sealed record FeatureRepository
 {
     public string Name { get; init; } = "";
+
+    /// <summary>相对项目根目录的 worktree 路径。The project-relative worktree path.</summary>
+    public string Path { get; init; } = "";
     public string Branch { get; init; } = "";
     public bool Dirty { get; init; }
 
@@ -52,6 +58,7 @@ public sealed record RepositoryTreeEntry(string Name, string Path, bool IsDirect
 /// 分支的一层目录。<see cref="Checkout"/> 为检出该分支的目录（相对 Project 根目录），此时条目来自磁盘；为 null 时条目来自
 /// 提交。One directory level of a branch. <see cref="Checkout"/> is the directory where the branch is checked out
 /// (relative to the Project root), and the entries then come from the disk; when null they come from the commit.
+/// 空字符串表示项目根目录。An empty string denotes the project root.
 /// </summary>
 public sealed record RepositoryTree(string? Checkout, RepositoryTreeEntry[] Entries);
 
@@ -68,7 +75,7 @@ public sealed record RepositoryChange(string Path, string Status);
 public sealed record RepositoryBlob(string? Content, long Size, bool IsBinary, bool TooLarge);
 
 /// <summary>
-/// 按目录约定管理多仓库 worktree；状态全部从磁盘和 Git 推导。Manages multi-repository worktrees by directory convention;
+/// 按目录约定管理仓库 worktree；状态全部从磁盘和 Git 推导。Manages repository worktrees by directory convention;
 /// all state is derived from the disk and Git.
 /// </summary>
 public interface IRepositoryWorkspace
@@ -76,7 +83,14 @@ public interface IRepositoryWorkspace
     Task<RepositoryWorkspaceState> ReadAsync(string root, CancellationToken ct);
 
     /// <summary><paramref name="name"/> 为空时从 URL 推导。Derives the name from the URL when <paramref name="name"/> is empty.</summary>
-    Task CloneAsync(string root, string url, string? name, CancellationToken ct, string? proxyUrl = null);
+    Task CloneAsync(
+        string root,
+        string url,
+        string? name,
+        CancellationToken ct,
+        string? proxyUrl = null,
+        bool intoRoot = false
+    );
 
     /// <summary>
     /// 从各仓库的默认分支创建名为 <paramref name="feature"/> 的分支和 worktree。Creates a <paramref name="feature"/>

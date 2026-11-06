@@ -1,6 +1,8 @@
-/** 项目根目录下含 `.git` 目录的主工作副本。A root checkout: a project subdirectory with a `.git` directory. */
+/** 项目目录或其子目录中的主工作副本。A main checkout in the Project directory or one of its subdirectories. */
 export interface WorkspaceRepository {
   name: string;
+  /** 相对 Project 的目录；空字符串表示 Project 根目录。The directory relative to the Project; empty for the Project root. */
+  path: string;
   /** 远程默认分支；没有 origin/HEAD 时为当前分支。The remote default branch, or the current branch without origin/HEAD. */
   defaultBranch: string;
   /** 当前分支；分离 HEAD 时为空。The current branch; empty when HEAD is detached. */
@@ -16,9 +18,11 @@ export interface WorkspaceRepository {
   error: string | null;
 }
 
-/** `.worktrees/<feature>/<repo>` 下的 worktree。A worktree at `.worktrees/<feature>/<repo>`. */
+/** feature 中的 worktree。A worktree in a feature. */
 export interface FeatureRepository {
   name: string;
+  /** 相对 Project 的 worktree 目录。The worktree directory relative to the Project. */
+  path: string;
   branch: string;
   dirty: boolean;
   /** 相对主工作副本默认分支的提交数。Commits relative to the root checkout's default branch. */
@@ -46,9 +50,9 @@ export interface RepositoryTreeEntry {
 
 export interface RepositoryTree {
   /**
-   * 检出该分支的目录（相对 Project 根目录），此时条目来自磁盘；null 时条目来自提交。
-   * Where the branch is checked out (relative to the Project root), with entries from the disk; null means the
-   * entries come from the commit.
+   * 检出该分支的目录（相对 Project 根目录），此时条目来自磁盘；空字符串表示 Project 根目录，null 时条目来自提交。
+   * Where the branch is checked out (relative to the Project root), with entries from the disk; an empty string
+   * means the Project root, and null means the entries come from the commit.
    */
   checkout: string | null;
   entries: RepositoryTreeEntry[];
@@ -78,9 +82,9 @@ export interface RepositoryBlob {
 export interface RepositoryWorkspaceApi {
   /** 这些方法需要 project.repositories；项目所有权由 Server 校验。Requires project.repositories; the Server checks project ownership. */
   get(projectId: string): Promise<RepositoryWorkspaceState>;
-  /** `name` 省略时从 URL 推导。`name` is derived from the URL when omitted. */
+  /** `intoRoot` 默认为 false；子目录的 `name` 省略时从 URL 推导。`intoRoot` defaults to false; a subdirectory's `name` is derived from the URL when omitted. */
   clone(
-    input: { projectId: string; url: string; name?: string; proxyUrl?: string },
+    input: { projectId: string; url: string; name?: string; intoRoot?: boolean; proxyUrl?: string },
     options?: { signal?: AbortSignal },
   ): Promise<RepositoryWorkspaceState>;
   createFeature(input: {

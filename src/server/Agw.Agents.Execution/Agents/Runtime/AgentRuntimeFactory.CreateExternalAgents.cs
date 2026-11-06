@@ -562,10 +562,10 @@ public partial class AgentRuntimeFactory
             .ConfigureAwait(false);
         try
         {
-            var codexAgent = new CodexAppServerAIAgent(client, options);
             return new ExternalAgentCreation(
                 new CodexProviderSessionTrackingAgent(
-                    codexAgent,
+                    client,
+                    options,
                     runtimeOptions.ProviderSessionId,
                     runtimeOptions.IsResume
                 ),

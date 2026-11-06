@@ -79,6 +79,8 @@ export function ProjectWorkspace({
   const [selection, setSelection] = useState<Selection>({ kind: "main" });
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const active = useRef(true);
+  const handledRequest = useRef<OpenRequest | null>(null);
+  const singleRoot = state?.repositories.some((repo) => repo.path === "") ?? false;
 
   const refresh = useCallback(async () => {
     setLoadError("");
@@ -99,11 +101,13 @@ export function ProjectWorkspace({
   }, [refresh]);
 
   useEffect(() => {
+    if (!state || handledRequest.current === request) return;
+    handledRequest.current = request;
     const params = (request.params ?? {}) as ManageParams;
     if (params.feature) setSelection({ kind: "feature", name: params.feature });
-    if (params.action === "clone") setDialog({ kind: "clone" });
+    if (params.action === "clone" && !singleRoot) setDialog({ kind: "clone" });
     if (params.action === "feature") setDialog({ kind: "feature", feature: params.feature });
-  }, [request]);
+  }, [request, state, singleRoot]);
 
   async function run(
     key: string,
@@ -245,12 +249,17 @@ export function ProjectWorkspace({
             </p>
           </div>
           <div className="actions feature-actions">
-            <button
-              disabled={deleting}
-              onClick={() => setDialog({ kind: "feature", feature: feature.name })}
-            >
-              <Plus size={16} /> Add repositories
-            </button>
+            {repositories.some(
+              (repo) =>
+                !repo.error && !feature.repositories.some((entry) => entry.name === repo.name),
+            ) && (
+              <button
+                disabled={deleting}
+                onClick={() => setDialog({ kind: "feature", feature: feature.name })}
+              >
+                <Plus size={16} /> Add repositories
+              </button>
+            )}
             <button disabled={busy} onClick={() => void deleteFeature(feature)}>
               <Trash2 size={16} /> {deleting ? "Deleting…" : "Delete feature"}
             </button>
@@ -278,7 +287,7 @@ export function ProjectWorkspace({
               <Row
                 key={key}
                 name={repo.name}
-                directory={`.worktrees/${feature.name}/${repo.name}`}
+                directory={repo.path}
                 busy={pending.has(key)}
                 error={errors[key] ?? repo.error ?? undefined}
                 status={
@@ -333,7 +342,7 @@ export function ProjectWorkspace({
             </p>
           </div>
           <div className="actions">
-            <button onClick={() => setDialog({ kind: "clone" })}>
+            <button disabled={singleRoot} onClick={() => setDialog({ kind: "clone" })}>
               <Download size={16} /> Clone
             </button>
             <button disabled={busy || repositories.length === 0} onClick={() => void syncAll()}>
@@ -350,7 +359,7 @@ export function ProjectWorkspace({
               <Row
                 key={key}
                 name={repo.name}
-                directory={repo.name}
+                directory={repo.path || "."}
                 busy={pending.has(key)}
                 error={errors[key] ?? repo.error ?? undefined}
                 status={
@@ -506,7 +515,7 @@ export function ProjectWorkspace({
         </nav>
         {content}
       </div>
-      {dialog?.kind === "clone" && (
+      {dialog?.kind === "clone" && !singleRoot && (
         <CloneDialog
           busy={pending.has(DIALOG)}
           error={errors[DIALOG]}
@@ -596,19 +605,16 @@ function Welcome({ onClone }: { onClone: () => void }) {
   return (
     <section className="panel welcome">
       <FolderGit2 size={32} />
-      <h2>Develop features across repositories</h2>
+      <h2>Develop features with worktrees</h2>
       <p>
-        Clone each repository on its default branch into the Project root, then create a feature to
-        get one worktree per repository on the same <code>yyMMdd-feature</code> branch. Repositories
-        you already cloned into the Project root appear here automatically.
+        Clone a repository into an empty Project directory or clone repositories into Project
+        subdirectories. Existing checkouts appear automatically. Create a feature to develop on a{" "}
+        <code>yyMMdd-feature</code> branch in its own worktree.
       </p>
-      <pre>{`.
-├── .worktrees
-│   └── 261127-add-extensions
-│       ├── repo-a
-│       └── repo-b
-├── repo-a
-└── repo-b`}</pre>
+      <p>
+        A Project-root repository uses <code>.worktrees/&lt;feature&gt;</code>. Repositories in
+        subdirectories use <code>.worktrees/&lt;feature&gt;/&lt;repo&gt;</code>.
+      </p>
       <button className="primary" onClick={onClone}>
         <Download size={16} /> Clone a repository
       </button>

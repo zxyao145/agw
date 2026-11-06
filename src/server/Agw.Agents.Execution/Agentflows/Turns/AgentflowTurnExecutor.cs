@@ -463,7 +463,7 @@ public sealed class AgentflowTurnExecutor
                     case WorkflowErrorEvent error:
                         _logger.LogError(error.Exception, "Workflow error");
                         yield return CreateWorkflowErrorMessage(error.Exception, Guid.CreateVersion7().Normalize());
-                        state.Outcome = TurnOutcome.Failed(error.Exception?.Message ?? "Agentflow execution failed.");
+                        state.Outcome = TurnOutcome.Failed(GetWorkflowErrorText(error.Exception));
                         yield break;
                 }
             }

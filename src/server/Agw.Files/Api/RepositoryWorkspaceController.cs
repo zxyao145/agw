@@ -57,7 +57,16 @@ public sealed class RepositoryWorkspaceController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status502BadGateway)]
     public async Task<IActionResult> CloneAsync([FromBody] CloneRepositoryRequest request, CancellationToken ct) =>
-        ApiResult.Ok(await _service.CloneAsync(request.ProjectId, request.Url, request.Name, ct, request.ProxyUrl));
+        ApiResult.Ok(
+            await _service.CloneAsync(
+                request.ProjectId,
+                request.Url,
+                request.Name,
+                ct,
+                request.ProxyUrl,
+                request.IntoRoot == true
+            )
+        );
 
     [HttpPost("feature")]
     [ProducesResponseType(typeof(ApiResult<RepositoryWorkspaceState>), StatusCodes.Status200OK)]

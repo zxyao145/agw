@@ -97,11 +97,12 @@ export function CloneDialog({
 }: {
   busy: boolean;
   error: string | undefined;
-  onSubmit: (input: { url: string; name?: string }, signal: AbortSignal) => void;
+  onSubmit: (input: { url: string; name?: string; intoRoot: boolean }, signal: AbortSignal) => void;
   onClose: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const [destination, setDestination] = useState("subdirectory");
   const operation = useRef<AbortController | null>(null);
   useEffect(() => () => operation.current?.abort(), []);
   function close() {
@@ -119,7 +120,12 @@ export function CloneDialog({
       onSubmit={() => {
         const controller = new AbortController();
         operation.current = controller;
-        onSubmit({ url: url.trim(), name: name.trim() || undefined }, controller.signal);
+        onSubmit(
+          destination === "root"
+            ? { url: url.trim(), intoRoot: true }
+            : { url: url.trim(), name: name.trim() || undefined, intoRoot: false },
+          controller.signal,
+        );
       }}
       onClose={close}
     >
@@ -135,16 +141,27 @@ export function CloneDialog({
         />
       </label>
       <label>
-        Directory name
-        <input
-          name="name"
-          pattern="[\p{L}\p{N}][\p{L}\p{N}._\-]*"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={nameFromUrl(url) || "derived from the URL"}
-        />
-        <small>Clones the remote default branch into this directory of the Project.</small>
+        Destination
+        <select value={destination} onChange={(event) => setDestination(event.target.value)}>
+          <option value="subdirectory">Project subdirectory</option>
+          <option value="root">Project root</option>
+        </select>
       </label>
+      {destination === "root" ? (
+        <small>Clones into the empty Project directory, using its directory name.</small>
+      ) : (
+        <label>
+          Directory name
+          <input
+            name="name"
+            pattern="[\p{L}\p{N}][\p{L}\p{N}._\-]*"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={nameFromUrl(url) || "derived from the URL"}
+          />
+          <small>Clones the remote default branch into this directory of the Project.</small>
+        </label>
+      )}
     </Modal>
   );
 }
@@ -166,7 +183,10 @@ export function FeatureDialog({
   onClose: () => void;
 }) {
   const [name, setName] = useState("");
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const singleRoot = repositories.length === 1 && repositories[0].path === "";
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set(singleRoot ? [repositories[0].name] : []),
+  );
   const allSelected = repositories.length > 0 && selected.size === repositories.length;
   const branch = feature ?? `${datePrefix()}-${name.trim() || "feature-name"}`;
   function toggle(repo: string) {
@@ -203,7 +223,11 @@ export function FeatureDialog({
         </label>
       )}
       <p className="preview">
-        Branch <code>{branch}</code> at <code>.worktrees/{branch}/&lt;repo&gt;</code>
+        Branch <code>{branch}</code> at{" "}
+        <code>
+          .worktrees/{branch}
+          {singleRoot ? "" : "/<repo>"}
+        </code>
       </p>
       <div className="choices" role="group" aria-label="Repositories">
         <label className="choice all">

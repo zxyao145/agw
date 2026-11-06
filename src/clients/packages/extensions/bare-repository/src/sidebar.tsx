@@ -58,14 +58,14 @@ function cloudUri(serverId: string, projectId: string, path: string): string {
 /** 仓库的主工作副本与 feature worktree 各自检出的分支。The branches checked out by a repository's root and feature worktrees. */
 function checkoutsOf(state: RepositoryWorkspaceState, repo: WorkspaceRepository): Checkout[] {
   const checkouts: Checkout[] = repo.branch
-    ? [{ branch: repo.branch, location: repo.name, feature: null }]
+    ? [{ branch: repo.branch, location: repo.path, feature: null }]
     : [];
   for (const feature of state.features)
     for (const entry of feature.repositories)
       if (entry.name === repo.name && entry.branch && !entry.error)
         checkouts.push({
           branch: entry.branch,
-          location: `.worktrees/${feature.name}/${repo.name}`,
+          location: entry.path,
           feature: feature.name,
         });
   return checkouts;
@@ -123,6 +123,7 @@ function RepositorySidebar({
   }, [loadState, request]);
 
   const repositories = state?.repositories.filter((repo) => !repo.error) ?? [];
+  const singleRoot = state?.repositories.some((repo) => repo.path === "") ?? false;
   const repo =
     repositories.find((item) => item.name === selection?.repository) ?? repositories.at(0);
   const branch =
@@ -233,8 +234,10 @@ function RepositorySidebar({
     try {
       const root = await loadDirectory("", generation.current);
       if (!root) return;
-      if (root.checkout)
-        await api.workspace.openFile(cloudUri(serverId, project.id, `${root.checkout}/${path}`));
+      if (root.checkout !== null)
+        await api.workspace.openFile(
+          cloudUri(serverId, project.id, root.checkout === "" ? path : `${root.checkout}/${path}`),
+        );
       else
         await api.workspace.openMainView("file", {
           repository: repo.name,
@@ -247,6 +250,7 @@ function RepositorySidebar({
   }
 
   function manage(params: ManageParams = {}) {
+    if (params.action === "clone" && singleRoot) return;
     void api.workspace.openMainView("repositories", params);
   }
 
@@ -298,7 +302,7 @@ function RepositorySidebar({
   // 当前位置的操作：worktree 合并，主工作副本同步或恢复默认分支。The action for the current location: merge a worktree,
   // or sync or restore the root checkout.
   const contextAction =
-    !repo || !checkout ? null : current?.feature ? (
+    !repo || checkout === null ? null : current?.feature ? (
       <button
         className="icon"
         aria-label={`Merge into ${repo.defaultBranch}`}
@@ -378,6 +382,7 @@ function RepositorySidebar({
             className="icon"
             title="Clone repository"
             aria-label="Clone repository"
+            disabled={singleRoot}
             onClick={() => manage({ action: "clone" })}
           >
             <Download size={15} />
@@ -407,8 +412,12 @@ function RepositorySidebar({
       )}
       {!repo ? (
         <div className="sidebar-empty">
-          <p>No repositories at the Project root.</p>
-          <button className="primary" onClick={() => manage({ action: "clone" })}>
+          <p>No repositories found in this Project.</p>
+          <button
+            className="primary"
+            disabled={singleRoot}
+            onClick={() => manage({ action: "clone" })}
+          >
             <Download size={15} /> Clone a repository
           </button>
         </div>
@@ -469,7 +478,7 @@ function RepositorySidebar({
               </SelectContent>
             </Select>
           </div>
-          {!checkout && (
+          {checkout === null && (
             <div className="location">
               <Eye size={14} />
               <span>Read-only · not checked out</span>
@@ -482,17 +491,21 @@ function RepositorySidebar({
             <button
               role="tab"
               aria-selected={tab === "changes"}
-              disabled={!checkout}
-              title={checkout ? undefined : "Only checked-out branches have uncommitted changes."}
+              disabled={checkout === null}
+              title={
+                checkout !== null
+                  ? undefined
+                  : "Only checked-out branches have uncommitted changes."
+              }
               onClick={() => setTab("changes")}
             >
               Changes
-              {checkout && changes.length > 0 ? (
+              {checkout !== null && changes.length > 0 ? (
                 <span className="count">{changes.length}</span>
               ) : null}
             </button>
           </div>
-          {tab === "changes" && checkout ? (
+          {tab === "changes" && checkout !== null ? (
             <ul className="changes" aria-label="Uncommitted changes">
               {changes.length === 0 && <li className="hint">No uncommitted changes.</li>}
               {changes.map((change) => (
@@ -526,7 +539,7 @@ function RepositorySidebar({
                   tree={tree}
                   expanded={expanded}
                   selectedPath={selectedPath}
-                  changes={checkout ? changes : []}
+                  changes={checkout !== null ? changes : []}
                   onToggle={toggle}
                   onOpen={(path) => void open(path)}
                 />

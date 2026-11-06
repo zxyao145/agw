@@ -21,7 +21,10 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
 
     public async Task<RepositoryWorkspaceState> ReadAsync(string root, CancellationToken ct)
     {
-        var names = ListDirectories(root).Where(name => IsDirectory(Path.Combine(root, name, ".git")));
+        var single = HasRootRepository(root);
+        var names = single
+            ? [RootRepositoryName(root)]
+            : ListDirectories(root).Where(name => IsDirectory(Path.Combine(root, name, ".git"))).ToArray();
         var repositories = await Task.WhenAll(names.Select(name => ReadRepositoryAsync(root, name, ct)));
         var defaults = repositories
             .Where(repo => repo.Error == null)
@@ -29,19 +32,36 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         var features = new List<WorkspaceFeature>();
         foreach (var feature in ListDirectories(SafePath(root, WorktreesDirectory)))
         {
-            var entries = ListDirectories(Path.Combine(root, WorktreesDirectory, feature))
-                .Select(name => ReadWorktreeAsync(root, feature, name, defaults, ct));
+            var entries = (single ? names : ListDirectories(Path.Combine(root, WorktreesDirectory, feature))).Select(
+                name => ReadWorktreeAsync(root, feature, name, defaults, ct)
+            );
             features.Add(new(feature, await Task.WhenAll(entries)));
         }
         return new(repositories, features.ToArray());
     }
 
-    public async Task CloneAsync(string root, string url, string? name, CancellationToken ct, string? proxyUrl = null)
+    public async Task CloneAsync(
+        string root,
+        string url,
+        string? name,
+        CancellationToken ct,
+        string? proxyUrl = null,
+        bool intoRoot = false
+    )
     {
         var derived = ValidateUrl(url);
+        await using var lease = await LockAsync(root, ct);
+        if (HasRootRepository(root))
+            throw Conflict("The project root already contains a repository.");
+        if (intoRoot)
+        {
+            if (!string.IsNullOrWhiteSpace(name))
+                throw Invalid("A directory name cannot be used when cloning into the project root.");
+            await CloneIntoRootAsync(root, url, proxyUrl, ct);
+            return;
+        }
         name = string.IsNullOrWhiteSpace(name) ? derived : name.Trim();
         ValidateName(name);
-        await using var lease = await LockAsync(root, ct);
         var destination = SafePath(root, name);
         if (Directory.Exists(destination) || File.Exists(destination))
             throw Conflict($"{name} already exists in the project.");
@@ -54,6 +74,58 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
             DeletePartialClone(destination);
             throw;
         }
+    }
+
+    private static async Task CloneIntoRootAsync(string root, string url, string? proxyUrl, CancellationToken ct)
+    {
+        if (Directory.EnumerateFileSystemEntries(root).Any())
+            throw Conflict("Cloning into the project root requires an empty directory.");
+        var staging = SafePath(root, $".agw-clone-{Guid.NewGuid():N}");
+        try
+        {
+            await GitAsync(root, ["clone", "--", url, staging], ct, ErrorCodes.GitRemoteOperationFailed, proxyUrl);
+            ct.ThrowIfCancellationRequested();
+            if (Directory.EnumerateFileSystemEntries(root).Any(entry => !entry.Equals(staging, PathComparison)))
+                throw Conflict("The project root changed while the repository was being cloned.");
+        }
+        catch
+        {
+            DeletePartialClone(staging);
+            throw;
+        }
+        PublishRootClone(root, staging);
+    }
+
+    internal static void PublishRootClone(string root, string staging)
+    {
+        try
+        {
+            // .git 最后移动，供未完成的发布恢复使用。Move .git last so an incomplete publication can be recovered.
+            var entries = new DirectoryInfo(staging)
+                .GetFileSystemInfos()
+                .OrderBy(entry => entry.Name.Equals(".git", PathComparison))
+                .ThenBy(entry => entry.Name, StringComparer.Ordinal)
+                .ToArray();
+            foreach (var entry in entries)
+            {
+                var destination = Path.Combine(root, entry.Name);
+                if (entry is DirectoryInfo directory)
+                    directory.MoveTo(destination);
+                else
+                    ((FileInfo)entry).MoveTo(destination);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new AgwException(
+                ErrorCodes.RepositoryStateConflict,
+                $"Clone publication into '{root}' failed. "
+                    + $"Git metadata and remaining files are in '{staging}'; moved files remain in the project root. "
+                    + "Resolve the filesystem error and move the remaining entries into the project root, with .git last.",
+                exception
+            );
+        }
+        Directory.Delete(staging);
     }
 
     private static void DeletePartialClone(string destination)
@@ -99,7 +171,7 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         {
             var main = await MainPathAsync(root, name, ct);
             await GitAsync(main, ["check-ref-format", "--branch", feature], ct, ErrorCodes.InvalidParam);
-            var target = SafePath(root, $"{WorktreesDirectory}/{feature}/{name}");
+            var target = SafePath(root, WorktreeRelativePath(root, feature, name));
             if (Directory.Exists(target) || File.Exists(target))
                 throw Conflict($"Worktree already exists: {name}.");
             if ((await RunGitAsync(main, ["show-ref", "--verify", "--quiet", $"refs/heads/{feature}"], ct)).IsSuccess)
@@ -121,6 +193,15 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         var directory = SafePath(root, $"{WorktreesDirectory}/{feature}");
         if (!Directory.Exists(directory))
             throw new AgwException(ErrorCodes.ResourceNotFound, $"Feature {feature} was not found.");
+        if (HasRootRepository(root))
+        {
+            var name = RootRepositoryName(root);
+            var main = await MainPathAsync(root, name, ct);
+            var worktree = await WorktreePathAsync(root, feature, name, ct);
+            await RequireRemovableWorktreeAsync(worktree, ct);
+            await GitAsync(main, ["worktree", "remove", "--", worktree], ct);
+            return;
+        }
         var targets = new List<(string Main, string Worktree)>();
         // 删除前检查全部 worktrees。Check every worktree before removing any.
         foreach (var entry in Directory.EnumerateFileSystemEntries(directory).Order(StringComparer.Ordinal))
@@ -233,7 +314,7 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         var checkout = await FindCheckoutAsync(root, repository, main, reference, ct);
         if (checkout != null)
         {
-            var directory = SafePath(root, string.Join('/', [checkout, .. segments]));
+            var directory = SafePath(SafePath(root, checkout), string.Join('/', segments));
             if (!Directory.Exists(directory))
                 throw new AgwException(ErrorCodes.ResourceNotFound, $"Directory not found: {path}.");
             var entries = new DirectoryInfo(directory)
@@ -354,16 +435,17 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
             return null;
         var branch = reference["refs/heads/".Length..];
         if (await GitAsync(main, ["branch", "--show-current"], ct) == branch)
-            return repository;
+            return MainRelativePath(root, repository);
         foreach (var feature in ListDirectories(SafePath(root, WorktreesDirectory)))
         {
-            if (!Directory.Exists(Path.Combine(root, WorktreesDirectory, feature, repository)))
+            var relative = WorktreeRelativePath(root, feature, repository);
+            if (!Directory.Exists(SafePath(root, relative)))
                 continue;
             try
             {
                 var path = await WorktreePathAsync(root, feature, repository, ct);
                 if (await GitAsync(path, ["branch", "--show-current"], ct) == branch)
-                    return $"{WorktreesDirectory}/{feature}/{repository}";
+                    return relative;
             }
             catch (AgwException)
             {
@@ -405,6 +487,7 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
 
     private static async Task<WorkspaceRepository> ReadRepositoryAsync(string root, string name, CancellationToken ct)
     {
+        var relative = HasRootRepository(root) ? "" : name;
         try
         {
             var path = await MainPathAsync(root, name, ct);
@@ -412,6 +495,7 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
             return new()
             {
                 Name = name,
+                Path = relative,
                 DefaultBranch = await DefaultBranchAsync(path, ct),
                 Branch = status.Branch,
                 Dirty = status.Dirty,
@@ -429,7 +513,12 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         }
         catch (AgwException exception)
         {
-            return new() { Name = name, Error = exception.Message };
+            return new()
+            {
+                Name = name,
+                Path = relative,
+                Error = exception.Message,
+            };
         }
     }
 
@@ -441,6 +530,9 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         CancellationToken ct
     )
     {
+        var relative = HasRootRepository(root)
+            ? $"{WorktreesDirectory}/{feature}"
+            : $"{WorktreesDirectory}/{feature}/{name}";
         try
         {
             if (!defaults.TryGetValue(name, out var defaultBranch))
@@ -453,6 +545,7 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
             return new()
             {
                 Name = name,
+                Path = relative,
                 Branch = status.Branch,
                 Dirty = status.Dirty,
                 Behind = int.Parse(counts[0], CultureInfo.InvariantCulture),
@@ -461,7 +554,12 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
         }
         catch (AgwException exception)
         {
-            return new() { Name = name, Error = exception.Message };
+            return new()
+            {
+                Name = name,
+                Path = relative,
+                Error = exception.Message,
+            };
         }
     }
 
@@ -507,9 +605,10 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
 
     private static async Task<string> MainPathAsync(string root, string name, CancellationToken ct)
     {
-        ValidateName(name);
-        var path = SafePath(root, name);
-        if (!IsDirectory(SafePath(root, $"{name}/.git")))
+        var relative = MainRelativePath(root, name);
+        var path = SafePath(root, relative);
+        var git = SafePath(path, ".git");
+        if (!IsDirectory(git) && !(relative.Length == 0 && File.Exists(git)))
             throw new AgwException(ErrorCodes.ResourceNotFound, $"No root checkout named {name}.");
         await RequireWorktreeRootAsync(path, ct);
         return path;
@@ -517,19 +616,43 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
 
     private static async Task<string> WorktreePathAsync(string root, string feature, string name, CancellationToken ct)
     {
-        ValidateName(feature);
-        ValidateName(name);
-        var main = SafePath(root, name);
-        var path = SafePath(root, $"{WorktreesDirectory}/{feature}/{name}");
-        if (!File.Exists(SafePath(root, $"{WorktreesDirectory}/{feature}/{name}/.git")))
+        var main = await MainPathAsync(root, name, ct);
+        var path = SafePath(root, WorktreeRelativePath(root, feature, name));
+        if (!File.Exists(SafePath(path, ".git")))
             throw new AgwException(ErrorCodes.ResourceNotFound, $"No worktree for {name} in feature {feature}.");
         await RequireWorktreeRootAsync(path, ct);
         var common = await GitAsync(path, ["rev-parse", "--path-format=absolute", "--git-common-dir"], ct);
-        if (!Path.GetFullPath(common).Equals(Path.Combine(main, ".git"), PathComparison))
+        var mainCommon = await GitAsync(main, ["rev-parse", "--path-format=absolute", "--git-common-dir"], ct);
+        if (!Path.GetFullPath(common).Equals(Path.GetFullPath(mainCommon), PathComparison))
             throw Conflict(
                 $"The worktree for {name} in feature {feature} does not belong to the root checkout {name}."
             );
         return path;
+    }
+
+    private static bool HasRootRepository(string root) =>
+        Directory.Exists(Path.Combine(root, ".git")) || File.Exists(Path.Combine(root, ".git"));
+
+    private static string RootRepositoryName(string root) => new DirectoryInfo(root).Name;
+
+    private static string MainRelativePath(string root, string name)
+    {
+        if (HasRootRepository(root))
+        {
+            if (name != RootRepositoryName(root))
+                throw new AgwException(ErrorCodes.ResourceNotFound, $"No root checkout named {name}.");
+            return "";
+        }
+        ValidateName(name);
+        return name;
+    }
+
+    private static string WorktreeRelativePath(string root, string feature, string name)
+    {
+        ValidateName(feature);
+        return MainRelativePath(root, name).Length == 0
+            ? $"{WorktreesDirectory}/{feature}"
+            : $"{WorktreesDirectory}/{feature}/{name}";
     }
 
     private static async Task RequireWorktreeRootAsync(string path, CancellationToken ct)
@@ -615,6 +738,8 @@ public sealed partial class RepositoryWorkspace : IRepositoryWorkspace
     private static string SafePath(string root, string relative)
     {
         var path = Path.GetFullPath(root);
+        if (relative.Length == 0)
+            return path;
         foreach (var part in relative.Split('/'))
         {
             if (part is "" or "." or ".." || part.Contains('\\') || Path.IsPathRooted(part))
