@@ -5,6 +5,7 @@ export * from "./lib/chat/search-command";
 export * from "./lib/chat/search-file";
 export * from "./ui-web/components/agent-selector";
 export * from "./ui-web/components/message/chat";
+export * from "./ui-web/components/message/floating-chat-panel";
 export * from "./ui-web/components/message/chat-extension-types";
 export {
   ConversationImagePlatformProvider,

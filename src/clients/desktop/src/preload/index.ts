@@ -110,6 +110,8 @@ const bridge: AgwDesktopBridge = {
     ipcRenderer.invoke("agw:hide-obscured-extension-frames", hostInstanceId, requests),
   revealExtensionFrames: (hostInstanceId, frameIds) =>
     ipcRenderer.invoke("agw:reveal-extension-frames", hostInstanceId, frameIds),
+  focusExtensionFrame: (hostInstanceId, frameId) =>
+    ipcRenderer.invoke("agw:focus-extension-frame", hostInstanceId, frameId),
   setExtensionFrameBackground: (hostInstanceId, color) =>
     ipcRenderer.invoke("agw:set-extension-frame-background", hostInstanceId, color),
   destroyExtensionFrame: (hostInstanceId, frameId) =>

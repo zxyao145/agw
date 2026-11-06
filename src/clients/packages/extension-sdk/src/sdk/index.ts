@@ -4,6 +4,7 @@ import type { BackgroundDefinition, ExtensionApi, ViewDefinition } from "../api"
 import { connect as connectToHost, registerBackground, registerView } from "./connection";
 
 export type * from "../api";
+export { mountFloatingChatButton } from "./floating-chat";
 
 /** 建立连接并返回 API。Connects and returns the API. */
 export function connect(): Promise<ExtensionApi> {

@@ -22,6 +22,7 @@ import {
   type FileViewerFile,
   type FileViewerParams,
   type HostContext,
+  normalizeFloatingChatContext,
 } from "@agw/extension-sdk";
 import { DEFAULT_THEME_ID } from "@desktop/shared/appearance";
 import { parseHostPermissions } from "@desktop/shared/extension-host-permissions";
@@ -112,6 +113,14 @@ export type ExtensionHostSnapshot = {
   fileHeaderItems: Readonly<Record<string, readonly FileHeaderItem[]>>;
   /** 视图请求的图片预览（`ui.previewImage`）；没有时为 null。The image preview a view requested (`ui.previewImage`), or null. */
   imagePreview: ExtensionImagePreview | null;
+  floatingChat: FloatingChatSnapshot | null;
+};
+
+export type FloatingChatSnapshot = {
+  open: boolean;
+  context: Record<string, string>;
+  ownerFrameId: string | null;
+  ownerPageId: string | null;
 };
 
 /** 宿主显示的图片预览；`src` 为宿主页面中的 Blob URL。An image preview the host shows; `src` is a Blob URL in the host page. */
@@ -311,6 +320,14 @@ export class ExtensionHost {
   /** 显示中的图片预览，同一时间只有一个。The image preview showing; only one at a time. */
   private imagePreview: PendingImagePreview | null = null;
   private nextImagePreviewId = 1;
+  private floatingChat: FloatingChatSnapshot | null = null;
+  private readonly floatingChatContexts = new Map<string, Record<string, string>>();
+  private readonly floatingChatContextScopes = new Map<
+    string,
+    { serverId: string; projectId: string | null }
+  >();
+  private floatingChatScope: { serverId: string; projectId: string | null } | null = null;
+  private floatingChatFocusAfterReveal: { frameId: string; pageId: string } | null = null;
   private readonly listeners = new Set<() => void>();
   private snapshot: ExtensionHostSnapshot = {
     started: false,
@@ -322,6 +339,7 @@ export class ExtensionHost {
     saveStatuses: {},
     fileHeaderItems: {},
     imagePreview: null,
+    floatingChat: null,
   };
 
   public constructor(private readonly options: ExtensionHostOptions) {
@@ -358,6 +376,17 @@ export class ExtensionHost {
     this.context = new ContextService(options.app, this.workspaceState());
     this.layout.subscribe(() => this.context.setWorkspace(this.workspaceState()));
     this.context.onConnectionChanged(() => this.cloudGrants.clear());
+    this.context.onConnectionChanged(() => this.clearFloatingChat());
+    this.context.subscribe((context) => {
+      const scopeChanged = (scope: { serverId: string; projectId: string | null }) =>
+        scope.projectId !== (context.project?.id ?? null) || scope.serverId !== context.server.id;
+      if (
+        (this.floatingChatScope && scopeChanged(this.floatingChatScope)) ||
+        [...this.floatingChatContextScopes.values()].some(scopeChanged)
+      ) {
+        this.clearFloatingChat();
+      }
+    });
     const cloud = new CloudFileSystem(this.context, this.cloudGrants, (location) =>
       this.fileWriteListener?.(location),
     );
@@ -423,6 +452,13 @@ export class ExtensionHost {
         }),
       showMessageBox: (owner, request) => this.showMessageBox(owner, request),
       previewImage: (owner, request) => this.previewImage(owner, request),
+      floatingChat: {
+        register: (owner, context) => this.registerExtensionFloatingChat(owner, context),
+        setContext: (owner, context) => this.setExtensionFloatingChatContext(owner, context),
+        open: (owner, context) => this.openExtensionFloatingChat(owner, context),
+        close: (owner) => this.closeFloatingChatOwner(owner.frameId, owner.pageId),
+        dispose: (owner) => this.disposeExtensionFloatingChat(owner.frameId, owner.pageId),
+      },
     });
   }
 
@@ -556,6 +592,234 @@ export class ExtensionHost {
 
   public setComposer(composer: { insertText(text: string): void } | null): void {
     this.composer = composer;
+  }
+
+  public openSourceFloatingChat(context: Record<string, string>): void {
+    this.requireFloatingChatWorkspace();
+    this.floatingChat = {
+      open: true,
+      context: normalizeFloatingChatContext(context),
+      ownerFrameId: null,
+      ownerPageId: null,
+    };
+    this.floatingChatScope = this.currentFloatingChatScope();
+    this.publish();
+  }
+
+  public setSourceFloatingChatContext(context: Record<string, string>): void {
+    const state = this.floatingChat;
+    if (state?.ownerFrameId !== null && state?.ownerFrameId !== undefined) return;
+    this.floatingChat = {
+      open: state?.open ?? false,
+      context: normalizeFloatingChatContext(context),
+      ownerFrameId: null,
+      ownerPageId: null,
+    };
+    this.floatingChatScope = this.currentFloatingChatScope();
+    this.publish();
+  }
+
+  public closeFloatingChat(): void {
+    if (!this.floatingChat?.open) return;
+    this.queueFloatingChatFocus(this.floatingChat);
+    this.floatingChat = { ...this.floatingChat, open: false };
+    this.publish();
+  }
+
+  public closeSourceFloatingChat(): void {
+    if (!this.floatingChat || this.floatingChat.ownerFrameId !== null) return;
+    this.floatingChat = null;
+    this.floatingChatScope = null;
+    this.publish();
+  }
+
+  private registerExtensionFloatingChat(
+    owner: SessionOwner,
+    context: Record<string, string>,
+  ): void {
+    this.assertFloatingChatOwner(owner);
+    const ownerKey = this.floatingChatOwnerKey(owner.frameId, owner.pageId);
+    if (this.floatingChatContexts.has(ownerKey)) {
+      throw createExtensionError(
+        "ERR_INVALID_ARGUMENT",
+        "This view already has a floating Chat component.",
+      );
+    }
+    this.floatingChatContexts.set(ownerKey, normalizeFloatingChatContext(context));
+    this.floatingChatContextScopes.set(ownerKey, this.currentFloatingChatScope());
+  }
+
+  private setExtensionFloatingChatContext(
+    owner: SessionOwner,
+    context: Record<string, string>,
+  ): void {
+    this.assertFloatingChatOwner(owner);
+    const ownerKey = this.floatingChatOwnerKey(owner.frameId, owner.pageId);
+    if (!this.floatingChatContexts.has(ownerKey)) {
+      throw createExtensionError("ERR_UNAVAILABLE", "Create the floating Chat component first.");
+    }
+    const normalized = normalizeFloatingChatContext(context);
+    this.floatingChatContexts.set(ownerKey, normalized);
+    this.floatingChatContextScopes.set(ownerKey, this.currentFloatingChatScope());
+    if (this.isFloatingChatOwner(owner.frameId, owner.pageId)) {
+      this.floatingChat = { ...this.floatingChat!, context: normalized };
+      this.publish();
+    }
+  }
+
+  private openExtensionFloatingChat(owner: SessionOwner, context: Record<string, string>): void {
+    this.assertFloatingChatOwner(owner);
+    this.requireFloatingChatWorkspace();
+    const ownerKey = this.floatingChatOwnerKey(owner.frameId, owner.pageId);
+    if (!this.floatingChatContexts.has(ownerKey)) {
+      throw createExtensionError("ERR_UNAVAILABLE", "Create the floating Chat component first.");
+    }
+    const normalized = normalizeFloatingChatContext(context);
+    this.floatingChatContexts.set(ownerKey, normalized);
+    this.floatingChatContextScopes.set(ownerKey, this.currentFloatingChatScope());
+    this.floatingChat = {
+      open: true,
+      context: normalized,
+      ownerFrameId: owner.frameId,
+      ownerPageId: owner.pageId,
+    };
+    this.floatingChatScope = this.currentFloatingChatScope();
+    this.publish();
+  }
+
+  private closeFloatingChatOwner(frameId: string, pageId: string): void {
+    if (!this.isFloatingChatOwner(frameId, pageId) || !this.floatingChat?.open) return;
+    this.queueFloatingChatFocus(this.floatingChat);
+    this.floatingChat = { ...this.floatingChat, open: false };
+    this.publish();
+  }
+
+  private queueFloatingChatFocus(state: FloatingChatSnapshot): void {
+    if (state.ownerFrameId && state.ownerPageId) {
+      const frame = this.frames.get(state.ownerFrameId);
+      if (frame?.shown && frame.closing === null && frame.pageId === state.ownerPageId) {
+        this.floatingChatFocusAfterReveal = {
+          frameId: state.ownerFrameId,
+          pageId: state.ownerPageId,
+        };
+      }
+    }
+  }
+
+  private async restoreFloatingChatFocus(frameId: string): Promise<void> {
+    const pending = this.floatingChatFocusAfterReveal;
+    if (!pending || pending.frameId !== frameId) return;
+    const frame = this.frames.get(frameId);
+    if (!frame || !frame.shown || frame.closing !== null || frame.pageId !== pending.pageId) {
+      this.floatingChatFocusAfterReveal = null;
+      return;
+    }
+    if (frame.wantsObscured) return;
+    await this.bridge.focusExtensionFrame(this.hostInstanceId, frameId);
+    if (this.floatingChatFocusAfterReveal !== pending) return;
+    this.floatingChatFocusAfterReveal = null;
+    this.broker.emit(frameId, pending.pageId, "chat.floating.focus", {});
+  }
+
+  private disposeExtensionFloatingChat(frameId: string, pageId: string): void {
+    this.floatingChatContexts.delete(this.floatingChatOwnerKey(frameId, pageId));
+    this.floatingChatContextScopes.delete(this.floatingChatOwnerKey(frameId, pageId));
+    if (this.isFloatingChatOwner(frameId, pageId)) {
+      if (
+        this.floatingChatFocusAfterReveal?.frameId === frameId &&
+        this.floatingChatFocusAfterReveal.pageId === pageId
+      ) {
+        this.floatingChatFocusAfterReveal = null;
+      }
+      this.floatingChat = null;
+      this.floatingChatScope = null;
+      this.publish();
+    }
+  }
+
+  private assertFloatingChatOwner(owner: SessionOwner): void {
+    const frame = this.frames.get(owner.frameId);
+    if (
+      !frame ||
+      frame.closing !== null ||
+      frame.pageId !== owner.pageId ||
+      frame.kind === "background"
+    ) {
+      throw createExtensionError(
+        "ERR_FRAME_GONE",
+        "The floating Chat view is no longer available.",
+      );
+    }
+  }
+
+  private requireFloatingChatWorkspace(): void {
+    if (!this.composer) {
+      throw createExtensionError("ERR_UNAVAILABLE", "The Chat workspace is not available.");
+    }
+  }
+
+  private isFloatingChatOwner(frameId: string, pageId: string): boolean {
+    return this.floatingChat?.ownerFrameId === frameId && this.floatingChat.ownerPageId === pageId;
+  }
+
+  private floatingChatOwnerKey(frameId: string, pageId: string): string {
+    return `${frameId}\0${pageId}`;
+  }
+
+  private currentFloatingChatScope(): { serverId: string; projectId: string | null } {
+    const context = this.context.snapshot();
+    return { serverId: context.server.id, projectId: context.project?.id ?? null };
+  }
+
+  private clearFloatingChatOwner(
+    frameId: string,
+    pageId?: string,
+    preserveRegistration = false,
+  ): void {
+    for (const ownerKey of this.floatingChatContexts.keys()) {
+      const [ownerFrameId, ownerPageId] = ownerKey.split("\0", 2);
+      if (ownerFrameId === frameId && (pageId === undefined || ownerPageId === pageId)) {
+        if (preserveRegistration) {
+          this.floatingChatContexts.set(ownerKey, {});
+          this.floatingChatContextScopes.set(ownerKey, this.currentFloatingChatScope());
+          this.broker.emit(frameId, ownerPageId, "chat.floating.contextCleared", {});
+        } else {
+          this.floatingChatContexts.delete(ownerKey);
+          this.floatingChatContextScopes.delete(ownerKey);
+        }
+      }
+    }
+    const state = this.floatingChat;
+    if (
+      this.floatingChatFocusAfterReveal?.frameId === frameId &&
+      (pageId === undefined || this.floatingChatFocusAfterReveal.pageId === pageId)
+    ) {
+      this.floatingChatFocusAfterReveal = null;
+    }
+    if (state?.ownerFrameId === frameId && (pageId === undefined || state.ownerPageId === pageId)) {
+      if (preserveRegistration) {
+        this.floatingChat = { ...state, open: false, context: {} };
+        this.floatingChatScope = null;
+        this.publish();
+      } else {
+        this.floatingChat = null;
+        this.floatingChatScope = null;
+        this.publish();
+      }
+    }
+  }
+
+  private clearFloatingChat(): void {
+    this.floatingChat = null;
+    this.floatingChatScope = null;
+    const scope = this.currentFloatingChatScope();
+    for (const ownerKey of this.floatingChatContexts.keys()) {
+      const [frameId, pageId] = ownerKey.split("\0", 2);
+      this.floatingChatContexts.set(ownerKey, {});
+      this.floatingChatContextScopes.set(ownerKey, scope);
+      this.broker.emit(frameId, pageId, "chat.floating.contextCleared", {});
+    }
+    this.publish();
   }
 
   public setConversationRefresher(refresh: ((projectId: string) => void) | null): void {
@@ -877,6 +1141,7 @@ export class ExtensionHost {
     for (const frame of this.frames.values()) {
       if (frame.kind === "background") continue;
       const wanted = frameIds.has(frame.frameId);
+      const wasObscured = frame.wantsObscured;
       if (wanted && !frame.wantsObscured) {
         frame.wantsObscured = true;
         const request = ++frame.obscureRequest;
@@ -897,11 +1162,23 @@ export class ExtensionHost {
           .revealExtensionFrames(this.hostInstanceId, [frame.frameId])
           .then(afterNextPaint)
           .then(() => {
-            if (frame.obscureRequest !== request || frame.snapshot === null) return;
-            frame.snapshot = null;
-            this.publish();
+            if (frame.obscureRequest !== request) return;
+            if (frame.snapshot !== null) {
+              frame.snapshot = null;
+              this.publish();
+            }
+            void this.restoreFloatingChatFocus(frame.frameId).catch((error: unknown) =>
+              console.error("Unable to focus the floating Chat owner.", error),
+            );
           })
           .catch((error: unknown) => console.error("Unable to reveal an extension view.", error));
+      }
+      if (!wanted && !wasObscured && this.floatingChatFocusAfterReveal?.frameId === frame.frameId) {
+        void afterNextPaint()
+          .then(() => this.restoreFloatingChatFocus(frame.frameId))
+          .catch((error: unknown) =>
+            console.error("Unable to focus the floating Chat owner.", error),
+          );
       }
     }
   }
@@ -1181,6 +1458,7 @@ export class ExtensionHost {
     hooks: boolean,
   ): Promise<void> {
     frame.closing ??= (async () => {
+      this.clearFloatingChatOwner(frame.frameId);
       this.publish();
       this.dismissMessageBoxes(frame.frameId);
       this.dismissImagePreview(frame.frameId);
@@ -1318,6 +1596,7 @@ export class ExtensionHost {
       (view?.location === "main" && view.retainContextWhenHidden && frame.kind === "mainView") ||
       frame.kind === "fileViewer"
     ) {
+      this.clearFloatingChatOwner(frame.frameId, frame.pageId ?? undefined, true);
       if (frame.loaded) {
         void this.broker.call(frame.frameId, "view.onHide", {}).catch((error: unknown) => {
           console.error(`[extension ${frame.extensionId}/${viewId}] onHide failed.`, error);
@@ -1602,6 +1881,7 @@ export class ExtensionHost {
   private async pageReplaced(frame: HostFrame, pageId: string): Promise<void> {
     if (frame.pageId !== pageId) return;
     frame.pageId = null;
+    this.clearFloatingChatOwner(frame.frameId, pageId);
     frame.loaded = false;
     this.dismissMessageBoxes(frame.frameId, pageId);
     this.dismissImagePreview(frame.frameId, pageId);
@@ -1743,6 +2023,7 @@ export class ExtensionHost {
         }),
       ),
       imagePreview: this.imagePreview?.preview ?? null,
+      floatingChat: this.floatingChat,
       extensions: [...this.records.values()]
         .sort((left, right) => left.installed.id.localeCompare(right.installed.id))
         .map((record) => ({

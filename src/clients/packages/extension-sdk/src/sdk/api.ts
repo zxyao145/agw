@@ -25,6 +25,7 @@ import {
   reloadChangedDocuments,
 } from "./documents";
 import { applyTheme, mergeThemeChange, type ThemeState } from "./theme";
+import { createFloatingChat } from "./floating-chat";
 
 export type EventRouter = Map<string, Set<(data: unknown) => void>>;
 
@@ -283,6 +284,17 @@ export function createExtensionApi(
     },
     chat: {
       composer: { insertText: (text) => call("chat.composer.insertText", { text }) },
+      createFloatingChat: async (options) =>
+        createFloatingChat(
+          call,
+          options,
+          (error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            void call("ui.notify", { type: "error", message });
+          },
+          (listener) => subscribe(router, "chat.floating.contextCleared", listener),
+          (listener) => subscribe(router, "chat.floating.focus", listener),
+        ),
       observe: async (filter, listener) => {
         const subscriptionId = crypto.randomUUID();
         const subscription = subscribe(router, "chat.event", (data) => {

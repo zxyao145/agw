@@ -53,6 +53,7 @@ export interface Scenario {
   diffScope?: GitDiffScope;
   comments?: CommentData[];
   editable?: EditableScenario;
+  showSourceAccessory?: boolean;
 }
 
 declare global {
@@ -197,6 +198,15 @@ function App({ scenario, model }: { scenario: Scenario; model: CodeTextModel | n
           }
           defaultFileViewerId={scenario.defaultFileViewerId}
           editableSource={editableSource}
+          renderSourceAccessory={
+            scenario.showSourceAccessory
+              ? () => (
+                  <button aria-label="Open chat" data-testid="source-chat-accessory">
+                    Chat
+                  </button>
+                )
+              : undefined
+          }
         />
       </div>
     </CodeViewAppearanceProvider>

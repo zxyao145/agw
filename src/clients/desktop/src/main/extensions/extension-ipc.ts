@@ -161,6 +161,9 @@ export function registerExtensionIpc({
   handle("agw:reveal-extension-frames", (hostInstanceId: string, frameIds: string[]) =>
     runtime.revealFrames(hostInstanceId, frameIds),
   );
+  handle("agw:focus-extension-frame", (hostInstanceId: string, frameId: string) =>
+    runtime.focusFrame(hostInstanceId, frameId),
+  );
   handle("agw:set-extension-frame-background", (hostInstanceId: string, color: string) =>
     runtime.setFrameBackground(hostInstanceId, color),
   );

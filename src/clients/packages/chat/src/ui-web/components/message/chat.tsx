@@ -72,7 +72,7 @@ import type { AiMessage, ConversationHistoryTurn } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { conversationComposerStorage } from "../../../lib/chat/conversation-composer-storage";
 import { notifyImageDraftError, useConversationImageDraft } from "./use-conversation-image-draft";
-import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
+import { createChatContextPromptBuilder } from "../../../lib/chat/chat-context-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 import { ToolDirectoriesContext } from "./tool-directory";
 import { userInputKey } from "./user-input-navigation";
@@ -123,6 +123,7 @@ export interface ChatProps {
   onExecutionError?: (error: unknown) => void;
   pendingFileComments?: readonly LineComment[];
   onPendingFileCommentsRemove?: (commentIds: readonly string[]) => void;
+  context?: Readonly<Record<string, string>>;
   showUserInputNavigation?: boolean;
   /** 将 SignalR 重连状态与重试入口同步给更高层的工作区遮罩。Reports the SignalR reconnect state and a retry action to the workspace overlay. */
   onReconnectStateChange?: (
@@ -141,6 +142,7 @@ export interface ChatProps {
 }
 
 const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
+const EMPTY_CHAT_CONTEXT: Readonly<Record<string, string>> = {};
 const EMPTY_PROJECT_DIRECTORIES: readonly ProjectDirectoryOption[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
@@ -212,6 +214,7 @@ export function Chat({
   onExecutionError,
   pendingFileComments = EMPTY_FILE_COMMENTS,
   onPendingFileCommentsRemove,
+  context = EMPTY_CHAT_CONTEXT,
   showUserInputNavigation = false,
   onReconnectStateChange,
   restoreExecution = false,
@@ -1202,6 +1205,7 @@ export function Chat({
       const nextConversationId = ensureConversationId();
       const generation = executionGenerationRef.current;
       const submittedTarget = target;
+      const createPrompt = createChatContextPromptBuilder(context, submittedFileComments);
       try {
         const client = attachManagedClient(nextConversationId, generation);
         // 先交出当前设置：configure 在调用时同步记录，设置变化后队列等新设置生效再发送。
@@ -1219,10 +1223,7 @@ export function Chat({
           fileCommentCount: submittedFileComments.length,
           createMessage: (text, messageId) => {
             const userMessage = {
-              ...createUserMessage(
-                buildFileCommentPrompt(text, submittedFileComments),
-                imageAttachments,
-              ),
+              ...createUserMessage(createPrompt(text), imageAttachments),
               messageId,
             };
             const firstContent = userMessage.contents[0];
@@ -1247,6 +1248,7 @@ export function Chat({
     },
     [
       attachManagedClient,
+      context,
       ensureConfiguredClient,
       ensureConversationId,
       isHydratingSession,
@@ -2017,7 +2019,9 @@ export function Chat({
                     onPermissionModeChange={handlePermissionModeChange}
                     onAgentModeChange={handleAgentModeChange}
                     pendingFileCommentCount={pendingFileComments.length}
+                    pendingFileComments={pendingFileComments}
                     onClearPendingFileComments={handleClearPendingFileComments}
+                    context={context}
                     placeholder={placeholder}
                     topLeft={inputTopLeft}
                     userInputRef={userInputRef}

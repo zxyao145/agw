@@ -215,6 +215,21 @@ test("FileContent_WithViewers_ShowsSwitchAndMoreMenuWithInfoAndReload", async (t
   done();
 });
 
+test("FileContent_SourceAccessory_ShowsOnlyForSource", async (t) => {
+  const { page, done } = await open(t, {
+    selectedFile: "README.md",
+    viewers: VIEWERS,
+    showSourceAccessory: true,
+  });
+
+  assert.equal(await page.getByTestId("source-chat-accessory").count(), 0);
+  await selectTab(page, "source");
+  await page.getByTestId("source-chat-accessory").waitFor();
+  await selectTab(page, "other:outline");
+  assert.equal(await page.getByTestId("source-chat-accessory").count(), 0);
+  done();
+});
+
 test("FileContent_SourceSelected_ReloadRereadsFileInsteadOfViewer", async (t) => {
   const { page, done } = await open(t, {
     selectedFile: "README.md",

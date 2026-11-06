@@ -29,6 +29,7 @@ import {
   type PreviewImageType,
   RpcEndpoint,
   type RpcPort,
+  normalizeFloatingChatContext,
   type ThemeChangedNotification,
   type ThemeInfo,
   type ThemeStyleUpdate,
@@ -138,6 +139,13 @@ export type ExtensionBridgeBrokerOptions = {
   showMessageBox(owner: SessionOwner, request: MessageBoxRequest): Promise<number>;
   /** 在宿主窗口上显示图片预览，用户关闭时完成。Shows an image preview over the host window; settles when the user closes it. */
   previewImage(owner: SessionOwner, request: ImagePreviewRequest): Promise<void>;
+  floatingChat: {
+    register(owner: SessionOwner, context: Record<string, string>): void;
+    setContext(owner: SessionOwner, context: Record<string, string>): void;
+    open(owner: SessionOwner, context: Record<string, string>): void;
+    close(owner: SessionOwner): void;
+    dispose(owner: SessionOwner): void;
+  };
 };
 
 /** 检查后的 `ui.previewImage` 参数。Checked `ui.previewImage` options. */
@@ -1189,6 +1197,45 @@ export class ExtensionBridgeBroker {
         this.options.insertComposerText(String(params.text));
         return null;
       },
+      "chat.floating.context": (connection, params: { context: unknown }) => {
+        this.requireFloatingChatView(connection);
+        this.requirePermission(connection, "chat.composer");
+        this.options.floatingChat.setContext(
+          this.owner(connection),
+          normalizeFloatingChatContext(params.context),
+        );
+        return null;
+      },
+      "chat.floating.register": (connection, params: { context: unknown }) => {
+        this.requireFloatingChatView(connection);
+        this.requirePermission(connection, "chat.composer");
+        this.options.floatingChat.register(
+          this.owner(connection),
+          normalizeFloatingChatContext(params.context),
+        );
+        return null;
+      },
+      "chat.floating.open": (connection, params: { context: unknown }) => {
+        this.requireFloatingChatView(connection);
+        this.requirePermission(connection, "chat.composer");
+        this.options.floatingChat.open(
+          this.owner(connection),
+          normalizeFloatingChatContext(params.context),
+        );
+        return null;
+      },
+      "chat.floating.close": (connection) => {
+        this.requireFloatingChatView(connection);
+        this.requirePermission(connection, "chat.composer");
+        this.options.floatingChat.close(this.owner(connection));
+        return null;
+      },
+      "chat.floating.dispose": (connection) => {
+        this.requireFloatingChatView(connection);
+        this.requirePermission(connection, "chat.composer");
+        this.options.floatingChat.dispose(this.owner(connection));
+        return null;
+      },
       "chat.observe": (connection, params: { subscriptionId: unknown; filter: unknown }) => {
         if (this.options.isFrameClosing(connection.frameId)) throw frameClosing();
         this.requirePermission(connection, "chat.observe");
@@ -1273,5 +1320,12 @@ export class ExtensionBridgeBroker {
         return this.options.previewImage(this.owner(connection), toImagePreviewRequest(params));
       },
     };
+  }
+
+  private requireFloatingChatView(connection: FrameConnection): void {
+    if (connection.kind === "background") {
+      throw createExtensionError("ERR_UNSUPPORTED_OPERATION", "Only views can open floating Chat.");
+    }
+    if (this.options.isFrameClosing(connection.frameId)) throw frameClosing();
   }
 }

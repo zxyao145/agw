@@ -1,12 +1,15 @@
 "use client";
 
+import * as React from "react";
 import {
   ChatConversationPane,
   ChatFilePane,
+  FloatingChatPanel,
   type ChatMessageActionArgs,
   type ExtensionMenuItem,
 } from "@agw/chat";
 import type { FileViewerFile } from "@agw/extension-sdk";
+import { mountFloatingChatButton } from "@agw/extension-sdk";
 import type { EditableSource } from "@agw/projects";
 
 import type { ExtensionHost, ExtensionHostSnapshot } from "../../extensions/extension-host";
@@ -35,7 +38,45 @@ export type MainWorkspaceProps = {
   defaultFileViewerId: string | null;
   /** 把查看器设为当前文件类型的默认，null 删除设置。Sets the file type's default viewer; null removes it. */
   onSetDefaultFileViewer: ((viewerId: string | null) => void) | undefined;
+  sourceChatContext: Record<string, string> | null;
 };
+
+function SourceFloatingChatButton({
+  host,
+  context,
+  returnFocusRef,
+  hidden,
+}: {
+  host: ExtensionHost;
+  context: Record<string, string>;
+  returnFocusRef: React.RefObject<HTMLElement | null>;
+  hidden: boolean;
+}) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const contextRef = React.useRef(context);
+  contextRef.current = context;
+
+  React.useEffect(() => {
+    host.setSourceFloatingChatContext(context);
+  }, [host, context]);
+
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const button = mountFloatingChatButton(container, {
+      onOpen: () => host.openSourceFloatingChat(contextRef.current),
+    });
+    const element = container.querySelector("button");
+    returnFocusRef.current = element;
+    return () => {
+      if (returnFocusRef.current === element) returnFocusRef.current = null;
+      button.dispose();
+      host.closeSourceFloatingChat();
+    };
+  }, [host, returnFocusRef]);
+
+  return <div ref={containerRef} hidden={hidden} />;
+}
 
 /**
  * 渲染 `activeMainViewId` 对应的视图。内置对话视图常驻挂载、切走时隐藏；内置文件视图只在激活时挂载；
@@ -45,7 +86,13 @@ export type MainWorkspaceProps = {
  */
 export function MainWorkspace(props: MainWorkspaceProps) {
   const { activeView, fileViewerFile } = props;
+  const floatingChatReturnFocusRef = React.useRef<HTMLElement | null>(null);
+  const floatingChat = props.snapshot.floatingChat;
   const isChat = activeView.id === BUILT_IN_VIEWS.chat;
+  const floatingChatMode = isChat ? "page" : floatingChat?.open ? "floating" : "hidden";
+  React.useEffect(() => {
+    if (isChat && floatingChat?.open) props.host.closeFloatingChat();
+  }, [props.host, isChat, floatingChat?.open]);
   const retained = new Set(props.retainedViews.map((view) => view.id));
   const extensionView = (view: WorkspaceView, hidden: boolean) => (
     <div key={view.id} className="flex min-h-0 flex-1 flex-col" hidden={hidden}>
@@ -70,15 +117,24 @@ export function MainWorkspace(props: MainWorkspaceProps) {
     (props.snapshot.fileHeaderItems[viewerId] ?? []).filter((item) => item.placement === placement);
 
   return (
-    <main className="agw-main-workspace" aria-label={activeView.title} data-view-id={activeView.id}>
-      <div className="flex min-h-0 flex-1 flex-col" hidden={!isChat}>
+    <main
+      className="agw-main-workspace relative"
+      aria-label={activeView.title}
+      data-view-id={activeView.id}
+    >
+      <FloatingChatPanel
+        mode={floatingChatMode}
+        onClose={() => props.host.closeFloatingChat()}
+        returnFocusRef={floatingChatReturnFocusRef}
+      >
         <ChatConversationPane
           compact
           showUserInputNavigation
           composerActions={props.composerActions}
           messageActions={props.messageActions}
+          context={floatingChatMode === "floating" ? floatingChat?.context : undefined}
         />
-      </div>
+      </FloatingChatPanel>
       {activeView.id === BUILT_IN_VIEWS.file ? (
         <ChatFilePane
           fileViewers={fileViewers.map((view) => ({
@@ -115,6 +171,16 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           defaultFileViewerId={props.defaultFileViewerId}
           onSetDefaultFileViewer={props.onSetDefaultFileViewer}
           editableSource={props.editableSource}
+          renderSourceAccessory={() =>
+            props.sourceChatContext ? (
+              <SourceFloatingChatButton
+                host={props.host}
+                context={props.sourceChatContext}
+                returnFocusRef={floatingChatReturnFocusRef}
+                hidden={floatingChat?.open === true && floatingChat.ownerFrameId === null}
+              />
+            ) : null
+          }
         />
       ) : null}
       {props.retainedViews.map((view) => extensionView(view, view.id !== activeView.id))}

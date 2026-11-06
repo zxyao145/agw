@@ -26,6 +26,7 @@ const installed = sampleExtension([
   { id: "viewer", title: "Viewer", icon: "Eye", patterns: ["*.md"], entry: "viewer.html" },
   { id: "outline", title: "Outline", icon: "List", patterns: ["*.md"], entry: "outline.html" },
 ]);
+installed.grantedPermissions = ["chat.composer"];
 
 // setupDomEnvironment 注册关闭 window 的 after 钩子；在 before 中调用时 node:test 在 before 结束后立即运行它，
 // window 的事件监听随之移除。模块加载时调用，钩子属于整个文件。
@@ -151,6 +152,36 @@ test("a loaded file viewer gets onShow when it is shown again after being hidden
   acquire(VIEWER);
   await reportUnsaved(page, false);
   assert.deepEqual(hooks(page), ["view.onLoad", "view.onHide", "view.onShow"]);
+});
+
+test("floating Chat handles survive retained-view hide and keep registrations per view", async () => {
+  const file = fileNamed("notes.md");
+  const viewer = await showLoaded(VIEWER, file);
+  const outline = await showLoaded(OUTLINE, file);
+  const viewerChat = await (
+    await viewer.page.api
+  ).chat.createFloatingChat({
+    context: { projectRelativePath: "viewer.md" },
+  });
+  const outlineChat = await (
+    await outline.page.api
+  ).chat.createFloatingChat({
+    context: { projectRelativePath: "outline.md" },
+  });
+
+  viewer.release();
+  await until(() => hooks(viewer.page).includes("view.onHide"), "the viewer to hide");
+  await viewerChat.setContext({ projectRelativePath: "viewer-after-hide.md" });
+  const showAgain = acquire(VIEWER);
+  await until(() => hooks(viewer.page).includes("view.onShow"), "the viewer to show again");
+
+  await assert.rejects(viewerChat.open(), { code: "ERR_UNAVAILABLE" });
+  await viewerChat.close();
+  await viewerChat.dispose();
+  await outlineChat.setContext({ projectRelativePath: "outline-still-available.md" });
+  await outlineChat.dispose();
+  showAgain();
+  outline.release();
 });
 
 test("confirmDiscardUnsaved lists only the unsaved changes of the given viewers", async () => {

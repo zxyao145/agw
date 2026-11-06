@@ -481,6 +481,11 @@ export class ExtensionRuntime {
     this.views.reveal(frameIds);
   }
 
+  public focusFrame(hostInstanceId: string, frameId: string): void {
+    this.registry.assertHost(hostInstanceId);
+    this.views.focus(frameId);
+  }
+
   public setFrameBackground(hostInstanceId: string, color: string): void {
     this.registry.assertHost(hostInstanceId);
     this.views.setBackground(color);
