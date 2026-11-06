@@ -15,13 +15,17 @@ import {
   FolderOpen,
   GitBranch,
   GitMerge,
+  Network,
   Plus,
   RefreshCw,
   RotateCcw,
+  Trash2,
   Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CloneDialog, FeatureDialog, SwitchBranchDialog, isoDate } from "./dialogs";
+import { readProxyUrl } from "./proxy-settings";
+import { ProxySettingsForm } from "./proxy-settings-form";
 import type { OpenRequest } from "./view";
 
 /**
@@ -30,7 +34,7 @@ import type { OpenRequest } from "./view";
  */
 export type ManageParams = { action?: "clone" | "feature"; feature?: string };
 
-type Selection = { kind: "main" } | { kind: "feature"; name: string };
+type Selection = { kind: "main" } | { kind: "proxy" } | { kind: "feature"; name: string };
 
 type Dialog =
   | { kind: "clone" }
@@ -38,6 +42,7 @@ type Dialog =
   | { kind: "switch"; feature: string; repo: FeatureRepository };
 
 const DIALOG = "dialog";
+const DELETE_FEATURE = "delete-feature";
 
 function message(caught: unknown): string {
   return caught instanceof Error ? caught.message : String(caught);
@@ -104,19 +109,22 @@ export function ProjectWorkspace({
     key: string,
     operation: () => Promise<RepositoryWorkspaceState>,
     done = "",
+    signal?: AbortSignal,
   ): Promise<RepositoryWorkspaceState | null> {
     setPending((previous) => new Set(previous).add(key));
     setErrors((previous) => without(previous, key));
     setNotice("");
     try {
       const value = await operation();
+      if (signal?.aborted) return null;
       if (active.current) {
         setState(value);
         setNotice(done);
       }
       return value;
     } catch (caught) {
-      if (active.current) setErrors((previous) => ({ ...previous, [key]: message(caught) }));
+      if (active.current && !signal?.aborted)
+        setErrors((previous) => ({ ...previous, [key]: message(caught) }));
       return null;
     } finally {
       if (active.current)
@@ -156,6 +164,33 @@ export function ProjectWorkspace({
       : undefined;
   const mainDefaults = new Map(repositories.map((repo) => [repo.name, repo]));
   const busy = pending.size > 0;
+  const deleting = pending.has(DELETE_FEATURE);
+
+  async function deleteFeature(item: WorkspaceFeature) {
+    const decision = await api.dialog.showMessageBox({
+      type: "warning",
+      message: `Delete ${item.name}?`,
+      detail:
+        "Deletes all worktrees in this feature and removes its directory. Git branches are kept. Commit or stash local changes first.",
+      buttons: ["Cancel", "Delete feature"],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (decision !== 1 || !active.current) return;
+    const value = await run(
+      DELETE_FEATURE,
+      () => api.repositories.deleteFeature({ projectId: project.id, feature: item.name }),
+      `Feature ${item.name} deleted.`,
+    );
+    if (!active.current) return;
+    if (!value) {
+      await refresh();
+      return;
+    }
+    setSelection((previous) =>
+      previous.kind === "feature" && previous.name === item.name ? { kind: "main" } : previous,
+    );
+  }
 
   async function merge(item: WorkspaceFeature, repo: FeatureRepository) {
     const main = mainDefaults.get(repo.name);
@@ -183,14 +218,22 @@ export function ProjectWorkspace({
 
   async function syncAll() {
     for (const repo of repositories.filter((item) => !item.error && !offDefault(item)))
-      await run(`main/${repo.name}`, () =>
-        api.repositories.sync({ projectId: project.id, repository: repo.name }),
-      );
+      if (!(await run(`main/${repo.name}`, () => sync(repo.name)))) return;
     if (active.current) setNotice("Default branches synced.");
   }
 
+  async function sync(repository: string) {
+    return api.repositories.sync({
+      projectId: project.id,
+      repository,
+      proxyUrl: await readProxyUrl(api),
+    });
+  }
+
   const content =
-    repositories.length === 0 && state.features.length === 0 ? (
+    selection.kind === "proxy" ? (
+      <ProxySettingsForm api={api} project={project} />
+    ) : repositories.length === 0 && state.features.length === 0 ? (
       <Welcome onClone={() => setDialog({ kind: "clone" })} />
     ) : feature ? (
       <section className="panel" aria-label={feature.name}>
@@ -201,9 +244,17 @@ export function ProjectWorkspace({
               <code>.worktrees/{feature.name}</code> · branch <code>{feature.name}</code>
             </p>
           </div>
-          <button onClick={() => setDialog({ kind: "feature", feature: feature.name })}>
-            <Plus size={16} /> Add repositories
-          </button>
+          <div className="actions feature-actions">
+            <button
+              disabled={deleting}
+              onClick={() => setDialog({ kind: "feature", feature: feature.name })}
+            >
+              <Plus size={16} /> Add repositories
+            </button>
+            <button disabled={busy} onClick={() => void deleteFeature(feature)}>
+              <Trash2 size={16} /> {deleting ? "Deleting…" : "Delete feature"}
+            </button>
+          </div>
         </div>
         {feature.repositories.length === 0 && (
           <p className="hint">This feature has no worktrees.</p>
@@ -249,7 +300,7 @@ export function ProjectWorkspace({
                   repo.error ? null : (
                     <>
                       <button
-                        disabled={repo.dirty}
+                        disabled={repo.dirty || deleting}
                         title={repo.dirty ? "Commit the worktree changes first." : undefined}
                         onClick={() => setDialog({ kind: "switch", feature: feature.name, repo })}
                       >
@@ -257,7 +308,7 @@ export function ProjectWorkspace({
                       </button>
                       <button
                         className="primary"
-                        disabled={Boolean(mergeBlock)}
+                        disabled={Boolean(mergeBlock) || deleting}
                         title={mergeBlock || `Merge into ${main?.defaultBranch}`}
                         onClick={() => void merge(feature, repo)}
                       >
@@ -353,8 +404,7 @@ export function ProjectWorkspace({
                       onClick={() =>
                         void run(
                           key,
-                          () =>
-                            api.repositories.sync({ projectId: project.id, repository: repo.name }),
+                          () => sync(repo.name),
                           `${repo.name} synced with origin/${repo.defaultBranch}.`,
                         )
                       }
@@ -396,17 +446,30 @@ export function ProjectWorkspace({
           {loadError}
         </p>
       )}
+      {errors[DELETE_FEATURE] && (
+        <p className="error banner" role="alert">
+          {errors[DELETE_FEATURE]}
+        </p>
+      )}
       <div className="layout">
         <nav aria-label="Workspace">
           <button
             className="nav-item"
-            aria-current={!feature ? "page" : undefined}
+            aria-current={!feature && selection.kind !== "proxy" ? "page" : undefined}
             onClick={() => setSelection({ kind: "main" })}
           >
             <FolderGit2 size={16} />
             <span>Main checkouts</span>
             {repositories.some(needsAttention) && <AlertTriangle size={14} className="warn" />}
             <small>{repositories.length}</small>
+          </button>
+          <button
+            className="nav-item"
+            aria-current={selection.kind === "proxy" ? "page" : undefined}
+            onClick={() => setSelection({ kind: "proxy" })}
+          >
+            <Network size={16} />
+            <span>Proxy</span>
           </button>
           <div className="nav-head">
             <span>Features</span>
@@ -448,12 +511,17 @@ export function ProjectWorkspace({
           busy={pending.has(DIALOG)}
           error={errors[DIALOG]}
           onClose={closeDialog}
-          onSubmit={async (input) => {
+          onSubmit={async (input, signal) => {
             if (
               await run(
                 DIALOG,
-                () => api.repositories.clone({ projectId: project.id, ...input }),
+                async () =>
+                  api.repositories.clone(
+                    { projectId: project.id, ...input, proxyUrl: await readProxyUrl(api, signal) },
+                    { signal },
+                  ),
                 "Repository cloned.",
+                signal,
               )
             )
               closeDialog();

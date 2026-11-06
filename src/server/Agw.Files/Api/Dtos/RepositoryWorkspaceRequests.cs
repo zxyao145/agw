@@ -7,6 +7,7 @@ public sealed record CloneRepositoryRequest
 
     /// <summary>目录名；省略时从 URL 推导。Directory name; derived from the URL when omitted.</summary>
     public string? Name { get; init; }
+    public string? ProxyUrl { get; init; }
 }
 
 public sealed record CreateFeatureRequest
@@ -22,6 +23,12 @@ public sealed record CreateFeatureRequest
     /// <summary>客户端当地日期；省略时使用 UTC 日期。The client's local date; defaults to the UTC date.</summary>
     public DateOnly? Date { get; init; }
     public string[] Repositories { get; init; } = [];
+}
+
+public sealed record DeleteFeatureRequest
+{
+    public Guid ProjectId { get; init; }
+    public string Feature { get; init; } = "";
 }
 
 public sealed record SwitchWorktreeBranchRequest
@@ -44,4 +51,11 @@ public sealed record RootRepositoryRequest
 {
     public Guid ProjectId { get; init; }
     public string Repository { get; init; } = "";
+}
+
+public sealed record SyncRepositoryRequest
+{
+    public Guid ProjectId { get; init; }
+    public string Repository { get; init; } = "";
+    public string? ProxyUrl { get; init; }
 }

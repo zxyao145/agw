@@ -3461,6 +3461,82 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/files/repositories/delete-feature": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["DeleteFeatureRequest"];
+          "text/json": components["schemas"]["DeleteFeatureRequest"];
+          "application/*+json": components["schemas"]["DeleteFeatureRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "application/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+            "text/json": components["schemas"]["ApiResultOfRepositoryWorkspaceState"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/files/repositories/switch": {
     parameters: {
       query?: never;
@@ -3631,9 +3707,9 @@ export interface paths {
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["RootRepositoryRequest"];
-          "text/json": components["schemas"]["RootRepositoryRequest"];
-          "application/*+json": components["schemas"]["RootRepositoryRequest"];
+          "application/json": components["schemas"]["SyncRepositoryRequest"];
+          "text/json": components["schemas"]["SyncRepositoryRequest"];
+          "application/*+json": components["schemas"]["SyncRepositoryRequest"];
         };
       };
       responses: {
@@ -7000,6 +7076,7 @@ export interface components {
       url: string;
       /** @description 目录名；省略时从 URL 推导。Directory name; derived from the URL when omitted. */
       name?: null | string;
+      proxyUrl?: null | string;
     };
     ConnectionCreateRequest: {
       pluginId: string;
@@ -7197,6 +7274,11 @@ export interface components {
       usageOutputTokenCount: number | string;
       /** Format: int64 */
       usageTotalTokenCount: number | string;
+    };
+    DeleteFeatureRequest: {
+      /** Format: uuid */
+      projectId: string;
+      feature: string;
     };
     DesktopExchangeRequest: {
       code: string;
@@ -8109,6 +8191,12 @@ export interface components {
       repository: string;
       branch: string;
       createBranch: boolean;
+    };
+    SyncRepositoryRequest: {
+      /** Format: uuid */
+      projectId: string;
+      repository: string;
+      proxyUrl?: null | string;
     };
     TaskExecutionStatus: number;
     ToolBlockDefinition:

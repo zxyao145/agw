@@ -759,23 +759,25 @@ export class ExtensionBridgeBroker {
         );
       },
       ...Object.fromEntries(
-        (["clone", "feature", "switch", "merge", "sync", "restore"] as const).map((operation) => [
-          `repositories.${operation}`,
-          ((connection, params: Record<string, unknown>, signal) => {
-            this.requirePermission(connection, "project.repositories");
-            return this.tracked(connection, signal, (requestSignal) =>
-              context.request(
-                (contextSignal) =>
-                  // 请求体由 Server 按操作校验。The Server validates each operation's body.
-                  apiPost(`/api/files/repositories/${operation}`, {
-                    body: params as never,
-                    signal: contextSignal,
-                  }),
-                requestSignal,
-              ),
-            );
-          }) satisfies RequestHandler,
-        ]),
+        (["clone", "feature", "delete-feature", "switch", "merge", "sync", "restore"] as const).map(
+          (operation) => [
+            `repositories.${operation}`,
+            ((connection, params: Record<string, unknown>, signal) => {
+              this.requirePermission(connection, "project.repositories");
+              return this.tracked(connection, signal, (requestSignal) =>
+                context.request(
+                  (contextSignal) =>
+                    // 请求体由 Server 按操作校验。The Server validates each operation's body.
+                    apiPost(`/api/files/repositories/${operation}`, {
+                      body: params as never,
+                      signal: contextSignal,
+                    }),
+                  requestSignal,
+                ),
+              );
+            }) satisfies RequestHandler,
+          ],
+        ),
       ),
       ...Object.fromEntries(
         (["tree", "changes", "blob"] as const).map((operation) => [

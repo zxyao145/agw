@@ -17,6 +17,7 @@
     "radix-ui": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "zod": "catalog:"
   }
 }
