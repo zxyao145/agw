@@ -11,6 +11,12 @@ import {
 // Compiled by test:types, never executed. Invalid calls must fail at the public boundary.
 function checkContract() {
   apiGet("/api/agents");
+  apiPost("/api/files/repositories/clone", {
+    body: { projectId: "project-1", url: "https://example.com/repository.git" },
+  });
+  apiPost("/api/files/repositories/clone", {
+    body: { projectId: "project-1", url: "https://example.com/repository.git", intoRoot: true },
+  });
   apiPost("/api/auth/login", { body: { password: "test" } });
   apiPost("/api/auth/logout");
   apiDelete("/api/auth/tokens/{id}", { params: { path: { id: "token-1" } } });

@@ -8,6 +8,9 @@ public sealed record CloneRepositoryRequest
     /// <summary>目录名；省略时从 URL 推导。Directory name; derived from the URL when omitted.</summary>
     public string? Name { get; init; }
     public string? ProxyUrl { get; init; }
+
+    /// <summary>克隆到空的项目根目录。Clones into the empty project root.</summary>
+    public bool? IntoRoot { get; init; }
 }
 
 public sealed record CreateFeatureRequest

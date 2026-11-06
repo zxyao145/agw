@@ -108,10 +108,7 @@ public partial class AgentflowTurnExecutorTests
         );
 
         Assert.Equal(["input", "workflow-error"], messages.Select(MessageShape));
-        Assert.StartsWith(
-            "Error invoking handler for ",
-            Assert.IsType<AgwErrorContent>(Assert.Single(messages[1].Contents)).Content
-        );
+        Assert.Equal("scripted failure", Assert.IsType<AgwErrorContent>(Assert.Single(messages[1].Contents)).Content);
         Assert.Equal(1, agent.DisposeCount);
     }
 
@@ -388,7 +385,8 @@ public partial class AgentflowTurnExecutorTests
 
         Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
         Assert.Equal(["input", "workflow-error"], sink.Messages.Select(MessageShape));
-        Assert.StartsWith("Error invoking handler for ", result.ErrorMessage);
+        Assert.Equal("scripted failure", result.ErrorMessage);
+        Assert.Equal(result.ErrorMessage, ErrorText(sink.Messages[1]));
         Assert.Equal(1, agent.DisposeCount);
     }
 

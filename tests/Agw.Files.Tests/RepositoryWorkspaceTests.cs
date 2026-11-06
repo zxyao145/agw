@@ -21,6 +21,265 @@ public sealed class RepositoryWorkspaceTests
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task ReadAsync_ProjectRootRepository_DiscoversSingleCheckout()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        File.Delete(Path.Combine(fixture.Root, ".gitignore"));
+        await WorkspaceFixture.GitAsync(fixture.Root, "clone", "--", fixture.Url, ".");
+        await WorkspaceFixture.GitAsync(fixture.Root, "clone", "--", fixture.Url, "nested");
+
+        var repository = Assert.Single((await fixture.ReadAsync()).Repositories);
+
+        Assert.Equal("project", repository.Name);
+        Assert.Equal("", repository.Path);
+        Assert.Equal("trunk", repository.DefaultBranch);
+        Assert.Null(repository.Error);
+    }
+
+    [Fact]
+    public async Task CreateFeatureAsync_ProjectRootRepository_CreatesFlatWorktreeAndMerges()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        await fixture.CloneRootAsync();
+        await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["project"], false, Token);
+        var worktree = Path.Combine(fixture.Root, ".worktrees", Feature);
+        Assert.True(File.Exists(Path.Combine(worktree, ".git")));
+        var feature = Assert.Single((await fixture.ReadAsync()).Features);
+        Assert.Equal($".worktrees/{Feature}", Assert.Single(feature.Repositories).Path);
+        Assert.Equal(
+            $".worktrees/{Feature}",
+            (await fixture.Service.ListTreeAsync(fixture.Root, "project", Feature, "", Token)).Checkout
+        );
+        Assert.True(Assert.Single((await fixture.ReadAsync()).Repositories).Dirty);
+        await WorkspaceFixture.GitAsync(fixture.Root, "add", ".gitignore");
+        await WorkspaceFixture.GitAsync(fixture.Root, "commit", "-m", "Ignore feature worktrees");
+        await File.WriteAllTextAsync(Path.Combine(worktree, "feature.txt"), "feature content", Token);
+        await WorkspaceFixture.GitAsync(worktree, "add", ".");
+        await WorkspaceFixture.GitAsync(worktree, "commit", "-m", "Add feature");
+        await fixture.Service.SwitchBranchAsync(fixture.Root, Feature, "project", "alternate", true, Token);
+
+        await fixture.Service.MergeAsync(fixture.Root, Feature, "project", Token);
+
+        Assert.Equal("feature content", await File.ReadAllTextAsync(Path.Combine(fixture.Root, "feature.txt"), Token));
+        var parents = await WorkspaceFixture.GitAsync(fixture.Root, "show", "-s", "--format=%P", "HEAD");
+        Assert.Equal(2, parents.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
+        Assert.Equal(
+            "alternate",
+            Assert.Single(Assert.Single((await fixture.ReadAsync()).Features).Repositories).Branch
+        );
+    }
+
+    [Fact]
+    public async Task ListTreeAsync_ProjectRootRepository_UsesRootCheckoutAndReadsCommittedBranches()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        await fixture.CloneRootAsync();
+        Directory.CreateDirectory(Path.Combine(fixture.Root, "src"));
+        await File.WriteAllTextAsync(Path.Combine(fixture.Root, "src", "new.txt"), "local", Token);
+        var tree = await fixture.Service.ListTreeAsync(fixture.Root, "project", "trunk", "", Token);
+        Assert.Equal("", tree.Checkout);
+        Assert.DoesNotContain(tree.Entries, entry => entry.Name == ".git");
+        var children = await fixture.Service.ListTreeAsync(fixture.Root, "project", "trunk", "src", Token);
+        Assert.Equal("src/new.txt", Assert.Single(children.Entries).Path);
+        var change = Assert.Single(await fixture.Service.ListChangesAsync(fixture.Root, "project", "trunk", Token));
+        Assert.Equal("src/new.txt", change.Path);
+        var committed = await fixture.Service.ListTreeAsync(fixture.Root, "project", "origin/trunk", "", Token);
+        Assert.Null(committed.Checkout);
+        Assert.DoesNotContain(committed.Entries, entry => entry.Name == "src");
+        var blob = await fixture.Service.ReadBlobAsync(fixture.Root, "project", "origin/trunk", "README.md", Token);
+        Assert.Equal("base\n", blob.Content);
+        await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Service.ListTreeAsync(fixture.Root, "project", "trunk", "../seed", Token)
+        );
+    }
+
+    [Fact]
+    public async Task CloneAsync_IntoRoot_CreatesRootCheckout()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        File.Delete(Path.Combine(fixture.Root, ".gitignore"));
+
+        await fixture.Service.CloneAsync(fixture.Root, fixture.Url, null, Token, intoRoot: true);
+
+        var repository = Assert.Single((await fixture.ReadAsync()).Repositories);
+        Assert.Equal("project", repository.Name);
+        Assert.Equal("", repository.Path);
+        Assert.Null(repository.Error);
+        Assert.True(Directory.Exists(Path.Combine(fixture.Root, ".git")));
+        Assert.Equal("base", (await File.ReadAllTextAsync(Path.Combine(fixture.Root, "README.md"), Token)).TrimEnd());
+        Assert.Empty(Directory.EnumerateDirectories(fixture.Root, ".agw-clone-*"));
+    }
+
+    [Fact]
+    public async Task PublishRootClone_PublicationCollision_PreservesRepositoryAndUserFilesForRecovery()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        var staging = await fixture.CloneRootStagingAsync();
+        var collision = Directory.CreateDirectory(Path.Combine(fixture.Root, "20-conflict")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(collision, "user.txt"), "concurrent collision", Token);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Root, "user.txt"), "concurrent file", Token);
+
+        var failure = Assert.Throws<AgwException>(() => RepositoryWorkspace.PublishRootClone(fixture.Root, staging));
+
+        Assert.Equal(ErrorCodes.RepositoryStateConflict.Code, failure.Code);
+        Assert.IsAssignableFrom<IOException>(failure.InnerException);
+        Assert.Contains(staging, failure.Message);
+        Assert.Contains(fixture.Root, failure.Message);
+        Assert.True(Directory.Exists(Path.Combine(staging, ".git")));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, ".git")));
+        await WorkspaceFixture.GitAsync(staging, "fsck", "--full");
+        Assert.Equal(
+            "published directory",
+            await WorkspaceFixture.GitAsync(staging, "show", "HEAD:10-published/seed.txt")
+        );
+        Assert.Equal(
+            "published directory",
+            await File.ReadAllTextAsync(Path.Combine(fixture.Root, "10-published", "seed.txt"), Token)
+        );
+        Assert.Equal(
+            "published file",
+            await File.ReadAllTextAsync(Path.Combine(fixture.Root, "11-published.txt"), Token)
+        );
+        Assert.Equal("concurrent collision", await File.ReadAllTextAsync(Path.Combine(collision, "user.txt"), Token));
+        Assert.Equal("concurrent file", await File.ReadAllTextAsync(Path.Combine(fixture.Root, "user.txt"), Token));
+        Assert.Equal("base", (await File.ReadAllTextAsync(Path.Combine(staging, "README.md"), Token)).TrimEnd());
+        Assert.Equal(
+            "unpublished directory",
+            await File.ReadAllTextAsync(Path.Combine(staging, "20-conflict", "seed.txt"), Token)
+        );
+
+        File.Delete(Path.Combine(collision, "user.txt"));
+        Directory.Delete(collision);
+        RepositoryWorkspace.PublishRootClone(fixture.Root, staging);
+
+        Assert.False(Directory.Exists(staging));
+        Assert.True(Directory.Exists(Path.Combine(fixture.Root, ".git")));
+        await WorkspaceFixture.GitAsync(fixture.Root, "fsck", "--full");
+        await WorkspaceFixture.GitAsync(fixture.Root, "diff", "--exit-code", "HEAD");
+        Assert.Equal("concurrent file", await File.ReadAllTextAsync(Path.Combine(fixture.Root, "user.txt"), Token));
+    }
+
+    [Fact]
+    public async Task CloneAsync_NonemptyRoot_RejectsWithoutChangingFiles()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+
+        var failure = await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Service.CloneAsync(fixture.Root, fixture.Url, null, Token, intoRoot: true)
+        );
+
+        Assert.Equal(ErrorCodes.RepositoryStateConflict.Code, failure.Code);
+        Assert.Equal("existing-rule\n", await File.ReadAllTextAsync(Path.Combine(fixture.Root, ".gitignore"), Token));
+        Assert.Single(Directory.EnumerateFileSystemEntries(fixture.Root));
+    }
+
+    [Fact]
+    public async Task CloneAsync_IntoRootWithName_RejectsBeforeCloning()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        File.Delete(Path.Combine(fixture.Root, ".gitignore"));
+        var failure = await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Service.CloneAsync(fixture.Root, fixture.Url, "alpha", Token, intoRoot: true)
+        );
+        Assert.Equal(ErrorCodes.InvalidParam.Code, failure.Code);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.Root));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CloneAsync_ExistingRootRepository_RejectsAdditionalClone(bool intoRoot)
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        await fixture.CloneRootAsync();
+        var before = await File.ReadAllBytesAsync(Path.Combine(fixture.Root, "README.md"), Token);
+        var failure = await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Service.CloneAsync(fixture.Root, fixture.Url, null, Token, intoRoot: intoRoot)
+        );
+        Assert.Equal(ErrorCodes.RepositoryStateConflict.Code, failure.Code);
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, "seed")));
+        Assert.Equal(before, await File.ReadAllBytesAsync(Path.Combine(fixture.Root, "README.md"), Token));
+    }
+
+    [Fact]
+    public async Task SyncAsync_ProjectRootRepository_FastForwardsAndRestoresDefaultBranch()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        await fixture.CloneRootAsync();
+        await WorkspaceFixture.GitAsync(fixture.Root, "switch", "-c", "alternate");
+        await Assert.ThrowsAsync<AgwException>(() => fixture.Service.SyncAsync(fixture.Root, "project", Token));
+        await fixture.Service.RestoreDefaultBranchAsync(fixture.Root, "project", Token);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Seed, "README.md"), "remote update", Token);
+        await WorkspaceFixture.GitAsync(fixture.Seed, "commit", "-am", "Update remote");
+
+        await fixture.Service.SyncAsync(fixture.Root, "project", Token);
+
+        Assert.Equal("remote update", await File.ReadAllTextAsync(Path.Combine(fixture.Root, "README.md"), Token));
+        Assert.Equal("trunk", Assert.Single((await fixture.ReadAsync()).Repositories).Branch);
+    }
+
+    [Fact]
+    public async Task DeleteFeatureAsync_ProjectRootRepository_ProtectsChangesAndRemovesCleanWorktree()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        await fixture.CloneRootAsync();
+        await fixture.Service.CreateFeatureAsync(fixture.Root, Feature, ["project"], false, Token);
+        var worktree = Path.Combine(fixture.Root, ".worktrees", Feature);
+        await File.WriteAllTextAsync(Path.Combine(worktree, "README.md"), "feature update", Token);
+        await Assert.ThrowsAsync<AgwException>(() => fixture.Service.DeleteFeatureAsync(fixture.Root, Feature, Token));
+        Assert.True(Directory.Exists(worktree));
+        await WorkspaceFixture.GitAsync(worktree, "commit", "-am", "Update feature");
+
+        await fixture.Service.DeleteFeatureAsync(fixture.Root, Feature, Token);
+
+        Assert.False(Directory.Exists(worktree));
+        Assert.Empty((await fixture.ReadAsync()).Features);
+        Assert.Equal("base", (await File.ReadAllTextAsync(Path.Combine(fixture.Root, "README.md"), Token)).TrimEnd());
+        Assert.Equal("feature update", await WorkspaceFixture.GitAsync(fixture.Root, "show", $"{Feature}:README.md"));
+    }
+
+    [Fact]
+    public async Task CreateFeatureAsync_LinkedProjectRootWithSpaces_ValidatesCommonDirectory()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        await fixture.CloneRootAsync();
+        var root = Path.Combine(Path.GetDirectoryName(fixture.Root)!, "linked project");
+        await WorkspaceFixture.GitAsync(fixture.Root, "worktree", "add", "-b", "linked", root);
+        var repository = Assert.Single((await fixture.Service.ReadAsync(root, Token)).Repositories);
+        Assert.Equal("linked project", repository.Name);
+        Assert.Equal("", repository.Path);
+        Assert.Null(repository.Error);
+
+        await fixture.Service.CreateFeatureAsync(root, Feature, [repository.Name], false, Token);
+
+        var worktree = Assert.Single(
+            Assert.Single((await fixture.Service.ReadAsync(root, Token)).Features).Repositories
+        );
+        Assert.Equal($".worktrees/{Feature}", worktree.Path);
+        Assert.Null(worktree.Error);
+        await fixture.Service.DeleteFeatureAsync(root, Feature, Token);
+        Assert.True(File.Exists(Path.Combine(root, ".git")));
+    }
+
+    [Fact]
+    public async Task SwitchBranchAsync_ForeignFlatWorktree_RejectsRepositoryMismatch()
+    {
+        using var fixture = await WorkspaceFixture.CreateAsync();
+        await fixture.CloneRootAsync();
+        var worktree = Path.Combine(fixture.Root, ".worktrees", Feature);
+        await WorkspaceFixture.GitAsync(fixture.Seed, "worktree", "add", "-b", Feature, worktree);
+        var state = await fixture.ReadAsync();
+        Assert.NotNull(Assert.Single(Assert.Single(state.Features).Repositories).Error);
+
+        var failure = await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Service.SwitchBranchAsync(fixture.Root, Feature, "project", "other", true, Token)
+        );
+
+        Assert.Equal(ErrorCodes.RepositoryStateConflict.Code, failure.Code);
+        Assert.Equal(Feature, await WorkspaceFixture.GitAsync(worktree, "branch", "--show-current"));
+    }
+
+    [Fact]
     public async Task CreateFeatureAsync_TwoRepositories_CreatesWorktreesSwitchesAndMergesWithTwoParents()
     {
         using var fixture = await WorkspaceFixture.CreateAsync();
@@ -84,10 +343,14 @@ public sealed class RepositoryWorkspaceTests
         Assert.Equal("module-alpha", Assert.Single((await fixture.ReadAsync()).Repositories).Name);
     }
 
-    [Fact]
-    public async Task CloneAsync_CanceledDuringTransfer_RemovesPartialDirectoryAndAllowsRetry()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CloneAsync_CanceledDuringTransfer_RemovesPartialDirectoryAndAllowsRetry(bool intoRoot)
     {
         using var fixture = await WorkspaceFixture.CreateAsync();
+        if (intoRoot)
+            File.Delete(Path.Combine(fixture.Root, ".gitignore"));
         const int transferBytes = 16 * 1024 * 1024;
         await File.WriteAllBytesAsync(
             Path.Combine(fixture.Seed, "large.bin"),
@@ -100,15 +363,27 @@ public sealed class RepositoryWorkspaceTests
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         var destination = Path.Combine(fixture.Root, "alpha");
-        var clone = fixture.Service.CloneAsync(fixture.Root, fixture.Url, "alpha", cancellation.Token);
+        var clone = fixture.Service.CloneAsync(
+            fixture.Root,
+            fixture.Url,
+            intoRoot ? null : "alpha",
+            cancellation.Token,
+            intoRoot: intoRoot
+        );
         try
         {
-            while (!Directory.Exists(Path.Combine(destination, ".git")))
+            while (
+                !Directory
+                    .EnumerateDirectories(fixture.Root)
+                    .Any(directory => Directory.Exists(Path.Combine(directory, ".git")))
+            )
             {
                 Assert.False(clone.IsCompleted);
                 await Task.Delay(10, timeout.Token);
             }
             Assert.False(clone.IsCompleted);
+            if (intoRoot)
+                await File.WriteAllTextAsync(Path.Combine(fixture.Root, "keep.txt"), "concurrent file", Token);
         }
         finally
         {
@@ -117,8 +392,21 @@ public sealed class RepositoryWorkspaceTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => clone.WaitAsync(timeout.Token));
         Assert.False(Directory.Exists(destination));
-        await fixture.CloneAsync("alpha");
-        Assert.Equal("alpha", Assert.Single((await fixture.ReadAsync()).Repositories).Name);
+        if (intoRoot)
+        {
+            Assert.True(Directory.Exists(fixture.Root));
+            Assert.Equal("concurrent file", await File.ReadAllTextAsync(Path.Combine(fixture.Root, "keep.txt"), Token));
+            Assert.Single(Directory.EnumerateFileSystemEntries(fixture.Root));
+            File.Delete(Path.Combine(fixture.Root, "keep.txt"));
+        }
+        await fixture.Service.CloneAsync(
+            fixture.Root,
+            fixture.Url,
+            intoRoot ? null : "alpha",
+            Token,
+            intoRoot: intoRoot
+        );
+        Assert.Equal(intoRoot ? "project" : "alpha", Assert.Single((await fixture.ReadAsync()).Repositories).Name);
     }
 
     [Fact]
@@ -699,6 +987,29 @@ public sealed class RepositoryWorkspaceTests
             await Service.CloneAsync(Root, Url, name, Token);
             await GitAsync(Path.Combine(Root, name), "config", "user.name", "Agw Tests");
             await GitAsync(Path.Combine(Root, name), "config", "user.email", "tests@agw.local");
+        }
+
+        public async Task CloneRootAsync()
+        {
+            File.Delete(Path.Combine(Root, ".gitignore"));
+            await GitAsync(Root, "clone", "--", Url, ".");
+            await GitAsync(Root, "config", "user.name", "Agw Tests");
+            await GitAsync(Root, "config", "user.email", "tests@agw.local");
+        }
+
+        public async Task<string> CloneRootStagingAsync()
+        {
+            File.Delete(Path.Combine(Root, ".gitignore"));
+            Directory.CreateDirectory(Path.Combine(Seed, "10-published"));
+            await File.WriteAllTextAsync(Path.Combine(Seed, "10-published", "seed.txt"), "published directory", Token);
+            await File.WriteAllTextAsync(Path.Combine(Seed, "11-published.txt"), "published file", Token);
+            Directory.CreateDirectory(Path.Combine(Seed, "20-conflict"));
+            await File.WriteAllTextAsync(Path.Combine(Seed, "20-conflict", "seed.txt"), "unpublished directory", Token);
+            await GitAsync(Seed, "add", ".");
+            await GitAsync(Seed, "commit", "-m", "Add publication entries");
+            var staging = Path.Combine(Root, ".agw-clone-publication");
+            await GitAsync(Root, "clone", "--", Url, staging);
+            return staging;
         }
 
         public Task<RepositoryWorkspaceState> ReadAsync() => Service.ReadAsync(Root, Token);

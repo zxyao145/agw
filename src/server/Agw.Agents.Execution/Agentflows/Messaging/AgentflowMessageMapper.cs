@@ -179,9 +179,16 @@ internal static class AgentflowMessageMapper
             messageId,
             Constants.DefaultAgentAuthor,
             AiRole.System,
-            [new AgwErrorContent { Content = exception?.Message ?? "Workflow execution failed." }],
+            [new AgwErrorContent { Content = GetWorkflowErrorText(exception) }],
             additionalProperties
         );
+    }
+
+    internal static string GetWorkflowErrorText(Exception? exception)
+    {
+        while (exception is System.Reflection.TargetInvocationException { InnerException: { } inner })
+            exception = inner;
+        return exception?.Message ?? "Workflow execution failed.";
     }
 
     private static HumanGateConfig ReadHumanGateConfig(AgentflowHumanGateNode node)

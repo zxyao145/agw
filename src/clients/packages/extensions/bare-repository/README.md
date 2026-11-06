@@ -13,15 +13,16 @@ The sidebar also offers the action for the selected location: **Merge** for a fe
 
 ## Management view
 
-The extension follows a directory convention; it does not enforce it. Repository and feature views are derived from the disk:
+Repository and feature views are derived from the Project directory and Git:
 
-- Each Project-root subdirectory with a `.git` directory is a **main checkout**, including repositories cloned outside the extension. Its default branch is `origin/HEAD`, or the current branch when that is missing.
-- Each `.worktrees/<feature>/<repo-name>` directory is a feature worktree of `<repo-name>`.
+- When the Project directory is a Git repository, the extension manages that single **main checkout**. Its name is the Project directory name, and its feature worktrees use `.worktrees/<feature>`. Clone is unavailable for that Project.
+- Otherwise, each Project-root subdirectory with a `.git` directory is a **main checkout**, including repositories cloned outside the extension. Feature worktrees use `.worktrees/<feature>/<repo-name>`.
+- A main checkout's default branch is `origin/HEAD`, or the current branch when that is missing.
 
 Workflow:
 
-1. **Clone** a repository by URL (HTTPS, `ssh://`, `user@host:path` or `git://`). The directory name defaults to the last URL segment without `.git`. Git checks out the remote default branch.
-2. **New feature**: enter a name and select repositories. Your local date is prefixed as `yyMMdd-`. Each worktree starts on that branch from the local default branch at `.worktrees/<yyMMdd>-<feature-name>/<repo-name>`. **Add repositories** adds worktrees to an existing feature. The first feature adds `/.worktrees/` to the root `.gitignore`.
+1. **Clone** a repository by URL (HTTPS, `ssh://`, `user@host:path` or `git://`). The default destination is **Project subdirectory**, whose name defaults to the last URL segment without `.git`. Choose **Project root** to clone into an empty Project directory; this uses the Project directory name. Git checks out the remote default branch.
+2. **New feature**: enter a name and select repositories. A Project-root repository is selected automatically. Your local date is prefixed as `yyMMdd-`, and each worktree starts on that branch from the local default branch. A Project-root repository uses `.worktrees/<yyMMdd>-<feature-name>`; repositories in subdirectories use `.worktrees/<yyMMdd>-<feature-name>/<repo-name>`. **Add repositories** appears when eligible repositories have no worktree in the selected feature. The first feature adds `/.worktrees/` to the root `.gitignore`.
 3. Develop and commit in the worktrees with your usual tools. **Switch** moves a worktree to another branch, or creates one from its current HEAD.
 4. **Merge** runs `git merge --no-ff` in the main checkout. If the merge conflicts, it is aborted and the main checkout is left unchanged. Merge the default branch into the feature branch in the worktree, resolve the conflicts there, and merge again. Configure Git `user.name` and `user.email` on the Server first.
 5. **Sync** fetches `origin` and fast-forwards the default branch; **Sync all** does this for every main checkout.
@@ -38,3 +39,5 @@ HTTP, HTTPS, SOCKS4, SOCKS4a, SOCKS5 and SOCKS5h proxy URLs can be used for HTTP
 Build from `src/clients` with `pnpm --filter @agw/extension-bare-repository build`. Desktop's bundled-extension build discovers this package and installs its `dist/` directory.
 
 Run the proxy settings component tests from `src/clients` with `pnpm test:repository-proxy`. They use the extension SDK and Desktop's file system implementation to check saving, clearing, validation, independent settings for each Server and Project, and context changes. Server proxy transfer tests run with `dotnet test tests/Agw.Files.Tests` from the repository root.
+
+Run `pnpm test:repository-workspace` from `src/clients` for Chromium component tests of Clone destinations, submitted parameters, cancellation and feature repository selection. These render the extension's dialogs and capture their submitted events.

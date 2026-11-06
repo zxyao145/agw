@@ -1,3 +1,4 @@
+using System.Reflection;
 using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Microsoft.Agents.AI;
@@ -8,6 +9,29 @@ namespace Agw.Agents.Tests;
 
 public class AgentflowMessageMapperTests
 {
+    [Fact]
+    public void CreateWorkflowErrorMessage_InvocationException_ReportsOriginalFailure()
+    {
+        var cause = new NotSupportedException("System and developer messages require thread instructions.");
+        var exception = new TargetInvocationException("Error invoking handler for TurnToken", cause);
+
+        var message = AgentflowMessageMapper.CreateWorkflowErrorMessage(exception, "error");
+
+        Assert.Equal(cause.Message, Assert.IsType<AgwErrorContent>(Assert.Single(message.Contents)).Content);
+        Assert.Same(cause, exception.InnerException);
+    }
+
+    [Fact]
+    public void CreateWorkflowErrorMessage_NestedInvocationExceptions_ReportsOriginalFailure()
+    {
+        var cause = new NotSupportedException("Unsupported input.");
+        var exception = new TargetInvocationException(new TargetInvocationException(cause));
+
+        var message = AgentflowMessageMapper.CreateWorkflowErrorMessage(exception, "error");
+
+        Assert.Equal(cause.Message, Assert.IsType<AgwErrorContent>(Assert.Single(message.Contents)).Content);
+    }
+
     [Fact]
     public void MapEvent_StreamedAndCompletedResponses_DeliversEachContentOnce()
     {

@@ -129,13 +129,6 @@ nav {
 .welcome p {
   max-width: 560px;
 }
-.welcome pre {
-  text-align: left;
-  margin: 0;
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  background: var(--muted);
-}
 .proxy-settings {
   padding: 16px 20px;
 }

@@ -29,8 +29,9 @@ public sealed class RepositoryWorkspaceAppService
         string url,
         string? name,
         CancellationToken ct,
-        string? proxyUrl = null
-    ) => RunAsync(projectId, root => _workspace.CloneAsync(root, url, name, ct, proxyUrl), ct);
+        string? proxyUrl = null,
+        bool intoRoot = false
+    ) => RunAsync(projectId, root => _workspace.CloneAsync(root, url, name, ct, proxyUrl, intoRoot), ct);
 
     /// <summary>
     /// <paramref name="feature"/> 非空时向已有 feature 添加仓库，否则以 <c>yyMMdd-name</c> 新建；<paramref name="date"/>

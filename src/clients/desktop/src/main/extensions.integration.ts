@@ -531,7 +531,7 @@ async function textCodecBridge(): Promise<void> {
 async function bareRepositoryWorkflow(): Promise<void> {
   await goToChat();
   await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]`);
-  const sidebar = await untilFrame(EXTENSION_IDS.bareRepository, "sidebarView");
+  let sidebar = await untilFrame(EXTENSION_IDS.bareRepository, "sidebarView");
   await until(
     () =>
       evalFrame<boolean>(
@@ -837,6 +837,176 @@ async function bareRepositoryWorkflow(): Promise<void> {
     );
     pass(
       "the Bare Repository sidebar browses a branch that is not checked out read-only and lists a worktree's uncommitted changes",
+    );
+
+    const rootDirectory = resolve(".scratch/extension-tests/root-repository");
+    await mkdir(rootDirectory);
+    await writeFile(join(seed, "root.txt"), "root content\n");
+    git(seed, "add", "root.txt");
+    git(seed, "commit", "-m", "Add root file");
+    const rootProject = await hostSend<{ id: string }>("POST", "/api/projects", {
+      name: "Root repository tests",
+      workspace: rootDirectory,
+    });
+    await evalHost(
+      `location.assign(${JSON.stringify(`/desktop/chat/?projectId=${rootProject.id}`)}); true`,
+    );
+    await delay(500);
+    await untilHost("Boolean(document.querySelector('.agw-ribbon'))", "the root project workspace");
+    await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]`);
+    sidebar = await untilFrame(EXTENSION_IDS.bareRepository, "sidebarView");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'Boolean(document.querySelector(".sidebar-empty button.primary"))',
+        ),
+      "the empty root project",
+    );
+    await clickInFrame(sidebar, 'document.querySelector(".sidebar-empty button.primary")');
+    frame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "repositories");
+    await fill({ url });
+    await evalFrame(
+      frame,
+      `(() => {
+      const select = document.querySelector("dialog select");
+      select.value = "root";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`,
+    );
+    await until(
+      () => evalFrame<boolean>(frame, '!document.querySelector("dialog input[name=name]")'),
+      "the root clone destination",
+    );
+    await submitDialog("the repository cloned into the project root");
+    assert.equal(existsSync(join(rootDirectory, ".git")), true);
+    git(rootDirectory, "config", "user.name", "Agw Tests");
+    git(rootDirectory, "config", "user.email", "tests@agw.local");
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          `
+        document.querySelector('button[aria-label="Repository"]')?.textContent === "root-repository"
+        && !document.querySelector('[role="tab"][disabled]')
+        && document.querySelector('button[aria-label="Clone repository"]')?.disabled
+        && Boolean(document.querySelector('.tree-item[data-path="root.txt"]'))
+      `,
+        ),
+      "the editable root checkout and disabled Clone",
+    );
+    await clickInFrame(sidebar, "document.querySelector('.tree-item[data-path=\"root.txt\"]')");
+    await untilHost(sourceIncludes("root content"), "the root file in the Source editor");
+    await focusSourceEditor();
+    pressHostKey("a", [MOD]);
+    await typeInSource("root edited\n");
+    saveInSource();
+    await untilFileText(
+      join(rootDirectory, "root.txt"),
+      "root edited\n",
+      "the root file saved through Desktop",
+    );
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await clickInFrame(sidebar, '[...document.querySelectorAll("[role=tab]")][1]');
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector(".changes .name")?.textContent === "root.txt"',
+        ),
+      "the root file in Changes",
+    );
+    git(rootDirectory, "commit", "-am", "Edit root file");
+    git(rootDirectory, "switch", "-c", "root-alternate");
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await choose("Branch", "root-alternate");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          "Boolean(document.querySelector('button[aria-label=\"Restore trunk\"]'))",
+        ),
+      "Restore for the root checkout",
+    );
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Restore trunk\"]')");
+    await choose("Branch", "trunk");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          "Boolean(document.querySelector('button[aria-label=\"Sync\"]'))",
+        ),
+      "Sync for the root default branch",
+    );
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Sync\"]')");
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          'document.querySelector("main").getAttribute("aria-busy") === "false" && !document.querySelector("[role=alert]")',
+        ),
+      "the root default branch synced",
+    );
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"New feature\"]')");
+    frame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "repositories");
+    await fill({ name: "root-feature" });
+    assert.equal(
+      await evalFrame<boolean>(frame, 'document.querySelector("input[name=repositories]").checked'),
+      true,
+    );
+    await submitDialog("the root feature created with the repository selected");
+    const rootFeature = await evalFrame<string>(
+      frame,
+      'document.querySelector(".nav-item[data-feature][aria-current=page]").dataset.feature',
+    );
+    const rootWorktree = join(rootDirectory, ".worktrees", rootFeature);
+    assert.equal(existsSync(join(rootWorktree, ".git")), true);
+    assert.equal(
+      await evalFrame<string>(frame, 'document.querySelector(".row-dir code").textContent'),
+      `.worktrees/${rootFeature}`,
+    );
+    git(rootDirectory, "add", ".gitignore");
+    git(rootDirectory, "commit", "-m", "Ignore root worktrees");
+    await writeFile(join(rootWorktree, "feature.txt"), "root feature content\n");
+    git(rootWorktree, "add", "feature.txt");
+    git(rootWorktree, "commit", "-m", "Add root feature");
+    await clickInFrame(sidebar, "document.querySelector('button[aria-label=\"Refresh\"]')");
+    await choose("Branch", rootFeature);
+    await until(
+      () =>
+        evalFrame<boolean>(
+          sidebar,
+          "Boolean(document.querySelector('button[aria-label=\"Merge into trunk\"]')) && !document.querySelector('button[aria-label=\"Merge into trunk\"]').disabled",
+        ),
+      "Merge for the root feature worktree",
+    );
+    await clickInFrame(
+      sidebar,
+      "document.querySelector('button[aria-label=\"Merge into trunk\"]')",
+    );
+    await expectConfirmation(
+      "message",
+      ["Bare Repository", `Merge ${rootFeature} into root-repository/trunk?`],
+      "the root merge confirmation",
+    );
+    await answerConfirmation("Merge");
+    await untilFileText(
+      join(rootDirectory, "feature.txt"),
+      "root feature content\n",
+      "the root feature merged",
+    );
+    assert.equal(git(rootDirectory, "show", "-s", "--format=%P", "HEAD").split(" ").length, 2);
+    pass(
+      "Bare Repository clones into the project root, edits root files, restores and syncs the main branch, and merges a flat feature worktree",
+    );
+    await evalHost(
+      `location.assign(${JSON.stringify(`/desktop/chat/?projectId=${config.projectId}`)}); true`,
+    );
+    await delay(500);
+    await untilHost(
+      "Boolean(document.querySelector('.agw-ribbon'))",
+      "the original project workspace",
     );
   } finally {
     daemon.kill();

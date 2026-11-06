@@ -7077,6 +7077,8 @@ export interface components {
       /** @description 目录名；省略时从 URL 推导。Directory name; derived from the URL when omitted. */
       name?: null | string;
       proxyUrl?: null | string;
+      /** @description 克隆到空的项目根目录。Clones into the empty project root. */
+      intoRoot?: null | boolean;
     };
     ConnectionCreateRequest: {
       pluginId: string;
@@ -7308,9 +7310,11 @@ export interface components {
       defaultExtra: string;
       supportedProviderTypes: components["schemas"]["ProviderType"][];
     };
-    /** @description `.worktrees/&lt;feature&gt;/&lt;repo&gt;` 下的一个 worktree。A worktree at `.worktrees/&lt;feature&gt;/&lt;repo&gt;`. */
+    /** @description feature 中的一个 worktree。A worktree belonging to a feature. */
     FeatureRepository: {
       name: string;
+      /** @description 相对项目根目录的 worktree 路径。The project-relative worktree path. */
+      path: string;
       branch: string;
       dirty: boolean;
       /**
@@ -8129,6 +8133,7 @@ export interface components {
      * @description 分支的一层目录。string? RepositoryTree.Checkout 为检出该分支的目录（相对 Project 根目录），此时条目来自磁盘；为 null 时条目来自
      *     提交。One directory level of a branch. string? RepositoryTree.Checkout is the directory where the branch is checked out
      *     (relative to the Project root), and the entries then come from the disk; when null they come from the commit.
+     *     空字符串表示项目根目录。An empty string denotes the project root.
      */
     RepositoryTree: {
       checkout: null | string;
@@ -8370,9 +8375,11 @@ export interface components {
       name: string;
       repositories: components["schemas"]["FeatureRepository"][];
     };
-    /** @description 项目根目录下的主工作副本（含 `.git` 目录的子目录）。A root checkout: a project subdirectory with a `.git` directory. */
+    /** @description 项目根目录或其子目录中的主工作副本。A main checkout at the project root or in a subdirectory. */
     WorkspaceRepository: {
       name: string;
+      /** @description 相对项目根目录的路径；空字符串表示项目根目录。Project-relative path; empty for the project root. */
+      path: string;
       /** @description 远程默认分支；没有 `origin/HEAD` 时为当前分支。The remote default branch, or the current branch without `origin/HEAD`. */
       defaultBranch: string;
       /** @description 当前分支；分离 HEAD 时为空。The current branch; empty when HEAD is detached. */
