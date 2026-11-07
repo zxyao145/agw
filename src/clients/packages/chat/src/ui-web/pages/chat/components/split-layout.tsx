@@ -102,7 +102,7 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }: ColSplitProps) =>
             {leftProps.collapsed ? null : (
               <div
                 className={cn(
-                  "w-px cursor-col-resize flex items-center justify-center bg-primary/10 hover:bg-primary/30 transition-colors group",
+                  "relative z-20 w-px shrink-0 cursor-col-resize flex items-center justify-center bg-primary/10 hover:bg-primary/30 transition-colors group before:absolute before:inset-y-0 before:left-1/2 before:w-[4px] before:-translate-x-1/2",
                   isResizing && "bg-primary/30",
                 )}
                 onMouseDown={(e) => {
