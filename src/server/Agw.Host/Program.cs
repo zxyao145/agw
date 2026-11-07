@@ -315,7 +315,8 @@ public static class AgwHostApplication
             );
             var iocUtil = app.Services.GetRequiredService<IocUtil>();
 
-            // Apply configured first-run setup, or seed an already initialized database on the Control Plane.
+            // 首次启动执行配置的 Setup，已初始化的 Control Plane 维护系统数据。
+            // Applies configured first-run Setup or maintains system data on an initialized Control Plane.
             if (hasControlPlane)
             {
                 using var scope = app.Services.CreateScope();
@@ -330,7 +331,7 @@ public static class AgwHostApplication
                     if (!initializedFromConfiguration)
                     {
                         var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
-                        await seeder.SeedAsync();
+                        await seeder.MaintainSystemDataAsync();
                     }
                 }
             }

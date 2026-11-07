@@ -3,6 +3,7 @@ using Agw.Auth.Contracts;
 using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
+using Agw.Jobs.Application.Skills;
 using Agw.Projects;
 using Agw.Projects.Contracts;
 using Agw.Providers.Contracts;
@@ -39,6 +40,78 @@ public class DbSeederTests : IDisposable
 
     public void Dispose() => _systemScope.Dispose();
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MaintainSystemDataAsync_BuiltInSkillMissingOrOutdated_UpdatesOnlySystemDefinitions(bool exists)
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "maintenance.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            var registration = new JobManagementSkillRegistration();
+            if (exists)
+                context.Skills.Add(
+                    new Skill
+                    {
+                        Id = registration.Id,
+                        Name = "job-management",
+                        Description = "Legacy metadata",
+                        Kind = SkillKind.BuiltIn,
+                        CreateBy = Constants.AdminUserId,
+                    }
+                );
+            var userSkill = new Skill
+            {
+                Id = Guid.CreateVersion7(),
+                Name = registration.Name,
+                Description = "User content",
+                Kind = SkillKind.Local,
+                ContentPath = "skills/custom",
+                CreateBy = "user-a",
+            };
+            context.Skills.Add(userSkill);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            context.ChangeTracker.Clear();
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                CreateWorkspaceAccess(paths),
+                [registration]
+            );
+
+            await seeder.MaintainSystemDataAsync();
+            await seeder.MaintainSystemDataAsync();
+            context.ChangeTracker.Clear();
+
+            var builtIn = await context.Skills.SingleAsync(skill => skill.Id == registration.Id);
+            Assert.Equal(registration.Name, builtIn.Name);
+            Assert.Equal(registration.Description, builtIn.Description);
+            Assert.Equal(SkillKind.BuiltIn, builtIn.Kind);
+            Assert.Equal(
+                "User content",
+                (await context.Skills.SingleAsync(skill => skill.Id == userSkill.Id)).Description
+            );
+            Assert.Equal(2, await context.Skills.CountAsync());
+            Assert.Empty(await context.Agents.ToListAsync());
+            Assert.Empty(await context.Agentflows.ToListAsync());
+            Assert.Empty(await context.Projects.ToListAsync());
+            Assert.Empty(await context.Settings.ToListAsync());
+            Assert.False(Directory.Exists(Path.Combine(paths.SkillsDirectory, "xhs-explore")));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task SeedAsync_NewDatabase_CreatesDefaultDefinitionsAndRemainsIdempotent()
     {
@@ -61,14 +134,6 @@ public class DbSeederTests : IDisposable
             );
 
             await seeder.SeedAsync();
-            var seededPi = await context.Agents.SingleAsync(
-                agent => agent.Id == PiAgentId,
-                TestContext.Current.CancellationToken
-            );
-            context.Agents.Remove(seededPi);
-            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-            // Simulate an upgraded database where older External Agents exist but Pi is missing.
             await seeder.SeedAsync();
             await seeder.SeedAsync();
 
