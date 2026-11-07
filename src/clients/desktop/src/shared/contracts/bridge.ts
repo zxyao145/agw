@@ -146,6 +146,7 @@ export type AgwDesktopBridge = {
     requests: ExtensionFrameObscureRequest[],
   ): Promise<void>;
   revealExtensionFrames(hostInstanceId: string, frameIds: string[]): Promise<void>;
+  focusExtensionFrame(hostInstanceId: string, frameId: string): Promise<void>;
   setExtensionFrameBackground(hostInstanceId: string, color: string): Promise<void>;
   destroyExtensionFrame(hostInstanceId: string, frameId: string): Promise<void>;
   terminateExtensionFrameProcess(hostInstanceId: string, frameId: string): Promise<void>;

@@ -1581,6 +1581,80 @@ async function chatContributions(): Promise<void> {
   pass("message actions open the extension view with the message");
 }
 
+async function floatingChat(): Promise<void> {
+  await openFileInTree("src/app.ts");
+  await clickHost('button[aria-label="Open chat"]');
+  await untilHost(
+    `Boolean(document.querySelector('[data-slot="floating-chat-panel"]'))`,
+    "the Source floating Chat panel",
+  );
+  await setInput('textarea[role="combobox"]', "source floating chat context");
+  await clickHost('button[aria-label="Send message"]');
+  await until(
+    async () =>
+      (await serviceState()).echoInputs.some(
+        (text) =>
+          text.includes("source floating chat context") &&
+          text.includes('"projectRelativePath": "src/app.ts"'),
+      ),
+    "the Source file path in the floating Chat request",
+  );
+  await clickHost('button[aria-label="Close chat"]');
+  await untilHost(
+    `!document.querySelector('[data-slot="floating-chat-panel"]')`,
+    "the Source floating Chat panel to close",
+  );
+
+  await openMainView(`${EXTENSION_IDS.sample}:app`);
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
+  await api(
+    main,
+    `window.floatingChatHandle = await api.chat.createFloatingChat({
+      context: { projectRelativePath: "extension/sample.md" },
+    }); return true;`,
+  );
+  await until(
+    () =>
+      evalFrame<boolean>(main, `Boolean(document.querySelector('button[aria-label="Open chat"]'))`),
+    "the SDK floating Chat button",
+  );
+  await evalFrame(main, `document.querySelector('button[aria-label="Open chat"]').click(); true`);
+  await untilHost(
+    `Boolean(document.querySelector('[data-slot="floating-chat-panel"]'))`,
+    "the extension floating Chat panel",
+  );
+  await setInput('textarea[role="combobox"]', "extension floating chat context");
+  await clickHost('button[aria-label="Send message"]');
+  await until(
+    async () =>
+      (await serviceState()).echoInputs.some(
+        (text) =>
+          text.includes("extension floating chat context") &&
+          text.includes('"projectRelativePath": "extension/sample.md"'),
+      ),
+    "the extension context in the floating Chat request",
+  );
+  await clickHost('button[aria-label="Close chat"]');
+  await until(
+    async () =>
+      main.view.getVisible() &&
+      (await evalFrame<string | null>(
+        main,
+        "document.activeElement?.getAttribute('aria-label') ?? null",
+      )) === "Open chat",
+    "the extension view and floating Chat button to regain focus",
+  );
+  await api(main, "await window.floatingChatHandle.dispose(); return true;");
+  await until(
+    () => evalFrame<boolean>(main, `!document.querySelector('button[aria-label="Open chat"]')`),
+    "the extension floating Chat button to dispose",
+  );
+  await showSidebarView("agw.conversations", "agw.ribbon.conversations");
+  pass(
+    "Source and extension floating Chat buttons send their file context and return focus on close",
+  );
+}
+
 const CHAT_MARKDOWN = [
   "Markdown check[^n] and [^missing].",
   "",
@@ -9019,6 +9093,7 @@ async function run(): Promise<void> {
   await execution();
   await a2aAndHttp();
   await chatContributions();
+  await floatingChat();
   await chatMarkdown();
   await chatObserve();
   await hostConversationReadOnly();

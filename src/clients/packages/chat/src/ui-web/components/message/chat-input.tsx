@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 
-import { QuickTextDialog } from "@agw/projects";
+import { QuickTextDialog, type LineComment } from "@agw/projects";
 import { Button } from "@agw/components";
 import { Separator } from "@agw/components";
 import { resolveInputSuggestions, type CommandSource } from "@agw/chat-core";
@@ -63,7 +63,9 @@ interface ChatInputProps {
   onPermissionModeChange: (mode: PermissionMode) => void;
   onAgentModeChange: (mode: AgentMode) => void;
   pendingFileCommentCount: number;
+  pendingFileComments?: readonly LineComment[];
   onClearPendingFileComments: () => void;
+  context?: Readonly<Record<string, string>>;
   placeholder?: string;
   userInputRef?: React.RefObject<UserInputRef | null>;
   /** 用户编辑输入后的新值，用于保存草稿。 */
@@ -110,7 +112,9 @@ export function ChatInput({
   onPermissionModeChange,
   onAgentModeChange,
   pendingFileCommentCount,
+  pendingFileComments = [],
   onClearPendingFileComments,
+  context,
   placeholder,
   userInputRef: externalUserInputRef,
   onInputDraftChange,
@@ -120,6 +124,7 @@ export function ChatInput({
   const internalUserInputRef = React.useRef<UserInputRef | null>(null);
   const userInputRef = externalUserInputRef ?? internalUserInputRef;
   const isBusy = isExecuting || isTransitioning;
+  const contextEntries = Object.entries(context ?? {});
 
   const handleQuickCommand = (text: string) => {
     userInputRef.current?.insertText(text);
@@ -184,9 +189,22 @@ export function ChatInput({
           onResume={onQueueResume}
         />
       </UserInput.Queue>
-      {pendingFileCommentCount > 0 || imageAttachments.length > 0 ? (
+      {pendingFileCommentCount > 0 || imageAttachments.length > 0 || contextEntries.length > 0 ? (
         <UserInput.Context>
           <div className="space-y-2">
+            {contextEntries.length > 0 ? (
+              <details className="rounded-lg bg-muted px-3 py-2">
+                <summary className="cursor-pointer text-sm font-medium">Message context</summary>
+                <dl className="mt-2 space-y-1 text-xs">
+                  {contextEntries.map(([key, value]) => (
+                    <div key={key} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+                      <dt className="font-medium text-muted-foreground">{key}</dt>
+                      <dd className="min-w-0 break-all">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+            ) : null}
             {imageAttachments.length > 0 ? (
               <ul
                 className="agw-scrollbar flex gap-2 overflow-x-auto pb-1"
@@ -222,10 +240,22 @@ export function ChatInput({
               <div className="flex min-h-10 items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2">
                 <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-primary">
                   <CornerDownRight className="size-4 shrink-0" />
-                  <span>
-                    {pendingFileCommentCount} code comment
-                    {pendingFileCommentCount === 1 ? "" : "s"}
-                  </span>
+                  <details className="min-w-0">
+                    <summary className="cursor-pointer">
+                      {pendingFileCommentCount} code comment
+                      {pendingFileCommentCount === 1 ? "" : "s"}
+                    </summary>
+                    <ul className="mt-2 space-y-2 text-xs font-normal text-foreground">
+                      {pendingFileComments.map((comment) => (
+                        <li key={comment.id} className="rounded-md border bg-background p-2">
+                          <p className="font-medium">
+                            {comment.filePath}:{comment.lineNumber}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap">{comment.content}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 </div>
                 <Button
                   type="button"

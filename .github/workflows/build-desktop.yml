@@ -131,7 +131,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y fakeroot dpkg
+          sudo apt-get install -y fakeroot dpkg desktop-file-utils
       - run: pnpm install --frozen-lockfile
       - name: Build installer
         run: >-
@@ -139,6 +139,10 @@ jobs:
           --flavor ${{ matrix.flavor }}
           --arch ${{ matrix.arch }}
           --version ${{ needs.metadata.outputs.version }}
+      - name: Verify installed Windows icons
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: ./desktop/scripts/test-installed-icons.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: agw-desktop-${{ matrix.flavor }}-${{ matrix.platform }}-${{ matrix.arch }}

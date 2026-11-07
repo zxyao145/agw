@@ -261,6 +261,18 @@ export class ExtensionViewManager {
     }
   }
 
+  public focus(frameId: string): void {
+    const frame = this.frames.get(frameId);
+    if (
+      !frame ||
+      !frame.inWindow ||
+      !frame.view.getVisible() ||
+      frame.view.webContents.isDestroyed()
+    )
+      return;
+    frame.view.webContents.focus();
+  }
+
   public setBackground(color: string): void {
     for (const frame of this.frames.values()) {
       if (frame.inWindow) frame.view.setBackgroundColor(color);

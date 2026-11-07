@@ -6,6 +6,7 @@
  */
 export const OVERLAY_SLOTS = [
   "image-preview",
+  "floating-chat-panel",
   "dialog-content",
   "dialog-overlay",
   "alert-dialog-content",

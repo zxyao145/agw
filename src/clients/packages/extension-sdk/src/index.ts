@@ -11,6 +11,11 @@ export { ExtensionError } from "./rpc";
 export { connect, defineBackground, defineView } from "./sdk/index";
 export { createExtensionApi, type EventRouter } from "./sdk/api";
 export { SDK_MANIFEST_VERSION } from "./sdk/connection";
+export {
+  mountFloatingChatButton,
+  normalizeFloatingChatContext,
+  type FloatingChatButton,
+} from "./sdk/floating-chat";
 // Desktop 的 Source 用同一个文档会话运行时。Desktop's Source uses the same document session runtime.
 export { isSaveShortcut } from "./sdk/document-state";
 export {

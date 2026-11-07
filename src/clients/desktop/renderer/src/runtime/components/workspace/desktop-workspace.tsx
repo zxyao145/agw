@@ -83,6 +83,18 @@ function DesktopWorkspaceLayout({
     refreshConversations,
   } = workspace;
   const serverId = host.context.snapshot().server.id;
+  const sourceChatContext = React.useMemo(() => {
+    const filePath = workspace.selectedFile;
+    if (!selectedProjectId || !filePath) return null;
+    const normalizedPath = filePath.replace(/\\/gu, "/").replace(/^\.\//u, "");
+    const directory = workspace.selectedDirectory;
+    return {
+      projectId: selectedProjectId,
+      ...(directory?.id ? { directoryId: directory.id } : {}),
+      ...(directory?.name ? { directoryName: directory.name } : {}),
+      projectRelativePath: normalizedPath,
+    };
+  }, [selectedProjectId, workspace.selectedDirectory, workspace.selectedFile]);
 
   // 当前 Project、对话与 Agent 连同连接标识写入 context。Writes the current selection with the connection key.
   React.useEffect(() => {
@@ -325,6 +337,7 @@ function DesktopWorkspaceLayout({
             editableSource={editableSource}
             defaultFileViewerId={defaultFileViewerId}
             onSetDefaultFileViewer={setDefaultFileViewer}
+            sourceChatContext={sourceChatContext}
           />
         </ColResizeSplit.Right>
       </ColResizeSplit>

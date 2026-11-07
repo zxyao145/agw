@@ -31,6 +31,7 @@ import {
   type ServerInfo,
 } from "./runtime-model";
 import { ServerQueryClientRegistry } from "./query-client-registry";
+import { connectServer, probeServer } from "./server-connection";
 import { AppearanceProvider } from "./appearance/appearance-provider";
 import { DesktopCodeViewAppearance } from "./appearance/code-view-appearance";
 import { ThemeProvider } from "./appearance/theme-provider";
@@ -85,21 +86,6 @@ function toAuthUser(session: AuthSession | null): DesktopAuthUser | null {
 
 function showImageContextMenu(request: ImageContextMenuRequest): Promise<void> {
   return window.agwDesktop!.showImageContextMenu(request);
-}
-
-async function probeServer(
-  profile: ServerProfile,
-  token: string | null,
-  signal?: AbortSignal,
-): Promise<ServerInfo> {
-  const response = await fetch(`${profile.baseUrl.replace(/\/+$/u, "")}/api/server-info`, {
-    credentials: "omit",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    signal,
-  });
-  const body = (await response.json()) as { title?: string; data?: ServerInfo };
-  if (!response.ok || !body.data) throw new Error(body.title || "Unable to reach Agw Server.");
-  return body.data;
 }
 
 /** Bearer 校验通过时返回 session，否则为 null。Returns the session when Bearer access is valid, otherwise null. */
@@ -253,7 +239,19 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
         // Keep local settings editable even when the Server probe or authentication fails.
         setRuntimeState(nextState);
 
-        let info = await probeServer(profile, token, abortController.signal);
+        const connected = await connectServer(
+          nextState,
+          () => bridge.getRuntimeState(),
+          abortController.signal,
+        );
+        if (generation !== connectGenerationRef.current || abortController.signal.aborted) return;
+        nextState = connected.state;
+        profile = getEffectiveActiveServerProfile(nextState);
+        token = nextState.activeToken;
+        configureClients(profile, token, nextState.activeCredentialSource === "oidc");
+        activateQueryClient(profile, token);
+        setRuntimeState(nextState);
+        let info = connected.info;
         if (!info.initialized && !setupAttempted.current.has(profile.baseUrl)) {
           setupAttempted.current.add(profile.baseUrl);
           if (generation === connectGenerationRef.current) setStatus("setup-required");

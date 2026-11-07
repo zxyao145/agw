@@ -162,6 +162,8 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
   const unsaved: [string, string, boolean][] = [];
   const saveStatuses: [string, string, string | null][] = [];
   const fileHeaderItems: [string, string, unknown][] = [];
+  const floatingChats: { method: string; frameId: string; pageId: string; context?: unknown }[] =
+    [];
   // 云端文件按 Project 主目录中的路径保存。Cloud files by their path in the Project's primary directory.
   const cloudFiles = new Map<string, Uint8Array>([["a.bin", new Uint8Array([7, 8, 9])]]);
   const server = await startApiServer({
@@ -307,6 +309,33 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     previewImage: async (owner, request) => {
       imagePreviews.push({ frameId: owner.frameId, pageId: owner.pageId, ...request });
     },
+    floatingChat: {
+      register: (owner, context) =>
+        floatingChats.push({
+          method: "register",
+          frameId: owner.frameId,
+          pageId: owner.pageId,
+          context,
+        }),
+      setContext: (owner, context) =>
+        floatingChats.push({
+          method: "context",
+          frameId: owner.frameId,
+          pageId: owner.pageId,
+          context,
+        }),
+      open: (owner, context) =>
+        floatingChats.push({
+          method: "open",
+          frameId: owner.frameId,
+          pageId: owner.pageId,
+          context,
+        }),
+      close: (owner) =>
+        floatingChats.push({ method: "close", frameId: owner.frameId, pageId: owner.pageId }),
+      dispose: (owner) =>
+        floatingChats.push({ method: "dispose", frameId: owner.frameId, pageId: owner.pageId }),
+    },
   });
   const channel = new MessageChannel();
   broker.connect(
@@ -352,6 +381,7 @@ async function createHarness(permissions: ExtensionPermission[], options: Harnes
     unsaved,
     saveStatuses,
     fileHeaderItems,
+    floatingChats,
     uri: (path: string) =>
       formatCloudUri({ serverId: "local", projectId: PROJECT, directoryId: null, path }),
     localUri: (path: string) => pathToFileURL(join(storage.path, path)).toString(),
@@ -1261,6 +1291,62 @@ test("chat.observe rejects invalid filters and subscription ids", async () => {
       String(subscriptionId),
     );
   }
+});
+
+test("floating Chat carries context through its handle and mounted button", async () => {
+  const harness = await createHarness(["chat.composer"]);
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: dom.window.document,
+  });
+  try {
+    const floatingChat = await harness.api.chat.createFloatingChat({
+      context: { projectRelativePath: "plans/first.md" },
+    });
+    await floatingChat.setContext({ projectRelativePath: "plans/second.md" });
+    await floatingChat.open();
+    harness.broker.emit("frame-1", "page-1", "chat.floating.contextCleared", {});
+    await flushEvents(harness.api);
+
+    dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Open chat"]')!.click();
+    await flushEvents(harness.api);
+    harness.broker.emit("frame-1", "page-1", "chat.floating.focus", {});
+    await flushEvents(harness.api);
+    assert.equal(
+      dom.window.document.activeElement,
+      dom.window.document.querySelector('[aria-label="Open chat"]'),
+    );
+    await floatingChat.close();
+    await floatingChat.dispose();
+
+    assert.deepEqual(
+      harness.floatingChats.map(({ method, context }) => ({ method, context })),
+      [
+        { method: "register", context: { projectRelativePath: "plans/first.md" } },
+        { method: "context", context: { projectRelativePath: "plans/second.md" } },
+        { method: "open", context: { projectRelativePath: "plans/second.md" } },
+        { method: "open", context: {} },
+        { method: "close", context: undefined },
+        { method: "dispose", context: undefined },
+      ],
+    );
+  } finally {
+    dom.window.close();
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
+test("floating Chat checks permission and rejects background views", async () => {
+  const denied = await createHarness([]);
+  await assert.rejects(denied.api.chat.createFloatingChat(), { code: "ERR_PERMISSION_DENIED" });
+
+  const background = await createHarness(["chat.composer"], { kind: "background" });
+  await assert.rejects(background.api.chat.createFloatingChat(), {
+    code: "ERR_UNSUPPORTED_OPERATION",
+  });
 });
 
 test("a history subscription receives each history message in order and nothing else", async () => {

@@ -57,6 +57,9 @@ module.exports = {
         name: "agw_desktop",
         version: releaseVersion,
         setupIcon: path.resolve(__dirname, "assets", "agw-logo.ico"),
+        loadingGif: path.resolve(__dirname, "assets", "agw-installer.gif"),
+        iconUrl:
+          "https://raw.githubusercontent.com/zxyao145/agw/main/src/clients/desktop/assets/agw-logo.ico",
         setupExe: `Agw-${releaseVersion}-${flavor}-windows-${arch}-Setup.exe`,
       },
     },
@@ -65,6 +68,7 @@ module.exports = {
       platforms: ["darwin"],
       config: {
         name: `Agw-${flavor}-macos-${arch}`,
+        icon: path.resolve(__dirname, "assets", "agw-logo.icns"),
         format: "ULFO",
       },
     },
