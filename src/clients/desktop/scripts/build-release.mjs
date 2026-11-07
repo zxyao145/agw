@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { access, readFile, readdir, rm } from "node:fs/promises";
 import { arch as hostArch, platform as hostPlatform } from "node:os";
 import { resolve } from "node:path";
+import { verifyReleaseIcons } from "./verify-release-icons.mjs";
 
 const desktopDirectory = resolve(import.meta.dirname, "..");
 const packageManifest = JSON.parse(
@@ -174,4 +175,9 @@ if (
     `Unexpected Desktop artifacts: expected ${expectedArtifacts.join(", ")}, found ${artifacts.join(", ")}.`,
   );
 }
+await verifyReleaseIcons({
+  platform: hostPlatform(),
+  applicationDirectory: packagedApplicationDirectory,
+  artifacts: artifacts.map((artifact) => resolve(releaseDirectory, artifact)),
+});
 for (const artifact of artifacts) console.log(resolve(releaseDirectory, artifact));
