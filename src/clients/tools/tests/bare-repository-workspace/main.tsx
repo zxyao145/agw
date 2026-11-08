@@ -1,12 +1,9 @@
 import type { WorkspaceRepository } from "../../../packages/extension-sdk/src";
 import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  CloneDialog,
-  FeatureDialog,
-} from "../../../packages/extensions/bare-repository/src/dialogs";
-import "../../../packages/extensions/bare-repository/src/base.css";
-import "../../../packages/extensions/bare-repository/src/styles.css";
+import { CloneDialog, FeatureDialog } from "../../../../extensions/bare-repository/src/dialogs";
+import "../../../../extensions/bare-repository/src/base.css";
+import "../../../../extensions/bare-repository/src/styles.css";
 
 const view = new URLSearchParams(location.search).get("view") ?? "clone";
 const repositories: WorkspaceRepository[] = [

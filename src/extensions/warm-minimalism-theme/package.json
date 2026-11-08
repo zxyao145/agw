@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "lint": "oxlint -c ../../../.oxlintrc.json ./build.mjs",
-    "format": "oxfmt -c ../../../.oxfmtrc.json ./build.mjs *.json themes",
-    "format:check": "oxfmt -c ../../../.oxfmtrc.json --check ./build.mjs *.json themes"
+    "lint": "oxlint -c ../../clients/.oxlintrc.json ./build.mjs",
+    "format": "oxfmt -c ../../clients/.oxfmtrc.json ./build.mjs *.json themes",
+    "format:check": "oxfmt -c ../../clients/.oxfmtrc.json --check ./build.mjs *.json themes"
   }
 }
