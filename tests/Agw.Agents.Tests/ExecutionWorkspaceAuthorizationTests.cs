@@ -1,6 +1,10 @@
+using System.Runtime.CompilerServices;
 using System.Security.Claims;
+using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Commands.Setting;
@@ -10,6 +14,9 @@ using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Extensions;
+using Agw.Extensions.Application.Persistence;
+using Agw.Extensions.Contracts;
+using Agw.Extensions.Infrastructure.Packages;
 using Agw.Files;
 using Agw.Files.Abstracts;
 using Agw.Host.Data;
@@ -21,11 +28,13 @@ using Agw.Projects;
 using Agw.Projects.Application;
 using Agw.Projects.Contracts.Execution;
 using Agw.Providers;
+using Agw.Providers.Contracts;
 using Agw.Settings;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
@@ -33,6 +42,7 @@ using Agw.Shared.Utils;
 using Agw.Skills;
 using Agw.Tools.Impl.ContextualTools.Shell;
 using Agw.Tools.Runtime;
+using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -90,6 +100,167 @@ public sealed class ExecutionWorkspaceAuthorizationTests
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, exception.Code);
         Assert.Same(firstRuntime, fixture.Coordinator.Host.AgentflowRuntime);
         Assert.False(Directory.Exists(seed.ForeignWorkspace));
+    }
+
+    [Fact]
+    public async Task GetOrCreateHostForTurnAsync_CompiledExtension_ReusesHostAndRebuildsForNewEpoch()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var extensionId = Guid.Parse("019a4c17-5f00-7a80-8b3d-2b732f48a100");
+        var extensionRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "in-process-host-extension",
+            Guid.CreateVersion7().ToString("N")
+        );
+        var extensionDirectory = Path.Combine(extensionRoot, "extensions");
+        Directory.CreateDirectory(extensionDirectory);
+
+        try
+        {
+            await TurnAcceptanceTests.CreateCompiledExtensionPackageAsync(extensionDirectory, extensionId, token);
+            await using var fixture = await WorkspaceAuthorizationFixture.CreateAsync(extensionDirectory);
+            var seed = await fixture.SeedAsync();
+            var agentId = await fixture.SeedSystemAgentAsync(extensionId);
+
+            using var user = EnterUser(UserId);
+            var runtimeDataPaths = fixture.Services.GetRequiredService<AgwDataPaths>();
+            var packages = fixture.Services.GetRequiredService<ExtensionPackageCatalog>();
+            await packages.InitializeAsync(token);
+            var package = packages.GetValidPackage(extensionId);
+            var server = package.Manifest.Server!;
+            var loadRequest = new ExtensionRuntimeLoadRequest
+            {
+                ExtensionId = extensionId,
+                Name = package.Manifest.Name,
+                Version = package.Manifest.Version,
+                ReleaseHash = package.ReleaseHash,
+                Epoch = 0,
+                DataDirectory = Path.Combine(runtimeDataPaths.Root, "extensions", "data", extensionId.ToString("N")),
+                PackageDirectory = package.SnapshotDirectory,
+                EntryAssemblyPath = server.EntryAssembly,
+                EntryType = server.EntryType,
+            };
+            var enablement = fixture.Services.GetRequiredService<IExtensionEnablementStore>();
+            var extensionRuntime = fixture.Services.GetRequiredService<IExtensionRuntime>();
+            var enabled = await enablement.SetAsync(extensionId, true, token);
+            loadRequest = loadRequest with { Epoch = enabled.Version };
+            ExtensionGenerationSnapshot generation = await extensionRuntime.LoadAsync(loadRequest, token);
+            await extensionRuntime.PrepareDatabaseAsync(generation.GenerationId, token);
+            await extensionRuntime.ActivateAsync(generation.GenerationId, token);
+            await extensionRuntime.ResumeAsync(generation.GenerationId, token);
+
+            var firstRequest = await fixture.AcceptAgentTurnAsync(seed, agentId);
+            var firstCapabilities = Assert.IsType<ExtensionCapabilitySnapshot>(
+                firstRequest.Settings.ExtensionCapabilityLease
+            );
+            var firstHost = await fixture.Coordinator.GetOrCreateHostForTurnAsync(firstRequest, false, token);
+            Assert.NotNull(firstHost);
+            await AssertCompiledToolCallAsync(firstHost!, "first", token);
+            await fixture.Coordinator.ReleaseExecutionLeaseAsync(
+                Task.CompletedTask,
+                null,
+                new CancellationTokenSource(),
+                firstRequest.Settings,
+                firstRequest.TurnId,
+                firstCapabilities
+            );
+
+            var secondRequest = await fixture.AcceptAgentTurnAsync(seed, agentId);
+            var secondHost = await fixture.Coordinator.GetOrCreateHostForTurnAsync(secondRequest, false, token);
+            Assert.Same(firstHost, secondHost);
+            await AssertCompiledToolCallAsync(secondHost!, "second", token);
+            await fixture.Coordinator.ReleaseExecutionLeaseAsync(
+                Task.CompletedTask,
+                null,
+                new CancellationTokenSource(),
+                secondRequest.Settings,
+                secondRequest.TurnId,
+                firstCapabilities
+            );
+
+            var agentflowId = await fixture.SeedAgentflowWithAgentAsync(agentId);
+            var agentflowRequest = await fixture.AcceptAgentflowTurnAsync(seed, agentflowId);
+            var agentflowHost = await fixture.Coordinator.GetOrCreateHostForTurnAsync(agentflowRequest, false, token);
+            Assert.NotNull(agentflowHost?.AgentflowRuntime);
+            var agentflowRequestForTurn = fixture.Coordinator.ApplyAgentflowSettingsForTurn(
+                agentflowHost!,
+                agentflowRequest
+            );
+            var agentflowCapabilities = Assert.IsType<ExtensionCapabilitySnapshot>(
+                agentflowRequestForTurn.Settings.ExtensionCapabilityLease
+            );
+            Assert.Equal(firstCapabilities.Pins, agentflowCapabilities.Pins);
+            await AssertCompiledAgentflowToolCallAsync(
+                fixture.Services,
+                agentflowRequestForTurn,
+                agentflowCapabilities,
+                token
+            );
+            await fixture.Coordinator.ReleaseExecutionLeaseAsync(
+                Task.CompletedTask,
+                null,
+                new CancellationTokenSource(),
+                agentflowRequest.Settings,
+                agentflowRequest.TurnId,
+                agentflowCapabilities
+            );
+
+            await enablement.SetAsync(extensionId, false, token);
+            Assert.True(await extensionRuntime.DrainAsync(generation.GenerationId, TimeSpan.FromSeconds(1), token));
+            await extensionRuntime.UnloadAsync(generation.GenerationId, TimeSpan.FromSeconds(5), token);
+            var rejected = await Assert.ThrowsAsync<AgwException>(async () =>
+            {
+                await using var unavailable = await fixture
+                    .Services.GetRequiredService<IExtensionCapabilityCatalog>()
+                    .AcquireCurrentAsync(
+                        new ExtensionCapabilitySelection(
+                            [new ExtensionToolSelection(extensionId, "calendar-lookup")],
+                            []
+                        ),
+                        token
+                    );
+            });
+            Assert.Equal(ErrorCodes.ExtensionUnavailable.Code, rejected.Code);
+
+            var reenabled = await enablement.SetAsync(extensionId, true, token);
+            var nextGeneration = await extensionRuntime.LoadAsync(
+                loadRequest with
+                {
+                    Epoch = reenabled.Version,
+                },
+                token
+            );
+            await extensionRuntime.PrepareDatabaseAsync(nextGeneration.GenerationId, token);
+            await extensionRuntime.ActivateAsync(nextGeneration.GenerationId, token);
+            await extensionRuntime.ResumeAsync(nextGeneration.GenerationId, token);
+
+            await ExerciseReenabledHostAsync(fixture, seed, agentId, firstHost!, token);
+            Assert.True(await extensionRuntime.DrainAsync(nextGeneration.GenerationId, TimeSpan.FromSeconds(1), token));
+            await extensionRuntime.UnloadAsync(nextGeneration.GenerationId, TimeSpan.FromSeconds(5), token);
+        }
+        finally
+        {
+            if (Directory.Exists(extensionRoot))
+                Directory.Delete(extensionRoot, recursive: true);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static async Task ExerciseReenabledHostAsync(
+        WorkspaceAuthorizationFixture fixture,
+        WorkspaceSeed seed,
+        Guid agentId,
+        InProcessTurnHost previousHost,
+        CancellationToken cancellationToken
+    )
+    {
+        var request = await fixture.AcceptAgentTurnAsync(seed, agentId);
+        var host = await fixture.Coordinator.GetOrCreateHostForTurnAsync(request, false, cancellationToken);
+        Assert.NotNull(host);
+        Assert.NotSame(previousHost, host);
+        await AssertCompiledToolCallAsync(host!, "new-epoch", cancellationToken);
+        await fixture.Coordinator.ReleaseAsync();
     }
 
     [Fact]
@@ -152,6 +323,69 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "Test"))
         );
 
+    private static async Task AssertCompiledToolCallAsync(
+        InProcessTurnHost host,
+        string value,
+        CancellationToken cancellationToken
+    )
+    {
+        var runtime = Assert.IsType<AgentRuntime>(host.AgentRuntime);
+        var options = AgentRuntimeFactorySystemCompositionTests.FindInObjectGraph<ChatClientAgentOptions>(
+            runtime.Agent
+        );
+        var chatOptions = Assert.IsType<ChatOptions>(options.ChatOptions);
+        var function = Assert.IsAssignableFrom<AIFunction>(
+            Assert.Single(chatOptions.Tools!, tool => tool.Name == "calendar_lookup")
+        );
+        var result = await function.InvokeAsync(new AIFunctionArguments { ["value"] = value }, cancellationToken);
+        Assert.Equal($"current-calendar:{value}", JsonSerializer.SerializeToElement(result).GetString());
+    }
+
+    private static async Task AssertCompiledAgentflowToolCallAsync(
+        IServiceProvider services,
+        ExecutionRequest request,
+        ExtensionCapabilitySnapshot capabilities,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var agentflow = await context.Agentflows.SingleAsync(
+            item => item.Id == request.Target.AgentId,
+            cancellationToken
+        );
+        var workflowFactory = scope.ServiceProvider.GetRequiredService<AgentflowRuntimeFactory>();
+        var sessionScope = new AgentflowAgentSessionScope(
+            scope.ServiceProvider.GetRequiredService<IProviderSessionState>(),
+            request.Task.ProjectId,
+            request.Task.ContextId,
+            request.Task.TaskId,
+            conversationId: request.Task.ProjectConversationId
+        );
+        await using var workflow = await workflowFactory.CreateAiWorkflow(
+            agentflow,
+            cancellationToken,
+            sessionScope,
+            environmentVariables: request.Settings.EnvironmentVariables,
+            deferHumanInteractions: true,
+            extensionPins: capabilities.Pins,
+            acceptedExtensionCapabilities: capabilities
+        );
+        Assert.NotNull(workflow);
+        var function = Assert.IsAssignableFrom<AIFunction>(
+            Assert.Single(
+                capabilities.SelectTools(
+                    new ExtensionCapabilitySelection(
+                        [new ExtensionToolSelection(capabilities.Pins.Single().ExtensionId, "calendar-lookup")],
+                        []
+                    )
+                )
+            )
+        );
+        var result = await function.InvokeAsync(new AIFunctionArguments { ["value"] = "agentflow" }, cancellationToken);
+        Assert.Equal("current-calendar:agentflow", JsonSerializer.SerializeToElement(result).GetString());
+    }
+
     private static ToolMaterializationContext CreateShellContext(
         Project project,
         string workspace,
@@ -197,11 +431,13 @@ public sealed class ExecutionWorkspaceAuthorizationTests
 
         public IConfiguration Configuration { get; }
 
+        public IServiceProvider Services => _services;
+
         public IProjectWorkspaceAccess WorkspaceAccess => _services.GetRequiredService<IProjectWorkspaceAccess>();
 
         public InProcessExecutionCoordinator Coordinator { get; }
 
-        public static async Task<WorkspaceAuthorizationFixture> CreateAsync()
+        public static async Task<WorkspaceAuthorizationFixture> CreateAsync(string? extensionDirectory = null)
         {
             var token = TestContext.Current.CancellationToken;
             var root = Path.Combine(
@@ -211,18 +447,17 @@ public sealed class ExecutionWorkspaceAuthorizationTests
                 Guid.CreateVersion7().ToString("N")
             );
             Directory.CreateDirectory(root);
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(
-                    new Dictionary<string, string?>
-                    {
-                        ["Database:Provider"] = "sqlite",
-                        ["Database:ConnectionString"] = $"Data Source={Path.Combine(root, "agw.db")};Pooling=False",
-                        ["Execution:Provider"] = "InProcess",
-                        ["Projects:Workspace:IsolationEnabled"] = "true",
-                        ["Agents:Shell:Backend"] = "local",
-                    }
-                )
-                .Build();
+            var values = new Dictionary<string, string?>
+            {
+                ["Database:Provider"] = "sqlite",
+                ["Database:ConnectionString"] = $"Data Source={Path.Combine(root, "agw.db")};Pooling=False",
+                ["Execution:Provider"] = "InProcess",
+                ["Projects:Workspace:IsolationEnabled"] = "true",
+                ["Agents:Shell:Backend"] = "local",
+            };
+            if (extensionDirectory != null)
+                values["Extensions:Directory"] = extensionDirectory;
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton(AgwDataPaths.Resolve(Path.Combine(root, "data"), root, Path.Combine(root, "logs")));
@@ -244,6 +479,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
                 )
                 .AddFiles(configuration)
                 .AddInfrastructure(configuration)
+                .AddTestExtensions(configuration)
                 .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
                 .AddProviders(configuration)
                 .AddSkills(configuration)
@@ -327,6 +563,151 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             return new WorkspaceSeed(project, foreign.Workspace, agentflowId, conversationId);
         }
 
+        public async Task<Guid> SeedSystemAgentAsync(Guid extensionId)
+        {
+            using var user = EnterUser(UserId);
+            await using var scope = _services.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            var modelId = Guid.CreateVersion7();
+            var providerId = Guid.CreateVersion7();
+            var modelProviderId = Guid.CreateVersion7();
+            var agentId = Guid.CreateVersion7();
+            var now = TimeProvider.System.GetUtcNow();
+            context.Models.Add(
+                new AgwAiModel
+                {
+                    Id = modelId,
+                    Name = "test-model",
+                    MaxContextWindowTokens = 128_000,
+                    MaxOutputTokens = 16_000,
+                    CreateBy = UserId,
+                }
+            );
+            context.Providers.Add(
+                new Provider
+                {
+                    Id = providerId,
+                    Name = "test-provider",
+                    ProviderType = ProviderType.OpenAIChatCompletions,
+                    Endpoint = "https://example.test/v1",
+                    CreateBy = UserId,
+                    AuthConfigs =
+                    [
+                        new ProviderAuthConfig
+                        {
+                            Id = Guid.CreateVersion7(),
+                            ProviderId = providerId,
+                            AuthType = ProviderAuthType.ApiKey,
+                            ApiKey = "test-api-key",
+                            Enable = true,
+                            CreateBy = UserId,
+                        },
+                    ],
+                }
+            );
+            context.ModelProviders.Add(
+                new ModelProviderRelation
+                {
+                    Id = modelProviderId,
+                    ModelId = modelId,
+                    ProviderId = providerId,
+                    CreateBy = UserId,
+                }
+            );
+            context.Agents.Add(
+                new Agent
+                {
+                    Id = agentId,
+                    Name = "compiled-extension-agent",
+                    DisplayName = "Compiled Extension Agent",
+                    Type = AgentType.System,
+                    ModelProviderId = modelProviderId,
+                    Tools =
+                    [
+                        new ToolValue
+                        {
+                            Definition = new ExtensionToolDefinition
+                            {
+                                ExtensionId = extensionId,
+                                ToolId = "calendar-lookup",
+                            },
+                        },
+                    ],
+                    CreateBy = UserId,
+                    CreateTime = now,
+                }
+            );
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            return agentId;
+        }
+
+        public async Task<Guid> SeedAgentflowWithAgentAsync(Guid agentId)
+        {
+            using var user = EnterUser(UserId);
+            await using var scope = _services.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            var agentflowId = Guid.CreateVersion7();
+            var now = TimeProvider.System.GetUtcNow();
+            context.Agentflows.Add(
+                new Agentflow
+                {
+                    Id = agentflowId,
+                    Name = "compiled-extension-agentflow",
+                    CreateBy = UserId,
+                    CreateTime = now,
+                    Nodes =
+                    [
+                        new AgentflowNode
+                        {
+                            NodeId = "input",
+                            Kind = AgentflowNodeKind.Input,
+                            Name = "Input",
+                            CreateBy = UserId,
+                            CreateTime = now,
+                        },
+                        new AgentflowNode
+                        {
+                            NodeId = "agent",
+                            Kind = AgentflowNodeKind.Agent,
+                            Name = "Agent",
+                            RelateId = agentId,
+                            CreateBy = UserId,
+                            CreateTime = now,
+                        },
+                        new AgentflowNode
+                        {
+                            NodeId = "output",
+                            Kind = AgentflowNodeKind.Output,
+                            Name = "Output",
+                            CreateBy = UserId,
+                            CreateTime = now,
+                        },
+                    ],
+                    Edges =
+                    [
+                        new AgentflowEdge
+                        {
+                            EdgeId = "input-agent",
+                            SourceNodeId = "input",
+                            TargetNodeId = "agent",
+                            CreateBy = UserId,
+                            CreateTime = now,
+                        },
+                        new AgentflowEdge
+                        {
+                            EdgeId = "agent-output",
+                            SourceNodeId = "agent",
+                            TargetNodeId = "output",
+                            CreateBy = UserId,
+                            CreateTime = now,
+                        },
+                    ],
+                }
+            );
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            return agentflowId;
+        }
+
         public async Task SetWorkspaceAsync(Guid projectId, string workspace)
         {
             using var user = EnterUser(UserId);
@@ -340,7 +721,10 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        public async Task<ExecutionRequest> AcceptAgentflowTurnAsync(WorkspaceSeed seed)
+        public Task<ExecutionRequest> AcceptAgentflowTurnAsync(WorkspaceSeed seed) =>
+            AcceptAgentflowTurnAsync(seed, seed.AgentflowId);
+
+        public async Task<ExecutionRequest> AcceptAgentflowTurnAsync(WorkspaceSeed seed, Guid agentflowId)
         {
             using var user = EnterUser(UserId);
             await using var scope = _services.CreateAsyncScope();
@@ -350,11 +734,32 @@ public sealed class ExecutionWorkspaceAuthorizationTests
                     new TurnAcceptanceRequest(
                         UserId,
                         TurnId: null,
-                        new ExecutionTarget(seed.AgentflowId, AgentRuntimeType.Agentflow),
+                        new ExecutionTarget(agentflowId, AgentRuntimeType.Agentflow),
                         seed.ConversationId,
                         TurnPersistenceTestKit.CreateInput("continue"),
                         SettingCommandMapper.FromCommand(new SettingCommand(seed.Project.Id, seed.ConversationId)),
                         Stream: false
+                    ),
+                    TestContext.Current.CancellationToken
+                );
+            return accepted.Request;
+        }
+
+        public async Task<ExecutionRequest> AcceptAgentTurnAsync(WorkspaceSeed seed, Guid agentId)
+        {
+            using var user = EnterUser(UserId);
+            await using var scope = _services.CreateAsyncScope();
+            var accepted = await scope
+                .ServiceProvider.GetRequiredService<TurnAcceptanceService>()
+                .AcceptAsync(
+                    new TurnAcceptanceRequest(
+                        UserId,
+                        TurnId: null,
+                        new ExecutionTarget(agentId, AgentRuntimeType.Agent),
+                        seed.ConversationId,
+                        TurnPersistenceTestKit.CreateInput("use compiled extension"),
+                        SettingCommandMapper.FromCommand(new SettingCommand(seed.Project.Id, seed.ConversationId)),
+                        Stream: true
                     ),
                     TestContext.Current.CancellationToken
                 );

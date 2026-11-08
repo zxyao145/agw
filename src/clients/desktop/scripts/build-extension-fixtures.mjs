@@ -88,7 +88,7 @@ function loadManifestModule() {
 }
 
 /** 校验 manifest 文本，端口占位符按 1 处理。Validates manifest text with the port placeholder read as 1. */
-async function validateManifest(text, label) {
+export async function validateManifest(text, label) {
   const { evaluateExtensionManifest } = await loadManifestModule();
   const { version } = JSON.parse(await readFile(join(desktopDirectory, "package.json"), "utf8"));
   const evaluation = evaluateExtensionManifest(

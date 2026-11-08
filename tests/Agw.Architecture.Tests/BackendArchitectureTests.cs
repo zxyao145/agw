@@ -9,6 +9,7 @@ public sealed partial class BackendArchitectureTests
     private static readonly IReadOnlySet<string> GuardedModules = Set(
         "Agw.Agents",
         "Agw.Auth",
+        "Agw.Extensions",
         "Agw.Files",
         "Agw.Integrations",
         "Agw.Jobs",
@@ -22,6 +23,9 @@ public sealed partial class BackendArchitectureTests
 
     private static readonly IReadOnlySet<string> AllowedRootNamespaceFacadeFiles = Set(
         "Agw.Agents/DependencyInjection.cs",
+        "Agw.Extensions/DependencyInjection.cs",
+        "Agw.Extensions/ExtensionHostCapabilityServiceCollectionExtensions.cs",
+        "Agw.Extensions/ExtensionOptions.cs",
         "Agw.Files/DependencyInjection.cs",
         "Agw.Jobs/DependencyInjection.cs",
         "Agw.Projects/DependencyInjection.cs",
@@ -58,6 +62,7 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents.Contracts",
                 "Agw.Agents.Execution",
                 "Agw.Auth",
+                "Agw.Extensions",
                 "Agw.Infrastructure",
                 "Agw.Jobs.Contracts",
                 "Agw.Migrations.Postgres",
@@ -71,6 +76,7 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents",
                 "Agw.Auth",
                 "Agw.Data",
+                "Agw.Extensions",
                 "Agw.Integrations",
                 "Agw.Jobs",
                 "Agw.Projects",
@@ -96,6 +102,7 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
                 "Agw.Data",
+                "Agw.Extensions.Contracts",
                 "Agw.Files",
                 "Agw.Integrations",
                 "Agw.Projects.Contracts",
@@ -107,6 +114,17 @@ public sealed partial class BackendArchitectureTests
             ),
             ["Agw.Agents.Contracts"] = Set("Agw.Projects.Contracts", "Agw.Providers.Contracts", "Agw.Shared"),
             ["Agw.Files"] = Set("Agw.Shared"),
+            ["Agw.Extensions"] = Set(
+                "Agw.Agents.Contracts",
+                "Agw.Extensions.Contracts",
+                "Agw.Extensions.Sdk",
+                "Agw.Settings",
+                "Agw.Shared",
+                "Agw.Tools.Abstractions"
+            ),
+            ["Agw.Extensions.Contracts"] = Set("Agw.Tools.Abstractions"),
+            ["Agw.Extensions.Sdk"] = Set("Agw.Extensions.Contracts", "Agw.Shared", "Agw.Tools.Abstractions"),
+            ["Agw.Extensions.Sdk.EntityFrameworkCore"] = Set("Agw.Extensions.Sdk", "Agw.Shared"),
             ["Agw.Providers.Contracts"] = Set(),
             ["Agw.Integrations.Contracts"] = Set(),
             ["Agw.Skills.Contracts"] = Set(),
@@ -149,7 +167,13 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Tools.Abstractions",
                 "Agw.Skills.Contracts"
             ),
-            ["Agw.Tools"] = Set("Agw.Auth", "Agw.Files", "Agw.Tools.Abstractions", "Agw.Tools.Generators"),
+            ["Agw.Tools"] = Set(
+                "Agw.Auth",
+                "Agw.Files",
+                "Agw.Extensions.Contracts",
+                "Agw.Tools.Abstractions",
+                "Agw.Tools.Generators"
+            ),
             ["Agw.Tools.Abstractions"] = Set(),
             ["Agw.Tools.Generators"] = Set(),
 
@@ -354,7 +378,12 @@ public sealed partial class BackendArchitectureTests
             .SelectMany(project =>
                 ReadProjectReferences(project)
                     .Where(dependency =>
-                        dependency != "Agw.Shared" && !dependency.EndsWith(".Contracts", StringComparison.Ordinal)
+                        dependency != "Agw.Shared"
+                        && !(
+                            Path.GetFileNameWithoutExtension(project) == "Agw.Extensions.Contracts"
+                            && dependency == "Agw.Tools.Abstractions"
+                        )
+                        && !dependency.EndsWith(".Contracts", StringComparison.Ordinal)
                     )
                     .Select(dependency => $"{Path.GetFileNameWithoutExtension(project)} -> {dependency}")
             )

@@ -38,7 +38,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var task = CreateTask("old");
         var context = CreateContext(task);
         var handler = new SettingCommandHandler();
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         await handler.HandleAsync(
             new SettingCommand(task.ProjectId, command.ConversationId!.Value),
             context,
@@ -70,7 +70,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var task = CreateTask("current");
         Runtimes.HoldTurnOpen = true;
         var context = CreateContext(task, sink: sink);
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         var current = new SettingCommand(task.ProjectId, command.ConversationId!.Value);
         await context.ApplySettingsAsync(
             SettingCommandMapper.FromCommand(current),
@@ -104,7 +104,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         Runtimes.HoldTurnOpen = true;
         var context = CreateContext(task, sink: sink);
         var handler = new SettingCommandHandler();
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         await handler.HandleAsync(
             new SettingCommand(task.ProjectId, command.ConversationId!.Value),
             context,
@@ -186,7 +186,10 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var sink = new CapturingSink();
         Runtimes.HoldTurnOpen = true;
         await using var context = CreateContext(CreateTask("active"), sink: sink);
-        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(
+            await CreateExecCommand(Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken
+        );
         await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await new InterruptCommandHandler().HandleAsync(
@@ -229,7 +232,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             context,
             TestContext.Current.CancellationToken
         );
-        await context.StartTurnAsync(CreateExecCommand(agentId), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(await CreateExecCommand(agentId), TestContext.Current.CancellationToken);
         await context.WhenIdleAsync();
 
         Assert.Equal(["execute"], Runtimes.ModeChanges);
@@ -247,7 +250,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var agentId = Guid.CreateVersion7();
         Runtimes.HoldTurnOpen = true;
         await using var context = CreateContext(CreateTask("mode-context"), sink: sink);
-        await context.StartTurnAsync(CreateExecCommand(agentId), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(await CreateExecCommand(agentId), TestContext.Current.CancellationToken);
         await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var handler = new SetModeCommandHandler();
 
@@ -311,7 +314,10 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
     {
         Runtimes.HoldTurnOpen = true;
         await using var context = CreateContext(CreateTask("permission-context"));
-        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(
+            await CreateExecCommand(Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken
+        );
         await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
 
         await new SetPermissionModeCommandHandler().HandleAsync(
@@ -339,7 +345,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             ExecutionSettings.CreateDefault().WithPermissionMode(AgwPermissionMode.AlwaysAsk),
             TestContext.Current.CancellationToken
         );
-        var command = CreateExecCommand(Guid.NewGuid());
+        var command = await CreateExecCommand(Guid.NewGuid());
         await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
         await Runtimes.TurnStarts.WaitAsync(TurnTimeout, TestContext.Current.CancellationToken);
         var original = Assert.Single(Runtimes.TurnContexts);
@@ -383,7 +389,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var projectTasks = new FakeProjectTaskFacade(task, _persistence);
         var projects = new FakeProjectRuntimeFacade(AppContext.BaseDirectory);
         await using var context = CreateContext(task, projectTasks: projectTasks, projects: projects);
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         var handler = new ExecCommandHandler();
 
         await handler.HandleAsync(command, context, TestContext.Current.CancellationToken);
@@ -402,12 +408,12 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
     {
         await using var context = CreateContext(CreateTask("resolved"));
         var handler = new ExecCommandHandler();
-        var firstCommand = CreateExecCommand(Guid.CreateVersion7());
+        var firstCommand = await CreateExecCommand(Guid.CreateVersion7());
 
         await handler.HandleAsync(firstCommand, context, TestContext.Current.CancellationToken);
         await context.WhenIdleAsync();
         var previous = Assert.Single(Runtimes.Created);
-        var secondCommand = CreateExecCommand(Guid.CreateVersion7());
+        var secondCommand = await CreateExecCommand(Guid.CreateVersion7());
         secondCommand.ConversationId = firstCommand.ConversationId;
         await handler.HandleAsync(secondCommand, context, TestContext.Current.CancellationToken);
         await context.WhenIdleAsync();
@@ -427,7 +433,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
             projectTasks: projectTasks,
             projects: new FakeProjectRuntimeFacade(configuredWorkspace)
         );
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
 
         await new ExecCommandHandler().HandleAsync(command, context, TestContext.Current.CancellationToken);
         await context.WhenIdleAsync();
@@ -456,7 +462,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var task = CreateTask("resolved");
         var projectTasks = new FakeProjectTaskFacade(task, _persistence);
         await using var context = CreateContext(task, projectTasks: projectTasks);
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         command.ConversationId = null;
 
         var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
@@ -474,7 +480,7 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         var task = CreateTask("resolved");
         var projectTasks = new FakeProjectTaskFacade(task, _persistence);
         await using var context = CreateContext(task, projectTasks: projectTasks);
-        var command = CreateExecCommand(Guid.CreateVersion7());
+        var command = await CreateExecCommand(Guid.CreateVersion7());
         command.ConversationId = Guid.Empty;
 
         var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
@@ -511,12 +517,19 @@ public partial class ExecutionCommandHandlerTests : IAsyncLifetime
         );
     }
 
-    private ExecCommand CreateExecCommand(Guid agentId) =>
-        new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [new AgwTextContent { Content = "hello" }] })
+    private async Task<ExecCommand> CreateExecCommand(Guid agentId)
+    {
+        var registeredAgentId = _agents.Add(agentId);
+        await _persistence.SeedAgentAsync(registeredAgentId);
+        return new ExecCommand(
+            AgentRuntimeType.Agent,
+            new AgwUserInput { Contents = [new AgwTextContent { Content = "hello" }] }
+        )
         {
-            AgentId = _agents.Add(agentId),
+            AgentId = registeredAgentId,
             ConversationId = Guid.CreateVersion7(),
         };
+    }
 
     /// <summary>
     /// 同一对话的下一条命令：客户端每个 Turn 发送新的 ExecCommand，不带 turnId 时由服务端分配。

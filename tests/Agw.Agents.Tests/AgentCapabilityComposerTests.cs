@@ -3,16 +3,25 @@ using System.Reflection;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context.Workspace;
+using Agw.Auth.Application;
+using Agw.Auth.Contracts;
+using Agw.Extensions.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Settings;
 using Agw.Integrations.Mcp;
+using Agw.Settings;
+using Agw.Settings.Application.Persistence;
+using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
+using Agw.Skills.Contracts.References;
 using Agw.Tools.Abstractions;
 using Agw.Tools.Abstractions.ToolBlocks;
 using Agw.Tools.Impl.ContextualTools.WebSearch;
@@ -22,6 +31,7 @@ using Agw.Tools.ToolBlocks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -38,11 +48,13 @@ public class AgentCapabilityComposerTests
         var toolRegistry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())],
-            new ToolBlockRegistry([])
+            extensionGenerations: database.Services.GetRequiredService<IExtensionGenerationCatalog>(),
+            contextualTools: [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())],
+            toolBlockRegistry: new ToolBlockRegistry([])
         );
         var composer = CreateComposer(
             database.Context,
+            database.ExtensionCapabilities,
             toolRegistry,
             new StubConnectionCapabilityResolver((_, _, _) => CreateResolution()),
             new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], []))
@@ -110,7 +122,13 @@ public class AgentCapabilityComposerTests
         var materializer = new StubMcpToolMaterializer(
             (_, _, _) => CreateToolLease([CreateTool("independent_tool")], [mcpResource])
         );
-        var composer = CreateComposer(database.Context, CreateToolRegistry(), resolver, materializer);
+        var composer = CreateComposer(
+            database.Context,
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
+            resolver,
+            materializer
+        );
         var agent = new Agent
         {
             Type = AgentType.System,
@@ -183,7 +201,13 @@ public class AgentCapabilityComposerTests
         var materializer = new StubMcpToolMaterializer(
             (_, _, _) => throw new InvalidOperationException("materializer must not be called")
         );
-        var composer = CreateComposer(database.Context, CreateToolRegistry(), resolver, materializer);
+        var composer = CreateComposer(
+            database.Context,
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
+            resolver,
+            materializer
+        );
         var agent = new Agent
         {
             Type = AgentType.External,
@@ -220,7 +244,8 @@ public class AgentCapabilityComposerTests
         );
         var composer = CreateComposer(
             database.Context,
-            CreateToolRegistry(),
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
             resolver,
             materializer,
             [userMemoryBlock, unrelatedBlock]
@@ -266,7 +291,8 @@ public class AgentCapabilityComposerTests
         var userMemoryBlock = new UserMemoryToolBlock(serviceProvider.GetRequiredService<IServiceScopeFactory>());
         var composer = CreateComposer(
             database.Context,
-            CreateToolRegistry(),
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
             new StubConnectionCapabilityResolver((_, _, _) => CreateResolution()),
             new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], [])),
             [userMemoryBlock]
@@ -319,7 +345,8 @@ public class AgentCapabilityComposerTests
         );
         var composer = CreateComposer(
             database.Context,
-            CreateToolRegistry(),
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
             resolver,
             new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], []))
         );
@@ -353,7 +380,8 @@ public class AgentCapabilityComposerTests
         );
         var composer = CreateComposer(
             database.Context,
-            CreateToolRegistry(),
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
             resolver,
             new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], []))
         );
@@ -385,7 +413,8 @@ public class AgentCapabilityComposerTests
         var toolBlock = new TestToolBlock();
         var composer = CreateComposer(
             database.Context,
-            CreateToolRegistry(),
+            database.ExtensionCapabilities,
+            CreateToolRegistry(database.Services),
             new StubConnectionCapabilityResolver((_, _, _) => CreateResolution()),
             new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], [])),
             [toolBlock]
@@ -410,31 +439,39 @@ public class AgentCapabilityComposerTests
 
     private static AgentCapabilityComposer CreateComposer(
         AgwDbContext dbContext,
+        IExtensionCapabilityCatalog extensionCapabilityCatalog,
         ToolRegistryService toolRegistry,
         IConnectionCapabilityResolver resolver,
         IMcpToolMaterializer materializer,
-        IEnumerable<IToolBlock>? toolBlocks = null
+        IEnumerable<IToolBlock>? toolBlocks = null,
+        TestUserInfoService? userInfoService = null,
+        ISkillReferenceFacade? skillReferences = null
     )
     {
+        userInfoService ??= new TestUserInfoService();
         return new AgentCapabilityComposer(
-            CreateAgentAppService(dbContext),
+            CreateAgentAppService(dbContext, userInfoService, skillReferences),
             toolRegistry,
             resolver,
             materializer,
             new ToolBlockRegistry(toolBlocks ?? []),
             NullLogger<AgentCapabilityComposer>.Instance,
+            extensionCapabilityCatalog,
             [new ProjectInstructionsSource()]
         );
     }
 
-    private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
+    private static AgentAppService CreateAgentAppService(
+        AgwDbContext dbContext,
+        TestUserInfoService userInfo,
+        ISkillReferenceFacade? skillReferences
+    )
     {
         var connectionRepository = new EfRepository<Connection>(dbContext);
         var modelProviderRepository = new EfRepository<ModelProviderRelation>(dbContext);
         var modelRepository = new EfRepository<AgwAiModel>(dbContext);
         var providerRepository = new EfRepository<Provider>(dbContext);
         var skillRepository = new EfRepository<Skill>(dbContext);
-        var userInfo = new TestUserInfoService();
         return TestAgentAppService.Create(
             dbContext,
             new TestConnectionReferenceFacade(connectionRepository, userInfo),
@@ -444,7 +481,7 @@ public class AgentCapabilityComposerTests
                 providerRepository,
                 userInfo
             ),
-            new TestSkillReferenceFacade(skillRepository, userInfo),
+            skillReferences ?? new TestSkillReferenceFacade(skillRepository, userInfo),
             userInfo,
             new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
                 dbContext,
@@ -453,12 +490,13 @@ public class AgentCapabilityComposerTests
         );
     }
 
-    private static ToolRegistryService CreateToolRegistry()
+    private static ToolRegistryService CreateToolRegistry(IServiceProvider services)
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpClient();
-        return new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services.BuildServiceProvider());
+        return new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            services,
+            services.GetRequiredService<IExtensionGenerationCatalog>()
+        );
     }
 
     private static AITool CreateTool(string name)
@@ -619,14 +657,21 @@ public class AgentCapabilityComposerTests
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
+        private readonly ServiceProvider _extensionServices;
 
-        private TestDatabase(SqliteConnection connection, AgwDbContext context)
+        private TestDatabase(SqliteConnection connection, AgwDbContext context, ServiceProvider extensionServices)
         {
             _connection = connection;
             Context = context;
+            _extensionServices = extensionServices;
         }
 
         public AgwDbContext Context { get; }
+
+        public IServiceProvider Services => _extensionServices;
+
+        public IExtensionCapabilityCatalog ExtensionCapabilities =>
+            _extensionServices.GetRequiredService<IExtensionCapabilityCatalog>();
 
         public static async Task<TestDatabase> CreateAsync(CancellationToken cancellationToken)
         {
@@ -638,11 +683,38 @@ public class AgentCapabilityComposerTests
                 .Options;
             var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(cancellationToken);
-            return new TestDatabase(connection, context);
+            var extensionConfiguration = new ConfigurationBuilder()
+                .AddInMemoryCollection(
+                    new Dictionary<string, string?>
+                    {
+                        ["AgwDataDir"] = Path.Combine(
+                            AppContext.BaseDirectory,
+                            ".scratch",
+                            "agent-capability-composer",
+                            Guid.CreateVersion7().ToString("N")
+                        ),
+                        ["Extensions:Directory"] = Path.Combine(AppContext.BaseDirectory, ".empty-extension-catalog"),
+                    }
+                )
+                .Build();
+            var extensionServices = new ServiceCollection()
+                .AddLogging()
+                .AddHttpClient()
+                .AddSingleton(AgwDataPaths.Resolve(extensionConfiguration["AgwDataDir"], AppContext.BaseDirectory))
+                .AddSingleton(context)
+                .AddSingleton<ISettingsDbContext>(context)
+                .AddScoped<ISettingsPersistence, EfSettingsPersistence>()
+                .AddScoped<ICurrentUser, UserInfoService>()
+                .AddScoped<IUserInfoService, UserInfoService>()
+                .AddSettings()
+                .AddTestExtensions(extensionConfiguration)
+                .BuildServiceProvider();
+            return new TestDatabase(connection, context, extensionServices);
         }
 
         public async ValueTask DisposeAsync()
         {
+            await _extensionServices.DisposeAsync();
             await Context.DisposeAsync();
             await _connection.DisposeAsync();
         }

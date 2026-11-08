@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Context;
@@ -35,6 +36,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly CancellationToken _hostToken;
     private readonly Action<int>? _pendingInteractionCountChanged;
+    private ExtensionCapabilitySnapshot? _hostExtensionCapabilities;
 
     public InProcessExecutionCoordinator(
         IAgentRuntimeFactory agentRuntimes,
@@ -72,6 +74,24 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
     public async Task<ExecutionReceipt> StartAsync(ExecutionRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        try
+        {
+            return await StartCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (request.Settings.ExtensionPins is { Count: > 0 })
+            {
+                await ReleaseAsync().ConfigureAwait(false);
+            }
+
+            await request.Settings.DisposeExtensionCapabilityLeaseAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task<ExecutionReceipt> StartCoreAsync(ExecutionRequest request, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         var context = await _executionContexts.CreateAsync(
             new ExecutionContextRequest(
@@ -130,21 +150,27 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         );
         try
         {
-            if (Host != null && !await CanReuseAsync(Host, request, ownership.Token))
-            {
-                await ReleaseAsync();
-            }
-
             var activeTurn = await StartTurnAsync(scope, request, ownership.Token);
             if (activeTurn == null)
             {
+                if (_hostExtensionCapabilities != null)
+                    await _hostExtensionCapabilities.ReleaseTurnAsync(request.TurnId).ConfigureAwait(false);
                 if (lease != null)
                     await lease.DisposeAsync();
                 ownership.Dispose();
+                await request.Settings.DisposeExtensionCapabilityLeaseAsync().ConfigureAwait(false);
             }
             else
             {
-                _ = ReleaseExecutionLeaseAsync(Host!.WhenIdleAsync(), lease, ownership);
+                var hostExtensionCapabilities = _hostExtensionCapabilities;
+                _ = ReleaseExecutionLeaseAsync(
+                    Host!.WhenIdleAsync(),
+                    lease,
+                    ownership,
+                    request.Settings,
+                    request.TurnId,
+                    hostExtensionCapabilities
+                );
             }
             return new ExecutionReceipt(request.TurnId, activeTurn != null);
         }
@@ -153,6 +179,11 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             if (lease != null)
                 await lease.DisposeAsync();
             ownership.Dispose();
+            if (request.Settings.ExtensionPins is { Count: > 0 })
+            {
+                await ReleaseAsync().ConfigureAwait(false);
+            }
+            await request.Settings.DisposeExtensionCapabilityLeaseAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -176,10 +207,22 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
     {
         var host = Host;
         Host = null;
+        var extensionCapabilities = _hostExtensionCapabilities;
+        _hostExtensionCapabilities = null;
         if (host != null)
         {
-            await host.DisposeAsync();
+            try
+            {
+                await host.DisposeAsync();
+            }
+            finally
+            {
+                if (extensionCapabilities != null)
+                    await extensionCapabilities.DisposeAsync().ConfigureAwait(false);
+            }
         }
+        else if (extensionCapabilities != null)
+            await extensionCapabilities.DisposeAsync().ConfigureAwait(false);
         _pendingInteractionCountChanged?.Invoke(0);
     }
 
@@ -193,16 +236,11 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
     {
         await EnsureWorkspaceAsync(scope, cancellationToken);
         var unattended = request.Settings.HumanInteractionPolicy == HumanInteractionPolicy.Reject;
-        var host = Host;
+        var host = await GetOrCreateHostForTurnAsync(request, unattended, cancellationToken);
         if (host == null)
-        {
-            host = await CreateHostAsync(request, unattended, cancellationToken);
-            if (host == null)
-            {
-                return null;
-            }
-            Host = host;
-        }
+            return null;
+
+        request = ApplyAgentflowSettingsForTurn(host, request);
 
         await scope.Turn!.MarkRunningAsync(cancellationToken);
         if (host.AgentRuntime is { } agent)
@@ -343,6 +381,48 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             );
     }
 
+    internal async Task<InProcessTurnHost?> GetOrCreateHostForTurnAsync(
+        ExecutionRequest request,
+        bool deferHumanInteractions,
+        CancellationToken cancellationToken
+    )
+    {
+        if (Host != null && !await CanReuseAsync(Host, request, cancellationToken).ConfigureAwait(false))
+            await ReleaseAsync().ConfigureAwait(false);
+
+        if (Host == null)
+        {
+            var host = await CreateHostAsync(request, deferHumanInteractions, cancellationToken).ConfigureAwait(false);
+            if (host == null)
+                return null;
+
+            Host = host;
+        }
+
+        await BindExtensionCapabilitiesForTurnAsync(request.Settings, request.TurnId).ConfigureAwait(false);
+        return Host;
+    }
+
+    internal ExecutionRequest ApplyAgentflowSettingsForTurn(InProcessTurnHost host, ExecutionRequest request)
+    {
+        if (host.AgentflowRuntime is not { } agentflowRuntime)
+            return request;
+
+        if (_hostExtensionCapabilities != null)
+        {
+            request = request with
+            {
+                Settings = request.Settings.WithExtensionCapabilities(
+                    request.Settings.ExtensionPins ?? [],
+                    _hostExtensionCapabilities
+                ),
+            };
+        }
+
+        agentflowRuntime.ApplyExecutionSettings(request.Settings);
+        return request;
+    }
+
     private async Task ExecuteAgentTurnAsync(
         ExecutionScope scope,
         AgentRuntime runtime,
@@ -391,6 +471,15 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         CancellationToken cancellationToken
     )
     {
+        var requestedPins = request.Settings.ExtensionPins ?? [];
+        var cachedPins = _hostExtensionCapabilities?.Pins ?? [];
+        var requestedTools = request.Settings.ExtensionCapabilityLease?.SelectedToolSelections ?? [];
+        var cachedTools = _hostExtensionCapabilities?.SelectedToolSelections ?? [];
+        if (!cachedPins.SequenceEqual(requestedPins) || !cachedTools.SequenceEqual(requestedTools))
+        {
+            return false;
+        }
+
         if (
             host.Target != request.Target
             || host.WorkspaceFingerprint != request.WorkspaceSnapshot.Fingerprint
@@ -428,10 +517,13 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         }
     }
 
-    private static async Task ReleaseExecutionLeaseAsync(
+    internal async Task ReleaseExecutionLeaseAsync(
         Task completion,
         IApplicationLockLease? lease,
-        CancellationTokenSource ownership
+        CancellationTokenSource ownership,
+        ExecutionSettings settings,
+        Guid turnId,
+        ExtensionCapabilitySnapshot? extensionCapabilities
     )
     {
         try
@@ -443,9 +535,28 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         }
         finally
         {
+            if (extensionCapabilities != null)
+                await extensionCapabilities.ReleaseTurnAsync(turnId).ConfigureAwait(false);
+            await settings.DisposeExtensionCapabilityLeaseAsync().ConfigureAwait(false);
             if (lease != null)
                 await lease.DisposeAsync();
             ownership.Dispose();
         }
+    }
+
+    private async Task BindExtensionCapabilitiesForTurnAsync(ExecutionSettings settings, Guid turnId)
+    {
+        var next = settings.DetachExtensionCapabilityLease();
+        if (_hostExtensionCapabilities == null)
+        {
+            _hostExtensionCapabilities = next;
+            if (next != null)
+                await next.BindTurnAsync(turnId).ConfigureAwait(false);
+            return;
+        }
+
+        await _hostExtensionCapabilities.RebindTurnAsync(turnId, next).ConfigureAwait(false);
+        if (next != null)
+            await next.DisposeAsync().ConfigureAwait(false);
     }
 }

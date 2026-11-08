@@ -9,8 +9,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Tools.Tests;
 
-public sealed class ToolsControllerTests
+public sealed class ToolsControllerTests : IClassFixture<ToolRuntimeFixture>
 {
+    private readonly ToolRuntimeFixture _extensionRuntime;
+
+    public ToolsControllerTests(ToolRuntimeFixture extensionRuntime)
+    {
+        _extensionRuntime = extensionRuntime;
+    }
+
     private static ServiceCollection CreateToolServices()
     {
         var services = new ServiceCollection();
@@ -33,6 +40,7 @@ public sealed class ToolsControllerTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             services,
+            extensionGenerations: _extensionRuntime.Catalog,
             toolBlockRegistry: new ToolBlockRegistry([new TodoToolBlock()])
         );
         var controller = new ToolsController(registry);
@@ -57,9 +65,13 @@ public sealed class ToolsControllerTests
         // Assert
         Assert.Equal(
             [
+                "allowInPlanMode",
                 "category",
                 "description",
                 "displayName",
+                "extensionId",
+                "extensionToolId",
+                "inputSchema",
                 "kind",
                 "memberToolNames",
                 "name",
@@ -75,6 +87,10 @@ public sealed class ToolsControllerTests
         Assert.Equal(3, item.GetProperty("scopes").GetInt32());
         Assert.False(item.GetProperty("requiresWorkspace").GetBoolean());
         Assert.False(item.GetProperty("requiresConfirmation").GetBoolean());
+        Assert.False(item.GetProperty("allowInPlanMode").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("extensionId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("extensionToolId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("inputSchema").ValueKind);
         Assert.Equal(name == "todo" ? "toolBlock" : "tool", item.GetProperty("kind").GetString());
         if (name == "todo")
         {
@@ -96,7 +112,11 @@ public sealed class ToolsControllerTests
     {
         // Arrange
         using var services = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            services,
+            _extensionRuntime.Catalog
+        );
         var controller = new ToolsController(registry);
 
         // Act
@@ -112,7 +132,11 @@ public sealed class ToolsControllerTests
     {
         // Arrange
         using var services = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            services,
+            _extensionRuntime.Catalog
+        );
         var controller = new ToolsController(registry);
 
         // Act
@@ -130,6 +154,7 @@ public sealed class ToolsControllerTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             services,
+            extensionGenerations: _extensionRuntime.Catalog,
             toolBlockRegistry: new ToolBlockRegistry([new HiddenToolBlock()])
         );
         var controller = new ToolsController(registry);

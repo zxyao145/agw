@@ -774,6 +774,9 @@ importers:
       tw-animate-css:
         specifier: 'catalog:'
         version: 1.4.0
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.2
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
@@ -1611,6 +1614,18 @@ importers:
         specifier: workspace:*
         version: link:../integrations
 
+  packages/server-extensions:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+
   packages/settings:
     dependencies:
       '@agw/api':
@@ -1715,6 +1730,9 @@ importers:
       '@agw/providers':
         specifier: workspace:*
         version: link:../packages/providers
+      '@agw/server-extensions':
+        specifier: workspace:*
+        version: link:../packages/server-extensions
       '@agw/settings':
         specifier: workspace:*
         version: link:../packages/settings
@@ -1764,6 +1782,12 @@ importers:
       tw-animate-css:
         specifier: 'catalog:'
         version: 1.4.0
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.2
+      ws:
+        specifier: 'catalog:'
+        version: 8.22.0
 
 packages:
 

@@ -1,3 +1,5 @@
+using Agw.Agents.Execution.Agents.Composition;
+using Agw.Extensions.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.Agents.Execution.Agents.Contracts;
@@ -29,4 +31,10 @@ public sealed class CreateAiAgentRequest
     /// 获取是否把人机交互 Tool 包装为可由 durable runtime checkpoint 的 approval 请求。
     /// </summary>
     public bool DeferHumanInteractions { get; init; }
+
+    public IReadOnlyList<ExtensionExecutionPin>? ExtensionPins { get; init; }
+
+    public IReadOnlyList<Guid>? ExtensionIds { get; init; }
+
+    internal ExtensionCapabilitySnapshot? AcceptedExtensionCapabilities { get; init; }
 }

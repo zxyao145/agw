@@ -11,7 +11,8 @@ import type {
 } from "../../shared/contracts";
 import { APPEARANCE_MODES, DEFAULT_APPEARANCE, DEFAULT_THEME_ID } from "../../shared/appearance";
 import { HOST_PERMISSION_PATTERN } from "../../shared/extension-host-permissions";
-import { isExtensionId, isLocalId } from "../../shared/extension-manifest";
+import { isExtensionInstanceId } from "../../shared/extension-instance";
+import { isLocalId } from "../../shared/extension-manifest";
 import { EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import { writeJsonFile } from "./json-file";
 import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
@@ -32,7 +33,7 @@ function isThemeId(value: string): boolean {
   const separator = value.indexOf(":");
   return (
     separator !== -1 &&
-    isExtensionId(value.slice(0, separator)) &&
+    isExtensionInstanceId(value.slice(0, separator)) &&
     isLocalId(value.slice(separator + 1))
   );
 }

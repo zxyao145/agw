@@ -2,14 +2,17 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Agw.Auth.Api;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
+using Agw.Extensions.Contracts;
 using Agw.Files;
 using Agw.Host.Controllers;
 using Agw.Host.Data;
 using Agw.Host.Hosting;
+using Agw.Host.Runtime;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application;
@@ -75,6 +78,129 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task ServerInfo_InitializedServerRestart_PreservesDeploymentIdentity()
+    {
+        string serverId;
+        await using (var app = await CreateAuthenticationAppAsync())
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<ISetupInitializationService>()
+                .InitializeAsync(
+                    new SetupRequest { AdminPassword = "administrator-password" },
+                    TestContext.Current.CancellationToken
+                );
+            using var client = app.GetTestClient();
+            using var response = await client.GetAsync("/api/server-info", TestContext.Current.CancellationToken);
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+            );
+            serverId = document.RootElement.GetProperty("data").GetProperty("serverId").GetString()!;
+            Assert.Equal(7, Guid.Parse(serverId).Version);
+        }
+        await using var restarted = await CreateAuthenticationAppAsync();
+        using var restartedClient = restarted.GetTestClient();
+        using var after = await restartedClient.GetAsync("/api/server-info", TestContext.Current.CancellationToken);
+        after.EnsureSuccessStatusCode();
+        using var result = JsonDocument.Parse(
+            await after.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(serverId, result.RootElement.GetProperty("data").GetProperty("serverId").GetString());
+    }
+
+    [Fact]
+    public async Task MaintainSystemDataAsync_LegacyInitialization_ProvisionsIdentityOnce()
+    {
+        await using var app = await CreateAuthenticationAppAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await scope
+            .ServiceProvider.GetRequiredService<ISetupInitializationService>()
+            .InitializeAsync(new SetupRequest { AdminPassword = "administrator-password" }, cancellationToken);
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        var database = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var authentication = await database.Settings.SingleAsync(
+            setting => setting.Key == "auth" && setting.UserId == null,
+            cancellationToken
+        );
+        var originalAuthentication = JsonNode.Parse(authentication.ValueJson)!.AsObject();
+        originalAuthentication.Remove("serverIdentityProvisioned");
+        authentication.ValueJson = originalAuthentication.ToJsonString();
+        await database
+            .Settings.Where(setting => setting.Key == "server.identity" && setting.UserId == null)
+            .ExecuteDeleteAsync(cancellationToken);
+        await database.SaveChangesAsync(cancellationToken);
+        var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
+
+        await seeder.MaintainSystemDataAsync();
+
+        var identity = await scope
+            .ServiceProvider.GetRequiredService<IExtensionDeploymentIdentity>()
+            .GetServerIdAsync(cancellationToken);
+        Assert.Equal(7, Guid.Parse(identity).Version);
+        database.ChangeTracker.Clear();
+        authentication = await database.Settings.SingleAsync(setting => setting.Key == "auth", cancellationToken);
+        using (var upgraded = JsonDocument.Parse(authentication.ValueJson))
+            Assert.True(upgraded.RootElement.GetProperty("serverIdentityProvisioned").GetBoolean());
+        await scope
+            .ServiceProvider.GetRequiredService<IAuthenticationStateStore>()
+            .UpdatePasswordAsync("updated-password-hash", cancellationToken);
+        database.ChangeTracker.Clear();
+        await database
+            .Settings.Where(setting => setting.Key == "server.identity" && setting.UserId == null)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await seeder.MaintainSystemDataAsync();
+
+        Assert.False(await database.Settings.AnyAsync(setting => setting.Key == "server.identity", cancellationToken));
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.ServiceProvider.GetRequiredService<IExtensionDeploymentIdentity>().GetServerIdAsync(cancellationToken)
+        );
+        Assert.Equal(ErrorCodes.ExtensionUnavailable.Code, error.Code);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{\"serverId\":\"invalid\"}")]
+    [InlineData("{\"serverId\":17}")]
+    [InlineData("invalid-json")]
+    public async Task GetServerIdAsync_MissingOrInvalidIdentity_FailsWithoutChangingSettings(string? valueJson)
+    {
+        await using var app = await CreateAuthenticationAppAsync();
+        await using var scope = app.Services.CreateAsyncScope();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await scope
+            .ServiceProvider.GetRequiredService<ISetupInitializationService>()
+            .InitializeAsync(new SetupRequest { AdminPassword = "administrator-password" }, cancellationToken);
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        var database = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var identity = await database.Settings.SingleAsync(
+            setting => setting.Key == "server.identity",
+            cancellationToken
+        );
+        if (valueJson is null)
+            database.Settings.Remove(identity);
+        else
+            identity.ValueJson = valueJson;
+        await database.SaveChangesAsync(cancellationToken);
+        database.ChangeTracker.Clear();
+
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.ServiceProvider.GetRequiredService<IExtensionDeploymentIdentity>().GetServerIdAsync(cancellationToken)
+        );
+
+        Assert.Equal(ErrorCodes.ExtensionUnavailable.Code, error.Code);
+        Assert.Equal(
+            valueJson,
+            await database
+                .Settings.Where(setting => setting.Key == "server.identity")
+                .Select(setting => setting.ValueJson)
+                .SingleOrDefaultAsync(cancellationToken)
+        );
+    }
+
+    [Fact]
     public async Task Authentication_SetupCompleted_ValidatesPersistedBearerToken()
     {
         await using var app = await CreateAuthenticationAppAsync();
@@ -123,6 +249,10 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
             .InitializeAsync(new SetupRequest { AdminPassword = "administrator-password" }, cancellationToken);
         using var systemScope = UserInfoUtil.PushSystemScope();
         var database = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var serverIdentity = await database
+            .Settings.Where(setting => setting.Key == "server.identity" && setting.UserId == null)
+            .Select(setting => setting.ValueJson)
+            .SingleAsync(cancellationToken);
         await database.AgentflowEdges.ExecuteDeleteAsync(cancellationToken);
         await database.AgentflowNodes.ExecuteDeleteAsync(cancellationToken);
         await database.Agentflows.ExecuteDeleteAsync(cancellationToken);
@@ -137,7 +267,9 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
             await database.Models.ExecuteDeleteAsync(cancellationToken);
             await database.Providers.ExecuteDeleteAsync(cancellationToken);
             await database.McpToolServers.ExecuteDeleteAsync(cancellationToken);
-            await database.Settings.Where(setting => setting.Key != "auth").ExecuteDeleteAsync(cancellationToken);
+            await database
+                .Settings.Where(setting => setting.Key != "auth" && setting.Key != "server.identity")
+                .ExecuteDeleteAsync(cancellationToken);
         }
         else
         {
@@ -177,7 +309,19 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
                 Assert.Empty(await database.Models.ToListAsync(cancellationToken));
                 Assert.Empty(await database.Providers.ToListAsync(cancellationToken));
                 Assert.Empty(await database.McpToolServers.ToListAsync(cancellationToken));
-                Assert.False(await database.Settings.AnyAsync(setting => setting.Key != "auth", cancellationToken));
+                Assert.False(
+                    await database.Settings.AnyAsync(
+                        setting => setting.Key != "auth" && setting.Key != "server.identity",
+                        cancellationToken
+                    )
+                );
+                Assert.Equal(
+                    serverIdentity,
+                    await database
+                        .Settings.Where(setting => setting.Key == "server.identity" && setting.UserId == null)
+                        .Select(setting => setting.ValueJson)
+                        .SingleAsync(cancellationToken)
+                );
             }
             else
             {
@@ -381,6 +525,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         services.AddInfrastructure(configuration);
         services.AddAuth();
         services.AddSettings();
+        services.AddScoped<IExtensionDeploymentIdentity, ExtensionDeploymentIdentity>();
         services.AddScoped<IUserProjectInitializer, UserProjectInitializer>();
         services.AddScoped<IConversationTurnStore, ConversationTurnStore>();
         services.AddSetup(configuration, bootstrap);

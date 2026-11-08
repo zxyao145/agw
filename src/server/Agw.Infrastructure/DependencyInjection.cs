@@ -1,6 +1,8 @@
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Contracts.Execution;
 using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
+using Agw.Extensions.Sdk.Database;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Configuration;
@@ -8,6 +10,7 @@ using Agw.Infrastructure.Coordination;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
+using Agw.Infrastructure.Extensions;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Providers;
@@ -44,6 +47,12 @@ namespace Agw.Infrastructure;
 
 public static class DependencyInjection
 {
+    public static IServiceCollection AddExtensionInfrastructure(this IServiceCollection services)
+    {
+        services.AddSingleton<IExtensionDatabaseConnection, ExtensionDatabaseConnection>();
+        return services;
+    }
+
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IEncryptedDataProtector, DataProtectionEncryptedDataProtector>();
@@ -127,6 +136,7 @@ public static class DependencyInjection
         services.AddScoped<IToolsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
+        services.AddScoped<IExtensionExecutionUsage, DurableExecutionScopeMaintenance>();
         services.AddScoped<IDurableExecutionEventSequence, DurableExecutionEventSequence>();
         services.AddScoped<ITurnAcceptanceWriter, TurnAcceptanceWriter>();
         services.AddScoped<DurableTurnUpgrade>();

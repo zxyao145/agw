@@ -1,4 +1,5 @@
 import type { ExtensionContributes, ExtensionManifest } from "@agw/extension-sdk";
+import { extensionDisplayName } from "@desktop/shared/extension-manifest";
 import type { ExtensionState } from "./extension-host";
 
 /** manifest 声明的主题名称，停用或不合法的 extension 同样有。Theme titles from the manifest, also for disabled or invalid extensions. */
@@ -66,7 +67,8 @@ export function extensionCategories(extension: ExtensionState): string[] {
  * new array.
  */
 export function sortExtensionsByName(extensions: readonly ExtensionState[]): ExtensionState[] {
-  const title = (extension: ExtensionState) => extension.installed.manifest?.name ?? extension.id;
+  const title = (extension: ExtensionState) =>
+    extensionDisplayName(extension.installed.manifest) ?? extension.extensionId;
   return [...extensions].sort(
     (left, right) => title(left).localeCompare(title(right)) || left.id.localeCompare(right.id),
   );

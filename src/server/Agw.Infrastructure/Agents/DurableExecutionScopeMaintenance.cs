@@ -1,4 +1,6 @@
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Contracts.Execution;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
@@ -7,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Agw.Infrastructure.Agents;
 
-public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMaintenance
+public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMaintenance, IExtensionExecutionUsage
 {
     private readonly AgwDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
@@ -77,6 +79,37 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
         return await ActiveExecutions(projectId, conversationId, ownerUserId)
             .AnyAsync(cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    public async Task<bool> HasNonterminalExecutionsAsync(
+        Guid extensionId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        var records = await ProjectManifests(
+                _dbContext.DurableExecutions.AsNoTracking().Where(DurableExecutionQueries.Active)
+            )
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var record in records)
+        {
+            var scope = ReadScope(record);
+            if (scope == null)
+            {
+                throw new AgwException(
+                    ErrorCodes.EncryptedDataInvalid,
+                    "An active durable execution manifest could not be read while checking extension usage."
+                );
+            }
+
+            if (scope.ExtensionIds.Contains(extensionId))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task<bool> ValidateExecutionAsync(Guid turnId, CancellationToken cancellationToken = default)

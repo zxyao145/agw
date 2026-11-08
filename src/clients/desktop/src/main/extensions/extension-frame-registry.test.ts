@@ -9,7 +9,10 @@ function createRegistry() {
   const registry = new ExtensionFrameRegistry(() => `page-${++next}`);
   registry.register({
     frameId: "frame-1",
+    instanceId: "sample",
     extensionId: "sample",
+    origin: null,
+    releaseHash: null,
     kind: "mainView",
     viewId: "app",
     webContentsId: 11,
@@ -36,14 +39,18 @@ test("capability callers need a live frame of the same extension and its current
   const hello = registry.recordHello(11)!;
   assert.equal(hello.pageId, "page-1");
   assert.equal(
-    registry.validateCaller({ extensionId: "sample", frameId: "frame-1", pageId: "page-1" })
-      .frameId,
+    registry.validateCaller({
+      instanceId: "sample",
+      extensionId: "sample",
+      frameId: "frame-1",
+      pageId: "page-1",
+    }).frameId,
     "frame-1",
   );
   for (const caller of [
-    { extensionId: "sample", frameId: "missing", pageId: "page-1" },
-    { extensionId: "other", frameId: "frame-1", pageId: "page-1" },
-    { extensionId: "sample", frameId: "frame-1", pageId: "page-0" },
+    { instanceId: "sample", extensionId: "sample", frameId: "missing", pageId: "page-1" },
+    { instanceId: "other", extensionId: "other", frameId: "frame-1", pageId: "page-1" },
+    { instanceId: "sample", extensionId: "sample", frameId: "frame-1", pageId: "page-0" },
   ]) {
     assert.throws(() => registry.validateCaller(caller), { code: "ERR_FRAME_GONE" });
   }
@@ -115,7 +122,12 @@ test("resources of a replaced page are released and the new page starts empty", 
   );
   assert.throws(
     () =>
-      registry.validateCaller({ extensionId: "sample", frameId: "frame-1", pageId: first.pageId }),
+      registry.validateCaller({
+        instanceId: "sample",
+        extensionId: "sample",
+        frameId: "frame-1",
+        pageId: first.pageId,
+      }),
     { code: "ERR_FRAME_GONE" },
   );
 });

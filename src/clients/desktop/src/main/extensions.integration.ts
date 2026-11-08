@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import { basename, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -289,10 +289,61 @@ async function errorCode(frame: FrameHandle, code: string): Promise<string> {
 async function serviceState(): Promise<{
   requests: string[];
   neverClosed: number;
-  hub: { held: number; heldClosed: number; hubOpen: number; delayHub: boolean };
+  hub: {
+    held: number;
+    heldClosed: number;
+    hubOpen: number;
+    delayHub: boolean;
+    delayCatalog: boolean;
+    catalogHeld: number;
+    pendingCatalog: number;
+    catalogRequests: string[];
+  };
   echoInputs: string[];
 }> {
   return (await fetch(`${config.testServiceUrl}/__test/state`)).json();
+}
+
+async function serverPackageCacheHas(releaseHash: string): Promise<boolean> {
+  return evalHost<boolean>(
+    `window.agwDesktop.hasServerExtensionRelease(${JSON.stringify(config.serverOrigin)}, ${JSON.stringify(config.serverExtension.id)}, ${JSON.stringify(releaseHash)})`,
+  );
+}
+
+async function serverPackageStagingEntries(): Promise<string[]> {
+  try {
+    return await readdir(join(config.userData, "extensions", "server-packages", ".staging"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function setServerCatalogDelay(enabled: boolean): Promise<void> {
+  const response = await fetch(
+    `${config.testServiceUrl}/__test/delay-catalog?enabled=${String(enabled)}`,
+    { method: "POST" },
+  );
+  assert.equal(response.status, 204);
+}
+
+async function switchServerProfile(name: string, discardFileName?: string): Promise<void> {
+  await clickHost('button[aria-label="Switch server"]');
+  const option = `[...document.querySelectorAll('[role="listbox"][aria-label="Servers"] button[role="option"]')].find((item) => item.textContent?.includes(${JSON.stringify(name)}))`;
+  await untilHost(`Boolean(${option})`, `the ${name} profile option`);
+  await evalHost(`(${option}).click(); true`);
+  if (discardFileName) {
+    await expectConfirmation(
+      "message",
+      [`Discard unsaved changes to ${discardFileName}?`],
+      `the discard confirmation before switching to ${name}`,
+    );
+    await answerConfirmation("Discard");
+  }
+  await untilHost(
+    `document.querySelector('button[aria-label="Switch server"]')?.textContent?.includes(${JSON.stringify(name)}) ?? false`,
+    `${name} to become the active profile`,
+  );
 }
 
 /** 用第一个 token 直接读取 Host 数据。Reads Host data directly with the first token. */
@@ -319,6 +370,55 @@ async function hostSend<T>(method: "POST" | "DELETE", path: string, body?: unkno
   const text = await response.text();
   assert.equal(response.ok, true, `${method} ${path} -> ${response.status} ${text}`);
   return (JSON.parse(text) as { data: T }).data;
+}
+
+async function serverExtensionRequest<T>(
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const response = await fetch(`${config.remoteProfile.baseUrl}${path}`, {
+    method,
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${config.firstToken}`,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const text = await response.text();
+  const result = text ? (JSON.parse(text) as { code?: number; data?: T; title?: string }) : null;
+  assert.equal(response.ok, true, `${method} ${path} -> ${response.status}: ${text.slice(0, 300)}`);
+  assert.equal(result?.code, 0, `${method} ${path} -> ${text.slice(0, 300)}`);
+  return result!.data as T;
+}
+
+async function serverExtensionStatus(): Promise<{ id: string; isEnabled: boolean; state: string }> {
+  const extensions = await serverExtensionRequest<
+    { id: string; isEnabled: boolean; state: string }[]
+  >("GET", "/api/extensions");
+  const status = extensions.find((extension) => extension.id === config.serverExtension.id);
+  if (!status) throw new Error("The Server extension is missing from the management list.");
+  return status;
+}
+
+async function setServerExtensionEnabled(enabled: boolean): Promise<void> {
+  const status = await serverExtensionRequest<{ id: string; isEnabled: boolean }>(
+    "POST",
+    `/api/extensions/${enabled ? "enable" : "disable"}`,
+    { extensionId: config.serverExtension.id },
+  );
+  assert.equal(status.id, config.serverExtension.id);
+  assert.equal(status.isEnabled, enabled);
+  await until(
+    async () => {
+      const current = await serverExtensionStatus();
+      return current.isEnabled === enabled && current.state === (enabled ? "Active" : "Disabled");
+    },
+    `the Server extension to be ${enabled ? "Active" : "Disabled"}`,
+    undefined,
+    async () => JSON.stringify(await serverExtensionStatus()),
+  );
 }
 
 async function readJson<T>(path: string): Promise<T> {
@@ -398,11 +498,15 @@ async function untilStatus(id: string, status: string, timeoutMs = 20_000): Prom
  * Turns on the enable switch on the Extensions page and approves in the main process's separate confirmation window;
  * returns the approval window's text.
  */
-async function enable(id: string, name: string): Promise<string> {
+async function enable(id: string, name: string, confirmationId = id): Promise<string> {
   await goToExtensions();
   await untilHost(`!${OPEN_DIALOG}`, "earlier dialogs to close");
   await clickHost(`[data-extension-id="${id}"] button[role="switch"]`);
-  await expectConfirmation("enable", [`Enable ${name}?`, `(${id})`], `the ${name} approval`);
+  await expectConfirmation(
+    "enable",
+    [`Enable ${name}?`, `(${confirmationId})`],
+    `the ${name} approval`,
+  );
   return answerConfirmation("Enable");
 }
 
@@ -444,7 +548,11 @@ async function boot(): Promise<void> {
   hooks.mainWindow()!.show();
   hooks.mainWindow()!.focus();
   await untilHost("Boolean(window.agwDesktop)", "the Desktop bridge");
-  if (config.phase === "first") {
+  if (
+    config.phase === "first" ||
+    config.phase === "frame-visibility" ||
+    config.phase === "server-extension"
+  ) {
     await evalHost(
       `window.agwDesktop.saveToken(${JSON.stringify(config.remoteProfile.id)}, ${JSON.stringify(config.firstToken)}).then(() => true)`,
     );
@@ -622,6 +730,17 @@ async function bareRepositoryWorkflow(): Promise<void> {
             '!document.querySelector("dialog") && document.querySelector("main").getAttribute("aria-busy") === "false"',
           ),
         label,
+        undefined,
+        () =>
+          evalFrame<string>(
+            frame,
+            `JSON.stringify({
+              dialog: document.querySelector("dialog")?.textContent?.trim() ?? null,
+              error: document.querySelector('dialog [role="alert"]')?.textContent?.trim() ?? null,
+              dialogBusy: document.querySelector("dialog form")?.getAttribute("aria-busy") ?? null,
+              mainBusy: document.querySelector("main")?.getAttribute("aria-busy") ?? null,
+            })`,
+          ),
       );
     };
     const url = `git://127.0.0.1:${port}/repository-seed`;
@@ -650,7 +769,50 @@ async function bareRepositoryWorkflow(): Promise<void> {
     }
     await clickInFrame(frame, "document.querySelector('button[aria-label=\"New feature\"]')");
     await fill({ name: "add-extensions" });
-    await clickInFrame(frame, 'document.querySelector("label.choice.all input")');
+    const repositoryCheckboxes = `[...document.querySelectorAll('dialog[open] input[name="repositories"]')]
+      .map((input) => ({ value: input.value, checked: input.checked, disabled: input.disabled, ariaChecked: input.getAttribute("aria-checked") }))
+      .sort((left, right) => left.value.localeCompare(right.value))`;
+    const repositoryChoices = await until(
+      async () => {
+        const choices = await evalFrame<
+          { value: string; checked: boolean; disabled: boolean; ariaChecked: string | null }[]
+        >(frame, repositoryCheckboxes);
+        return choices.length === 2 && choices.every((choice) => !choice.disabled) ? choices : null;
+      },
+      "both enabled repository choices in the feature dialog",
+      undefined,
+      () =>
+        evalFrame<string>(
+          frame,
+          `JSON.stringify({
+            choices: ${repositoryCheckboxes},
+            selectAllDisabled: document.querySelector('dialog[open] label.choice.all input')?.disabled ?? null,
+          })`,
+        ),
+    );
+    assert.deepEqual(
+      repositoryChoices.map((choice) => choice.value),
+      ["module-alpha", "module-beta"],
+    );
+    await clickInFrame(frame, 'document.querySelector("dialog[open] label.choice.all input")');
+    const selectedRepositories = await until(
+      async () => {
+        const choices = await evalFrame<
+          { value: string; checked: boolean; disabled: boolean; ariaChecked: string | null }[]
+        >(frame, repositoryCheckboxes);
+        return choices.length === 2 && choices.every((choice) => choice.checked) ? choices : null;
+      },
+      "both feature repository checkboxes to be checked",
+      undefined,
+      () => evalFrame<string>(frame, `JSON.stringify(${repositoryCheckboxes})`),
+    );
+    assert.deepEqual(
+      selectedRepositories.map(({ value, checked }) => ({ value, checked })),
+      [
+        { value: "module-alpha", checked: true },
+        { value: "module-beta", checked: true },
+      ],
+    );
     await submitDialog("two feature worktrees");
     const feature = await evalFrame<string>(
       frame,
@@ -2314,6 +2476,17 @@ async function failureModes(): Promise<void> {
   assert.equal(await extensionStatus(EXTENSION_IDS.sample), "Active");
   pass("a failing activate marks only that extension as failed");
 
+  const syncStart = `performance.getEntriesByName("agw.desktop.extensions.server_sync").find((entry) => entry.detail?.result === "success")?.startTime ?? -1`;
+  const synchronized = await evalHost<number>(syncStart);
+  const contentsBeforeSync = createdWebContents;
+  await evalHost('window.dispatchEvent(new Event("focus")); true');
+  await untilHost(`(${syncStart}) > ${synchronized}`, "the Server catalog synchronization");
+  assert.equal(await extensionStatus(EXTENSION_IDS.broken), "Failed");
+  assert.equal(createdWebContents, contentsBeforeSync);
+  pass(
+    "Server catalog synchronization keeps a failed local extension and its error without creating another page",
+  );
+
   const neverRequests = async () =>
     (await serviceState()).requests.filter((line) => line === "GET /never").length;
   const requestsBefore = await neverRequests();
@@ -2879,33 +3052,41 @@ async function monacoDiffAndComments(): Promise<void> {
   const project = config.projectDirectory;
   const git = (...args: string[]) =>
     execFileSync("git", ["-c", "core.autocrlf=false", ...args], { cwd: project, stdio: "pipe" });
-  const readmePath = join(project, "readme.md");
-  const readme = await readFile(readmePath, "utf8");
-  git("init", "--quiet");
-  git("add", "readme.md");
-  git(
-    "-c",
-    "user.name=Agw Tests",
-    "-c",
-    "user.email=tests@agw.local",
-    "-c",
-    "commit.gpgsign=false",
-    "commit",
-    "--quiet",
-    "-m",
-    "fixture",
-  );
-  await writeFile(readmePath, `${readme}changed line\n`);
+  const diffPath = join(project, "extension-diff-fixture.txt");
   try {
-    await clickFileInTree("readme.md");
+    await writeFile(diffPath, "before\n");
+    git("init", "--quiet");
+    git("add", "extension-diff-fixture.txt");
+    git(
+      "-c",
+      "user.name=Agw Tests",
+      "-c",
+      "user.email=tests@agw.local",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--quiet",
+      "-m",
+      "fixture",
+    );
+    await writeFile(diffPath, "before\nchanged line\n");
+    await clickFileInTree("extension-diff-fixture.txt");
     await clickHost("#diff-mode");
     // 等变更树加载完成，再点击 Unstaged 中的文件。Wait for the change tree, then click the file under Unstaged.
     await untilHost(`Boolean(${treeItem("Unstaged")})`, "the Unstaged group");
-    await clickFileInTree("readme.md");
+    await clickFileInTree("extension-diff-fixture.txt");
     const diff = '.agw-main-workspace [data-code-view="diff"]';
+    await untilHost(
+      shownFileIs("extension-diff-fixture.txt"),
+      "the diff view to show its fixture file",
+    );
     await untilHost(
       `Boolean(document.querySelector('${diff} .line-insert'))`,
       "the inserted line in the diff",
+    );
+    await untilHost(
+      `[...document.querySelectorAll('${diff} .editor.modified .view-line')].some((line) => line.textContent.replace(/\\u00a0/g, " ").includes("changed line"))`,
+      "the changed line in the modified side",
     );
     assert.equal(
       await evalHost<string>(`document.querySelector('[data-diff-side="modified"]').textContent`),
@@ -2947,7 +3128,7 @@ async function monacoDiffAndComments(): Promise<void> {
       `!document.querySelector('.agw-main-workspace')?.textContent.includes("1 code comment")`,
       "the cleared code comment",
     );
-    await clickFileInTree("readme.md");
+    await clickFileInTree("extension-diff-fixture.txt");
     await clickHost("#diff-mode");
     await untilHost(
       `document.querySelector("#diff-mode")?.getAttribute("aria-checked") === "false"`,
@@ -2957,7 +3138,7 @@ async function monacoDiffAndComments(): Promise<void> {
       "Only diff shows a working-tree change in Monaco's diff editor with its worker, and a modified-side comment becomes a pending code comment",
     );
   } finally {
-    await writeFile(readmePath, readme);
+    await rm(diffPath, { force: true });
     await rm(join(project, ".git"), { recursive: true, force: true });
   }
 }
@@ -3692,6 +3873,15 @@ async function clickInFrame(
   element: string,
   modifiers: ("meta" | "control")[] = [],
 ): Promise<void> {
+  hooks.mainWindow()!.focus();
+  await until(
+    async () =>
+      frame.view.getVisible() &&
+      (await evalFrame<boolean>(frame, `document.visibilityState === "visible"`)),
+    `frame ${frame.frameId} to be visible before clicking ${element}`,
+    undefined,
+    () => overlayState(frame),
+  );
   // 排版规范使内容变高，元素可能在滚动区域之外，先滚动到可见位置。弹出层可能先显示在临时位置，到下一帧才修正（例如
   // `/` 菜单先按空容器定位在光标下方，floating-ui 的 autoUpdate 在下一帧把它移到光标上方）；对临时位置滚动会滚动整个页面，
   // 点击会点到别的项目。所以元素出现后等一帧渲染完再滚动，命中检查也在一帧渲染完后进行（centerOf）。
@@ -3715,11 +3905,18 @@ async function clickInFrame(
         })()`,
       ),
     `${element} to exist`,
+    undefined,
+    () => overlayState(frame),
   );
-  const point = await until(async () => {
-    const center = await centerOf(frame, element);
-    return center?.hit ? center : null;
-  }, `${element} to be clickable`);
+  const point = await until(
+    async () => {
+      const center = await centerOf(frame, element);
+      return center?.hit ? center : null;
+    },
+    `${element} to be clickable`,
+    undefined,
+    () => overlayState(frame),
+  );
   const contents = frame.view.webContents;
   contents.focus();
   const x = Math.round(point.x);
@@ -3879,6 +4076,7 @@ async function mixedShowing(predicate: string, label: string): Promise<FrameHand
  * with its editor focused.
  */
 async function sourceShowing(predicate: string, label: string): Promise<void> {
+  hooks.mainWindow()!.focus();
   await until(
     () =>
       evalHost<boolean>(
@@ -3895,6 +4093,19 @@ async function sourceShowing(predicate: string, label: string): Promise<void> {
         active: document.activeElement === null ? null : document.activeElement.tagName + " " + (document.activeElement.getAttribute("aria-label") ?? document.activeElement.className),
         matches: Boolean(${predicate}),
         text: (${SOURCE_TEXT}).slice(0, 120),
+        editors: [...document.querySelectorAll('${SOURCE_AREA} [data-code-view="source"], ${SOURCE_AREA} .monaco-editor, ${SOURCE_AREA} .view-lines')].map((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return {
+            className: element.className,
+            width: rect.width,
+            height: rect.height,
+            display: style.display,
+            visibility: style.visibility,
+            lineCount: element.querySelectorAll(".view-line").length,
+            text: element.textContent.slice(0, 120),
+          };
+        }),
       })`),
   );
 }
@@ -4368,11 +4579,49 @@ async function textEditorTypography(): Promise<void> {
     const center = await centerOf(mixed, insertAbove);
     return center?.hit ? center : null;
   }, "the table toolbar");
+  await evalFrame(
+    mixed,
+    `(() => {
+      const probe = { events: [], nativeEventCount: null, dispose: null };
+      const selector = '.table-toolbar button[aria-label="Insert row above"]';
+      const record = (event) => {
+        if (!(event.target instanceof Element) || !event.target.closest(selector)) return;
+        probe.events.push({
+          type: event.type,
+          pointerType: "pointerType" in event ? event.pointerType : null,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+        if (probe.events.length > 24) probe.events.shift();
+      };
+      const types = ["pointerenter", "pointerover", "pointermove", "mouseenter", "mouseover", "mousemove"];
+      for (const type of types) document.addEventListener(type, record, true);
+      probe.dispose = () => { for (const type of types) document.removeEventListener(type, record, true); };
+      window.__tableToolbarHoverProbe = probe;
+      return true;
+    })()`,
+  );
+  mixed.view.webContents.focus();
   mixed.view.webContents.sendInputEvent({
     type: "mouseMove",
     x: Math.round(insertAbovePoint.x),
     y: Math.round(insertAbovePoint.y),
   });
+  await evalFrame(
+    mixed,
+    `(() => {
+      const probe = window.__tableToolbarHoverProbe;
+      probe.nativeEventCount = probe.events.length;
+      const button = ${insertAbove};
+      button.dispatchEvent(new PointerEvent("pointermove", {
+        bubbles: true,
+        pointerType: "mouse",
+        clientX: ${Math.round(insertAbovePoint.x)},
+        clientY: ${Math.round(insertAbovePoint.y)},
+      }));
+      return true;
+    })()`,
+  );
   const tooltip = await until(
     () =>
       evalFrame<{ text: string; aboveToolbar: boolean; onTop: boolean } | null>(
@@ -4388,8 +4637,31 @@ async function textEditorTypography(): Promise<void> {
         })()`,
       ),
     "the table toolbar tooltip",
+    undefined,
+    () =>
+      evalFrame<string>(
+        mixed,
+        `(async () => {
+          await ${NEXT_RENDERED_FRAME};
+          const button = ${insertAbove};
+          const tip = document.querySelector(".tooltip");
+          const target = document.elementFromPoint(${Math.round(insertAbovePoint.x)}, ${Math.round(insertAbovePoint.y)});
+          const probe = window.__tableToolbarHoverProbe;
+          return JSON.stringify({
+            pointerEvents: probe?.events ?? null,
+            nativeEventCount: probe?.nativeEventCount ?? null,
+            buttonHovered: button?.matches(":hover") ?? false,
+            pointTarget: target?.outerHTML.slice(0, 160) ?? null,
+            tooltip: tip ? { text: tip.textContent, state: tip.dataset.state, rect: tip.getBoundingClientRect().toJSON() } : null,
+          });
+        })()`,
+      ),
   );
   assert.deepEqual(tooltip, { text: "Insert row above", aboveToolbar: true, onTop: true });
+  await evalFrame(
+    mixed,
+    `(() => { window.__tableToolbarHoverProbe.dispose(); delete window.__tableToolbarHoverProbe; return true; })()`,
+  );
   await clickInFrame(mixed, mixedBlock("Top paragraph", "p"));
   await until(
     () => evalFrame<boolean>(mixed, `!document.querySelector(".table-toolbar")`),
@@ -9068,10 +9340,444 @@ async function restartPhase(): Promise<void> {
   );
   assert.equal(existsSync(storage(EXTENSION_IDS.sample)), false);
   pass("disabling removes entries and frames, and uninstalling with data removes both directories");
+
+  await serverExtensionRestart();
+}
+
+async function serverExtensionLifecycle(): Promise<void> {
+  await goToChat();
+  const { id, name, displayName, versionV1, releaseHashV1 } = config.serverExtension;
+  assert.equal((await serverExtensionStatus()).isEnabled, false);
+  const disabledCatalog = await serverExtensionRequest<{ extensions: { id: string }[] }>(
+    "GET",
+    "/api/extensions/catalog",
+  );
+  assert.equal(
+    disabledCatalog.extensions.some((extension) => extension.id === id),
+    false,
+  );
+  await setServerExtensionEnabled(true);
+  const initial = await until(
+    async () =>
+      (await runtime().listExtensions()).find(
+        (extension) => extension.id === id && extension.serverAvailable === true,
+      ) ?? null,
+    "the Server extension catalog entry",
+    60_000,
+  );
+  assert.equal(initial.source, "server");
+  assert.equal(initial.releaseHash, releaseHashV1);
+  assert.equal(initial.manifest?.version, versionV1);
+  assert.equal(initial.enabled, false);
+  const syncMetricName = "agw.desktop.extensions.server_sync";
+  const syncMetricExpression = `(() => {
+    const entries = performance.getEntriesByName(${JSON.stringify(syncMetricName)});
+    const success = entries.find((entry) => entry.detail?.result === "success");
+    return success ? { result: success.detail.result, durationMs: success.duration, retained: entries.length } : null;
+  })()`;
+  await untilHost(`Boolean(${syncMetricExpression})`, "the successful Server sync measurement");
+  const syncMetric = await evalHost<{
+    result: string;
+    durationMs: number;
+    retained: number;
+  }>(syncMetricExpression);
+  assert.equal(syncMetric.result, "success");
+  assert.ok(Number.isFinite(syncMetric.durationMs) && syncMetric.durationMs >= 0);
+  assert.equal(syncMetric.retained, 1);
+
+  const instanceId = initial.instanceId;
+  if (!initial.enabled) await enable(instanceId, displayName, id);
+  await until(
+    async () =>
+      (await runtime().listExtensions()).find((extension) => extension.id === id)?.enabled,
+    "the Server extension to be enabled in Desktop",
+  );
+  await goToChat();
+  const ribbonEntry = `.agw-ribbon [data-entry-id="${instanceId}:open"]`;
+  await untilHost(
+    `Boolean(document.querySelector(${JSON.stringify(ribbonEntry)}))`,
+    "the Server extension ribbon entry",
+  );
+  await clickHost(ribbonEntry);
+  const firstFrame = await untilFrame(id, "mainView");
+  assert.equal(await api<string>(firstFrame, "return api.manifest.version;"), versionV1);
+  assert.deepEqual(
+    await api(
+      firstFrame,
+      'return await api.server.request("echo", { method: "POST", body: { value: "desktop-v1" } });',
+    ),
+    { value: "desktop-v1" },
+  );
+  const storageUri = await api<string>(
+    firstFrame,
+    "return api.context.get().extension.storageUri;",
+  );
+  const stateFile = `${storageUri}/state.txt`;
+  await api(
+    firstFrame,
+    `await api.fs.writeFile(${JSON.stringify(stateFile)}, new TextEncoder().encode("retained")); return true;`,
+  );
+
+  await setServerExtensionEnabled(false);
+  const disabledStatus = await until(async () => {
+    const status = await serverExtensionStatus();
+    return status.isEnabled ? null : status;
+  }, "shared Server extension enablement to be disabled");
+  assert.equal(disabledStatus.isEnabled, false);
+  await until(
+    async () =>
+      (await runtime().listExtensions()).find((extension) => extension.id === id)
+        ?.serverAvailable === false,
+    "the disabled Server extension catalog to reach Desktop",
+  );
+  await until(
+    () => runtime().registry.get(firstFrame.frameId) === undefined,
+    "the unavailable Server extension page to close",
+  );
+  await untilHost(
+    `!document.querySelector(${JSON.stringify(ribbonEntry)})`,
+    "the unavailable Server extension ribbon entry to be removed",
+  );
+  const disabledResponse = await fetch(new URL(`/api/ext/${name}/echo`, config.hostUrl), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.firstToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ value: "disabled" }),
+  });
+  assert.equal(disabledResponse.ok, false);
+
+  await setServerExtensionEnabled(true);
+  const enabledStatus = await until(async () => {
+    const status = await serverExtensionStatus();
+    return status.isEnabled ? status : null;
+  }, "shared Server extension enablement to be restored");
+  assert.equal(enabledStatus.isEnabled, true);
+  await until(
+    async () =>
+      (await runtime().listExtensions()).find((extension) => extension.id === id)
+        ?.serverAvailable === true,
+    "the enabled Server extension catalog to reach Desktop",
+  );
+  await untilHost(
+    `Boolean(document.querySelector(${JSON.stringify(ribbonEntry)}))`,
+    "the enabled Server extension ribbon entry",
+  );
+  await clickHost(ribbonEntry);
+  const restoredFrame = await untilFrame(id, "mainView");
+  assert.notEqual(restoredFrame.frameId, firstFrame.frameId);
+  assert.deepEqual(
+    await api(
+      restoredFrame,
+      'return await api.server.request("echo", { method: "POST", body: { value: "restored" } });',
+    ),
+    { value: "restored" },
+  );
+  assert.equal(
+    await api<string>(
+      restoredFrame,
+      `return new TextDecoder().decode(await api.fs.readFile(${JSON.stringify(stateFile)}));`,
+    ),
+    "retained",
+  );
+  const hostInstanceId = runtime().registry.hostInstanceId;
+  assert.ok(hostInstanceId);
+  await evalHost(
+    `window.agwDesktop.destroyExtensionFrame(${JSON.stringify(hostInstanceId)}, ${JSON.stringify(restoredFrame.frameId)}).then(() => true)`,
+  );
+  await until(
+    () => runtime().registry.get(restoredFrame.frameId) === undefined,
+    "the Server main view to close before opening its file viewer",
+  );
+  await openFileInTree("readme.md");
+  const fileViewerId = `${instanceId}:viewer`;
+  await selectViewer(fileViewerId);
+  const dirtyFrame = await untilViewerFrame(id, "viewer");
+  await api(
+    dirtyFrame,
+    'await api.workspace.setUnsavedChanges(true); window.floatingChatHandle = await api.chat.createFloatingChat({ context: { projectRelativePath: "readme.md" } }); return true;',
+  );
+  await untilHost(
+    unsavedIn(fileViewerId),
+    "the Server extension file viewer to report unsaved changes",
+  );
+  pass(
+    "Server extension catalog sync, authenticated requests and data persistence use the production bridge",
+  );
+}
+
+async function serverExtensionContextSwitchRace(): Promise<void> {
+  const { id, releaseHashV1, releaseHashV2, versionV1 } = config.serverExtension;
+  const dirtyFrame = viewerFrameOf(id, "viewer");
+  assert.ok(dirtyFrame);
+  const dirtyFrameRegistration = runtime().registry.get(dirtyFrame.frameId);
+  assert.ok(dirtyFrameRegistration);
+  assert.equal(dirtyFrameRegistration.releaseHash, releaseHashV1);
+  const fileViewerId = `${dirtyFrameRegistration.instanceId}:viewer`;
+  await untilHost(
+    unsavedIn(fileViewerId),
+    "the old Server file viewer to remain dirty before the update",
+  );
+
+  const previousStages = new Set(await serverPackageStagingEntries());
+  await setServerCatalogDelay(true);
+  const switchResponse = await fetch(
+    `${config.testServiceUrl}/__test/server-extension-version?version=1.0.1`,
+    { method: "POST" },
+  );
+  assert.equal(switchResponse.status, 204);
+  await evalHost("window.dispatchEvent(new Event('focus')); true");
+  await until(
+    async () => {
+      const state = await serviceState();
+      return state.hub.pendingCatalog > 0 ? state.hub : null;
+    },
+    "the updated Server catalog request to reach the proxy",
+    60_000,
+  );
+  await setServerCatalogDelay(false);
+  const stagingEntry = await until(
+    async () =>
+      (await serverPackageStagingEntries()).find((entry) => !previousStages.has(entry)) ?? null,
+    "the new Server release to enter the main-process cache",
+    60_000,
+  );
+
+  await switchServerProfile("Local", "readme.md");
+  assert.ok(
+    (await serverPackageStagingEntries()).includes(stagingEntry),
+    "the Server catalog application should still be in flight after the profile switch",
+  );
+  const staleRelease = await until(
+    async () => {
+      const pendingStages = await serverPackageStagingEntries();
+      const current = (await runtime().listExtensions()).find((extension) => extension.id === id);
+      return !pendingStages.includes(stagingEntry) &&
+        current?.releaseHash === releaseHashV2 &&
+        current.serverAvailable === false
+        ? current
+        : null;
+    },
+    "the stale Server source to remain unavailable after the context switch",
+    60_000,
+  );
+  assert.equal(staleRelease.manifest?.version, config.serverExtension.versionV2);
+  assert.equal(await serverPackageCacheHas(releaseHashV2), true);
+  assert.equal(runtime().registry.get(dirtyFrame.frameId)?.releaseHash, releaseHashV1);
+  assert.equal(await api<string>(dirtyFrame, "return api.manifest.version;"), versionV1);
+  assert.equal(await evalFrame<string | null>(dirtyFrame, "window.loadedFile"), "readme.md");
+  await untilHost(
+    `!document.querySelector(${JSON.stringify(`[data-file-viewer-tab="${fileViewerId}"]`)})`,
+    "the unavailable Server file viewer contribution to be withdrawn",
+  );
+  await untilHost(
+    `!document.querySelector(${JSON.stringify(`.agw-ribbon [data-entry-id="${dirtyFrameRegistration.instanceId}:open"]`)})`,
+    "the unavailable Server ribbon contribution to be withdrawn",
+  );
+  const contextError = (error: unknown) =>
+    ["ERR_CONNECTION_CHANGED", "ERR_EXTENSION_DISABLED"].includes(
+      (error as { code?: string }).code ?? "",
+    );
+  await assert.rejects(
+    api(dirtyFrame, 'return await api.chat.composer.insertText("new Server");'),
+    contextError,
+  );
+  await assert.rejects(
+    api(dirtyFrame, "return await window.floatingChatHandle.open();"),
+    contextError,
+  );
+  await api(dirtyFrame, "await api.workspace.setUnsavedChanges(false); return true;");
+  await goToChat();
+  await until(
+    () => runtime().registry.get(dirtyFrame.frameId) === undefined,
+    "the discarded dirty Server frame to close",
+  );
+
+  await switchServerProfile(config.remoteProfile.name);
+  const restored = await until(
+    async () => {
+      const current = (await runtime().listExtensions()).find((extension) => extension.id === id);
+      return current?.serverAvailable === true && current.releaseHash === releaseHashV2
+        ? current
+        : null;
+    },
+    "the current Server profile to synchronize its extension after the switch",
+    60_000,
+  );
+  assert.equal(restored.manifest?.version, config.serverExtension.versionV2);
+  pass(
+    "a profile change keeps the old dirty Server frame unavailable and blocks Chat capabilities",
+  );
+}
+
+async function serverExtensionCacheRetry(frameId: string): Promise<void> {
+  if (process.platform === "win32" || process.getuid?.() === 0) {
+    console.log("SKIP cache write retry: directory permissions cannot block this process");
+    return;
+  }
+  const { id, releaseHashV2 } = config.serverExtension;
+  const hostInstanceId = runtime().registry.hostInstanceId;
+  assert.ok(hostInstanceId);
+  await evalHost(
+    `window.agwDesktop.destroyExtensionFrame(${JSON.stringify(hostInstanceId)}, ${JSON.stringify(frameId)}).then(() => true)`,
+  );
+  await until(
+    () => runtime().registry.get(frameId) === undefined,
+    "the Server extension frame to close before retrying its package cache",
+  );
+
+  const packageDirectory = join(config.userData, "extensions", "server-packages");
+  await rm(join(packageDirectory, releaseHashV2), { recursive: true, force: true });
+  await setServerExtensionEnabled(false);
+  await evalHost("window.dispatchEvent(new Event('focus')); true");
+  await until(
+    async () =>
+      (await runtime().listExtensions()).find((extension) => extension.id === id)
+        ?.serverAvailable === false,
+    "the disabled catalog to reach Desktop before the package retry",
+  );
+
+  const catalogRequestCount = (await serviceState()).hub.catalogRequests.length;
+  await chmod(packageDirectory, 0o555);
+  try {
+    await setServerExtensionEnabled(true);
+    await evalHost("window.dispatchEvent(new Event('focus')); true");
+    const failed = await until(
+      async () => {
+        const current = (await runtime().listExtensions()).find((extension) => extension.id === id);
+        return current?.releaseHash === releaseHashV2 &&
+          current.validation === "invalid" &&
+          current.serverAvailable === false
+          ? current
+          : null;
+      },
+      "the main-process Server package cache failure to reach the extension catalog",
+      60_000,
+    );
+    assert.ok(
+      failed.errors.some((item) => /EACCES|permission denied/iu.test(item.message)),
+      `Expected a cache permission error, got ${JSON.stringify(failed.errors)}`,
+    );
+  } finally {
+    await chmod(packageDirectory, 0o755);
+  }
+
+  const failedRequests = (await serviceState()).hub.catalogRequests.slice(catalogRequestCount);
+  assert.ok(failedRequests.some((request) => request.includes("afterRevision=")));
+  const retryRequestCount = (await serviceState()).hub.catalogRequests.length;
+  await delay(250);
+  await evalHost("window.dispatchEvent(new Event('focus')); true");
+  const recovered = await until(
+    async () => {
+      const current = (await runtime().listExtensions()).find((extension) => extension.id === id);
+      return current?.releaseHash === releaseHashV2 && current.serverAvailable === true
+        ? current
+        : null;
+    },
+    "the next full catalog fetch to recover the cached Server release",
+    60_000,
+  );
+  assert.equal(recovered.validation, "valid");
+  const retryRequests = (await serviceState()).hub.catalogRequests.slice(retryRequestCount);
+  assert.ok(retryRequests.length > 0, "a follow-up Server catalog request should be observed");
+  assert.equal(retryRequests[0]?.includes("afterRevision="), false);
+  pass("a failed Server package cache write retries from a full catalog and recovers");
+}
+
+async function serverExtensionRestart(): Promise<void> {
+  await goToChat();
+  const { id, displayName, versionV2, releaseHashV2 } = config.serverExtension;
+  await until(
+    async () => {
+      const state = await serviceState();
+      return state.hub.pendingCatalog > 0 ? state.hub : null;
+    },
+    "the startup Server catalog request to wait in the proxy",
+    60_000,
+  );
+  assert.equal(await serverPackageCacheHas(releaseHashV2), true);
+  const hostInstanceId = runtime().registry.hostInstanceId;
+  assert.ok(hostInstanceId);
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.bareRepository}:repositories"]`);
+  const localFrame = await untilViewerFrame(EXTENSION_IDS.bareRepository, "repositories");
+  await evalHost(
+    `window.agwDesktop.destroyExtensionFrame(${JSON.stringify(hostInstanceId)}, ${JSON.stringify(localFrame.frameId)}).then(() => true)`,
+  );
+  await until(
+    () => runtime().registry.get(localFrame.frameId) === undefined,
+    "the local extension frame to close through the Desktop bridge",
+  );
+  assert.equal(await serverPackageCacheHas(releaseHashV2), true);
+  await evalHost(
+    `window.agwDesktop.releaseExtensionResources(${JSON.stringify(hostInstanceId)}, ${JSON.stringify(EXTENSION_IDS.bareRepository)}).then(() => true)`,
+  );
+  assert.equal(await serverPackageCacheHas(releaseHashV2), true);
+  await setServerCatalogDelay(false);
+
+  const extension = await until(
+    async () => {
+      const current = (await runtime().listExtensions()).find((item) => item.id === id);
+      return current?.serverAvailable === true && current.releaseHash === releaseHashV2
+        ? current
+        : null;
+    },
+    "the Server package discovered after Host restart",
+    60_000,
+  );
+  assert.equal(extension.source, "server");
+  assert.equal(extension.manifest?.version, versionV2);
+  if (!extension.enabled) await enable(extension.instanceId, displayName, id);
+  await until(
+    async () => (await runtime().listExtensions()).find((item) => item.id === id)?.enabled ?? null,
+    "the Server extension to be enabled in Desktop",
+  );
+
+  const ribbonEntry = `.agw-ribbon [data-entry-id="${extension.instanceId}:open"]`;
+  await untilHost(
+    `Boolean(document.querySelector(${JSON.stringify(ribbonEntry)}))`,
+    "the restarted Server extension ribbon entry",
+  );
+  await clickHost(ribbonEntry);
+  const frame = await untilFrame(id, "mainView");
+  assert.equal(await api<string>(frame, "return api.manifest.version;"), versionV2);
+  assert.deepEqual(
+    await api(
+      frame,
+      'return await api.server.request("echo", { method: "POST", body: { value: "desktop-after-server-restart" } });',
+    ),
+    { value: "desktop-after-server-restart" },
+  );
+  await serverExtensionCacheRetry(frame.frameId);
+  pass("Desktop syncs the startup-discovered extension package after the Server Host restarts");
 }
 
 async function run(): Promise<void> {
   await boot();
+  if (config.phase === "server-extension") {
+    await serverExtensionLifecycle();
+    await serverExtensionContextSwitchRace();
+    return;
+  }
+  if (config.phase === "server-restart") {
+    await serverExtensionRestart();
+    return;
+  }
+  if (config.phase === "frame-visibility") {
+    await bundledDefaults();
+    await bareRepositoryWorkflow();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const settings = await openTextEditorSettings();
+      await chooseInSettings(settings, DOCUMENT_SIZE_SELECT, "20");
+      await clickInFrame(settings, settingsButton("Reset document font size"));
+      await untilTextEditorSettings(TEXT_EDITOR_DEFAULTS, "the reset document size");
+      await goToChat();
+      await openFileInTree("src/app.ts");
+      await sourceShowing(sourceIncludes("function"), "app.ts after closing Settings");
+    }
+    pass("Source renders after repeated Settings changes and native confirmation windows");
+    return;
+  }
   if (config.phase === "restart") {
     await restartPhase();
     return;
@@ -9141,6 +9847,7 @@ async function run(): Promise<void> {
   await uninstallBundled();
   await themeExtensionRemoval();
   await themeBeforeRestart();
+  await serverExtensionLifecycle();
 }
 
 void run().then(

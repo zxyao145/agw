@@ -99,7 +99,10 @@ public sealed class AgentflowTurnExecutor
                 resources.SessionScope,
                 resources.TraceContext,
                 runtime.Settings.EnvironmentVariables,
-                runtime.DeferHumanInteractions
+                runtime.DeferHumanInteractions,
+                extensionPins: runtime.Settings.ExtensionPins,
+                acceptedExtensionCapabilities: runtime.Settings.ExtensionCapabilityLease,
+                extensionIds: runtime.Settings.ExtensionIds
             ) ?? throw new AgwException(ErrorCodes.AgentExecutionFailed, "Agentflow could not be constructed.");
         var run = new WorkflowRunState();
         await using (workflowLease)

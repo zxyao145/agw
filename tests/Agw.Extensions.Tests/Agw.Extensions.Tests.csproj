@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <ProjectReference Include="../../src/server/Agw.Extensions/Agw.Extensions.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
+  </ItemGroup>
+  <Target Name="CopyExtensionIntegrationFixture" AfterTargets="Build">
+    <ItemGroup>
+      <ExtensionFixtureFiles Include="../Agw.Extensions.Runtime.Tests/Fixture/bin/$(Configuration)/net10.0/**/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(ExtensionFixtureFiles)"
+      DestinationFiles="@(ExtensionFixtureFiles->'$(OutDir)ExtensionFixture/%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
+</Project>

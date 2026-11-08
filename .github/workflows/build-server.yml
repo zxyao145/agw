@@ -120,14 +120,16 @@ jobs:
           dotnet build tests/Agw.Agents.Tests -c Release
           dotnet build tests/Agw.Jobs.Tests -c Release
           dotnet build tests/Agw.Files.Tests -c Release
-      - name: Configure Jobs and Files PostgreSQL tests
+          dotnet build tests/Agw.Extensions.Database.Tests -c Release
+          dotnet build tests/Agw.Extensions.Runtime.Tests -c Release
+      - name: Configure PostgreSQL test databases
         run: |
           mkdir -p .scratch
           cp .github/postgres-tests.json .scratch/postgres-tests.json
       - name: Test PostgreSQL fencing, event ordering, upgrades and scheduler capacity
         run: >-
           tests/Agw.Agents.Tests/bin/Release/net10.0/Agw.Agents.Tests
-          -filterVSTest "FullyQualifiedName~DurableDistributedStoreTests.Postgres_|FullyQualifiedName~DurableTurnUpgradeTests.Postgres_|FullyQualifiedName~DurableSchedulerTests.Postgres_"
+          -filterVSTest "FullyQualifiedName~DurableDistributedStoreTests.Postgres_|FullyQualifiedName~DurableTurnUpgradeTests.Postgres_|FullyQualifiedName~DurableSchedulerTests.Postgres_|FullyQualifiedName~TurnAcceptanceLockTests.Postgres_"
           -result-trx TestResults/Postgres/results.trx
           -failSkips
       - name: Test PostgreSQL job deletion and execution locks
@@ -141,6 +143,18 @@ jobs:
           tests/Agw.Files.Tests/bin/Release/net10.0/Agw.Files.Tests
           -filterVSTest "Category=Postgres"
           -result-trx TestResults/Postgres/files.trx
+          -failSkips
+      - name: Test PostgreSQL extension migrations, isolation and settings propagation
+        run: >-
+          tests/Agw.Extensions.Database.Tests/bin/Release/net10.0/Agw.Extensions.Database.Tests
+          -filterVSTest "Category=Postgres"
+          -result-trx TestResults/Postgres/extensions-database.trx
+          -failSkips
+      - name: Test collectible extension with private PostgreSQL dependencies
+        run: >-
+          tests/Agw.Extensions.Runtime.Tests/bin/Release/net10.0/Agw.Extensions.Runtime.Tests
+          -filterVSTest "Category=Postgres"
+          -result-trx TestResults/Postgres/extensions-runtime.trx
           -failSkips
       - name: Require actual PostgreSQL test execution
         run: python3 .github/scripts/verify-postgres-tests.py TestResults/Postgres

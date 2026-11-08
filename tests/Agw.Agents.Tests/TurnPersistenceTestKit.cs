@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain.Services;
+using Agw.Agents.Definitions.Persistence;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Inbound.Connections;
@@ -15,6 +18,8 @@ using Agw.Files;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
+using Agw.Infrastructure.Settings;
+using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Application.Persistence;
@@ -22,13 +27,20 @@ using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Projects.Domain.Services;
+using Agw.Providers.Application.Facades;
+using Agw.Settings;
+using Agw.Settings.Application.Persistence;
 using Agw.Shared.Configuration;
+using Agw.Shared.Contracts;
 using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
+using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Facades;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -67,7 +79,12 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(clock);
-        var dataRoot = Path.Combine(AppContext.BaseDirectory, ".scratch", "turn-persistence");
+        var dataRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "turn-persistence",
+            Guid.CreateVersion7().ToString("N")
+        );
         services.AddSingleton(
             AgwDataPaths.Resolve(Path.Combine(dataRoot, "data"), dataRoot, Path.Combine(dataRoot, "logs"))
         );
@@ -77,6 +94,7 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
+        services.AddScoped<IExtensionExecutionUsage, DurableExecutionScopeMaintenance>();
         services.AddScoped<IDurableExecutionEventSequence, DurableExecutionEventSequence>();
         services.AddScoped<IConversationTurnStore, ConversationTurnStore>();
         services.AddScoped<ITurnAcceptanceWriter, TurnAcceptanceWriter>();
@@ -97,6 +115,20 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         services.AddSingleton<DurableExecutionEventLog>();
         services.AddSingleton<DurableExecutionCoordinator>();
         configure?.Invoke(services);
+        if (!services.Any(descriptor => descriptor.ServiceType == typeof(IExtensionCapabilityCatalog)))
+        {
+            var extensionConfiguration = new ConfigurationBuilder()
+                .AddInMemoryCollection(
+                    new Dictionary<string, string?> { ["Extensions:Directory"] = Path.Combine(dataRoot, "extensions") }
+                )
+                .Build();
+            services.AddScoped<ISettingsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+            services.AddScoped<ICurrentUser, UserInfoService>();
+            services.AddScoped<IUserInfoService, UserInfoService>();
+            services.AddSettings();
+            services.AddTestExtensions(extensionConfiguration);
+        }
         Services = services.BuildServiceProvider();
     }
 
@@ -202,6 +234,36 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         );
 
     public AgwDbContext CreateContext() => new(DbOptions);
+
+    public async Task SeedAgentAsync(Guid agentId, string userId = UserId)
+    {
+        await using var context = CreateContext();
+        context.Agents.Add(
+            new Agent
+            {
+                Id = agentId,
+                Name = $"test-agent-{agentId:N}",
+                Type = AgentType.System,
+                CreateBy = userId,
+            }
+        );
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    public async Task SeedAgentflowAsync(Guid agentflowId, string userId = UserId)
+    {
+        await using var context = CreateContext();
+        context.Agentflows.Add(
+            new Agentflow
+            {
+                Id = agentflowId,
+                Name = $"test-agentflow-{agentflowId:N}",
+                CreateBy = userId,
+                CreateTime = Clock.GetUtcNow(),
+            }
+        );
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
 
     /// <summary>
     /// 在新的作用域中解析服务；作用域随测试环境一起释放。
@@ -392,11 +454,23 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
         IProjectTaskFacade? projectTasks,
         IProjectRuntimeFacade projects,
         DurableExecutionCoordinator? durable = null,
-        ExecutionPermissionService? permissions = null
+        ExecutionPermissionService? permissions = null,
+        IExtensionExecutionSelectionResolver? extensionSelectionResolver = null,
+        IExtensionCapabilityCatalog? extensionCapabilityCatalog = null
     )
     {
         var scope = Services.CreateAsyncScope();
         _scopes.Add(scope);
+        var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        IExtensionCapabilityCatalog catalog =
+            extensionCapabilityCatalog ?? scope.ServiceProvider.GetRequiredService<IExtensionCapabilityCatalog>();
+        var resolver =
+            extensionSelectionResolver
+            ?? new ExtensionExecutionSelectionResolver(
+                CreateAgentAppService(dbContext, scope.ServiceProvider.GetRequiredService<IUserInfoService>(), Locks),
+                new AgentflowDefinitionReader(dbContext),
+                catalog
+            );
         return new TurnAcceptanceService(
             projectTasks!,
             projects,
@@ -404,8 +478,32 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             scope.ServiceProvider.GetRequiredService<IConversationTurnStore>(),
             Broadcasts,
             Clock,
+            catalog,
+            resolver,
             permissions,
             durable
+        );
+    }
+
+    internal static AgentAppService CreateAgentAppService(
+        AgwDbContext context,
+        IUserInfoService currentUser,
+        IApplicationLock applicationLock
+    )
+    {
+        var skillReferences = new SkillReferenceFacade(context, currentUser);
+        var connectionReferences = new ConnectionReferenceFacade(context, currentUser);
+        var modelProviderReferences = new ModelProviderReferenceFacade(context, currentUser);
+        var definitionRepository = new AgentDefinitionRepository(context, currentUser);
+        return new AgentAppService(
+            context,
+            new AgentDefinitionDomainService(definitionRepository, modelProviderReferences),
+            new AgentResourceBindingDomainService(definitionRepository, skillReferences, connectionReferences),
+            modelProviderReferences,
+            skillReferences,
+            currentUser,
+            new AgentDeletionCoordinator(context, applicationLock),
+            applicationLock
         );
     }
 

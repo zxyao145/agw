@@ -72,7 +72,7 @@ export class ContextService {
   public constructor(app: HostContext["app"], workspace: WorkspaceState) {
     this.context = {
       app,
-      server: { id: "", name: "", kind: "local" },
+      server: { id: "", name: "", kind: "local", serverId: null },
       user: null,
       project: null,
       conversation: null,
@@ -110,9 +110,16 @@ export class ContextService {
 
   public setConnection(identity: ConnectionIdentity | null, server: ServerSummary | null): void {
     const key = identity ? connectionKeyOf(identity) : null;
+    const nextServer = server
+      ? {
+          ...server,
+          serverId: server.serverId ?? (key === this.key ? this.context.server.serverId : null),
+        }
+      : { id: "", name: "", kind: "local" as const, serverId: null };
     if (key === this.key) {
-      if (server && JSON.stringify(server) !== JSON.stringify(this.context.server))
-        this.replace({ server });
+      if (JSON.stringify(nextServer) !== JSON.stringify(this.context.server)) {
+        this.replace({ server: nextServer });
+      }
       return;
     }
     this.identity = identity ? { ...identity, baseUrl: normalizeBaseUrl(identity.baseUrl) } : null;
@@ -121,12 +128,18 @@ export class ContextService {
     this.pending.clear();
     for (const listener of this.connectionListeners) listener(key);
     this.replace({
-      server: server ?? { id: "", name: "", kind: "local" },
+      server: nextServer,
       user: null,
       project: null,
       conversation: null,
       target: null,
     });
+  }
+
+  public setServerId(connectionKey: string, serverId: string | null): void {
+    if (connectionKey !== this.key) return;
+    if (this.context.server.serverId === serverId) return;
+    this.replace({ server: { ...this.context.server, serverId } });
   }
 
   /** 携带旧连接标识的写入被丢弃。Writes carrying an old connection key are dropped. */

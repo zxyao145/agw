@@ -17,7 +17,10 @@ import type {
 ipcRenderer.on("agw:extension-port", (event, data: Omit<ExtensionPortMessage, "type">) => {
   const message: ExtensionPortMessage = {
     type: "agw:extension-port",
+    instanceId: data.instanceId,
     extensionId: data.extensionId,
+    origin: data.origin,
+    releaseHash: data.releaseHash,
     frameId: data.frameId,
     pageId: data.pageId,
   };
@@ -60,6 +63,12 @@ const bridge: AgwDesktopBridge = {
   attachExtensionHost: (hostInstanceId) =>
     ipcRenderer.invoke("agw:attach-extension-host", hostInstanceId),
   listExtensions: () => ipcRenderer.invoke("agw:list-extensions"),
+  markServerExtensionsUnavailable: (hostInstanceId) =>
+    ipcRenderer.invoke("agw:mark-server-extensions-unavailable", hostInstanceId),
+  hasServerExtensionRelease: (origin, extensionId, releaseHash) =>
+    ipcRenderer.invoke("agw:has-server-extension-release", origin, extensionId, releaseHash),
+  syncServerExtensionCatalog: (hostInstanceId, request) =>
+    ipcRenderer.invoke("agw:sync-server-extension-catalog", hostInstanceId, request),
   listExtensionRecoveryNotices: () => ipcRenderer.invoke("agw:list-extension-recovery-notices"),
   prepareExtensionInstall: (request) =>
     ipcRenderer.invoke("agw:prepare-extension-install", request),

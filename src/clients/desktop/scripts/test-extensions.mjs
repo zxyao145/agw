@@ -3,36 +3,51 @@
 // Full-flow extension integration test: build, start a SQLite Standalone Host and local services, then run
 // Electron three times (first launch, restart and performance).
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createWriteStream } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { connect, createServer as createTcpServer } from "node:net";
-import { join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { parseArgs } from "node:util";
 import electron from "electron";
 import { build } from "esbuild";
 import iconv from "iconv-lite";
+import { v7 as uuidV7 } from "uuid";
 
 import EXTENSION_IDS from "../test-fixtures/extension-ids.json" with { type: "json" };
 import {
   buildExtensionFixtures,
   HTTP_PORT_PLACEHOLDER,
+  validateManifest,
   writeSampleV2Zip,
 } from "./build-extension-fixtures.mjs";
+import { startHubProxy } from "./extension-test-proxy.mjs";
 import { buildBundledExtensions } from "./build-bundled-extensions.mjs";
 import { buildExtensionSdk } from "./build-extension-sdk.mjs";
 import { buildDesktopMain } from "./build-main.mjs";
+
+const { values } = parseArgs({
+  options: { scenario: { type: "string", default: "full" } },
+});
+if (!["full", "frame-visibility", "server-extension"].includes(values.scenario)) {
+  throw new Error(`Unknown extension test scenario: ${values.scenario}`);
+}
 
 const desktopDirectory = resolve(".");
 const repositoryRoot = resolve(desktopDirectory, "..", "..", "..");
 const root = resolve(".scratch/extension-tests");
 const userData = join(root, "user-data");
 const fixtures = join(root, "fixtures");
+const serverContentRoot = join(root, "server-content");
+const serverExtensionsDirectory = join(serverContentRoot, "Extensions");
 const projectDirectory = join(root, "project");
 const adminPassword = randomBytes(18).toString("hex");
+const serverExtensionId = uuidV7();
 const children = new Set();
+const childClosePromises = new WeakMap();
+let hostLog;
 
 const GUIDE_MARKDOWN = `# Guide
 
@@ -217,6 +232,116 @@ async function listen(server) {
   return server.address().port;
 }
 
+async function buildServerExtensionPackages(serverOutputDirectory) {
+  const desktopDirectory = join(fixtures, "server-extension", "desktop");
+  await mkdir(desktopDirectory, { recursive: true });
+  await writeFile(
+    join(desktopDirectory, "index.html"),
+    '<!doctype html><html><head><meta charset="utf-8"><title>Server E2E</title></head><body><main id="extension-version"></main><script type="module" src="index.js"></script></body></html>\n',
+  );
+  await writeFile(
+    join(desktopDirectory, "index.js"),
+    'import { defineView } from "/__agw/sdk.js";\n\ndefineView({ onLoad(api, params) { window.api = api; window.loadedFile = params?.file?.name ?? null; document.querySelector("#extension-version").textContent = api.manifest.version; } });\n',
+  );
+
+  const serverFiles = await readdir(serverOutputDirectory, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  const packageFiles = [
+    ...serverFiles
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const source = join(entry.parentPath, entry.name);
+        return {
+          source,
+          path: `server/${relative(serverOutputDirectory, source).split(sep).join("/")}`,
+        };
+      }),
+    ...["index.html", "index.js"].map((name) => ({
+      source: join(desktopDirectory, name),
+      path: `desktop/${name}`,
+    })),
+  ].sort((left, right) => left.path.localeCompare(right.path));
+  const racePayloadPath = join(desktopDirectory, "race-payload.bin");
+  if (values.scenario === "server-extension") {
+    await writeFile(racePayloadPath, randomBytes(64 * 1024 * 1024));
+  }
+
+  const output = {};
+  for (const version of ["1.0.0", "1.0.1"]) {
+    const versionFiles =
+      values.scenario === "server-extension" && version === "1.0.1"
+        ? [...packageFiles, { source: racePayloadPath, path: "desktop/race-payload.bin" }]
+        : packageFiles;
+    const files = Object.fromEntries(
+      await Promise.all(
+        versionFiles.map(async ({ source, path }) => [
+          path,
+          createHash("sha256")
+            .update(await readFile(source))
+            .digest("hex"),
+        ]),
+      ),
+    );
+    const manifest = {
+      manifestVersion: 2,
+      id: serverExtensionId,
+      name: "server-e2e",
+      displayName: "Server E2E",
+      version,
+      targets: 3,
+      files,
+      server: {
+        apiVersion: 1,
+        entryAssembly: "server/Agw.Extensions.Runtime.TestExtension.dll",
+        entryType: "Agw.Extensions.Runtime.Tests.Fixture.TestExtension",
+      },
+      desktop: {
+        apiVersion: 1,
+        permissions: ["context.user", "chat.composer"],
+        contributes: {
+          ribbon: [
+            {
+              id: "open",
+              title: "Server E2E",
+              icon: "Puzzle",
+              action: { type: "openMainView", view: "app" },
+            },
+          ],
+          mainViews: [
+            { id: "app", title: "Server E2E", icon: "Puzzle", entry: "desktop/index.html" },
+          ],
+          fileViewers: [
+            {
+              id: "viewer",
+              title: "Server E2E",
+              icon: "Puzzle",
+              patterns: ["*.md"],
+              entry: "desktop/index.html",
+            },
+          ],
+        },
+      },
+    };
+    const manifestJson = `${JSON.stringify(manifest, null, 2)}\n`;
+    await validateManifest(manifestJson, `server-extension-${version}`);
+    const packageDirectory = join(fixtures, "server-extension", version);
+    await mkdir(packageDirectory, { recursive: true });
+    for (const { source, path } of versionFiles) {
+      const destination = join(packageDirectory, ...path.split("/"));
+      await mkdir(dirname(destination), { recursive: true });
+      await cp(source, destination);
+    }
+    await writeFile(join(packageDirectory, "manifest.json"), manifestJson);
+    output[version] = {
+      directory: packageDirectory,
+      releaseHash: createHash("sha256").update(manifestJson).digest("hex"),
+    };
+  }
+  return output;
+}
+
 /** 取得一个空闲端口后释放，交给 Host 监听。Picks a free port and releases it for the Host. */
 async function freePort() {
   const probe = createServer();
@@ -312,12 +437,22 @@ async function startEchoService() {
  * The local test service: a normal path, a path that never responds, a redirect to an undeclared host, and
  * observations the Electron test reads.
  */
-async function startTestService(hubProxy, echo) {
+async function startTestService(hubProxy, echo, switchServerExtensionVersion) {
   const requests = [];
   let neverClosed = 0;
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://local");
     const headers = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+    if (url.pathname === "/__test/server-extension-version") {
+      const version = url.searchParams.get("version");
+      if (version !== "1.0.0" && version !== "1.0.1") {
+        response.writeHead(400).end();
+        return;
+      }
+      await switchServerExtensionVersion(version);
+      response.writeHead(204).end();
+      return;
+    }
     if (url.pathname === "/__test/state") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
@@ -327,6 +462,11 @@ async function startTestService(hubProxy, echo) {
     }
     if (url.pathname === "/__test/delay-hub") {
       hubProxy.setDelay(url.searchParams.get("enabled") === "true");
+      response.writeHead(204).end();
+      return;
+    }
+    if (url.pathname === "/__test/delay-catalog") {
+      hubProxy.setCatalogDelay(url.searchParams.get("enabled") === "true");
       response.writeHead(204).end();
       return;
     }
@@ -342,49 +482,6 @@ async function startTestService(hubProxy, echo) {
     }
   });
   return { server, port: await listen(server) };
-}
-
-/**
- * Host 前的 TCP 转发：开启延迟后，新的 `/api/hubs/exec` 连接不转发，直到客户端关闭。
- * A TCP forwarder in front of the Host: while delaying, new `/api/hubs/exec` connections are held until the client closes.
- */
-async function startHubProxy(hostPort) {
-  let delayHub = false;
-  let held = 0;
-  let heldClosed = 0;
-  let hubOpen = 0;
-  const server = createTcpServer((client) => {
-    client.once("data", (first) => {
-      client.pause();
-      const isHub = first.subarray(0, 64).toString("latin1").startsWith("GET /api/hubs/exec");
-      if (isHub && delayHub) {
-        held += 1;
-        client.on("error", () => undefined);
-        client.once("close", () => (heldClosed += 1));
-        return;
-      }
-      const upstream = connect(hostPort, "127.0.0.1", () => {
-        if (isHub) hubOpen += 1;
-        upstream.write(first);
-        client.pipe(upstream);
-        upstream.pipe(client);
-        client.resume();
-      });
-      upstream.once("close", () => {
-        if (isHub) hubOpen -= 1;
-        client.destroy();
-      });
-      upstream.on("error", () => client.destroy());
-      client.on("error", () => upstream.destroy());
-      client.once("close", () => upstream.destroy());
-    });
-  });
-  return {
-    server,
-    port: await listen(server),
-    setDelay: (enabled) => (delayHub = enabled),
-    state: () => ({ delayHub, held, heldClosed, hubOpen }),
-  };
 }
 
 async function api(baseUrl, session, method, path, body) {
@@ -424,6 +521,8 @@ async function prepareServerData(baseUrl, echoPort) {
     await api(baseUrl, session, "POST", "/api/auth/tokens", { name: "extension-tests-second" })
   ).token;
   session.bearer = firstToken;
+  const serverInfo = await api(baseUrl, session, "GET", "/api/server-info");
+  const authSession = await api(baseUrl, session, "GET", "/api/auth/session");
   const provider = await api(baseUrl, session, "POST", "/api/providers", {
     name: "echo-provider",
     providerType: 0,
@@ -529,6 +628,7 @@ async function prepareServerData(baseUrl, echoPort) {
   return {
     firstToken,
     secondToken,
+    serverOrigin: { serverId: serverInfo.serverId, userId: authSession.userId },
     agentId: agent.id,
     agentName: "echo",
     summaryAgentId: summaryAgent.id,
@@ -700,42 +800,95 @@ async function main() {
   await buildExtensionFixtures(fixtures);
 
   await run("dotnet", ["build", "src/server/Agw.Standalone.Host"], { cwd: repositoryRoot });
-  const hostPort = await freePort();
-  const hostLog = createWriteStream(join(root, "logs", "host.log"));
-  const host = spawn(
+  await run(
     "dotnet",
     [
-      "run",
-      "--no-build",
-      "--no-launch-profile",
-      "--project",
-      "src/server/Agw.Standalone.Host",
-      "--",
-      "--environment=Production",
-      `--urls=http://127.0.0.1:${hostPort}`,
-      `--AgwDataDir=${join(root, "server")}`,
-      `--AgwLogDir=${join(root, "logs")}`,
-      "--Database:Provider=sqlite",
-      `--Database:ConnectionString=Data Source=${join(root, "server", "agw.db")}`,
-      "--Execution:Provider=InProcess",
-      "--DistributedLock:Provider=inmemory",
-      `--Setup:AdminPassword=${adminPassword}`,
+      "build",
+      "tests/Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj",
     ],
-    { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd: repositoryRoot },
   );
-  children.add(host);
-  host.stdout.pipe(hostLog);
-  host.stderr.pipe(hostLog);
+  const serverExtensionPackages = await buildServerExtensionPackages(
+    join(
+      repositoryRoot,
+      "tests",
+      "Agw.Extensions.Runtime.Tests",
+      "Fixture",
+      "bin",
+      "Debug",
+      "net10.0",
+    ),
+  );
+  const hostPort = await freePort();
+  hostLog = createWriteStream(join(root, "logs", "host.log"));
+  const serverExtensionDirectory = join(serverExtensionsDirectory, serverExtensionId);
+  await mkdir(serverExtensionsDirectory, { recursive: true });
+  await cp(serverExtensionPackages["1.0.0"].directory, serverExtensionDirectory, {
+    recursive: true,
+  });
+  let host;
+  let currentServerExtensionVersion = "1.0.0";
   const hostUrl = `http://127.0.0.1:${hostPort}`;
-  await waitFor(async () => {
-    const response = await fetch(`${hostUrl}/api/server-info`);
-    return response.ok && (await response.json()).data?.initialized === true;
-  }, "the Standalone Host");
+  async function startHost() {
+    host = spawn(
+      "dotnet",
+      [
+        "run",
+        "--no-build",
+        "--no-launch-profile",
+        "--project",
+        "src/server/Agw.Standalone.Host",
+        "--",
+        "--environment=Production",
+        `--urls=http://127.0.0.1:${hostPort}`,
+        `--contentRoot=${serverContentRoot}`,
+        `--Extensions:Directory=${serverExtensionsDirectory}`,
+        `--AgwDataDir=${join(root, "server")}`,
+        `--AgwLogDir=${join(root, "logs")}`,
+        "--Database:Provider=sqlite",
+        `--Database:ConnectionString=Data Source=${join(root, "server", "agw.db")}`,
+        "--Execution:Provider=InProcess",
+        "--DistributedLock:Provider=inmemory",
+        `--Setup:AdminPassword=${adminPassword}`,
+      ],
+      { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    childClosePromises.set(host, once(host, "close"));
+    children.add(host);
+    host.stdout.pipe(hostLog, { end: false });
+    host.stderr.pipe(hostLog, { end: false });
+    await waitFor(async () => {
+      const response = await fetch(`${hostUrl}/api/server-info`);
+      return response.ok && (await response.json()).data?.initialized === true;
+    }, "the Standalone Host");
+  }
+  async function stopHost() {
+    const stopping = host;
+    if (!stopping) return;
+    const closed = childClosePromises.get(stopping);
+    if (stopping.exitCode === null && stopping.signalCode === null) {
+      stopping.kill();
+    }
+    await closed;
+    children.delete(stopping);
+    host = null;
+  }
+  async function switchServerExtensionVersion(version) {
+    if (version === currentServerExtensionVersion) return;
+    await stopHost();
+    await rm(serverExtensionDirectory, { recursive: true, force: true });
+    await cp(serverExtensionPackages[version].directory, serverExtensionDirectory, {
+      recursive: true,
+    });
+    currentServerExtensionVersion = version;
+    await startHost();
+  }
+  await startHost();
 
   const echo = await startEchoService();
   const serverData = await prepareServerData(hostUrl, echo.port);
   const hubProxy = await startHubProxy(hostPort);
-  const testService = await startTestService(hubProxy, echo);
+  const testService = await startTestService(hubProxy, echo, switchServerExtensionVersion);
   await installFixtures(testService.port);
 
   const remoteProfile = {
@@ -784,7 +937,14 @@ async function main() {
     logLevel: "warning",
   });
 
-  for (const phase of ["first", "restart", "performance"]) {
+  const phases =
+    values.scenario === "full"
+      ? ["first", "restart", "performance"]
+      : values.scenario === "server-extension"
+        ? ["server-extension", "server-restart"]
+        : [values.scenario];
+  for (const phase of phases) {
+    if (phase === "server-restart") hubProxy.setCatalogDelay(true);
     const performance = phase === "performance" ? await writePerformanceInputs() : null;
     await writeFile(
       join(root, "config.json"),
@@ -799,6 +959,15 @@ async function main() {
           hostUrl,
           performance,
           results: join(root, "performance.json"),
+          serverExtension: {
+            id: serverExtensionId,
+            name: "server-e2e",
+            displayName: "Server E2E",
+            versionV1: "1.0.0",
+            versionV2: "1.0.1",
+            releaseHashV1: serverExtensionPackages["1.0.0"].releaseHash,
+            releaseHashV2: serverExtensionPackages["1.0.1"].releaseHash,
+          },
           ...serverData,
         },
         null,
@@ -807,7 +976,11 @@ async function main() {
     );
     console.log(`--- Electron (${phase}) ---`);
     await run(electron, [entry], { cwd: desktopDirectory });
+    if (phase === "first" || phase === "server-extension") {
+      await switchServerExtensionVersion("1.0.1");
+    }
   }
+  await stopHost();
 }
 
 try {
@@ -817,6 +990,15 @@ try {
   console.error(error);
   process.exitCode = 1;
 } finally {
-  for (const child of children) child.kill();
+  for (const child of children) {
+    const closed = childClosePromises.get(child);
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await closed;
+  }
+  if (hostLog) {
+    const finished = once(hostLog, "finish");
+    hostLog.end();
+    await finished;
+  }
   process.exit();
 }

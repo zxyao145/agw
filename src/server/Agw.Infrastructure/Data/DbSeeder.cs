@@ -3,6 +3,7 @@ using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
+using Agw.Extensions.Contracts;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts;
 using Agw.Providers.Contracts;
@@ -74,6 +75,7 @@ public class DbSeeder
     private readonly TimeProvider _timeProvider;
     private readonly AgwDataPaths _dataPaths;
     private readonly IProjectWorkspaceAccess _workspaceAccess;
+    private readonly IServerAuthStatePersistence _authentication;
     private readonly IReadOnlyList<IAgentSkillRegistration> _skillRegistrations;
 
     public DbSeeder(
@@ -82,10 +84,12 @@ public class DbSeeder
         TimeProvider timeProvider,
         AgwDataPaths dataPaths,
         IProjectWorkspaceAccess workspaceAccess,
+        IServerAuthStatePersistence authentication,
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null
     )
     {
         _context = context;
+        _authentication = authentication;
         _logger = logger;
         _timeProvider = timeProvider;
         _dataPaths = dataPaths;
@@ -118,6 +122,7 @@ public class DbSeeder
             }
             await SeedDefaultAgentflowAsync(agents);
             await SeedQuickPromptsAsync();
+            await SeedServerIdentityAsync();
 
             await _context.SaveChangesAsync();
             _logger.LogInformation("Database seeding completed successfully");
@@ -137,6 +142,7 @@ public class DbSeeder
     {
         using var systemScope = UserInfoUtil.PushSystemScope();
         await SeedBuiltInClassSkillsAsync();
+        await UpgradeServerIdentityAsync();
         await _context.SaveChangesAsync();
     }
 
@@ -196,6 +202,44 @@ public class DbSeeder
             )
             .ToListAsync(cancellationToken);
         return rows.Select(row => (row.Id, row.UserId)).ToArray();
+    }
+
+    private async Task SeedServerIdentityAsync()
+    {
+        if (
+            await _context.Settings.AnyAsync(setting =>
+                setting.Key == ExtensionDeploymentSettings.Key && setting.UserId == null
+            )
+        )
+            return;
+        _context.Settings.Add(
+            new Setting
+            {
+                Id = Guid.CreateVersion7(),
+                Key = ExtensionDeploymentSettings.Key,
+                ValueJson = JsonSerializer.Serialize(new { serverId = Guid.CreateVersion7().ToString() }),
+                Version = 1,
+                CreateBy = Constants.AdminUserId,
+                UpdateBy = Constants.AdminUserId,
+            }
+        );
+    }
+
+    private async Task UpgradeServerIdentityAsync()
+    {
+        var provisioned = await _authentication.ReadServerIdentityProvisionedAsync();
+        if (provisioned is null or true)
+            return;
+
+        // 首次升级同时保存身份和标记，后续启动保留已保存的身份状态。
+        // The first upgrade saves the identity and marker atomically; later starts preserve that persisted state.
+        await using var transaction =
+            _context.Database.CurrentTransaction == null ? await _context.Database.BeginTransactionAsync() : null;
+        await SeedServerIdentityAsync();
+        await _authentication.MarkServerIdentityProvisionedAsync();
+        await _context.SaveChangesAsync();
+        if (transaction is not null)
+            await transaction.CommitAsync();
     }
 
     private async Task SeedQuickPromptsAsync()

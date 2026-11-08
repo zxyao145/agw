@@ -24,10 +24,16 @@ import type {
   ExtensionWatchRequest,
   InstalledExtension,
   SaveExtensionSdkTypesResult,
+  ServerExtensionArchive,
+  ServerExtensionCatalog,
+  ServerExtensionOrigin,
   ThemeStyleRequest,
   ThemeStyleText,
 } from "../../shared/contracts";
-import { EXTENSION_MANIFEST_VERSION_CURRENT } from "../../shared/extension-manifest";
+import {
+  desktopApiVersion,
+  EXTENSION_SDK_API_VERSION_CURRENT,
+} from "../../shared/extension-manifest";
 import { type HostPermission, parseHostPermissions } from "../../shared/extension-host-permissions";
 import type { ExtensionPermission } from "@agw/extension-sdk";
 import type { ConfirmationService } from "../confirmation/confirmation-service";
@@ -51,6 +57,7 @@ import { ExtensionInstaller } from "./extension-installer";
 import { ExtensionOperationError } from "./extension-ipc-result";
 import { packageDigest } from "./extension-package-digest";
 import { serviceWorkerRegistrationOutcome } from "./extension-network-rules";
+import { ServerExtensionPackageStore } from "./server-extension-package-store";
 import type { ExtensionProtocolState } from "./extension-protocol";
 import { ExtensionRuntimeReset } from "./extension-runtime-reset";
 import { ExtensionSafeModeGuard } from "./extension-safe-mode";
@@ -58,6 +65,7 @@ import { ExtensionSessionFactory } from "./extension-session";
 import { themeStyleCompiler } from "./extension-theme-style-cache";
 import { ExtensionViewManager } from "./extension-view-manager";
 import { ReplacedFileRegistry } from "./replaced-file-registry";
+import { resolveServerExtensionCatalogEntries } from "./server-extension-catalog-sync";
 
 export type ExtensionRuntimeOptions = {
   userDataDirectory: string;
@@ -79,6 +87,13 @@ function sameMembers(left: readonly string[], right: readonly string[]): boolean
   return left.length === right.length && left.every((item) => right.includes(item));
 }
 
+type ServerCatalogSyncRequest = {
+  origin: ServerExtensionOrigin;
+  catalog: ServerExtensionCatalog;
+  archives: ServerExtensionArchive[];
+  failures?: Array<{ extensionId: string; releaseHash: string; message: string }>;
+};
+
 /** Electron 主进程中的 extension 运行时。The extension runtime in the Electron main process. */
 export class ExtensionRuntime {
   /** 用户安装的 extension 包：`<userData>/extensions/packages/<id>`。User-installed packages. */
@@ -91,6 +106,13 @@ export class ExtensionRuntime {
   public readonly reset: ExtensionRuntimeReset;
 
   private catalog = new Map<string, SourcedCatalogEntry>();
+  private readonly serverInstances = new Map<string, SourcedCatalogEntry>();
+  private readonly serverReleases = new Map<string, SourcedCatalogEntry>();
+  private readonly serverCatalogRevisions = new Map<string, number>();
+  private readonly serverCatalogInstances = new Map<string, Set<string>>();
+  private serverSyncDepth = 0;
+  private serverCatalogSyncSucceeded = false;
+  private pinnedThemeRelease: { themeId: string; releaseHash: string } | null = null;
   private extensionSettings: Record<string, ExtensionSettings> = {};
   private recoveryNotices: ExtensionRecoveryNotice[] = [];
   /** 已经批准、尚未提交的安装：installId → 批准绑定的包摘要、版本与权限。Approved installs not yet committed: installId → the bound digest, version and grants. */
@@ -106,17 +128,22 @@ export class ExtensionRuntime {
   private readonly proxies = new Map<string, ExtensionEgressProxy>();
   private readonly sessions: ExtensionSessionFactory;
   private readonly installer: ExtensionInstaller;
+  private readonly serverPackages: ServerExtensionPackageStore;
 
   public constructor(private readonly options: ExtensionRuntimeOptions) {
     const extensionsDirectory = join(options.userDataDirectory, "extensions");
     this.packagesDirectory = join(extensionsDirectory, "packages");
     this.dataDirectory = join(extensionsDirectory, "data");
+    this.serverPackages = new ServerExtensionPackageStore(
+      join(extensionsDirectory, "server-packages"),
+      options.appVersion,
+    );
     this.watcher = new ExtensionFileWatcher((event) => this.emit(event), this.replacedFiles);
     this.sessions = new ExtensionSessionFactory({
       sdkDirectory: options.sdkDirectory,
-      protocolState: (id) => this.protocolState(id),
-      grantedPermissions: (id) => this.grantedPermissions(id),
-      hostPermissions: (id) => this.hostPermissions(id),
+      protocolState: (id, releaseHash) => this.protocolState(id, releaseHash),
+      grantedPermissions: (id, webContentsId) => this.grantedPermissions(id, webContentsId),
+      hostPermissions: (id, webContentsId) => this.hostPermissions(id, webContentsId),
       onRequestBlocked: (event) => this.emit(event),
       onServiceWorkerRegistered: (id, scope) => void this.serviceWorkerRegistered(id, scope),
     });
@@ -134,8 +161,8 @@ export class ExtensionRuntime {
       registry: this.registry,
       sessions: this.sessions,
       preloadPath: options.extensionPreloadPath,
-      manifestVersion: (id) => this.validEntry(id).manifest.manifestVersion,
-      hostPermissions: (id) => this.hostPermissions(id),
+      apiVersion: (id, releaseHash) => desktopApiVersion(this.validEntry(id, releaseHash).manifest),
+      hostPermissions: (id, webContentsId) => this.hostPermissions(id, webContentsId),
       emit: (event) => this.emit(event),
       onPageReplaced: (frame, pageId) => {
         this.watcher.releasePage(frame.frameId, pageId);
@@ -158,6 +185,7 @@ export class ExtensionRuntime {
   /** 启动时先恢复未完成的安装与卸载，再扫描。At startup, recover unfinished installs and uninstalls, then scan. */
   public async initialize(): Promise<void> {
     this.recoveryNotices = await this.installer.recover();
+    await this.serverPackages.initialize();
     await this.refresh();
   }
 
@@ -173,8 +201,109 @@ export class ExtensionRuntime {
   public async listExtensions(): Promise<InstalledExtension[]> {
     await this.refresh();
     return [...this.catalog.values()].map((entry) =>
-      toInstalledExtension(entry, this.extensionSettings[entry.id]),
+      toInstalledExtension(entry, this.extensionSettings[entry.instanceId ?? entry.id]),
     );
+  }
+
+  public hasServerExtensionRelease(
+    origin: ServerExtensionOrigin,
+    extensionId: string,
+    releaseHash: string,
+  ): Promise<boolean> {
+    return this.serverPackages.has(origin, extensionId, releaseHash);
+  }
+
+  public async markServerExtensionsUnavailable(hostInstanceId: string): Promise<void> {
+    this.registry.assertHost(hostInstanceId);
+    for (const [instanceId, entry] of this.serverInstances) {
+      if (entry.serverAvailable)
+        this.serverInstances.set(instanceId, { ...entry, serverAvailable: false });
+    }
+    await this.refresh();
+  }
+
+  public async syncServerExtensionCatalog(
+    hostInstanceId: string,
+    request: ServerCatalogSyncRequest,
+  ): Promise<boolean> {
+    this.serverSyncDepth++;
+    let applied: boolean;
+    try {
+      applied = await this.applyServerExtensionCatalog(hostInstanceId, request);
+    } finally {
+      this.serverSyncDepth--;
+    }
+    this.serverCatalogSyncSucceeded ||= applied;
+    await this.pruneServerPackages();
+    return applied;
+  }
+
+  private async applyServerExtensionCatalog(
+    hostInstanceId: string,
+    request: ServerCatalogSyncRequest,
+  ): Promise<boolean> {
+    this.registry.assertHost(hostInstanceId);
+    if (request.catalog.serverId !== request.origin.serverId) {
+      throw new Error("The Server catalog belongs to another Server.");
+    }
+    if (!Number.isSafeInteger(request.catalog.revision) || request.catalog.revision < 0) {
+      throw new Error("The Server catalog revision is invalid.");
+    }
+    const originKey = JSON.stringify([request.origin.serverId, request.origin.userId]);
+    const previousRevision = this.serverCatalogRevisions.get(originKey);
+    if (
+      previousRevision === request.catalog.revision &&
+      request.catalog.extensions.length === 0 &&
+      !request.failures?.length
+    ) {
+      const currentInstances = this.serverCatalogInstances.get(originKey) ?? new Set<string>();
+      for (const [instanceId, entry] of this.serverInstances) {
+        if (!entry.origin) continue;
+        const sameOrigin =
+          entry.origin.serverId === request.origin.serverId &&
+          entry.origin.userId === request.origin.userId;
+        const serverAvailable = sameOrigin && currentInstances.has(instanceId);
+        if (entry.serverAvailable !== serverAvailable) {
+          this.serverInstances.set(instanceId, { ...entry, serverAvailable });
+        }
+      }
+      await this.refresh();
+      return true;
+    }
+
+    const resolvedEntries = await resolveServerExtensionCatalogEntries({
+      packages: this.serverPackages,
+      origin: request.origin,
+      catalog: request.catalog,
+      archives: request.archives,
+      failures: request.failures,
+      previousInstances: this.serverInstances,
+    });
+    const currentInstances = new Set<string>();
+    let available = true;
+    for (const resolved of resolvedEntries) {
+      const key = this.serverReleaseKey(resolved.instanceId, resolved.releaseHash);
+      if (resolved.available) {
+        this.serverReleases.set(key, resolved.entry);
+        currentInstances.add(resolved.instanceId);
+      } else available = false;
+      this.serverInstances.set(resolved.instanceId, resolved.entry);
+    }
+
+    for (const [instanceId, entry] of this.serverInstances) {
+      if (
+        entry.origin &&
+        (!currentInstances.has(instanceId) ||
+          entry.origin.serverId !== request.origin.serverId ||
+          entry.origin.userId !== request.origin.userId)
+      ) {
+        this.serverInstances.set(instanceId, { ...entry, serverAvailable: false });
+      }
+    }
+    this.serverCatalogInstances.set(originKey, currentInstances);
+    this.serverCatalogRevisions.set(originKey, request.catalog.revision);
+    await this.refresh();
+    return available;
   }
 
   public listRecoveryNotices(): ExtensionRecoveryNotice[] {
@@ -261,7 +390,7 @@ export class ExtensionRuntime {
     await this.refresh();
     return toInstalledExtension(
       this.catalog.get(entry.id) ?? { ...entry, source: "user" },
-      this.extensionSettings[entry.id],
+      this.extensionSettings[entry.instanceId ?? entry.id],
     );
   }
 
@@ -273,6 +402,9 @@ export class ExtensionRuntime {
   public async uninstall(extensionId: string, deleteData: boolean): Promise<void> {
     const entry = this.catalog.get(extensionId);
     if (!entry) throw new Error(`Extension ${extensionId} is not installed.`);
+    if (entry.source === "server") {
+      throw new Error("Server-managed extensions are removed by the Server administrator.");
+    }
     this.releaseExtension(extensionId);
     await themeStyleCompiler.invalidate(entry.directory);
     if (entry.source === "bundled") await this.installer.removeBundled(extensionId, deleteData);
@@ -315,6 +447,9 @@ export class ExtensionRuntime {
     const style = await themeStyleCompiler.compile(entry.directory, contribution.path);
     if (style.styleId !== request.styleId) throw changed();
     await themeStyleCompiler.pin(entry.directory, contribution.path);
+    this.pinnedThemeRelease = entry.releaseHash
+      ? { themeId: request.themeId, releaseHash: entry.releaseHash }
+      : null;
     return { styleId: style.styleId, cssText: style.cssText };
   }
 
@@ -326,6 +461,8 @@ export class ExtensionRuntime {
    */
   public async setEnabled(extensionId: string, enabled: boolean): Promise<boolean> {
     if (!enabled) {
+      this.registry.revokeGrants(extensionId);
+      this.grants.release(extensionId);
       this.http.releaseExtension(extensionId);
       this.watcher.releaseExtension(extensionId);
       await this.options.settings.setExtensionEnabled(extensionId, false);
@@ -409,6 +546,7 @@ export class ExtensionRuntime {
     const proxy = this.proxies.get(extensionId);
     this.proxies.delete(extensionId);
     await proxy?.close();
+    await this.pruneServerPackages();
   }
 
   public async openDirectory(directory: string): Promise<void> {
@@ -432,7 +570,7 @@ export class ExtensionRuntime {
       : await dialog.showOpenDialog(options);
     if (result.canceled || result.filePaths.length === 0) return { canceled: true };
     const directory = result.filePaths[0];
-    const source = join(this.options.sdkDirectory, `v${EXTENSION_MANIFEST_VERSION_CURRENT}`);
+    const source = join(this.options.sdkDirectory, `v${EXTENSION_SDK_API_VERSION_CURRENT}`);
     await copyFile(join(source, "sdk.d.ts"), join(directory, "sdk.d.ts"));
     await copyFile(join(source, "manifest.schema.json"), join(directory, "manifest.schema.json"));
     return { canceled: false, directory };
@@ -442,14 +580,30 @@ export class ExtensionRuntime {
 
   public createFrame(hostInstanceId: string, request: CreateExtensionFrameRequest): void {
     this.registry.assertHost(hostInstanceId);
-    this.validEntry(request.extensionId);
-    if (!this.extensionSettings[request.extensionId]?.enabled) {
-      throw new Error(`Extension ${request.extensionId} is not enabled.`);
+    const entry = this.validEntry(request.instanceId, request.releaseHash);
+    if (entry.id !== request.extensionId)
+      throw new Error("The frame extension identity is invalid.");
+    if (
+      entry.source === "server"
+        ? !entry.origin ||
+          !this.sameOrigin(entry.origin, request.origin) ||
+          entry.releaseHash !== request.releaseHash
+        : request.origin !== null || request.releaseHash !== null
+    ) {
+      throw new Error("The frame source identity is invalid.");
     }
-    if (!this.proxies.has(request.extensionId)) {
-      throw new Error(`Extension ${request.extensionId} has not begun activation.`);
+    if (!this.extensionSettings[request.instanceId]?.enabled) {
+      throw new Error(`Extension ${request.instanceId} is not enabled.`);
+    }
+    if (!this.proxies.has(request.instanceId)) {
+      throw new Error(`Extension ${request.instanceId} has not begun activation.`);
     }
     this.views.create(request);
+    const settings = this.extensionSettings[request.instanceId];
+    this.registry.approveGrants(request.frameId, {
+      permissions: settings.grantedPermissions,
+      hostPermissions: settings.grantedHostPermissions,
+    });
   }
 
   public updateFrameLayout(
@@ -491,9 +645,10 @@ export class ExtensionRuntime {
     this.views.setBackground(color);
   }
 
-  public destroyFrame(hostInstanceId: string, frameId: string): void {
+  public async destroyFrame(hostInstanceId: string, frameId: string): Promise<void> {
     this.registry.assertHost(hostInstanceId);
     this.views.destroy(frameId);
+    await this.pruneServerPackages();
   }
 
   public terminateFrameProcess(hostInstanceId: string, frameId: string): void {
@@ -539,7 +694,7 @@ export class ExtensionRuntime {
     const context = this.accessContext(caller);
     await this.files.withReadAccess(context, request.uri, (path) =>
       this.watcher.add(
-        { extensionId: caller.extensionId, frameId: caller.frameId, pageId: caller.pageId },
+        { extensionId: caller.instanceId, frameId: caller.frameId, pageId: caller.pageId },
         request.watchId,
         path,
         request.recursive,
@@ -550,7 +705,7 @@ export class ExtensionRuntime {
 
   public unwatch(caller: ExtensionCaller, watchId: string): null {
     this.checkCaller(caller);
-    this.watcher.remove(caller.extensionId, watchId);
+    this.watcher.remove(caller.instanceId, watchId);
     return null;
   }
 
@@ -573,7 +728,8 @@ export class ExtensionRuntime {
       ? await dialog.showOpenDialog(window, dialogOptions)
       : await dialog.showOpenDialog(dialogOptions);
     if (result.canceled) return [];
-    for (const path of result.filePaths) await this.grants.grantRead(caller.extensionId, path);
+    this.checkCaller(caller);
+    for (const path of result.filePaths) await this.grants.grantRead(caller.instanceId, path);
     return result.filePaths.map((path) => pathToFileURL(path).toString());
   }
 
@@ -592,7 +748,8 @@ export class ExtensionRuntime {
       ? await dialog.showSaveDialog(window, dialogOptions)
       : await dialog.showSaveDialog(dialogOptions);
     if (result.canceled || !result.filePath) return null;
-    await this.grants.grantWrite(caller.extensionId, result.filePath);
+    this.checkCaller(caller);
+    await this.grants.grantWrite(caller.instanceId, result.filePath);
     return pathToFileURL(result.filePath).toString();
   }
 
@@ -607,77 +764,109 @@ export class ExtensionRuntime {
     caller: ExtensionCaller,
     request: ExtensionHttpRequest,
   ): Promise<ExtensionHttpResult> {
-    this.checkCaller(caller);
+    const grants = this.checkCaller(caller);
     return this.http.request(
-      { extensionId: caller.extensionId, frameId: caller.frameId, pageId: caller.pageId },
-      this.hostPermissions(caller.extensionId),
+      { extensionId: caller.instanceId, frameId: caller.frameId, pageId: caller.pageId },
+      parseHostPermissions(grants.hostPermissions),
       request,
     );
   }
 
   /* ---------- 内部 Internal ---------- */
 
-  /** 能力通道的检查顺序：宿主登记 → 已启用 → frame 与页面。Capability checks: host registration, enabled, frame and page. */
-  private checkCaller(caller: ExtensionCaller): void {
+  /** 能力请求需要当前宿主和 frame 的已批准权限。Capability calls require the current host and the frame's approved grants. */
+  private checkCaller(caller: ExtensionCaller): ExtensionGrants {
     if (!this.registry.isCurrentHost(caller.hostInstanceId)) {
       throw new ExtensionOperationError(
         "ERR_FRAME_GONE",
         "This extension host is no longer attached.",
       );
     }
-    const entry = this.catalog.get(caller.extensionId);
-    if (
-      !entry ||
-      entry.validation !== "valid" ||
-      !this.extensionSettings[caller.extensionId]?.enabled
-    ) {
-      throw new ExtensionOperationError(
-        "ERR_EXTENSION_DISABLED",
-        `Extension ${caller.extensionId} is not enabled.`,
-      );
-    }
-    this.registry.validateCaller(caller);
+    return this.registry.requireGrants(
+      caller,
+      this.extensionSettings[caller.instanceId]?.enabled === true,
+    );
   }
 
   private accessContext(caller: ExtensionCaller): FileAccessContext {
-    this.checkCaller(caller);
+    const grants = this.checkCaller(caller);
     return {
-      extensionId: caller.extensionId,
-      grantedPermissions: this.grantedPermissions(caller.extensionId),
-      storageDirectory: join(this.dataDirectory, caller.extensionId),
+      extensionId: caller.instanceId,
+      grantedPermissions: grants.permissions,
+      storageDirectory: join(this.dataDirectory, caller.instanceId),
     };
   }
 
   private validEntry(
-    extensionId: string,
-  ): CatalogEntry & { manifest: NonNullable<CatalogEntry["manifest"]> } {
-    const entry = this.catalog.get(extensionId);
+    instanceId: string,
+    releaseHash?: string | null,
+  ): SourcedCatalogEntry & { manifest: NonNullable<CatalogEntry["manifest"]> } {
+    const entry =
+      releaseHash === undefined || releaseHash === null
+        ? this.catalog.get(instanceId)
+        : this.serverReleases.get(this.serverReleaseKey(instanceId, releaseHash));
     if (!entry || entry.validation !== "valid" || !entry.manifest) {
-      throw new Error(`Extension ${extensionId} is not installed or not valid.`);
+      throw new Error(`Extension instance ${instanceId} is not installed or not valid.`);
     }
-    return entry as CatalogEntry & { manifest: NonNullable<CatalogEntry["manifest"]> };
+    return entry as SourcedCatalogEntry & { manifest: NonNullable<CatalogEntry["manifest"]> };
   }
 
-  private protocolState(extensionId: string): ExtensionProtocolState | null {
-    const entry = this.catalog.get(extensionId);
+  private protocolState(
+    instanceId: string,
+    releaseHash: string | null,
+  ): ExtensionProtocolState | null {
+    const entry =
+      releaseHash === null
+        ? this.catalog.get(instanceId)
+        : this.serverReleases.get(this.serverReleaseKey(instanceId, releaseHash));
     if (!entry || entry.validation !== "valid" || !entry.manifest) return null;
-    const settings = this.extensionSettings[extensionId];
+    const settings = this.extensionSettings[instanceId];
+    const retainedGrants = this.registry
+      .framesOf(instanceId)
+      .find((frame) => frame.releaseHash === releaseHash && frame.approvedGrants)?.approvedGrants;
     return {
       manifest: entry.manifest,
       rootDirectory: entry.directory,
-      enabled: settings?.enabled ?? false,
-      grantedHostPermissions: settings?.enabled ? settings.grantedHostPermissions : [],
+      enabled: settings?.enabled === true || retainedGrants != null,
+      grantedHostPermissions:
+        retainedGrants?.hostPermissions ??
+        (settings?.enabled ? settings.grantedHostPermissions : []),
     };
   }
 
-  private grantedPermissions(extensionId: string): readonly ExtensionPermission[] {
-    const settings = this.extensionSettings[extensionId];
-    return settings?.enabled ? settings.grantedPermissions : [];
+  private serverReleaseKey(instanceId: string, releaseHash: string): string {
+    return instanceId + "\u0000" + releaseHash;
   }
 
-  private hostPermissions(extensionId: string): readonly HostPermission[] {
+  private sameOrigin(left: ServerExtensionOrigin, right: ServerExtensionOrigin | null): boolean {
+    return right !== null && left.serverId === right.serverId && left.userId === right.userId;
+  }
+
+  private grantedPermissions(
+    extensionId: string,
+    webContentsId?: number,
+  ): readonly ExtensionPermission[] {
+    const frame =
+      webContentsId === undefined ? undefined : this.registry.findByWebContents(webContentsId);
+    return frame?.instanceId === extensionId ? (frame.approvedGrants?.permissions ?? []) : [];
+  }
+
+  private hostPermissions(extensionId: string, webContentsId?: number): readonly HostPermission[] {
+    if (webContentsId !== undefined) {
+      const frame = this.registry.findByWebContents(webContentsId);
+      return parseHostPermissions(
+        frame?.instanceId === extensionId ? (frame.approvedGrants?.hostPermissions ?? []) : [],
+      );
+    }
     const settings = this.extensionSettings[extensionId];
-    return settings?.enabled ? parseHostPermissions(settings.grantedHostPermissions) : [];
+    return parseHostPermissions([
+      ...new Set([
+        ...(settings?.enabled ? settings.grantedHostPermissions : []),
+        ...this.registry
+          .framesOf(extensionId)
+          .flatMap((frame) => frame.approvedGrants?.hostPermissions ?? []),
+      ]),
+    ]);
   }
 
   private releaseExtension(extensionId: string): void {
@@ -703,26 +892,62 @@ export class ExtensionRuntime {
       scanExtensionDirectory(this.packagesDirectory, this.options.appVersion, "user"),
       this.options.settings.load(),
     ]);
-    const entries = mergeExtensionCatalogs(bundled, user, settings.removedBundledExtensions);
-    this.catalog = new Map(entries.map((entry) => [entry.id, entry]));
+    const entries = mergeExtensionCatalogs(bundled, user, settings.removedBundledExtensions, [
+      ...this.serverInstances.values(),
+    ]);
+    this.catalog = new Map(entries.map((entry) => [entry.instanceId ?? entry.id, entry]));
     // 内置 extension 的声明视为已批准；用户 extension 有新增项时停用等待批准。
     // Bundled declarations count as approved; user extensions with new entries are disabled until approved.
-    const declared: Record<"bundled" | "user", Map<string, ExtensionGrants>> = {
+    const declared: Record<"bundled" | "user" | "server", Map<string, ExtensionGrants>> = {
       bundled: new Map(),
       user: new Map(),
+      server: new Map(),
     };
     for (const entry of entries) {
-      if (entry.validation === "valid" && entry.manifest)
-        declared[entry.source].set(entry.id, declaredGrants(entry.manifest));
+      if (entry.validation === "valid" && entry.manifest) {
+        declared[entry.source].set(entry.instanceId ?? entry.id, declaredGrants(entry.manifest));
+      }
     }
     await this.options.settings.applyBundledExtensions(declared.bundled);
-    await this.options.settings.reconcileExtensionGrants(declared.user);
+    await this.options.settings.reconcileExtensionGrants(
+      new Map([...declared.user, ...declared.server]),
+    );
     await this.reloadSettings();
   }
 
   private async reloadSettings(): Promise<void> {
-    this.extensionSettings = (await this.options.settings.load()).extensions;
+    const settings = await this.options.settings.load();
+    this.extensionSettings = settings.extensions;
+    if (this.pinnedThemeRelease?.themeId !== settings.appearance.theme)
+      this.pinnedThemeRelease = null;
     await this.options.onSettingsChanged();
+  }
+
+  private async pruneServerPackages(): Promise<void> {
+    if (this.serverSyncDepth > 0 || !this.serverCatalogSyncSucceeded) return;
+    const retainedKeys = new Set<string>();
+    const retainedHashes = new Set<string>();
+    for (const instanceIds of this.serverCatalogInstances.values()) {
+      for (const instanceId of instanceIds) {
+        const hash = this.serverInstances.get(instanceId)?.releaseHash;
+        if (hash) {
+          retainedKeys.add(this.serverReleaseKey(instanceId, hash));
+          retainedHashes.add(hash);
+        }
+      }
+    }
+    for (const frame of this.registry.all()) {
+      if (frame.releaseHash) {
+        retainedKeys.add(this.serverReleaseKey(frame.instanceId, frame.releaseHash));
+        retainedHashes.add(frame.releaseHash);
+      }
+    }
+    if (this.pinnedThemeRelease) retainedHashes.add(this.pinnedThemeRelease.releaseHash);
+    for (const [key, entry] of this.serverReleases) {
+      if (!retainedKeys.has(key) && entry.releaseHash !== this.pinnedThemeRelease?.releaseHash)
+        this.serverReleases.delete(key);
+    }
+    await this.serverPackages.prune(retainedHashes);
   }
 
   private async serviceWorkerRegistered(extensionId: string, scope: string): Promise<void> {
@@ -739,6 +964,10 @@ export class ExtensionRuntime {
 
   private emit(event: ExtensionEvent): void {
     const window = this.options.getMainWindow();
-    if (window && !window.isDestroyed()) window.webContents.send("agw:extension-event", event);
+    if (window && !window.isDestroyed()) {
+      const instanceId = event.instanceId ?? event.extensionId;
+      const extensionId = this.catalog.get(instanceId)?.id ?? event.extensionId;
+      window.webContents.send("agw:extension-event", { ...event, instanceId, extensionId });
+    }
   }
 }

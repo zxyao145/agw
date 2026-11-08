@@ -23,6 +23,27 @@ public sealed class EfSettingsPersistence : ISettingsPersistence
             .Select(setting => new SettingDocument { ValueJson = setting.ValueJson, Version = setting.Version })
             .SingleOrDefaultAsync(cancellationToken);
 
+    public async Task<SettingDocument?> ReadGlobalForShareAsync(string key, CancellationToken cancellationToken)
+    {
+        var dbContext = (AgwDbContext)_context;
+        if (dbContext.Database.ProviderName != "Npgsql.EntityFrameworkCore.PostgreSQL")
+        {
+            return await Query(key, null)
+                .AsNoTracking()
+                .Select(setting => new SettingDocument { ValueJson = setting.ValueJson, Version = setting.Version })
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
+        var setting = await dbContext
+            .Settings.FromSqlInterpolated($"SELECT * FROM setting WHERE \"key\" = {key} AND user_id IS NULL FOR SHARE")
+            .IgnoreUserScope()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+        return setting is null
+            ? null
+            : new SettingDocument { ValueJson = setting.ValueJson, Version = setting.Version };
+    }
+
     public async Task<bool> TryCreateAsync(
         string key,
         string? userId,

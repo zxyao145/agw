@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace Agw.Shared.Tooling;
@@ -21,10 +22,12 @@ public static class ToolDefinitionNames
     public const string Diff = "diff";
     public const string GitClone = "git_clone";
     public const string RunShell = "run_shell";
+    public const string Extension = "extension";
     public const string WebFetch = "web_fetch";
     public const string WebSearch = "web_search";
 
-    public static IReadOnlyList<string> All { get; } = [AskUserQuestion, Diff, GitClone, RunShell, WebFetch, WebSearch];
+    public static IReadOnlyList<string> All { get; } =
+    [AskUserQuestion, Diff, GitClone, RunShell, WebFetch, WebSearch, Extension];
 }
 
 /// <summary>
@@ -75,6 +78,7 @@ public sealed record ToolBlockValue : ToolValueObject
 [JsonDerivedType(typeof(RunShellToolDefinition), ToolDefinitionNames.RunShell)]
 [JsonDerivedType(typeof(WebFetchToolDefinition), ToolDefinitionNames.WebFetch)]
 [JsonDerivedType(typeof(WebSearchToolDefinition), ToolDefinitionNames.WebSearch)]
+[JsonDerivedType(typeof(ExtensionToolDefinition), ToolDefinitionNames.Extension)]
 public abstract record ToolDefinition
 {
     public abstract string GetDefinitionName();
@@ -121,6 +125,20 @@ public sealed record WebFetchToolDefinition : ToolDefinition<EmptyToolOptions>
 public sealed record WebSearchToolDefinition : ToolDefinition<EmptyToolOptions>
 {
     public override string GetDefinitionName() => ToolDefinitionNames.WebSearch;
+}
+
+public sealed record ExtensionToolDefinition : ToolDefinition
+{
+    public Guid ExtensionId { get; init; }
+
+    public string ToolId { get; init; } = string.Empty;
+
+    public override string GetDefinitionName() =>
+        ExtensionId == Guid.Empty && string.IsNullOrEmpty(ToolId)
+            ? ToolDefinitionNames.Extension
+            : $"extension:{ExtensionId:D}:{Convert.ToHexString(Encoding.UTF8.GetBytes(ToolId))}";
+
+    internal override object? GetOptions() => new EmptyToolOptions();
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "name")]
@@ -211,6 +229,9 @@ public static class ToolValueObjectValidation
         {
             var hasDefinition = value switch
             {
+                ToolValue { Definition: ExtensionToolDefinition extensionDefinition } => extensionDefinition.ExtensionId
+                    != Guid.Empty
+                    && !string.IsNullOrWhiteSpace(extensionDefinition.ToolId),
                 ToolValue { Definition: not null } => true,
                 ToolBlockValue { Definition: not null } => true,
                 _ => false,

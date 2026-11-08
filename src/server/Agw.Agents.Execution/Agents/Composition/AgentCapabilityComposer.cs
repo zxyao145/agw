@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Context.Workspace;
+using Agw.Extensions.Contracts;
 using Agw.Integrations.Contracts.Capabilities;
 using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Agents;
@@ -14,6 +15,7 @@ using Agw.Tools.Abstractions.ToolBlocks;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -44,6 +46,7 @@ public sealed class AgentCapabilityComposer
     private readonly ToolBlockRegistry _toolBlockRegistry;
     private readonly ILogger<AgentCapabilityComposer> _logger;
     private readonly IReadOnlyList<IAgentInstructionsSource> _instructionSources;
+    private readonly IExtensionCapabilityCatalog _extensionCapabilityCatalog;
 
     public AgentCapabilityComposer(
         AgentAppService agentAppService,
@@ -52,6 +55,7 @@ public sealed class AgentCapabilityComposer
         IMcpToolMaterializer mcpToolMaterializer,
         ToolBlockRegistry toolBlockRegistry,
         ILogger<AgentCapabilityComposer> logger,
+        IExtensionCapabilityCatalog extensionCapabilityCatalog,
         IEnumerable<IAgentInstructionsSource>? instructionSources = null
     )
     {
@@ -62,6 +66,7 @@ public sealed class AgentCapabilityComposer
         _toolBlockRegistry = toolBlockRegistry;
         _logger = logger;
         _instructionSources = instructionSources?.ToArray() ?? [];
+        _extensionCapabilityCatalog = extensionCapabilityCatalog;
     }
 
     internal async Task<AgentCapabilityComposition> ComposeAsync(
@@ -77,7 +82,10 @@ public sealed class AgentCapabilityComposer
             ValueTask<IReadOnlyList<Microsoft.Agents.AI.AIAgent>>
         >? backgroundAgentFactory = null,
         Guid conversationId = default,
-        bool deferHumanInteractions = false
+        bool deferHumanInteractions = false,
+        IReadOnlyList<ExtensionExecutionPin>? extensionPins = null,
+        ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+        IReadOnlyList<Guid>? extensionIds = null
     )
     {
         var lease = new AgentResourceLease();
@@ -91,6 +99,7 @@ public sealed class AgentCapabilityComposer
         var planModeAllowedToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var toolWarnings = new List<string>();
         var toolInvocationWarnings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var extensionSkills = new List<AgentSkill>();
 
         try
         {
@@ -101,6 +110,10 @@ public sealed class AgentCapabilityComposer
                         SelectUserMemoryValues(project.Tools)
                     )
                     : ToolValueResolution.Resolve(agent.Tools, project.Tools);
+            var extensionToolDefinitions = resolvedToolValues.Tools.OfType<ExtensionToolDefinition>().ToArray();
+            var executableToolDefinitions = resolvedToolValues
+                .Tools.Where(static definition => definition is not ExtensionToolDefinition)
+                .ToArray();
             var materializationContext = new ToolMaterializationContext
             {
                 Agent = agent,
@@ -176,7 +189,7 @@ public sealed class AgentCapabilityComposer
                 .ToArray();
 
             var toolContribution = await _toolRegistry
-                .MaterializeAsync(resolvedToolValues.Tools, materializationContext, cancellationToken)
+                .MaterializeAsync(executableToolDefinitions, materializationContext, cancellationToken)
                 .ConfigureAwait(false);
             AddContribution(
                 toolContribution,
@@ -264,6 +277,71 @@ public sealed class AgentCapabilityComposer
                 _logger.LogWarning("Tool Block warning for agent {AgentId}: {Warning}", agent.Id, warning);
             }
 
+            IReadOnlyList<Guid> skillExtensionIds =
+                acceptedExtensionCapabilities == null && extensionPins == null && extensionIds == null
+                    ? await _extensionCapabilityCatalog
+                        .ListEnabledSkillExtensionIdsAsync(cancellationToken)
+                        .ConfigureAwait(false)
+                    : [];
+            var extensionSelection = new ExtensionCapabilitySelection(
+                extensionToolDefinitions
+                    .Select(definition => new ExtensionToolSelection(definition.ExtensionId, definition.ToolId))
+                    .Distinct()
+                    .ToArray(),
+                skillExtensionIds
+            );
+            ExtensionCapabilitySnapshot? extensionCapabilities = acceptedExtensionCapabilities;
+            if (extensionPins != null && extensionIds != null)
+            {
+                throw new AgwException(
+                    ErrorCodes.DurableExecutionConflict,
+                    "The execution extension selection is invalid."
+                );
+            }
+
+            if (
+                extensionCapabilities != null
+                && extensionPins != null
+                && !extensionCapabilities.Pins.SequenceEqual(extensionPins)
+            )
+            {
+                throw new AgwException(ErrorCodes.ExtensionVersionMismatch);
+            }
+
+            if (extensionCapabilities == null && extensionPins is { Count: > 0 })
+            {
+                throw new AgwException(ErrorCodes.ExtensionUnavailable);
+            }
+
+            if (extensionCapabilities == null)
+            {
+                if (extensionIds != null)
+                {
+                    extensionCapabilities = await _extensionCapabilityCatalog
+                        .AcquireForExecutionAsync(extensionIds, extensionSelection, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    extensionCapabilities = await _extensionCapabilityCatalog
+                        .AcquireCurrentAsync(extensionSelection, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                lease.Add(extensionCapabilities);
+            }
+
+            if (extensionCapabilities != null)
+            {
+                var selectedTools = extensionCapabilities.SelectTools(extensionSelection);
+                AddTools(tools, registeredToolNames, selectedTools, "extension");
+                planModeAllowedToolNames.UnionWith(
+                    selectedTools
+                        .Where(tool => AgwToolMetadataBinding.GetMetadata(tool)?.AllowInPlanMode == true)
+                        .Select(tool => tool.Name)
+                );
+                extensionSkills.AddRange(extensionCapabilities.Skills);
+            }
+
             if (deferHumanInteractions)
                 contextProviders.Add(new DeferredHumanInteractionProvider());
 
@@ -280,7 +358,8 @@ public sealed class AgentCapabilityComposer
                 lease,
                 toolContribution
                     .DynamicToolMetadata.Keys.Concat(contribution.DynamicToolMetadata.Keys)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase),
+                extensionSkills
             );
         }
         catch

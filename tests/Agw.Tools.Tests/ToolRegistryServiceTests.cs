@@ -17,8 +17,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Tools.Tests;
 
-public class ToolRegistryServiceTests
+public class ToolRegistryServiceTests : IClassFixture<ToolRuntimeFixture>
 {
+    private readonly ToolRuntimeFixture _extensionRuntime;
+
+    public ToolRegistryServiceTests(ToolRuntimeFixture extensionRuntime)
+    {
+        _extensionRuntime = extensionRuntime;
+    }
+
     private static ServiceCollection CreateToolServices()
     {
         var services = new ServiceCollection();
@@ -50,6 +57,7 @@ public class ToolRegistryServiceTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
+            extensionGenerations: _extensionRuntime.Catalog,
             discoverAllToolKinds: true
         );
         registry.ValidateDefinitionCoverage();
@@ -65,7 +73,11 @@ public class ToolRegistryServiceTests
     {
         // Arrange
         using var services = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            services,
+            _extensionRuntime.Catalog
+        );
         registry.RegisterTool(new ProjectScopedTestTool());
         var projectId = Guid.CreateVersion7();
 
@@ -104,7 +116,11 @@ public class ToolRegistryServiceTests
     {
         // Arrange
         using var serviceProvider = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            _extensionRuntime.Catalog
+        );
 
         // Act
         var diff = registry.GetTool("diff");
@@ -122,7 +138,11 @@ public class ToolRegistryServiceTests
     {
         // Arrange
         using var serviceProvider = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            _extensionRuntime.Catalog
+        );
 
         // Act
         var exception = Assert.Throws<AgwException>(() => registry.RegisterTool(new MutableTool()));
@@ -137,7 +157,11 @@ public class ToolRegistryServiceTests
     {
         // Arrange
         using var serviceProvider = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            _extensionRuntime.Catalog
+        );
 
         // Act
         var function = Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("git_clone"));
@@ -166,7 +190,11 @@ public class ToolRegistryServiceTests
     public async Task MaterializeAsync_IndependentTools_MarksOnlyTrustedPlanToolsAllowed()
     {
         await using var serviceProvider = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            _extensionRuntime.Catalog
+        );
 
         await using var contribution = await registry.MaterializeAsync(
             [
@@ -194,7 +222,8 @@ public class ToolRegistryServiceTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())]
+            extensionGenerations: _extensionRuntime.Catalog,
+            contextualTools: [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())]
         );
         var context = CreateMaterializationContext();
         context = new ToolMaterializationContext
@@ -226,7 +255,7 @@ public class ToolRegistryServiceTests
     {
         var services = CreateToolServices();
         using var sp = services.BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp);
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp, _extensionRuntime.Catalog);
 
         var removedToolNames = new[]
         {
@@ -263,8 +292,9 @@ public class ToolRegistryServiceTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new ObsoleteWebSearchContextualTool()],
-            toolBlockRegistry
+            extensionGenerations: _extensionRuntime.Catalog,
+            contextualTools: [new ObsoleteWebSearchContextualTool()],
+            toolBlockRegistry: toolBlockRegistry
         );
 #pragma warning restore CS0618
 
@@ -308,8 +338,9 @@ public class ToolRegistryServiceTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())],
-            toolBlockRegistry
+            extensionGenerations: _extensionRuntime.Catalog,
+            contextualTools: [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())],
+            toolBlockRegistry: toolBlockRegistry
         );
 
         var webSearch = Assert.Single(registry.GetAllTools(), item => item.Name == "web_search");
@@ -328,8 +359,9 @@ public class ToolRegistryServiceTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            Array.Empty<IContextualTool>(),
-            new ToolBlockRegistry([new TodoToolBlock()])
+            extensionGenerations: _extensionRuntime.Catalog,
+            contextualTools: Array.Empty<IContextualTool>(),
+            toolBlockRegistry: new ToolBlockRegistry([new TodoToolBlock()])
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(async () =>
@@ -363,19 +395,22 @@ public class ToolRegistryServiceTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            contextualTools,
-            new ToolBlockRegistry(toolBlocks)
+            extensionGenerations: _extensionRuntime.Catalog,
+            contextualTools: contextualTools,
+            toolBlockRegistry: new ToolBlockRegistry(toolBlocks)
         );
 
         registry.ValidateDefinitionCoverage();
+        Assert.Null(registry.GetTool(ToolDefinitionNames.Extension));
+        Assert.DoesNotContain(registry.GetAllTools(), tool => tool.Name == ToolDefinitionNames.Extension);
     }
 
-    private static AIFunction CreateDiffFunction()
+    private AIFunction CreateDiffFunction()
     {
         var services = CreateToolServices();
         using var sp = services.BuildServiceProvider();
 
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp);
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp, _extensionRuntime.Catalog);
         return Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("diff"));
     }
 
@@ -418,6 +453,8 @@ public class ToolRegistryServiceTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
+            extensionGenerations: _extensionRuntime.Catalog,
+            contextualTools:
             [
                 new ShellContextualTool(
                     new ConfigurationBuilder().Build(),

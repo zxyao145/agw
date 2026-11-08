@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <ProjectReference Include="../../src/server/Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Extensions.Sdk.EntityFrameworkCore/Agw.Extensions.Sdk.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Extensions/Agw.Extensions.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Shared/Agw.Shared.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyExtensionDatabaseTestExtension" AfterTargets="Build">
+    <ItemGroup>
+      <ExtensionFixtureFiles Include="../Agw.Extensions.Runtime.Tests/Fixture/bin/$(Configuration)/net10.0/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(ExtensionFixtureFiles)"
+      DestinationFolder="$(OutDir)ExtensionFixture"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
+</Project>

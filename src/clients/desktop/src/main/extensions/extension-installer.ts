@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { open as openZip, type Entry, type ZipFile } from "yauzl";
@@ -88,6 +88,29 @@ function installError(error: unknown): ExtensionValidationError {
   throw error;
 }
 
+async function readLocalExtensionDirectory(
+  directory: string,
+  appVersion: string,
+  expectedId: string | null = basename(directory),
+): Promise<CatalogEntry> {
+  const entry = await readExtensionDirectory(directory, appVersion, expectedId);
+  if (entry.manifest?.manifestVersion !== 2 || ((entry.manifest.targets ?? 0) & 1) === 0) {
+    return entry;
+  }
+  return {
+    ...entry,
+    validation: "invalid",
+    errors: [
+      ...entry.errors,
+      {
+        code: "SERVER_TARGET_NOT_ALLOWED",
+        message: "A local Desktop install cannot include the Server target.",
+        path: "targets",
+      },
+    ],
+  };
+}
+
 /** 管理暂存目录、提交、卸载与启动恢复。Manages staging, commits, uninstalls and startup recovery. */
 export class ExtensionInstaller {
   public readonly stagingDirectory: string;
@@ -162,7 +185,7 @@ export class ExtensionInstaller {
       const directory = this.packageDirectory(installId);
       return {
         directory,
-        entry: await readExtensionDirectory(directory, this.options.appVersion, null),
+        entry: await readLocalExtensionDirectory(directory, this.options.appVersion, null),
       };
     });
   }
@@ -177,7 +200,7 @@ export class ExtensionInstaller {
     verify: (directory: string, entry: CatalogEntry) => Promise<void>,
   ): Promise<CatalogEntry> {
     return this.serialize(async () => {
-      const staged = await readExtensionDirectory(
+      const staged = await readLocalExtensionDirectory(
         this.packageDirectory(installId),
         this.options.appVersion,
         null,
@@ -210,7 +233,7 @@ export class ExtensionInstaller {
         hasPrevious,
       } satisfies InstallJournal);
       await rm(this.installDirectory(installId), { recursive: true, force: true });
-      return readExtensionDirectory(target, this.options.appVersion);
+      return readLocalExtensionDirectory(target, this.options.appVersion);
     });
   }
 
@@ -333,7 +356,7 @@ export class ExtensionInstaller {
   }
 
   private async preview(installId: string): Promise<PreparedExtensionInstall> {
-    const staged = await readExtensionDirectory(
+    const staged = await readLocalExtensionDirectory(
       this.packageDirectory(installId),
       this.options.appVersion,
       null,
@@ -472,6 +495,16 @@ async function extractArchive(
     });
     zipfile.readEntry();
   });
+}
+
+export async function extractServerExtensionArchive(
+  file: string,
+  destination: string,
+  limits: ArchiveLimits = { maxEntries: MAX_ARCHIVE_ENTRIES, maxBytes: MAX_ARCHIVE_BYTES },
+): Promise<string> {
+  await mkdir(destination, { recursive: true });
+  await extractArchive(file, destination, limits);
+  return findArchiveRoot(destination);
 }
 
 /** 压缩包根目录，或根目录下唯一的目录（忽略 `__MACOSX/`）。The archive root, or its only directory (ignoring `__MACOSX/`). */

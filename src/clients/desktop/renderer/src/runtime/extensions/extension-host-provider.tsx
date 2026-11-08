@@ -8,6 +8,7 @@ import { useDesktopRuntime } from "../runtime-provider";
 import { normalizeBaseUrl } from "./context-service";
 import { ExtensionImagePreview } from "./extension-image-preview";
 import { type ExtensionRuntime, getExtensionRuntime } from "./extension-runtime";
+import { ServerExtensionSync } from "./server-extension-sync";
 
 const ExtensionHostContext = React.createContext<ExtensionRuntime | null>(null);
 
@@ -24,6 +25,7 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
     [],
   );
   const host = value?.host ?? null;
+  const serverSync = React.useMemo(() => (host ? new ServerExtensionSync(host) : null), [host]);
   const router = useRouter();
   const pathname = usePathname();
   const pathnameRef = React.useRef(pathname);
@@ -31,12 +33,24 @@ export function ExtensionHostProvider({ children }: { children: React.ReactNode 
   const { publishedTheme } = useDesktopTheme();
 
   React.useEffect(() => {
-    if (!value) return;
+    if (!value || !serverSync) return;
     value.tracker.start();
+    let active = true;
+    value.host.setServerVersionMismatchHandler(() => {
+      void serverSync.refresh(true);
+    });
     void value.host
       .start()
+      .then(() => {
+        if (active) serverSync.start();
+      })
       .catch((error: unknown) => console.error("Unable to start extensions.", error));
-  }, [value]);
+    return () => {
+      active = false;
+      serverSync.dispose();
+      value.host.setServerVersionMismatchHandler(() => undefined);
+    };
+  }, [value, serverSync]);
 
   React.useEffect(() => {
     if (!host) return;

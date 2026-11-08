@@ -5,6 +5,8 @@ using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Execution;
 using Agw.Auth.Extensions;
+using Agw.Extensions;
+using Agw.Extensions.Contracts;
 using Agw.Files;
 using Agw.Host.Data;
 using Agw.Host.Hosting;
@@ -217,7 +219,11 @@ public static class AgwHostApplication
                         ApiResult.BadRequest(context.ModelState, code: ErrorCodes.InvalidParam.Code);
                 });
                 builder.Services.AddEndpointsApiExplorer();
-                builder.Services.AddOpenApi(options => options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>());
+                builder.Services.AddOpenApi(options =>
+                {
+                    options.AddSchemaTransformer<AgwOpenApiSchemaTransformer>();
+                    options.AddDocumentTransformer<ExtensionOpenApiDocumentTransformer>();
+                });
             }
             builder.Services.AddApiResult();
             builder.Services.AddHttpClient();
@@ -275,6 +281,9 @@ public static class AgwHostApplication
                 )
                 .AddFiles(builder.Configuration)
                 .AddInfrastructure(builder.Configuration)
+                .AddExtensionInfrastructure()
+                .AddExtensions(builder.Configuration, profile.ToString())
+                .AddExtensionCapabilities()
                 .AddJobs(
                     builder.Configuration,
                     new Agw.Jobs.DependencyInjection.RegistrationOptions(
@@ -301,6 +310,11 @@ public static class AgwHostApplication
             builder.Services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
 
             builder.Services.AddHybridCache();
+            builder.Services.AddScoped<IExtensionDeploymentIdentity, ExtensionDeploymentIdentity>();
+            builder.Services.AddExtensionHostCapability<Agw.Projects.Contracts.Runtime.IProjectRuntimeFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Projects.Contracts.Runtime.IProjectOwnershipFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Projects.Contracts.Runtime.IProjectDefaultResolver>();
+            builder.Services.AddExtensionHostCapability<Agw.Skills.Contracts.References.ISkillReferenceFacade>();
 
             var app = builder.Build();
             var stateStore = app.Services.GetRequiredService<DatabaseInitializationStateStore>();
@@ -375,6 +389,8 @@ public static class AgwHostApplication
             {
                 module.MapEndpoints(app);
             }
+            if (hasControlPlane)
+                app.MapExtensionEndpoints();
             app.MapGet("/api/health/live", () => Results.Ok(new { status = "live", hostProfile = profile.ToString() }));
             app.MapGet(
                 "/api/health/ready",

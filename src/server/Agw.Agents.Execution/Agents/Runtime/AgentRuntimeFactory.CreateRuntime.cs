@@ -92,6 +92,9 @@ public partial class AgentRuntimeFactory
                 ConversationId = conversationId,
                 IsResume = isResume,
                 DeferHumanInteractions = true,
+                ExtensionPins = settings.ExtensionPins,
+                ExtensionIds = settings.ExtensionIds,
+                AcceptedExtensionCapabilities = settings.ExtensionCapabilityLease,
                 OnExternalSessionStartedAsync = _providerBindings.CreateExternalSessionStartedCallback(
                     providerSession,
                     UserInfoUtil.RequiredUserId

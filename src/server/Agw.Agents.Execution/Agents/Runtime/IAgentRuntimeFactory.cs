@@ -1,4 +1,6 @@
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Extensions.Contracts;
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
@@ -36,7 +38,10 @@ public interface IAgentRuntimeFactory
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
         CancellationToken cancellationToken = default,
-        AgwPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null,
+        IReadOnlyList<ExtensionExecutionPin>? extensionPins = null,
+        ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+        IReadOnlyList<Guid>? extensionIds = null
     );
 
     Task<AgentRuntime?> CreateRuntimeAsync(

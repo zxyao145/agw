@@ -69,7 +69,9 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             return [];
         }
 
-        var normalizedContextId = string.IsNullOrWhiteSpace(contextId) ? null : contextId.Trim();
+        var normalizedContextId = string.IsNullOrWhiteSpace(contextId)
+            ? null
+            : ContextIdUtil.NormalizeContextId(contextId);
         var ownerUserId = ResolveOwnerUserId();
         var conversations = await _dbContext
             .ProjectConversations.AsNoTracking()
@@ -112,6 +114,8 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             return ExternalTaskSaveResult.TaskIdConflict;
         }
 
+        var normalizedContextId = ContextIdUtil.NormalizeContextId(request.ContextId);
+
         // 同一请求会多次保存快照；跟踪查询返回上一次保存时已跟踪的实例，下面才能删除它。
         // One request saves the snapshot several times; a tracking query returns the instance the previous save
         // already tracks, so it can be removed below.
@@ -144,7 +148,7 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             .ProjectConversations.SingleOrDefaultAsync(
                 item =>
                     item.ProjectId == request.ProjectId
-                    && item.ContextId == request.ContextId
+                    && item.ContextId == normalizedContextId
                     && item.CreateBy == currentOwnerUserId,
                 cancellationToken
             )
@@ -155,7 +159,7 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             {
                 Id = Guid.CreateVersion7(),
                 ProjectId = request.ProjectId,
-                ContextId = request.ContextId,
+                ContextId = normalizedContextId,
                 Title = request.Title,
                 CreateBy = currentOwnerUserId,
                 CreateTime = request.StatusTimestamp,
@@ -166,7 +170,7 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
         }
         else
         {
-            conversation.ContextId = request.ContextId;
+            conversation.ContextId = normalizedContextId;
             conversation.Title = request.Title;
             new ProjectConversationBehavior(conversation).StampUpdate(currentOwnerUserId, request.StatusTimestamp);
         }

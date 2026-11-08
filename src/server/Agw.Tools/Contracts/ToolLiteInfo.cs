@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Agw.Tools.Contracts;
 
 /// <summary>Describes a selectable Tool or ToolBlock without execution implementation details.</summary>
@@ -24,4 +26,12 @@ public sealed record ToolLiteInfo
 
     /// <summary>Whether this Tool or any ToolBlock member may require execution approval.</summary>
     public bool RequiresConfirmation { get; init; }
+
+    public bool AllowInPlanMode { get; init; }
+
+    public Guid? ExtensionId { get; init; }
+
+    public string? ExtensionToolId { get; init; }
+
+    public JsonElement? InputSchema { get; init; }
 }

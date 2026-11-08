@@ -8,6 +8,7 @@ import { writeFile } from "node:fs/promises";
 import { DEFAULT_APPEARANCE } from "../../shared/appearance";
 import type { AppearanceSettings } from "../../shared/contracts";
 import { createScratchDirectory } from "../scratch-directory.test-helper";
+import { extensionInstanceId } from "../extensions/extension-instance";
 import { DesktopSettingsStore, type SecretCodec } from "./settings-store";
 
 const codec: SecretCodec = {
@@ -17,6 +18,7 @@ const codec: SecretCodec = {
 
 const THEME_EXTENSION_ID = "01a173b5-526c-74d8-864c-26b0968892f6";
 const SOFT_THEME = `${THEME_EXTENSION_ID}:soft`;
+const SERVER_THEME = `${extensionInstanceId({ serverId: "server-a", userId: "user-a" }, THEME_EXTENSION_ID)}:soft`;
 
 test("settings store persists the default close behavior and local profile", async () => {
   const directory = await mkdtemp(join(tmpdir(), "agw-desktop-settings-"));
@@ -548,6 +550,13 @@ async function rejectsStoredAppearance(appearance: unknown): Promise<void> {
 
 test("load returns the default appearance when the file has none", async () => {
   assert.deepEqual(await loadWithStoredAppearance(undefined), DEFAULT_APPEARANCE);
+});
+
+test("load accepts an appearance theme owned by a Server extension instance", async () => {
+  assert.deepEqual(await loadWithStoredAppearance({ ...DEFAULT_APPEARANCE, theme: SERVER_THEME }), {
+    ...DEFAULT_APPEARANCE,
+    theme: SERVER_THEME,
+  });
 });
 
 test("load accepts the appearance range boundaries", async () => {

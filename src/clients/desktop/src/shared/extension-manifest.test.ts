@@ -86,6 +86,36 @@ function sampleManifest(): Record<string, unknown> {
   };
 }
 
+function sampleManifestV2(): Record<string, unknown> {
+  return {
+    manifestVersion: 2,
+    id: EXTENSION_ID,
+    name: "calendar",
+    displayName: "Calendar",
+    version: "1.0.0",
+    targets: 3,
+    files: {
+      "desktop/index.html": "a".repeat(64),
+      "server/Calendar.Extension.dll": "b".repeat(64),
+    },
+    desktop: {
+      apiVersion: 1,
+      minHostVersion: "0.5.0",
+      permissions: ["context.project"],
+      contributes: {
+        mainViews: [
+          { id: "appointments", title: "Calendar", icon: "Calendar", entry: "desktop/index.html" },
+        ],
+      },
+    },
+    server: {
+      apiVersion: 1,
+      entryAssembly: "server/Calendar.Extension.dll",
+      entryType: "Calendar.Extension.Entry",
+    },
+  };
+}
+
 function withChange(change: (manifest: Record<string, unknown>) => void): Record<string, unknown> {
   const manifest = sampleManifest();
   change(manifest);
@@ -105,6 +135,79 @@ test("a complete manifest passes validation", () => {
   assert.deepEqual(result.errors, []);
   assert.equal(result.validation, "valid");
   assert.equal(result.manifest?.id, EXTENSION_ID);
+});
+
+test("a manifest v2 uses Desktop-specific contributions while preserving its technical name", () => {
+  const result = evaluateExtensionManifest(sampleManifestV2(), APP_VERSION);
+
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.validation, "valid");
+  assert.equal(result.manifest?.name, "calendar");
+  assert.equal(result.manifest?.displayName, "Calendar");
+  assert.deepEqual(manifestPackagePaths(result.manifest!), [
+    { path: "desktop/index.html", field: "contributes.mainViews[0].entry", kind: "entry" },
+  ]);
+});
+
+test("manifest v2 preserves unknown top-level and Server metadata", () => {
+  const raw = sampleManifestV2();
+  const topLevelMetadata = { owner: "Agw", flags: ["future"] };
+  const serverMetadata = { capabilities: ["calendar"] };
+  raw.metadata = topLevelMetadata;
+  (raw.server as Record<string, unknown>).metadata = serverMetadata;
+
+  const result = evaluateExtensionManifest(raw, APP_VERSION);
+
+  assert.deepEqual(result.errors, []);
+  assert.ok(result.manifest?.server);
+  assert.deepEqual(
+    (result.manifest as unknown as Record<string, unknown>).metadata,
+    topLevelMetadata,
+  );
+  assert.deepEqual(
+    (result.manifest.server as unknown as Record<string, unknown>).metadata,
+    serverMetadata,
+  );
+});
+
+test("manifest v2 reports unsupported target flags", () => {
+  const manifest = sampleManifestV2();
+  manifest.targets = 16;
+
+  assert.ok(errorCodes(manifest).includes("INVALID_TARGET"));
+});
+
+test("Server host requirements do not decide Desktop compatibility", () => {
+  const raw = sampleManifestV2();
+  (raw.server as Record<string, unknown>).minHostVersion = "99.0.0";
+
+  const result = evaluateExtensionManifest(raw, APP_VERSION);
+
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.validation, "valid");
+  assert.ok(result.manifest?.server);
+  assert.equal((result.manifest.server as Record<string, unknown>).minHostVersion, "99.0.0");
+});
+
+test("manifest v2 requires a Desktop target and file checksums", () => {
+  const noDesktopTargetManifest = sampleManifestV2();
+  noDesktopTargetManifest.targets = 1;
+  const noDesktopTarget = evaluateExtensionManifest(noDesktopTargetManifest, APP_VERSION);
+  assert.ok(noDesktopTarget.errors.some((error) => error.code === "DESKTOP_TARGET_REQUIRED"));
+
+  const missingChecksumsManifest = sampleManifestV2();
+  delete missingChecksumsManifest.files;
+  const missingChecksums = evaluateExtensionManifest(missingChecksumsManifest, APP_VERSION);
+  assert.ok(missingChecksums.errors.some((error) => error.code === "FILE_CHECKSUMS_REQUIRED"));
+});
+
+test("Desktop API version is checked independently from the manifest format", () => {
+  const manifest = sampleManifestV2();
+  (manifest.desktop as { apiVersion: number }).apiVersion = 2;
+  const result = evaluateExtensionManifest(manifest, APP_VERSION);
+
+  assert.equal(result.validation, "incompatible");
+  assert.equal(result.errors[0].code, "DESKTOP_API_VERSION_TOO_NEW");
 });
 
 test("extension ids must be lowercase GUID v7", () => {
@@ -414,12 +517,12 @@ test("manifest versions outside the supported range are incompatible", () => {
   assert.equal(old.errors[0].code, "MANIFEST_VERSION_UNSUPPORTED");
   assert.equal(
     old.errors[0].message,
-    "This extension targets Extension API version 0. This Desktop supports version 1 and later.",
+    "This extension uses manifest format 0. This Desktop supports format 1 and later.",
   );
 
   const newer = evaluateExtensionManifest(
     withChange((manifest) => {
-      manifest.manifestVersion = 2;
+      manifest.manifestVersion = 3;
       manifest.futureField = true;
     }),
     APP_VERSION,
@@ -535,6 +638,8 @@ test("the generated JSON Schema validates the same samples", () => {
   const validate = ajv.compile(extensionManifestJsonSchema());
   const samples: [string, Record<string, unknown>, boolean][] = [
     ["complete", sampleManifest(), true],
+    ["unified v2", sampleManifestV2(), true],
+    ["v2 metadata", { ...sampleManifestV2(), metadata: { owner: "Agw" } }, true],
     ["unknown field", withChange((manifest) => (manifest.permision = [])), false],
     [
       "unknown contributes field",

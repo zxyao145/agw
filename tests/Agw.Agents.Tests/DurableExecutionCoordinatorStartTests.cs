@@ -19,6 +19,8 @@ public sealed partial class DurableExecutionStoreTests
         // Arrange
         var token = TestContext.Current.CancellationToken;
         var task = await _kit.SeedConversationAsync();
+        if (agentType == AgentRuntimeType.Agentflow)
+            await _kit.SeedAgentflowAsync(_agentId);
         var turnId = Guid.CreateVersion7();
         var starts = new List<(ExecutionReceipt Receipt, Guid? ActiveId, AgwMessage Start)>();
 

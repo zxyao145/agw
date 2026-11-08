@@ -23,7 +23,7 @@ namespace Agw.Infrastructure.Tests;
 public sealed class UserScopeFilterTests
 {
     [Fact]
-    public void UserScopeFilter_AllTableEntities_HaveNamedFilter()
+    public void UserScopeFilter_TableEntities_RestrictsUnfilteredTypesToDeploymentMetadata()
     {
         // Arrange
         var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options;
@@ -33,15 +33,16 @@ public sealed class UserScopeFilterTests
         var unfilteredEntities = context
             .Model.GetEntityTypes()
             .Where(entityType => entityType.GetTableName() != null)
-            // Auth owns the deployment-wide allocator; it contains no per-user data.
-            .Where(entityType => entityType.ClrType != typeof(AuthUserIdSequence))
             .Where(entityType => entityType.FindDeclaredQueryFilter(UserScopeQueryFilterNames.UserScope) == null)
             .Select(entityType => entityType.ClrType.FullName ?? entityType.Name)
             .OrderBy(static entityName => entityName, StringComparer.Ordinal)
             .ToArray();
 
         // Assert
-        Assert.Empty(unfilteredEntities);
+        Assert.Equal(
+            new[] { typeof(AuthUserIdSequence) }.Select(type => type.FullName).Order(StringComparer.Ordinal),
+            unfilteredEntities
+        );
     }
 
     [Fact]

@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createToolBlockValue, createToolValue, parseToolValues } from "./tool-values.ts";
+import {
+  createToolBlockValue,
+  createToolValue,
+  createToolValueFromInfo,
+  getToolCatalogSelectionKey,
+  getToolValueSelectionKey,
+  parseToolValues,
+} from "./tool-values.ts";
 
 test("null and empty both mean that the owner adds no Tools", () => {
   assert.deepEqual(parseToolValues(null), []);
@@ -16,6 +23,30 @@ test("createToolValue creates the nested Tool definition with empty options", ()
       options: {},
     },
   });
+});
+
+test("extension Tool selection retains its stable extension and descriptor IDs", () => {
+  const info = {
+    kind: "tool" as const,
+    name: "extension:ext:calendar",
+    displayName: "Calendar lookup",
+    description: "Looks up calendar information.",
+    category: "Calendar",
+    memberToolNames: [],
+    scopes: 3,
+    requiresWorkspace: false,
+    requiresConfirmation: false,
+    extensionId: "ext",
+    extensionToolId: "calendar",
+  };
+  const value = createToolValueFromInfo(info);
+
+  assert.deepEqual(value, {
+    kind: "tool",
+    definition: { name: "extension", extensionId: "ext", toolId: "calendar" },
+  });
+  assert.equal(getToolCatalogSelectionKey(info), "extension:ext:calendar");
+  assert.equal(getToolValueSelectionKey(value), "extension:ext:calendar");
 });
 
 test("createToolBlockValue creates strong default options", () => {

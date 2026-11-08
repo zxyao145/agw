@@ -108,6 +108,7 @@ public sealed class ConversationGenerationPersistenceTests
         await using var kit = await TurnPersistenceTestKit.CreateAsync();
         var task = await kit.SeedConversationAsync();
         var agentId = Guid.CreateVersion7();
+        await kit.SeedAgentAsync(agentId);
         var request = new TurnAcceptanceRequest(
             TurnPersistenceTestKit.UserId,
             Guid.CreateVersion7(),

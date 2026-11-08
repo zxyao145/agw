@@ -101,11 +101,33 @@ public partial class AgentRuntimeFactory
             pluginSkillPaths.Add(skillDirectory);
         }
 
+        var registeredSkillNames = new HashSet<string>(userSkillNames, StringComparer.OrdinalIgnoreCase);
+        registeredSkillNames.UnionWith(pluginSkillNames);
+        var extensionSkills = new List<AgentSkill>();
+        foreach (var extensionSkill in capabilities.ExtensionSkills)
+        {
+            var skillName = extensionSkill.Frontmatter.Name;
+            if (userSkillNames.Contains(skillName))
+            {
+                _logger.LogWarning("User skill {SkillName} overrides an extension skill", skillName);
+                continue;
+            }
+
+            if (!registeredSkillNames.Add(skillName))
+            {
+                _logger.LogWarning("Extension skill {SkillName} conflicts with another skill", skillName);
+                continue;
+            }
+
+            extensionSkills.Add(extensionSkill);
+        }
+
         if (
             classSkillRegistrations.Length == 0
             && userSkillPaths.Length == 0
             && remoteSkills.Length == 0
             && pluginSkillPaths.Count == 0
+            && extensionSkills.Count == 0
         )
         {
             if (
@@ -142,9 +164,12 @@ public partial class AgentRuntimeFactory
             );
         }
 
-        if (remoteSkills.Length > 0)
+        var runtimeSkills = new List<AgentSkill>(remoteSkills.Length + extensionSkills.Count);
+        runtimeSkills.AddRange(remoteSkills);
+        runtimeSkills.AddRange(extensionSkills);
+        if (runtimeSkills.Count > 0)
         {
-            builder.UseSkills(remoteSkills);
+            builder.UseSkills(runtimeSkills);
         }
 
         if (pluginSkillPaths.Count > 0)

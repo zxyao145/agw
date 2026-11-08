@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:31816/"
+      "url": "http://127.0.0.1:55217/"
     }
   ],
   "paths": {
@@ -2111,6 +2111,223 @@
                 }
               },
               "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/extensions": {
+      "get": {
+        "tags": [
+          "Extensions"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus[]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus[]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/extensions/enable": {
+      "post": {
+        "tags": [
+          "Extensions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionEnablementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionEnablementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionEnablementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/extensions/disable": {
+      "post": {
+        "tags": [
+          "Extensions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionEnablementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionEnablementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtensionEnablementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionManagementStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/extensions/catalog": {
+      "get": {
+        "tags": [
+          "Extensions"
+        ],
+        "parameters": [
+          {
+            "name": "afterRevision",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionCatalog"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionCatalog"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExtensionCatalog"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/extensions/package": {
+      "get": {
+        "tags": [
+          "Extensions"
+        ],
+        "parameters": [
+          {
+            "name": "extensionId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseHash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/zip": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResult"
                 }
@@ -5213,7 +5430,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfServerInfoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfServerInfoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfServerInfoResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -10375,6 +10609,101 @@
           }
         }
       },
+      "ApiResultOfExtensionCatalog": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExtensionCatalog"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfExtensionManagementStatus": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExtensionManagementStatus"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfExtensionManagementStatus[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ExtensionManagementStatus"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfExternalAgentOptionResponse[]": {
         "required": [
           "code",
@@ -11695,6 +12024,38 @@
           }
         }
       },
+      "ApiResultOfServerInfoResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ServerInfoResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfSkillResponse": {
         "required": [
           "code",
@@ -12732,6 +13093,166 @@
           }
         }
       },
+      "ExtensionCatalog": {
+        "required": [
+          "serverId",
+          "revision",
+          "extensions"
+        ],
+        "type": "object",
+        "properties": {
+          "serverId": {
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExtensionCatalogEntry"
+            }
+          }
+        }
+      },
+      "ExtensionCatalogEntry": {
+        "required": [
+          "id",
+          "name",
+          "displayName",
+          "version",
+          "releaseHash",
+          "packageHash",
+          "manifest"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "releaseHash": {
+            "type": "string"
+          },
+          "packageHash": {
+            "type": "string"
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
+      "ExtensionEnablementRequest": {
+        "required": [
+          "extensionId"
+        ],
+        "type": "object",
+        "properties": {
+          "extensionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ExtensionManagementState": {
+        "enum": [
+          "Disabled",
+          "Starting",
+          "Loading",
+          "Prepared",
+          "Ready",
+          "Active",
+          "Draining",
+          "Stopping",
+          "Unloading",
+          "Faulted",
+          "UnloadFailed",
+          "Failed"
+        ]
+      },
+      "ExtensionManagementStatus": {
+        "required": [
+          "name",
+          "displayName",
+          "state",
+          "id",
+          "targets",
+          "isEnabled",
+          "settingsVersion",
+          "activeInvocations",
+          "activeLeases"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/ExtensionTarget"
+          },
+          "currentVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "settingsVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExtensionManagementState"
+          },
+          "errorCode": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "activeInvocations": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "activeLeases": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ExtensionTarget": {
+        "type": "integer"
+      },
       "ExternalAgentOptionResponse": {
         "required": [
           "kind",
@@ -13285,6 +13806,7 @@
           }
         }
       },
+      "JsonElement": { },
       "LoginRequest": {
         "required": [
           "password"
@@ -15950,6 +16472,32 @@
           "Clear"
         ]
       },
+      "ServerInfoResponse": {
+        "required": [
+          "serverVersion",
+          "apiMajorVersion",
+          "initialized"
+        ],
+        "type": "object",
+        "properties": {
+          "serverVersion": {
+            "type": "string"
+          },
+          "apiMajorVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "initialized": {
+            "type": "boolean"
+          },
+          "serverId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SkillKind": {
         "enum": [
           "BuiltIn",
@@ -16287,6 +16835,9 @@
           },
           {
             "$ref": "#/components/schemas/ToolDefinitionWebSearchToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionExtensionToolDefinition"
           }
         ],
         "discriminator": {
@@ -16297,7 +16848,8 @@
             "git_clone": "#/components/schemas/ToolDefinitionGitCloneToolDefinition",
             "run_shell": "#/components/schemas/ToolDefinitionRunShellToolDefinition",
             "web_fetch": "#/components/schemas/ToolDefinitionWebFetchToolDefinition",
-            "web_search": "#/components/schemas/ToolDefinitionWebSearchToolDefinition"
+            "web_search": "#/components/schemas/ToolDefinitionWebSearchToolDefinition",
+            "extension": "#/components/schemas/ToolDefinitionExtensionToolDefinition"
           }
         }
       },
@@ -16332,6 +16884,28 @@
           },
           "options": {
             "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionExtensionToolDefinition": {
+        "required": [
+          "name",
+          "extensionId",
+          "toolId"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "extension"
+            ],
+            "type": "string"
+          },
+          "extensionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toolId": {
+            "type": "string"
           }
         }
       },
@@ -16412,7 +16986,8 @@
           "kind",
           "scopes",
           "requiresWorkspace",
-          "requiresConfirmation"
+          "requiresConfirmation",
+          "allowInPlanMode"
         ],
         "type": "object",
         "properties": {
@@ -16457,6 +17032,32 @@
           "requiresConfirmation": {
             "type": "boolean",
             "description": "Whether this Tool or any ToolBlock member may require execution approval."
+          },
+          "allowInPlanMode": {
+            "type": "boolean"
+          },
+          "extensionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "extensionToolId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inputSchema": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
           }
         },
         "description": "Describes a selectable Tool or ToolBlock without execution implementation details."
@@ -16880,6 +17481,9 @@
     },
     {
       "name": "Oidc"
+    },
+    {
+      "name": "Extensions"
     },
     {
       "name": "Files"

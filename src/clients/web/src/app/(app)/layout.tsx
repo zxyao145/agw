@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Puzzle } from "lucide-react";
 
 import {
   APP_ROUTES,
@@ -18,7 +19,8 @@ import {
 import { QueryErrorBoundary } from "@agw/components";
 import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
 import { SidebarProvider } from "@agw/components";
-import { AuthGate } from "@agw/auth";
+import { AuthGate, getAuthSession } from "@agw/auth";
+import { useQuery } from "@agw/components/query";
 
 function menuItem(route: AppRoute): MenuItem {
   return { url: route.href, title: route.title, isActive: true, icon: <route.icon /> };
@@ -48,16 +50,36 @@ const navItems: SidebarMenuGroupProps[] = [
   { groupLable: "System", menus: [menuItem(APP_ROUTES.settings)] },
 ];
 
-function getActiveNavLabel(pathname: string): MenuItem | undefined {
-  const allNavItems = navItems.flatMap((group) => group.menus);
+function getActiveNavLabel(pathname: string, menus: SidebarMenuGroupProps[]): MenuItem | undefined {
+  const allNavItems = menus.flatMap((group) => group.menus);
   const match = allNavItems.find((x) => pathname === x.url || pathname.startsWith(`${x.url}/`));
   return match;
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { data: session } = useQuery({
+    queryKey: ["auth", "session"],
+    queryFn: getAuthSession,
+  });
+  const menus = navItems.map((group) =>
+    group.groupLable === "System" && session?.isAdmin
+      ? {
+          ...group,
+          menus: [
+            ...group.menus,
+            {
+              url: "/extensions",
+              title: "Server extensions",
+              isActive: true,
+              icon: <Puzzle />,
+            },
+          ],
+        }
+      : group,
+  );
   const isChatRoute = pathname === "/chat";
-  const activeMenu = getActiveNavLabel(pathname);
+  const activeMenu = getActiveNavLabel(pathname, menus);
   const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/chat");
 
   React.useEffect(() => {
@@ -100,7 +122,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
           >
             <aside className="flex min-h-[calc(100vh-64px)]">
-              <AppSidebar menus={navItems} />
+              <AppSidebar menus={menus} />
             </aside>
 
             <div className="px-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">

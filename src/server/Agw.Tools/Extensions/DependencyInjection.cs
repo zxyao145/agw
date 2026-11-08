@@ -1,3 +1,4 @@
+using Agw.Extensions.Contracts;
 using Agw.Tools.Abstractions.Generated;
 using Agw.Tools.Application;
 using Agw.Tools.Domain.Repositories;
@@ -41,6 +42,7 @@ public static class DependencyInjection
             var registry = new ToolRegistryService(
                 serviceProvider.GetRequiredService<ILogger<ToolRegistryService>>(),
                 serviceProvider,
+                serviceProvider.GetRequiredService<IExtensionGenerationCatalog>(),
                 generatedToolCatalog: serviceProvider.GetRequiredService<AgwGeneratedToolCatalog>(),
                 generatedToolTypes: serviceProvider
                     .GetServices<AgwToolCatalogType>()

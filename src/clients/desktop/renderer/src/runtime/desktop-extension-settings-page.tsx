@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@agw/components";
+import { extensionDisplayName } from "@desktop/shared/extension-manifest";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./components/app-shell-routing";
 import { ExtensionView } from "./components/workspace/extension-view";
 import { settingsViewId } from "./extensions/extension-host";
@@ -34,13 +35,15 @@ export function DesktopExtensionSettingsPage() {
             <ArrowLeft /> Extensions
           </Link>
         </Button>
-        <h1 className="text-lg font-semibold">{manifest?.name ?? extensionId} settings</h1>
+        <h1 className="text-lg font-semibold">
+          {extensionDisplayName(manifest) ?? extensionId} settings
+        </h1>
       </div>
       {!runtime || !snapshot || !extension || !manifest || !entry ? (
         <p className="text-sm text-muted-foreground">This extension has no settings page.</p>
       ) : extension.status !== "active" ? (
         <p className="text-sm text-muted-foreground">
-          Enable {manifest.name} to change its settings.
+          Enable {extensionDisplayName(manifest)} to change its settings.
         </p>
       ) : (
         // extension 页面是矩形的原生视图，会盖住圆角；内边距让它留在圆角以内。The extension page is a rectangular native
@@ -56,7 +59,7 @@ export function DesktopExtensionSettingsPage() {
               title: "Settings",
               icon: { kind: "lucide", name: "Settings" },
               extensionId: extension.id,
-              extensionName: manifest.name,
+              extensionName: extensionDisplayName(manifest) ?? manifest.id,
               entry,
               retainContextWhenHidden: false,
               failure: null,

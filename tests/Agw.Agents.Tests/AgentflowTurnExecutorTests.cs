@@ -1429,7 +1429,10 @@ public partial class AgentflowTurnExecutorTests : IDisposable
             IReadOnlyDictionary<string, string>? environmentVariables,
             bool deferHumanInteractions,
             CancellationToken cancellationToken = default,
-            Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null
+            Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null,
+            IReadOnlyList<Agw.Extensions.Contracts.ExtensionExecutionPin>? extensionPins = null,
+            Agw.Agents.Execution.Agents.Composition.ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+            IReadOnlyList<Guid>? extensionIds = null
         )
         {
             LastPermissionMode = permissionMode;

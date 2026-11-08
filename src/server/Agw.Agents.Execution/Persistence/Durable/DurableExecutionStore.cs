@@ -135,6 +135,7 @@ internal sealed class DurableExecutionStore
                 Input = request.Input,
                 Task = DurableExecutionMapper.FromProjection(request.Task),
                 Settings = DurableExecutionMapper.FromSettings(request.Settings),
+                ExtensionIds = request.ExtensionPins.Select(pin => pin.ExtensionId).Distinct().ToArray(),
                 WorkspaceSnapshot = request.WorkspaceSnapshot,
                 StreamingScopeId = request.Envelope.StreamingScopeId,
             }

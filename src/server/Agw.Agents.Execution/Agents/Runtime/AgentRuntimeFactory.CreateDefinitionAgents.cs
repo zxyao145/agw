@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Agents.Middleware.ModelInput;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Context;
+using Agw.Extensions.Contracts;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Agents;
@@ -34,7 +35,10 @@ public partial class AgentRuntimeFactory
         string defaultMode,
         CancellationToken cancellationToken,
         int backgroundDepth = 0,
-        bool deferHumanInteractions = false
+        bool deferHumanInteractions = false,
+        IReadOnlyList<ExtensionExecutionPin>? extensionPins = null,
+        ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+        IReadOnlyList<Guid>? extensionIds = null
     )
     {
         if (!agentDefinition.ModelProviderId.HasValue)
@@ -78,7 +82,10 @@ public partial class AgentRuntimeFactory
                         conversationId,
                         environmentVariables,
                         defaultMode,
-                        token
+                        token,
+                        extensionPins,
+                        acceptedExtensionCapabilities,
+                        extensionIds
                     )
                 : null;
         var capabilities = await _capabilityComposer
@@ -91,7 +98,10 @@ public partial class AgentRuntimeFactory
                 defaultMode,
                 backgroundAgentFactory,
                 conversationId,
-                deferHumanInteractions
+                deferHumanInteractions,
+                extensionPins,
+                acceptedExtensionCapabilities,
+                extensionIds
             )
             .ConfigureAwait(false);
         AIAgent? aiAgent = null;
@@ -258,7 +268,10 @@ public partial class AgentRuntimeFactory
         Guid conversationId,
         IReadOnlyDictionary<string, string> environmentVariables,
         string defaultMode,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IReadOnlyList<ExtensionExecutionPin>? extensionPins,
+        ExtensionCapabilitySnapshot? acceptedExtensionCapabilities,
+        IReadOnlyList<Guid>? extensionIds
     )
     {
         var agents = new List<AIAgent>();
@@ -282,7 +295,10 @@ public partial class AgentRuntimeFactory
                             environmentVariables,
                             defaultMode,
                             cancellationToken,
-                            backgroundDepth: 1
+                            backgroundDepth: 1,
+                            extensionPins: extensionPins,
+                            acceptedExtensionCapabilities: acceptedExtensionCapabilities,
+                            extensionIds: extensionIds
                         )
                         .ConfigureAwait(false);
                 }
@@ -295,6 +311,9 @@ public partial class AgentRuntimeFactory
                         ConversationId = conversationId,
                         EnvironmentVariables = environmentVariables,
                         IsResume = false,
+                        ExtensionPins = extensionPins,
+                        ExtensionIds = extensionIds,
+                        AcceptedExtensionCapabilities = acceptedExtensionCapabilities,
                     };
                     agent = await CreateExternalAgentAsync(
                             request,

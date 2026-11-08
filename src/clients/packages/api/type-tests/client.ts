@@ -11,6 +11,16 @@ import {
 // Compiled by test:types, never executed. Invalid calls must fail at the public boundary.
 function checkContract() {
   apiGet("/api/agents");
+  apiGet("/api/server-info");
+  apiGet("/api/extensions/catalog", { params: { query: { afterRevision: 7 } } });
+  const extensionPackage = apiDownload("/api/extensions/package", {
+    params: {
+      query: {
+        extensionId: "019a4c17-5f00-7a80-8b3d-2b732f48a100",
+        releaseHash: "a".repeat(64),
+      },
+    },
+  });
   apiPost("/api/files/repositories/clone", {
     body: { projectId: "project-1", url: "https://example.com/repository.git" },
   });
@@ -19,6 +29,14 @@ function checkContract() {
   });
   apiPost("/api/auth/login", { body: { password: "test" } });
   apiPost("/api/auth/logout");
+  apiPost("/api/extensions/enable", { body: { extensionId: "extension-1" } });
+  apiPost("/api/extensions/disable", { body: { extensionId: "extension-1" } });
+  // @ts-expect-error Enablement requires a body. 启用设置要求提供请求体。
+  apiPost("/api/extensions/enable");
+  // @ts-expect-error Enablement requires the identifier. 启用设置要求提供 extension 标识。
+  apiPost("/api/extensions/disable", { body: {} });
+  // @ts-expect-error Enablement accepts the extension identifier. 启用设置接收 extension 标识。
+  apiPost("/api/extensions/enable", { body: { operationId: "operation-1" } });
   apiDelete("/api/auth/tokens/{id}", { params: { path: { id: "token-1" } } });
   apiGet("/api/files/list", { params: { query: { projectId: "project-1" } } });
   // @ts-expect-error A required query parameter requires options.
@@ -39,6 +57,8 @@ function checkContract() {
   apiDelete("/api/auth/tokens/{id}", { params: {} });
   // @ts-expect-error No GET operation is declared on login.
   apiGet("/api/auth/login");
+  // @ts-expect-error Extension catalog queries use the generated contract.
+  apiGet("/api/extensions/catalog", { params: { query: { unknown: true } } });
   // @ts-expect-error The route is not in the contract.
   apiGet("/api/not-a-route");
   const bytes: Promise<Uint8Array> = apiDownload("/api/files/download", {
@@ -64,6 +84,7 @@ function checkContract() {
   void bytes;
   void blob;
   void bearerBytes;
+  void extensionPackage;
 }
 
 void checkContract;

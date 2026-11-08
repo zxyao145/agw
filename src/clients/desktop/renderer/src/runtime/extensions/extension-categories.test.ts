@@ -14,9 +14,12 @@ import { sampleExtension } from "./extension-host.test-helper";
 function extension(installed: InstalledExtension): ExtensionState {
   return {
     id: installed.id,
+    instanceId: installed.instanceId,
+    extensionId: installed.id,
     installed,
     status: "inactive",
     error: null,
+    pendingUpdate: false,
     blockedRequests: [],
     frames: [],
   };
@@ -30,6 +33,7 @@ const viewer = extension(
 const commandsOnly = extension({
   ...sampleExtension([]),
   id: "snippets",
+  instanceId: "snippets",
   manifest: {
     manifestVersion: 1,
     id: "snippets",
@@ -52,6 +56,7 @@ const commandsOnly = extension({
 const themeOnly = extension({
   ...sampleExtension([]),
   id: "soft-theme",
+  instanceId: "soft-theme",
   enabled: false,
   manifest: {
     manifestVersion: 1,
@@ -64,6 +69,7 @@ const themeOnly = extension({
 const themeWithViews = extension({
   ...sampleExtension([]),
   id: "studio",
+  instanceId: "studio",
   validation: "invalid",
   manifest: {
     manifestVersion: 1,
@@ -119,10 +125,15 @@ test("the Extensions page lists extensions by name, using the id without a manif
   const unreadable = extension({
     ...sampleExtension([]),
     id: "broken",
+    instanceId: "broken",
     manifest: null,
     validation: "invalid",
   });
-  const sameName = extension({ ...sampleExtension([]), id: "another-sample" });
+  const sameName = extension({
+    ...sampleExtension([]),
+    id: "another-sample",
+    instanceId: "another-sample",
+  });
   const input = [...all, unreadable, sameName];
   assert.deepEqual(
     sortExtensionsByName(input).map((item) => item.id),

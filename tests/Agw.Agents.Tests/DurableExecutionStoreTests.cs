@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Configuration;
@@ -11,6 +12,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
+using Agw.Extensions.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
@@ -37,7 +39,11 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
     private readonly Guid _agentId = Guid.CreateVersion7();
     private TurnPersistenceTestKit _kit = null!;
 
-    public async ValueTask InitializeAsync() => _kit = await TurnPersistenceTestKit.CreateAsync(_clock);
+    public async ValueTask InitializeAsync()
+    {
+        _kit = await TurnPersistenceTestKit.CreateAsync(_clock);
+        await _kit.SeedAgentAsync(_agentId);
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -100,6 +106,53 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         Assert.Equal(1, start.TurnSequence);
     }
 
+    [Theory]
+    [InlineData(DurableExecutionStatus.Queued, DurableExecutionStatus.Completed)]
+    [InlineData(DurableExecutionStatus.Running, DurableExecutionStatus.Failed)]
+    [InlineData(DurableExecutionStatus.WaitingForHuman, DurableExecutionStatus.Interrupted)]
+    [InlineData(DurableExecutionStatus.Resuming, DurableExecutionStatus.Completed)]
+    public async Task HasNonterminalExecutionsAsync_MatchingExtensionId_ReturnsTrueUntilTerminal(
+        DurableExecutionStatus status,
+        DurableExecutionStatus terminalStatus
+    )
+    {
+        var token = TestContext.Current.CancellationToken;
+        var turnId = await RegisterAsync();
+        var extensionId = Guid.CreateVersion7();
+        await using (var context = _kit.CreateContext())
+        {
+            var record = await context.DurableExecutions.SingleAsync(item => item.Id == turnId, token);
+            record.Status = status;
+            var manifest = JsonNode.Parse(record.ManifestJson)!;
+            manifest["extensionIds"] = new JsonArray(extensionId);
+            record.ManifestJson = manifest.ToJsonString();
+            await context.SaveChangesAsync(token);
+        }
+
+        var usage = _kit.ResolveScoped<IExtensionExecutionUsage>();
+        Assert.True(await usage.HasNonterminalExecutionsAsync(extensionId, token));
+        await using (var context = _kit.CreateContext())
+        {
+            var record = await context.DurableExecutions.SingleAsync(item => item.Id == turnId, token);
+            record.Status = terminalStatus;
+            await context.SaveChangesAsync(token);
+        }
+        Assert.False(await usage.HasNonterminalExecutionsAsync(extensionId, token));
+    }
+
+    [Fact]
+    public async Task CreateManifestJson_ExtensionIds_PersistsAcceptedIds()
+    {
+        var accepted = await AcceptAsync();
+        var pin = new ExtensionExecutionPin(Guid.CreateVersion7(), "sha256:release-a", 17);
+        var request = accepted.Request with { ExtensionPins = [pin] };
+
+        using var persistedManifest = JsonDocument.Parse(DurableExecutionStore.CreateManifestJson(request));
+        var extensionId = Assert.Single(persistedManifest.RootElement.GetProperty("extensionIds").EnumerateArray());
+
+        Assert.Equal(pin.ExtensionId, extensionId.GetGuid());
+    }
+
     [Fact]
     public async Task AcceptAsync_FullAccessJob_ReloadPreservesPermissions()
     {
@@ -118,6 +171,23 @@ public sealed partial class DurableExecutionStoreTests : IAsyncLifetime
         // Assert
         Assert.Equal(AgwPermissionMode.FullAccess, restored.Manifest.Settings.PermissionMode);
         Assert.Equal(HumanInteractionPolicy.Reject, restored.Manifest.Settings.HumanInteractionPolicy);
+    }
+
+    [Fact]
+    public void DurableExecutionManifest_ExtensionIds_SurviveJsonRoundTrip()
+    {
+        var extensionId = Guid.CreateVersion7();
+        var manifestJson = DurableExecutionJson.Serialize(CreateManifest() with { ExtensionIds = [extensionId] });
+        var manifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
+            manifestJson,
+            "execution manifest"
+        );
+        using var persistedManifest = JsonDocument.Parse(DurableExecutionJson.Serialize(manifest));
+        var persistedExtensionId = Assert.Single(
+            persistedManifest.RootElement.GetProperty("extensionIds").EnumerateArray()
+        );
+
+        Assert.Equal(extensionId, persistedExtensionId.GetGuid());
     }
 
     [Fact]

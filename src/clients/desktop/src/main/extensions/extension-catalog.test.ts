@@ -11,10 +11,24 @@ import {
   scanExtensionDirectory,
   toInstalledExtension,
 } from "./extension-catalog";
-import { testManifest, writeTestExtension } from "./extension-fixture.test-helper";
+import { TEST_ICON_SVG, testManifest, writeTestExtension } from "./extension-fixture.test-helper";
 
 const APP_VERSION = "0.5.0";
 const EXTENSION_ID = "01a173c6-4933-766f-8182-77f77ba5b946";
+const DEFAULT_PACKAGE_FILES = {
+  "background.js": 'import { defineBackground } from "/__agw/sdk.js";\ndefineBackground({});\n',
+  "icon.svg": TEST_ICON_SVG,
+  "index.html": '<!doctype html><script type="module" src="./main.js"></script>',
+};
+
+function fileChecksums(files: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(files).map(([path, content]) => [
+      path,
+      createHash("sha256").update(content).digest("hex"),
+    ]),
+  );
+}
 
 test("scanning lists valid extensions with icon data URLs matching the files", async () => {
   const scratch = await createScratchDirectory("catalog");
@@ -34,6 +48,80 @@ test("scanning lists valid extensions with icon data URLs matching the files", a
     assert.deepEqual(
       Buffer.from(dataUrl.split(",")[1], "base64"),
       await readFile(join(scratch.path, EXTENSION_ID, "icon.svg")),
+    );
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("v2 checksum maps are verified when a Server package is scanned", async () => {
+  const scratch = await createScratchDirectory("catalog-v2-checksum");
+  try {
+    const entry = "<!doctype html><main>Calendar</main>";
+    const manifest = {
+      manifestVersion: 2,
+      id: EXTENSION_ID,
+      name: "calendar",
+      displayName: "Calendar",
+      version: "1.0.0",
+      targets: 2,
+      files: fileChecksums({ ...DEFAULT_PACKAGE_FILES, "desktop/index.html": entry }),
+      desktop: {
+        apiVersion: 1,
+        contributes: {
+          mainViews: [
+            { id: "app", title: "Calendar", icon: "Calendar", entry: "desktop/index.html" },
+          ],
+        },
+      },
+    };
+    await writeTestExtension(join(scratch.path, EXTENSION_ID), manifest, {
+      "desktop/index.html": entry,
+    });
+
+    const [extension] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+
+    assert.equal(extension.validation, "valid");
+    assert.deepEqual(extension.errors, []);
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("v2 checksum mismatch invalidates the package file", async () => {
+  const scratch = await createScratchDirectory("catalog-v2-checksum-mismatch");
+  try {
+    await writeTestExtension(
+      join(scratch.path, EXTENSION_ID),
+      {
+        manifestVersion: 2,
+        id: EXTENSION_ID,
+        name: "calendar",
+        displayName: "Calendar",
+        version: "1.0.0",
+        targets: 2,
+        files: {
+          ...fileChecksums(DEFAULT_PACKAGE_FILES),
+          "desktop/index.html": "0".repeat(64),
+        },
+        desktop: {
+          apiVersion: 1,
+          contributes: {
+            mainViews: [
+              { id: "app", title: "Calendar", icon: "Calendar", entry: "desktop/index.html" },
+            ],
+          },
+        },
+      },
+      { "desktop/index.html": "<!doctype html><main>Calendar</main>" },
+    );
+
+    const [extension] = await scanExtensionDirectory(scratch.path, APP_VERSION, "user");
+
+    assert.equal(extension.validation, "invalid");
+    assert.deepEqual(
+      extension.errors.map((error) => [error.code, error.path]),
+      [["PACKAGE_CHECKSUM_MISMATCH", "files.desktop/index.html"]],
     );
   } finally {
     await scratch.dispose();
@@ -418,6 +506,68 @@ test("bundled and user directories merge with user copies winning and uninstalle
       afterUninstall.find((entry) => entry.id === "shared")?.directory,
       join(bundledDirectory, "shared"),
     );
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("available Server copies preserve instances from every Server source", async () => {
+  const scratch = await createScratchDirectory("catalog-server-sources");
+  try {
+    const userDirectory = join(scratch.path, "user");
+    await writeTestExtension(join(userDirectory, EXTENSION_ID), testManifest(EXTENSION_ID));
+    const [userEntry] = await scanExtensionDirectory(userDirectory, APP_VERSION, "user");
+    const serverEntries = ["server-a", "server-b"].map((instanceId, index) => ({
+      ...userEntry,
+      instanceId,
+      origin: { serverId: instanceId, userId: "user-a" },
+      releaseHash: String(index + 1).repeat(64),
+      source: "server" as const,
+      serverAvailable: true,
+    }));
+
+    const merged = mergeExtensionCatalogs([], [userEntry], [], serverEntries);
+
+    assert.deepEqual(
+      merged.map((entry) => entry.instanceId),
+      ["server-a", "server-b"],
+    );
+  } finally {
+    await scratch.dispose();
+  }
+});
+
+test("an active Server copy takes precedence over a local copy with the same id", async () => {
+  const scratch = await createScratchDirectory("catalog-server-copy");
+  try {
+    const localDirectory = join(scratch.path, "local");
+    const serverDirectory = join(scratch.path, "server");
+    await writeTestExtension(join(localDirectory, EXTENSION_ID), testManifest(EXTENSION_ID));
+    await writeTestExtension(
+      join(serverDirectory, EXTENSION_ID),
+      testManifest(EXTENSION_ID, { version: "2.0.0" }),
+    );
+    const server = (await scanExtensionDirectory(serverDirectory, APP_VERSION, "server")).map(
+      (entry) => ({
+        ...entry,
+        instanceId: "server-" + "a".repeat(64),
+        origin: { serverId: "server-a", userId: "user-a" },
+        releaseHash: "b".repeat(64),
+        serverAvailable: true,
+      }),
+    );
+
+    const merged = mergeExtensionCatalogs(
+      [],
+      await scanExtensionDirectory(localDirectory, APP_VERSION, "user"),
+      [],
+      server,
+    );
+
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].source, "server");
+    assert.equal(merged[0].instanceId, server[0].instanceId);
+    assert.equal((await scanExtensionDirectory(localDirectory, APP_VERSION, "user")).length, 1);
   } finally {
     await scratch.dispose();
   }

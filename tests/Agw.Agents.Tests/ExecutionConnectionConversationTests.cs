@@ -21,11 +21,10 @@ public partial class ExecutionCommandHandlerTests
             SettingCommandMapper.FromCommand(new SettingCommand(task.ProjectId, configuredConversationId)),
             token
         );
+        var command = await CreateExecCommand(Guid.CreateVersion7());
 
         // Act
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), token)
-        );
+        var exception = await Assert.ThrowsAsync<AgwException>(() => context.StartTurnAsync(command, token));
 
         // Assert
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -41,7 +40,7 @@ public partial class ExecutionCommandHandlerTests
         var sink = new CapturingSink();
         Runtimes.HoldTurnOpen = true;
         await using var context = CreateContext(CreateTask("busy-context"), sink: sink);
-        var first = CreateExecCommand(Guid.CreateVersion7());
+        var first = await CreateExecCommand(Guid.CreateVersion7());
         await context.StartTurnAsync(first, token);
         await Runtimes.TurnStarts.WaitAsync(TurnTimeout, token);
 
@@ -66,7 +65,7 @@ public partial class ExecutionCommandHandlerTests
         var token = TestContext.Current.CancellationToken;
         var sink = new FinishGateSink();
         await using var context = CreateContext(CreateTask("settling-context"), sink: sink);
-        var first = CreateExecCommand(Guid.CreateVersion7());
+        var first = await CreateExecCommand(Guid.CreateVersion7());
         Task next;
         try
         {

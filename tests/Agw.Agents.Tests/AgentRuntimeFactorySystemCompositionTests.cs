@@ -13,13 +13,19 @@ using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Auth.Application;
+using Agw.Auth.Contracts;
+using Agw.Extensions.Contracts;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Settings;
 using Agw.Infrastructure.Skills;
 using Agw.Integrations.Mcp;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Providers.Contracts;
+using Agw.Settings;
+using Agw.Settings.Application.Persistence;
+using Agw.Shared.Contracts;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -49,6 +55,7 @@ using Microsoft.Agents.AI.Compaction;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -252,7 +259,6 @@ public class AgentRuntimeFactorySystemCompositionTests
             ],
             AgentConnectionRelations = [new AgentConnectionRelation { ConnectionId = connectionId }],
         };
-        var toolRegistry = CreateToolRegistry();
         if (includeUserMemory)
         {
             project.Tools =
@@ -287,8 +293,10 @@ public class AgentRuntimeFactorySystemCompositionTests
             )
         );
 
-        using var runtimeServices = CreateSkillServices(dbContext, AgwDataPaths.Resolve(root, root));
+        await using var runtimeServices = CreateSkillServices(dbContext, AgwDataPaths.Resolve(root, root));
+        var toolRegistry = CreateToolRegistry(runtimeServices);
         var runtimeService = CreateRuntimeFactory(
+            dbContext,
             agentAppService,
             new TestProjectRuntimeFacade(project),
             toolRegistry,
@@ -510,14 +518,17 @@ public class AgentRuntimeFactorySystemCompositionTests
             ModelProviderId = modelProviderId,
         };
         using var httpClientFactory = new RecordingHttpClientFactory();
+        await using var runtimeServices = CreateSkillServices(dbContext, AgwDataPaths.Resolve(root, root));
         var runtimeService = CreateRuntimeFactory(
+            dbContext,
             CreateAgentAppService(dbContext),
             new TestProjectRuntimeFacade(project),
-            CreateToolRegistry(),
+            CreateToolRegistry(runtimeServices),
             AgwDataPaths.Resolve(root, root),
             new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
             new TestMcpToolMaterializer(),
-            httpClientFactory: httpClientFactory
+            httpClientFactory: httpClientFactory,
+            runtimeServices: runtimeServices
         );
 
         try
@@ -588,14 +599,17 @@ public class AgentRuntimeFactorySystemCompositionTests
         };
         var connectionResource = new TrackingResource();
         using var httpClientFactory = new RecordingHttpClientFactory();
+        await using var runtimeServices = CreateSkillServices(dbContext, AgwDataPaths.Resolve(root, root));
         var runtimeService = CreateRuntimeFactory(
+            dbContext,
             CreateAgentAppService(dbContext),
             new TestProjectRuntimeFacade(project),
-            CreateToolRegistry(),
+            CreateToolRegistry(runtimeServices),
             AgwDataPaths.Resolve(root, root),
             new TestConnectionCapabilityResolver(CreateResolution([], connectionResource)),
             new TestMcpToolMaterializer(),
-            httpClientFactory: httpClientFactory
+            httpClientFactory: httpClientFactory,
+            runtimeServices: runtimeServices
         );
 
         try
@@ -749,14 +763,17 @@ public class AgentRuntimeFactorySystemCompositionTests
             Type = AgentType.System,
             AgentSkillRelations = agentSelected ? [new AgentSkillRelation { SkillId = registration.Id }] : [],
         };
+        await using var runtimeServices = CreateSkillServices(dbContext, AgwDataPaths.Resolve(root, root));
         var runtimeService = CreateRuntimeFactory(
+            dbContext,
             CreateAgentAppService(dbContext),
             new TestProjectRuntimeFacade(project),
-            CreateToolRegistry(),
+            CreateToolRegistry(runtimeServices),
             AgwDataPaths.Resolve(root, root),
             new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
             new TestMcpToolMaterializer(),
-            [registration]
+            [registration],
+            runtimeServices: runtimeServices
         );
         var method = typeof(AgentRuntimeFactory).GetMethod(
             "CreateSkillsProviderAsync",
@@ -858,11 +875,12 @@ public class AgentRuntimeFactorySystemCompositionTests
             );
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            using var skillServices = CreateSkillServices(dbContext, paths);
+            await using var skillServices = CreateSkillServices(dbContext, paths);
             var runtime = CreateRuntimeFactory(
+                dbContext,
                 CreateAgentAppService(dbContext),
                 new TestProjectRuntimeFacade(new Project { Id = Guid.CreateVersion7() }),
-                CreateToolRegistry(),
+                CreateToolRegistry(skillServices),
                 paths,
                 new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
                 new TestMcpToolMaterializer(),
@@ -944,6 +962,7 @@ public class AgentRuntimeFactorySystemCompositionTests
     }
 
     private static AgentRuntimeFactory CreateRuntimeFactory(
+        AgwDbContext dbContext,
         AgentAppService appService,
         IProjectRuntimeFacade projectRuntimeFacade,
         ToolRegistryService toolRegistry,
@@ -957,7 +976,7 @@ public class AgentRuntimeFactorySystemCompositionTests
         IServiceProvider? runtimeServices = null
     )
     {
-        var services = runtimeServices ?? new ServiceCollection().BuildServiceProvider();
+        var services = runtimeServices ?? throw new InvalidOperationException("Runtime services are required.");
         return new AgentRuntimeFactory(
             appService,
             projectRuntimeFacade,
@@ -968,6 +987,7 @@ public class AgentRuntimeFactorySystemCompositionTests
                 mcpToolMaterializer,
                 new ToolBlockRegistry(toolBlocks ?? []),
                 NullLogger<AgentCapabilityComposer>.Instance,
+                services.GetRequiredService<IExtensionCapabilityCatalog>(),
                 [new ProjectInstructionsSource()]
             ),
             new ConversationHistoryStore(
@@ -1005,9 +1025,22 @@ public class AgentRuntimeFactorySystemCompositionTests
 
     private static ServiceProvider CreateSkillServices(AgwDbContext dbContext, AgwDataPaths paths)
     {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Extensions:Directory"] = Path.Combine(paths.Root, "extensions") }
+            )
+            .Build();
         var services = new ServiceCollection();
         services.AddOptions();
         services.AddHttpClient();
+        services.AddSingleton(paths);
+        services.AddSingleton(dbContext);
+        services.AddSingleton<ISettingsDbContext>(dbContext);
+        services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<ICurrentUser, UserInfoService>();
+        services.AddScoped<IUserInfoService, UserInfoService>();
+        services.AddSettings();
+        services.AddTestExtensions(configuration);
         services.AddSingleton<ILocalSkillContentResolver>(provider =>
         {
             var user = new UserInfoService();
@@ -1046,15 +1079,16 @@ public class AgentRuntimeFactorySystemCompositionTests
         return directory?.FullName ?? throw new InvalidOperationException("Could not locate the repository root.");
     }
 
-    private static ToolRegistryService CreateToolRegistry()
+    private static ToolRegistryService CreateToolRegistry(IServiceProvider services)
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddHttpClient();
-        return new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services.BuildServiceProvider());
+        return new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            services,
+            services.GetRequiredService<IExtensionGenerationCatalog>()
+        );
     }
 
-    private static T FindInObjectGraph<T>(object root)
+    internal static T FindInObjectGraph<T>(object root)
         where T : class
     {
         foreach (var value in TraverseObjectGraph(root))

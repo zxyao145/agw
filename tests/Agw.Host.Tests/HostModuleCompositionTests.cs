@@ -11,6 +11,7 @@ using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.ControlPlane.Host;
 using Agw.DataPlane.Host;
+using Agw.Extensions;
 using Agw.Files;
 using Agw.Host.Data;
 using Agw.Host.Hosting;
@@ -137,12 +138,12 @@ public sealed class HostModuleCompositionTests
     }
 
     [Fact]
-    public void AgentRuntimeFactory_ResolvedFromModuleComposition_UsesProjectsHistoryStore()
+    public async Task AgentRuntimeFactory_ResolvedFromModuleComposition_UsesProjectsHistoryStore()
     {
         // 历史存储由 Projects 模块注册，Execution 通过 Contracts 使用同一个单例。
         // The history store is registered by the Projects module, and Execution uses the same singleton through Contracts.
         var dataPaths = AgwDataPaths.Resolve(
-            Path.Combine(Path.GetTempPath(), $"agw-runtime-composition-{Guid.CreateVersion7():N}"),
+            Path.Combine(AppContext.BaseDirectory, ".scratch", $"agw-runtime-composition-{Guid.CreateVersion7():N}"),
             "/unused"
         );
         dataPaths.EnsureCreated();
@@ -158,14 +159,28 @@ public sealed class HostModuleCompositionTests
             services.AddSingleton(dataPaths);
             services.AddSingleton<IConfiguration>(configuration);
             services.AddSingleton(TimeProvider.System);
+            services.AddSingleton<IHostEnvironment>(
+                Microsoft
+                    .Extensions.Hosting.Host.CreateApplicationBuilder(
+                        new HostApplicationBuilderSettings
+                        {
+                            ContentRootPath = AppContext.BaseDirectory,
+                            DisableDefaults = true,
+                        }
+                    )
+                    .Environment
+            );
             services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
             services.AddHybridCache();
             services
                 .AddTools(configuration)
                 .AddAgents(configuration)
                 .AddAgentExecution(configuration)
+                .AddExtensions(configuration, "Standalone")
+                .AddExtensionCapabilities()
                 .AddFiles(configuration)
                 .AddInfrastructure(configuration)
+                .AddExtensionInfrastructure()
                 .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
                 .AddProviders(configuration)
                 .AddSkills(configuration)
@@ -175,8 +190,8 @@ public sealed class HostModuleCompositionTests
                 .AddSetup(configuration, readOnly: false)
                 .AddIntegrations(configuration);
 
-            using var provider = services.BuildServiceProvider();
-            using var scope = provider.CreateScope();
+            await using var provider = services.BuildServiceProvider();
+            await using var scope = provider.CreateAsyncScope();
             var runtimeService = Assert.IsType<AgentRuntimeFactory>(
                 scope.ServiceProvider.GetRequiredService<IAgentRuntimeFactory>()
             );

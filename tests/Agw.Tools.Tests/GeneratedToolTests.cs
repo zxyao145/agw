@@ -12,8 +12,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Tools.Tests;
 
-public sealed class GeneratedToolTests
+public sealed class GeneratedToolTests : IClassFixture<ToolRuntimeFixture>
 {
+    private readonly ToolRuntimeFixture _extensionRuntime;
+
+    public GeneratedToolTests(ToolRuntimeFixture extensionRuntime)
+    {
+        _extensionRuntime = extensionRuntime;
+    }
+
     [Fact]
     public async Task GeneratedModule_ContainerAndIgnore_ProducesSchemaAndDirectInvocation()
     {
@@ -39,6 +46,7 @@ public sealed class GeneratedToolTests
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             provider,
+            extensionGenerations: _extensionRuntime.Catalog,
             toolAssemblies: [],
             generatedToolCatalog: catalog,
             generatedToolTypes: [typeof(GeneratedFixtureTools)]

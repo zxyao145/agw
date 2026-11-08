@@ -43,7 +43,8 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
         IReadOnlyList<string> toolWarnings,
         IReadOnlyDictionary<string, string> toolInvocationWarnings,
         AgentResourceLease lease,
-        IReadOnlySet<string>? declaredToolNames = null
+        IReadOnlySet<string>? declaredToolNames = null,
+        IReadOnlyList<AgentSkill>? extensionSkills = null
     )
     {
         _tools = tools.ToList();
@@ -60,6 +61,7 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
         _planModeAllowedToolNames = new HashSet<string>(planModeAllowedToolNames, StringComparer.OrdinalIgnoreCase);
         ToolWarnings = toolWarnings;
         ToolInvocationWarnings = toolInvocationWarnings;
+        ExtensionSkills = extensionSkills ?? [];
         _lease = lease;
     }
 
@@ -74,6 +76,8 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
     /// 集成提供的 Skill 引用，供创建 Skills Provider 时加载使用。
     /// </summary>
     public IReadOnlyList<PluginSkillReference> PluginSkills { get; }
+
+    public IReadOnlyList<AgentSkill> ExtensionSkills { get; }
 
     /// <summary>
     /// Structured warnings collected while preparing integration capabilities, with sources and reasons to help diagnose configuration issues.

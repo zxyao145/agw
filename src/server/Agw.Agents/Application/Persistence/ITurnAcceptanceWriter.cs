@@ -20,6 +20,8 @@ public sealed record TurnAcceptanceWrite
 {
     public required AcceptConversationTurnRequest Turn { get; init; }
 
+    public IReadOnlyList<Guid> ExtensionIds { get; init; } = [];
+
     public DurableTurnRegistration? Durable { get; init; }
 }
 

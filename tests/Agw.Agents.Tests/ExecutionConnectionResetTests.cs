@@ -10,7 +10,7 @@ public partial class ExecutionCommandHandlerTests
         var task = CreateTask("new-context");
         var tasks = new FakeProjectTaskFacade(task, _persistence) { Generation = null };
         await using var connection = CreateContext(task, projectTasks: tasks);
-        var command = CreateExecCommand(Guid.NewGuid());
+        var command = await CreateExecCommand(Guid.NewGuid());
 
         // Act
         await connection.StartTurnAsync(command, token);
@@ -31,7 +31,7 @@ public partial class ExecutionCommandHandlerTests
         var task = CreateTask("deleted-context");
         var tasks = new FakeProjectTaskFacade(task, _persistence);
         await using var connection = CreateContext(task, projectTasks: tasks);
-        var command = CreateExecCommand(Guid.NewGuid());
+        var command = await CreateExecCommand(Guid.NewGuid());
         await connection.StartTurnAsync(command, token);
         await connection.WhenIdleAsync();
         var oldRuntime = Assert.Single(Runtimes.Created);
@@ -57,7 +57,7 @@ public partial class ExecutionCommandHandlerTests
         var task = CreateTask("reset-context");
         var tasks = new FakeProjectTaskFacade(task, _persistence);
         await using var connection = CreateContext(task, projectTasks: tasks);
-        var command = CreateExecCommand(Guid.NewGuid());
+        var command = await CreateExecCommand(Guid.NewGuid());
         await connection.StartTurnAsync(command, token);
         await connection.WhenIdleAsync();
         var oldRuntime = Assert.Single(Runtimes.Created);

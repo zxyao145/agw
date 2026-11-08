@@ -5,6 +5,7 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
 using Agw.Agents.Execution.Configuration;
@@ -445,7 +446,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             var renewal = RenewLeaseAsync(lease, ownership, renewalStop.Token);
             try
             {
-                DurableExecutionSegmentResult result;
+                DurableExecutionSegmentResult? result = null;
                 var reportedFailure = true;
                 try
                 {
@@ -479,7 +480,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     // The Agent stream is released and telemetry has written its usage; an interrupted lease settles now.
                     await SettleInterruptedUsageAsync(lease, CancellationToken.None).ConfigureAwait(false);
                 }
-                await CommitResultAsync(snapshot, lease, guard, result, reportedFailure, ownership.Token)
+                await CommitResultAsync(snapshot, lease, guard, result!, reportedFailure, ownership.Token)
                     .ConfigureAwait(false);
             }
             finally
@@ -685,10 +686,12 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         .CreateRuntimeAsync(
                             manifest.AgentId,
                             manifest.Task.ToProjection(),
-                            manifest.Settings.ToRuntimeSettings(
-                                manifest.Task.ProjectId,
-                                manifest.Task.ProjectConversationId
-                            ),
+                            manifest
+                                .Settings.ToRuntimeSettings(
+                                    manifest.Task.ProjectId,
+                                    manifest.Task.ProjectConversationId
+                                )
+                                .WithExtensionIds(manifest.ExtensionIds),
                             token
                         )
                         .ConfigureAwait(false)
@@ -758,7 +761,9 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                 await using var runtime = AgentflowRuntimeFactory.CreateRuntime(
                     manifest.AgentId,
                     manifest.Task.ToProjection(),
-                    manifest.Settings.ToRuntimeSettings(manifest.Task.ProjectId, manifest.Task.ProjectConversationId),
+                    manifest
+                        .Settings.ToRuntimeSettings(manifest.Task.ProjectId, manifest.Task.ProjectConversationId)
+                        .WithExtensionIds(manifest.ExtensionIds),
                     deferHumanInteractions: true
                 );
                 scope.BindInteractions(
