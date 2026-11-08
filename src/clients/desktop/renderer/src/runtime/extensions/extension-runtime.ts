@@ -28,7 +28,9 @@ export function getExtensionRuntime(): ExtensionRuntime {
       else toast(message);
     },
   });
-  const tracker = new HostOverlayTracker(document, (frameIds) => host.setObscuredFrames(frameIds));
+  const tracker = new HostOverlayTracker(document, (frameIds, buttonObscured) =>
+    host.setObscuredFrames(frameIds, buttonObscured),
+  );
   const layout = createLayoutSampler(host, tracker);
   runtime = { host, tracker, layout };
   return runtime;

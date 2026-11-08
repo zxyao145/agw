@@ -1,0 +1,40 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  box-sizing: border-box;
+  padding: 8px;
+}
+
+body > button {
+  margin-left: var(--floating-chat-x, 0px);
+  margin-top: var(--floating-chat-y, 0px);
+  outline: none;
+}
+
+/* 悬停时叠加一层前景色。Hover tints the surface with the foreground color. */
+body > button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+body > button:hover::after {
+  opacity: 0.06;
+}
+
+body > button:focus-visible {
+  outline: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+  outline-offset: 2px;
+}

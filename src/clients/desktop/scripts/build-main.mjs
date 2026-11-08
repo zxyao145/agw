@@ -11,6 +11,7 @@ export const mainBuildOptions = {
     "preload/index": "src/preload/index.ts",
     "preload/extension": "src/preload/extension.ts",
     "preload/confirmation": "src/preload/confirmation.ts",
+    "preload/floating-chat": "src/preload/floating-chat.ts",
   },
   outdir: "dist",
   bundle: true,
@@ -34,9 +35,23 @@ export const confirmationBuildOptions = {
   logLevel: "info",
 };
 
-/** 构建主进程、preload 与确认页面。Builds the main process, the preloads and the confirmation page. */
+export const floatingChatBuildOptions = {
+  entryPoints: ["src/floating-chat/floating-chat.ts", "src/floating-chat/floating-chat.css"],
+  outdir: "dist/floating-chat",
+  bundle: true,
+  platform: "browser",
+  format: "iife",
+  target: "chrome140",
+  logLevel: "info",
+};
+
+/** 构建主进程、preload 与独立页面。Builds the main process, the preloads and the separate pages. */
 export async function buildDesktopMain() {
-  await Promise.all([build(mainBuildOptions), build(confirmationBuildOptions)]);
+  await Promise.all([
+    build(mainBuildOptions),
+    build(confirmationBuildOptions),
+    build(floatingChatBuildOptions),
+  ]);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

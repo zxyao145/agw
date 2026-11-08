@@ -5,11 +5,11 @@ import {
   ChatConversationPane,
   ChatFilePane,
   FloatingChatPanel,
+  useChatWorkspace,
   type ChatMessageActionArgs,
   type ExtensionMenuItem,
 } from "@agw/chat";
 import type { FileViewerFile } from "@agw/extension-sdk";
-import { mountFloatingChatButton } from "@agw/extension-sdk";
 import type { EditableSource } from "@agw/projects";
 
 import type { ExtensionHost, ExtensionHostSnapshot } from "../../extensions/extension-host";
@@ -18,6 +18,7 @@ import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
 import type { ViewOpenRequest } from "../../extensions/workspace-layout-store";
 import type { WorkspaceView } from "../../extensions/workspace-registry";
 import { ExtensionView, ExtensionViewInfo, reloadExtensionView } from "./extension-view";
+import { WindowFloatingChatButton } from "./window-floating-chat-button";
 
 export type MainWorkspaceProps = {
   host: ExtensionHost;
@@ -41,41 +42,22 @@ export type MainWorkspaceProps = {
   sourceChatContext: Record<string, string> | null;
 };
 
-function SourceFloatingChatButton({
+function SourceFloatingChatContext({
   host,
   context,
-  returnFocusRef,
-  hidden,
 }: {
   host: ExtensionHost;
   context: Record<string, string>;
-  returnFocusRef: React.RefObject<HTMLElement | null>;
-  hidden: boolean;
 }) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const contextRef = React.useRef(context);
-  contextRef.current = context;
-
   React.useEffect(() => {
     host.setSourceFloatingChatContext(context);
   }, [host, context]);
 
   React.useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const button = mountFloatingChatButton(container, {
-      onOpen: () => host.openSourceFloatingChat(contextRef.current),
-    });
-    const element = container.querySelector("button");
-    returnFocusRef.current = element;
-    return () => {
-      if (returnFocusRef.current === element) returnFocusRef.current = null;
-      button.dispose();
-      host.closeSourceFloatingChat();
-    };
-  }, [host, returnFocusRef]);
+    return () => host.closeSourceFloatingChat();
+  }, [host]);
 
-  return <div ref={containerRef} hidden={hidden} />;
+  return null;
 }
 
 /**
@@ -85,8 +67,8 @@ function SourceFloatingChatButton({
  * main views hide or unload according to `retainContextWhenHidden`.
  */
 export function MainWorkspace(props: MainWorkspaceProps) {
+  const workspace = useChatWorkspace();
   const { activeView, fileViewerFile } = props;
-  const floatingChatReturnFocusRef = React.useRef<HTMLElement | null>(null);
   const floatingChat = props.snapshot.floatingChat;
   const isChat = activeView.id === BUILT_IN_VIEWS.chat;
   const floatingChatMode = isChat ? "page" : floatingChat?.open ? "floating" : "hidden";
@@ -122,10 +104,11 @@ export function MainWorkspace(props: MainWorkspaceProps) {
       aria-label={activeView.title}
       data-view-id={activeView.id}
     >
+      <WindowFloatingChatButton host={props.host} snapshot={props.snapshot} hidden={isChat} />
       <FloatingChatPanel
         mode={floatingChatMode}
         onClose={() => props.host.closeFloatingChat()}
-        returnFocusRef={floatingChatReturnFocusRef}
+        onNewConversation={workspace.startNewConversation}
       >
         <ChatConversationPane
           compact
@@ -173,12 +156,7 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           editableSource={props.editableSource}
           renderSourceAccessory={() =>
             props.sourceChatContext ? (
-              <SourceFloatingChatButton
-                host={props.host}
-                context={props.sourceChatContext}
-                returnFocusRef={floatingChatReturnFocusRef}
-                hidden={floatingChat?.open === true && floatingChat.ownerFrameId === null}
-              />
+              <SourceFloatingChatContext host={props.host} context={props.sourceChatContext} />
             ) : null
           }
         />

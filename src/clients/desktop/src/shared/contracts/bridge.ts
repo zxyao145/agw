@@ -1,4 +1,5 @@
 import type { ConfirmationAnswer, HostConfirmationRequest } from "./confirmation";
+import type { FloatingChatButtonRequest } from "./floating-chat";
 import type { DesktopRuntimeState } from "./runtime";
 import type { DesktopSettingsUpdate } from "./settings";
 import type { DesktopUpdateCheckResult } from "./update";
@@ -47,6 +48,11 @@ export type TurnNotificationStatus = "completed" | "failed";
 export type TurnNotificationRequest = {
   status: TurnNotificationStatus;
   title?: string;
+};
+
+export type AgwFloatingChatHostBridge = {
+  update(hostInstanceId: string, request: FloatingChatButtonRequest): Promise<void>;
+  onOpen(listener: (owner: string) => void): () => void;
 };
 
 export type AgwDesktopBridge = {

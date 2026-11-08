@@ -11,6 +11,7 @@ export type FloatingChatPanelMode = "page" | "floating" | "hidden";
 export interface FloatingChatPanelProps {
   mode: FloatingChatPanelMode;
   onClose: () => void;
+  onNewConversation?: () => void;
   returnFocusRef?: React.RefObject<HTMLElement | null>;
   children: React.ReactNode;
 }
@@ -36,6 +37,7 @@ function isVisibleFocusTarget(element: HTMLElement): boolean {
 export function FloatingChatPanel({
   mode,
   onClose,
+  onNewConversation,
   returnFocusRef,
   children,
 }: FloatingChatPanelProps) {
@@ -80,15 +82,28 @@ export function FloatingChatPanel({
       {mode === "floating" ? (
         <div className="flex h-11 shrink-0 items-center justify-between border-b px-3">
           <span className="text-sm font-semibold">Chat</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Close chat"
-            onClick={onClose}
-          >
-            <X className="size-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {onNewConversation ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="New conversation"
+                onClick={onNewConversation}
+              >
+                new
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close chat"
+              onClick={onClose}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>

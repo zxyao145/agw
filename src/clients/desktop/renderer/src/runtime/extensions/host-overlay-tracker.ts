@@ -119,7 +119,7 @@ export class HostOverlayTracker {
 
   public constructor(
     private readonly document: Document,
-    private readonly onChange: (frameIds: ReadonlySet<string>) => void,
+    private readonly onChange: (frameIds: ReadonlySet<string>, buttonObscured: boolean) => void,
   ) {}
 
   public start(): void {
@@ -166,10 +166,11 @@ export class HostOverlayTracker {
       return [{ frameId, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }];
     });
     const obscured = computeObscuredFrames(overlays, frames, this.obscureAll);
-    const key = [...obscured].sort().join(",");
+    const buttonObscured = this.obscureAll || overlays.length > 0;
+    const key = `${buttonObscured}:${[...obscured].sort().join(",")}`;
     if (key !== this.last) {
       this.last = key;
-      this.onChange(obscured);
+      this.onChange(obscured, buttonObscured);
     }
     // 弹出层打开期间每个动画帧重新计算（位置可能在动画中变化）。Recompute every frame while overlays are open.
     if (overlays.length > 0) this.schedule();

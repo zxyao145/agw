@@ -44,6 +44,89 @@ async function openCount(page: Page): Promise<number> {
   return page.evaluate("window.floatingChatOpenCount");
 }
 
+test("floating Chat uses an accessible icon button", async () => {
+  await withBrowserPage({ width: 800, height: 600 }, async (page) => {
+    const button = page.getByRole("button", { name: "Open chat" });
+    assert.equal(await button.textContent(), "");
+    assert.equal(await button.locator('svg[aria-hidden="true"]').count(), 1);
+    const bounds = await button.boundingBox();
+    assert.ok(bounds && bounds.width === 36 && bounds.height === 36);
+  });
+});
+
+test("floating Chat delegates window dragging without repositioning its local button", async () => {
+  await withBrowserPage({ width: 800, height: 600 }, async (page) => {
+    await page.evaluate(`(() => {
+      window.floatingChatButton.dispose();
+      window.floatingChatDragEvents = [];
+      window.floatingChatButton = window.FloatingChatBundle.mountFloatingChatButton(
+        document.getElementById("floating-chat-container"),
+        {
+          onOpen: () => window.floatingChatOpenCount++,
+          onDrag: event => window.floatingChatDragEvents.push(event),
+        }
+      );
+    })()`);
+    const button = page.getByRole("button", { name: "Open chat" });
+    const before = await button.boundingBox();
+    assert.ok(before);
+    await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(500, 250, { steps: 6 });
+    await page.mouse.up();
+
+    const events = await page.evaluate<{ phase: string; screenX: number; screenY: number }[]>(
+      "window.floatingChatDragEvents",
+    );
+    assert.equal(events[0]?.phase, "start");
+    assert.ok(events.some((event) => event.phase === "move"));
+    assert.equal(events.at(-1)?.phase, "end");
+    assert.ok(events.every((event) => Number.isFinite(event.screenX + event.screenY)));
+    assert.deepEqual(await button.boundingBox(), before);
+    assert.equal(await openCount(page), 0);
+    await button.press("Enter");
+    assert.equal(await openCount(page), 1);
+  });
+});
+
+test("losing window focus cancels a Chat drag", async () => {
+  await withBrowserPage({ width: 800, height: 600 }, async (page) => {
+    const button = page.getByRole("button", { name: "Open chat" });
+    const bounds = await button.boundingBox();
+    assert.ok(bounds);
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(40, 250, { steps: 6 });
+    await page.evaluate("window.dispatchEvent(new Event('blur'))");
+    const docked = await button.boundingBox();
+    assert.ok(docked && Math.abs(docked.x - 24) < 1);
+    assert.equal(await openCount(page), 0);
+    await page.mouse.up();
+  });
+});
+
+test("disposing a window-managed Chat button cancels its active drag", async () => {
+  await withBrowserPage({ width: 800, height: 600 }, async (page) => {
+    await page.evaluate(`(() => {
+      window.floatingChatButton.dispose();
+      window.floatingChatDragEvents = [];
+      window.floatingChatButton = window.FloatingChatBundle.mountFloatingChatButton(
+        document.getElementById("floating-chat-container"),
+        { onOpen() {}, onDrag: event => window.floatingChatDragEvents.push(event) }
+      );
+    })()`);
+    const button = page.getByRole("button", { name: "Open chat" });
+    const bounds = await button.boundingBox();
+    assert.ok(bounds);
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(500, 250, { steps: 6 });
+    await page.evaluate("window.floatingChatButton.dispose()");
+    assert.equal(await page.evaluate("window.floatingChatDragEvents.at(-1)?.phase"), "cancel");
+    await page.mouse.up();
+  });
+});
+
 test("floating Chat drags across the viewport, docks left, and suppresses the drag click", async () => {
   await withBrowserPage({ width: 800, height: 600 }, async (page) => {
     const button = page.getByRole("button", { name: "Open chat" });

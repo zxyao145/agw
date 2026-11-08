@@ -19,7 +19,7 @@ defineView({
 
 The button opens the current Project's current conversation over the view. Messages, drafts, Agent selection and execution state are shared with the Chat page. The user sends messages through the host composer.
 
-Drag the button around the view to reposition it. Releasing it docks it to the nearest left or right edge while keeping its vertical position inside the viewport. Dragging does not open Chat; clicking the button or activating it with the keyboard opens the panel.
+Desktop manages the icon button for the current view. Drag it across the application window, including the Ribbon and sidebars. Releasing it docks it to the nearest left or right window edge while keeping its vertical position inside the window. Dragging does not open Chat; clicking the button or activating it with the keyboard opens the panel.
 
 Call `setContext({ projectRelativePath: nextPath })` when the displayed document changes. Context replaces the previous values; an empty object clears it. Context is attached to each submitted message together with any pending file comments. Queued messages retain the context captured at submission.
 
