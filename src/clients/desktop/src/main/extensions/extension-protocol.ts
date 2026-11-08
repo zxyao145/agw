@@ -4,7 +4,15 @@ import { pathToFileURL } from "node:url";
 import { lookup } from "mime-types";
 
 import type { ExtensionManifest } from "@agw/extension-sdk";
-import { isValidPackagePath } from "../../shared/extension-manifest";
+import {
+  desktopApiVersion,
+  isExtensionId,
+  isValidPackagePath,
+} from "../../shared/extension-manifest";
+import {
+  SERVER_EXTENSION_RELEASE_PATH_PREFIX,
+  serverExtensionReleaseUrl,
+} from "../../shared/extension-urls";
 import { isPathInside } from "./extension-catalog";
 import { buildExtensionCsp } from "./extension-csp";
 
@@ -20,7 +28,7 @@ export type ExtensionProtocolState = {
 export type ExtensionProtocolOptions = {
   extensionId: string;
   /** manifest 校验通过时返回状态，否则为 null。Returns the state when the manifest is valid, otherwise null. */
-  getState(): ExtensionProtocolState | null;
+  getState(releaseHash: string | null): ExtensionProtocolState | null;
   /** `resources/extension-sdk`。 */
   sdkDirectory: string;
   /** 生产环境为 `net.fetch`。`net.fetch` in production. */
@@ -43,6 +51,40 @@ export const EXTENSION_SCHEME_PRIVILEGES = {
 };
 
 const RESERVED_PREFIX = "__agw/";
+const RELEASE_PATH_PREFIX = SERVER_EXTENSION_RELEASE_PATH_PREFIX.slice(1);
+
+type ServerReleasePath = {
+  releaseHash: string;
+  extensionId: string;
+  packagePath: string;
+};
+
+function parseServerReleasePath(path: string): ServerReleasePath | null {
+  if (!path.startsWith(RELEASE_PATH_PREFIX)) return null;
+  const parts = path.split("/");
+  if (
+    parts.length < 5 ||
+    parts[0] !== "__agw" ||
+    parts[1] !== "releases" ||
+    !/^[0-9a-f]{64}$/u.test(parts[2] ?? "") ||
+    !isExtensionId(parts[3] ?? "")
+  ) {
+    return null;
+  }
+  return { releaseHash: parts[2]!, extensionId: parts[3]!, packagePath: parts.slice(4).join("/") };
+}
+
+function releasePathFromReferrer(request: Request, extensionId: string): ServerReleasePath | null {
+  const referer = request.headers.get("referer");
+  if (!referer) return null;
+  try {
+    const url = new URL(referer);
+    if (url.protocol !== "agw-extension:" || url.host !== extensionId) return null;
+    return parseServerReleasePath(decodeURIComponent(url.pathname.slice(1)));
+  } catch {
+    return null;
+  }
+}
 
 function contentType(path: string): string {
   if (path.endsWith(".wasm")) return "application/wasm";
@@ -79,8 +121,6 @@ export function createExtensionProtocolHandler(
   return async (request) => {
     const url = new URL(request.url);
     if (url.host !== options.extensionId) return notFound();
-    const state = options.getState();
-    if (!state) return notFound();
 
     let path: string;
     try {
@@ -89,13 +129,44 @@ export function createExtensionProtocolHandler(
       return notFound();
     }
 
+    let releaseHash: string | null = null;
+    let releaseExtensionId: string | null = null;
+    if (path.startsWith(RELEASE_PATH_PREFIX)) {
+      const release = parseServerReleasePath(path);
+      if (!release) return notFound();
+      releaseHash = release.releaseHash;
+      releaseExtensionId = release.extensionId;
+      path = release.packagePath;
+      if (!path.startsWith(RESERVED_PREFIX) && !isValidPackagePath(path)) return notFound();
+    } else {
+      const release = releasePathFromReferrer(request, options.extensionId);
+      if (release) {
+        releaseHash = release.releaseHash;
+        releaseExtensionId = release.extensionId;
+      }
+    }
+
+    const state = options.getState(releaseHash);
+    if (!state || (releaseExtensionId !== null && state.manifest.id !== releaseExtensionId)) {
+      return notFound();
+    }
+
     if (path.startsWith(RESERVED_PREFIX)) {
       const name = path.slice(RESERVED_PREFIX.length);
       if (name === "background.html") {
         if (state.manifest.background === undefined) return notFound();
+        const backgroundScript =
+          releaseHash === null
+            ? `/${state.manifest.background}`
+            : serverExtensionReleaseUrl(
+                options.extensionId,
+                releaseExtensionId!,
+                releaseHash,
+                state.manifest.background,
+              );
         return respond(
           state,
-          `<!doctype html><meta charset="utf-8"><script type="module" src="/${state.manifest.background}"></script>`,
+          `<!doctype html><meta charset="utf-8"><script type="module" src="${backgroundScript}"></script>`,
           "background.html",
         );
       }
@@ -108,7 +179,7 @@ export function createExtensionProtocolHandler(
       ) {
         return notFound();
       }
-      const file = join(options.sdkDirectory, `v${state.manifest.manifestVersion}`, name);
+      const file = join(options.sdkDirectory, `v${desktopApiVersion(state.manifest)}`, name);
       return serveFile(state, file, name);
     }
 

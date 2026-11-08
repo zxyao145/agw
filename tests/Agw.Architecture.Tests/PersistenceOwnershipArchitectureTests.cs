@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Xunit;
 
 namespace Agw.Architecture.Tests;
@@ -218,10 +220,7 @@ public sealed partial class BackendArchitectureTests
         );
 
         var violations = GetSourceFiles(serverRoot)
-            .Where(path =>
-                File.ReadAllText(path).Contains("IgnoreUserScope", StringComparison.Ordinal)
-                || File.ReadAllText(path).Contains("IgnoreQueryFilters", StringComparison.Ordinal)
-            )
+            .Where(path => UsesUserScopeBypass(File.ReadAllText(path)))
             .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
             .Where(path => !allowed.Contains(path))
             .OrderBy(static path => path, StringComparer.Ordinal)
@@ -229,6 +228,33 @@ public sealed partial class BackendArchitectureTests
 
         Assert.Empty(violations);
     }
+
+    [Theory]
+    [InlineData("context.Records.IgnoreQueryFilters().ToList();", true)]
+    [InlineData("context.Records.IgnoreUserScope().ToList();", true)]
+    [InlineData("nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters)", false)]
+    [InlineData("// IgnoreQueryFilters\nvar name = \"IgnoreUserScope\";", false)]
+    public void UsesUserScopeBypass_ParsedSource_DetectsCalls(string source, bool expected) =>
+        Assert.Equal(expected, UsesUserScopeBypass(source));
+
+    private static bool UsesUserScopeBypass(string source) =>
+        CSharpSyntaxTree
+            .ParseText(source)
+            .GetRoot()
+            .DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(invocation =>
+                (
+                    invocation.Expression switch
+                    {
+                        MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+                        SimpleNameSyntax name => name.Identifier.ValueText,
+                        _ => null,
+                    }
+                )
+                    is "IgnoreUserScope"
+                        or "IgnoreQueryFilters"
+            );
 
     [Fact]
     public void UserScopeSystemScope_Usage_IsRestrictedToTrustedSchedulers()
@@ -244,6 +270,7 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
                 "Agw.Jobs/Scheduling/Attempts/JobAttemptOutcomeRecorder.cs",
                 "Agw.Infrastructure/Auth/SettingsServerAuthStatePersistence.cs",
+                "Agw.Infrastructure/Agents/DurableExecutionScopeMaintenance.cs",
             ],
             StringComparer.Ordinal
         );
@@ -337,6 +364,7 @@ public sealed partial class BackendArchitectureTests
         "Agw.Agents",
         "Agw.Agents.Execution",
         "Agw.Auth",
+        "Agw.Extensions",
         "Agw.Integrations",
         "Agw.Jobs",
         "Agw.Projects",

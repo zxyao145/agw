@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, readdir, readFile, rename, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -141,6 +142,51 @@ test("installing from a folder copies the package and commits it", async () => {
     );
     assert.deepEqual(await stagingEntries(harness), []);
     assert.deepEqual((await harness.settings.load()).extensions, {});
+  } finally {
+    await harness.dispose();
+  }
+});
+
+test("a local Desktop install rejects a Server-targeted manifest", async () => {
+  const harness = await createHarness();
+  try {
+    const source = join(harness.sources, EXTENSION_ID);
+    const files = {
+      "desktop/index.html": "<!doctype html><main>Calendar</main>",
+      "server/Calendar.Extension.dll": "server assembly",
+    };
+    const manifest = {
+      manifestVersion: 2,
+      id: EXTENSION_ID,
+      name: "calendar",
+      displayName: "Calendar",
+      version: "1.0.0",
+      targets: 3,
+      files: Object.fromEntries(
+        Object.entries(files).map(([path, content]) => [
+          path,
+          createHash("sha256").update(content).digest("hex"),
+        ]),
+      ),
+      desktop: {
+        apiVersion: 1,
+        contributes: {
+          mainViews: [
+            { id: "app", title: "Calendar", icon: "Calendar", entry: "desktop/index.html" },
+          ],
+        },
+      },
+      server: {
+        apiVersion: 1,
+        entryAssembly: "server/Calendar.Extension.dll",
+        entryType: "Calendar.Extension.Entry",
+      },
+    };
+    await writeTestExtension(source, manifest, files);
+
+    const preview = await harness.installer.prepareFromDirectory(source);
+
+    assert.ok(preview.errors.some((error) => error.code === "SERVER_TARGET_NOT_ALLOWED"));
   } finally {
     await harness.dispose();
   }

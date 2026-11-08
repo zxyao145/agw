@@ -1,4 +1,5 @@
 using System.Reflection;
+using Agw.Extensions.Contracts;
 using Agw.Shared.Results;
 using Agw.Shared.Runtime;
 using Bens.Results;
@@ -12,16 +13,17 @@ namespace Agw.Host.Controllers;
 public sealed class ServerInfoController : ControllerBase
 {
     private readonly IServerInitializationState _initializationState;
+    private readonly IExtensionDeploymentIdentity _identity;
 
-    public ServerInfoController(IServerInitializationState initializationState)
+    public ServerInfoController(IServerInitializationState initializationState, IExtensionDeploymentIdentity identity)
     {
         _initializationState = initializationState;
+        _identity = identity;
     }
 
     [HttpGet]
     [ProducesApiResult(typeof(ServerInfoResponse))]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public IActionResult Get()
+    public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
         var version =
             Assembly
@@ -30,8 +32,24 @@ public sealed class ServerInfoController : ControllerBase
                 ?.InformationalVersion
             ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
             ?? "0.0.0-dev";
-        return ApiResult.Ok(new ServerInfoResponse(version, 1, _initializationState.IsInitialized));
+        return ApiResult.Ok(
+            new ServerInfoResponse
+            {
+                ServerVersion = version,
+                ApiMajorVersion = 1,
+                Initialized = _initializationState.IsInitialized,
+                ServerId = _initializationState.IsInitialized
+                    ? await _identity.GetServerIdAsync(cancellationToken)
+                    : null,
+            }
+        );
     }
 
-    public sealed record ServerInfoResponse(string ServerVersion, int ApiMajorVersion, bool Initialized);
+    public sealed record ServerInfoResponse
+    {
+        public required string ServerVersion { get; init; }
+        public int ApiMajorVersion { get; init; }
+        public bool Initialized { get; init; }
+        public string? ServerId { get; init; }
+    }
 }

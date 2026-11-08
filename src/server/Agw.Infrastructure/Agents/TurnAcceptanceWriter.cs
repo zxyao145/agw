@@ -1,4 +1,5 @@
 using Agw.Agents.Application.Persistence;
+using Agw.Extensions.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Contracts;
 using Agw.Projects.Contracts.History;
@@ -53,6 +54,13 @@ public sealed class TurnAcceptanceWriter : ITurnAcceptanceWriter
             await using var transaction = await dbContext
                 .Database.BeginTransactionAsync(cancellationToken)
                 .ConfigureAwait(false);
+            if (write.ExtensionIds.Count > 0)
+            {
+                await scope
+                    .ServiceProvider.GetRequiredService<IExtensionAdmissionValidator>()
+                    .ValidateEnabledAsync(write.ExtensionIds, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             var acceptance = await turns.AcceptAsync(turn, cancellationToken).ConfigureAwait(false);
             var durable = write.Durable switch
             {

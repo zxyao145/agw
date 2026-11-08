@@ -6,6 +6,12 @@ export type ToolName =
   | "web_fetch"
   | "web_search";
 
+export type ExtensionToolDefinition = {
+  name: "extension";
+  extensionId: string;
+  toolId: string;
+};
+
 export type ToolBlockName =
   | "todo"
   | "mode"
@@ -17,10 +23,12 @@ export type ToolBlockName =
 
 export type EmptyToolOptions = Record<string, never>;
 
-export type ToolDefinition = {
+export type BuiltInToolDefinition = {
   name: ToolName;
   options: EmptyToolOptions;
 };
+
+export type ToolDefinition = BuiltInToolDefinition | ExtensionToolDefinition;
 
 type ParameterlessToolBlockDefinition = {
   name: Exclude<ToolBlockName, "project-memory" | "background-agents">;
@@ -69,6 +77,10 @@ export type ToolLiteInfo = {
   requiresWorkspace: boolean;
   requiredPermission?: "none" | "readOnly" | "write" | "execute" | null;
   requiresConfirmation: boolean;
+  allowInPlanMode?: boolean;
+  extensionId?: string | null;
+  extensionToolId?: string | null;
+  inputSchema?: unknown;
 };
 
 export function parseToolValues(value: ToolValueObject[] | null | undefined): ToolValueObject[] {
@@ -83,6 +95,33 @@ export function createToolValue(name: ToolName): ToolValue {
       options: {},
     },
   };
+}
+
+export function getToolCatalogSelectionKey(tool: ToolLiteInfo): string {
+  return tool.extensionId && tool.extensionToolId
+    ? `extension:${tool.extensionId}:${tool.extensionToolId}`
+    : tool.name;
+}
+
+export function getToolValueSelectionKey(value: ToolValue): string {
+  return value.definition.name === "extension"
+    ? `extension:${value.definition.extensionId}:${value.definition.toolId}`
+    : value.definition.name;
+}
+
+export function createToolValueFromInfo(tool: ToolLiteInfo): ToolValue {
+  if (tool.extensionId && tool.extensionToolId) {
+    return {
+      kind: "tool",
+      definition: {
+        name: "extension",
+        extensionId: tool.extensionId,
+        toolId: tool.extensionToolId,
+      },
+    };
+  }
+
+  return createToolValue(tool.name as ToolName);
 }
 
 export function createToolBlockValue(name: ToolBlockName): ToolBlockValue {

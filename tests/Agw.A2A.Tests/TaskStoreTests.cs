@@ -2,6 +2,7 @@ using System.Text.Json;
 using A2A;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Facades;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -101,6 +102,57 @@ public class TaskStoreTests
             .ProjectConversationChatHistories.AsNoTracking()
             .SingleAsync(x => x.TaskId == Guid.Parse(taskId), cancellationToken);
         Assert.Equal(TaskExecutionStatus.Succeeded, record.Status);
+    }
+
+    [Theory]
+    [InlineData("N")]
+    [InlineData("B")]
+    public async Task SaveAsync_GuidContextFormats_ReuseConversationAndKeepCanonicalHistoryKey(string format)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        await SeedA2AProjectAsync(options, cancellationToken);
+
+        await using var dbContext = new AgwDbContext(options);
+        var store = new ExternalTaskSnapshotStore(dbContext, new TestUserInfoService());
+        var contextId = Guid.CreateVersion7();
+        var request = new SaveExternalTaskSnapshotRequest(
+            A2AProjectId,
+            Guid.CreateVersion7(),
+            contextId.ToString("D"),
+            "A2A task",
+            ProjectTaskStatus.Running,
+            null,
+            TimeProvider.System.GetUtcNow(),
+            "a2a",
+            JsonSerializer.SerializeToElement(new { contextId = contextId.ToString(format) })
+        );
+        Assert.Equal(ExternalTaskSaveResult.Saved, await store.SaveAsync(request, cancellationToken));
+        var conversationId = (await dbContext.ProjectConversations.SingleAsync(cancellationToken)).Id;
+
+        var formattedContextId = $" {contextId.ToString(format).ToUpperInvariant()} ";
+        request = request with { ContextId = formattedContextId };
+        Assert.Equal(ExternalTaskSaveResult.Saved, await store.SaveAsync(request, cancellationToken));
+        dbContext.ChangeTracker.Clear();
+        var conversation = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
+        Assert.Equal(conversationId, conversation.Id);
+        Assert.Equal(contextId.ToString("D"), conversation.ContextId);
+
+        request = request with { TaskId = Guid.CreateVersion7() };
+        Assert.Equal(ExternalTaskSaveResult.Saved, await store.SaveAsync(request, cancellationToken));
+        dbContext.ChangeTracker.Clear();
+        Assert.Equal(conversationId, (await dbContext.ProjectConversations.SingleAsync(cancellationToken)).Id);
+        var snapshots = await store.ListAsync(A2AProjectId, formattedContextId, cancellationToken);
+        Assert.Equal(2, snapshots.Count);
+        Assert.All(snapshots, snapshot => Assert.Equal(contextId.ToString("D"), snapshot.Task.ContextId));
+        Assert.All(
+            snapshots,
+            snapshot =>
+                Assert.Equal(contextId.ToString(format), snapshot.Payload!.Value.GetProperty("contextId").GetString())
+        );
     }
 
     [Fact]

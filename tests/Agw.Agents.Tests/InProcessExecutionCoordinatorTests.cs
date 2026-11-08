@@ -74,7 +74,10 @@ public partial class ExecutionCommandHandlerTests
         await using var context = CreateContext(CreateTask("starter"), sink: sink);
 
         // Act
-        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(
+            await CreateExecCommand(Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken
+        );
 
         // Assert: the start message, the error and one failed finish, with the turn row failed.
         Assert.False(context.HasActiveTurn);
@@ -201,6 +204,7 @@ public partial class ExecutionCommandHandlerTests
     )
     {
         await _persistence.SeedConversationAsync(task);
+        await _persistence.SeedAgentAsync(targetId);
         var accepted = await _persistence
             .CreateAcceptance(projectTasks: null, new FakeProjectRuntimeFacade(AppContext.BaseDirectory))
             .AcceptAsync(

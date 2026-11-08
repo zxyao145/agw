@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Controllers;
 using Agw.Auth.Api;
+using Agw.Extensions.Api;
 using Agw.Files.Api;
 using Agw.Host.Controllers;
 using Agw.Host.Hosting;
@@ -22,6 +23,7 @@ public sealed class ControlPlaneHostModule : IAgwHostModule
         AddAssembly(applicationParts, typeof(AgentsController));
         AddAssembly(applicationParts, typeof(ProjectsController));
         AddAssembly(applicationParts, typeof(FilesController));
+        AddAssembly(applicationParts, typeof(ExtensionsController));
         AddAssembly(applicationParts, typeof(SkillsController));
         AddAssembly(applicationParts, typeof(SetupController));
         AddAssembly(applicationParts, typeof(AuthController));

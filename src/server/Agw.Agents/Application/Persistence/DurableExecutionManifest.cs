@@ -53,6 +53,8 @@ public sealed record DurableExecutionManifest
     /// </summary>
     public required DurableExecutionSettings Settings { get; init; }
 
+    public IReadOnlyList<Guid> ExtensionIds { get; init; } = [];
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ProjectWorkspaceSnapshot? WorkspaceSnapshot { get; init; }
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, extname, join, relative, isAbsolute, sep } from "node:path";
 
@@ -30,6 +31,10 @@ const ICON_MIME_TYPES: Readonly<Record<string, string>> = {
 /** 扫描得到的一个 extension 目录。One scanned extension directory. */
 export type CatalogEntry = {
   id: string;
+  instanceId?: string;
+  origin?: InstalledExtension["origin"];
+  releaseHash?: string;
+  serverAvailable?: boolean;
   directory: string;
   manifest: ExtensionManifest | null;
   validation: ExtensionValidation;
@@ -81,6 +86,7 @@ export async function readExtensionDirectory(
   appVersion: string,
   expectedId: string | null = basename(directory),
   compiler: ThemeStyleCompiler = themeStyleCompiler,
+  options: { serverProjection?: boolean } = {},
 ): Promise<CatalogEntry> {
   const rootRealPath = await realpath(directory);
   const manifestFile = join(directory, "manifest.json");
@@ -116,6 +122,8 @@ export async function readExtensionDirectory(
 
   const evaluation = evaluateExtensionManifest(raw, appVersion);
   const manifest = evaluation.manifest;
+  const serverProjection =
+    options.serverProjection === true && ((manifest?.targets ?? 0) & 1) !== 0;
   const errors = [...evaluation.errors];
   const icons: Record<string, string> = {};
   let themes: ExtensionTheme[] = [];
@@ -128,7 +136,98 @@ export async function readExtensionDirectory(
         path: "id",
       });
     }
+    for (const [path, expectedChecksum] of Object.entries(manifest.files ?? {})) {
+      if (serverProjection && !path.startsWith("desktop/")) continue;
+      const field = `files.${path}`;
+      const file = join(rootRealPath, ...path.split("/"));
+      const fileRealPath = await realPathOrNull(file);
+      if (fileRealPath === null) {
+        errors.push({
+          code: "PACKAGE_CHECKSUM_FILE_NOT_FOUND",
+          message: `The checksummed file "${path}" does not exist.`,
+          path: field,
+        });
+        continue;
+      }
+      if (!isPathInside(rootRealPath, fileRealPath)) {
+        errors.push({
+          code: "PACKAGE_PATH_OUTSIDE_ROOT",
+          message: `The checksummed file "${path}" resolves outside the extension directory.`,
+          path: field,
+        });
+        continue;
+      }
+      if (!(await stat(fileRealPath)).isFile()) {
+        errors.push({
+          code: "PACKAGE_CHECKSUM_FILE_NOT_FOUND",
+          message: `The checksummed path "${path}" is not a file.`,
+          path: field,
+        });
+        continue;
+      }
+      const actualChecksum = createHash("sha256")
+        .update(await readFile(fileRealPath))
+        .digest("hex");
+      if (actualChecksum !== expectedChecksum) {
+        errors.push({
+          code: "PACKAGE_CHECKSUM_MISMATCH",
+          message: `The SHA-256 of "${path}" does not match its manifest checksum.`,
+          path: field,
+        });
+      }
+    }
+    if (manifest.manifestVersion === 2) {
+      const packageFiles = await readdir(rootRealPath, { recursive: true, withFileTypes: true });
+      const checksummedPaths = new Set(Object.keys(manifest.files ?? {}));
+      for (const item of packageFiles) {
+        const filePath = join(item.parentPath, item.name);
+        const path = relative(rootRealPath, filePath).split(sep).join("/");
+        if (path === "manifest.json" || item.isDirectory()) continue;
+        if (serverProjection && !path.startsWith("desktop/")) {
+          errors.push({
+            code: "SERVER_PACKAGE_FILE_NOT_ALLOWED",
+            message: `The Server package includes a file outside the Desktop directory: "${path}".`,
+            path: `files.${path}`,
+          });
+          continue;
+        }
+        if (item.isSymbolicLink()) {
+          errors.push({
+            code: "SYMLINK_NOT_ALLOWED",
+            message: `Symbolic links are not allowed: ${path}.`,
+            path: `files.${path}`,
+          });
+          continue;
+        }
+        if (item.isFile() && !checksummedPaths.has(path)) {
+          errors.push({
+            code: "PACKAGE_CHECKSUM_REQUIRED",
+            message: `The package file "${path}" has no manifest checksum.`,
+            path: `files.${path}`,
+          });
+        }
+      }
+    }
     for (const reference of manifestPackagePaths(manifest)) {
+      if (serverProjection && !reference.path.startsWith("desktop/")) {
+        errors.push({
+          code: "DESKTOP_RESOURCE_PATH_INVALID",
+          message: `Desktop resource "${reference.path}" must be under the desktop directory.`,
+          path: reference.field,
+        });
+        continue;
+      }
+      if (
+        serverProjection &&
+        manifest.manifestVersion === 2 &&
+        !Object.hasOwn(manifest.files ?? {}, reference.path)
+      ) {
+        errors.push({
+          code: "PACKAGE_CHECKSUM_REQUIRED",
+          message: `The Desktop resource "${reference.path}" has no manifest checksum.`,
+          path: `files.${reference.path}`,
+        });
+      }
       const file = join(rootRealPath, ...reference.path.split("/"));
       const fileRealPath = await realPathOrNull(file);
       if (fileRealPath === null) {
@@ -216,27 +315,40 @@ export async function scanExtensionDirectory(
     const directory = join(extensionsDirectory, name);
     if (!(await stat(directory)).isDirectory()) continue;
     const entry = await readExtensionDirectory(directory, appVersion);
-    entries.push({ ...entry, id: name, source });
+    entries.push({ ...entry, id: name, instanceId: name, source });
   }
   return entries;
 }
 
 /**
- * 合并内置与用户目录：同 id 时用户 extension 优先；用户卸载过的内置 extension 不出现。结果按 id 排序。
- * Merges the bundled and user directories: user extensions win on the same id, uninstalled bundled extensions are
- * left out, and the result is sorted by id.
+ * 合并内置、用户与 Server 目录：用户副本优先于内置副本，同 manifest 的活动 Server 副本优先。结果按 instanceId 排序。
+ * Merges bundled, user and Server directories: user copies win over bundled copies, active Server copies win over
+ * local copies with the same id, and the result is sorted by instanceId.
  */
 export function mergeExtensionCatalogs(
   bundled: readonly SourcedCatalogEntry[],
   user: readonly SourcedCatalogEntry[],
   removedBundled: readonly string[],
+  server: readonly SourcedCatalogEntry[] = [],
 ): SourcedCatalogEntry[] {
   const merged = new Map<string, SourcedCatalogEntry>();
   for (const entry of bundled) {
-    if (!removedBundled.includes(entry.id)) merged.set(entry.id, entry);
+    if (!removedBundled.includes(entry.id)) merged.set(entry.instanceId ?? entry.id, entry);
   }
-  for (const entry of user) merged.set(entry.id, entry);
-  return [...merged.values()].sort((left, right) => (left.id < right.id ? -1 : 1));
+  for (const entry of user) merged.set(entry.instanceId ?? entry.id, entry);
+  for (const entry of server) {
+    if (entry.serverAvailable !== false && entry.validation === "valid" && entry.manifest) {
+      for (const [key, local] of merged) {
+        if (local.source !== "server" && local.id === entry.id) merged.delete(key);
+      }
+    }
+    merged.set(entry.instanceId ?? entry.id, entry);
+  }
+  return [...merged.values()].sort((left, right) => {
+    const leftId = left.instanceId ?? left.id;
+    const rightId = right.instanceId ?? right.id;
+    return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+  });
 }
 
 export function toInstalledExtension(
@@ -245,7 +357,11 @@ export function toInstalledExtension(
 ): InstalledExtension {
   return {
     id: entry.id,
+    instanceId: entry.instanceId ?? entry.id,
     source: entry.source,
+    origin: entry.origin,
+    releaseHash: entry.releaseHash,
+    serverAvailable: entry.source === "server" ? (entry.serverAvailable ?? true) : undefined,
     directory: entry.directory,
     manifest: entry.manifest,
     validation: entry.validation,

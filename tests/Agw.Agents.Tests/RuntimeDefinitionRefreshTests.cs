@@ -573,7 +573,10 @@ public sealed class RuntimeDefinitionRefreshTests
             IReadOnlyDictionary<string, string>? environmentVariables,
             bool deferHumanInteractions,
             CancellationToken cancellationToken = default,
-            AgwPermissionMode? permissionMode = null
+            AgwPermissionMode? permissionMode = null,
+            IReadOnlyList<Agw.Extensions.Contracts.ExtensionExecutionPin>? extensionPins = null,
+            Agw.Agents.Execution.Agents.Composition.ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+            IReadOnlyList<Guid>? extensionIds = null
         ) => throw new NotSupportedException();
 
         public Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>

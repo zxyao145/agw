@@ -9,7 +9,10 @@ import type { ExtensionValidation, ExtensionValidationError } from "./contracts/
 import { HOST_PERMISSION_PATTERN } from "./extension-host-permissions";
 
 export const EXTENSION_MANIFEST_VERSION_MIN = 1;
-export const EXTENSION_MANIFEST_VERSION_CURRENT = 1;
+export const EXTENSION_MANIFEST_VERSION_CURRENT = 2;
+export const EXTENSION_DESKTOP_API_VERSION_MIN = 1;
+export const EXTENSION_DESKTOP_API_VERSION_CURRENT = 1;
+export const EXTENSION_SDK_API_VERSION_CURRENT = 1;
 
 // 包路径：根目录内的相对 POSIX 路径，不以 `/` 开头，不含 `\`、`.`/`..` 段与空段，不以 `__agw/` 开头。
 // Package path: a relative POSIX path inside the root without a leading `/`, `\`, `.`/`..` or empty segments, and not under `__agw/`.
@@ -23,10 +26,32 @@ const ENTRY_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.html$`, "u");
 const BACKGROUND_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.m?js$`, "u");
 const THEME_PATTERN = new RegExp(String.raw`^${PACKAGE_PATH}\.(?:json|css)$`, "u");
 const ICON_PATTERN = new RegExp(`^(?:${LUCIDE_ICON}|${ICON_FILE})$`, "u");
+const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 // 去掉首尾空白后忽略大小写等于 `host` 的名称不合法；大小写写在模式中，生成的 JSON Schema 做同样的检查（它只保留模式，不保留标志）。
 // A name that equals `host` ignoring case once trimmed is invalid; case is spelled out in the pattern so the generated JSON Schema, which keeps the pattern without its flags, checks the same.
 const EXTENSION_NAME_PATTERN = /^(?!\s*[Hh][Oo][Ss][Tt]\s*$)/u;
 const LOCAL_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+const EXTENSION_MANIFEST_FIELDS = [
+  "$schema",
+  "manifestVersion",
+  "id",
+  "name",
+  "displayName",
+  "version",
+  "targets",
+  "files",
+  "server",
+  "desktop",
+  "minAppVersion",
+  "description",
+  "author",
+  "authorUrl",
+  "icon",
+  "background",
+  "contributes",
+  "permissions",
+  "hostPermissions",
+] as const;
 
 /**
  * extension id 是小写的 GUID v7。`uuidv7()` 不区分大小写，`regex` 补充小写要求；生成的 JSON Schema 输出两个 pattern。
@@ -78,15 +103,105 @@ const fileViewerPatternSchema = z
   .max(64)
   .regex(new RegExp(String.raw`^[^/\\\u0000]+$`, "u"));
 
+const extensionContributesSchema = z.strictObject({
+  commands: z.array(z.strictObject({ id: localIdSchema, title: titleSchema })).optional(),
+  ribbon: z.array(actionContributionSchema).optional(),
+  sidebarViews: z
+    .array(
+      z.strictObject({
+        id: localIdSchema,
+        title: titleSchema,
+        icon: iconSchema,
+        entry: entrySchema,
+      }),
+    )
+    .optional(),
+  mainViews: z
+    .array(
+      z.strictObject({
+        id: localIdSchema,
+        title: titleSchema,
+        icon: iconSchema,
+        entry: entrySchema,
+        retainContextWhenHidden: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+  settings: z.strictObject({ entry: entrySchema }).optional(),
+  chat: z
+    .strictObject({
+      composerActions: z.array(actionContributionSchema).optional(),
+      messageActions: z.array(actionContributionSchema).optional(),
+      conversationActions: z.array(actionContributionSchema).optional(),
+    })
+    .optional(),
+  explorerActions: z.array(actionContributionSchema).optional(),
+  fileViewers: z
+    .array(
+      z.strictObject({
+        id: localIdSchema,
+        title: titleSchema,
+        icon: iconSchema,
+        patterns: z.array(fileViewerPatternSchema).min(1).max(20),
+        entry: entrySchema,
+        priority: z.enum(["default", "option"]).optional(),
+      }),
+    )
+    .optional(),
+  themes: z
+    .array(
+      z.strictObject({
+        id: localIdSchema,
+        title: titleSchema,
+        path: z.string().regex(THEME_PATTERN),
+      }),
+    )
+    .optional(),
+});
+
 export const extensionManifestSchema = z
-  .strictObject({
+  .object({
     $schema: z.string().optional(),
     manifestVersion: z.number().int(),
     id: extensionIdSchema,
     name: z.string().min(1).max(64).regex(EXTENSION_NAME_PATTERN),
+    displayName: z.string().min(1).max(100).optional(),
     version: z.string().refine((value) => semver.valid(value) !== null, {
       message: "Version must be a valid semantic version.",
     }),
+    targets: z.number().int().min(0).max(15).optional(),
+    files: z
+      .record(z.string().regex(PACKAGE_PATH_PATTERN), z.string().regex(SHA256_PATTERN))
+      .optional(),
+    server: z
+      .object({
+        apiVersion: z.number().int().positive(),
+        minHostVersion: z
+          .string()
+          .refine(isSupportedDesktopVersion, { message: "minHostVersion must be a host version." })
+          .optional(),
+        entryAssembly: z.string().min(1),
+        entryType: z.string().min(1),
+        permissions: z.array(z.string()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    desktop: z
+      .strictObject({
+        apiVersion: z.number().int().positive(),
+        minHostVersion: z
+          .string()
+          .refine(isSupportedDesktopVersion, {
+            message: "minHostVersion must be a Desktop version.",
+          })
+          .optional(),
+        icon: z.string().regex(PACKAGE_ICON_PATTERN).optional(),
+        background: z.string().regex(BACKGROUND_PATTERN).optional(),
+        contributes: extensionContributesSchema.optional(),
+        permissions: z.array(z.enum(EXTENSION_PERMISSIONS)).optional(),
+        hostPermissions: z.array(z.string().regex(HOST_PERMISSION_PATTERN)).optional(),
+      })
+      .optional(),
     minAppVersion: z
       .string()
       .refine(isSupportedDesktopVersion, { message: "minAppVersion must be a Desktop version." })
@@ -96,71 +211,110 @@ export const extensionManifestSchema = z
     authorUrl: z.url({ protocol: /^https?$/u }).optional(),
     icon: z.string().regex(PACKAGE_ICON_PATTERN).optional(),
     background: z.string().regex(BACKGROUND_PATTERN).optional(),
-    contributes: z
-      .strictObject({
-        commands: z.array(z.strictObject({ id: localIdSchema, title: titleSchema })).optional(),
-        ribbon: z.array(actionContributionSchema).optional(),
-        sidebarViews: z
-          .array(
-            z.strictObject({
-              id: localIdSchema,
-              title: titleSchema,
-              icon: iconSchema,
-              entry: entrySchema,
-            }),
-          )
-          .optional(),
-        mainViews: z
-          .array(
-            z.strictObject({
-              id: localIdSchema,
-              title: titleSchema,
-              icon: iconSchema,
-              entry: entrySchema,
-              retainContextWhenHidden: z.boolean().optional(),
-            }),
-          )
-          .optional(),
-        settings: z.strictObject({ entry: entrySchema }).optional(),
-        chat: z
-          .strictObject({
-            composerActions: z.array(actionContributionSchema).optional(),
-            messageActions: z.array(actionContributionSchema).optional(),
-            conversationActions: z.array(actionContributionSchema).optional(),
-          })
-          .optional(),
-        explorerActions: z.array(actionContributionSchema).optional(),
-        fileViewers: z
-          .array(
-            z.strictObject({
-              id: localIdSchema,
-              title: titleSchema,
-              icon: iconSchema,
-              patterns: z.array(fileViewerPatternSchema).min(1).max(20),
-              entry: entrySchema,
-              priority: z.enum(["default", "option"]).optional(),
-            }),
-          )
-          .optional(),
-        themes: z
-          .array(
-            z.strictObject({
-              id: localIdSchema,
-              title: titleSchema,
-              path: z.string().regex(THEME_PATTERN),
-            }),
-          )
-          .optional(),
-      })
-      .optional(),
+    contributes: extensionContributesSchema.optional(),
     permissions: z.array(z.enum(EXTENSION_PERMISSIONS)).optional(),
     hostPermissions: z.array(z.string().regex(HOST_PERMISSION_PATTERN)).optional(),
   })
+  .passthrough()
   .superRefine((manifest, context) => {
     const report = (code: string, message: string, path: (string | number)[]) =>
       context.addIssue({ code: "custom", message, path, params: { code } });
 
-    const contributes = manifest.contributes ?? {};
+    if (manifest.manifestVersion === 1) {
+      for (const key of Object.keys(manifest)) {
+        if (
+          !EXTENSION_MANIFEST_FIELDS.includes(key as (typeof EXTENSION_MANIFEST_FIELDS)[number])
+        ) {
+          report("UNKNOWN_FIELD", `Unknown field "${key}".`, [key]);
+        }
+      }
+      if (
+        manifest.displayName !== undefined ||
+        manifest.targets !== undefined ||
+        manifest.files !== undefined ||
+        manifest.server !== undefined ||
+        manifest.desktop !== undefined
+      ) {
+        report("MANIFEST_V2_FIELD_IN_V1", "Manifest v1 cannot declare v2 fields.", [
+          "manifestVersion",
+        ]);
+      }
+    } else if (manifest.manifestVersion === 2) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(manifest.name)) {
+        report(
+          "INVALID_TECHNICAL_NAME",
+          "The technical name must use lowercase letters, digits and hyphens.",
+          ["name"],
+        );
+      }
+      if (!manifest.displayName) {
+        report("DISPLAY_NAME_REQUIRED", "Manifest v2 requires a displayName.", ["displayName"]);
+      }
+      if (manifest.targets === undefined || manifest.targets === 0) {
+        report("TARGET_REQUIRED", "Manifest v2 requires at least one target.", ["targets"]);
+      } else {
+        if ((manifest.targets & ~15) !== 0) {
+          report("INVALID_TARGET", "Manifest v2 declares an unsupported target flag.", ["targets"]);
+        }
+        if ((manifest.targets & 2) === 0) {
+          report(
+            "DESKTOP_TARGET_REQUIRED",
+            "This Desktop package must declare the Desktop target.",
+            ["targets"],
+          );
+        }
+        if ((manifest.targets & 1) !== 0 && manifest.server === undefined) {
+          report("SERVER_TARGET_ENTRY_REQUIRED", "A Server target requires a server entry.", [
+            "server",
+          ]);
+        }
+      }
+      if (manifest.desktop === undefined) {
+        report("DESKTOP_ENTRY_REQUIRED", "A Desktop target requires a desktop entry.", ["desktop"]);
+      }
+      if (manifest.files === undefined) {
+        report(
+          "FILE_CHECKSUMS_REQUIRED",
+          "Manifest v2 requires a checksum for every package file.",
+          ["files"],
+        );
+      } else if ("manifest.json" in manifest.files) {
+        report("MANIFEST_CHECKSUM_FORBIDDEN", "The files map does not include manifest.json.", [
+          "files",
+          "manifest.json",
+        ]);
+      }
+      if (
+        manifest.server !== undefined &&
+        manifest.files?.[manifest.server.entryAssembly] === undefined
+      ) {
+        report(
+          "SERVER_ENTRY_CHECKSUM_REQUIRED",
+          "The Server entry assembly must have a checksum in files.",
+          ["server", "entryAssembly"],
+        );
+      }
+      if (
+        manifest.minAppVersion !== undefined ||
+        manifest.contributes !== undefined ||
+        manifest.permissions !== undefined ||
+        manifest.hostPermissions !== undefined ||
+        manifest.icon !== undefined ||
+        manifest.background !== undefined
+      ) {
+        report(
+          "PLATFORM_FIELD_OUTSIDE_DESKTOP",
+          "Manifest v2 Desktop fields belong under desktop.",
+          ["desktop"],
+        );
+      }
+    }
+
+    const desktopContributes = manifest.desktop?.contributes;
+    const contributes = manifest.contributes ?? desktopContributes ?? {};
+    const permissions = manifest.permissions ?? manifest.desktop?.permissions;
+    const hostPermissions = manifest.hostPermissions ?? manifest.desktop?.hostPermissions;
+    const background = manifest.background ?? manifest.desktop?.background;
     const unique = (items: readonly { id: string }[] | undefined, path: (string | number)[]) =>
       items?.forEach((item, index) => {
         if (items.findIndex((other) => other.id === item.id) !== index) {
@@ -202,8 +356,14 @@ export const extensionManifestSchema = z
           report("DUPLICATE_VALUE", `Duplicate value "${value}".`, [...path, index]);
         }
       });
-    uniqueValues(manifest.permissions, ["permissions"]);
-    uniqueValues(manifest.hostPermissions, ["hostPermissions"]);
+    uniqueValues(
+      permissions,
+      manifest.manifestVersion === 2 ? ["desktop", "permissions"] : ["permissions"],
+    );
+    uniqueValues(
+      hostPermissions,
+      manifest.manifestVersion === 2 ? ["desktop", "hostPermissions"] : ["hostPermissions"],
+    );
     contributes.fileViewers?.forEach((viewer, index) =>
       uniqueValues(viewer.patterns, ["contributes", "fileViewers", index, "patterns"]),
     );
@@ -234,7 +394,7 @@ export const extensionManifestSchema = z
               "command",
             ]);
           }
-          if (manifest.background === undefined) {
+          if (background === undefined) {
             report(
               "BACKGROUND_REQUIRED",
               "Command actions require a background script.",
@@ -268,6 +428,16 @@ export type ManifestEvaluation = {
   validation: ExtensionValidation;
   errors: ExtensionValidationError[];
 };
+
+export function desktopApiVersion(manifest: ExtensionManifest): number {
+  return manifest.manifestVersion === 1 ? 1 : (manifest.desktop?.apiVersion ?? 0);
+}
+
+export function extensionDisplayName(
+  manifest: ExtensionManifest | null | undefined,
+): string | undefined {
+  return manifest?.displayName ?? manifest?.name;
+}
 
 function formatPath(path: readonly PropertyKey[]): string | null {
   if (path.length === 0) return null;
@@ -306,7 +476,7 @@ function manifestVersionErrors(raw: unknown): ExtensionValidationError[] {
     return [
       {
         code: "MANIFEST_VERSION_UNSUPPORTED",
-        message: `This extension targets Extension API version ${version}. This Desktop supports version ${EXTENSION_MANIFEST_VERSION_MIN} and later.`,
+        message: `This extension uses manifest format ${version}. This Desktop supports format ${EXTENSION_MANIFEST_VERSION_MIN} and later.`,
         path: "manifestVersion",
       },
     ];
@@ -315,12 +485,42 @@ function manifestVersionErrors(raw: unknown): ExtensionValidationError[] {
     return [
       {
         code: "MANIFEST_VERSION_TOO_NEW",
-        message: `This extension targets Extension API version ${version}. Update Agw Desktop to version ${EXTENSION_MANIFEST_VERSION_CURRENT} of the Extension API or later.`,
+        message: `This extension uses manifest format ${version}. Update Agw Desktop to support manifest format ${EXTENSION_MANIFEST_VERSION_CURRENT} or later.`,
         path: "manifestVersion",
       },
     ];
   }
   return [];
+}
+
+function desktopApiVersionErrors(manifest: ExtensionManifest): ExtensionValidationError[] {
+  const version = manifest.manifestVersion === 1 ? 1 : manifest.desktop?.apiVersion;
+  if (version === undefined || version >= EXTENSION_DESKTOP_API_VERSION_MIN) {
+    if (version === undefined || version <= EXTENSION_DESKTOP_API_VERSION_CURRENT) return [];
+  }
+  return [
+    {
+      code:
+        version > EXTENSION_DESKTOP_API_VERSION_CURRENT
+          ? "DESKTOP_API_VERSION_TOO_NEW"
+          : "DESKTOP_API_VERSION_UNSUPPORTED",
+      message: `This extension targets Desktop API version ${version}. This Desktop supports version ${EXTENSION_DESKTOP_API_VERSION_CURRENT}.`,
+      path: manifest.manifestVersion === 1 ? "manifestVersion" : "desktop.apiVersion",
+    },
+  ];
+}
+
+function adaptDesktopManifest(manifest: ExtensionManifest): ExtensionManifest {
+  if (manifest.manifestVersion === 1) return manifest;
+  return {
+    ...manifest,
+    minAppVersion: manifest.desktop?.minHostVersion,
+    icon: manifest.desktop?.icon,
+    background: manifest.desktop?.background,
+    contributes: manifest.desktop?.contributes,
+    permissions: manifest.desktop?.permissions,
+    hostPermissions: manifest.desktop?.hostPermissions,
+  };
 }
 
 /** 校验 manifest 并检查版本。Validates a manifest and checks versions. */
@@ -329,7 +529,7 @@ export function evaluateExtensionManifest(raw: unknown, appVersion: string): Man
   const versionErrors = manifestVersionErrors(raw);
   if (versionErrors.length > 0) {
     return {
-      manifest: parsed.success ? parsed.data : null,
+      manifest: null,
       validation: "incompatible",
       errors: versionErrors,
     };
@@ -342,7 +542,11 @@ export function evaluateExtensionManifest(raw: unknown, appVersion: string): Man
     };
   }
 
-  const manifest = parsed.data;
+  const manifest = adaptDesktopManifest(parsed.data);
+  const apiVersionErrors = desktopApiVersionErrors(manifest);
+  if (apiVersionErrors.length > 0) {
+    return { manifest, validation: "incompatible", errors: apiVersionErrors };
+  }
   if (
     manifest.minAppVersion !== undefined &&
     compareDesktopVersions(appVersion, manifest.minAppVersion) < 0
@@ -424,5 +628,23 @@ export function manifestPackagePaths(manifest: ExtensionManifest): ManifestPacka
 
 /** manifest 的 JSON Schema，供编辑器提示与检查。The manifest JSON Schema for editor hints and checks. */
 export function extensionManifestJsonSchema(): Record<string, unknown> {
-  return z.toJSONSchema(extensionManifestSchema) as Record<string, unknown>;
+  const schema = z.toJSONSchema(extensionManifestSchema) as Record<string, unknown>;
+  const allOf = Array.isArray(schema.allOf) ? schema.allOf : [];
+  return {
+    ...schema,
+    allOf: [
+      ...allOf,
+      {
+        if: {
+          properties: { manifestVersion: { const: 1 } },
+          required: ["manifestVersion"],
+        },
+        // oxlint-disable-next-line unicorn/no-thenable -- then 是 JSON Schema keyword。then is a JSON Schema keyword.
+        then: {
+          properties: Object.fromEntries(EXTENSION_MANIFEST_FIELDS.map((field) => [field, {}])),
+          additionalProperties: false,
+        },
+      },
+    ],
+  };
 }

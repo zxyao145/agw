@@ -2,6 +2,7 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Turns;
+using Agw.Extensions.Contracts;
 using Agw.Shared.Runtime;
 
 namespace Agw.Agents.Execution.Runtimes.Contracts;
@@ -24,6 +25,8 @@ internal sealed record ExecutionRequest(
     public string? RequestedMode { get; init; }
 
     public AgentflowCheckpointSnapshot? ResumeCheckpoint { get; init; }
+
+    public IReadOnlyList<ExtensionExecutionPin> ExtensionPins { get; init; } = [];
 
     /// <summary>
     /// 开始与结束消息的字段来源。

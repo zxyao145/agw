@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agw.A2A\Agw.A2A.csproj" />
+    <ProjectReference Include="../Agw.Extensions/Agw.Extensions.csproj" />
     <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
     <ProjectReference Include="..\Agw.Agents.Execution\Agw.Agents.Execution.csproj" />

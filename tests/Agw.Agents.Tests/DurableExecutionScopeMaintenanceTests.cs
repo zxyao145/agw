@@ -23,6 +23,23 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
     public void Dispose() => _user.Dispose();
 
     [Fact]
+    public void Read_ExtensionIds_ReturnsIds()
+    {
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var row = CreateExecution(projectId, conversationId);
+        var extensionId = Guid.CreateVersion7();
+        var manifest = Agw.Shared.Utils.JsonUtil.Deserialize<DurableExecutionManifest>(row.ManifestJson)! with
+        {
+            ExtensionIds = [extensionId],
+        };
+
+        var scope = DurableExecutionManifestScopeReader.Read(DurableExecutionJson.Serialize(manifest), row.Id, "owner");
+
+        Assert.Equal(extensionId, Assert.Single(scope!.ExtensionIds));
+    }
+
+    [Fact]
     public async Task ValidateExecutionAsync_UnindexedRecord_RejectsWithoutRecoveringScope()
     {
         var token = TestContext.Current.CancellationToken;

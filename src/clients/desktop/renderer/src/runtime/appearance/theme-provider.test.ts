@@ -88,6 +88,7 @@ const INK: ExtensionTheme = {
 function themeExtension(enabled = true): InstalledExtension {
   return {
     id: "soft-theme",
+    instanceId: "soft-theme",
     source: "bundled",
     directory: "/extensions/soft-theme",
     manifest: {
@@ -227,6 +228,21 @@ test("the applied theme is the selected theme's id and title, and Default withou
   await environment.waitFor(() =>
     assert.deepEqual(current?.appliedTheme, { id: "soft-theme:soft", title: "Soft" }),
   );
+});
+
+test("a removed Server extension no longer contributes available themes", async () => {
+  const extension: InstalledExtension = {
+    ...themeExtension(),
+    source: "server",
+    origin: { serverId: "server-a", userId: "user-a" },
+    releaseHash: "a".repeat(64),
+    serverAvailable: false,
+  };
+  const host = await startedHost(() => [extension]);
+  const view = renderTheme({ appearance: appearance(), host }, recordingSave().save);
+  await environment.waitFor(() => assert.equal(current?.themes.length, 0));
+  assert.deepEqual(current?.appliedTheme, { id: "default", title: "Default" });
+  view.unmount();
 });
 
 test("only a theme with a workspace backdrop marks html, in the mode that sets it", async () => {

@@ -30,7 +30,7 @@ public sealed partial class DurableExecutionStoreTests
         var request = new AgentExecutionRequest(
             turnId,
             UserId,
-            new AgentTarget(AgentTargetKind.Agent, Guid.CreateVersion7()),
+            new AgentTarget(AgentTargetKind.Agent, _agentId),
             new ProjectTaskSnapshot(
                 task.TaskId,
                 task.ProjectConversationId,

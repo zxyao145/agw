@@ -30,6 +30,7 @@ export function sampleExtension(
 ): InstalledExtension {
   return {
     id: "sample",
+    instanceId: "sample",
     source: "user",
     directory: "/extensions/sample",
     manifest: {
@@ -198,7 +199,10 @@ export function createMainProcess(
       pages.set(request.frameId, openExtensionPage(channel.port2));
       const message: ExtensionPortMessage = {
         type: "agw:extension-port",
+        instanceId: request.instanceId,
         extensionId: request.extensionId,
+        origin: request.origin,
+        releaseHash: request.releaseHash,
         frameId: request.frameId,
         pageId: crypto.randomUUID(),
       };
@@ -219,6 +223,8 @@ export function createMainProcess(
       pages.get(frameId)?.endpoint.close();
     },
     releaseExtensionFrameResources: async () => undefined,
+    // 测试主进程不创建 extension 代理或 watcher 资源。The test main process creates no extension proxy or watcher resources.
+    releaseExtensionResources: async () => undefined,
     // 与主进程的 agw:confirm-host-action、agw:dismiss-host-confirmation 相同。The same as main's channels.
     confirmHostAction: async (request) => {
       const { view, clientId } = hostConfirmationView(request);

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Agw.Extensions.Contracts;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Abstractions.Generated;
 using Agw.Tools.Generated;
@@ -26,10 +27,12 @@ public sealed class ToolRegistryService
     );
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ToolRegistryService> _logger;
+    private readonly IExtensionGenerationCatalog _extensionGenerations;
 
     public ToolRegistryService(
         ILogger<ToolRegistryService> logger,
         IServiceProvider serviceProvider,
+        IExtensionGenerationCatalog extensionGenerations,
         IEnumerable<IContextualTool>? contextualTools = null,
         ToolBlockRegistry? toolBlockRegistry = null,
         bool discoverAllToolKinds = false,
@@ -40,6 +43,7 @@ public sealed class ToolRegistryService
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _extensionGenerations = extensionGenerations;
         _generatedToolCatalog =
             generatedToolCatalog
             ?? new AgwGeneratedToolCatalog(
@@ -188,6 +192,7 @@ public sealed class ToolRegistryService
         return _toolInfos
             .Values.Concat(_contextualTools.Values.Select(BuildMetaToolInfo))
             .Concat(_toolBlockRegistry.GetDescriptors().Select(ToToolInfo))
+            .Concat(GetExtensionToolInfos())
             .OrderBy(t => t.Category)
             .ThenBy(t => t.Name)
             .ToList();
@@ -212,10 +217,11 @@ public sealed class ToolRegistryService
         }
 
         return _toolBlockRegistry
-            .GetDescriptors()
-            .Where(descriptor => string.Equals(descriptor.Name, name, StringComparison.OrdinalIgnoreCase))
-            .Select(ToToolInfo)
-            .SingleOrDefault();
+                .GetDescriptors()
+                .Where(descriptor => string.Equals(descriptor.Name, name, StringComparison.OrdinalIgnoreCase))
+                .Select(ToToolInfo)
+                .SingleOrDefault()
+            ?? GetExtensionToolByName(name);
     }
 
     /// <summary>
@@ -231,7 +237,10 @@ public sealed class ToolRegistryService
     /// </summary>
     public bool ToolExists(string name)
     {
-        return _generatedTools.ContainsKey(name) || _toolTypes.ContainsKey(name) || _contextualTools.ContainsKey(name);
+        return _generatedTools.ContainsKey(name)
+            || _toolTypes.ContainsKey(name)
+            || _contextualTools.ContainsKey(name)
+            || GetExtensionToolInfos().Any(tool => string.Equals(tool.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -551,6 +560,41 @@ public sealed class ToolRegistryService
         };
     }
 
+    private IReadOnlyList<ToolInfo> GetExtensionToolInfos() =>
+        _extensionGenerations
+            .GetSnapshots()
+            .Where(snapshot => snapshot.State == ExtensionGenerationState.Active)
+            .SelectMany(snapshot => snapshot.Tools.Select(descriptor => BuildExtensionToolInfo(snapshot, descriptor)))
+            .ToArray();
+
+    private ToolInfo? GetExtensionToolByName(string name) =>
+        GetExtensionToolInfos()
+            .SingleOrDefault(tool => string.Equals(tool.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    private static ToolInfo BuildExtensionToolInfo(
+        ExtensionGenerationSnapshot snapshot,
+        ExtensionToolDescriptor descriptor
+    ) =>
+        new()
+        {
+            Name = new ExtensionToolDefinition
+            {
+                ExtensionId = snapshot.GenerationId.ExtensionId,
+                ToolId = descriptor.Id,
+            }.GetDefinitionName(),
+            DisplayName = descriptor.Name,
+            Description = descriptor.Description,
+            Category = descriptor.Category,
+            TypeName = "Extension Tool",
+            Parameters = [],
+            RequiredPermission = descriptor.RequiredPermission,
+            RequiresConfirmation = AgwToolMetadataBinding.RequiresApproval(descriptor.RequiredPermission),
+            AllowInPlanMode = descriptor.AllowInPlanMode,
+            ExtensionId = snapshot.GenerationId.ExtensionId,
+            ExtensionToolId = descriptor.Id,
+            InputSchema = descriptor.InputSchema.Clone(),
+        };
+
     private void ValidateCatalog()
     {
         foreach (var contextualTool in _contextualTools.Values)
@@ -610,7 +654,8 @@ public sealed class ToolRegistryService
             .Keys.Concat(_contextualTools.Keys)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missingImplementations = ToolDefinitionNames
-            .All.Except(executableToolNames, StringComparer.OrdinalIgnoreCase)
+            .All.Where(name => !string.Equals(name, ToolDefinitionNames.Extension, StringComparison.OrdinalIgnoreCase))
+            .Except(executableToolNames, StringComparer.OrdinalIgnoreCase)
             .Except(_obsoleteToolNames, StringComparer.OrdinalIgnoreCase)
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -689,7 +734,10 @@ public sealed class ToolRegistryService
 
     private void EnsureIndependentToolNameAvailable(string name)
     {
-        if (!ToolDefinitionNames.All.Contains(name, StringComparer.OrdinalIgnoreCase))
+        if (
+            !ToolDefinitionNames.All.Contains(name, StringComparer.OrdinalIgnoreCase)
+            || string.Equals(name, ToolDefinitionNames.Extension, StringComparison.OrdinalIgnoreCase)
+        )
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,

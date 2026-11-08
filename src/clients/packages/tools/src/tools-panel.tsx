@@ -21,12 +21,13 @@ import {
 
 import {
   createToolBlockValue,
-  createToolValue,
+  createToolValueFromInfo,
+  getToolCatalogSelectionKey,
+  getToolValueSelectionKey,
   type BackgroundAgentsToolBlockDefinition,
   type ProjectMemoryToolBlockDefinition,
   type ToolBlockName,
   type ToolLiteInfo,
-  type ToolName,
   type ToolValueObject,
 } from "./tool-values";
 
@@ -67,13 +68,13 @@ export function ToolsPanel({
   );
   const selectedTools = values
     .filter((value) => value.kind === "tool")
-    .map((value) => value.definition.name);
+    .map(getToolValueSelectionKey);
   const toolBlocks = values.filter((value) => value.kind === "toolBlock");
   const toolOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
       individualTools
         .map((tool) => ({
-          value: tool.name,
+          value: getToolCatalogSelectionKey(tool),
           title: tool.displayName || tool.name,
           subtitle: tool.description,
           group: tool.category.trim() || "Uncategorized",
@@ -112,14 +113,22 @@ export function ToolsPanel({
     );
   };
 
-  const toggleTool = (name: ToolName) => {
+  const toggleTool = (selectionKey: string) => {
     if (disabled) return;
-    const selected = selectedTools.some((selectedName) => selectedName === name);
-    setValues(
-      selected
-        ? values.filter((value) => value.kind !== "tool" || value.definition.name !== name)
-        : [...values, createToolValue(name)],
+    const selected = selectedTools.some((selectedName) => selectedName === selectionKey);
+    if (selected) {
+      setValues(
+        values.filter(
+          (value) => value.kind !== "tool" || getToolValueSelectionKey(value) !== selectionKey,
+        ),
+      );
+      return;
+    }
+
+    const tool = individualTools.find(
+      (candidate) => getToolCatalogSelectionKey(candidate) === selectionKey,
     );
+    if (tool) setValues([...values, createToolValueFromInfo(tool)]);
   };
 
   return (
@@ -282,11 +291,33 @@ export function ToolsPanel({
           id={`${idPrefix}tools`}
           ariaLabel="Tools"
           value={selectedTools}
-          onValueChange={(values) => {
-            const nextNames = Array.isArray(values) ? values : [];
+          onValueChange={(nextValues) => {
+            const nextNames = Array.isArray(nextValues) ? nextValues : [];
+            const selectedNames = new Set(nextNames);
+            const existingTools = values.filter(
+              (value): value is Extract<ToolValueObject, { kind: "tool" }> => value.kind === "tool",
+            );
+            const existingByName = new Map(
+              existingTools.map((value) => [getToolValueSelectionKey(value), value]),
+            );
+            for (const value of existingTools) {
+              if (value.definition.name !== "extension") continue;
+              const name = getToolValueSelectionKey(value);
+              if (!individualTools.some((tool) => getToolCatalogSelectionKey(tool) === name)) {
+                selectedNames.add(name);
+              }
+            }
+
             setValues([
               ...toolBlocks,
-              ...nextNames.map((name) => createToolValue(name as ToolName)),
+              ...[...selectedNames].flatMap((name) => {
+                const existing = existingByName.get(name);
+                if (existing) return [existing];
+                const tool = individualTools.find(
+                  (candidate) => getToolCatalogSelectionKey(candidate) === name,
+                );
+                return tool ? [createToolValueFromInfo(tool)] : [];
+              }),
             ]);
           }}
           options={toolOptions}
@@ -309,7 +340,16 @@ export function ToolsPanel({
         ) : (
           <div className="space-y-2">
             {selectedTools.map((name) => {
-              const tool = individualTools.find((candidate) => candidate.name === name);
+              const tool = individualTools.find(
+                (candidate) => getToolCatalogSelectionKey(candidate) === name,
+              );
+              const selectedValue = values.find(
+                (value) => value.kind === "tool" && getToolValueSelectionKey(value) === name,
+              );
+              const displayName =
+                selectedValue?.kind === "tool" && selectedValue.definition.name === "extension"
+                  ? selectedValue.definition.toolId
+                  : name;
               return (
                 <div
                   key={name}
@@ -317,7 +357,9 @@ export function ToolsPanel({
                 >
                   <Puzzle className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{tool?.displayName || name}</p>
+                    <p className="truncate text-sm font-medium">
+                      {tool?.displayName || displayName}
+                    </p>
                     {tool?.description ? (
                       <p className="truncate text-xs text-muted-foreground">{tool.description}</p>
                     ) : null}

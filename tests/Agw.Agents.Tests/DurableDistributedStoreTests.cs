@@ -274,6 +274,9 @@ public sealed class DurableDistributedStoreTests : IDisposable
     )
     {
         task ??= await kit.SeedConversationAsync();
+        var targetId = agentId ?? Guid.CreateVersion7();
+        if (!agentId.HasValue)
+            await kit.SeedAgentAsync(targetId);
         var accepted = await kit.CreateAcceptance(
                 projectTasks: null,
                 new AgentExecutionFacadeTests.WorkspaceProjects(),
@@ -283,7 +286,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
                 new TurnAcceptanceRequest(
                     TurnPersistenceTestKit.UserId,
                     TurnId: null,
-                    new ExecutionTarget(agentId ?? Guid.CreateVersion7(), AgentRuntimeType.Agent),
+                    new ExecutionTarget(targetId, AgentRuntimeType.Agent),
                     task.ProjectConversationId,
                     TurnPersistenceTestKit.CreateInput("hello"),
                     TurnPersistenceTestKit.CreateSettings(task.ProjectId, task.ProjectConversationId),

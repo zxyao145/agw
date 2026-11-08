@@ -81,6 +81,42 @@ test("writes carrying an old connection key are dropped", () => {
   assert.equal(context.snapshot().project?.id, "fresh");
 });
 
+test("Server deployment identity is bound to the active connection", () => {
+  const context = new ContextService(app, workspace);
+  const identity = {
+    profileId: "remote-1",
+    baseUrl: "https://office.example.test",
+    token: "agw_a",
+  };
+  context.setConnection(identity, server);
+  const key = connectionKeyOf(identity);
+
+  context.setServerId(key, "deployment-a");
+  assert.equal(context.snapshot().server.serverId, "deployment-a");
+  context.setServerId("stale", "deployment-stale");
+  assert.equal(context.snapshot().server.serverId, "deployment-a");
+
+  context.setConnection({ ...identity, token: "agw_b" }, server);
+  assert.equal(context.snapshot().server.serverId, null);
+});
+
+test("setting the current ServerId does not notify context subscribers", () => {
+  const context = new ContextService(app, workspace);
+  const identity = {
+    profileId: "remote-1",
+    baseUrl: "https://office.example.test",
+    token: "agw_a",
+  };
+  context.setConnection(identity, server);
+  context.setServerId(context.connectionKey!, "deployment-a");
+  const notifications: unknown[] = [];
+  context.subscribe((snapshot) => notifications.push(snapshot));
+
+  context.setServerId(context.connectionKey!, "deployment-a");
+
+  assert.deepEqual(notifications, []);
+});
+
 test("requests stop without being sent when the API runtime no longer matches the identity", async () => {
   const api = await startApiServer({ "GET /api/projects": [] });
   const context = new ContextService(app, workspace);
@@ -147,7 +183,7 @@ test("context fields without the matching permission are removed", () => {
   assert.equal("project" in none, false);
   assert.equal("conversation" in none, false);
   assert.equal("target" in none, false);
-  assert.deepEqual(none.server, server);
+  assert.deepEqual(none.server, { ...server, serverId: null });
 
   const project = filterContextForPermissions(full, ["context.project"]);
   assert.equal(project.project?.id, "project-1");

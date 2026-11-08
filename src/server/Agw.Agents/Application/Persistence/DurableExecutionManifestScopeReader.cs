@@ -3,7 +3,10 @@ using Agw.Shared.Utils;
 
 namespace Agw.Agents.Application.Persistence;
 
-public sealed record DurableExecutionScope(Guid ProjectId, Guid ProjectConversationId);
+public sealed record DurableExecutionScope(Guid ProjectId, Guid ProjectConversationId)
+{
+    public IReadOnlyList<Guid> ExtensionIds { get; init; } = [];
+}
 
 public static class DurableExecutionManifestScopeReader
 {
@@ -29,7 +32,10 @@ public static class DurableExecutionManifestScopeReader
                 return null;
             }
 
-            return new DurableExecutionScope(manifest.Task.ProjectId, manifest.Task.ProjectConversationId);
+            return new DurableExecutionScope(manifest.Task.ProjectId, manifest.Task.ProjectConversationId)
+            {
+                ExtensionIds = manifest.ExtensionIds,
+            };
         }
         catch (JsonException)
         {

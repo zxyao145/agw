@@ -4,6 +4,56 @@ namespace Agw.Shared.Exceptions;
 
 public static class ErrorCodes
 {
+    public static readonly ErrorCode ExtensionPackageInvalid = new(
+        400_0077,
+        "Extension package is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode ExtensionNotFound = new(
+        404_0013,
+        "Extension was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode ExtensionVersionMismatch = new(
+        409_0027,
+        "Extension release does not match the active release.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode ExtensionDrainTimeout = new(
+        409_0028,
+        "Extension work did not finish before the deadline.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode ExtensionOperationConflict = new(
+        409_0029,
+        "Extension operation conflicts with the current state.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode ExtensionMigrationFailed = new(
+        500_0030,
+        "Extension database migration failed.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode ExtensionUnloadFailed = new(
+        500_0031,
+        "Extension unload could not be confirmed.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode ExtensionLoadFailed = new(
+        500_0032,
+        "Extension could not be loaded.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode ExtensionPackageCorrupted = new(
+        500_0033,
+        "Cached extension package is corrupted.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode ExtensionUnavailable = new(
+        503_0003,
+        "Extension is unavailable.",
+        HttpStatusCode.ServiceUnavailable
+    );
     public static readonly ErrorCode InvalidParam = new(400_0001, "Invalid params.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode TaskIdMismatch = new(400_0002, "Task id mismatch.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode A2ATaskIdMustBeGuid = new(

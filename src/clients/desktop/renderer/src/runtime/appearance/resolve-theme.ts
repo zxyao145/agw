@@ -1,5 +1,6 @@
 import { APPEARANCE_MODES, DEFAULT_THEME_ID, extensionThemeId } from "@desktop/shared/appearance";
 import type { AppearanceMode, ExtensionTheme } from "@desktop/shared/contracts";
+import { extensionDisplayName } from "@desktop/shared/extension-manifest";
 import type { ExtensionState } from "../extensions/extension-host";
 
 export const DEFAULT_THEME_TITLE = "Default";
@@ -24,11 +25,13 @@ export type AvailableTheme = {
 /** 启用且合法的 extension 提供的主题。The themes of enabled, valid extensions. */
 export function listAvailableThemes(extensions: readonly ExtensionState[]): AvailableTheme[] {
   const themes = extensions.flatMap(({ installed }) =>
-    installed.enabled && installed.validation === "valid"
+    installed.enabled &&
+    installed.validation === "valid" &&
+    (installed.source !== "server" || installed.serverAvailable !== false)
       ? installed.themes.map((theme) => ({
-          id: extensionThemeId(installed.id, theme.id),
+          id: extensionThemeId(installed.instanceId ?? installed.id, theme.id),
           title: theme.title,
-          extensionName: installed.manifest?.name ?? installed.id,
+          extensionName: extensionDisplayName(installed.manifest) ?? installed.id,
           theme,
         }))
       : [],
@@ -51,7 +54,7 @@ export function declaredThemeTitles(extensions: readonly ExtensionState[]): Map<
   return new Map(
     extensions.flatMap(({ installed }) =>
       (installed.manifest?.contributes?.themes ?? []).map((theme): [string, string] => [
-        extensionThemeId(installed.id, theme.id),
+        extensionThemeId(installed.instanceId ?? installed.id, theme.id),
         theme.title,
       ]),
     ),

@@ -64,6 +64,7 @@
     <Project Path="src/server/Agw.Settings/Agw.Settings.csproj" />
   </Folder>
   <Folder Name="/7.SDKs/">
+    <Project Path="src/server/Agw.Extensions.Sdk.EntityFrameworkCore/Agw.Extensions.Sdk.EntityFrameworkCore.csproj" />
     <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
     <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/PiAgentSdk.csproj" />
     <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.MAF.Tests/PiAgentSdk.MAF.Tests.csproj" />

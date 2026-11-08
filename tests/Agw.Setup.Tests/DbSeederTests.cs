@@ -1,12 +1,16 @@
 using Agw.Agents.Contracts.Execution;
+using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Files;
 using Agw.Files.Abstracts;
+using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Settings;
 using Agw.Jobs.Application.Skills;
 using Agw.Projects;
 using Agw.Projects.Contracts;
 using Agw.Providers.Contracts;
+using Agw.Settings.Application;
 using Agw.Shared;
 using Agw.Shared.Configuration;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -39,6 +43,13 @@ public class DbSeederTests : IDisposable
     private readonly IDisposable _systemScope = UserInfoUtil.PushSystemScope();
 
     public void Dispose() => _systemScope.Dispose();
+
+    private static IServerAuthStatePersistence CreateAuthentication(AgwDbContext context) =>
+        new SettingsServerAuthStatePersistence(
+            new SettingsStore(new EfSettingsPersistence(context), new UserInfoService()),
+            context,
+            TimeProvider.System
+        );
 
     [Theory]
     [InlineData(false)]
@@ -84,6 +95,7 @@ public class DbSeederTests : IDisposable
                 TimeProvider.System,
                 paths,
                 CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
                 [registration]
             );
 
@@ -130,6 +142,7 @@ public class DbSeederTests : IDisposable
                 TimeProvider.System,
                 paths,
                 CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
                 [new TestSkillRegistration()]
             );
 
@@ -306,6 +319,7 @@ public class DbSeederTests : IDisposable
                 TimeProvider.System,
                 paths,
                 CreateWorkspaceAccess(paths, isolationEnabled),
+                CreateAuthentication(context),
                 [new TestSkillRegistration()]
             );
             var existingA2A = isolationEnabled
@@ -379,6 +393,7 @@ public class DbSeederTests : IDisposable
                 TimeProvider.System,
                 paths,
                 CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
                 [new TestSkillRegistration()]
             );
 
@@ -432,6 +447,7 @@ public class DbSeederTests : IDisposable
                 TimeProvider.System,
                 paths,
                 CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
                 [new TestSkillRegistration()]
             );
 
@@ -488,6 +504,7 @@ public class DbSeederTests : IDisposable
                 TimeProvider.System,
                 paths,
                 CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
                 [new TestSkillRegistration()]
             );
 
@@ -552,6 +569,7 @@ public class DbSeederTests : IDisposable
                 TimeProvider.System,
                 paths,
                 CreateWorkspaceAccess(paths),
+                CreateAuthentication(context),
                 [new TestSkillRegistration()]
             );
 

@@ -1,6 +1,6 @@
+using Agw.Agents;
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Contracts.Catalog;
-using Agw.Agents.Definitions.Facades;
+using Agw.Agents.Execution;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Inbound.Facades;
 using Agw.Agents.Execution.Messaging.Durable;
@@ -9,7 +9,9 @@ using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
+using Agw.Extensions;
 using Agw.Files;
+using Agw.Infrastructure;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
@@ -31,6 +33,9 @@ using Agw.Projects.Contracts.History;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Projects.Domain.Services;
 using Agw.Projects.Infrastructure;
+using Agw.Providers.Application.Facades;
+using Agw.Providers.Application.Persistence;
+using Agw.Providers.Contracts.References;
 using Agw.Settings;
 using Agw.Settings.Application.Persistence;
 using Agw.Setup.Services;
@@ -43,6 +48,7 @@ using Agw.Skills.Contracts.References;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Agw.Jobs.Tests;
 
@@ -59,7 +65,9 @@ internal static class JobTestServices
         services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<ISkillsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IIntegrationsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
-        services.AddScoped<IAgentCatalogFacade, AgentCatalogFacade>();
+        services.AddScoped<IProvidersDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentDeletionCoordinator, AgentDeletionCoordinator>();
+        services.AddScoped<IModelProviderReferenceFacade, ModelProviderReferenceFacade>();
         services.AddScoped<ISkillReferenceFacade, SkillReferenceFacade>();
         services.AddScoped<IConnectionReferenceFacade, ConnectionReferenceFacade>();
         services.AddScoped<ProjectResourceBindingDomainService>();
@@ -94,10 +102,21 @@ internal static class JobTestServices
         IProjectExecutionLock executionLock
     )
     {
-        var configuration = new ConfigurationBuilder().Build();
+        var testRoot = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            "job-test-services",
+            Guid.CreateVersion7().ToString("N")
+        );
+        var extensionDirectory = Path.Combine(testRoot, "extensions");
+        Directory.CreateDirectory(extensionDirectory);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Extensions:Directory"] = extensionDirectory })
+            .Build();
         var dataPaths = AgwDataPaths.Resolve(
-            Path.Combine(AppContext.BaseDirectory, ".scratch", "job-test-services", "data"),
-            Path.Combine(AppContext.BaseDirectory, ".scratch", "job-test-services", "home")
+            Path.Combine(testRoot, "data"),
+            Path.Combine(testRoot, "home"),
+            Path.Combine(testRoot, "logs")
         );
         dataPaths.EnsureCreated();
         services.AddSingleton(dataPaths);
@@ -126,5 +145,20 @@ internal static class JobTestServices
         services.AddScoped<ITaskAppService>(provider => provider.GetRequiredService<TaskAppService>());
         services.AddScoped<IProjectTaskFacade, ProjectTaskFacade>();
         services.AddJobs(configuration, new DependencyInjection.RegistrationOptions());
+        services.AddAgents(configuration);
+        services.AddExtensions(configuration, "Standalone");
+        services.AddExtensionCapabilities();
+        services.AddExtensionInfrastructure();
+        services.AddSingleton<IHostEnvironment>(
+            Microsoft
+                .Extensions.Hosting.Host.CreateApplicationBuilder(
+                    new HostApplicationBuilderSettings
+                    {
+                        ContentRootPath = AppContext.BaseDirectory,
+                        DisableDefaults = true,
+                    }
+                )
+                .Environment
+        );
     }
 }

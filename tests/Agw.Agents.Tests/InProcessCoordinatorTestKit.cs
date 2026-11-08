@@ -163,7 +163,10 @@ internal sealed class TestAgentRuntimeFactory : IAgentRuntimeFactory
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
         CancellationToken cancellationToken = default,
-        AgwPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null,
+        IReadOnlyList<Agw.Extensions.Contracts.ExtensionExecutionPin>? extensionPins = null,
+        Agw.Agents.Execution.Agents.Composition.ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
+        IReadOnlyList<Guid>? extensionIds = null
     ) => throw new NotSupportedException();
 }
 

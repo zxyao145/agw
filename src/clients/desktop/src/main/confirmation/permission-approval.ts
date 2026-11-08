@@ -2,6 +2,7 @@ import semver from "semver";
 
 import { type ExtensionManifest, HIGH_RISK_EXTENSION_PERMISSIONS } from "@agw/extension-sdk";
 import type { PermissionApprovalView } from "../../shared/contracts";
+import { extensionDisplayName } from "../../shared/extension-manifest";
 import {
   isUnencryptedHostPermission,
   parseHostPermission,
@@ -25,7 +26,7 @@ export function permissionApprovalView(
   return {
     kind,
     extensionId: manifest.id,
-    extensionName: manifest.name,
+    extensionName: extensionDisplayName(manifest) ?? manifest.id,
     version: manifest.version,
     installedVersion,
     downgrade: installedVersion !== null && semver.lt(manifest.version, installedVersion),

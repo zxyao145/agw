@@ -163,7 +163,10 @@ public class AgentAppService
             .ToListAsync();
     }
 
-    public async Task<IReadOnlyList<SkillReferenceSnapshot>> ListSkillsAsync(IEnumerable<Guid>? skillIds)
+    public async Task<IReadOnlyList<SkillReferenceSnapshot>> ListSkillsAsync(
+        IEnumerable<Guid>? skillIds,
+        CancellationToken cancellationToken = default
+    )
     {
         var requestedSkillIds = (skillIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
         if (requestedSkillIds.Count == 0)
@@ -171,7 +174,9 @@ public class AgentAppService
             return [];
         }
 
-        return await _skillReferences.ResolveVisibleSkillsAsync(requestedSkillIds).ConfigureAwait(false);
+        return await _skillReferences
+            .ResolveVisibleSkillsAsync(requestedSkillIds, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<Agent?> CreateAgentAsync(

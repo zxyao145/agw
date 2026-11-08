@@ -76,7 +76,10 @@ public class AgentAppServiceCapabilityTests : IDisposable
             ]
         );
 
-        var skills = await service.ListSkillsAsync(new[] { agentSkillId, projectSkillId, agentSkillId });
+        var skills = await service.ListSkillsAsync(
+            new[] { agentSkillId, projectSkillId, agentSkillId },
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(
             new[] { agentSkillId, projectSkillId }.OrderBy(id => id).ToArray(),

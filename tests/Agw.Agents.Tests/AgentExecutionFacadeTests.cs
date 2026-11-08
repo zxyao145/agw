@@ -164,6 +164,7 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
             );
             await _database.Context.SaveChangesAsync(cancellationToken);
         }
+        await _persistence.SeedAgentAsync(agentId, owner);
         return agentId;
     }
 

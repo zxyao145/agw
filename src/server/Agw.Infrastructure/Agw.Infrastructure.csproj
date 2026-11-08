@@ -5,6 +5,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+    <ProjectReference Include="../Agw.Extensions/Agw.Extensions.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Settings\Agw.Settings.csproj" />
     <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />

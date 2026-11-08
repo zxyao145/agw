@@ -24,10 +24,14 @@ await build({
   external: ["electron"],
   logLevel: "warning",
 });
-const child = spawn(electron, [entry], { stdio: "inherit" });
-child.on("error", (error) => {
-  throw error;
-});
-child.on("exit", (code) => {
-  process.exitCode = code ?? 1;
-});
+for (const args of [[], ["--server-extension"]]) {
+  await new Promise((resolvePromise, reject) => {
+    const child = spawn(electron, [entry, ...args], { stdio: "inherit" });
+    child.once("error", reject);
+    child.once("exit", (code) =>
+      code === 0
+        ? resolvePromise()
+        : reject(new Error(`Extension network tests exited with code ${code}.`)),
+    );
+  });
+}

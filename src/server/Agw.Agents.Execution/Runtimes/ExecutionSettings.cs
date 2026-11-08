@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using Agw.Agents.Execution.Agents.Composition;
+using Agw.Extensions.Contracts;
 
 namespace Agw.Agents.Execution.Runtimes;
 
 public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 {
     private readonly IReadOnlyDictionary<string, string> _environmentVariables;
+    private ExtensionCapabilitySnapshot? _extensionCapabilityLease;
 
     public ExecutionSettings(
         Guid projectId,
@@ -65,6 +68,16 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     /// </summary>
     public string? ExtensionId { get; }
 
+    internal IReadOnlyList<ExtensionExecutionPin>? ExtensionPins { get; init; }
+
+    internal IReadOnlyList<Guid>? ExtensionIds { get; init; }
+
+    internal ExtensionCapabilitySnapshot? ExtensionCapabilityLease
+    {
+        get => Volatile.Read(ref _extensionCapabilityLease);
+        init => _extensionCapabilityLease = value;
+    }
+
     public static ExecutionSettings CreateDefault() => new(ProjectDefaults.DefaultBuiltInId);
 
     public ExecutionSettings WithPermissionMode(AgwPermissionMode permissionMode) =>
@@ -78,7 +91,12 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             PermissionMode == permissionMode ? PermissionVersion : checked(PermissionVersion + 1),
             ResultOnly,
             ExtensionId
-        );
+        )
+        {
+            ExtensionPins = ExtensionPins,
+            ExtensionIds = ExtensionIds,
+            ExtensionCapabilityLease = ExtensionCapabilityLease,
+        };
 
     internal ExecutionSettings WithPermissionSnapshot(AgwPermissionMode? mode, long version) =>
         new(
@@ -91,7 +109,12 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             version,
             ResultOnly,
             ExtensionId
-        );
+        )
+        {
+            ExtensionPins = ExtensionPins,
+            ExtensionIds = ExtensionIds,
+            ExtensionCapabilityLease = ExtensionCapabilityLease,
+        };
 
     public ExecutionSettings WithHumanInteractionPolicy(HumanInteractionPolicy policy) =>
         new(
@@ -104,7 +127,12 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             PermissionVersion,
             ResultOnly,
             ExtensionId
-        );
+        )
+        {
+            ExtensionPins = ExtensionPins,
+            ExtensionIds = ExtensionIds,
+            ExtensionCapabilityLease = ExtensionCapabilityLease,
+        };
 
     public ExecutionSettings WithResultOnly(bool resultOnly) =>
         new(
@@ -117,7 +145,12 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             PermissionVersion,
             resultOnly,
             ExtensionId
-        );
+        )
+        {
+            ExtensionPins = ExtensionPins,
+            ExtensionIds = ExtensionIds,
+            ExtensionCapabilityLease = ExtensionCapabilityLease,
+        };
 
     internal ExecutionSettings WithConversationId(Guid conversationId) =>
         new(
@@ -130,7 +163,63 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             PermissionVersion,
             ResultOnly,
             ExtensionId
-        );
+        )
+        {
+            ExtensionPins = ExtensionPins,
+            ExtensionIds = ExtensionIds,
+            ExtensionCapabilityLease = ExtensionCapabilityLease,
+        };
+
+    internal ExecutionSettings WithExtensionCapabilities(
+        IReadOnlyList<ExtensionExecutionPin> extensionPins,
+        ExtensionCapabilitySnapshot? extensionCapabilityLease
+    ) =>
+        new(
+            ProjectId,
+            ConversationId,
+            _environmentVariables,
+            PermissionMode,
+            Resume,
+            HumanInteractionPolicy,
+            PermissionVersion,
+            ResultOnly,
+            ExtensionId
+        )
+        {
+            ExtensionPins = extensionPins.ToArray(),
+            ExtensionIds = null,
+            ExtensionCapabilityLease = extensionCapabilityLease,
+        };
+
+    internal ExecutionSettings WithExtensionIds(IReadOnlyList<Guid> extensionIds) =>
+        new(
+            ProjectId,
+            ConversationId,
+            _environmentVariables,
+            PermissionMode,
+            Resume,
+            HumanInteractionPolicy,
+            PermissionVersion,
+            ResultOnly,
+            ExtensionId
+        )
+        {
+            ExtensionPins = null,
+            ExtensionIds = extensionIds.ToArray(),
+            ExtensionCapabilityLease = null,
+        };
+
+    internal async ValueTask DisposeExtensionCapabilityLeaseAsync()
+    {
+        var extensionCapabilityLease = DetachExtensionCapabilityLease();
+        if (extensionCapabilityLease != null)
+        {
+            await extensionCapabilityLease.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    internal ExtensionCapabilitySnapshot? DetachExtensionCapabilityLease() =>
+        Interlocked.Exchange(ref _extensionCapabilityLease, null);
 
     public bool Equals(ExecutionSettings? other)
     {
@@ -146,6 +235,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             && Resume == other.Resume
             && HumanInteractionPolicy == other.HumanInteractionPolicy
             && string.Equals(ExtensionId, other.ExtensionId, StringComparison.Ordinal)
+            && ExtensionPinsEqual(ExtensionPins, other.ExtensionPins)
+            && ExtensionIdsEqual(ExtensionIds, other.ExtensionIds)
             && EnvironmentVariablesEqual(_environmentVariables, other._environmentVariables);
     }
 
@@ -160,6 +251,20 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         hash.Add(Resume);
         hash.Add(HumanInteractionPolicy);
         hash.Add(ExtensionId, StringComparer.Ordinal);
+        if (ExtensionPins != null)
+        {
+            foreach (var pin in ExtensionPins)
+            {
+                hash.Add(pin);
+            }
+        }
+        if (ExtensionIds != null)
+        {
+            foreach (var extensionId in ExtensionIds)
+            {
+                hash.Add(extensionId);
+            }
+        }
         foreach (var (key, value) in _environmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             hash.Add(key, StringComparer.Ordinal);
@@ -192,4 +297,12 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
         return true;
     }
+
+    private static bool ExtensionPinsEqual(
+        IReadOnlyList<ExtensionExecutionPin>? left,
+        IReadOnlyList<ExtensionExecutionPin>? right
+    ) => ReferenceEquals(left, right) || left != null && right != null && left.SequenceEqual(right);
+
+    private static bool ExtensionIdsEqual(IReadOnlyList<Guid>? left, IReadOnlyList<Guid>? right) =>
+        ReferenceEquals(left, right) || left != null && right != null && left.SequenceEqual(right);
 }

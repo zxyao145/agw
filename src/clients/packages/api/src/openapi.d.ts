@@ -1940,6 +1940,215 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/extensions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExtensionManagementStatus[]"];
+            "application/json": components["schemas"]["ApiResultOfExtensionManagementStatus[]"];
+            "text/json": components["schemas"]["ApiResultOfExtensionManagementStatus[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/extensions/enable": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ExtensionEnablementRequest"];
+          "text/json": components["schemas"]["ExtensionEnablementRequest"];
+          "application/*+json": components["schemas"]["ExtensionEnablementRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExtensionManagementStatus"];
+            "application/json": components["schemas"]["ApiResultOfExtensionManagementStatus"];
+            "text/json": components["schemas"]["ApiResultOfExtensionManagementStatus"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/extensions/disable": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ExtensionEnablementRequest"];
+          "text/json": components["schemas"]["ExtensionEnablementRequest"];
+          "application/*+json": components["schemas"]["ExtensionEnablementRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExtensionManagementStatus"];
+            "application/json": components["schemas"]["ApiResultOfExtensionManagementStatus"];
+            "text/json": components["schemas"]["ApiResultOfExtensionManagementStatus"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/extensions/catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          afterRevision?: number | string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExtensionCatalog"];
+            "application/json": components["schemas"]["ApiResultOfExtensionCatalog"];
+            "text/json": components["schemas"]["ApiResultOfExtensionCatalog"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/extensions/package": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          extensionId?: string;
+          releaseHash?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/zip": string;
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/zip": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/files/list": {
     parameters: {
       query?: never;
@@ -3910,7 +4119,11 @@ export interface paths {
           headers: {
             [name: string]: unknown;
           };
-          content?: never;
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfServerInfoResponse"];
+            "application/json": components["schemas"]["ApiResultOfServerInfoResponse"];
+            "text/json": components["schemas"]["ApiResultOfServerInfoResponse"];
+          };
         };
       };
     };
@@ -6705,6 +6918,27 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfExtensionCatalog: {
+      data?: null | components["schemas"]["ExtensionCatalog"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfExtensionManagementStatus: {
+      data?: null | components["schemas"]["ExtensionManagementStatus"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfExtensionManagementStatus[]": {
+      data?: null | components["schemas"]["ExtensionManagementStatus"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     "ApiResultOfExternalAgentOptionResponse[]": {
       data?: null | components["schemas"]["ExternalAgentOptionResponse"][];
       /** Format: int32 */
@@ -6994,6 +7228,13 @@ export interface components {
     };
     ApiResultOfRepositoryWorkspaceState: {
       data?: null | components["schemas"]["RepositoryWorkspaceState"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfServerInfoResponse: {
+      data?: null | components["schemas"]["ServerInfoResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -7304,6 +7545,59 @@ export interface components {
       supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
       reason?: null | string;
     };
+    ExtensionCatalog: {
+      serverId: string;
+      /** Format: int64 */
+      revision: number | string;
+      extensions: components["schemas"]["ExtensionCatalogEntry"][];
+    };
+    ExtensionCatalogEntry: {
+      id: string;
+      name: string;
+      displayName: string;
+      version: string;
+      releaseHash: string;
+      packageHash: string;
+      manifest: components["schemas"]["JsonElement"];
+    };
+    ExtensionEnablementRequest: {
+      /** Format: uuid */
+      extensionId: string;
+    };
+    /** @enum {unknown} */
+    ExtensionManagementState:
+      | "Disabled"
+      | "Starting"
+      | "Loading"
+      | "Prepared"
+      | "Ready"
+      | "Active"
+      | "Draining"
+      | "Stopping"
+      | "Unloading"
+      | "Faulted"
+      | "UnloadFailed"
+      | "Failed";
+    ExtensionManagementStatus: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      displayName: string;
+      targets: components["schemas"]["ExtensionTarget"];
+      currentVersion?: null | string;
+      isEnabled: boolean;
+      /** Format: int64 */
+      settingsVersion: number | string;
+      state: components["schemas"]["ExtensionManagementState"];
+      /** Format: int32 */
+      errorCode?: number;
+      errorMessage?: null | string;
+      /** Format: int32 */
+      activeInvocations: number;
+      /** Format: int32 */
+      activeLeases: number;
+    };
+    ExtensionTarget: number;
     ExternalAgentOptionResponse: {
       kind: components["schemas"]["EngineKind"];
       displayName: string;
@@ -7467,6 +7761,7 @@ export interface components {
       isEnabled: boolean;
       status: components["schemas"]["JobStatus"];
     };
+    JsonElement: unknown;
     LoginRequest: {
       password: string;
     };
@@ -8168,6 +8463,13 @@ export interface components {
     };
     /** @enum {unknown} */
     SecretUpdateAction: "Keep" | "Set" | "Clear";
+    ServerInfoResponse: {
+      serverVersion: string;
+      /** Format: int32 */
+      apiMajorVersion: number;
+      initialized: boolean;
+      serverId?: null | string;
+    };
     /** @enum {unknown} */
     SkillKind: "BuiltIn" | "Local" | "Remote";
     SkillResponse: {
@@ -8255,7 +8557,8 @@ export interface components {
       | components["schemas"]["ToolDefinitionGitCloneToolDefinition"]
       | components["schemas"]["ToolDefinitionRunShellToolDefinition"]
       | components["schemas"]["ToolDefinitionWebFetchToolDefinition"]
-      | components["schemas"]["ToolDefinitionWebSearchToolDefinition"];
+      | components["schemas"]["ToolDefinitionWebSearchToolDefinition"]
+      | components["schemas"]["ToolDefinitionExtensionToolDefinition"];
     ToolDefinitionAskUserQuestionToolDefinition: {
       /** @enum {string} */
       name: "ask_user_question";
@@ -8265,6 +8568,13 @@ export interface components {
       /** @enum {string} */
       name: "diff";
       options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionExtensionToolDefinition: {
+      /** @enum {string} */
+      name: "extension";
+      /** Format: uuid */
+      extensionId: string;
+      toolId: string;
     };
     ToolDefinitionGitCloneToolDefinition: {
       /** @enum {string} */
@@ -8299,6 +8609,11 @@ export interface components {
       requiredPermission?: null | components["schemas"]["AgwToolPermission"];
       /** @description Whether this Tool or any ToolBlock member may require execution approval. */
       requiresConfirmation: boolean;
+      allowInPlanMode: boolean;
+      /** Format: uuid */
+      extensionId?: null | string;
+      extensionToolId?: null | string;
+      inputSchema?: null | components["schemas"]["JsonElement"];
     };
     ToolScope: number;
     ToolValueObject:

@@ -26,4 +26,15 @@
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyAgentsTestExtension" AfterTargets="Build">
+    <ItemGroup>
+      <ExtensionFixtureFiles Include="../Agw.Extensions.Runtime.Tests/Fixture/bin/$(Configuration)/net10.0/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(ExtensionFixtureFiles)"
+      DestinationFolder="$(OutDir)ExtensionFixture"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
 </Project>

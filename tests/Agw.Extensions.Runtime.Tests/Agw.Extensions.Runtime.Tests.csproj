@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Fixture/**/*.cs" />
+    <ProjectReference Include="../../src/server/Agw.Extensions/Agw.Extensions.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Tools/Agw.Tools.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyExtensionRuntimeTestExtension" AfterTargets="Build">
+    <ItemGroup>
+      <ExtensionFixtureFiles Include="Fixture/bin/$(Configuration)/net10.0/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(ExtensionFixtureFiles)"
+      DestinationFolder="$(OutDir)ExtensionFixture"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
+  <Target Name="PublishExtensionRuntimeTestExtension" AfterTargets="Publish">
+    <ItemGroup>
+      <ExtensionFixtureFiles Include="Fixture/bin/$(Configuration)/net10.0/*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(ExtensionFixtureFiles)"
+      DestinationFolder="$(PublishDir)ExtensionFixture"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
+</Project>

@@ -163,6 +163,7 @@ public sealed class DurableTurnUpgrade
             input.ConversationPayload = JsonSerializer.Serialize(message, WebJsonOptions.Default);
             manifest = manifest with
             {
+                ExtensionIds = manifest.ExtensionIds,
                 StreamingScopeId = manifest.StreamingScopeId ?? id.ToString("D"),
                 Input = new AgwUserInput
                 {

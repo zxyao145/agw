@@ -77,6 +77,10 @@ afterEach(async () => {
       confirmation.kind === "message" ? confirmation.cancelId : false,
     );
   }
+  for (const viewId of [VIEWER, OUTLINE]) {
+    const page = pageOf(viewId);
+    if (page && !page.endpoint.isClosed) await reportUnsaved(page, false);
+  }
   for (const release of acquired) release();
   host.retainFileViewers([]);
   await until(
@@ -128,6 +132,7 @@ async function reportUnsaved(page: ExtensionPage, unsaved: boolean): Promise<voi
 
 /** 显示文件查看器并等到 onLoad 完成。Shows a file viewer and waits until its onLoad finished. */
 async function showLoaded(viewId: string, file: FileViewerFile) {
+  host.retainFileViewers([VIEWER, OUTLINE]);
   host.setFileViewerFile(viewId, file);
   const release = acquire(viewId);
   const page = await until(() => pageOf(viewId), `the ${viewId} page`);

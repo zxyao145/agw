@@ -5,7 +5,13 @@ import { resolve } from "node:path";
 import { app } from "electron";
 
 export type IntegrationConfig = {
-  phase: "first" | "restart" | "performance";
+  phase:
+    | "first"
+    | "restart"
+    | "performance"
+    | "frame-visibility"
+    | "server-extension"
+    | "server-restart";
   userData: string;
   fixtures: string;
   projectDirectory: string;
@@ -19,6 +25,16 @@ export type IntegrationConfig = {
   } | null;
   /** 性能测试结果写入的文件。The file the performance results are written to. */
   results: string;
+  serverExtension: {
+    id: string;
+    name: string;
+    displayName: string;
+    versionV1: string;
+    versionV2: string;
+    releaseHashV1: string;
+    releaseHashV2: string;
+  };
+  serverOrigin: { serverId: string; userId: string };
   firstToken: string;
   secondToken: string;
   agentId: string;

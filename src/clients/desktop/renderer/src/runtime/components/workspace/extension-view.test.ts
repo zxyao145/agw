@@ -49,6 +49,7 @@ function snapshot(overrides: Partial<ExtensionHostSnapshot> = {}): ExtensionHost
   return {
     started: true,
     safeMode: null,
+    serverSyncError: null,
     recoveryNotices: [],
     extensions: [],
     viewErrors: {},

@@ -138,12 +138,36 @@ export interface ExtensionContributes {
   themes?: ExtensionThemeContribution[];
 }
 
+export interface DesktopExtensionManifest {
+  apiVersion: number;
+  minHostVersion?: string;
+  icon?: string;
+  background?: string;
+  contributes?: ExtensionContributes;
+  permissions?: ExtensionPermission[];
+  hostPermissions?: string[];
+}
+
+export interface ServerExtensionManifest {
+  [key: string]: unknown;
+  apiVersion: number;
+  minHostVersion?: string;
+  entryAssembly: string;
+  entryType: string;
+}
+
 export interface ExtensionManifest {
+  [key: string]: unknown;
   $schema?: string;
   manifestVersion: number;
   id: string;
   name: string;
+  displayName?: string;
   version: string;
+  targets?: number;
+  files?: Record<string, string>;
+  server?: ServerExtensionManifest;
+  desktop?: DesktopExtensionManifest;
   minAppVersion?: string;
   description?: string;
   author?: string;
@@ -295,6 +319,7 @@ export interface ExtensionApi {
   readonly execution: ExecutionApi;
   readonly repositories: RepositoryWorkspaceApi;
   readonly a2a: A2AApi;
+  readonly server: ServerApi;
   readonly http: HttpApi;
   readonly chat: {
     composer: { insertText(text: string): Promise<void> };
@@ -427,7 +452,13 @@ export interface ViewDefinition {
 export interface HostContext {
   app: { version: string; platform: "darwin" | "win32" | "linux"; architecture: string };
   extension: { id: string; version: string; manifestVersion: number; storageUri: string };
-  server: { id: string; name: string; kind: "local" | "remote" };
+  server: {
+    id: string;
+    name: string;
+    kind: "local" | "remote";
+    /** The persistent deployment identity returned by the Server info API. */
+    serverId?: string | null;
+  };
   /** 需要 context.user。Requires context.user. */
   user?: ContextUser | null;
   /** 需要 context.project。Requires context.project. */
@@ -889,6 +920,17 @@ export interface HttpApi {
     body?: string | Uint8Array;
     signal?: AbortSignal;
   }): Promise<HttpResponse>;
+}
+
+export interface ServerApi {
+  request<T = unknown>(path: string, options?: ServerRequestOptions): Promise<T>;
+}
+
+export interface ServerRequestOptions {
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  query?: Record<string, string | number | boolean>;
+  body?: unknown;
+  signal?: AbortSignal;
 }
 
 export interface HttpResponse {

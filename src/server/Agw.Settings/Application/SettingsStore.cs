@@ -22,6 +22,12 @@ public sealed class SettingsStore : ISettingsStore
     public Task<SettingSnapshot<T>?> GetGlobalAsync<T>(string key, CancellationToken cancellationToken = default)
         where T : class => ReadAsync<T>(key, null, cancellationToken);
 
+    public Task<SettingSnapshot<T>?> GetGlobalForShareAsync<T>(
+        string key,
+        CancellationToken cancellationToken = default
+    )
+        where T : class => ReadAsync<T>(key, null, cancellationToken, forShare: true);
+
     public Task<SettingSnapshot<T>?> GetCurrentUserAsync<T>(string key, CancellationToken cancellationToken = default)
         where T : class => ReadAsync<T>(key, _currentUser.RequiredUserId, cancellationToken);
 
@@ -50,12 +56,15 @@ public sealed class SettingsStore : ISettingsStore
     private async Task<SettingSnapshot<T>?> ReadAsync<T>(
         string key,
         string? userId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool forShare = false
     )
         where T : class
     {
         ValidateKey(key);
-        var document = await _persistence.ReadAsync(key, userId, cancellationToken);
+        var document = forShare
+            ? await _persistence.ReadGlobalForShareAsync(key, cancellationToken)
+            : await _persistence.ReadAsync(key, userId, cancellationToken);
         if (document == null)
             return null;
         try

@@ -71,6 +71,7 @@ public sealed class SettingsServerAuthStatePersistence : IServerAuthStatePersist
                 PasswordHash = passwordHash,
                 SessionVersion = 1,
                 InitializedAt = _clock.GetUtcNow(),
+                ServerIdentityProvisioned = true,
             },
             cancellationToken
         );
@@ -88,6 +89,7 @@ public sealed class SettingsServerAuthStatePersistence : IServerAuthStatePersist
             PasswordHash = passwordHash,
             SessionVersion = checked(snapshot.Value.SessionVersion + 1),
             InitializedAt = snapshot.Value.InitializedAt,
+            ServerIdentityProvisioned = snapshot.Value.ServerIdentityProvisioned,
         };
         if (!await _settings.TryUpdateGlobalAsync(Key, next, snapshot.Version, cancellationToken))
             throw new AgwException(
@@ -95,6 +97,24 @@ public sealed class SettingsServerAuthStatePersistence : IServerAuthStatePersist
                 "The administrator password changed concurrently. Sign in again before retrying."
             );
     }
+
+    public async Task MarkServerIdentityProvisionedAsync(CancellationToken cancellationToken = default)
+    {
+        var snapshot =
+            await ReadSettingsAsync(cancellationToken)
+            ?? throw new AgwException(ErrorCodes.InvalidSetupConfiguration, "Server initialization has not completed.");
+        if (snapshot.Value.ServerIdentityProvisioned)
+            return;
+        snapshot.Value.ServerIdentityProvisioned = true;
+        if (!await _settings.TryUpdateGlobalAsync(Key, snapshot.Value, snapshot.Version, cancellationToken))
+            throw new AgwException(
+                ErrorCodes.InvalidSetupConfiguration,
+                "The administrator configuration changed concurrently."
+            );
+    }
+
+    public async Task<bool?> ReadServerIdentityProvisionedAsync(CancellationToken cancellationToken = default) =>
+        (await ReadSettingsAsync(cancellationToken))?.Value.ServerIdentityProvisioned;
 
     private async Task<SettingSnapshot<AuthenticationSettings>?> ReadSettingsAsync(CancellationToken cancellationToken)
     {
@@ -117,5 +137,7 @@ public sealed class SettingsServerAuthStatePersistence : IServerAuthStatePersist
         public string PasswordHash { get; set; } = string.Empty;
         public int SessionVersion { get; set; }
         public DateTimeOffset InitializedAt { get; set; }
+
+        public bool ServerIdentityProvisioned { get; set; }
     }
 }

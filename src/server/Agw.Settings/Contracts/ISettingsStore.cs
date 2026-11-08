@@ -5,6 +5,8 @@ public interface ISettingsStore
 {
     Task<SettingSnapshot<T>?> GetGlobalAsync<T>(string key, CancellationToken cancellationToken = default)
         where T : class;
+    Task<SettingSnapshot<T>?> GetGlobalForShareAsync<T>(string key, CancellationToken cancellationToken = default)
+        where T : class;
     Task<SettingSnapshot<T>?> GetCurrentUserAsync<T>(string key, CancellationToken cancellationToken = default)
         where T : class;
     Task<bool> TryCreateGlobalAsync<T>(string key, T value, CancellationToken cancellationToken = default)

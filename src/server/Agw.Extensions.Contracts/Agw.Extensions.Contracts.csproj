@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Agw.Tools.Abstractions/Agw.Tools.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
