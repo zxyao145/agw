@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { InteractionResponse } from "./protocol";
+import type { InteractionResponse } from "@agw/execution-types";
 
 import {
   buildHumanResponseCommand,

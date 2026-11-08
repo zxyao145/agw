@@ -1263,13 +1263,19 @@ importers:
         specifier: workspace:*
         version: link:../test-harness
 
-  clients/packages/execution-core: {}
+  clients/packages/execution-core:
+    dependencies:
+      '@agw/execution-types':
+        specifier: workspace:*
+        version: link:../execution-types
+
+  clients/packages/execution-types: {}
 
   clients/packages/extension-sdk:
     dependencies:
-      '@agw/execution-core':
+      '@agw/execution-types':
         specifier: workspace:*
-        version: link:../execution-core
+        version: link:../execution-types
     devDependencies:
       '@agw/test-harness':
         specifier: workspace:*

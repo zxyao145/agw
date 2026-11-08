@@ -3,7 +3,7 @@
   "compilerOptions": {
     "types": [],
     "paths": {
-      "@agw/execution-core": ["../../packages/execution-core/src/index.ts"]
+      "@agw/execution-types": ["../../packages/execution-types/src/index.ts"]
     }
   },
   "include": ["../../packages/extension-sdk/src/**/*.ts"]

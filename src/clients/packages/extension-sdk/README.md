@@ -1,4 +1,8 @@
-# Floating Chat
+# @agw/extension-sdk
+
+The Extension API types, RPC protocol, permissions and browser SDK runtime. Shared execution types come from `@agw/execution-types` through type-only imports.
+
+## Floating Chat
 
 Declare `chat.composer` in the extension manifest and create the floating button from a view:
 
