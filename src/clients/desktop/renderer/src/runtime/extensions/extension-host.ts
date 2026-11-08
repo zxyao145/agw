@@ -123,6 +123,7 @@ export type ExtensionHostSnapshot = {
   /** 视图请求的图片预览（`ui.previewImage`）；没有时为 null。The image preview a view requested (`ui.previewImage`), or null. */
   imagePreview: ExtensionImagePreview | null;
   floatingChat: FloatingChatSnapshot | null;
+  floatingChatButton: { owner: string; obscured: boolean } | null;
 };
 
 export type FloatingChatSnapshot = {
@@ -340,13 +341,14 @@ export class ExtensionHost {
   private imagePreview: PendingImagePreview | null = null;
   private nextImagePreviewId = 1;
   private floatingChat: FloatingChatSnapshot | null = null;
+  private sourceFloatingChatContext: Record<string, string> | null = null;
+  private floatingChatButtonObscured = false;
   private readonly floatingChatContexts = new Map<string, Record<string, string>>();
   private readonly floatingChatContextScopes = new Map<
     string,
     { serverId: string; projectId: string | null }
   >();
   private floatingChatScope: { serverId: string; projectId: string | null } | null = null;
-  private floatingChatFocusAfterReveal: { frameId: string; pageId: string } | null = null;
   private readonly listeners = new Set<() => void>();
   private snapshot: ExtensionHostSnapshot = {
     started: false,
@@ -360,6 +362,7 @@ export class ExtensionHost {
     fileHeaderItems: {},
     imagePreview: null,
     floatingChat: null,
+    floatingChatButton: null,
   };
 
   public constructor(private readonly options: ExtensionHostOptions) {
@@ -657,6 +660,7 @@ export class ExtensionHost {
     this.themeBackground = background;
     this.broker.broadcastTheme(theme);
     if (this.started) void this.bridge.setExtensionFrameBackground(this.hostInstanceId, background);
+    this.publish();
   }
 
   public setComposer(composer: { insertText(text: string): void } | null): void {
@@ -676,8 +680,12 @@ export class ExtensionHost {
   }
 
   public setSourceFloatingChatContext(context: Record<string, string>): void {
+    this.sourceFloatingChatContext = normalizeFloatingChatContext(context);
     const state = this.floatingChat;
-    if (state?.ownerFrameId !== null && state?.ownerFrameId !== undefined) return;
+    if (state?.ownerFrameId !== null && state?.ownerFrameId !== undefined) {
+      this.publish();
+      return;
+    }
     this.floatingChat = {
       open: state?.open ?? false,
       context: normalizeFloatingChatContext(context),
@@ -690,16 +698,54 @@ export class ExtensionHost {
 
   public closeFloatingChat(): void {
     if (!this.floatingChat?.open) return;
-    this.queueFloatingChatFocus(this.floatingChat);
     this.floatingChat = { ...this.floatingChat, open: false };
     this.publish();
   }
 
   public closeSourceFloatingChat(): void {
-    if (!this.floatingChat || this.floatingChat.ownerFrameId !== null) return;
-    this.floatingChat = null;
-    this.floatingChatScope = null;
+    this.sourceFloatingChatContext = null;
+    if (this.floatingChat?.ownerFrameId === null) {
+      this.floatingChat = null;
+      this.floatingChatScope = null;
+    }
     this.publish();
+  }
+
+  public openFloatingChatButton(owner: string): void {
+    const button = this.windowFloatingChatButton();
+    if (button?.owner !== owner || button.obscured) return;
+    if (owner === "source") {
+      this.openSourceFloatingChat(this.sourceFloatingChatContext!);
+      return;
+    }
+    const frame = [...this.frames.values()].find(
+      (item) => item.pageId && this.floatingChatOwnerKey(item.frameId, item.pageId) === owner,
+    );
+    if (!frame?.pageId) throw createExtensionError("ERR_FRAME_GONE", "The Chat view is gone.");
+    this.openExtensionFloatingChat(
+      { extensionId: frame.extensionId, frameId: frame.frameId, pageId: frame.pageId },
+      this.floatingChatContexts.get(owner)!,
+    );
+  }
+
+  private windowFloatingChatButton(): { owner: string; obscured: boolean } | null {
+    if (this.sourceFloatingChatContext) {
+      return { owner: "source", obscured: this.floatingChatButtonObscured };
+    }
+    const frames = [...this.frames.values()].filter(
+      (frame) =>
+        frame.shown &&
+        frame.closing === null &&
+        frame.pageId !== null &&
+        this.floatingChatContexts.has(this.floatingChatOwnerKey(frame.frameId, frame.pageId)),
+    );
+    const frame = frames.find((item) => item.kind !== "sidebarView") ?? frames[0];
+    return frame?.pageId
+      ? {
+          owner: this.floatingChatOwnerKey(frame.frameId, frame.pageId),
+          obscured: this.floatingChatButtonObscured,
+        }
+      : null;
   }
 
   private registerExtensionFloatingChat(
@@ -716,6 +762,7 @@ export class ExtensionHost {
     }
     this.floatingChatContexts.set(ownerKey, normalizeFloatingChatContext(context));
     this.floatingChatContextScopes.set(ownerKey, this.currentFloatingChatScope());
+    this.publish();
   }
 
   private setExtensionFloatingChatContext(
@@ -732,8 +779,8 @@ export class ExtensionHost {
     this.floatingChatContextScopes.set(ownerKey, this.currentFloatingChatScope());
     if (this.isFloatingChatOwner(owner.frameId, owner.pageId)) {
       this.floatingChat = { ...this.floatingChat!, context: normalized };
-      this.publish();
     }
+    this.publish();
   }
 
   private openExtensionFloatingChat(owner: SessionOwner, context: Record<string, string>): void {
@@ -758,52 +805,18 @@ export class ExtensionHost {
 
   private closeFloatingChatOwner(frameId: string, pageId: string): void {
     if (!this.isFloatingChatOwner(frameId, pageId) || !this.floatingChat?.open) return;
-    this.queueFloatingChatFocus(this.floatingChat);
     this.floatingChat = { ...this.floatingChat, open: false };
     this.publish();
-  }
-
-  private queueFloatingChatFocus(state: FloatingChatSnapshot): void {
-    if (state.ownerFrameId && state.ownerPageId) {
-      const frame = this.frames.get(state.ownerFrameId);
-      if (frame?.shown && frame.closing === null && frame.pageId === state.ownerPageId) {
-        this.floatingChatFocusAfterReveal = {
-          frameId: state.ownerFrameId,
-          pageId: state.ownerPageId,
-        };
-      }
-    }
-  }
-
-  private async restoreFloatingChatFocus(frameId: string): Promise<void> {
-    const pending = this.floatingChatFocusAfterReveal;
-    if (!pending || pending.frameId !== frameId) return;
-    const frame = this.frames.get(frameId);
-    if (!frame || !frame.shown || frame.closing !== null || frame.pageId !== pending.pageId) {
-      this.floatingChatFocusAfterReveal = null;
-      return;
-    }
-    if (frame.wantsObscured) return;
-    await this.bridge.focusExtensionFrame(this.hostInstanceId, frameId);
-    if (this.floatingChatFocusAfterReveal !== pending) return;
-    this.floatingChatFocusAfterReveal = null;
-    this.broker.emit(frameId, pending.pageId, "chat.floating.focus", {});
   }
 
   private disposeExtensionFloatingChat(frameId: string, pageId: string): void {
     this.floatingChatContexts.delete(this.floatingChatOwnerKey(frameId, pageId));
     this.floatingChatContextScopes.delete(this.floatingChatOwnerKey(frameId, pageId));
     if (this.isFloatingChatOwner(frameId, pageId)) {
-      if (
-        this.floatingChatFocusAfterReveal?.frameId === frameId &&
-        this.floatingChatFocusAfterReveal.pageId === pageId
-      ) {
-        this.floatingChatFocusAfterReveal = null;
-      }
       this.floatingChat = null;
       this.floatingChatScope = null;
-      this.publish();
     }
+    this.publish();
   }
 
   private assertFloatingChatOwner(owner: SessionOwner): void {
@@ -859,26 +872,20 @@ export class ExtensionHost {
       }
     }
     const state = this.floatingChat;
-    if (
-      this.floatingChatFocusAfterReveal?.frameId === frameId &&
-      (pageId === undefined || this.floatingChatFocusAfterReveal.pageId === pageId)
-    ) {
-      this.floatingChatFocusAfterReveal = null;
-    }
     if (state?.ownerFrameId === frameId && (pageId === undefined || state.ownerPageId === pageId)) {
       if (preserveRegistration) {
         this.floatingChat = { ...state, open: false, context: {} };
         this.floatingChatScope = null;
-        this.publish();
       } else {
         this.floatingChat = null;
         this.floatingChatScope = null;
-        this.publish();
       }
     }
+    this.publish();
   }
 
   private clearFloatingChat(): void {
+    this.sourceFloatingChatContext = null;
     this.floatingChat = null;
     this.floatingChatScope = null;
     const scope = this.currentFloatingChatScope();
@@ -1222,11 +1229,14 @@ export class ExtensionHost {
    * Frames under host overlays are swapped for snapshots. The view hides only after its slot painted the snapshot
    * (`snapshotShown`), and on reveal the snapshot goes only after the view shows, so no blank shows in between.
    */
-  public setObscuredFrames(frameIds: ReadonlySet<string>): void {
+  public setObscuredFrames(frameIds: ReadonlySet<string>, buttonObscured = false): void {
+    if (this.floatingChatButtonObscured !== buttonObscured) {
+      this.floatingChatButtonObscured = buttonObscured;
+      this.publish();
+    }
     for (const frame of this.frames.values()) {
       if (frame.kind === "background") continue;
       const wanted = frameIds.has(frame.frameId);
-      const wasObscured = frame.wantsObscured;
       if (wanted && !frame.wantsObscured) {
         frame.wantsObscured = true;
         const request = ++frame.obscureRequest;
@@ -1252,18 +1262,8 @@ export class ExtensionHost {
               frame.snapshot = null;
               this.publish();
             }
-            void this.restoreFloatingChatFocus(frame.frameId).catch((error: unknown) =>
-              console.error("Unable to focus the floating Chat owner.", error),
-            );
           })
           .catch((error: unknown) => console.error("Unable to reveal an extension view.", error));
-      }
-      if (!wanted && !wasObscured && this.floatingChatFocusAfterReveal?.frameId === frame.frameId) {
-        void afterNextPaint()
-          .then(() => this.restoreFloatingChatFocus(frame.frameId))
-          .catch((error: unknown) =>
-            console.error("Unable to focus the floating Chat owner.", error),
-          );
       }
     }
   }
@@ -1663,6 +1663,7 @@ export class ExtensionHost {
     if (existing && existing.closing === null) {
       const wasShown = existing.shown;
       existing.shown = true;
+      if (!wasShown) this.publish();
       // 文件查看器从隐藏变为显示时收到 onShow；释放计时器被取消时 frame 一直显示，不重复发送。
       // File viewers get onShow when they go from hidden to shown; after a canceled release timer the frame stayed
       // shown, so nothing is sent again.
@@ -2231,6 +2232,7 @@ export class ExtensionHost {
       ),
       imagePreview: this.imagePreview?.preview ?? null,
       floatingChat: this.floatingChat,
+      floatingChatButton: this.windowFloatingChatButton(),
       extensions: [...this.records.values()]
         .sort((left, right) =>
           (left.installed.instanceId ?? left.installed.id).localeCompare(

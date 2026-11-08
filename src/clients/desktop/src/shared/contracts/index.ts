@@ -1,5 +1,6 @@
 export type {
   AgwDesktopBridge,
+  AgwFloatingChatHostBridge,
   TurnNotificationRequest,
   TurnNotificationStatus,
   UninstallRequest,
@@ -56,6 +57,12 @@ export type {
   PermissionApprovalView,
   UnsavedFileItem,
 } from "./confirmation";
+export type {
+  AgwFloatingChatButtonBridge,
+  FloatingChatButtonDrag,
+  FloatingChatButtonRequest,
+  FloatingChatButtonViewState,
+} from "./floating-chat";
 export type { DesktopRuntimeState, LocalServerRuntime } from "./runtime";
 export type { ImageContextMenuRequest } from "./image";
 export type { DesktopPlatform, ServerProfile } from "./server-profile";

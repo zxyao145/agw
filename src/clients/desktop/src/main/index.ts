@@ -33,6 +33,11 @@ import type {
   UninstallResult,
 } from "../shared/contracts";
 import { CONFIRMATION_SCHEME_PRIVILEGES } from "./confirmation/confirmation-protocol";
+import { FLOATING_CHAT_SCHEME_PRIVILEGES } from "./floating-chat/floating-chat-protocol";
+import {
+  FloatingChatButtonView,
+  registerFloatingChatButtonIpc,
+} from "./floating-chat/floating-chat-button";
 import { ConfirmationService } from "./confirmation/confirmation-service";
 import {
   createConfirmationWindowFactory,
@@ -73,6 +78,7 @@ protocol.registerSchemesAsPrivileged([
   },
   EXTENSION_SCHEME_PRIVILEGES,
   CONFIRMATION_SCHEME_PRIVILEGES,
+  FLOATING_CHAT_SCHEME_PRIVILEGES,
 ]);
 
 if (started) app.quit();
@@ -83,6 +89,7 @@ const hasSingleInstanceLock = !started && app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 
 let mainWindow: BrowserWindow | null = null;
+let floatingChatButton: FloatingChatButtonView | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let activeTaskCount = 0;
@@ -297,6 +304,7 @@ function writeExtensionSafeModeEvent(state: ExtensionSafeModeState, url: string)
 
 /** 旧宿主页面结束：销毁 extension frame 并释放资源。The old host page ended: destroy extension frames and release resources. */
 function resetExtensionRuntime(): void {
+  floatingChatButton?.reset();
   void extensionRuntime.reset
     .run()
     .catch((error) => console.error("Unable to reset the extension runtime.", error));
@@ -306,6 +314,7 @@ function resetExtensionRuntime(): void {
 async function reloadWithoutExtensions(): Promise<void> {
   const state = extensionRuntime.safeMode.enterManual();
   writeExtensionSafeModeEvent(state, lastTrustedRendererUrl ?? "agw://app/");
+  floatingChatButton?.reset();
   await extensionRuntime.reset.run();
   if (!mainWindow) mainWindow = createMainWindow();
   await reloadRendererWindow();
@@ -900,6 +909,12 @@ void app
       }),
     });
     registerConfirmationIpc(confirmationService);
+    floatingChatButton = new FloatingChatButtonView({
+      getMainWindow: () => mainWindow,
+      preloadPath: resolve(__dirname, "..", "preload", "floating-chat.js"),
+      pageDirectory: resolve(__dirname, "..", "floating-chat"),
+      onOpen: (owner) => mainWindow?.webContents.send("agw:floating-chat-open", owner),
+    });
     extensionRuntime = new ExtensionRuntime({
       userDataDirectory: app.getPath("userData"),
       appVersion: packageMetadata.appVersion,
@@ -909,6 +924,7 @@ void app
       settings: settingsStore,
       confirmations: confirmationService,
       getMainWindow: () => mainWindow,
+      onViewAdded: () => floatingChatButton?.raise(),
       onSettingsChanged: async () => {
         currentSettings = await settingsStore.load();
       },
@@ -924,6 +940,17 @@ void app
       confirmations: confirmationService,
       assertTrusted: (event) => assertTrustedSender(senderUrl(event)),
       runtimeState,
+    });
+    registerFloatingChatButtonIpc(floatingChatButton, {
+      assertHost: (event, hostInstanceId) => {
+        assertTrustedSender(senderUrl(event));
+        if (
+          event.sender !== mainWindow?.webContents ||
+          event.senderFrame !== event.sender.mainFrame
+        )
+          throw new Error("Chat button updates require the main renderer.");
+        extensionRuntime.registry.assertHost(hostInstanceId);
+      },
     });
     mainWindow = createMainWindow();
     createTray();

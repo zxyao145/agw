@@ -21,6 +21,7 @@
     "test:images": "node scripts/test-images.mjs",
     "test:extension-network": "node scripts/test-extension-network.mjs",
     "test:extensions": "node scripts/test-extensions.mjs",
+    "test:floating-chat": "node scripts/test-floating-chat.mjs",
     "test:development-reload": "pnpm build:renderer && node scripts/test-development-reload.mjs",
     "package": "pnpm build && pnpm prepare:resources && electron-forge package",
     "make": "pnpm build && pnpm prepare:resources && electron-forge make",

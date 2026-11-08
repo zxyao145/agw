@@ -291,15 +291,8 @@ export function createExtensionApi(
     chat: {
       composer: { insertText: (text) => call("chat.composer.insertText", { text }) },
       createFloatingChat: async (options) =>
-        createFloatingChat(
-          call,
-          options,
-          (error) => {
-            const message = error instanceof Error ? error.message : String(error);
-            void call("ui.notify", { type: "error", message });
-          },
-          (listener) => subscribe(router, "chat.floating.contextCleared", listener),
-          (listener) => subscribe(router, "chat.floating.focus", listener),
+        createFloatingChat(call, options, (listener) =>
+          subscribe(router, "chat.floating.contextCleared", listener),
         ),
       observe: async (filter, listener) => {
         const subscriptionId = crypto.randomUUID();

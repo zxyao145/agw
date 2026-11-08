@@ -30,6 +30,7 @@ export type ExtensionViewManagerOptions = {
   emit(event: ExtensionEvent): void;
   /** 旧页面被替换：主进程释放它的监听与请求。An old page was replaced: release its watchers and requests. */
   onPageReplaced(frame: RegisteredFrame, pageId: string): void;
+  onViewAdded?(): void;
 };
 
 type FrameView = {
@@ -121,6 +122,7 @@ export class ExtensionViewManager {
       view.setBackgroundColor(request.backgroundColor);
       view.setVisible(false);
       window.contentView.addChildView(view);
+      this.options.onViewAdded?.();
     }
     const url =
       request.releaseHash === null

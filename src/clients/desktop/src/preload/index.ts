@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import type {
   AgwDesktopBridge,
+  AgwFloatingChatHostBridge,
   DesktopRuntimeState,
   DesktopSettingsUpdate,
   DesktopUpdateCheckResult,
@@ -157,3 +158,14 @@ const bridge: AgwDesktopBridge = {
 };
 
 contextBridge.exposeInMainWorld("agwDesktop", bridge);
+
+const floatingChatHost: AgwFloatingChatHostBridge = {
+  update: (hostInstanceId, request) =>
+    ipcRenderer.invoke("agw:update-floating-chat-button", hostInstanceId, request),
+  onOpen: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, owner: string) => listener(owner);
+    ipcRenderer.on("agw:floating-chat-open", handler);
+    return () => ipcRenderer.off("agw:floating-chat-open", handler);
+  },
+};
+contextBridge.exposeInMainWorld("agwFloatingChatHost", floatingChatHost);
