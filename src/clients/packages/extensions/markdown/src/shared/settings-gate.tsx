@@ -9,13 +9,19 @@ import { readTextEditorSettings, type TextEditorSettings } from "./text-editor-s
 export type OpenedView = {
   /** 显示（或刷新）宿主给出的文件。Shows (or refreshes) the file the host gives. */
   show(params: unknown): void | Promise<void>;
+  /** 隐藏时清除当前文件的外部 Context。Clears the current file's external context when hidden. */
+  hide?(): void | Promise<void>;
   /** 卸载界面并释放文档会话与监听器。Unmounts the UI and releases the document session and listeners. */
-  dispose(): void;
+  dispose(): void | Promise<void>;
 };
 
 type Loaded = {
   api: ExtensionApi;
   unloaded: boolean;
+  hidden: boolean;
+  opening: boolean;
+  visibilityRevision: number;
+  disposeTask: Promise<void> | null;
   opened: OpenedView | null;
   ready: Promise<void>;
 };
@@ -32,9 +38,22 @@ type Loaded = {
  */
 export function createSettingsGate(
   root: Root,
-  open: (api: ExtensionApi, settings: TextEditorSettings, params: unknown) => OpenedView,
+  open: (
+    api: ExtensionApi,
+    settings: TextEditorSettings,
+    params: unknown,
+  ) => OpenedView | Promise<OpenedView>,
 ) {
   let loaded: Loaded | null = null;
+
+  function dispose(current: Loaded): Promise<void> {
+    if (current.disposeTask) return current.disposeTask;
+    current.disposeTask = (async () => {
+      if (current.opened) await current.opened.dispose();
+      else root.unmount();
+    })();
+    return current.disposeTask;
+  }
 
   async function load(current: Loaded, params: unknown): Promise<void> {
     let settings: TextEditorSettings;
@@ -51,12 +70,33 @@ export function createSettingsGate(
       return;
     }
     if (current.unloaded) return;
-    current.opened = open(current.api, settings, params);
+    current.opening = true;
+    let opened: OpenedView;
+    try {
+      opened = await open(current.api, settings, params);
+    } finally {
+      current.opening = false;
+    }
+    current.opened = opened;
+    if (current.unloaded) {
+      await dispose(current);
+      return;
+    }
+    if (current.hidden && opened.hide) notifyFailure(current.api, Promise.resolve(opened.hide()));
   }
 
   return {
     onLoad(api: ExtensionApi, params: unknown): Promise<void> {
-      const current: Loaded = { api, unloaded: false, opened: null, ready: Promise.resolve() };
+      const current: Loaded = {
+        api,
+        unloaded: false,
+        hidden: false,
+        opening: false,
+        visibilityRevision: 0,
+        disposeTask: null,
+        opened: null,
+        ready: Promise.resolve(),
+      };
       loaded = current;
       current.ready = load(current, params);
       return current.ready;
@@ -64,14 +104,30 @@ export function createSettingsGate(
     onShow(params: unknown): void {
       const current = loaded;
       if (!current) throw new Error("The view received a file before onLoad.");
+      current.hidden = false;
+      const visibilityRevision = ++current.visibilityRevision;
       notifyFailure(
         current.api,
         current.ready.then(async () => {
-          if (current.opened && !current.unloaded) await current.opened.show(params);
+          if (
+            current.opened &&
+            !current.unloaded &&
+            !current.hidden &&
+            current.visibilityRevision === visibilityRevision
+          ) {
+            await current.opened.show(params);
+          }
         }),
       );
     },
-    onUnload(): void {
+    onHide(): void {
+      const current = loaded;
+      if (!current || current.unloaded) return;
+      current.hidden = true;
+      current.visibilityRevision += 1;
+      if (current.opened?.hide) notifyFailure(current.api, Promise.resolve(current.opened.hide()));
+    },
+    async onUnload(): Promise<void> {
       const current = loaded;
       loaded = null;
       if (!current) {
@@ -79,8 +135,16 @@ export function createSettingsGate(
         return;
       }
       current.unloaded = true;
-      if (current.opened) current.opened.dispose();
-      else root.unmount();
+      current.visibilityRevision += 1;
+      if (current.opening) {
+        try {
+          await current.ready;
+        } catch (error) {
+          await dispose(current);
+          throw error;
+        }
+      }
+      await dispose(current);
     },
   };
 }

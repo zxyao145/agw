@@ -1271,6 +1271,12 @@ importers:
       '@agw/test-harness':
         specifier: workspace:*
         version: link:../test-harness
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
+      playwright:
+        specifier: 'catalog:'
+        version: 1.63.0
       tsx:
         specifier: 'catalog:'
         version: 4.23.15

@@ -25,5 +25,5 @@
     ],
     "settings": { "entry": "settings.html" }
   },
-  "permissions": ["fs.cloud.read", "fs.cloud.write"]
+  "permissions": ["chat.composer", "fs.cloud.read", "fs.cloud.write"]
 }
