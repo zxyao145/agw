@@ -76,8 +76,8 @@ export async function buildExtensionSdk() {
     logLevel: "warning",
   });
 
-  // SDK 的 tsconfig 把 `@agw/execution-core` 映射到源码，这些类型因此作为本地文件打包进 sdk.d.ts。
-  // The SDK tsconfig maps `@agw/execution-core` to its sources, so those types are bundled into sdk.d.ts as local files.
+  // SDK 的 tsconfig 把 `@agw/execution-types` 映射到源码，这些类型因此作为本地文件打包进 sdk.d.ts。
+  // The SDK tsconfig maps `@agw/execution-types` to its sources, so those types are bundled into sdk.d.ts as local files.
   const [declarations] = generateDtsBundle(
     [{ filePath: sdkEntry, output: { noBanner: true, exportReferencedTypes: true } }],
     { preferredConfigPath: join(desktopDirectory, "scripts", "extension-sdk-dts.tsconfig.json") },

@@ -14,5 +14,8 @@
     "test": "tsx --test \"src/**/*.test.ts\"",
     "format": "oxfmt -c ../../.oxfmtrc.json ./src *.json",
     "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src *.json"
+  },
+  "dependencies": {
+    "@agw/execution-types": "workspace:*"
   }
 }
