@@ -171,3 +171,117 @@ test("a read error other than invalid settings shows the panel, never opens, and
   assert.ok(text.includes("Open Markdown settings to reset them."), text);
   await act(async () => viewer.onUnload());
 });
+
+test("unloading during async view creation waits for and disposes the view", async () => {
+  putSettings(JSON.stringify({ schemaVersion: 2, documentFontSize: null }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const events: string[] = [];
+  let resolveOpening!: (view: { show(params: unknown): void; dispose(): Promise<void> }) => void;
+  let opened!: () => void;
+  const openingStarted = new Promise<void>((resolve) => (opened = resolve));
+  const opening = new Promise<{ show(params: unknown): void; dispose(): Promise<void> }>(
+    (resolve) => (resolveOpening = resolve),
+  );
+  const viewer = createSettingsGate(root, () => {
+    opened();
+    return opening;
+  });
+
+  const loading = viewer.onLoad(host.api, "a.md");
+  await openingStarted;
+  const unloading = viewer.onUnload();
+  let unloaded = false;
+  void unloading.then(() => (unloaded = true));
+  await settle();
+  assert.equal(unloaded, false);
+
+  resolveOpening({
+    show() {},
+    async dispose() {
+      events.push("dispose");
+      root.unmount();
+    },
+  });
+  await act(async () => {
+    await loading;
+    await unloading;
+  });
+
+  assert.deepEqual(events, ["dispose"]);
+  assert.equal(unloaded, true);
+});
+
+test("hiding invalidates a show queued while async view creation is pending", async () => {
+  putSettings(JSON.stringify({ schemaVersion: 2, documentFontSize: null }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const events: string[] = [];
+  let resolveOpening!: (view: {
+    show(params: unknown): void;
+    hide(): void;
+    dispose(): void;
+  }) => void;
+  let opened!: () => void;
+  const openingStarted = new Promise<void>((resolve) => (opened = resolve));
+  const opening = new Promise<{ show(params: unknown): void; hide(): void; dispose(): void }>(
+    (resolve) => (resolveOpening = resolve),
+  );
+  const viewer = createSettingsGate(root, () => {
+    opened();
+    return opening;
+  });
+
+  const loading = viewer.onLoad(host.api, "a.md");
+  await openingStarted;
+  viewer.onShow("a.md");
+  viewer.onHide();
+  resolveOpening({
+    show(params) {
+      events.push(`show ${String(params)}`);
+    },
+    hide() {
+      events.push("hide");
+    },
+    dispose() {
+      events.push("dispose");
+    },
+  });
+  await act(() => loading);
+  await settle();
+
+  assert.deepEqual(events, ["hide"]);
+  await act(async () => viewer.onUnload());
+});
+
+test("failed async view creation settles a pending unload and unmounts the root", async () => {
+  putSettings(JSON.stringify({ schemaVersion: 2, documentFontSize: null }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => root.render("Opening"));
+  let rejectOpening!: (error: Error) => void;
+  let started!: () => void;
+  const openingStarted = new Promise<void>((resolve) => (started = resolve));
+  const opening = new Promise<never>((_, reject) => (rejectOpening = reject));
+  const viewer = createSettingsGate(root, () => {
+    started();
+    return opening;
+  });
+
+  const loading = viewer.onLoad(host.api, "a.md");
+  await openingStarted;
+  const unloading = viewer.onUnload();
+  const failure = createExtensionError("ERR_PERMISSION_DENIED", "Chat permission is required.");
+  const loadingRejected = assert.rejects(loading, failure);
+  const unloadingRejected = assert.rejects(unloading, failure);
+  rejectOpening(failure);
+  await act(async () => {
+    await Promise.all([loadingRejected, unloadingRejected]);
+  });
+
+  assert.equal(container.childElementCount, 0);
+  assert.equal(container.textContent, "");
+});
