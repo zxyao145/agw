@@ -10,7 +10,6 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
-  Clock3,
   Cloud,
   Info,
   LoaderCircle,
@@ -88,10 +87,7 @@ const SETTINGS_GROUPS: ReadonlyArray<{
   },
   {
     label: "Operations",
-    items: [
-      settingsItem(APP_ROUTES.dashboard, { label: "Overview" }),
-      settingsItem(APP_ROUTES.jobs, { icon: Clock3 }),
-    ],
+    items: [settingsItem(APP_ROUTES.dashboard, { label: "Overview" })],
   },
   { label: "Workspace", items: [settingsItem(APP_ROUTES.projects)] },
   {

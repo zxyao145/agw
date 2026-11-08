@@ -9,6 +9,7 @@ export type RibbonProps = {
   entries: readonly WorkspaceEntry[];
   sidebarVisible: boolean;
   activeSidebarViewId: string;
+  activeMainViewId: string;
   onSelect(entry: WorkspaceEntry): void;
 };
 
@@ -29,7 +30,7 @@ function RibbonButton({
           type="button"
           className={cn("agw-ribbon-item", active && "is-active")}
           aria-label={label}
-          aria-pressed={entry.action.type === "toggleSidebarView" ? active : undefined}
+          aria-pressed={entry.action.type !== "command" ? active : undefined}
           data-entry-id={entry.id}
           onClick={() => onSelect(entry)}
         >
@@ -42,13 +43,21 @@ function RibbonButton({
 }
 
 /** 窗口左侧的竖向图标栏：内置项在前，extension 项在后。The vertical icon bar: built-in items first, then extensions. */
-export function Ribbon({ entries, sidebarVisible, activeSidebarViewId, onSelect }: RibbonProps) {
+export function Ribbon({
+  entries,
+  sidebarVisible,
+  activeSidebarViewId,
+  activeMainViewId,
+  onSelect,
+}: RibbonProps) {
   const builtIn = entries.filter((entry) => entry.extensionId === null);
   const extensions = entries.filter((entry) => entry.extensionId !== null);
   const isActive = (entry: WorkspaceEntry) =>
-    entry.action.type === "toggleSidebarView" &&
-    sidebarVisible &&
-    entry.action.view === activeSidebarViewId;
+    entry.action.type === "openMainView"
+      ? entry.action.view === activeMainViewId
+      : entry.action.type === "toggleSidebarView" &&
+        sidebarVisible &&
+        entry.action.view === activeSidebarViewId;
 
   return (
     <nav className="agw-ribbon" aria-label="Ribbon">

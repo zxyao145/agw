@@ -304,6 +304,7 @@ function DesktopWorkspaceLayout({
         entries={registry.ribbon}
         sidebarVisible={layout.sidebarVisible}
         activeSidebarViewId={layout.activeSidebarViewId}
+        activeMainViewId={layout.activeMainViewId}
         onSelect={(entry) => host.runAction(entry.extensionId, entry.action, {})}
       />
       <ColResizeSplit>

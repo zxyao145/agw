@@ -1,5 +1,5 @@
 import { createExtensionError } from "@agw/extension-sdk";
-import { DEFAULT_MAIN_VIEW_ID, DEFAULT_SIDEBAR_VIEW_ID } from "./workspace-ids";
+import { BUILT_IN_VIEWS, DEFAULT_MAIN_VIEW_ID, DEFAULT_SIDEBAR_VIEW_ID } from "./workspace-ids";
 import type { WorkspaceRegistry, WorkspaceViewLocation } from "./workspace-registry";
 
 export type ViewOpenRequest = { params: unknown; sequence: number };
@@ -56,21 +56,44 @@ export class WorkspaceLayoutStore {
 
   public showSidebarView(id: string): void {
     this.assertView(id, "sidebar");
-    this.update({
+    const changes: Partial<WorkspaceLayoutState> = {
       sidebarVisible: true,
       activeSidebarViewId: id,
       openRequests: this.withRequest(id, {}),
-    });
+    };
+    if (this.state.activeMainViewId === BUILT_IN_VIEWS.jobs) {
+      changes.activeMainViewId =
+        id === BUILT_IN_VIEWS.files ? BUILT_IN_VIEWS.file : BUILT_IN_VIEWS.chat;
+    }
+    this.update(changes);
   }
 
   public setSidebarVisible(visible: boolean): void {
+    if (visible && this.state.activeMainViewId === BUILT_IN_VIEWS.jobs) {
+      this.showSidebarView(this.state.activeSidebarViewId);
+      return;
+    }
     this.update({ sidebarVisible: visible });
   }
 
   public openMainView(id: string, params: unknown = {}): void {
     this.assertView(id, "main");
     this.navigateToChat?.();
-    this.update({ activeMainViewId: id, openRequests: this.withRequest(id, params) });
+    const changes: Partial<WorkspaceLayoutState> = {
+      activeMainViewId: id,
+      openRequests: this.withRequest(id, params),
+    };
+    if (id === BUILT_IN_VIEWS.jobs) {
+      changes.sidebarVisible = false;
+    } else if (
+      this.state.activeMainViewId === BUILT_IN_VIEWS.jobs &&
+      (id === BUILT_IN_VIEWS.chat || id === BUILT_IN_VIEWS.file)
+    ) {
+      changes.sidebarVisible = true;
+      changes.activeSidebarViewId =
+        id === BUILT_IN_VIEWS.file ? BUILT_IN_VIEWS.files : BUILT_IN_VIEWS.conversations;
+    }
+    this.update(changes);
   }
 
   private assertView(id: string, location: WorkspaceViewLocation): void {

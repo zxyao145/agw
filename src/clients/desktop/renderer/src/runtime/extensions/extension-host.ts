@@ -373,6 +373,7 @@ export class ExtensionHost {
         builtInView(BUILT_IN_VIEWS.files, "sidebar", "Files", "FolderTree"),
         builtInView(BUILT_IN_VIEWS.chat, "main", "Chat", "MessageSquare"),
         builtInView(BUILT_IN_VIEWS.file, "main", "File", "FileText"),
+        builtInView(BUILT_IN_VIEWS.jobs, "main", "Jobs", "Clock3"),
       ],
       entries: {
         ribbon: [
@@ -391,6 +392,14 @@ export class ExtensionHost {
             title: "Files",
             icon: { kind: "lucide", name: "FolderTree" },
             action: { type: "toggleSidebarView", view: BUILT_IN_VIEWS.files },
+          },
+          {
+            id: "agw.ribbon.jobs",
+            extensionId: null,
+            extensionName: null,
+            title: "Jobs",
+            icon: { kind: "lucide", name: "Clock3" },
+            action: { type: "openMainView", view: BUILT_IN_VIEWS.jobs },
           },
         ],
       },

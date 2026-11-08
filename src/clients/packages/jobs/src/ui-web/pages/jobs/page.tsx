@@ -287,7 +287,7 @@ function getAgentTypeLabel(agentType: number | null): string {
   }
 }
 
-export default function JobsPage() {
+export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) => void }) {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
@@ -606,13 +606,21 @@ export default function JobsPage() {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <ButtonGroup>
-                      <Button type="button" variant="ghost" size="icon-sm" asChild>
-                        <Link
-                          href={`/jobs/logs/?jobId=${encodeURIComponent(job.id)}`}
-                          aria-label={`View ${job.name} logs`}
-                        >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        asChild={!onViewLogs}
+                        onClick={onViewLogs ? () => onViewLogs(job.id) : undefined}
+                        aria-label={`View ${job.name} logs`}
+                      >
+                        {onViewLogs ? (
                           <ListChecks className="h-4 w-4" />
-                        </Link>
+                        ) : (
+                          <Link href={`/jobs/logs/?jobId=${encodeURIComponent(job.id)}`}>
+                            <ListChecks className="h-4 w-4" />
+                          </Link>
+                        )}
                       </Button>
                       <Button
                         type="button"
