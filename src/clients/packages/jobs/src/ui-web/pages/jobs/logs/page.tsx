@@ -35,12 +35,18 @@ type JobLogDto = {
 
 export default function JobLogsPage({
   chatBasePath,
+  jobId: requestedJobId,
+  onBack,
+  onOpenChat,
 }: {
   /** 宿主应用的 Chat 路由：Web 为 `/chat`，Desktop 为 `/desktop/chat`。Chat route of the host app. */
   chatBasePath: string;
+  jobId?: string;
+  onBack?: () => void;
+  onOpenChat?: () => void;
 }) {
   const searchParams = useSearchParams();
-  const jobId = searchParams.get("jobId") ?? "";
+  const jobId = requestedJobId ?? searchParams.get("jobId") ?? "";
 
   const jobQuery = useQuery({
     queryKey: ["job", jobId],
@@ -83,12 +89,19 @@ export default function JobLogsPage({
           </p>
         </div>
 
-        <Button variant="outline" asChild>
-          <Link href="/jobs">
+        {onBack ? (
+          <Button variant="outline" onClick={onBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Jobs
-          </Link>
-        </Button>
+          </Button>
+        ) : (
+          <Button variant="outline" asChild>
+            <Link href="/jobs">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Jobs
+            </Link>
+          </Button>
+        )}
       </div>
 
       {jobQuery.isLoading ? (
@@ -142,7 +155,7 @@ export default function JobLogsPage({
                 <TableCell className="text-right">
                   {job ? (
                     <Button type="button" variant="outline" size="sm" asChild>
-                      <Link href={getChatHref(log)}>
+                      <Link href={getChatHref(log)} onClick={onOpenChat}>
                         <MessageSquareText className="mr-2 h-4 w-4" />
                         Go to Chat
                       </Link>

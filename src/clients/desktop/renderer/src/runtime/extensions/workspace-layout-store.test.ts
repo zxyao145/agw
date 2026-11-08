@@ -31,6 +31,7 @@ function createStore() {
       view(BUILT_IN_VIEWS.files, "sidebar"),
       view(BUILT_IN_VIEWS.chat, "main"),
       view(BUILT_IN_VIEWS.file, "main"),
+      view(BUILT_IN_VIEWS.jobs, "main"),
     ],
     entries: {},
   });
@@ -83,6 +84,58 @@ test("opening a main view switches it, records the params and navigates to the c
   assert.ok(second.sequence > first.sequence);
   assert.deepEqual(second.params, { message: "again" });
   assert.equal(navigations, 2);
+});
+
+test("opening Jobs hides the current sidebar", () => {
+  for (const sidebar of [BUILT_IN_VIEWS.conversations, BUILT_IN_VIEWS.files]) {
+    const { layout } = createStore();
+    layout.showSidebarView(sidebar);
+    layout.openMainView(BUILT_IN_VIEWS.jobs);
+
+    assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.jobs);
+    assert.equal(layout.getSnapshot().sidebarVisible, false);
+  }
+});
+
+test("selecting a built-in sidebar from Jobs opens its main view", () => {
+  for (const [sidebar, main] of [
+    [BUILT_IN_VIEWS.conversations, BUILT_IN_VIEWS.chat],
+    [BUILT_IN_VIEWS.files, BUILT_IN_VIEWS.file],
+  ]) {
+    const { layout } = createStore();
+    layout.openMainView(BUILT_IN_VIEWS.jobs);
+    layout.toggleSidebarView(sidebar);
+
+    assert.equal(layout.getSnapshot().sidebarVisible, true);
+    assert.equal(layout.getSnapshot().activeSidebarViewId, sidebar);
+    assert.equal(layout.getSnapshot().activeMainViewId, main);
+  }
+});
+
+test("showing the sidebar from Jobs returns to its main view", () => {
+  const { layout } = createStore();
+  layout.showSidebarView(BUILT_IN_VIEWS.files);
+  layout.openMainView(BUILT_IN_VIEWS.jobs);
+  layout.setSidebarVisible(true);
+
+  assert.equal(layout.getSnapshot().sidebarVisible, true);
+  assert.equal(layout.getSnapshot().activeSidebarViewId, BUILT_IN_VIEWS.files);
+  assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.file);
+});
+
+test("opening Chat or File from Jobs restores the corresponding sidebar", () => {
+  for (const [main, sidebar] of [
+    [BUILT_IN_VIEWS.chat, BUILT_IN_VIEWS.conversations],
+    [BUILT_IN_VIEWS.file, BUILT_IN_VIEWS.files],
+  ]) {
+    const { layout } = createStore();
+    layout.openMainView(BUILT_IN_VIEWS.jobs);
+    layout.openMainView(main);
+
+    assert.equal(layout.getSnapshot().sidebarVisible, true);
+    assert.equal(layout.getSnapshot().activeSidebarViewId, sidebar);
+    assert.equal(layout.getSnapshot().activeMainViewId, main);
+  }
 });
 
 test("unknown views or views in the wrong area are rejected", () => {
