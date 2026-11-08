@@ -4,6 +4,7 @@ export const BUILT_IN_VIEWS = {
   files: "agw.files",
   chat: "agw.chat",
   file: "agw.file",
+  jobs: "agw.jobs",
 } as const;
 
 export const DEFAULT_SIDEBAR_VIEW_ID = BUILT_IN_VIEWS.conversations;

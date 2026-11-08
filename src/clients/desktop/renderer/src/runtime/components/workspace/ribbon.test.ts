@@ -2,17 +2,20 @@ import assert from "node:assert/strict";
 import test, { afterEach, before } from "node:test";
 
 import type { WorkspaceEntry } from "../../extensions/workspace-registry";
+import { BUILT_IN_VIEWS } from "../../extensions/workspace-ids";
 
 type DomEnvironment = Awaited<ReturnType<typeof import("@agw/test-harness").setupDomEnvironment>>;
 let environment: DomEnvironment;
 let Ribbon: typeof import("./ribbon").Ribbon;
 let TooltipProvider: typeof import("./components.test-helper").TooltipProvider;
+let ExtensionHost: typeof import("../../extensions/extension-host").ExtensionHost;
 
 before(async () => {
   const { setupDomEnvironment } = await import("@agw/test-harness");
   environment = await setupDomEnvironment();
   ({ Ribbon } = await import("./ribbon"));
   ({ TooltipProvider } = await import("./components.test-helper"));
+  ({ ExtensionHost } = await import("../../extensions/extension-host"));
 });
 // 在 before 中注册的钩子不作用于之后的测试，这里在文件层清理渲染结果。
 // Hooks registered inside before do not apply to later tests, so clean up renders at file level.
@@ -48,6 +51,7 @@ const entries: WorkspaceEntry[] = [
 function renderRibbon(options: {
   sidebarVisible: boolean;
   activeSidebarViewId: string;
+  activeMainViewId?: string;
   selected: WorkspaceEntry[];
 }) {
   const { createElement } = environment.React;
@@ -59,6 +63,7 @@ function renderRibbon(options: {
         entries,
         sidebarVisible: options.sidebarVisible,
         activeSidebarViewId: options.activeSidebarViewId,
+        activeMainViewId: options.activeMainViewId ?? BUILT_IN_VIEWS.chat,
         onSelect: (entry: WorkspaceEntry) => options.selected.push(entry),
       }),
     ) as Parameters<DomEnvironment["render"]>[0],
@@ -74,6 +79,70 @@ test("clicking an item runs its action", () => {
     selected.map((entry) => entry.id),
     ["agw.ribbon.files", "sample:open"],
   );
+});
+
+test("Jobs appears below Files and opens the Jobs main view", () => {
+  const host = new ExtensionHost({
+    bridge: null,
+    app: { version: "0.5.0", platform: "darwin", architecture: "arm64" },
+    notify: () => undefined,
+  });
+  const render = () => {
+    const layout = host.layout.getSnapshot();
+    const { createElement } = environment.React;
+    return createElement(
+      TooltipProvider,
+      null,
+      createElement(Ribbon, {
+        entries: host.registry.getSnapshot().ribbon,
+        sidebarVisible: layout.sidebarVisible,
+        activeSidebarViewId: layout.activeSidebarViewId,
+        activeMainViewId: layout.activeMainViewId,
+        onSelect: (entry: WorkspaceEntry) => host.runAction(entry.extensionId, entry.action, {}),
+      }),
+    );
+  };
+  const view = environment.render(render());
+  const buttons = environment
+    .within(environment.screen.getByRole("navigation"))
+    .getAllByRole("button");
+  assert.deepEqual(
+    buttons.map((button) => button.getAttribute("aria-label")),
+    ["Conversations", "Files", "Jobs"],
+  );
+  environment.fireEvent.click(environment.screen.getByRole("button", { name: "Jobs" }));
+  assert.equal(host.layout.getSnapshot().activeMainViewId, "agw.jobs");
+  assert.equal(host.registry.view("agw.jobs")?.location, "main");
+  view.rerender(render());
+  const jobs = environment.screen.getByRole("button", { name: "Jobs" });
+  assert.equal(jobs.classList.contains("is-active"), true);
+  assert.equal(jobs.getAttribute("aria-pressed"), "true");
+  assert.equal(host.layout.getSnapshot().sidebarVisible, false);
+  assert.equal(view.container.querySelectorAll(".agw-ribbon-item.is-active").length, 1);
+
+  for (const [title, main] of [
+    ["Conversations", BUILT_IN_VIEWS.chat],
+    ["Files", BUILT_IN_VIEWS.file],
+  ]) {
+    environment.fireEvent.click(environment.screen.getByRole("button", { name: title }));
+    view.rerender(render());
+    assert.equal(host.layout.getSnapshot().activeMainViewId, main);
+    assert.equal(host.layout.getSnapshot().sidebarVisible, true);
+    assert.equal(
+      environment.screen.getByRole("button", { name: title }).getAttribute("aria-pressed"),
+      "true",
+    );
+    assert.equal(view.container.querySelectorAll(".agw-ribbon-item.is-active").length, 1);
+
+    environment.fireEvent.click(environment.screen.getByRole("button", { name: "Jobs" }));
+    view.rerender(render());
+    assert.equal(host.layout.getSnapshot().sidebarVisible, false);
+    assert.equal(view.container.querySelectorAll(".agw-ribbon-item.is-active").length, 1);
+    assert.equal(
+      environment.screen.getByRole("button", { name: "Jobs" }).getAttribute("aria-pressed"),
+      "true",
+    );
+  }
 });
 
 test("the item of the shown sidebar view is highlighted", () => {
