@@ -1296,6 +1296,12 @@ test("chat.observe rejects invalid filters and subscription ids", async () => {
 test("floating Chat carries context through its handle and mounted button", async () => {
   const harness = await createHarness(["chat.composer"]);
   const dom = new JSDOM("<!doctype html><body></body>");
+  Object.defineProperty(dom.window, "ResizeObserver", {
+    value: class {
+      observe() {}
+      disconnect() {}
+    },
+  });
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", {
     configurable: true,
