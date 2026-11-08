@@ -1,6 +1,6 @@
 # Agw Mobile
 
-Agw Mobile 是基于 Expo SDK 57、Expo Router 和 React Native 的 iOS/Android 客户端。应用根目录就是本目录，并已加入 `src/clients` 的 pnpm Workspace 与 Turborepo。
+Agw Mobile 是基于 Expo SDK 57、Expo Router 和 React Native 的 iOS/Android 客户端。应用根目录就是本目录，并已加入 `src` 的 pnpm Workspace 与 Turborepo。
 
 ## 开发
 

@@ -1,6 +1,6 @@
 # Client Monorepo Directory Structure
 
-Web and Desktop are independent applications with separate Next.js route shells. They do not import, build, locate, or consume artifacts from each other; Mobile is an Expo workspace application, and reusable infrastructure and business modules live under root `packages`.
+Web and Desktop are independent applications with separate Next.js route shells. They do not import, build, locate, or consume artifacts from each other; Mobile is an Expo workspace application, and reusable infrastructure and business modules live under `clients/packages`. The pnpm/Turborepo workspace is rooted at `src`, where `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, and `turbo.json` live. Extension projects live under `src/extensions`.
 
 ```text
 clients/
@@ -70,10 +70,6 @@ clients/
 ├── .dependency-cruiser.cjs           # import-level boundaries between workspaces
 ├── .oxlintrc.json                    # shared lint configuration
 ├── .oxfmtrc.json                     # shared formatter configuration
-├── package.json
-├── pnpm-workspace.yaml               # workspace list, dependency catalog, build permissions
-├── pnpm-lock.yaml
-├── turbo.json
 ├── tsconfig.json
 └── tsconfig.react.json
 ```

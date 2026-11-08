@@ -10,7 +10,7 @@ const backendBaseUrl =
 const outputMode = process.env.NEXT_OUTPUT_MODE;
 const isStaticExport = outputMode === "export";
 const webRoot = dirname(require.resolve("./package.json"));
-const clientsRoot = resolve(webRoot, "..");
+const workspaceRoot = resolve(webRoot, "..", "..");
 
 const nextConfig: NextConfig = {
   distDir: process.env.AGW_E2E === "1" ? ".next-e2e" : ".next",
@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
   output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
   trailingSlash: isStaticExport,
   turbopack: {
-    root: clientsRoot,
+    root: workspaceRoot,
   },
   webpack(config, { dev }) {
     if (dev) {

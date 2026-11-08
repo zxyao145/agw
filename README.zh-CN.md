@@ -394,7 +394,7 @@ flowchart TB
 
 ### 客户端
 
-`src/clients` 下的 pnpm Workspace 包含 `@agw/web`、`@agw/desktop`、`@agw/mobile` 三个应用，以及 `src/clients/packages/` 下的共享包，由 Turborepo 统一编排任务。
+`src` 下的 pnpm Workspace 包含 `@agw/web`、`@agw/desktop`、`@agw/mobile` 三个应用、`src/clients/packages/` 下的共享包和 `src/extensions/` 下的 extension，由 Turborepo 统一编排任务。
 
 - `@agw/web` 只包含路由、布局、全局 CSS 和应用外壳组合；业务界面来自 `packages/*`。
 - `@agw/desktop` 拥有安全的 Electron main/preload 实现和位于 `desktop/renderer/` 的独立 React renderer，bridge 接口定义保留在 Desktop 内部。Web 与 Desktop 不会互相导入、构建或使用对方的产物。详见 [`src/clients/desktop/README.md`](src/clients/desktop/README.md)。

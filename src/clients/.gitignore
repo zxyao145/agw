@@ -6,6 +6,3 @@ node_modules/
 packages/*/node_modules/
 packages/*/.turbo/
 packages/*/dist/
-packages/extensions/*/node_modules/
-packages/extensions/*/.turbo/
-packages/extensions/*/dist/

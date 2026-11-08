@@ -6,7 +6,7 @@ lastmod: 2026-09-25
 translationKey: docs/development/setup
 ---
 
-前提：.NET 10 SDK、Node.js 24、pnpm 12.5.1（版本由 `src/clients/package.json` 的 `packageManager` 指定）和 Git。只有构建容器镜像时才需要 Docker Buildx。以下应用命令在 AGW 仓库执行，文档站本身不依赖这些工具链。
+前提：.NET 10 SDK、Node.js 24、pnpm 12.5.1（版本由 `src/package.json` 的 `packageManager` 指定）和 Git。只有构建容器镜像时才需要 Docker Buildx。以下应用命令在 AGW 仓库执行，文档站本身不依赖这些工具链。
 
 ## 后端
 
@@ -48,4 +48,4 @@ pnpm dev:web
 ## 实现与参考
 
 - [Development commands](https://github.com/zxyao145/agw/blob/main/docs/1.Development.md)
-- [Client scripts](https://github.com/zxyao145/agw/blob/main/src/clients/package.json)
+- [Client scripts](https://github.com/zxyao145/agw/blob/main/src/package.json)
