@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  matchesChatEvent,
-  snapshotChatEvent,
-  validateChatEventFilter,
-  type ChatEvent,
-  type ChatEventFilter,
-  type ChatMessageEvent,
-  type ChatRequestEvent,
-  type ChatResponseEvent,
-} from "./chat-events";
-import type { ExecutionMessage } from "./types";
+import { matchesChatEvent, snapshotChatEvent, validateChatEventFilter } from "./chat-events";
+import type {
+  ChatEvent,
+  ChatEventFilter,
+  ChatMessageEvent,
+  ChatRequestEvent,
+  ChatResponseEvent,
+  ExecutionMessage,
+} from "@agw/execution-types";
 
 const scope = { serverId: "browser", projectId: "project-1", conversationId: "conversation-1" };
 

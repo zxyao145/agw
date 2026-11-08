@@ -1,4 +1,4 @@
-/** 与具体客户端无关的结构化消息形状。 */
+/** 与具体客户端无关的结构化消息形状。Structured messages shared across clients. */
 
 export type AdditionalProperties = Record<string, unknown>;
 

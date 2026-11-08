@@ -1,23 +1,13 @@
 import { getStreamingIdentity } from "./message";
-import type { ExecutionMessage, ExecutionMessageContent } from "./types";
+import type {
+  ExecutionMessage,
+  ExecutionMessageContent,
+  MessageFragment,
+  ProcessedMessageItem,
+} from "@agw/execution-types";
 
 export const FunctionCallContent = "FunctionCallContent";
 export const FunctionResultContent = "FunctionResultContent";
-
-export type ProcessedMessageItem<T extends ExecutionMessage = ExecutionMessage> =
-  | { type: "accordion"; messages: T[]; toolName: string }
-  | { type: "normal"; message: T }
-  | { type: "result"; message: T };
-
-export type MessageFragmentType = "normal" | "result" | "function-call" | "function-result";
-
-export type MessageFragment<T extends ExecutionMessage = ExecutionMessage> = {
-  type: MessageFragmentType;
-  message: T;
-  callId: string | null;
-  groupKey: string | null;
-  toolName: string;
-};
 
 type ToolGroup<T extends ExecutionMessage> = {
   firstCallIndex: number;

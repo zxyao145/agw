@@ -18,7 +18,7 @@ import type {
   ExecutionMessage,
   InteractionResponse,
   PermissionMode,
-} from "@agw/execution-core";
+} from "@agw/execution-types";
 import type { ExtensionPermission } from "./permissions";
 import type { RepositoryWorkspaceApi } from "./repositories";
 export type * from "./repositories";

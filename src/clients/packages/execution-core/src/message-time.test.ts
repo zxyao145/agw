@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mergeStreamingMessages } from "./message";
-import type { ExecutionMessage } from "./types";
+import type { ExecutionMessage } from "@agw/execution-types";
 
 test("streaming timestamp stays stable, fills missing values and remains scoped to its turn", () => {
   const message = (scope: string, createdAt?: string): ExecutionMessage => ({

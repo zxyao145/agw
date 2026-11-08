@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ExecutionMessage } from "./types";
+import type { ExecutionMessage } from "@agw/execution-types";
 import { createMessageFragments, processMessages } from "./tool-group";
 
 function toolMessage(type: string, scope: string, callId = "item_1"): ExecutionMessage {

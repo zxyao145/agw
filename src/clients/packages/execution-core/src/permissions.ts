@@ -1,16 +1,9 @@
-import type { ExecutionMessage } from "./types";
-import type { PermissionMode } from "./protocol";
+import type { ExecutionMessage, PermissionMode, PermissionStatus } from "@agw/execution-types";
 
 export const PERMISSION_LABELS: Record<PermissionMode, string> = {
   fullAccess: "Full access",
   alwaysAsk: "Always ask",
   allowSameArguments: "Allow same arguments",
-};
-
-export type PermissionStatus = {
-  activePermissionMode: PermissionMode | null;
-  nextPermissionMode: PermissionMode | null;
-  permissionChangePending: boolean;
 };
 
 function readMode(value: unknown): PermissionMode | null {

@@ -4,14 +4,13 @@ Platform-neutral 执行消息处理核心，供 Web / Desktop（通过 `@agw/cha
 
 ## 职责
 
-只包含与平台和传输实现无关的类型、纯函数与定时策略，**不建立任何网络连接**：
+包含与平台和传输实现无关的纯函数、运行时常量与定时策略，**不建立任何网络连接**。公共类型由 `@agw/execution-types` 提供，本包继续通过入口导出这些类型：
 
 - 消息身份与流式合并（`src/message.ts`）
 - 工具调用 / 结果的配对与分组（`src/tool-group.ts`）
-- 结构化消息类型（`src/types.ts`）
-- SignalR command payload、message 级终态与共享重连间隔（`src/protocol.ts`）
+- SignalR command 构建、message 级终态判断与共享重连间隔（`src/protocol.ts`）
 - generation-aware 50ms 流式消息合批（`src/batcher.ts`）
-- 通信事件类型、订阅条件的校验与匹配（`src/chat-events.ts`）
+- 通信事件订阅条件的校验与匹配（`src/chat-events.ts`）
 
 传输与执行状态统一由 `@agw/chat-runtime` 的 `execution-hub.ts`、`execution-session.ts` 和 `execution-session-manager.ts` 管理，使用官方 `@microsoft/signalr`。Web/Desktop 通过 `@agw/chat` 展示；Mobile 通过 `@agw/chat-native` 适配，不在应用内维护第二套执行传输。
 

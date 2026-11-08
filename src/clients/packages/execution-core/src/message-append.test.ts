@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mergeStreamingMessages } from "./message";
-import type { ExecutionMessage } from "./types";
+import type { ExecutionMessage } from "@agw/execution-types";
 
 function message(text: string, blockId = "text"): ExecutionMessage {
   return {

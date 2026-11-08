@@ -16,7 +16,7 @@
     "format:check": "oxfmt -c ../../.oxfmtrc.json --check ./src ./browser-tests *.json"
   },
   "dependencies": {
-    "@agw/execution-core": "workspace:*"
+    "@agw/execution-types": "workspace:*"
   },
   "devDependencies": {
     "@agw/test-harness": "workspace:*",

@@ -1,3 +1,5 @@
+import type { StreamingMessageBatcher } from "@agw/execution-types";
+
 export const STREAMING_MESSAGE_BATCH_INTERVAL_MS = 50;
 
 type StreamingMessageBatchTimer = ReturnType<typeof setTimeout>;
@@ -5,12 +7,6 @@ type StreamingMessageBatchSchedule = (
   callback: () => void,
   delay: number,
 ) => StreamingMessageBatchTimer;
-
-export interface StreamingMessageBatcher<T> {
-  enqueue(message: T, generation: number): void;
-  flush(generation: number): void;
-  discard(): void;
-}
 
 /**
  * 将同一执行 generation 内的高频增量合并成固定间隔的提交。
