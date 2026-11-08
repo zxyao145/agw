@@ -570,7 +570,7 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  desktop:
+  clients/desktop:
     dependencies:
       chardet:
         specifier: 'catalog:'
@@ -774,6 +774,9 @@ importers:
       tw-animate-css:
         specifier: 'catalog:'
         version: 1.4.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
       uuid:
         specifier: 'catalog:'
         version: 14.0.2
@@ -799,7 +802,7 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
-  mobile:
+  clients/mobile:
     dependencies:
       '@agw/api':
         specifier: workspace:*
@@ -929,7 +932,7 @@ importers:
         specifier: 1.3.0
         version: 1.3.0(@types/react@19.3.0)(react@19.3.0)
 
-  packages/agents:
+  clients/packages/agents:
     dependencies:
       '@agw/api':
         specifier: workspace:*
@@ -966,7 +969,7 @@ importers:
         specifier: workspace:*
         version: link:../test-harness
 
-  packages/api:
+  clients/packages/api:
     dependencies:
       '@agw/http-client':
         specifier: workspace:*
@@ -979,7 +982,7 @@ importers:
         specifier: 7.13.0
         version: 7.13.0(typescript@5.4.5)
 
-  packages/auth:
+  clients/packages/auth:
     dependencies:
       '@agw/api':
         specifier: workspace:*
@@ -988,7 +991,7 @@ importers:
         specifier: workspace:*
         version: link:../components
 
-  packages/chat:
+  clients/packages/chat:
     dependencies:
       '@agw/api':
         specifier: workspace:*
@@ -1091,7 +1094,7 @@ importers:
         specifier: 'catalog:'
         version: 1.63.0
 
-  packages/chat-core:
+  clients/packages/chat-core:
     dependencies:
       '@agw/api':
         specifier: workspace:*
@@ -1103,7 +1106,7 @@ importers:
         specifier: 7.5.0
         version: 7.5.0
 
-  packages/chat-native:
+  clients/packages/chat-native:
     dependencies:
       '@agw/api':
         specifier: workspace:*
@@ -1149,7 +1152,7 @@ importers:
         specifier: 'catalog:'
         version: 1.0.2(katex@0.18.7)(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(react@19.3.0)(supports-color@10.2.2))(@react-native/metro-config@0.86.3(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2))(react@19.3.0)
 
-  packages/chat-runtime:
+  clients/packages/chat-runtime:
     dependencies:
       '@agw/api':
         specifier: workspace:*
@@ -1171,7 +1174,7 @@ importers:
         specifier: workspace:*
         version: link:../test-harness
 
-  packages/code-view:
+  clients/packages/code-view:
     dependencies:
       monaco-editor:
         specifier: 'catalog:'
@@ -1193,7 +1196,7 @@ importers:
         specifier: 'catalog:'
         version: 4.3.3
 
-  packages/components:
+  clients/packages/components:
     dependencies:
       '@base-ui/react':
         specifier: 1.8.0
@@ -1260,9 +1263,9 @@ importers:
         specifier: workspace:*
         version: link:../test-harness
 
-  packages/execution-core: {}
+  clients/packages/execution-core: {}
 
-  packages/extension-sdk:
+  clients/packages/extension-sdk:
     dependencies:
       '@agw/execution-core':
         specifier: workspace:*
@@ -1281,11 +1284,290 @@ importers:
         specifier: 'catalog:'
         version: 4.23.15
 
-  packages/extensions/bare-repository:
+  clients/packages/http-client: {}
+
+  clients/packages/integrations:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
+
+  clients/packages/jobs:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/chat':
+        specifier: workspace:*
+        version: link:../chat
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+
+  clients/packages/observability:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+
+  clients/packages/projects:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/code-view':
+        specifier: workspace:*
+        version: link:../code-view
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+      '@agw/integrations':
+        specifier: workspace:*
+        version: link:../integrations
+      '@agw/projects-core':
+        specifier: workspace:*
+        version: link:../projects-core
+      '@agw/tools':
+        specifier: workspace:*
+        version: link:../tools
+      '@tanstack/react-virtual':
+        specifier: 'catalog:'
+        version: 3.14.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
+      '@tailwindcss/postcss':
+        specifier: 'catalog:'
+        version: 4.3.3
+      '@types/jsdom':
+        specifier: 'catalog:'
+        version: 30.0.0
+      jsdom:
+        specifier: 'catalog:'
+        version: 30.1.0
+      playwright:
+        specifier: 'catalog:'
+        version: 1.63.0
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
+
+  clients/packages/projects-core:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
+
+  clients/packages/providers:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+      '@agw/integrations':
+        specifier: workspace:*
+        version: link:../integrations
+
+  clients/packages/server-extensions:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+
+  clients/packages/settings:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
+
+  clients/packages/skills:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+
+  clients/packages/test-harness:
+    dependencies:
+      '@microsoft/signalr':
+        specifier: 'catalog:'
+        version: 10.0.11(encoding@0.1.13)
+      '@testing-library/dom':
+        specifier: 10.4.2
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: 'catalog:'
+        version: 6.1.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      jsdom:
+        specifier: 'catalog:'
+        version: 30.1.0
+      playwright:
+        specifier: 'catalog:'
+        version: 1.63.0
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
+    devDependencies:
+      '@types/jsdom':
+        specifier: 'catalog:'
+        version: 30.0.0
+
+  clients/packages/tools:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../components
+      react-markdown:
+        specifier: 'catalog:'
+        version: 10.1.0(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2)
+      remark-gfm:
+        specifier: 'catalog:'
+        version: 4.0.1(supports-color@10.2.2)
+    devDependencies:
+      '@agw/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
+
+  clients/web:
+    dependencies:
+      '@agw/agents':
+        specifier: workspace:*
+        version: link:../packages/agents
+      '@agw/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
+      '@agw/chat':
+        specifier: workspace:*
+        version: link:../packages/chat
+      '@agw/code-view':
+        specifier: workspace:*
+        version: link:../packages/code-view
+      '@agw/components':
+        specifier: workspace:*
+        version: link:../packages/components
+      '@agw/integrations':
+        specifier: workspace:*
+        version: link:../packages/integrations
+      '@agw/jobs':
+        specifier: workspace:*
+        version: link:../packages/jobs
+      '@agw/observability':
+        specifier: workspace:*
+        version: link:../packages/observability
+      '@agw/projects':
+        specifier: workspace:*
+        version: link:../packages/projects
+      '@agw/providers':
+        specifier: workspace:*
+        version: link:../packages/providers
+      '@agw/server-extensions':
+        specifier: workspace:*
+        version: link:../packages/server-extensions
+      '@agw/settings':
+        specifier: workspace:*
+        version: link:../packages/settings
+      '@agw/skills':
+        specifier: workspace:*
+        version: link:../packages/skills
+      '@agw/tools':
+        specifier: workspace:*
+        version: link:../packages/tools
+      lucide-react:
+        specifier: 'catalog:'
+        version: 1.56.0(@types/react@19.3.0)(react@19.3.0)
+      next:
+        specifier: 'catalog:'
+        version: 16.3.5(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.63.0)(@types/node@26.6.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sass@1.51.0)
+      next-themes:
+        specifier: 'catalog:'
+        version: 0.4.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: 'catalog:'
+        version: 19.3.0
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.0(react@19.3.0)
+      sonner:
+        specifier: 'catalog:'
+        version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
+      '@tailwindcss/postcss':
+        specifier: 'catalog:'
+        version: 4.3.3
+      baseline-browser-mapping:
+        specifier: 2.11.25
+        version: 2.11.25
+      code-inspector-plugin:
+        specifier: 'catalog:'
+        version: 2.0.9(supports-color@10.2.2)
+      serve:
+        specifier: 'catalog:'
+        version: 14.2.6(supports-color@10.2.2)
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
+      tw-animate-css:
+        specifier: 'catalog:'
+        version: 1.4.0
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.2
+      ws:
+        specifier: 'catalog:'
+        version: 8.22.0
+
+  extensions/bare-repository:
     devDependencies:
       '@agw/extension-sdk':
         specifier: workspace:*
-        version: link:../../extension-sdk
+        version: link:../../clients/packages/extension-sdk
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 6.1.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -1308,11 +1590,11 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
-  packages/extensions/excalidraw:
+  extensions/excalidraw:
     devDependencies:
       '@agw/extension-sdk':
         specifier: workspace:*
-        version: link:../../extension-sdk
+        version: link:../../clients/packages/extension-sdk
       '@excalidraw/excalidraw':
         specifier: 'catalog:'
         version: 0.18.1(patch_hash=b6b1fd9d40b092edc1b774eaedd5735218433b5fc02db909ab8789f0ecf3be3e)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -1335,11 +1617,11 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
 
-  packages/extensions/image-viewer:
+  extensions/image-viewer:
     devDependencies:
       '@agw/extension-sdk':
         specifier: workspace:*
-        version: link:../../extension-sdk
+        version: link:../../clients/packages/extension-sdk
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 6.1.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -1353,11 +1635,11 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
 
-  packages/extensions/markdown:
+  extensions/markdown:
     devDependencies:
       '@agw/extension-sdk':
         specifier: workspace:*
-        version: link:../../extension-sdk
+        version: link:../../clients/packages/extension-sdk
       '@floating-ui/dom':
         specifier: 'catalog:'
         version: 1.8.0
@@ -1512,288 +1794,9 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
-  packages/extensions/soft-theme: {}
+  extensions/soft-theme: {}
 
-  packages/extensions/warm-minimalism-theme: {}
-
-  packages/http-client: {}
-
-  packages/integrations:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/auth':
-        specifier: workspace:*
-        version: link:../auth
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-    devDependencies:
-      '@agw/test-harness':
-        specifier: workspace:*
-        version: link:../test-harness
-
-  packages/jobs:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/chat':
-        specifier: workspace:*
-        version: link:../chat
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-
-  packages/observability:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-
-  packages/projects:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/code-view':
-        specifier: workspace:*
-        version: link:../code-view
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-      '@agw/integrations':
-        specifier: workspace:*
-        version: link:../integrations
-      '@agw/projects-core':
-        specifier: workspace:*
-        version: link:../projects-core
-      '@agw/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@tanstack/react-virtual':
-        specifier: 'catalog:'
-        version: 3.14.13(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-    devDependencies:
-      '@agw/test-harness':
-        specifier: workspace:*
-        version: link:../test-harness
-      '@tailwindcss/postcss':
-        specifier: 'catalog:'
-        version: 4.3.3
-      '@types/jsdom':
-        specifier: 'catalog:'
-        version: 30.0.0
-      jsdom:
-        specifier: 'catalog:'
-        version: 30.1.0
-      playwright:
-        specifier: 'catalog:'
-        version: 1.63.0
-      tailwindcss:
-        specifier: 'catalog:'
-        version: 4.3.3
-
-  packages/projects-core:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-    devDependencies:
-      '@agw/test-harness':
-        specifier: workspace:*
-        version: link:../test-harness
-
-  packages/providers:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-      '@agw/integrations':
-        specifier: workspace:*
-        version: link:../integrations
-
-  packages/server-extensions:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/auth':
-        specifier: workspace:*
-        version: link:../auth
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-
-  packages/settings:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/auth':
-        specifier: workspace:*
-        version: link:../auth
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-    devDependencies:
-      '@agw/test-harness':
-        specifier: workspace:*
-        version: link:../test-harness
-
-  packages/skills:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-
-  packages/test-harness:
-    dependencies:
-      '@microsoft/signalr':
-        specifier: 'catalog:'
-        version: 10.0.11(encoding@0.1.13)
-      '@testing-library/dom':
-        specifier: 10.4.2
-        version: 10.4.2
-      '@testing-library/react':
-        specifier: 'catalog:'
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@vitejs/plugin-react':
-        specifier: 'catalog:'
-        version: 6.1.2(babel-plugin-react-compiler@1.0.0)(vite@8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-      jsdom:
-        specifier: 'catalog:'
-        version: 30.1.0
-      playwright:
-        specifier: 'catalog:'
-        version: 1.63.0
-      vite:
-        specifier: 'catalog:'
-        version: 8.3.4(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
-    devDependencies:
-      '@types/jsdom':
-        specifier: 'catalog:'
-        version: 30.0.0
-
-  packages/tools:
-    dependencies:
-      '@agw/api':
-        specifier: workspace:*
-        version: link:../api
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../components
-      react-markdown:
-        specifier: 'catalog:'
-        version: 10.1.0(@types/react@19.3.0)(react@19.3.0)(supports-color@10.2.2)
-      remark-gfm:
-        specifier: 'catalog:'
-        version: 4.0.1(supports-color@10.2.2)
-    devDependencies:
-      '@agw/test-harness':
-        specifier: workspace:*
-        version: link:../test-harness
-
-  web:
-    dependencies:
-      '@agw/agents':
-        specifier: workspace:*
-        version: link:../packages/agents
-      '@agw/auth':
-        specifier: workspace:*
-        version: link:../packages/auth
-      '@agw/chat':
-        specifier: workspace:*
-        version: link:../packages/chat
-      '@agw/code-view':
-        specifier: workspace:*
-        version: link:../packages/code-view
-      '@agw/components':
-        specifier: workspace:*
-        version: link:../packages/components
-      '@agw/integrations':
-        specifier: workspace:*
-        version: link:../packages/integrations
-      '@agw/jobs':
-        specifier: workspace:*
-        version: link:../packages/jobs
-      '@agw/observability':
-        specifier: workspace:*
-        version: link:../packages/observability
-      '@agw/projects':
-        specifier: workspace:*
-        version: link:../packages/projects
-      '@agw/providers':
-        specifier: workspace:*
-        version: link:../packages/providers
-      '@agw/server-extensions':
-        specifier: workspace:*
-        version: link:../packages/server-extensions
-      '@agw/settings':
-        specifier: workspace:*
-        version: link:../packages/settings
-      '@agw/skills':
-        specifier: workspace:*
-        version: link:../packages/skills
-      '@agw/tools':
-        specifier: workspace:*
-        version: link:../packages/tools
-      lucide-react:
-        specifier: 'catalog:'
-        version: 1.56.0(@types/react@19.3.0)(react@19.3.0)
-      next:
-        specifier: 'catalog:'
-        version: 16.3.5(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.63.0)(@types/node@26.6.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sass@1.51.0)
-      next-themes:
-        specifier: 'catalog:'
-        version: 0.4.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      react:
-        specifier: 'catalog:'
-        version: 19.3.0
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.3.0(react@19.3.0)
-      sonner:
-        specifier: 'catalog:'
-        version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-    devDependencies:
-      '@playwright/test':
-        specifier: 1.63.0
-        version: 1.63.0
-      '@tailwindcss/postcss':
-        specifier: 'catalog:'
-        version: 4.3.3
-      baseline-browser-mapping:
-        specifier: 2.11.25
-        version: 2.11.25
-      code-inspector-plugin:
-        specifier: 'catalog:'
-        version: 2.0.9(supports-color@10.2.2)
-      serve:
-        specifier: 'catalog:'
-        version: 14.2.6(supports-color@10.2.2)
-      tailwindcss:
-        specifier: 'catalog:'
-        version: 4.3.3
-      tw-animate-css:
-        specifier: 'catalog:'
-        version: 1.4.0
-      uuid:
-        specifier: 'catalog:'
-        version: 14.0.2
-      ws:
-        specifier: 'catalog:'
-        version: 8.22.0
+  extensions/warm-minimalism-theme: {}
 
 packages:
 

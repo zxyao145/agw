@@ -4,7 +4,7 @@ import { codeInspectorPlugin } from "code-inspector-plugin";
 import type { NextConfig } from "next";
 
 const rendererRoot = dirname(fileURLToPath(import.meta.url));
-const clientsRoot = resolve(rendererRoot, "..", "..");
+const workspaceRoot = resolve(rendererRoot, "..", "..", "..");
 
 const nextConfig: NextConfig = {
   output: "export",
@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
     "@agw/skills",
   ],
   turbopack: {
-    root: clientsRoot,
+    root: workspaceRoot,
   },
   webpack(config, { dev }) {
     if (dev) {

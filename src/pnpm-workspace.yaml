@@ -1,9 +1,9 @@
 packages:
-  - web
-  - desktop
-  - mobile
-  - packages/*
-  - packages/extensions/*
+  - clients/web
+  - clients/desktop
+  - clients/mobile
+  - clients/packages/*
+  - extensions/*
 
 # 外部依赖版本的唯一来源；dependencies 与 peerDependencies 共用同一条目，
 # 因此 peer 声明与实际安装的版本永远一致。
@@ -151,9 +151,9 @@ overrides:
 patchedDependencies:
   # 设置了 EXCALIDRAW_ASSET_PATH 时字体只从该地址加载，不再加 esm.sh 回退地址（extension 的 CSP 会拦截并报告它）。
   # With EXCALIDRAW_ASSET_PATH set, fonts load only from it, without the esm.sh fallback the extension CSP blocks and reports.
-  '@excalidraw/excalidraw@0.18.1': patches/@excalidraw__excalidraw@0.18.1.patch
+  '@excalidraw/excalidraw@0.18.1': clients/patches/@excalidraw__excalidraw@0.18.1.patch
   # Detach DMGs by their stable /dev/diskN device when the /Volumes path disappears on macOS runners.
-  appdmg@0.6.6: patches/appdmg@0.6.6.patch
+  appdmg@0.6.6: clients/patches/appdmg@0.6.6.patch
 
 allowBuilds:
   "@code-inspector/core": true

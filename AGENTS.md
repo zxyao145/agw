@@ -2,7 +2,7 @@
 
 This file provides guidance to coding agents working in this repository.
 
-Agw is a modular-monolith agent gateway (Agents, Agentflows, Jobs, Chat, Integrations) built on ASP.NET Core + EF Core (.NET 10) with Microsoft.Agents.AI, MCP, and A2A. Clients are a Next.js Web app, an Electron Desktop app, and an Expo Mobile app in one pnpm/Turborepo workspace.
+Agw is a modular-monolith agent gateway (Agents, Agentflows, Jobs, Chat, Integrations) built on ASP.NET Core + EF Core (.NET 10) with Microsoft.Agents.AI, MCP, and A2A. Clients are a Next.js Web app, an Electron Desktop app, and an Expo Mobile app in one pnpm/Turborepo workspace rooted at `src`, alongside extension projects under `src/extensions`.
 
 ## Reference documents
 

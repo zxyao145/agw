@@ -22,7 +22,7 @@ function errors(raw: unknown): [string, string | null][] {
 test("the bundled Soft theme file passes validation", async () => {
   const raw = JSON.parse(
     await readFile(
-      resolve(process.cwd(), "..", "packages", "extensions", "soft-theme", "themes", "soft.json"),
+      resolve(process.cwd(), "..", "..", "extensions", "soft-theme", "themes", "soft.json"),
       "utf8",
     ),
   );
@@ -35,7 +35,7 @@ test("the bundled Warm Minimalism theme file passes validation", async () => {
       resolve(
         process.cwd(),
         "..",
-        "packages",
+        "..",
         "extensions",
         "warm-minimalism-theme",
         "themes",

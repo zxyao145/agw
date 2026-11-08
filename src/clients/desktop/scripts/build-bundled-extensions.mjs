@@ -1,5 +1,5 @@
-// 构建 src/clients/packages/extensions 下的内置 extension，校验后复制到 resources/extensions/<id>。
-// Builds the bundled extensions in src/clients/packages/extensions, validates them and copies them into
+// 构建 src/extensions 下的内置 extension，校验后复制到 resources/extensions/<id>。
+// Builds the bundled extensions in src/extensions, validates them and copies them into
 // resources/extensions/<id>.
 import { spawn } from "node:child_process";
 import { cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
@@ -10,8 +10,8 @@ import { full } from "acorn-walk";
 import { build } from "esbuild";
 
 const desktopDirectory = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const clientsDirectory = resolve(desktopDirectory, "..");
-const sourcesDirectory = join(clientsDirectory, "packages", "extensions");
+const workspaceDirectory = resolve(desktopDirectory, "..", "..");
+const sourcesDirectory = join(workspaceDirectory, "extensions");
 const pnpmCommand = process.platform === "win32" ? "cmd.exe" : "pnpm";
 const pnpmArguments = process.platform === "win32" ? ["/d", "/s", "/c", "pnpm.cmd"] : [];
 const SDK_SPECIFIER = "/__agw/sdk.js";
@@ -121,8 +121,8 @@ export async function buildBundledExtensions() {
     .sort();
   await run(
     pnpmCommand,
-    [...pnpmArguments, "--filter", "./packages/extensions/*", "run", "build"],
-    clientsDirectory,
+    [...pnpmArguments, "--filter", "./extensions/*", "run", "build"],
+    workspaceDirectory,
   );
 
   const tools = await loadManifestTools();

@@ -23,13 +23,13 @@ const environmentReady = import("../../packages/test-harness/src").then(({ setup
   setupDomEnvironment(),
 );
 let environment: DomEnvironment;
-let settings: typeof import("../../packages/extensions/bare-repository/src/proxy-settings");
-let form: typeof import("../../packages/extensions/bare-repository/src/proxy-settings-form");
+let settings: typeof import("../../../extensions/bare-repository/src/proxy-settings");
+let form: typeof import("../../../extensions/bare-repository/src/proxy-settings-form");
 
 before(async () => {
   environment = await environmentReady;
-  settings = await import("../../packages/extensions/bare-repository/src/proxy-settings");
-  form = await import("../../packages/extensions/bare-repository/src/proxy-settings-form");
+  settings = await import("../../../extensions/bare-repository/src/proxy-settings");
+  form = await import("../../../extensions/bare-repository/src/proxy-settings-form");
 });
 
 async function createHarness(t: TestContext) {

@@ -7,10 +7,10 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint -c ../../../.oxlintrc.json ./src ./vite.config.ts",
+    "lint": "oxlint -c ../../clients/.oxlintrc.json ./src ./vite.config.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "format": "oxfmt -c ../../../.oxfmtrc.json ./src ./vite.config.ts *.json *.html",
-    "format:check": "oxfmt -c ../../../.oxfmtrc.json --check ./src ./vite.config.ts *.json *.html"
+    "format": "oxfmt -c ../../clients/.oxfmtrc.json ./src ./vite.config.ts *.json *.html",
+    "format:check": "oxfmt -c ../../clients/.oxfmtrc.json --check ./src ./vite.config.ts *.json *.html"
   },
   "devDependencies": {
     "@agw/extension-sdk": "workspace:*",

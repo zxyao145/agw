@@ -5990,7 +5990,7 @@ async function themeSelection(): Promise<void> {
   );
   await chooseTheme(SOFT_THEME);
   const softFile = await readJson<Record<"common" | "light", Record<string, string>>>(
-    resolve("../packages/extensions/soft-theme/themes/soft.json"),
+    resolve("../../extensions/soft-theme/themes/soft.json"),
   );
   const softNames = new Set([...Object.keys(softFile.common), ...Object.keys(softFile.light)]);
   const derived = [

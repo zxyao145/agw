@@ -6,7 +6,7 @@ lastmod: 2026-09-25
 translationKey: docs/development/setup
 ---
 
-Prerequisites: .NET 10 SDK, Node.js 24, pnpm 12.5.1 (pinned by `packageManager` in `src/clients/package.json`), and Git. Docker Buildx is needed only for container images. These application commands run in the AGW repository; the documentation site does not depend on this toolchain.
+Prerequisites: .NET 10 SDK, Node.js 24, pnpm 12.5.1 (pinned by `packageManager` in `src/package.json`), and Git. Docker Buildx is needed only for container images. These application commands run in the AGW repository; the documentation site does not depend on this toolchain.
 
 ## Backend
 
@@ -48,4 +48,4 @@ The site needs Hugo Extended and Go, plus Python 3 for the `scripts/check-site.p
 ## Implementation and references
 
 - [Development commands](https://github.com/zxyao145/agw/blob/main/docs/1.Development.md)
-- [Client scripts](https://github.com/zxyao145/agw/blob/main/src/clients/package.json)
+- [Client scripts](https://github.com/zxyao145/agw/blob/main/src/package.json)

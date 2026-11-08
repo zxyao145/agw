@@ -14,14 +14,14 @@ module.exports = {
       name: "packages-no-application-imports",
       comment: "Workspace packages never import Web, Desktop, or Mobile application code.",
       severity: "error",
-      from: { path: "^packages/" },
+      from: { path: "^(packages/|\\.\\./extensions/)" },
       to: { path: ["^(web|desktop|mobile)/", "^@/"] },
     },
     {
       name: "no-cross-workspace-relative-import",
       comment: "A relative import must stay inside the workspace that owns the source file.",
       severity: "error",
-      from: { path: "^((?:packages/[^/]+)|web|desktop|mobile)/" },
+      from: { path: "^((?:packages/[^/]+)|(?:\\.\\./extensions/[^/]+)|web|desktop|mobile)/" },
       to: { dependencyTypes: ["local"], pathNot: "^$1/" },
     },
     {
@@ -36,7 +36,10 @@ module.exports = {
       comment: "Mobile consumes @agw/chat-native plus React Native-safe packages only.",
       severity: "error",
       from: { path: "^mobile/" },
-      to: { path: "^(web|desktop|packages)/", pathNot: `^packages/(${MOBILE_SAFE_PACKAGES})/` },
+      to: {
+        path: "^(web|desktop|packages|\\.\\./extensions)/",
+        pathNot: `^packages/(${MOBILE_SAFE_PACKAGES})/`,
+      },
     },
     {
       name: "chat-core-runtime-platform-neutral",
@@ -63,7 +66,10 @@ module.exports = {
       name: "react-query-through-components",
       comment: "DOM code reaches @tanstack/react-query through @agw/components/query.",
       severity: "error",
-      from: { path: "^(web|desktop|packages)/", pathNot: "^packages/(components|chat-native)/" },
+      from: {
+        path: "^(web|desktop|packages|\\.\\./extensions)/",
+        pathNot: "^packages/(components|chat-native)/",
+      },
       to: { path: String.raw`(^|/)node_modules/@tanstack/react-query/` },
     },
     {

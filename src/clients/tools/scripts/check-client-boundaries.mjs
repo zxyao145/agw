@@ -33,10 +33,10 @@ function packageDirectoriesIn(root) {
     .map((entry) => join(root, entry.name));
 }
 
-// packages/extensions/* 是随 Desktop 打包的 extension 页面应用，只依赖 @agw/extension-sdk，也不被任何包依赖。
-// packages/extensions/* are extension page apps bundled with Desktop; they depend only on @agw/extension-sdk and
+// src/extensions/* 是随 Desktop 打包的 extension 页面应用，只依赖 @agw/extension-sdk，也不被任何包依赖。
+// src/extensions/* are extension page apps bundled with Desktop; they depend only on @agw/extension-sdk and
 // nothing depends on them.
-const extensionPackageDirectories = packageDirectoriesIn(join(packagesRoot, "extensions"));
+const extensionPackageDirectories = packageDirectoriesIn(resolve(clientsRoot, "..", "extensions"));
 const extensionPackageNames = new Set(
   extensionPackageDirectories.map((directory) => readManifest(directory).name),
 );

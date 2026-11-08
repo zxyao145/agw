@@ -395,7 +395,7 @@ flowchart TB
 
 ### Clients
 
-The pnpm Workspace at `src/clients` contains the `@agw/web`, `@agw/desktop`, and `@agw/mobile` applications plus shared packages under `src/clients/packages/`, with Turborepo orchestrating their tasks.
+The pnpm Workspace at `src` contains the `@agw/web`, `@agw/desktop`, and `@agw/mobile` applications, shared packages under `src/clients/packages/`, and extensions under `src/extensions/`, with Turborepo orchestrating their tasks.
 
 - `@agw/web` holds only routes, layouts, global CSS, and shell composition; business UI comes from `packages/*`.
 - `@agw/desktop` owns a secure Electron main/preload implementation and an independent React renderer under `desktop/renderer/`, with bridge contracts kept inside Desktop. Web and Desktop do not import, build, or consume artifacts from each other. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md).
