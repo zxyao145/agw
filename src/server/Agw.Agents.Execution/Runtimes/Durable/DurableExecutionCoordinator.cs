@@ -51,6 +51,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DurableExecutionCoordinator> _logger;
     private readonly DistributedExecutionOptions _options;
+    private readonly int _steerMaxPending;
     private readonly TimeSpan _streamPollingInterval;
     private readonly DurableSegmentScheduler? _scheduler;
     private readonly AgentflowCheckpointStore? _checkpointStore;
@@ -77,6 +78,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
         _scheduler = scheduler;
         _checkpointStore = checkpointStore;
         _options = options.Value.Distributed;
+        _steerMaxPending = options.Value.Steer.MaxPendingPerTurn;
         _streamPollingInterval = TimeSpan.FromMilliseconds(_options.EventStream.ReadPollingMilliseconds);
     }
 
@@ -166,7 +168,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     request.TurnId,
                     request.Lease?.Epoch ?? 0,
                     0,
-                    events,
+                    await WithReturnedSteersAsync(services, request.Envelope, AgwTurnStatus.Failed, events, token)
+                        .ConfigureAwait(false),
                     lookupCommitted: true,
                     token
                 )
@@ -272,6 +275,14 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         .GetRequiredService<IConversationTurnStore>()
                         .FinishAsync(turnId, ConversationTurnStatus.Interrupted, 0, null, usageSettlesAt, token)
                         .ConfigureAwait(false);
+                    var events = await WithReturnedSteersAsync(
+                            services,
+                            CreateEnvelope(snapshot.Manifest),
+                            AgwTurnStatus.Interrupted,
+                            [finished],
+                            token
+                        )
+                        .ConfigureAwait(false);
                     return (
                         true,
                         await DurableExecutionEvents
@@ -281,7 +292,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                                 turnId,
                                 0,
                                 snapshot.SegmentIndex,
-                                [finished],
+                                events,
                                 lookupCommitted: true,
                                 token
                             )
@@ -707,6 +718,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     // ResultOnly applies only when the turn produces a result: outbound messages are filtered and interaction is declined.
                     var resultOnly = manifest.Settings.ResultOnly && runtime.EmitsTurnResult;
                     var output = ResultOnlyMessageSink.Wrap(sink, resultOnly);
+                    if (!resultOnly && scope.WriteGuard is { } guard)
+                        scope.BindSteers(new DurableSteerInbox(guard, manifest.TurnId));
                     scope.BindInteractions(
                         new PendingInteractionHandler(
                             manifest.Settings.HumanInteractionPolicy,
@@ -973,6 +986,13 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                         .GetRequiredService<DurableExecutionStore>()
                         .ApplySegmentResultAsync(result, token)
                         .ConfigureAwait(false);
+                    // 终态之前受理、仍未送达的输入在结束事件之前交还。
+                    // Inputs accepted before the terminal state and still not delivered go back before the finish event.
+                    var segmentEvents =
+                        terminalStatus == null
+                            ? events
+                            : await WithReturnedSteersAsync(services, envelope, terminalStatus, events, token)
+                                .ConfigureAwait(false);
                     // Segment 的执行已经返回，用量从结束时间起结算。
                     // The segment's execution has returned, so usage settles at the finish time.
                     if (terminalStatus != null)
@@ -994,7 +1014,7 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                             lease.TurnId,
                             lease.Epoch,
                             result.SegmentIndex,
-                            events,
+                            segmentEvents,
                             lookupCommitted: true,
                             token
                         )
@@ -1004,6 +1024,73 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
             )
             .ConfigureAwait(false);
         await PublishAsync(lease.TurnId, snapshot.Manifest.UserId, committed).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 在锁定执行行的事务中受理一条 Steer 输入；执行行不存在与 Turn 不在运行同样拒绝。
+    /// Accepts one Steer input in a transaction that locks the execution row; a missing execution row is refused the same way as a turn that is not running.
+    /// </summary>
+    public async Task SteerAsync(
+        Guid turnId,
+        string userId,
+        Guid conversationId,
+        Guid steerId,
+        AgwUserInput input,
+        CancellationToken cancellationToken
+    )
+    {
+        var entry = new SteerEntry(steerId, input);
+        try
+        {
+            await _leases
+                .RunLockedAsync(
+                    turnId,
+                    async (services, token) =>
+                    {
+                        await services
+                            .GetRequiredService<DurableSteerStore>()
+                            .OfferAsync(turnId, userId, conversationId, entry, _steerMaxPending, token)
+                            .ConfigureAwait(false);
+                        return true;
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+        catch (AgwException exception) when (exception.Code == ErrorCodes.DurableExecutionNotFound.Code)
+        {
+            throw new AgwException(ErrorCodes.SteerNoActiveTurn);
+        }
+        _logger.LogInformation("Steering input {SteerId} was accepted for durable turn {TurnId}.", steerId, turnId);
+    }
+
+    /// <summary>
+    /// 在终态事务中把仍在等待的 Steer 输入记为 Returned，并把 steer-returned 放在结束事件之前；其余事件顺序不变。
+    /// Records Steer inputs still waiting as Returned in the terminal transaction and places steer-returned before the finish event; other events keep their order.
+    /// </summary>
+    private static async Task<IReadOnlyList<PendingExecutionEvent>> WithReturnedSteersAsync(
+        IServiceProvider services,
+        TurnEnvelope envelope,
+        string terminalStatus,
+        IReadOnlyList<PendingExecutionEvent> events,
+        CancellationToken cancellationToken
+    )
+    {
+        var reason = SteerMessages.ToReturnReason(terminalStatus);
+        var returned = await services
+            .GetRequiredService<DurableSteerStore>()
+            .ReturnPendingAsync(envelope.TurnId, reason, cancellationToken)
+            .ConfigureAwait(false);
+        if (returned.Count == 0)
+            return events;
+        return
+        [
+            .. events.Take(events.Count - 1),
+            .. returned.Select(entry =>
+                PendingExecutionEvent.Create(SteerMessages.CreateReturned(envelope, entry, reason))
+            ),
+            events[^1],
+        ];
     }
 
     /// <summary>

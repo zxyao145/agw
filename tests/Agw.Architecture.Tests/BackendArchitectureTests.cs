@@ -786,6 +786,7 @@ public sealed partial class BackendArchitectureTests
         ["AgentflowTrace"] = "Agw.Agents",
         ["AgentflowCheckpointRecord"] = "Agw.Agents",
         ["DurableExecutionEventRecord"] = "Agw.Agents",
+        ["DurableExecutionSteerRecord"] = "Agw.Agents",
         ["DurableExecutionRecord"] = "Agw.Agents",
         ["McpServer"] = "Agw.Agents",
         ["AgentSkillRelation"] = "Agw.Agents",

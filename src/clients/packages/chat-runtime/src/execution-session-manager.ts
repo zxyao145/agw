@@ -3,8 +3,11 @@ import { chatHttpClient } from "./chat-http-client";
 import {
   ExecutionSession,
   ExecutionStartRejectedError,
+  getHubErrorCode,
   getPendingInteraction,
   getTurnFinishedStatus,
+  isServerRejection,
+  type ExecutionSteerRequest,
   type ExecutionHubHandlers,
   type ExecutionReconnectState,
   type AgentMode,
@@ -20,12 +23,15 @@ import { toExecutionUserInput } from "@agw/chat-core";
 import {
   cloneMessage,
   getMessageStreamingScopeId,
+  getSteerDelivered,
+  getSteerReturned,
   getTurnIdentity,
   isSupersededTurnMessage,
   isTurnStartMessage,
   mergeStreamingMessages,
   markTurnMessage,
   scopeStreamingMessage,
+  STEER_ERROR_CODES,
 } from "@agw/execution-core";
 import { ConversationStatusStore } from "./conversation-status-store";
 import {
@@ -40,6 +46,8 @@ import {
   type ExecutionQueueSnapshot,
   type ExecutionSubmission,
   type QueuedExecution,
+  type SteerRecord,
+  type SubmissionMode,
   type SubmissionResult,
 } from "./execution-queue";
 
@@ -47,6 +55,7 @@ type ExecutionClient = Pick<
   ExecutionSession,
   | "configure"
   | "execute"
+  | "steer"
   | "listAgentflowCheckpoints"
   | "resumeCheckpoint"
   | "setMode"
@@ -73,9 +82,16 @@ export type SubmissionReturnedEvent = {
   error: Error;
 };
 
+/** Hub 明确拒绝了一条 Steer：输入没有进入 Turn，调用方应把文字与附件还给草稿。The Hub explicitly rejected a Steer: the input did not enter the turn, and the caller should give the text and attachments back to the draft. */
+export type SteerRejectedEvent = {
+  submission: ExecutionSubmission;
+  error: Error;
+};
+
 export type ManagedExecutionHandlers = ExecutionHubHandlers & {
   onSubmissionStarted?: (event: SubmissionStartedEvent) => void;
   onSubmissionReturned?: (event: SubmissionReturnedEvent) => void;
+  onSteerRejected?: (event: SteerRejectedEvent) => void;
 };
 
 /** 已开始发送、尚未结束的条目；started 表示已收到它的 Turn 开始消息。An entry being sent and not yet finished; started means its turn start message arrived. */
@@ -92,6 +108,10 @@ type Entry = {
   pendingInteractions: Map<string, AiMessage>;
   reconnectState: ExecutionReconnectState | null;
   activeTurn: ActiveTurnState | null;
+  /** 最近一条 Turn 开始消息中的 turnId；Turn 结束或连接关闭后为空。The turnId of the latest turn start message; empty after the turn ends or the connection closes. */
+  observedTurnId: string | null;
+  /** 已发给服务端、等待送达的 Steer。Steers sent to the server and waiting for delivery. */
+  steers: SteerRecord[];
   /** 服务端连接当前使用的设置；新连接或连接关闭后为空。The settings the server connection uses now; empty for a new or closed connection. */
   appliedSetting: ExecutionSetting | null;
   /** 下一轮要使用的设置；与 appliedSetting 不同时不发送队列条目。The settings the next turn must use; queue entries are not sent while it differs from appliedSetting. */
@@ -132,9 +152,11 @@ export type ManagedExecutionHandle = {
   configure(setting: ExecutionSetting): Promise<ExecutionConfigurationResult>;
   /**
    * 提交一条输入：会话空闲且队列可发送时立即开始，否则排到队尾。无效输入或正在终止时抛出错误，调用方保留草稿。
+   * mode 为 steer 且有进行中的 Turn（turnId 已知）时，输入作为 Steer 送入该 Turn，返回 "steering"；其余情况与 queue 相同。
    * Submits an input: it starts at once when the conversation is idle and the queue can send, otherwise it joins the tail. Invalid input or a pending stop throws, and the caller keeps its draft.
+   * With mode steer and a running turn whose turnId is known, the input enters that turn as a Steer and "steering" is returned; every other case behaves as queue.
    */
-  submit(submission: ExecutionSubmission): SubmissionResult;
+  submit(submission: ExecutionSubmission, mode?: SubmissionMode): SubmissionResult;
   getQueue(): ExecutionQueueSnapshot;
   updateQueuedItem(itemId: string, text: string): void;
   removeQueuedItem(itemId: string): void;
@@ -165,6 +187,8 @@ const FAILED_TURN_PAUSE_REASON = "The previous message failed. The queue is paus
 const INTERRUPTED_TURN_PAUSE_REASON = "The previous message was interrupted. The queue is paused.";
 const UNKNOWN_OUTCOME_PAUSE_REASON =
   "The connection was lost before the message finished, so its outcome is unknown. The queue is paused.";
+const UNDELIVERED_STEER_PAUSE_REASON =
+  "The task ended before a steering message was confirmed, so its outcome is unknown. The queue is paused.";
 const SUPERSEDED_TURN_PAUSE_REASON =
   "A newer message was sent to this conversation from elsewhere. The queue is paused.";
 
@@ -217,6 +241,8 @@ export class ExecutionSessionManager {
         pendingInteractions: new Map(),
         reconnectState: null,
         activeTurn: null,
+        observedTurnId: null,
+        steers: [],
         appliedSetting: null,
         requestedSetting: null,
         configuring: 0,
@@ -271,7 +297,7 @@ export class ExecutionSessionManager {
         }
         return await this.applySetting(attachedEntry, setting);
       },
-      submit: (submission) => {
+      submit: (submission, mode = "queue") => {
         if (this.entries.get(id) !== attachedEntry) {
           throw new Error("Execution session is not available.");
         }
@@ -280,6 +306,11 @@ export class ExecutionSessionManager {
         }
         if (attachedEntry.stopping) {
           throw new Error("Please wait for the current execution to stop.");
+        }
+        const steerTurnId = mode === "steer" ? this.getSteerTurnId(attachedEntry) : null;
+        if (steerTurnId !== null) {
+          this.startSteer(attachedEntry, submission, steerTurnId);
+          return "steering";
         }
         const itemId = createUuidV7();
         attachedEntry.queue.push({
@@ -337,6 +368,9 @@ export class ExecutionSessionManager {
       },
       stop: async (reason) => {
         attachedEntry.queue = [];
+        // 未送达的 Steer 一并丢弃；服务端之后为它们发出的 steer-returned 找不到记录，会被忽略。
+        // Undelivered Steers are dropped too; the steer-returned the server sends for them later finds no record and is ignored.
+        attachedEntry.steers = [];
         attachedEntry.editingItemId = null;
         this.clearPause(attachedEntry);
         attachedEntry.stopping =
@@ -523,6 +557,7 @@ export class ExecutionSessionManager {
       this.activity.turnStarted(entry.key);
       if (turn) this.conversationStatuses.turnStarted(entry.key, turn.conversationId, turn.turnId);
       if (entry.inFlight && turnId === entry.inFlight.item.turnId) entry.inFlight.started = true;
+      if (!superseded && turnId) entry.observedTurnId = turnId;
     } else if (interaction) {
       entry.pendingInteractions.set(interaction.interactionId, message);
       this.activity.waitingForApproval(entry.key);
@@ -533,6 +568,7 @@ export class ExecutionSessionManager {
         const wasActive = this.activity.isActive(entry.key);
         this.activity.turnFinished(entry.key, terminalStatus);
         entry.activeTurn = null;
+        if (turnId === null || turnId === entry.observedTurnId) entry.observedTurnId = null;
         if (turn) {
           this.conversationStatuses.turnFinished(
             entry.key,
@@ -543,8 +579,13 @@ export class ExecutionSessionManager {
         }
         if (wasActive) this.emitTurnFinished(entry.key, terminalStatus);
         this.settleQueueAfterTurn(entry, turnId, terminalStatus, wasActive, superseded);
+        if (turnId !== null) this.settleStrandedSteers(entry, turnId);
       }
     }
+    const steerDelivered = getSteerDelivered(message);
+    if (steerDelivered) this.removeSteer(entry, steerDelivered.steerId);
+    const steerReturned = getSteerReturned(message);
+    if (steerReturned) this.returnSteerToQueue(entry, steerReturned.steerId);
     if (superseded) {
       for (const listener of this.supersededTurnListeners) listener(entry.key);
     }
@@ -606,12 +647,17 @@ export class ExecutionSessionManager {
     const inFlight = entry.inFlight;
     entry.inFlight = null;
     entry.stopping = false;
+    entry.observedTurnId = null;
+    // 等待送达的 Steer 同样无法确认：按提交顺序回到队首并锁定编辑。
+    // Steers waiting for delivery cannot be confirmed either: they return to the head in submission order, locked for editing.
+    const steers = entry.steers.splice(0);
+    entry.queue.unshift(...steers.map((steer) => this.toUncertainQueueItem(steer)));
     let returned: QueuedExecution | null = null;
     if (inFlight && !inFlight.started) {
       returned = { ...inFlight.item, uncertain: true };
       entry.queue.unshift(returned);
     }
-    if ((inFlight || turnWasActive) && entry.queue.length > 0) {
+    if ((inFlight || turnWasActive || steers.length > 0) && entry.queue.length > 0) {
       this.pauseQueue(entry, UNKNOWN_OUTCOME_PAUSE_REASON);
     }
     this.emitQueueChange(entry);
@@ -622,6 +668,127 @@ export class ExecutionSessionManager {
       });
     }
     this.drain(entry);
+  }
+
+  /**
+   * 进行中 Turn 的 turnId：Turn 开始消息里的 turnId，或尚未收到开始消息的发送中条目的 turnId。没有进行中的 Turn，或 turnId 未知时返回 null。
+   * The running turn's turnId: the one in the turn start message, or that of an in-flight entry whose start message has not arrived. Null when no turn runs or its turnId is unknown.
+   */
+  private getSteerTurnId(entry: Entry): string | null {
+    if (!this.isTurnRunning(entry)) return null;
+    return entry.observedTurnId ?? entry.inFlight?.item.turnId ?? null;
+  }
+
+  /** 创建 Steer 记录并发出命令；命令的输入在记录入列之前生成，生成失败时抛给调用方，草稿得以保留。Creates the Steer record and sends the command; the input is built before the record is stored, so a failure throws to the caller and the draft stays. */
+  private startSteer(entry: Entry, submission: ExecutionSubmission, turnId: string): void {
+    const record: SteerRecord = { id: createUuidV7(), turnId, submission, status: "sending" };
+    const request = this.buildSteerRequest(entry, record);
+    entry.steers.push(record);
+    this.emitQueueChange(entry);
+    void this.sendSteer(entry, record.id, request);
+  }
+
+  private buildSteerRequest(entry: Entry, record: SteerRecord): ExecutionSteerRequest {
+    const message = record.submission.createMessage(record.submission.text, record.id);
+    return {
+      conversationId: entry.key.conversationId,
+      turnId: record.turnId,
+      steerId: record.id,
+      input: toExecutionUserInput(message),
+    };
+  }
+
+  private async sendSteer(
+    entry: Entry,
+    steerId: string,
+    request: ExecutionSteerRequest,
+  ): Promise<void> {
+    try {
+      await entry.client.steer(request);
+    } catch (error) {
+      this.handleSteerFailure(entry, steerId, toError(error));
+      return;
+    }
+    const index = entry.steers.findIndex((steer) => steer.id === steerId);
+    const record = entry.steers[index];
+    // 送达或退回的消息可能先于命令的返回；此时记录已经移除。The delivered or returned message can arrive before the command returns, when the record is gone already.
+    if (!record || record.status === "accepted") return;
+    entry.steers[index] = { ...record, status: "accepted" };
+    this.emitQueueChange(entry);
+  }
+
+  /**
+   * Steer 命令失败：Hub 明确拒绝时，Turn 刚结束（4090027）的输入当作普通 Queue 提交，其他拒绝交还给调用方；连接问题造成的失败结果未知，记录保留，由重连或关闭流程处理。
+   * A failed Steer command: on an explicit Hub rejection, an input whose turn just ended (4090027) is submitted as a plain Queue entry and any other rejection goes back to the caller; a failure from the connection has an unknown outcome, so the record stays for the reconnect or close path.
+   */
+  private handleSteerFailure(entry: Entry, steerId: string, error: Error): void {
+    if (!this.isAttached(entry) || !isServerRejection(error)) return;
+    const record = entry.steers.find((steer) => steer.id === steerId);
+    if (!record) return;
+    entry.steers = entry.steers.filter((steer) => steer.id !== steerId);
+    if (getHubErrorCode(error) === STEER_ERROR_CODES.noActiveTurn) {
+      entry.queue.push({
+        ...record.submission,
+        id: createUuidV7(),
+        turnId: createUuidV7(),
+        uncertain: false,
+      });
+      this.emitQueueChange(entry);
+      this.drain(entry);
+      return;
+    }
+    this.emitQueueChange(entry);
+    entry.handler?.onSteerRejected?.({ submission: record.submission, error });
+  }
+
+  private removeSteer(entry: Entry, steerId: string): void {
+    if (!entry.steers.some((steer) => steer.id === steerId)) return;
+    entry.steers = entry.steers.filter((steer) => steer.id !== steerId);
+    this.emitQueueChange(entry);
+  }
+
+  /**
+   * 未送达的 Steer 转成队列条目放到队首，使用新的 turnId，不暂停队列；没有记录（例如 stop 已经丢弃）时忽略。
+   * An undelivered Steer becomes a queue entry at the head with a new turnId and does not pause the queue; it is ignored when no record exists, for example after stop dropped it.
+   */
+  private returnSteerToQueue(entry: Entry, steerId: string): void {
+    const record = entry.steers.find((steer) => steer.id === steerId);
+    if (!record) return;
+    entry.steers = entry.steers.filter((steer) => steer.id !== steerId);
+    entry.queue.unshift({
+      ...record.submission,
+      id: createUuidV7(),
+      turnId: createUuidV7(),
+      uncertain: false,
+      steerReturned: true,
+    });
+    this.emitQueueChange(entry);
+  }
+
+  /**
+   * Turn 已结束而 Steer 既没有送达也没有退回：结果无法确认，回到队首并锁定编辑，队列暂停。
+   * The turn ended and a Steer was neither delivered nor returned: its outcome is unknown, so it returns to the head locked for editing and the queue pauses.
+   */
+  private settleStrandedSteers(entry: Entry, turnId: string): void {
+    const stranded = entry.steers.filter((steer) => steer.turnId === turnId);
+    if (stranded.length === 0) return;
+    entry.steers = entry.steers.filter((steer) => steer.turnId !== turnId);
+    entry.queue.unshift(...stranded.map((steer) => this.toUncertainQueueItem(steer)));
+    this.pauseQueue(entry, UNDELIVERED_STEER_PAUSE_REASON);
+    this.emitQueueChange(entry);
+  }
+
+  private toUncertainQueueItem(steer: SteerRecord): QueuedExecution {
+    return { ...steer.submission, id: createUuidV7(), turnId: createUuidV7(), uncertain: true };
+  }
+
+  /** 重连后 Turn 仍在运行：尚无回应的 Steer 用同一个 steerId 重发，服务端只受理一次。The turn still runs after reconnecting: Steers without an answer are resent with the same steerId, which the server accepts once. */
+  private resendSteers(entry: Entry): void {
+    for (const record of entry.steers) {
+      if (record.status === "sending") {
+        void this.sendSteer(entry, record.id, this.buildSteerRequest(entry, record));
+      }
+    }
   }
 
   /**
@@ -708,6 +875,7 @@ export class ExecutionSessionManager {
       input,
     };
     entry.inFlight = { item, started: false };
+    entry.observedTurnId = null;
     this.beginActiveTurn(entry, item.turnId, message);
     this.activity.turnStarted(entry.key);
     this.emitQueueChange(entry);
@@ -750,6 +918,7 @@ export class ExecutionSessionManager {
 
   private emitQueueChange(entry: Entry): void {
     entry.queueSnapshot = {
+      steers: [...entry.steers],
       items: [...entry.queue],
       paused: entry.queuePaused,
       pauseReason: entry.pauseReason,
@@ -857,6 +1026,7 @@ export class ExecutionSessionManager {
     entry.reconnectState = null;
     if (entry.client.hasRunningTurn()) {
       this.activity.turnStarted(entry.key);
+      this.resendSteers(entry);
     } else {
       const wasActive = this.activity.isActive(entry.key);
       if (wasActive) {

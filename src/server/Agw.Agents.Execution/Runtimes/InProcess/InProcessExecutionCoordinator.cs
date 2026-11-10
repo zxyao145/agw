@@ -1,12 +1,15 @@
+using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Contracts;
+using Agw.Agents.Execution.Steering;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Execution;
@@ -35,6 +38,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly CancellationToken _hostToken;
     private readonly Action<int>? _pendingInteractionCountChanged;
+    private readonly int _steerMaxPending;
 
     public InProcessExecutionCoordinator(
         IAgentRuntimeFactory agentRuntimes,
@@ -47,7 +51,8 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         TurnBroadcastRegistry broadcasts,
         IServiceScopeFactory scopeFactory,
         CancellationToken hostToken,
-        Action<int>? pendingInteractionCountChanged = null
+        Action<int>? pendingInteractionCountChanged = null,
+        int steerMaxPending = SteerExecutionOptions.DefaultMaxPendingPerTurn
     )
     {
         _agentRuntimes = agentRuntimes;
@@ -61,6 +66,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
         _scopeFactory = scopeFactory;
         _hostToken = hostToken;
         _pendingInteractionCountChanged = pendingInteractionCountChanged;
+        _steerMaxPending = steerMaxPending;
     }
 
     /// <summary>
@@ -216,6 +222,7 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
             // ResultOnly applies only when the turn produces a result: outbound messages are filtered and interaction is declined.
             var resultOnly = request.Settings.ResultOnly && agent.EmitsTurnResult;
             var sink = ResultOnlyMessageSink.Wrap(scope.Output, resultOnly);
+            var steers = resultOnly ? null : BindSteers(scope);
             if (!unattended && scope.Context.EngineKind == EngineKind.Maf)
             {
                 BindApprovalBatches(scope, allowInteraction: !resultOnly);
@@ -225,7 +232,8 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
                     agent.CancelActiveRequest,
                     ct => ExecuteAgentTurnAsync(scope, agent, request, sink, ct),
                     async (response, ct) =>
-                        await scope.Interactions.TryResolveAsync(response, ct).ConfigureAwait(false) != null
+                        await scope.Interactions.TryResolveAsync(response, ct).ConfigureAwait(false) != null,
+                    steers
                 );
             }
 
@@ -239,7 +247,8 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
                     interactions?.CancelAll();
                 },
                 ct => ExecuteAgentTurnAsync(scope, agent, request, sink, ct),
-                interactions == null ? null : interactions.TrySubmitAsync
+                interactions == null ? null : interactions.TrySubmitAsync,
+                steers
             );
         }
 
@@ -260,6 +269,22 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
                 ),
             agentflowInteractions == null ? null : agentflowInteractions.TrySubmitAsync
         );
+    }
+
+    /// <summary>
+    /// 为支持 Steer 的引擎绑定本 Turn 的 Steer 集合；其他引擎返回空，Steer 命令因此被拒绝。
+    /// Binds this turn's Steer inbox for engines that support steering; other engines return null, so Steer commands are refused.
+    /// </summary>
+    private SteerInbox? BindSteers(ExecutionScope scope)
+    {
+        if (
+            scope.Context.EngineKind is not { } engine
+            || !ExecutionInputCapabilities.ForEngine(engine, ExecutionProvider.InProcess).SupportsSteer
+        )
+            return null;
+        var steers = new SteerInbox(_steerMaxPending);
+        scope.BindSteers(steers);
+        return steers;
     }
 
     /// <summary>

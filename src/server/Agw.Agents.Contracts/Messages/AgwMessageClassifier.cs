@@ -40,6 +40,8 @@ public static class AgwMessageClassifier
                 or AgwMessageTypes.TurnFinished
                 or AgwMessageTypes.StepDiscarded
                 or AgwMessageTypes.InteractionRequest
+                or AgwMessageTypes.SteerDelivered
+                or AgwMessageTypes.SteerReturned
                 or AgwMessageTypes.AgentflowCheckpoint
         || type?.StartsWith(AgwMessageTypes.HumanGatePrefix, StringComparison.Ordinal) == true
         || type?.StartsWith(AgwMessageTypes.ToolApprovalPrefix, StringComparison.Ordinal) == true;

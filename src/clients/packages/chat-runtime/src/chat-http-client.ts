@@ -58,6 +58,13 @@ export type ChatConversationScope = {
   conversationId: string;
 };
 
+/** 执行目标在 Turn 运行期间接收输入的能力。What an execution target accepts while a turn runs. */
+export type ExecutionInputCapabilities = NonNullable<
+  ApiResponse<"/api/agents/input-capabilities", "get">
+>;
+
+const STEER_UNSUPPORTED_BY_SERVER_REASON = "This server does not support steering a running task.";
+
 /** 对话详情接口的路径模板。The path template of the conversation details endpoint. */
 export const CONVERSATION_DETAILS_PATH = "/api/projects/{projectId}/conversations/{conversationId}";
 
@@ -95,6 +102,7 @@ const CLIENT_ORIGIN: ChatEventOrigin = { kind: "client" };
 export class ChatHttpClient {
   private readonly options: ChatHttpClientOptions;
   private readonly subscriptions = new Set<Subscription>();
+  private readonly inputCapabilities = new Map<string, ExecutionInputCapabilities>();
 
   public constructor(options: ChatHttpClientOptions) {
     this.options = options;
@@ -274,6 +282,35 @@ export class ChatHttpClient {
       params: { query: { type: target.type === "agent" ? 0 : 1, id: target.id } },
       signal,
     });
+  }
+
+  /**
+   * 读取执行目标在 Turn 运行期间接收输入的能力，结果按服务端与目标缓存。旧服务端没有这个接口（404），视为不支持 Steer。
+   * Reads whether an execution target accepts input while a turn runs, cached per server and target. An older server without the endpoint (404) is treated as not supporting Steer.
+   */
+  public async fetchInputCapabilities(
+    scope: ChatScope,
+    target: { type: "agent" | "agentflow"; id: string },
+    signal?: AbortSignal,
+    origin: ChatEventOrigin = CLIENT_ORIGIN,
+  ): Promise<ExecutionInputCapabilities> {
+    const cacheKey = JSON.stringify([this.getConnectionIdentity().baseUrl, target.type, target.id]);
+    const cached = this.inputCapabilities.get(cacheKey);
+    if (cached) return cached;
+    let capabilities: ExecutionInputCapabilities;
+    try {
+      const response = await this.createApi(scope, origin).client.apiGet(
+        "/api/agents/input-capabilities",
+        { params: { query: { type: target.type === "agent" ? 0 : 1, id: target.id } }, signal },
+      );
+      if (response === null) throw new Error("The input capabilities response was empty.");
+      capabilities = response;
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) throw error;
+      capabilities = { supportsSteer: false, reason: STEER_UNSUPPORTED_BY_SERVER_REASON };
+    }
+    this.inputCapabilities.set(cacheKey, capabilities);
+    return capabilities;
   }
 
   public async getAgentSuggestions(

@@ -143,6 +143,25 @@ internal sealed class DurableExecutionAttachment : IAsyncDisposable
     /// 提交类型化响应；显式指定未附着的 execution 时必须属于该对话。请求发布统一由已提交的事件负责。
     /// Submits a typed response; an explicit execution that is not attached must belong to the conversation. Requests are published by committed events.
     /// </summary>
+    /// <summary>
+    /// 向附着的 Turn 追加一条输入；客户端跟踪的必须是这条连接附着的 Turn。
+    /// Adds an input to the attached turn; the client must track the turn this connection is attached to.
+    /// </summary>
+    public async Task SteerAsync(
+        Guid turnId,
+        Guid steerId,
+        AgwUserInput input,
+        Guid? conversationId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (ActiveTurnId != turnId || conversationId is not { } configuredConversationId)
+            throw new AgwException(ErrorCodes.SteerNoActiveTurn);
+        await _coordinator
+            .SteerAsync(turnId, _userId, configuredConversationId, steerId, input, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task RespondAsync(
         HumanResponseCommand command,
         Guid? conversationId,

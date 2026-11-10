@@ -343,6 +343,10 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             .DurableExecutionEvents.Where(entry => turnIds.Contains(entry.TurnId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
+        await _dbContext
+            .DurableExecutionSteers.Where(steer => turnIds.Contains(steer.TurnId))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
         await executions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 

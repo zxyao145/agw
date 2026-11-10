@@ -9,6 +9,8 @@ import {
   isResultMessage,
   isUserTurnMessage,
   processMessages,
+  STEER_DELIVERED_MESSAGE_TYPE,
+  STEER_RETURNED_MESSAGE_TYPE,
   TURN_FINISHED_MESSAGE_TYPE,
   TURN_START_MESSAGE_TYPE,
 } from "@agw/execution-core";
@@ -43,6 +45,8 @@ const HIDDEN_CONTROL_TYPES = new Set([
   "mode-status",
   "mode-change-failed",
   "interaction-request",
+  STEER_DELIVERED_MESSAGE_TYPE,
+  STEER_RETURNED_MESSAGE_TYPE,
 ]);
 
 const supportedImageDataUrl = /^data:image\/(?:jpeg|png|gif|webp);base64,/i;

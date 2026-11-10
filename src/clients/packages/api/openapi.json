@@ -1107,6 +1107,52 @@
         }
       }
     },
+    "/api/agents/input-capabilities": {
+      "get": {
+        "tags": [
+          "ExecutionInput"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AgentRuntimeType"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionInputCapabilities"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionInputCapabilities"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionInputCapabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/permission-capabilities": {
       "get": {
         "tags": [
@@ -10343,6 +10389,38 @@
           }
         }
       },
+      "ApiResultOfExecutionInputCapabilities": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExecutionInputCapabilities"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfExecutionPermissionCapabilities": {
         "required": [
           "code",
@@ -12711,6 +12789,26 @@
       "EngineKind": {
         "type": "integer",
         "description": "执行 Agent 的程序种类；数值与持久化的外部 Agent 种类保持一致。\nThe kind of program that executes an Agent; values match the persisted external Agent kind."
+      },
+      "ExecutionInputCapabilities": {
+        "required": [
+          "supportsSteer"
+        ],
+        "type": "object",
+        "properties": {
+          "supportsSteer": {
+            "type": "boolean",
+            "description": "是否支持把输入送达正在运行的 Turn。Whether input can be delivered to the running turn."
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "不支持时的原因。The reason when steering is not supported."
+          }
+        },
+        "description": "执行目标在 Turn 运行期间接收输入的能力。\nThe ability of an execution target to accept input while a turn runs."
       },
       "ExecutionPermissionCapabilities": {
         "required": [

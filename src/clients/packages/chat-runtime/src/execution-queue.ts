@@ -30,9 +30,32 @@ export type QueuedExecution = ExecutionSubmission & {
    * The previous send's outcome is unknown: a resend reuses the same turnId, and the text can no longer be edited.
    */
   uncertain: boolean;
+  /**
+   * 由未送达的 Steer 退回而来：它已回到队首等待发送。
+   * Returned from a Steer that was not delivered: it waits at the queue head.
+   */
+  steerReturned?: boolean;
+};
+
+/** 提交方式：排到队尾等当前 Turn 结束，或送入进行中的 Turn。How a submission goes: join the queue until the turn ends, or enter the running turn. */
+export type SubmissionMode = "queue" | "steer";
+
+/**
+ * 一条已发给服务端、等待送达进行中 Turn 的 Steer。id 是 steerId，送达后也是用户消息的 messageId。
+ * A Steer sent to the server and waiting to be delivered into the running turn. Its id is the steerId, also the user message's messageId once delivered.
+ */
+export type SteerRecord = {
+  id: string;
+  /** 提交时进行中的 Turn。The turn running at submission. */
+  turnId: string;
+  submission: ExecutionSubmission;
+  /** sending：命令已发出，尚未得到回应；accepted：服务端已受理，等待送达。sending: the command was sent and not answered; accepted: the server took it and delivery is pending. */
+  status: "sending" | "accepted";
 };
 
 export type ExecutionQueueSnapshot = {
+  /** 等待送达的 Steer，按提交顺序。Steers waiting for delivery, in submission order. */
+  steers: readonly SteerRecord[];
   items: readonly QueuedExecution[];
   paused: boolean;
   /** 暂停原因。Why the queue paused. */
@@ -43,6 +66,7 @@ export type ExecutionQueueSnapshot = {
 };
 
 export const EMPTY_EXECUTION_QUEUE: ExecutionQueueSnapshot = Object.freeze({
+  steers: [],
   items: [],
   paused: false,
   pauseReason: null,
@@ -50,8 +74,8 @@ export const EMPTY_EXECUTION_QUEUE: ExecutionQueueSnapshot = Object.freeze({
   stopping: false,
 });
 
-/** 立即开始发送，或排在队列中等待。Sending started at once, or the entry waits in the queue. */
-export type SubmissionResult = "started" | "queued";
+/** 立即开始发送，排在队列中等待，或作为 Steer 发往进行中的 Turn。Sending started at once, the entry waits in the queue, or it goes to the running turn as a Steer. */
+export type SubmissionResult = "started" | "queued" | "steering";
 
 /**
  * 可提交的内容：非空白文字，或至少一条代码评论；图片只能与它们一起提交。

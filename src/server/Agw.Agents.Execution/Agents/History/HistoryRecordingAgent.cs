@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Context;
+using Agw.Agents.Execution.Steering;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -119,31 +120,49 @@ internal sealed class HistoryRecordingAgent : DelegatingAIAgent
                     if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
                         break;
                     update = enumerator.Current;
-                    // External Engine 在第一段输出之前写入原始输入。System Agent 的输入由 Provider 在读取历史之后写入：
-                    // 批准的工具结果会在模型调用之前流出，提前写入会让输入同时出现在历史与请求里。
-                    // External Engines write the original input before their first output. A System Agent's input is written by the provider after it reads history:
-                    // approved tool results stream out before the model call, and writing earlier would put the input in both history and the request.
-                    if (!_history.TracksSteps)
+                    // 外部引擎在运行中接收的 Steer 输入按到达位置写入历史，更新原样交给 TurnExecutor。
+                    // A Steer input the external engine accepted mid-run is written to history where it arrived, and the update passes to the TurnExecutor unchanged.
+                    if (SteerDelivery.GetDeliveredEntry(update) is { } steered)
                     {
                         await PersistStagedInputAsync(recording, cancellationToken).ConfigureAwait(false);
-                        afterToolResult = AdvanceExternalStep(update, afterToolResult);
-                    }
-                    else if (ToToolResultMessage(update) is { } toolResult)
-                    {
-                        // 工具结果在输出流中先于下一次模型请求出现；流式副本与请求副本写入同一行。
-                        // Tool results appear in the stream before the next model request; the streamed and requested copies write one row.
                         await recording
-                            .PutToolResultAsync(toolResult, ExecutionScope.Current?.StepIndex, cancellationToken)
+                            .PutAsync(
+                                SteerDelivery.CreateModelMessage(steered),
+                                ExecutionScope.Current?.StepIndex,
+                                cancellationToken
+                            )
                             .ConfigureAwait(false);
+                        handled = false;
                     }
-                    // 延续运行开始时 FICC 重新输出已批准或已拒绝的调用，它们已随上一 Step 的响应写入。
-                    // At the start of a continuation run FICC re-emits the approved or rejected calls, which were written with the previous Step's response.
-                    var replayedCalls =
-                        _history.TracksSteps
-                        && !recording.ModelCallStarted
-                        && update.Contents.Any(content => content is FunctionCallContent);
-                    handled =
-                        !replayedCalls && await recording.RecordAsync(update, cancellationToken).ConfigureAwait(false);
+                    else
+                    {
+                        // External Engine 在第一段输出之前写入原始输入。System Agent 的输入由 Provider 在读取历史之后写入：
+                        // 批准的工具结果会在模型调用之前流出，提前写入会让输入同时出现在历史与请求里。
+                        // External Engines write the original input before their first output. A System Agent's input is written by the provider after it reads history:
+                        // approved tool results stream out before the model call, and writing earlier would put the input in both history and the request.
+                        if (!_history.TracksSteps)
+                        {
+                            await PersistStagedInputAsync(recording, cancellationToken).ConfigureAwait(false);
+                            afterToolResult = AdvanceExternalStep(update, afterToolResult);
+                        }
+                        else if (ToToolResultMessage(update) is { } toolResult)
+                        {
+                            // 工具结果在输出流中先于下一次模型请求出现；流式副本与请求副本写入同一行。
+                            // Tool results appear in the stream before the next model request; the streamed and requested copies write one row.
+                            await recording
+                                .PutToolResultAsync(toolResult, ExecutionScope.Current?.StepIndex, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                        // 延续运行开始时 FICC 重新输出已批准或已拒绝的调用，它们已随上一 Step 的响应写入。
+                        // At the start of a continuation run FICC re-emits the approved or rejected calls, which were written with the previous Step's response.
+                        var replayedCalls =
+                            _history.TracksSteps
+                            && !recording.ModelCallStarted
+                            && update.Contents.Any(content => content is FunctionCallContent);
+                        handled =
+                            !replayedCalls
+                            && await recording.RecordAsync(update, cancellationToken).ConfigureAwait(false);
+                    }
                 }
                 catch (Exception exception)
                 {

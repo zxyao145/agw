@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Steering;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.History;
@@ -25,6 +26,7 @@ internal sealed class ExecutionScope : IExecutionIdentity
     private IConversationHistoryBuffer? _history;
     private Exception? _failure;
     private int _memoryInjected;
+    private ISteerInbox? _steers;
 
     private readonly TurnRecord? _turn;
     private readonly IExecutionWriteGuard? _writeGuard;
@@ -106,6 +108,23 @@ internal sealed class ExecutionScope : IExecutionIdentity
     public IHumanInteractionChannel? InteractionChannel { get; private set; }
 
     public IInteractionRequestRegistry? InteractionRequests { get; private set; }
+
+    /// <summary>
+    /// 绑定它的 Turn 作用域接收 Steer 的集合；子作用域（节点、后台 Agent）不继承，为空表示该作用域不接收 Steer。
+    /// The Steer inbox of the turn scope that bound it; child scopes (nodes, background Agents) do not inherit it, and null means the scope accepts no steering.
+    /// </summary>
+    public ISteerInbox? Steers => Volatile.Read(ref _steers);
+
+    /// <summary>
+    /// 为本 Turn 作用域绑定 Steer 集合；每个作用域只绑定一次。
+    /// Binds the Steer inbox of this turn scope; each scope binds once.
+    /// </summary>
+    public void BindSteers(ISteerInbox steers)
+    {
+        ArgumentNullException.ThrowIfNull(steers);
+        if (Interlocked.CompareExchange(ref _steers, steers, null) != null)
+            throw new AgwException(ErrorCodes.AgentExecutionFailed, "The execution scope already has a steer inbox.");
+    }
 
     /// <summary>
     /// 本 Turn 的历史缓冲；节点与后台 Agent 的子作用域沿用所属 Turn 的缓冲。

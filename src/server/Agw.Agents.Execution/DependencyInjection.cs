@@ -134,6 +134,7 @@ public static class DependencyInjection
         {
             ValidateDistributedConfiguration(configuration, executionOptions);
             services.AddScoped<DurableExecutionStore>();
+            services.AddScoped<DurableSteerStore>();
             services.AddSingleton<DurableWorkerIdentity>();
             services.AddSingleton<DurableExecutionEventLog>();
             AddEventProjection(services, executionOptions);

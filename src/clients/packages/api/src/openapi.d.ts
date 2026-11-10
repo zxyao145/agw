@@ -1060,6 +1060,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/input-capabilities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          type?: components["schemas"]["AgentRuntimeType"];
+          id?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExecutionInputCapabilities"];
+            "application/json": components["schemas"]["ApiResultOfExecutionInputCapabilities"];
+            "text/json": components["schemas"]["ApiResultOfExecutionInputCapabilities"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents/permission-capabilities": {
     parameters: {
       query?: never;
@@ -6698,6 +6738,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfExecutionInputCapabilities: {
+      data?: null | components["schemas"]["ExecutionInputCapabilities"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfExecutionPermissionCapabilities: {
       data?: null | components["schemas"]["ExecutionPermissionCapabilities"];
       /** Format: int32 */
@@ -7300,6 +7347,16 @@ export interface components {
      *     The kind of program that executes an Agent; values match the persisted external Agent kind.
      */
     EngineKind: number;
+    /**
+     * @description 执行目标在 Turn 运行期间接收输入的能力。
+     *     The ability of an execution target to accept input while a turn runs.
+     */
+    ExecutionInputCapabilities: {
+      /** @description 是否支持把输入送达正在运行的 Turn。Whether input can be delivered to the running turn. */
+      supportsSteer: boolean;
+      /** @description 不支持时的原因。The reason when steering is not supported. */
+      reason?: null | string;
+    };
     ExecutionPermissionCapabilities: {
       supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
       reason?: null | string;

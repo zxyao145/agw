@@ -18,8 +18,14 @@ import { Separator } from "@agw/components";
 import { resolveInputSuggestions, type CommandSource } from "@agw/chat-core";
 import { searchFile } from "../../../lib/chat/search-file";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
-import type { AgentMode, ExecutionQueueSnapshot, PermissionMode } from "@agw/chat-runtime";
+import type {
+  AgentMode,
+  ExecutionQueueSnapshot,
+  PermissionMode,
+  SubmissionMode,
+} from "@agw/chat-runtime";
 import { ChatInputQueue } from "./chat-input-queue";
+import type { SteerAvailability } from "./composer-submit";
 import { ChatInputToolbar } from "./chat-input-toolbar";
 import type { ExtensionMenuItem } from "./chat-extension-types";
 import { UserInput, type UserInputRef } from "./user-input";
@@ -35,9 +41,22 @@ interface ChatInputProps {
   isImageDraftBusy: boolean;
   onAddImages: (files: readonly File[]) => void;
   onRemoveImage: (attachmentId: string) => void;
-  /** 返回 true 表示已受理，清空本次文字、图片和代码评论；false 时保留草稿。True means accepted, clearing this text, images and code comments; false keeps the draft. */
-  onExecute: (value: string, imageAttachments: readonly ChatImageAttachment[]) => boolean;
+  /** 返回 true 表示已受理，清空本次文字、图片和代码评论；false 时保留草稿。mode 是这次提交使用的方式。True means accepted, clearing this text, images and code comments; false keeps the draft. mode is the submission mode of this send. */
+  onExecute: (
+    value: string,
+    imageAttachments: readonly ChatImageAttachment[],
+    mode: SubmissionMode,
+  ) => boolean;
   onInterrupt: () => void;
+  /** 目标对 Steer 的支持情况；省略时执行中只有普通发送。Whether the target supports Steer; omitted, a running turn only has the plain send. */
+  steerAvailability?: SteerAvailability;
+  /** 默认提交方式，初始为 queue。The default submission mode, queue at first. */
+  preferredSubmitMode?: SubmissionMode;
+  onPreferredSubmitModeChange?: (mode: SubmissionMode) => void;
+  /** 备用快捷键选中了不可用的方式。The alternate shortcut picked an unavailable mode. */
+  onSubmitBlocked?: (reason: string) => void;
+  /** 显示在输入框下方的提交错误，例如被拒绝的 Steer。A submission error shown under the input, such as a rejected Steer. */
+  submitError?: string | null;
   queue: ExecutionQueueSnapshot;
   onQueueEditStart: (itemId: string) => boolean;
   onQueueEditCancel: () => void;
@@ -87,6 +106,11 @@ export function ChatInput({
   onRemoveImage,
   onExecute,
   onInterrupt,
+  steerAvailability,
+  preferredSubmitMode,
+  onPreferredSubmitModeChange,
+  onSubmitBlocked,
+  submitError,
   queue,
   onQueueEditStart,
   onQueueEditCancel,
@@ -149,8 +173,8 @@ export function ChatInput({
   );
 
   const handleExecute = React.useCallback(
-    (value: string) => {
-      return onExecute(value, imageAttachments);
+    (value: string, mode: SubmissionMode) => {
+      return onExecute(value, imageAttachments, mode);
     },
     [imageAttachments, onExecute],
   );
@@ -173,6 +197,10 @@ export function ChatInput({
       canSubmitWithoutText={pendingFileCommentCount > 0}
       onExecute={handleExecute}
       onStop={onInterrupt}
+      steerAvailability={steerAvailability}
+      preferredSubmitMode={preferredSubmitMode}
+      onPreferredSubmitModeChange={onPreferredSubmitModeChange}
+      onSubmitBlocked={onSubmitBlocked}
       onPaste={handlePaste}
       onValueChange={onInputDraftChange}
       onSuggestion={handleSuggestion}
@@ -273,6 +301,13 @@ export function ChatInput({
             ) : null}
           </div>
         </UserInput.Context>
+      ) : null}
+      {submitError ? (
+        <UserInput.Help>
+          <p role="alert" className="text-destructive">
+            {submitError}
+          </p>
+        </UserInput.Help>
       ) : null}
       {topLeft ? <UserInput.TopLeft>{topLeft}</UserInput.TopLeft> : null}
       <UserInput.BottomLeft>

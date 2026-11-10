@@ -2,6 +2,7 @@
 
 import {
   getPermissionStatus,
+  isSteerUserMessage,
   isTurnStartMessage,
   type InteractionResponse,
 } from "@agw/execution-core";
@@ -48,6 +49,8 @@ import {
   type ManagedExecutionHandle,
   type ManagedExecutionHandlers,
   type QueuedExecution,
+  type SteerRejectedEvent,
+  type SubmissionMode,
 } from "@agw/chat-runtime";
 import { type LineComment, type ProjectDirectoryOption } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
@@ -55,6 +58,8 @@ import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
 import { ConversationImageFileProvider } from "./conversation-image-file";
 import type { UserInputRef } from "./user-input";
+import { getSteerRejectionMessage, type SteerAvailability } from "./composer-submit";
+import { useSubmitModePreference } from "../../../lib/chat/submit-mode-preference";
 import type {
   ChatComposerHandle,
   ChatMessageActionArgs,
@@ -255,6 +260,31 @@ export function Chat({
         signal,
       ),
   });
+  const inputCapabilities = useQuery({
+    queryKey: ["execution-input-capabilities", executionServerId, target?.type, target?.id],
+    enabled: Boolean(target),
+    queryFn: ({ signal }) =>
+      chatHttpClient.fetchInputCapabilities(
+        { serverId: executionServerId, projectId, conversationId: executionConversationId },
+        target!,
+        signal,
+      ),
+  });
+  const steerAvailability: SteerAvailability = inputCapabilities.data
+    ? inputCapabilities.data.supportsSteer
+      ? { supported: true }
+      : {
+          supported: false,
+          reason: inputCapabilities.data.reason ?? "This target does not support steering.",
+        }
+    : {
+        supported: false,
+        reason: inputCapabilities.error
+          ? "Unable to check whether this target supports steering."
+          : "Checking whether this target supports steering...",
+      };
+  const [preferredSubmitMode, setPreferredSubmitMode] = useSubmitModePreference();
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const supportedPermissionModes = permissionCapabilities.data?.supportedPermissionModes ?? [];
   const permissionUnavailable = !supportedPermissionModes.includes(permissionMode)
     ? permissionCapabilities.isPending
@@ -816,7 +846,9 @@ export function Chat({
         return;
       }
 
-      if (!isUserTurnMessage(message)) {
+      // 本地提交的用户消息已在发送时加入；送达 Turn 的 Steer 用户消息只来自服务端，按 messageId 与 scope 合并进该 Turn。
+      // A locally submitted user message was added when it was sent; the user message of a delivered Steer comes only from the server and merges into its turn by messageId and scope.
+      if (!isUserTurnMessage(message) || isSteerUserMessage(message)) {
         const scopedMessage = scopeStreamingMessage(
           message,
           getMessageStreamingScopeId(message) ??
@@ -879,6 +911,24 @@ export function Chat({
     [notifyExecutionError],
   );
 
+  /**
+   * Hub 拒绝了 Steer：文字与图片放回输入框，输入框下方显示错误。
+   * The Hub rejected a Steer: the text and images go back into the input and the error shows under it.
+   */
+  const applySteerRejected = React.useCallback(
+    ({ submission, error }: SteerRejectedEvent, generation: number) => {
+      if (generation !== executionGenerationRef.current) return;
+      const input = userInputRef.current;
+      const current = input?.value ?? "";
+      const restored = current.trim() ? `${submission.text}\n\n${current}` : submission.text;
+      input?.setInput(restored);
+      handleInputDraftChange(restored);
+      void currentImageDraft.restore(submission.attachments).catch(notifyImageDraftError);
+      setSubmitError(getSteerRejectionMessage(error));
+    },
+    [currentImageDraft, handleInputDraftChange],
+  );
+
   const createExecutionHandlers = React.useCallback(
     (generation: number, getClient: () => ManagedExecutionHandle): ManagedExecutionHandlers => {
       const isCurrent = () =>
@@ -888,6 +938,7 @@ export function Chat({
         onSubmissionStarted: ({ item, message }) =>
           applySubmissionStarted(item, message, generation),
         onSubmissionReturned: ({ item, error }) => applySubmissionReturned(item, error, generation),
+        onSteerRejected: (event) => applySteerRejected(event, generation),
         onClose: (error) => {
           if (!isCurrent()) return;
           executionClientRef.current = null;
@@ -919,6 +970,7 @@ export function Chat({
     },
     [
       applyExecutionMessage,
+      applySteerRejected,
       applySubmissionReturned,
       applySubmissionStarted,
       notifyExecutionError,
@@ -1178,7 +1230,11 @@ export function Chat({
    * The shared entry of the send button and Ctrl/Shift+Enter: the content joins the conversation's queue and starts at once when idle. False keeps the draft.
    */
   const handleExecute = React.useCallback(
-    (value: string, imageAttachments: readonly ChatImageAttachment[]): boolean => {
+    (
+      value: string,
+      imageAttachments: readonly ChatImageAttachment[],
+      mode: SubmissionMode,
+    ): boolean => {
       if (isHydratingSession || isRestoringExecution || showReconnect) return false;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
@@ -1213,34 +1269,38 @@ export function Chat({
         void ensureConfiguredClient(nextConversationId, generation).catch((error: unknown) => {
           if (generation === executionGenerationRef.current) notifyExecutionError(error);
         });
-        client.submit({
-          target: {
-            agentId: submittedTarget.id,
-            agentType: submittedTarget.type === "agent" ? 0 : 1,
-          },
-          text: value,
-          attachments: imageAttachments,
-          fileCommentCount: submittedFileComments.length,
-          createMessage: (text, messageId) => {
-            const userMessage = {
-              ...createUserMessage(createPrompt(text), imageAttachments),
-              messageId,
-            };
-            const firstContent = userMessage.contents[0];
-            if (firstContent) {
-              firstContent.additionalProperties = {
-                ...firstContent.additionalProperties,
-                targetType: submittedTarget.type,
-                targetId: submittedTarget.id,
+        client.submit(
+          {
+            target: {
+              agentId: submittedTarget.id,
+              agentType: submittedTarget.type === "agent" ? 0 : 1,
+            },
+            text: value,
+            attachments: imageAttachments,
+            fileCommentCount: submittedFileComments.length,
+            createMessage: (text, messageId) => {
+              const userMessage = {
+                ...createUserMessage(createPrompt(text), imageAttachments),
+                messageId,
               };
-            }
-            return userMessage;
+              const firstContent = userMessage.contents[0];
+              if (firstContent) {
+                firstContent.additionalProperties = {
+                  ...firstContent.additionalProperties,
+                  targetType: submittedTarget.type,
+                  targetId: submittedTarget.id,
+                };
+              }
+              return userMessage;
+            },
           },
-        });
+          mode,
+        );
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Unable to send the message");
         return false;
       }
+      setSubmitError(null);
       if (submittedFileComments.length > 0) {
         onPendingFileCommentsRemove?.(submittedFileComments.map((comment) => comment.id));
       }
@@ -1990,8 +2050,15 @@ export function Chat({
                     onRemoveImage={(id) =>
                       void currentImageDraft.removeImages([id]).catch(notifyImageDraftError)
                     }
-                    onExecute={(value) => imageDraft.submit(value, handleExecute)}
+                    onExecute={(value, _attachments, mode) =>
+                      imageDraft.submit(value, (text, images) => handleExecute(text, images, mode))
+                    }
                     onInterrupt={handleInterrupt}
+                    steerAvailability={steerAvailability}
+                    preferredSubmitMode={preferredSubmitMode}
+                    onPreferredSubmitModeChange={setPreferredSubmitMode}
+                    onSubmitBlocked={(reason) => toast.info(reason)}
+                    submitError={submitError}
                     queue={executionQueue}
                     onQueueEditStart={handleQueueEditStart}
                     onQueueEditCancel={handleQueueEditCancel}
@@ -2025,7 +2092,10 @@ export function Chat({
                     placeholder={placeholder}
                     topLeft={inputTopLeft}
                     userInputRef={userInputRef}
-                    onInputDraftChange={handleInputDraftChange}
+                    onInputDraftChange={(value) => {
+                      setSubmitError(null);
+                      handleInputDraftChange(value);
+                    }}
                     composerActions={composerActions}
                   />
                 </div>

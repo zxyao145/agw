@@ -160,6 +160,10 @@ public sealed class PiSessionTests
                     transport.Emit("""{"type":"agent_settled"}""");
                 }
             }
+            else if (type == "clear_queue")
+            {
+                transport.Emit(Response(command, """{"steering":[],"followUp":[]}"""));
+            }
             else if (type == "abort")
             {
                 transport.Emit(Response(command, data: null));
@@ -210,6 +214,9 @@ public sealed class PiSessionTests
                     }
 
                     break;
+                case "clear_queue":
+                    transport.Emit(Response(command, """{"steering":[],"followUp":[]}"""));
+                    break;
                 case "abort":
                     transport.Emit(Response(command, data: null));
                     transport.Emit("""{"type":"agent_settled"}""");
@@ -240,6 +247,114 @@ public sealed class PiSessionTests
         // Assert
         Assert.Contains(transport.WrittenLines, line => line.Contains("\"type\":\"abort\""));
         Assert.Equal(0, transport.KillCount);
+        Assert.False(session.IsFaulted);
+    }
+
+    [Fact]
+    public async Task SteerAsync_ActiveRun_SendsSteerCommandAndReturnsTrue()
+    {
+        // Arrange
+        var transport = new FakePiTransport();
+        transport.OnWrite = line =>
+        {
+            var command = JsonDocument.Parse(line).RootElement;
+            switch (command.GetProperty("type").GetString())
+            {
+                case "get_state":
+                    transport.Emit(Response(command, """{"sessionId":"session-1"}"""));
+                    break;
+                case "prompt":
+                    transport.Emit(Response(command, data: null));
+                    transport.Emit("""{"type":"agent_start"}""");
+                    break;
+                case "steer":
+                    transport.Emit(Response(command, """{"disposition":"queued"}"""));
+                    transport.Emit("""{"type":"agent_settled"}""");
+                    break;
+            }
+        };
+        var agent = CreateAgent(transport);
+        await using var session = agent.StartSession();
+        await using var run = session
+            .RunStreamingAsync("start", cancellationToken: TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        Assert.True(await run.MoveNextAsync());
+
+        // Act
+        var accepted = await session.SteerAsync(
+            "change course",
+            [new PiImage("aGk=", "image/png")],
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.True(accepted);
+        var steer = JsonDocument
+            .Parse(transport.WrittenLines.Single(line => line.Contains("\"type\":\"steer\"")))
+            .RootElement;
+        Assert.Equal("change course", steer.GetProperty("message").GetString());
+        Assert.Equal("image/png", steer.GetProperty("images")[0].GetProperty("mimeType").GetString());
+        while (await run.MoveNextAsync()) { }
+        Assert.False(await session.SteerAsync("too late", cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Single(transport.WrittenLines, line => line.Contains("\"type\":\"steer\""));
+    }
+
+    [Fact]
+    public async Task SteerAsync_NoRun_ReturnsFalseWithoutSending()
+    {
+        var transport = new FakePiTransport();
+        transport.OnWrite = line => HandleStandardFlow(transport, line);
+        var agent = CreateAgent(transport);
+        await using var session = agent.StartSession();
+        await session.RunAsync("first", cancellationToken: TestContext.Current.CancellationToken);
+
+        var accepted = await session.SteerAsync("idle", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(accepted);
+        Assert.DoesNotContain(transport.WrittenLines, line => line.Contains("\"type\":\"steer\""));
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_CancelledRun_ClearsQueueBeforeAbort()
+    {
+        var transport = new FakePiTransport();
+        transport.OnWrite = line =>
+        {
+            var command = JsonDocument.Parse(line).RootElement;
+            switch (command.GetProperty("type").GetString())
+            {
+                case "get_state":
+                    transport.Emit(Response(command, """{"sessionId":"session-1"}"""));
+                    break;
+                case "prompt":
+                    transport.Emit(Response(command, data: null));
+                    transport.Emit("""{"type":"agent_start"}""");
+                    break;
+                case "clear_queue":
+                    transport.Emit(Response(command, """{"steering":["queued"],"followUp":[]}"""));
+                    break;
+                case "abort":
+                    transport.Emit(Response(command, data: null));
+                    transport.Emit("""{"type":"agent_settled"}""");
+                    break;
+            }
+        };
+        var agent = CreateAgent(transport);
+        await using var session = agent.StartSession();
+        await using (
+            var run = session
+                .RunStreamingAsync("start", cancellationToken: TestContext.Current.CancellationToken)
+                .GetAsyncEnumerator(TestContext.Current.CancellationToken)
+        )
+        {
+            Assert.True(await run.MoveNextAsync());
+        }
+
+        var types = transport
+            .WrittenLines.Select(line => JsonDocument.Parse(line).RootElement.GetProperty("type").GetString())
+            .ToList();
+        Assert.True(types.IndexOf("clear_queue") >= 0);
+        Assert.True(types.IndexOf("clear_queue") < types.IndexOf("abort"));
         Assert.False(session.IsFaulted);
     }
 

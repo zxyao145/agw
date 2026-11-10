@@ -15,6 +15,7 @@ import {
   getExecutionRuntime,
   type ExecutionRequest,
   type ExecutionSetting,
+  type ExecutionSteerRequest,
 } from "./execution-session";
 import { ExecutionSessionManager } from "./execution-session-manager";
 
@@ -46,6 +47,7 @@ function createExecutionClient() {
     configure: async () => ({ restoredDurableExecution: false }),
     hasRunningTurn: () => false,
     execute: async () => undefined,
+    steer: async () => undefined,
     listAgentflowCheckpoints: async () => [],
     resumeCheckpoint: async () => "turn-resumed",
     setMode: async () => undefined,
@@ -850,11 +852,13 @@ function createQueueHarness(
   options: {
     execute?: (request: ExecutionRequest) => Promise<void>;
     configure?: (setting: ExecutionSetting) => Promise<void>;
+    steer?: (request: ExecutionSteerRequest) => Promise<void>;
   } = {},
 ) {
   let handlers!: ExecutionHubHandlers;
   let active = false;
   const executed: ExecutionRequest[] = [];
+  const steered: ExecutionSteerRequest[] = [];
   const configured: ExecutionSetting[] = [];
   // 配置与发送按发生顺序记录。Configurations and sends are recorded in the order they happen.
   const commands: string[] = [];
@@ -885,6 +889,11 @@ function createQueueHarness(
           }
         }
       },
+      steer: async (request: ExecutionSteerRequest) => {
+        steered.push(request);
+        commands.push(`steer:${request.steerId}`);
+        await options.steer?.(request);
+      },
       interrupt: async (reason?: string) => {
         interrupts.push(reason);
       },
@@ -893,6 +902,7 @@ function createQueueHarness(
   return {
     manager,
     executed,
+    steered,
     configured,
     commands,
     interrupts,
@@ -1588,5 +1598,379 @@ test("a permission mode change keeps the recorded settings in step with the serv
   assert.deepEqual(
     harness.configured.map((setting) => setting.permissionMode),
     ["fullAccess", "alwaysAsk"],
+  );
+});
+
+function createSteerControl(
+  type: "steer-delivered" | "steer-returned",
+  turnId: string,
+  steerId: string,
+  text = "",
+): AiMessage {
+  return {
+    messageId: `${type}-${steerId}`,
+    role: "system",
+    author: "$agw",
+    contents: [{ type: "TextContent", content: text }],
+    additionalProperties: {
+      type,
+      turnId,
+      steerId,
+      conversationId: "conversation-1",
+      streamingScopeId: turnId,
+      ...(type === "steer-returned" ? { reason: "turn-completed" } : { stepIndex: 1 }),
+    },
+  };
+}
+
+/** 一个正在运行的 Turn，Steer 的命令记录在 harness.steered。A running turn; Steer commands are recorded in harness.steered. */
+async function startRunningTurn(options: Parameters<typeof createQueueHarness>[0] = {}) {
+  const harness = createQueueHarness(options);
+  const rejected: Array<{ text: string; message: string }> = [];
+  const handle = harness.manager.attach(sessionKey, {
+    onMessage: () => undefined,
+    onSteerRejected: (event) =>
+      rejected.push({ text: event.submission.text, message: event.error.message }),
+  });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  assert.equal(handle.submit(createSubmission("running")), "started");
+  harness.start(harness.executed[0]!);
+  return { harness, handle, rejected, turnId: harness.executed[0]!.turnId! };
+}
+
+test("a Steer submitted during a running turn is sent as a SteerCommand and waits as sending, then accepted", async () => {
+  // Arrange
+  let accept!: () => void;
+  const { harness, handle, turnId } = await startRunningTurn({
+    steer: () =>
+      new Promise<void>((resolve) => {
+        accept = resolve;
+      }),
+  });
+
+  // Act
+  const result = handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+
+  // Assert: the command carries the running turn, and the record waits unanswered.
+  assert.equal(result, "steering");
+  assert.equal(harness.steered.length, 1);
+  const request = harness.steered[0]!;
+  assert.equal(request.turnId, turnId);
+  assert.equal(request.conversationId, "conversation-1");
+  assert.equal(request.input.messageId, request.steerId);
+  assert.equal(
+    request.input.contents.find((content) => content.type === "TextContent")?.content,
+    "use the other file",
+  );
+  assert.deepEqual(handle.getQueue().items, []);
+  assert.deepEqual(
+    handle.getQueue().steers.map((steer) => [steer.id, steer.turnId, steer.status]),
+    [[request.steerId, turnId, "sending"]],
+  );
+  assert.equal(harness.executed.length, 1);
+
+  accept();
+  await settle();
+  assert.equal(handle.getQueue().steers[0]?.status, "accepted");
+});
+
+test("a delivered Steer leaves the record and never joins the queue", async () => {
+  const { harness, handle, turnId } = await startRunningTurn();
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+  const steerId = harness.steered[0]!.steerId;
+
+  harness.handlers.onMessage(createSteerControl("steer-delivered", turnId, steerId));
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  assert.deepEqual(handle.getQueue().steers, []);
+  assert.deepEqual(handle.getQueue().items, []);
+  assert.equal(handle.getQueue().paused, false);
+  assert.equal(harness.executed.length, 1);
+});
+
+test("a delivered message arriving before the command returns still removes the record", async () => {
+  let accept!: () => void;
+  const { harness, handle, turnId } = await startRunningTurn({
+    steer: () =>
+      new Promise<void>((resolve) => {
+        accept = resolve;
+      }),
+  });
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+
+  harness.handlers.onMessage(
+    createSteerControl("steer-delivered", turnId, harness.steered[0]!.steerId),
+  );
+  accept();
+  await settle();
+
+  assert.deepEqual(handle.getQueue().steers, []);
+});
+
+test("a returned Steer becomes the queue head with a new turnId and does not pause the queue", async () => {
+  // Arrange
+  const { harness, handle, turnId } = await startRunningTurn();
+  handle.submit(createSubmission("later"));
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+  const steerId = harness.steered[0]!.steerId;
+
+  // Act
+  harness.handlers.onMessage(
+    createSteerControl("steer-returned", turnId, steerId, "use the other file"),
+  );
+
+  // Assert
+  const [head, next] = handle.getQueue().items;
+  assert.equal(head!.text, "use the other file");
+  assert.equal(head!.uncertain, false);
+  assert.equal(head!.steerReturned, true);
+  assert.notEqual(head!.turnId, turnId);
+  assert.equal(next!.text, "later");
+  assert.deepEqual(handle.getQueue().steers, []);
+  assert.equal(handle.getQueue().paused, false);
+
+  harness.finish(harness.executed[0]!);
+  await settle();
+  assert.deepEqual(harness.executed.map(harness.text), ["running", "use the other file"]);
+});
+
+test("a returned Steer followed by a failed turn pauses the queue with the Steer at its head", async () => {
+  const { harness, handle, turnId } = await startRunningTurn();
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+
+  harness.handlers.onMessage(
+    createSteerControl("steer-returned", turnId, harness.steered[0]!.steerId),
+  );
+  harness.finish(harness.executed[0]!, "failed");
+  await settle();
+
+  assert.equal(handle.getQueue().paused, true);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => item.text),
+    ["use the other file"],
+  );
+  assert.equal(harness.executed.length, 1);
+});
+
+test("4090027 means the turn just ended, so the input is queued as a plain submission", async () => {
+  const { harness, handle, rejected } = await startRunningTurn({
+    steer: async () => {
+      throw new Error(
+        "Invocation failed. HubException: 4090027: The turn to steer is not running.",
+      );
+    },
+  });
+  handle.submit(createSubmission("queued behind the turn"), "steer");
+  await settle();
+
+  assert.deepEqual(handle.getQueue().steers, []);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => [item.text, item.uncertain, item.steerReturned]),
+    [["queued behind the turn", false, undefined]],
+  );
+  assert.deepEqual(rejected, []);
+
+  harness.finish(harness.executed[0]!);
+  await settle();
+  assert.deepEqual(harness.executed.map(harness.text), ["running", "queued behind the turn"]);
+});
+
+for (const code of ["4000077", "4090028", "4000001", "4030008"]) {
+  test(`HubException ${code} hands the text back through onSteerRejected`, async () => {
+    const { harness, handle, rejected } = await startRunningTurn({
+      steer: async () => {
+        throw new Error(`Invocation failed. HubException: ${code}: rejected`);
+      },
+    });
+
+    handle.submit(createSubmission("not accepted"), "steer");
+    await settle();
+
+    assert.deepEqual(rejected, [
+      { text: "not accepted", message: `Invocation failed. HubException: ${code}: rejected` },
+    ]);
+    assert.deepEqual(handle.getQueue().steers, []);
+    assert.deepEqual(handle.getQueue().items, []);
+    assert.equal(harness.executed.length, 1);
+  });
+}
+
+test("a lost connection keeps the Steer and a reconnect with the turn still running resends the same steerId", async () => {
+  // Arrange
+  let attempts = 0;
+  const { harness, handle, rejected } = await startRunningTurn({
+    steer: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Connection disconnected.");
+    },
+  });
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+  assert.equal(handle.getQueue().steers[0]?.status, "sending");
+
+  // Act
+  harness.handlers.onReconnected?.();
+  await settle();
+
+  // Assert
+  assert.equal(harness.steered.length, 2);
+  assert.equal(harness.steered[1]!.steerId, harness.steered[0]!.steerId);
+  assert.equal(handle.getQueue().steers[0]?.status, "accepted");
+  assert.equal(handle.getQueue().paused, false);
+  assert.deepEqual(rejected, []);
+});
+
+test("a reconnect without an active execution returns the Steer to the head, locked, and pauses the queue", async () => {
+  const { harness, handle } = await startRunningTurn();
+  handle.submit(createSubmission("use the other file"), "steer");
+  handle.submit(createSubmission("later"));
+  await settle();
+
+  harness.setActive(false);
+  harness.handlers.onReconnected?.();
+  await settle();
+
+  assert.deepEqual(handle.getQueue().steers, []);
+  const [head, next] = handle.getQueue().items;
+  assert.equal(head!.text, "use the other file");
+  assert.equal(head!.uncertain, true);
+  assert.equal(next!.text, "later");
+  assert.equal(handle.getQueue().paused, true);
+  assert.throws(() => handle.setEditingQueuedItem(head!.id), /cannot be edited/);
+  assert.equal(harness.executed.length, 1);
+});
+
+test("a closed connection returns the Steer to the head as an uncertain entry and pauses", async () => {
+  const { harness, handle } = await startRunningTurn();
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+
+  harness.setActive(false);
+  harness.handlers.onClose?.(new Error("connection lost"));
+  await settle();
+
+  assert.deepEqual(handle.getQueue().steers, []);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => [item.text, item.uncertain]),
+    [["use the other file", true]],
+  );
+  assert.equal(handle.getQueue().paused, true);
+});
+
+test("stop drops the Steer records before interrupting and ignores a Steer returned afterwards", async () => {
+  // Arrange
+  const { harness, handle, turnId } = await startRunningTurn();
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+  const steerId = harness.steered[0]!.steerId;
+
+  // Act
+  await handle.stop("Stop requested by user.");
+  assert.deepEqual(handle.getQueue().steers, []);
+  assert.deepEqual(harness.interrupts, ["Stop requested by user."]);
+  harness.handlers.onMessage(
+    createSteerControl("steer-returned", turnId, steerId, "use the other file"),
+  );
+  harness.finish(harness.executed[0]!, "interrupted");
+  await settle();
+
+  // Assert
+  assert.deepEqual(handle.getQueue().items, []);
+  assert.equal(handle.getQueue().paused, false);
+  assert.equal(harness.executed.length, 1);
+});
+
+test("a Steer that ends neither delivered nor returned when the turn finishes returns locked and pauses", async () => {
+  const { harness, handle } = await startRunningTurn();
+  handle.submit(createSubmission("use the other file"), "steer");
+  await settle();
+
+  harness.finish(harness.executed[0]!);
+  await settle();
+
+  assert.deepEqual(handle.getQueue().steers, []);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => [item.text, item.uncertain]),
+    [["use the other file", true]],
+  );
+  assert.equal(handle.getQueue().paused, true);
+  assert.equal(harness.executed.length, 1);
+});
+
+test("steer mode without a known turnId degrades to the queue", async () => {
+  // Arrange: a restored execution runs but no start message or queue entry names its turn.
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  harness.setActive(true);
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+
+  // Act
+  const result = handle.submit(createSubmission("no turn known"), "steer");
+
+  // Assert
+  assert.equal(result, "queued");
+  assert.deepEqual(harness.steered, []);
+  assert.deepEqual(
+    handle.getQueue().items.map((item) => item.text),
+    ["no turn known"],
+  );
+});
+
+test("steer mode uses the turnId of the turn start message when no queue entry is in flight", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  harness.setActive(true);
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  harness.handlers.onMessage(createTurnLifecycleMessage("agw-turn-start", "restored-turn"));
+
+  const result = handle.submit(createSubmission("steer the restored turn"), "steer");
+  await settle();
+
+  assert.equal(result, "steering");
+  assert.equal(harness.steered[0]?.turnId, "restored-turn");
+});
+
+test("steer mode uses the in-flight entry's turnId before its start message arrives", async () => {
+  const harness = createQueueHarness();
+  const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+  await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+  handle.submit(createSubmission("dispatching"));
+
+  const result = handle.submit(createSubmission("steer early"), "steer");
+  await settle();
+
+  assert.equal(result, "steering");
+  assert.equal(harness.steered[0]?.turnId, harness.executed[0]!.turnId);
+});
+
+for (const mode of ["queue", "steer"] as const) {
+  test(`${mode} mode sends at once when the conversation is idle`, async () => {
+    const harness = createQueueHarness();
+    const handle = harness.manager.attach(sessionKey, { onMessage: () => undefined });
+    await handle.configure({ projectId: "project-1", conversationId: "conversation-1" });
+
+    const result = handle.submit(createSubmission("idle"), mode);
+    await settle();
+
+    assert.equal(result, "started");
+    assert.deepEqual(harness.executed.map(harness.text), ["idle"]);
+    assert.deepEqual(harness.steered, []);
+    assert.deepEqual(handle.getQueue().steers, []);
+  });
+}
+
+test("a stopping conversation rejects a Steer like any other submission", async () => {
+  const { handle } = await startRunningTurn();
+  await handle.stop();
+
+  assert.throws(
+    () => handle.submit(createSubmission("too early"), "steer"),
+    /wait for the current/,
   );
 });

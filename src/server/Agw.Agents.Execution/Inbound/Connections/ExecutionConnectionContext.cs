@@ -4,12 +4,14 @@ using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.Commands.Steer;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
+using Agw.Agents.Execution.Steering;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
@@ -431,6 +433,60 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         Host!.RequestInterrupt();
+    }
+
+    /// <summary>
+    /// 把一条输入追加到正在运行的 Turn。命令返回表示已受理，不表示已送达；结果通过 steer-delivered 或 steer-returned 消息下发。
+    /// Adds an input to the running turn. A returned command means accepted, not delivered; the outcome arrives as a steer-delivered or steer-returned message.
+    /// </summary>
+    public async Task SteerTurnAsync(SteerCommand command, CancellationToken cancellationToken)
+    {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
+        ArgumentNullException.ThrowIfNull(command);
+        await EnsureWritableAsync(Settings?.ExtensionId, cancellationToken);
+        if (Settings?.ConversationId != command.ConversationId)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "SteerCommand.conversationId does not match the active conversation."
+            );
+        }
+
+        if (_attachment != null)
+        {
+            SteerDelivery.Validate(command.Input);
+            await _attachment.SteerAsync(
+                command.TurnId,
+                command.SteerId,
+                command.Input,
+                ConversationId,
+                cancellationToken
+            );
+            return;
+        }
+
+        var turn = Host?.ActiveTurn;
+        if (turn is not { IsCompleted: false } || HasWrittenTurnFinish || turn.TurnId != command.TurnId)
+        {
+            throw new AgwException(ErrorCodes.SteerNoActiveTurn);
+        }
+
+        if (turn.Steers is not { } steers)
+        {
+            throw new AgwException(ErrorCodes.SteerNotSupported);
+        }
+
+        SteerDelivery.Validate(command.Input);
+        switch (steers.Offer(command.SteerId, command.Input))
+        {
+            case SteerOfferResult.Accepted:
+            case SteerOfferResult.Duplicate:
+                return;
+            case SteerOfferResult.Closed:
+                throw new AgwException(ErrorCodes.SteerNoActiveTurn);
+            case SteerOfferResult.LimitExceeded:
+                throw new AgwException(ErrorCodes.SteerLimitExceeded);
+        }
     }
 
     public async Task SubmitHumanDecisionAsync(HumanResponseCommand command, CancellationToken cancellationToken)

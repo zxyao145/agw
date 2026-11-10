@@ -10,16 +10,20 @@ import {
   buildInterruptCommand,
   buildResumeCheckpointCommand,
   buildSettingCommand,
+  buildSteerCommand,
   buildSubscribeTurnCommand,
   DEFAULT_AGENT_MODE,
   executionReconnectDelaysMs,
   getAgentMode,
   getExecutionReconnectDelay,
   getLatestAgentMode,
+  getSteerDelivered,
+  getSteerReturned,
   getTurnFinishedStatus,
   getTurnIdentity,
   getTurnPosition,
   isModeControlMessage,
+  isSteerUserMessage,
   isSupersededTurnMessage,
   isTurnStartMessage,
   TURN_FINISHED_MESSAGE_TYPE,
@@ -340,4 +344,73 @@ test("shared reconnect delays stop after ten attempts and add independent jitter
   assert.equal(random.mock.callCount(), 30);
   assert.equal(getExecutionReconnectDelay(executionReconnectDelaysMs.length), null);
   assert.equal(random.mock.callCount(), 30, "exhaustion does not sample jitter");
+});
+
+test("SteerCommand carries the conversation, turn, steer ID and input", () => {
+  const input = { messageId: "steer-1", contents: [{ type: "TextContent", content: "go left" }] };
+  assert.deepEqual(
+    buildSteerCommand({
+      conversationId: "conversation-1",
+      turnId: "turn-1",
+      steerId: "steer-1",
+      input,
+    }),
+    {
+      type: "SteerCommand",
+      conversationId: "conversation-1",
+      turnId: "turn-1",
+      steerId: "steer-1",
+      input,
+    },
+  );
+});
+
+test("steer control messages are read from their additional properties", () => {
+  const control = (properties: Record<string, unknown>) => ({
+    messageId: "control-1",
+    role: "system",
+    contents: [],
+    additionalProperties: properties,
+  });
+
+  assert.deepEqual(
+    getSteerDelivered(
+      control({ type: "steer-delivered", turnId: "turn-1", steerId: "steer-1", stepIndex: 3 }),
+    ),
+    { steerId: "steer-1", turnId: "turn-1", stepIndex: 3 },
+  );
+  assert.equal(
+    getSteerDelivered(control({ type: "steer-delivered", turnId: "turn-1", steerId: "steer-1" }))
+      ?.stepIndex,
+    null,
+  );
+  assert.equal(getSteerDelivered(control({ type: "steer-delivered", turnId: "turn-1" })), null);
+  assert.deepEqual(
+    getSteerReturned(
+      control({
+        type: "steer-returned",
+        turnId: "turn-1",
+        steerId: "steer-1",
+        reason: "turn-completed",
+      }),
+    ),
+    { steerId: "steer-1", turnId: "turn-1", reason: "turn-completed" },
+  );
+  assert.equal(
+    getSteerReturned(control({ type: "steer-delivered", turnId: "turn-1", steerId: "steer-1" })),
+    null,
+  );
+});
+
+test("only a user message carrying a steerId is a Steer user message", () => {
+  const message = (role: string, properties: Record<string, unknown>) => ({
+    messageId: "steer-1",
+    role,
+    contents: [],
+    additionalProperties: properties,
+  });
+
+  assert.equal(isSteerUserMessage(message("user", { steerId: "steer-1" })), true);
+  assert.equal(isSteerUserMessage(message("user", {})), false);
+  assert.equal(isSteerUserMessage(message("system", { steerId: "steer-1" })), false);
 });

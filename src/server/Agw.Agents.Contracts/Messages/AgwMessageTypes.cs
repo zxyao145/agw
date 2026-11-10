@@ -10,6 +10,8 @@ public static class AgwMessageTypes
     public const string TurnFinished = "agw-turn-finished";
     public const string StepDiscarded = "agw-step-discarded";
     public const string InteractionRequest = "interaction-request";
+    public const string SteerDelivered = "steer-delivered";
+    public const string SteerReturned = "steer-returned";
     public const string AgentflowCheckpoint = "agentflow-checkpoint";
     public const string HumanGateRejected = "human-gate-rejected";
     public const string HumanGateUnavailable = "human-gate-unavailable";

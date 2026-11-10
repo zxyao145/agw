@@ -1535,3 +1535,83 @@ for (const disconnected of [false, true]) {
     }
   });
 }
+
+test("a Steer travels as a SteerCommand over the hub and a Hub rejection reaches onSteerRejected", async (t) => {
+  // Arrange
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const { ExecutionSessionManager } = await import("./execution-session-manager.ts");
+  let rejectSteer = false;
+  const hubs = replaceExecutionHub(t, {
+    provider: "InProcess",
+    onInvoke({ method, args }) {
+      if (method === "DispatchCommand" && (args[0] as { type: string }).type === "SteerCommand") {
+        if (rejectSteer)
+          throw new Error(
+            "An unexpected error occurred invoking 'DispatchCommand' on the server. HubException: 4000077: Steering is not supported.",
+          );
+      }
+      return undefined;
+    },
+  });
+  const manager = new ExecutionSessionManager(
+    (handlers) =>
+      new ExecutionSession(handlers, {
+        baseUrl: "https://agw.test",
+        token: null,
+        attachmentStore: null,
+      }),
+  );
+  const key = { serverId: "server", projectId: "project", conversationId: "conversation" };
+  const rejected: string[] = [];
+  const handle = manager.attach(key, {
+    onMessage: () => undefined,
+    onSteerRejected: (event) => rejected.push(`${event.submission.text}: ${event.error.message}`),
+  });
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  };
+  try {
+    await handle.configure({ projectId: "project", conversationId: "conversation" });
+    assert.equal(handle.submit(createSubmission("first")), "started");
+    await settle();
+    const hub = hubs[0]!;
+    const turnId = hub.commands("ExecCommand")[0]!.turnId as string;
+    hub.receive({
+      messageId: "start",
+      role: "system",
+      contents: [],
+      additionalProperties: { type: "agw-turn-start", conversationId: "conversation", turnId },
+    });
+
+    // Act
+    assert.equal(handle.submit(createSubmission("go left"), "steer"), "steering");
+    await settle();
+
+    // Assert: the wire shape, then the accepted record.
+    const [command] = hub.commands("SteerCommand");
+    assert.ok(command);
+    assert.equal(command.conversationId, "conversation");
+    assert.equal(command.turnId, turnId);
+    const steerId = command.steerId as string;
+    assert.equal((command.input as { messageId: string }).messageId, steerId);
+    assert.equal(handle.getQueue().steers[0]?.status, "accepted");
+
+    hub.receive({
+      messageId: "delivered",
+      role: "system",
+      contents: [],
+      additionalProperties: { type: "steer-delivered", turnId, steerId, stepIndex: 1 },
+    });
+    assert.deepEqual(handle.getQueue().steers, []);
+
+    rejectSteer = true;
+    handle.submit(createSubmission("rejected"), "steer");
+    await settle();
+    assert.equal(rejected.length, 1);
+    assert.match(rejected[0]!, /^rejected: .*HubException: 4000077/u);
+    assert.deepEqual(handle.getQueue().steers, []);
+    assert.deepEqual(handle.getQueue().items, []);
+  } finally {
+    await handle.dispose();
+  }
+});

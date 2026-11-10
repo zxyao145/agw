@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Agents.Execution.Steering;
 using Agw.Projects.Application.History;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
@@ -214,6 +215,34 @@ public sealed class HistoryRecordingAgentTests
 
         Assert.Same(failure, thrown);
         Assert.Equal("current request", Assert.Single(await fixture.ReadAsync()).GetText());
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_SteerAcceptedMidRun_PersistsUserMessageWhereItArrived()
+    {
+        using var owner = HistoryTestFixture.EnterUser();
+        await using var fixture = await HistoryTestFixture.CreateAsync();
+        var history = fixture.CreateProvider(EngineKind.Codex);
+        var steerId = Guid.CreateVersion7();
+        var agent = HistoryTestFixture.Record(new SteeredEngineAgent(steerId), history);
+        var session = await fixture.CreateSessionAsync(agent);
+
+        var updates = new List<AgentResponseUpdate>();
+        await foreach (
+            var update in agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "current request")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
+            updates.Add(update);
+
+        var records = await fixture.ReadAsync();
+        Assert.Equal(["current request", "before", "change course", "after"], records.Select(r => r.GetText()));
+        Assert.Equal(steerId, records[2].Id);
+        Assert.Equal("user", records[2].ToChatMessage()!.Role.Value);
+        var passed = Assert.Single(updates, u => SteerDelivery.GetDeliveredEntry(u) != null);
+        Assert.Equal(steerId, SteerDelivery.GetDeliveredEntry(passed)!.SteerId);
     }
 
     [Fact]
@@ -610,6 +639,61 @@ public sealed class HistoryRecordingAgentTests
             AgentRunOptions? options,
             CancellationToken cancellationToken
         ) => new GetEnumeratorThrowingAsyncEnumerable(_exception);
+
+        private sealed class TestSession : AgentSession;
+    }
+
+    /// <summary>
+    /// 输出 before、一条已被引擎接收的 Steer 输入、after 的外部引擎。
+    /// An external engine that outputs before, a Steer input the engine accepted, then after.
+    /// </summary>
+    private sealed class SteeredEngineAgent(Guid steerId) : AIAgent
+    {
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new TestSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement serializedState,
+            JsonSerializerOptions? jsonSerializerOptions = null,
+            CancellationToken cancellationToken = default
+        ) => ValueTask.FromResult<AgentSession>(new TestSession());
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
+        {
+            await Task.Yield();
+            yield return new AgentResponseUpdate(ChatRole.Assistant, "before")
+            {
+                MessageId = Guid.CreateVersion7().ToString("D"),
+            };
+            yield return SteerDelivery.CreateDeliveredUpdate(
+                new SteerEntry(
+                    steerId,
+                    new AgwUserInput { Contents = [new AgwTextContent { Content = "change course" }] }
+                )
+            );
+            yield return new AgentResponseUpdate(ChatRole.Assistant, "after")
+            {
+                MessageId = Guid.CreateVersion7().ToString("D"),
+            };
+        }
 
         private sealed class TestSession : AgentSession;
     }

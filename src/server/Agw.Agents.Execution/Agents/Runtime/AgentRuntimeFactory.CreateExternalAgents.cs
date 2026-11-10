@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware.Approval;
 using Agw.Agents.Execution.Agents.Middleware.Telemetry;
+using Agw.Agents.Execution.Steering;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
@@ -563,11 +564,15 @@ public partial class AgentRuntimeFactory
         try
         {
             return new ExternalAgentCreation(
-                new CodexProviderSessionTrackingAgent(
-                    client,
-                    options,
-                    runtimeOptions.ProviderSessionId,
-                    runtimeOptions.IsResume
+                new ExternalSteerAgent(
+                    new CodexProviderSessionTrackingAgent(
+                        client,
+                        options,
+                        runtimeOptions.ProviderSessionId,
+                        runtimeOptions.IsResume
+                    ),
+                    _ => new CodexSteerTarget(client, _logger),
+                    _logger
                 ),
                 client
             );
@@ -619,10 +624,14 @@ public partial class AgentRuntimeFactory
         options = ExternalAgentModelOptions.ApplyPi(options, modelConfiguration);
         options = options with { };
         var piAgent = new PiAgentAIAgent(options, _logger);
-        var interactionAgent = piAgent
-            .AsBuilder()
-            .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
-            .Build();
+        var interactionAgent = new ExternalSteerAgent(
+            piAgent
+                .AsBuilder()
+                .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
+                .Build(),
+            session => new PiSteerTarget(piAgent, session, _logger),
+            _logger
+        );
         // MAF builder proxies do not retain IAsyncDisposable, so keep the concrete process owner outside the full chain.
         return WrapPiAgent(interactionAgent, piAgent, historyProvider, isBackground, createMemoryContextAsync);
     }

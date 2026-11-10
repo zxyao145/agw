@@ -1,11 +1,13 @@
 using Agw.Agents.Execution.Agentflows.Turns;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Turns;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Execution;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Execution.Runtimes.InProcess;
 
@@ -24,6 +26,7 @@ internal sealed class InProcessExecutionCoordinatorFactory
     private readonly TurnBroadcastRegistry _broadcasts;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConversationExecutionGate? _conversationGate;
+    private readonly int _steerMaxPending;
 
     public InProcessExecutionCoordinatorFactory(
         IAgentRuntimeFactory agentRuntimes,
@@ -34,9 +37,11 @@ internal sealed class InProcessExecutionCoordinatorFactory
         IProjectWorkspaceAccess workspaceAccess,
         TurnBroadcastRegistry broadcasts,
         IServiceScopeFactory scopeFactory,
-        IConversationExecutionGate? conversationGate = null
+        IConversationExecutionGate? conversationGate = null,
+        IOptions<ExecutionRuntimeOptions>? options = null
     )
     {
+        _steerMaxPending = options?.Value.Steer.MaxPendingPerTurn ?? SteerExecutionOptions.DefaultMaxPendingPerTurn;
         _agentRuntimes = agentRuntimes;
         _agentTurns = agentTurns;
         _agentflowTurns = agentflowTurns;
@@ -63,6 +68,7 @@ internal sealed class InProcessExecutionCoordinatorFactory
             _broadcasts,
             _scopeFactory,
             hostToken,
-            pendingInteractionCountChanged
+            pendingInteractionCountChanged,
+            _steerMaxPending
         );
 }

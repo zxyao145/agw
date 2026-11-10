@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Agents.Middleware.ToolFeedback;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Agents.Execution.Steering;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
@@ -192,6 +193,9 @@ public static class AgwAgentExtensions
             ? compactionProvider.StateKeys.SingleOrDefault()
             : null;
         chatClientBuilder
+            // 把用户在 Turn 运行期间提交的 Steer 追加到本次请求末尾，随工具结果一起整理并保存到历史。
+            // Appends the Steer inputs the user submitted while the turn runs to the end of this request, organized and saved to history with the tool results.
+            .Use(static innerClient => new SteerInjectionChatClient(innerClient))
             // 将执行期间追加的消息加入本次请求，一起整理并保存到历史。
             .UseMessageInjection()
             // 保存前先整理消息顺序，让 Tool 调用和对应结果相邻。

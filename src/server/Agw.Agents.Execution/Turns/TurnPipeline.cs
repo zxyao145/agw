@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Steering;
 
 namespace Agw.Agents.Execution.Turns;
 
@@ -86,6 +87,10 @@ internal static class TurnPipeline
             var errorCode = TurnMessageFactory.GetErrorCode(status, scope.Failure);
             try
             {
+                // 仍在等待的 Steer 在结束消息之前交还客户端。
+                // Steer inputs still waiting go back to the client before the finish message.
+                if (scope.Steers is SteerInbox steers)
+                    await SteerDelivery.ReturnAsync(scope, steers.Close(), status);
                 if (scope.Turn is { } turn)
                     await turn.FinishAsync(
                         TurnRecord.ToTerminalStatus(status),

@@ -173,6 +173,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         );
         active = true;
       },
+      steer: async () => undefined,
       listAgentflowCheckpoints: async () => [],
       resumeCheckpoint: async () => "turn-resumed",
       setMode: async () => undefined,

@@ -1,3 +1,4 @@
+import { isSteerUserMessage } from "./protocol";
 import type { ExecutionMessage, ExecutionMessageContent } from "./types";
 
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
@@ -217,8 +218,10 @@ export function mergeStreamingMessages<T extends ExecutionMessage>(
       continue;
     }
 
-    // Node inputs are complete snapshots. Replaying an event must not concatenate its text.
-    if (incoming.additionalProperties?.agentflowInput === true) continue;
+    // Node inputs and delivered Steer user messages are complete snapshots. Replaying an event must not concatenate its text.
+    if (incoming.additionalProperties?.agentflowInput === true || isSteerUserMessage(incoming)) {
+      continue;
+    }
 
     if (!hasSameStreamingIdentity(updated[existingIndex], incoming)) {
       continue;

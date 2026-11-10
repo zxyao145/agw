@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Steering;
 using Agw.Files.Abstracts;
 
 namespace Agw.Agents.Execution.Runtimes.InProcess;
@@ -73,12 +74,20 @@ internal sealed class InProcessTurnHost : IAsyncDisposable
         CancellationTokenSource executionCts,
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
-        Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null
+        Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
+        SteerInbox? steers = null
     )
     {
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var executionTask = RunAfterRegistrationAsync(start.Task, scope, executeAsync, executionCts.Token);
-        var activeTurn = new ActiveTurn(executionTask, executionCts, interruptAction, submitHumanResponseAsync);
+        var activeTurn = new ActiveTurn(
+            executionTask,
+            executionCts,
+            interruptAction,
+            submitHumanResponseAsync,
+            steers,
+            scope.Context.TurnId
+        );
         if (!TryStartTurn(activeTurn))
         {
             executionCts.Cancel();

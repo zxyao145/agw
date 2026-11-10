@@ -39,6 +39,7 @@ Commands are registered through the typed handler and JSON-discriminator seam. T
 | `SetModeCommand` | Changes the mode of an Agent that supports runtime modes. |
 | `SetPermissionModeCommand` | Selects the next turn's permission mode. The active turn and pending interactions keep their original snapshot; an external runtime is rebuilt before the next turn when its permission version changes. |
 | `HumanResponseCommand` | Supplies a typed `response` (`kind` plus `interactionId`) for Tool approval, a workflow gate, or user input; durable commands also include `turnId`, which must belong to the configured conversation. |
+| `SteerCommand` | Adds an input to the running turn of the configured conversation. See [Steering a running turn](#steering-a-running-turn). |
 | `SubscribeTurnCommand` | Reattaches the connection to an existing durable turn of the configured conversation and resumes output after an optional cursor. A turn of another conversation is reported as not found (`4040011`). |
 | `ResumeCheckpointCommand` | Starts a new Agentflow branch from one exact checkpoint occurrence of the configured conversation. |
 
@@ -58,7 +59,7 @@ Each `project_conversation` row records its creator in `extension_id`: `host`, o
 
 The host may write every conversation. An extension may write only conversations it created, open conversations, and draft conversations. Otherwise the Server refuses these operations with HubException `4030008` (`ConversationReadOnly`) before it reads a checkpoint, resolves a task, or changes any data:
 
-- `DispatchCommand` with `ExecCommand`, `ResumeCheckpointCommand`, `InterruptCommand`, `HumanResponseCommand`, `SetModeCommand`, or `SetPermissionModeCommand`;
+- `DispatchCommand` with `ExecCommand`, `ResumeCheckpointCommand`, `InterruptCommand`, `HumanResponseCommand`, `SteerCommand`, `SetModeCommand`, or `SetPermissionModeCommand`;
 - `RecoverInProcessExecution(connectionId, true)`, which is checked against the `extensionId` of the calling connection and the conversation of the target connection; a missing or foreign calling connection fails with `4000001`.
 
 Reads stay available on a read-only conversation: `SettingCommand`, `SubscribeTurnCommand`, `GetAgentflowCheckpoints`, `FindInProcessExecution`, and `RecoverInProcessExecution(connectionId, false)`. The conversation list and details report the creator as `extensionId`, together with `openToExtensions`.
@@ -112,6 +113,25 @@ Turn state is part of the `AgwMessage` protocol:
 - Durable lifecycle messages also carry `turnId`; streamed messages use a stable scope so replay and checkpoint branches merge with the correct user turn.
 
 When `stream=false`, the in-process provider buffers ordinary output until completion but forwards human-interaction control messages immediately. The distributed provider rejects non-streaming execution because a durable buffer across multiple human-interaction segments has no defined compatibility contract.
+
+## Steering a running turn
+
+`SteerCommand` carries `conversationId`, `turnId`, `steerId`, and an `input` shaped like `ExecCommand.input`. `steerId` is client-generated and becomes the `messageId` of the user message. The command returns once the Server has accepted the input; it does not mean the input reached the model.
+
+The input is delivered after the current batch of tool calls and before the next model call of the same turn. When the model requests no more tools and the turn is about to end, waiting inputs start a new Step of the same turn. Each input ends in exactly one of two states:
+
+- Delivered: the Server writes a user message (`messageId = steerId`, same `turnId` and `streamingScopeId` as the turn) followed by a control message with `type = "steer-delivered"` and `steerId`, `stepIndex`.
+- Returned: the turn ended, failed, or was interrupted first. The Server writes `type = "steer-returned"` with `steerId` and `reason` (`turn-completed`, `turn-failed`, or `turn-interrupted`). Its contents are the original input. It always precedes `turn-finished`.
+
+Repeating a `steerId` is accepted once. Failures use these HubException codes:
+
+| Code | Name | Meaning |
+| --- | --- | --- |
+| `4000077` | `SteerNotSupported` | The execution target does not accept input while a turn runs. |
+| `4090027` | `SteerNoActiveTurn` | The turn is not running, or `turnId` is not the active turn. |
+| `4090028` | `SteerLimitExceeded` | `Execution:Steer:MaxPendingPerTurn` (default 8) inputs are already waiting. |
+
+Support is reported by `GET /api/agents/input-capabilities?type={0|1}&id={id}`, which returns `supportsSteer` and `reason`. Currently System Agents on the InProcess provider support steering. Claude Code, Codex, Pi, Agentflows, and the Distributed provider do not.
 
 ## Provider-specific recovery
 

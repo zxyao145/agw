@@ -506,6 +506,17 @@ Agentflow 中的 Agent 节点同样遵守所引用 Agent 的 `EnableSummary`：�
 
 对话详情的 `usage` 只合计已结算的用量：不属于 Turn 的记录，以及已经结束、结算时间（`usage_settles_at`）已到的 Turn 的记录。受理后尚未结束或结算时间未到的 Turn 列在 `usage.unsettledTurnIds` 中，客户端用推送的 `UsageContent` 计入这些 Turn，结算之后再读取详情。Turn 结束时以结束时间作为结算时间，Distributed 中断的结算时间见“状态机与一致性边界”一节。
 
+### Steer：向运行中的 Turn 追加输入
+
+`SteerCommand` 由 `ExecutionConnectionContext.SteerTurnAsync` 处理：先做对话只读检查，再确认 `conversationId` 与连接一致、`turnId` 是活动 Turn；引擎不支持时抛 `SteerNotSupported`。输入放入该 Turn 的 `SteerInbox`，命令返回只表示已受理。
+
+`SteerInbox` 属于 `ActiveTurn`，并绑定在 Turn 的 `ExecutionScope` 上，子作用域（节点、后台 Agent）不继承。每条输入恰好有一个终态，取走与关闭在同一把锁内完成：
+
+- 送达：MAF 管线最外层的 `SteerInjectionChatClient` 在每次模型调用前取走输入，追加到请求末尾（位于上一 Step 的工具结果之后），并向客户端写出用户消息（`messageId = steerId`）和 `steer-delivered`。它在历史持久化层之外，所以输入与工具结果一起写入历史。`AgentTurnExecutor` 在模型不再请求工具时调用 `TakePendingOrClose`，有输入就继续同一个 Turn。
+- 交还：`TurnPipeline` 在写出 `turn-finished` 之前关闭集合，剩余输入以 `steer-returned` 交还，内容是原始输入。送达写出被取消时，未送达的输入同样交还。
+
+目前只有 InProcess 提供者上的 System Agent 支持。支持与否由 `ExecutionInputCapabilities` 按引擎判断，能力查询接口与绑定集合使用同一个判断。`Execution:Steer:MaxPendingPerTurn`（默认 8）限制同时等待送达的数量。
+
 ### Interrupt、HumanGate 与用户信息交互
 
 `InterruptCommandHandler` 只作用于当前活动 turn。`ActiveTurn.RequestInterrupt` 会先调用 runtime 专用 interrupt hook，再取消 linked cancellation source。没有活动 turn 时，服务端返回 system message。只读的 extension 请求方先被写入检查拒绝，不写出任何消息。

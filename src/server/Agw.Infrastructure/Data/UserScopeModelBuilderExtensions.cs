@@ -417,6 +417,17 @@ internal static class UserScopeModelBuilderExtensions
                             .Set<DurableExecutionRecord>()
                             .Any(execution => execution.Id == entry.TurnId && execution.UserId == context.CurrentUserId)
             );
+        modelBuilder
+            .Entity<DurableExecutionSteerRecord>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                steer =>
+                    context.UserScopeBypass
+                    || context.UserScopeIsActive
+                        && context
+                            .Set<DurableExecutionRecord>()
+                            .Any(execution => execution.Id == steer.TurnId && execution.UserId == context.CurrentUserId)
+            );
     }
 
     public static IQueryable<TEntity> IgnoreUserScope<TEntity>(this IQueryable<TEntity> query)

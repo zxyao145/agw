@@ -102,6 +102,18 @@ export class ConversationImageDraft {
     }
   }
 
+  /**
+   * 把已经读取过的图片放回草稿，例如被拒绝的 Steer 带回的附件；草稿中已有的同一张图片不重复加入。
+   * Puts images that were read before back into the draft, such as the attachments of a rejected Steer; an image already in the draft is not added twice.
+   */
+  restore(attachments: readonly ChatImageAttachment[]): Promise<void> {
+    if (this.discarded || attachments.length === 0) return Promise.resolve();
+    return this.update((current) => {
+      const present = new Set(current.map((image) => image.id));
+      return [...current, ...attachments.filter((image) => !present.has(image.id))];
+    });
+  }
+
   removeImages(ids: readonly string[]): Promise<void> {
     if (this.discarded) return Promise.resolve();
     const removed = new Set(ids);

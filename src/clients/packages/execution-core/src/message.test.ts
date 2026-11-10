@@ -626,3 +626,36 @@ test("node inputs stay in their user turn and repeated activations retain separa
   );
   assert.equal(getMessageTextContent(live[1]), "review result");
 });
+
+test("a replayed Steer user message keeps its text instead of concatenating it", () => {
+  const steer = textMessage({
+    messageId: "steer-1",
+    role: "user",
+    author: null,
+    content: "use the other file",
+    additionalProperties: { steerId: "steer-1", turnId: "turn-1" },
+  });
+  const assistant = textMessage({
+    messageId: "assistant-1",
+    role: "assistant",
+    author: "agent",
+    content: "working",
+  });
+
+  const merged = mergeStreamingMessages(
+    [],
+    [
+      scopeStreamingMessage(assistant, "turn-1"),
+      scopeStreamingMessage(steer, "turn-1"),
+      scopeStreamingMessage(steer, "turn-1"),
+    ],
+  );
+
+  assert.deepEqual(
+    merged.map((message) => [message.messageId, getMessageTextContent(message)]),
+    [
+      ["assistant-1", "working"],
+      ["steer-1", "use the other file"],
+    ],
+  );
+});
