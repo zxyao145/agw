@@ -111,6 +111,7 @@ internal sealed class TurnPersistenceTestKit : IAsyncDisposable
             provider.GetRequiredService<ConversationHistoryStore>()
         );
         services.AddScoped<DurableExecutionStore>();
+        services.AddScoped<DurableSteerStore>();
         services.AddSingleton<DurableWorkerIdentity>();
         services.AddSingleton<DurableExecutionEventLog>();
         services.AddSingleton<DurableExecutionCoordinator>();

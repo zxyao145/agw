@@ -40,5 +40,7 @@ public interface IAgentsDbContext : IModuleDbContext
 
     DbSet<DurableExecutionEventRecord> DurableExecutionEvents { get; }
 
+    DbSet<DurableExecutionSteerRecord> DurableExecutionSteers { get; }
+
     DbSet<AgentflowCheckpointRecord> AgentflowCheckpoints { get; }
 }

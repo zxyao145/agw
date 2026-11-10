@@ -730,3 +730,64 @@ test("a pushed message whose subscriber throws leaves the durable cursor unconfi
     await session.dispose();
   }
 });
+
+test("fetchInputCapabilities reads the target's capabilities once per server and target", async () => {
+  const { client, server } = await createHttpClient({
+    "GET /api/agents/input-capabilities": (request: ApiRequestRecord) => ({
+      supportsSteer: request.query.get("id") === "agent-1",
+      reason: request.query.get("id") === "agent-1" ? null : "Claude Code cannot be steered.",
+    }),
+  });
+
+  const first = await client.fetchInputCapabilities(scope, { type: "agent", id: "agent-1" });
+  const again = await client.fetchInputCapabilities(scope, { type: "agent", id: "agent-1" });
+  const other = await client.fetchInputCapabilities(scope, { type: "agent", id: "agent-2" });
+  const flow = await client.fetchInputCapabilities(scope, { type: "agentflow", id: "agent-1" });
+
+  assert.deepEqual(first, { supportsSteer: true, reason: null });
+  assert.deepEqual(again, first);
+  assert.deepEqual(other, { supportsSteer: false, reason: "Claude Code cannot be steered." });
+  assert.equal(flow.supportsSteer, true);
+  const queries = server.requests
+    .filter((request) => request.path === "/api/agents/input-capabilities")
+    .map((request) => `${request.query.get("type")}:${request.query.get("id")}`);
+  assert.deepEqual(queries, ["0:agent-1", "0:agent-2", "1:agent-1"]);
+});
+
+test("fetchInputCapabilities treats a server without the endpoint (404) as not supporting Steer", async () => {
+  const { client, server } = await createHttpClient({});
+
+  const capabilities = await client.fetchInputCapabilities(scope, { type: "agent", id: "agent-1" });
+  await client.fetchInputCapabilities(scope, { type: "agent", id: "agent-1" });
+
+  assert.equal(capabilities.supportsSteer, false);
+  assert.ok(capabilities.reason);
+  assert.equal(
+    server.requests.filter((request) => request.path === "/api/agents/input-capabilities").length,
+    1,
+  );
+});
+
+test("fetchInputCapabilities rethrows other failures and does not cache them", async () => {
+  let fail = true;
+  const { client, server } = await createHttpClient({
+    "GET /api/agents/input-capabilities": () =>
+      fail
+        ? rawApiResponse({
+            status: 500,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: 5000000, title: "Server error" }),
+          })
+        : { supportsSteer: true, reason: null },
+  });
+
+  await assert.rejects(client.fetchInputCapabilities(scope, { type: "agent", id: "agent-1" }));
+  fail = false;
+  const capabilities = await client.fetchInputCapabilities(scope, { type: "agent", id: "agent-1" });
+
+  assert.equal(capabilities.supportsSteer, true);
+  assert.equal(
+    server.requests.filter((request) => request.path === "/api/agents/input-capabilities").length,
+    2,
+  );
+});

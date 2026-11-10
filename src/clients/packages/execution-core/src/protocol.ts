@@ -6,6 +6,7 @@ import type {
   HumanResponseCommandInput,
   PermissionMode,
   ResumeCheckpointCommandInput,
+  SteerCommandInput,
   TurnFinishedStatus,
   TurnIdentity,
   TurnPosition,
@@ -17,6 +18,18 @@ export const DEFAULT_AGENT_MODE: AgentMode = "execute";
 export const TURN_START_MESSAGE_TYPE = "agw-turn-start";
 export const TURN_FINISHED_MESSAGE_TYPE = "agw-turn-finished";
 export const STEP_DISCARDED_MESSAGE_TYPE = "agw-step-discarded";
+/** Steer 的下发控制消息类型：已送达进入 Turn，或未送达退回。Steer control message types: delivered into the turn, or returned undelivered. */
+export const STEER_DELIVERED_MESSAGE_TYPE = "steer-delivered";
+export const STEER_RETURNED_MESSAGE_TYPE = "steer-returned";
+
+/** SteerCommand 被 Hub 拒绝时 HubException 的七位错误码。The seven-digit HubException codes a rejected SteerCommand carries. */
+export const STEER_ERROR_CODES = {
+  invalidArgument: "4000001",
+  notSupported: "4000079",
+  conversationReadOnly: "4030008",
+  noActiveTurn: "4090036",
+  limitExceeded: "4090037",
+} as const;
 
 /** SignalR 断线后的基础重试间隔；数组耗尽后结束自动重试。 */
 export const executionReconnectDelaysMs = [
@@ -54,6 +67,16 @@ export function buildExecCommand<TInput>(request: ExecutionCommandRequest<TInput
     ...(request.turnId ? { turnId: request.turnId } : {}),
     stream: request.stream ?? true,
     input: request.input,
+  };
+}
+
+export function buildSteerCommand<TInput>(input: SteerCommandInput<TInput>) {
+  return {
+    type: "SteerCommand" as const,
+    conversationId: input.conversationId,
+    turnId: input.turnId,
+    steerId: input.steerId,
+    input: input.input,
   };
 }
 
@@ -152,6 +175,59 @@ export function getTurnFinishedStatus(message: ExecutionMessage): TurnFinishedSt
   return status === "completed" || status === "interrupted" || status === "failed"
     ? status
     : "completed";
+}
+
+/** steer-delivered 控制消息携带的内容。What a steer-delivered control message carries. */
+export type SteerDelivered = {
+  steerId: string;
+  turnId: string;
+  stepIndex: number | null;
+};
+
+/** steer-returned 控制消息携带的内容；message.contents 是原始输入。What a steer-returned control message carries; message.contents is the original input. */
+export type SteerReturned = {
+  steerId: string;
+  turnId: string;
+  reason: string | null;
+};
+
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** 读取 steer-delivered 控制消息；其他消息返回 null。Reads a steer-delivered control message; other messages return null. */
+export function getSteerDelivered(message: ExecutionMessage): SteerDelivered | null {
+  const properties = message.additionalProperties;
+  if (properties?.type !== STEER_DELIVERED_MESSAGE_TYPE) return null;
+  const steerId = readNonEmptyString(properties.steerId);
+  const turnId = readNonEmptyString(properties.turnId);
+  if (!steerId || !turnId) return null;
+  const stepIndex = properties.stepIndex;
+  return {
+    steerId,
+    turnId,
+    stepIndex: typeof stepIndex === "number" && Number.isSafeInteger(stepIndex) ? stepIndex : null,
+  };
+}
+
+/** 读取 steer-returned 控制消息；其他消息返回 null。Reads a steer-returned control message; other messages return null. */
+export function getSteerReturned(message: ExecutionMessage): SteerReturned | null {
+  const properties = message.additionalProperties;
+  if (properties?.type !== STEER_RETURNED_MESSAGE_TYPE) return null;
+  const steerId = readNonEmptyString(properties.steerId);
+  const turnId = readNonEmptyString(properties.turnId);
+  if (!steerId || !turnId) return null;
+  return { steerId, turnId, reason: readNonEmptyString(properties.reason) };
+}
+
+/**
+ * 送达后进入 Turn 的 Steer 用户消息：role 为 user 且带有 steerId，messageId 等于 steerId。
+ * The user message of a delivered Steer: role user with a steerId, its messageId equal to the steerId.
+ */
+export function isSteerUserMessage(message: ExecutionMessage): boolean {
+  return (
+    message.role === "user" && readNonEmptyString(message.additionalProperties?.steerId) !== null
+  );
 }
 
 export function getAgentMode(message: ExecutionMessage): AgentMode | null {

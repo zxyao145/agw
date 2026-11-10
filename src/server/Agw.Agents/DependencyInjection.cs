@@ -33,6 +33,7 @@ public static class DependencyInjection
         );
         services.AddScoped<AgentSuggestionAppService>();
         services.AddScoped<ExecutionPermissionService>();
+        services.AddScoped<ExecutionInputService>();
         services.AddScoped<McpToolServerAppService>();
         return services;
     }

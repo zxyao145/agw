@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Steering;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Execution.Runtimes.InProcess;
@@ -17,9 +18,13 @@ internal sealed class ActiveTurn : IAsyncDisposable
         Task executionTask,
         CancellationTokenSource cancellationTokenSource,
         Action? interruptAction = null,
-        Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null
+        Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
+        SteerInbox? steers = null,
+        Guid? turnId = null
     )
     {
+        Steers = steers;
+        TurnId = turnId;
         ExecutionTask =
             executionTask ?? throw new AgwException(ErrorCodes.InvalidParam, "executionTask cannot be null.");
         _cancellationTokenSource =
@@ -30,6 +35,18 @@ internal sealed class ActiveTurn : IAsyncDisposable
     }
 
     public Task ExecutionTask { get; }
+
+    /// <summary>
+    /// 本 Turn 接收 Steer 的集合；为空表示执行引擎不支持 Steer。
+    /// The inbox through which this turn receives Steer inputs; null means the execution engine does not support steering.
+    /// </summary>
+    public SteerInbox? Steers { get; }
+
+    /// <summary>
+    /// 本 Turn 的标识；Steer 命令据此确认客户端跟踪的是同一个 Turn。
+    /// The identity of this turn, which a Steer command uses to confirm the client tracks the same turn.
+    /// </summary>
+    public Guid? TurnId { get; }
 
     public bool IsCompleted => ExecutionTask.IsCompleted;
 

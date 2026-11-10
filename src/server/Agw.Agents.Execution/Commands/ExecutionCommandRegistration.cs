@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Commands.Interrupt;
 using Agw.Agents.Execution.Commands.Mode;
 using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.Commands.Steer;
 using Agw.Agents.Execution.Commands.Subscribe;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.SignalR;
@@ -34,7 +35,8 @@ public static class ExecutionCommandRegistrationExtensions
             .AddExecutionCommand<ResumeCheckpointCommand, ResumeCheckpointCommandHandler>(
                 nameof(ResumeCheckpointCommand)
             )
-            .AddExecutionCommand<HumanResponseCommand, HumanResponseCommandHandler>(nameof(HumanResponseCommand));
+            .AddExecutionCommand<HumanResponseCommand, HumanResponseCommandHandler>(nameof(HumanResponseCommand))
+            .AddExecutionCommand<SteerCommand, SteerCommandHandler>(nameof(SteerCommand));
 
     public static IServiceCollection AddExecutionCommand<TCommand, THandler>(
         this IServiceCollection services,

@@ -1,11 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { Check, CornerDownRight, ImageIcon, Pencil, Play, Trash2, X } from "lucide-react";
+import {
+  Check,
+  CornerDownRight,
+  ImageIcon,
+  LoaderCircle,
+  Pencil,
+  Play,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { Button } from "@agw/components";
 import { Textarea } from "@agw/components";
-import type { ExecutionQueueSnapshot, QueuedExecution } from "@agw/chat-runtime";
+import type {
+  ExecutionQueueSnapshot,
+  ExecutionSubmission,
+  QueuedExecution,
+  SteerRecord,
+} from "@agw/chat-runtime";
 
 export interface ChatInputQueueProps {
   queue: ExecutionQueueSnapshot;
@@ -34,7 +48,7 @@ export function ChatInputQueue({
 }: ChatInputQueueProps) {
   const [draft, setDraft] = React.useState("");
 
-  if (queue.items.length === 0) {
+  if (queue.items.length === 0 && queue.steers.length === 0) {
     return null;
   }
 
@@ -47,6 +61,7 @@ export function ChatInputQueue({
       className="space-y-1.5 border border-b-0 rounded-lg rounded-b-none"
       aria-label="Queued messages"
     >
+      {queue.steers.length > 0 ? <SteeringSection steers={queue.steers} /> : null}
       {queue.paused ? (
         <div
           role="status"
@@ -68,7 +83,7 @@ export function ChatInputQueue({
           </Button>
         </div>
       ) : null}
-      <ol className="space-y-1.5 divide-y">
+      <ol className="space-y-1.5 divide-y" hidden={queue.items.length === 0}>
         {queue.items.map((item, index) => (
           <li key={item.id} className="text-sm mb-0" aria-label={`Queued message ${index + 1}`}>
             {queue.editingItemId === item.id ? (
@@ -127,9 +142,49 @@ export function ChatInputQueue({
   );
 }
 
-function QueueItemDetails({ item }: { item: QueuedExecution }) {
+/**
+ * 已发给服务端、等待送达进行中 Turn 的 Steer：不能编辑，也不能删除。
+ * Steers sent to the server and waiting for delivery into the running turn: they can be neither edited nor removed.
+ */
+function SteeringSection({ steers }: { steers: readonly SteerRecord[] }) {
+  return (
+    <section aria-label="Steering messages">
+      <h3 className="px-3 pt-1.5 text-xs font-medium text-muted-foreground">Steering</h3>
+      <ul className="divide-y">
+        {steers.map((steer, index) => (
+          <li
+            key={steer.id}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm"
+            aria-label={`Steering message ${index + 1}`}
+            data-status={steer.status}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-2 break-words whitespace-pre-wrap">
+                {steer.submission.text.trim() || (
+                  <span className="text-muted-foreground">Code comments only</span>
+                )}
+              </p>
+              <QueueItemDetails item={steer.submission} />
+            </div>
+            <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+              Waiting for delivery
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function QueueItemDetails({
+  item,
+}: {
+  item: Pick<ExecutionSubmission, "attachments" | "fileCommentCount"> &
+    Partial<Pick<QueuedExecution, "uncertain" | "steerReturned">>;
+}) {
   const imageCount = item.attachments.length;
-  if (imageCount === 0 && item.fileCommentCount === 0 && !item.uncertain) {
+  if (imageCount === 0 && item.fileCommentCount === 0 && !item.uncertain && !item.steerReturned) {
     return null;
   }
 
@@ -145,6 +200,11 @@ function QueueItemDetails({ item }: { item: QueuedExecution }) {
         <span className="inline-flex items-center gap-1">
           <CornerDownRight className="size-3.5" />
           {item.fileCommentCount} code comment{item.fileCommentCount === 1 ? "" : "s"}
+        </span>
+      ) : null}
+      {item.steerReturned ? (
+        <span className="text-amber-700 dark:text-amber-300">
+          Not delivered, added to the queue
         </span>
       ) : null}
       {item.uncertain ? (

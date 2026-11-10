@@ -3,6 +3,8 @@ import {
   getStreamingIdentity,
   mergeStreamingMessagesById,
   scopeMessagesByUserTurn,
+  STEER_DELIVERED_MESSAGE_TYPE,
+  STEER_RETURNED_MESSAGE_TYPE,
   TURN_FINISHED_MESSAGE_TYPE,
   TURN_START_MESSAGE_TYPE,
 } from "@agw/execution-core";
@@ -21,6 +23,8 @@ const HISTORY_CONTROL_MESSAGE_TYPES = new Set([
   TURN_START_MESSAGE_TYPE,
   TURN_FINISHED_MESSAGE_TYPE,
   "interaction-request",
+  STEER_DELIVERED_MESSAGE_TYPE,
+  STEER_RETURNED_MESSAGE_TYPE,
 ]);
 const STANDALONE_SYSTEM_MESSAGE_TYPES = new Set([
   "tool-todo-snapshot",
