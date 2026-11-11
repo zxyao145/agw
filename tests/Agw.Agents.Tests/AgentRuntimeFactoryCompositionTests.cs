@@ -1106,6 +1106,7 @@ public class AgentRuntimeFactoryCompositionTests
                     environmentVariables,
                     chatHistoryProvider,
                     permissionMode,
+                    Agw.Agents.Contracts.Execution.BackgroundToolPolicy.Default,
                 ]
             )
         );

@@ -5,7 +5,20 @@ x-deployment-environment: &deployment-environment
   DistributedLock__Provider: postgres
   DistributedLock__ConnectionString: ""
 
+x-event-transport-command: &event-transport-command
+  - "--Events:Transport:Provider=Redis"
+  - "--Events:Transport:Redis:ConnectionString=redis:6379"
+
 services:
+  redis:
+    image: redis:8.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - agw
+
   postgres:
     image: postgres:18-alpine
     restart: unless-stopped
@@ -21,6 +34,7 @@ services:
   control-plane:
     image: ghcr.io/zxyao145/agw-control-plane:latest
     restart: unless-stopped
+    command: *event-transport-command
     ports:
       - "127.0.0.1:30816:8080"
     environment:
@@ -31,12 +45,14 @@ services:
       - "${AGW_WORKSPACES_PATH:-./workspaces}:/workspaces"
     depends_on:
       - postgres
+      - redis
     networks:
       - agw
 
   data-plane:
     image: ghcr.io/zxyao145/agw-data-plane:latest
     restart: unless-stopped
+    command: *event-transport-command
     ports:
       - "127.0.0.1:30817:8080"
     environment:
@@ -46,12 +62,14 @@ services:
       - "${AGW_WORKSPACES_PATH:-./workspaces}:/workspaces"
     depends_on:
       - control-plane
+      - redis
     networks:
       - agw
 
 volumes:
   agw-data:
   postgres-data:
+  redis-data:
 
 networks:
   agw:

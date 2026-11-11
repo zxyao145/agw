@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "chardet": "catalog:",
+    "eventsource-parser": "catalog:",
     "iconv-lite": "catalog:"
   },
   "devDependencies": {
@@ -40,10 +41,12 @@
     "@agw/chat-runtime": "workspace:*",
     "@agw/code-view": "workspace:*",
     "@agw/components": "workspace:*",
+    "@agw/events": "workspace:*",
     "@agw/execution-core": "workspace:*",
     "@agw/extension-sdk": "workspace:*",
     "@agw/integrations": "workspace:*",
     "@agw/jobs": "workspace:*",
+    "@agw/notifications": "workspace:*",
     "@agw/observability": "workspace:*",
     "@agw/projects": "workspace:*",
     "@agw/projects-core": "workspace:*",
@@ -81,7 +84,6 @@
     "electron-winstaller": "5.4.4",
     "env-paths": "2.2.1",
     "esbuild": "catalog:",
-    "eventsource-parser": "catalog:",
     "ini": "catalog:",
     "jsdom": "catalog:",
     "lucide-react": "catalog:",

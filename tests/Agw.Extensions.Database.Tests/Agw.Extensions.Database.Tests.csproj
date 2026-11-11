@@ -16,6 +16,8 @@
     <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
     <ProjectReference Include="../../src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj" />
     <ProjectReference Include="../../src/server/Agw.Shared/Agw.Shared.csproj" />
+    <ProjectReference Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj" ReferenceOutputAssembly="false" />
+    <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
   </ItemGroup>
 
   <Target Name="CopyExtensionDatabaseTestExtension" AfterTargets="Build">

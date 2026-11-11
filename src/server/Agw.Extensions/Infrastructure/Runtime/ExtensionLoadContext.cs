@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Agw.Agents.Contracts.Execution;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Extensions.Infrastructure.Runtime;
@@ -38,6 +39,9 @@ internal sealed class ExtensionLoadContext : AssemblyLoadContext
         name
             is "Agw.Extensions.Sdk"
                 or "Agw.Extensions.Contracts"
+                or "Agw.Events.Contracts"
+                or "Agw.Notifications.Contracts"
+                or "Agw.Integrations.Contracts"
                 or "Agw.Projects.Contracts"
                 or "Agw.Skills.Contracts"
                 or "Agw.Shared"
@@ -48,6 +52,7 @@ internal sealed class ExtensionLoadContext : AssemblyLoadContext
                 or "Microsoft.Extensions.DependencyInjection.Abstractions"
                 or "Microsoft.Extensions.Logging.Abstractions"
                 or "Microsoft.Data.Sqlite"
+        || name == typeof(IBackgroundExecutionFacade).Assembly.GetName().Name
         || name?.StartsWith("SQLitePCLRaw.", StringComparison.Ordinal) == true;
 
     private static bool IsPrivateDatabaseAssembly(string? name) =>

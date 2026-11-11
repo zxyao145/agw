@@ -4,8 +4,10 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Data.Encryption;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
+using Agw.Shared.Data.Entities.Notifications;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
@@ -285,7 +287,14 @@ public class EncryptedDataPersistenceTests
             new[]
             {
                 $"{typeof(AgentflowCheckpointRecord).FullName}.{nameof(AgentflowCheckpointRecord.CheckpointJson)}",
+                $"{typeof(BackgroundExecution).FullName}.{nameof(BackgroundExecution.Error)}",
+                $"{typeof(BackgroundExecution).FullName}.{nameof(BackgroundExecution.ResultText)}",
                 $"{typeof(McpServer).FullName}.{nameof(McpServer.Headers)}",
+                $"{typeof(EventDelivery).FullName}.{nameof(EventDelivery.RequestSnapshotJson)}",
+                $"{typeof(EventRecord).FullName}.{nameof(EventRecord.CeData)}",
+                $"{typeof(EventSchedule).FullName}.{nameof(EventSchedule.Data)}",
+                $"{typeof(EventSource).FullName}.{nameof(EventSource.CursorJson)}",
+                $"{typeof(EventSource).FullName}.{nameof(EventSource.SecretJson)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.CheckpointJson)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ErrorMessage)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ManifestJson)}",
@@ -295,6 +304,7 @@ public class EncryptedDataPersistenceTests
                 $"{typeof(DurableExecutionEventRecord).FullName}.{nameof(DurableExecutionEventRecord.PayloadJson)}",
                 $"{typeof(ConnectionCredential).FullName}.{nameof(ConnectionCredential.Value)}",
                 $"{typeof(PluginInstallationCredential).FullName}.{nameof(PluginInstallationCredential.Value)}",
+                $"{typeof(NotificationQuestion).FullName}.{nameof(NotificationQuestion.AnswerText)}",
                 $"{typeof(ProviderAuthConfig).FullName}.{nameof(ProviderAuthConfig.ApiKey)}",
                 $"{typeof(UserMemory).FullName}.{nameof(UserMemory.Content)}",
             }.OrderBy(name => name),

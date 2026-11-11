@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Projects;
@@ -81,6 +83,56 @@ public class TaskExecutionAppServiceTests
         Assert.Equal(jobId, record.JobId);
         Assert.Equal(TaskExecutionStatus.Running, record.Status);
         Assert.Null(record.ConversationPayload);
+    }
+
+    [Fact]
+    public async Task CreateRunningForExecutionAsync_RecordsRequesterExtensionAsConversationCreator()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Background Project"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "test"))
+        );
+        var userInfo = new UserInfoService();
+        var service = new TaskExecutionAppService(
+            dbContext,
+            new ProjectResolver(dbContext, userInfo),
+            new ConversationHistoryDomainService(),
+            TimeProvider.System,
+            userInfo,
+            new ConversationCreatorStore(dbContext)
+        );
+        const string extensionId = "11111111-1111-1111-1111-111111111111";
+
+        var result = await service.CreateRunningForExecutionAsync(
+            projectId,
+            Guid.CreateVersion7(),
+            new TaskCreateRequest(
+                JobId: null,
+                Input: "background input",
+                Title: "background title",
+                ContextId: "background-context"
+            ),
+            "tester",
+            extensionId
+        );
+
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        var conversation = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
+        Assert.Equal(extensionId, conversation.ExtensionId);
     }
 
     [Fact]

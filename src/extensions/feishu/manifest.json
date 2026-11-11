@@ -1,0 +1,32 @@
+{
+  "manifestVersion": 2,
+  "id": "019a4c17-5f00-7a80-8b3d-2b732f48f112",
+  "name": "feishu",
+  "displayName": "Feishu",
+  "version": "1.0.0",
+  "description": "Feishu notification channel, card actions and account settings.",
+  "author": "Agw",
+  "targets": 3,
+  "server": {
+    "apiVersion": 1,
+    "entryAssembly": "server/Agw.Extensions.Feishu.dll",
+    "entryType": "Agw.Extensions.Feishu.FeishuExtension"
+  },
+  "desktop": {
+    "apiVersion": 1,
+    "contributes": {
+      "mainViews": [
+        {
+          "id": "settings",
+          "title": "Feishu",
+          "icon": "MessageSquare",
+          "entry": "desktop/index.html"
+        }
+      ]
+    },
+    "permissions": []
+  },
+  "files": {
+    "desktop/index.html": "2a5e3db6ea3193960bb8b0a154a3a0beb8e33e06718d5f4d9916941f7441d9da"
+  }
+}

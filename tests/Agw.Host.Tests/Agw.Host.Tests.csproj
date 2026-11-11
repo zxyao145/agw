@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj" />
+    <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
   </ItemGroup>
 
   <!--

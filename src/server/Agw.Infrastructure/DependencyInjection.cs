@@ -45,7 +45,7 @@ using Microsoft.Extensions.Options;
 
 namespace Agw.Infrastructure;
 
-public static class DependencyInjection
+public static partial class DependencyInjection
 {
     public static IServiceCollection AddExtensionInfrastructure(this IServiceCollection services)
     {
@@ -55,6 +55,7 @@ public static class DependencyInjection
 
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        AddEventInfrastructure(services, configuration);
         services.AddSingleton<IEncryptedDataProtector, DataProtectionEncryptedDataProtector>();
 
         var configuredDatabaseProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
@@ -108,7 +109,10 @@ public static class DependencyInjection
                 options.AddInterceptors(
                     serviceProvider.GetRequiredService<EntityCreatorInterceptor>(),
                     serviceProvider.GetRequiredService<EntityModifierInterceptor>(),
-                    serviceProvider.GetRequiredService<EntitySoftDeleteInterceptor>()
+                    serviceProvider.GetRequiredService<EntitySoftDeleteInterceptor>(),
+                    serviceProvider.GetRequiredService<Agw.Infrastructure.Events.EventSaveChangesInterceptor>(),
+                    serviceProvider.GetRequiredService<Agw.Infrastructure.Events.EventTransactionInterceptor>(),
+                    serviceProvider.GetRequiredService<Agw.Infrastructure.Events.EventVersionInterceptor>()
                 );
                 options.ReplaceService<IMigrationsModelDiffer, NoForeignKeyModelDiffer>();
             }

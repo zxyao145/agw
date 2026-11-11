@@ -65,7 +65,7 @@ public sealed class ExtensionEndpointDataSource : EndpointDataSource, IDisposabl
                     0
                 );
                 route.DisplayName = $"{generation.Name}: {endpoint.Id}";
-                route.Metadata.Add(new AuthorizeAttribute());
+                route.Metadata.Add(endpoint.IsCallback ? new AllowAnonymousAttribute() : new AuthorizeAttribute());
                 route.Metadata.Add(new HttpMethodMetadata([endpoint.Method]));
                 endpoints.Add(route.Build());
             }
@@ -80,10 +80,17 @@ public sealed class ExtensionEndpointDataSource : EndpointDataSource, IDisposabl
 
     private static async Task InvokeAsync(HttpContext context, Guid extensionId, string endpointId)
     {
-        if (context.Request.Headers["X-Agw-Extension-Id"] != extensionId.ToString())
-            throw new AgwException(ErrorCodes.ExtensionVersionMismatch);
         var catalog = context.RequestServices.GetRequiredService<IExtensionGenerationCatalog>();
         await using var generation = await catalog.AcquireCurrentAsync(extensionId, context.RequestAborted);
+        var descriptor =
+            generation.Snapshot.Endpoints.SingleOrDefault(endpoint => endpoint.Id == endpointId)
+            ?? throw new AgwException(ErrorCodes.ExtensionUnavailable);
+        if (
+            !descriptor.IsCallback
+            && !descriptor.IsBrowserPage
+            && context.Request.Headers["X-Agw-Extension-Id"] != extensionId.ToString()
+        )
+            throw new AgwException(ErrorCodes.ExtensionVersionMismatch);
         using var logScope = context
             .RequestServices.GetRequiredService<ILogger<ExtensionEndpointDataSource>>()
             .BeginScope(
@@ -100,12 +107,28 @@ public sealed class ExtensionEndpointDataSource : EndpointDataSource, IDisposabl
                 }
             );
         JsonElement? body = null;
+        byte[]? rawBody = null;
         if (context.Features.GetRequiredFeature<IHttpRequestBodyDetectionFeature>().CanHaveBody)
         {
             try
             {
+                Stream requestBody = context.Request.Body;
+                if (descriptor.IsCallback)
+                {
+                    using var buffer = new MemoryStream();
+                    var chunk = new byte[8192];
+                    int count;
+                    while ((count = await requestBody.ReadAsync(chunk, context.RequestAborted)) != 0)
+                    {
+                        if (buffer.Length + count > 1024 * 1024)
+                            throw new AgwException(ErrorCodes.ExtensionPayloadTooLarge);
+                        buffer.Write(chunk, 0, count);
+                    }
+                    rawBody = buffer.ToArray();
+                    requestBody = new MemoryStream(rawBody, writable: false);
+                }
                 using var document = await JsonDocument.ParseAsync(
-                    context.Request.Body,
+                    requestBody,
                     cancellationToken: context.RequestAborted
                 );
                 body = document.RootElement.Clone();
@@ -121,6 +144,8 @@ public sealed class ExtensionEndpointDataSource : EndpointDataSource, IDisposabl
                 method = context.Request.Method,
                 query = context.Request.Query.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray()),
                 body,
+                headers = context.Request.Headers.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray()),
+                rawBody,
             }
         );
         var invoker = context.RequestServices.GetRequiredService<IExtensionInvoker>();
@@ -136,6 +161,23 @@ public sealed class ExtensionEndpointDataSource : EndpointDataSource, IDisposabl
             context.RequestAborted
         );
         ApiResult<JsonElement?> result = CreateResult(response.StatusCode, response.JsonBody);
+        if (descriptor.IsCallback || descriptor.IsBrowserPage)
+        {
+            context.Response.StatusCode = response.StatusCode;
+            context.Response.ContentType = response.ContentType;
+            if (response.BodyStream is { } callbackStream)
+            {
+                await foreach (var bytes in callbackStream.WithCancellation(context.RequestAborted))
+                    await context.Response.Body.WriteAsync(bytes, context.RequestAborted);
+            }
+            else if (response.JsonBody is { } callbackBody)
+            {
+                await context.Response.WriteAsync(callbackBody.GetRawText(), context.RequestAborted);
+            }
+            await context.Response.CompleteAsync();
+            await response.CompleteAsync(context.RequestAborted);
+            return;
+        }
         if (response.BodyStream is { } stream)
         {
             context.Response.StatusCode = response.StatusCode;

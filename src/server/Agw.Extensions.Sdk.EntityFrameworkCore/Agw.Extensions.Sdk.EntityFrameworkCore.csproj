@@ -7,6 +7,9 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <ProjectReference Include="../Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj" />
+    <ProjectReference Include="../Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Notifications.Contracts/Agw.Notifications.Contracts.csproj" />
     <ProjectReference Include="../Agw.Shared/Agw.Shared.csproj" />
   </ItemGroup>
 </Project>
