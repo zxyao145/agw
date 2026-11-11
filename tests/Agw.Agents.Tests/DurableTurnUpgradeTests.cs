@@ -17,8 +17,7 @@ namespace Agw.Agents.Tests;
 
 public sealed class DurableTurnUpgradeTests
 {
-    public static bool PostgresEnabled =>
-        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING"));
+    public static bool PostgresEnabled => !string.IsNullOrWhiteSpace(DurableTestConnections.PostgresConnectionString);
 
     [Fact]
     public async Task UpgradeActiveExecutions_PreservesStateAndAllowsRecovery()
@@ -34,7 +33,7 @@ public sealed class DurableTurnUpgradeTests
     public async Task Postgres_UpgradeActiveExecutions_PreservesStateAndAllowsRecovery()
     {
         await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
-            Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING")!
+            DurableTestConnections.PostgresConnectionString!
         );
         await VerifyUpgradeAsync(kit);
     }

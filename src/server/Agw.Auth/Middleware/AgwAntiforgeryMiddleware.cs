@@ -1,4 +1,5 @@
 using Agw.Auth.Application;
+using Agw.Shared.Contracts.Events;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Http;
 
@@ -33,6 +34,7 @@ public sealed class AgwAntiforgeryMiddleware
                 && (
                     context.Request.Path.Equals("/api/auth/desktop/exchange")
                     || context.Request.Path.Equals("/api/auth/desktop/logout")
+                    || context.Request.Path.Equals(EventWebhookRoute.Receive)
                 )
             );
 

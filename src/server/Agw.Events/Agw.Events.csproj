@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Auth/Agw.Auth.csproj" />
+    <ProjectReference Include="../Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Projects.Contracts/Agw.Projects.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Integrations.Contracts/Agw.Integrations.Contracts.csproj" />
+    <PackageReference Include="JsonLogic" />
+    <PackageReference Include="JsonPath.Net" />
+    <PackageReference Include="Cronos" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
+    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+  </ItemGroup>
+</Project>

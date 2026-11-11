@@ -17,6 +17,7 @@ public sealed class ExecutionPermissionServiceTests
     public void ExternalSdk_WithoutApprovalChannel_OnlyAllowsFullAccess(EngineKind kind)
     {
         var agent = new Agent { Type = AgentType.External, ExternalAgentKind = kind };
+        Assert.False(ExecutionPermissionService.ForAgent(agent).SupportsNoTools);
         Assert.Equal(
             [AgwPermissionMode.FullAccess],
             ExecutionPermissionService.ForAgent(agent).SupportedPermissionModes
@@ -93,6 +94,7 @@ public sealed class ExecutionPermissionServiceTests
             TestContext.Current.CancellationToken
         );
         Assert.Equal([AgwPermissionMode.FullAccess], capabilities.SupportedPermissionModes);
+        Assert.False(capabilities.SupportsNoTools);
         Assert.Throws<AgwException>(() =>
             ExecutionPermissionService.Validate(capabilities, AgwPermissionMode.AlwaysAsk)
         );
@@ -115,9 +117,12 @@ public sealed class ExecutionPermissionServiceTests
                 new Agent { Type = AgentType.External, ExternalAgentKind = EngineKind.ClaudeCode },
             }
         )
+        {
             Assert.Equal(
                 Enum.GetValues<AgwPermissionMode>(),
                 ExecutionPermissionService.ForAgent(agent).SupportedPermissionModes
             );
+            Assert.True(ExecutionPermissionService.ForAgent(agent).SupportsNoTools);
+        }
     }
 }

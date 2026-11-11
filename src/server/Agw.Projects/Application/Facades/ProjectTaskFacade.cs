@@ -111,11 +111,18 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
                         request.ProjectId,
                         request.TaskId,
                         createRequest,
-                        request.OwnerUserId
+                        request.OwnerUserId,
+                        request.RequesterExtensionId
                     )
                     .ConfigureAwait(false)
                 : await _taskService
-                    .CreateForExecutionAsync(request.ProjectId, request.TaskId, createRequest, request.OwnerUserId)
+                    .CreateForExecutionAsync(
+                        request.ProjectId,
+                        request.TaskId,
+                        createRequest,
+                        request.OwnerUserId,
+                        request.RequesterExtensionId
+                    )
                     .ConfigureAwait(false);
         if (result.Type != ApplicationResultType.Success || result.Value == null)
         {

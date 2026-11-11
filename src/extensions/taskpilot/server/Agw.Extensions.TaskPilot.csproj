@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Cronos" />
+    <PackageReference Include="JsonLogic" />
+    <PackageReference Include="JsonPath.Net" />
+    <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="Markdig" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../../../server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj" />
+    <ProjectReference Include="../../../server/Agw.Extensions.Sdk.EntityFrameworkCore/Agw.Extensions.Sdk.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../../server/Agw.Integrations.Contracts/Agw.Integrations.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Notifications.Contracts/Agw.Notifications.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj" />
+    <ProjectReference Include="../../../server/Agw.Shared/Agw.Shared.csproj" />
+    <ProjectReference Include="../../../server/Agw.Skills.Contracts/Agw.Skills.Contracts.csproj" />
+  </ItemGroup>
+</Project>

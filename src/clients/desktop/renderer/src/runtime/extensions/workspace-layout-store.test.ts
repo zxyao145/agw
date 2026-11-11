@@ -32,6 +32,8 @@ function createStore() {
       view(BUILT_IN_VIEWS.chat, "main"),
       view(BUILT_IN_VIEWS.file, "main"),
       view(BUILT_IN_VIEWS.jobs, "main"),
+      view(BUILT_IN_VIEWS.events, "main"),
+      view(BUILT_IN_VIEWS.notifications, "main"),
     ],
     entries: {},
   });
@@ -121,6 +123,20 @@ test("showing the sidebar from Jobs returns to its main view", () => {
   assert.equal(layout.getSnapshot().sidebarVisible, true);
   assert.equal(layout.getSnapshot().activeSidebarViewId, BUILT_IN_VIEWS.files);
   assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.file);
+});
+
+test("openingEventsOrNotifications_HidesSidebarAndRestoresChatWhenSidebarReturns", () => {
+  for (const main of [BUILT_IN_VIEWS.events, BUILT_IN_VIEWS.notifications]) {
+    const { layout } = createStore();
+
+    layout.openMainView(main);
+    assert.equal(layout.getSnapshot().activeMainViewId, main);
+    assert.equal(layout.getSnapshot().sidebarVisible, false);
+
+    layout.setSidebarVisible(true);
+    assert.equal(layout.getSnapshot().activeMainViewId, BUILT_IN_VIEWS.chat);
+    assert.equal(layout.getSnapshot().sidebarVisible, true);
+  }
 });
 
 test("opening Chat or File from Jobs restores the corresponding sidebar", () => {

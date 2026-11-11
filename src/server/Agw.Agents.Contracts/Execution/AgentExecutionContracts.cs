@@ -32,6 +32,12 @@ public enum AgentExecutionPermissionMode
     AllowSameArguments = 2,
 }
 
+public enum BackgroundToolPolicy
+{
+    Default = 0,
+    None = 1,
+}
+
 public sealed record AgentTarget(AgentTargetKind Kind, Guid? Id = null, string? Name = null);
 
 public sealed record AgentExecutionRequest(
@@ -42,7 +48,8 @@ public sealed record AgentExecutionRequest(
     AgwUserInput Input,
     bool Resume = false,
     HumanInteractionPolicy HumanInteractionPolicy = HumanInteractionPolicy.Allow,
-    AgentExecutionPermissionMode? PermissionMode = null
+    AgentExecutionPermissionMode? PermissionMode = null,
+    BackgroundToolPolicy ToolPolicy = BackgroundToolPolicy.Default
 );
 
 public sealed record AgentExecutionResult(

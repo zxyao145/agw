@@ -80,7 +80,7 @@ export type MarkdownWriteResult = {
 };
 
 const LIST_TYPES = new Set(["bulletList", "orderedList"]);
-const BLANK_LINE = /\n[ \t]*\n/;
+const BLANK_LINE = /\r?\n[ \t]*\r?\n/;
 
 type RenderedItem = { range: SourceRange; preserved: number | null };
 
@@ -441,7 +441,8 @@ class Composer {
         this.blocks[y.left].range.from,
       );
       const kept =
-        BLANK_LINE.test(original) || (original.includes("\n") && this.endsOnOwnLine(x, y));
+        BLANK_LINE.test(original) ||
+        ((original.includes("\n") || original.includes("\r")) && this.endsOnOwnLine(x, y));
       return kept ? original : "\n\n";
     }
     return "\n\n";

@@ -102,7 +102,7 @@ export class EditDocument {
   }
 
   private load(text: string): void {
-    const loaded = loadMarkdown(text.replace(/\r\n?/g, "\n"), this.editor.schema);
+    const loaded = loadMarkdown(text, this.editor.schema);
     this.editor.commands.setContent(loaded.doc.content, { emitUpdate: false });
     // 补节点的插件已经执行；用同一个文档新建状态，撤销历史随之清空。
     // The plugins that append nodes have run; a new state over the same document clears the undo history.

@@ -22,6 +22,10 @@ public interface IExtensionContext
 
     ICurrentUser CurrentUser { get; }
 
+    IExtensionLeaseManager Leases { get; }
+
+    IExtensionSecrets Secrets { get; }
+
     JsonSerializerOptions JsonOptions { get; }
 
     ILogger Logger { get; }

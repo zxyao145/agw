@@ -93,6 +93,28 @@ Use short, lowercase `snake_case` table names in `ToTable`. The runtime prefixes
 
 Include SQLite and PostgreSQL migrations in the extension release. Use structured EF migration operations for schema and data changes (`CreateTable`, `AddColumn`, `CreateIndex`, `InsertData`, `UpdateData`, and `DeleteData`). Index names must be extension-owned: use the generated `ix_zext_<extensionIdN>_...` form or an explicit name beginning with `zext_<extensionIdN>_`. Primary and unique constraint names also require their extension prefix (`pk_zext_<extensionIdN>_...` and `uq_zext_<extensionIdN>_...`). Tables, columns, indexes, constraints, temporary identifiers, and operations are checked against provider limits. Column types must match the provider mapping for their CLR types and configured facets; collation names are restricted to identifiers. Validation covers the actual operations and target model used by the SQL generator, including SQLite table rebuilds.
 
+Use provider-specific migration and snapshot classes in separate namespaces within the registered migrations assembly. Annotate both classes with `ExtensionMigrationProviderAttribute`:
+
+```csharp
+[ExtensionMigrationProvider(ExtensionDatabaseProvider.Sqlite)]
+public partial class CalendarSqliteInitial { }
+
+[ExtensionMigrationProvider(ExtensionDatabaseProvider.Sqlite)]
+partial class CalendarSqliteModelSnapshot { }
+```
+
+Give each provider's snapshot a unique class name and matching file name, such as `CalendarSqliteModelSnapshot.cs` and `CalendarPostgresModelSnapshot.cs`. Rename the first generated snapshot before generating the other provider. Subsequent EF scaffolding uses the selected snapshot's class name. The runtime selects annotated migrations and snapshots for the configured provider; provider-neutral classes can omit the attribute.
+
+The design-time factory uses the same naming convention and migration selector as the runtime:
+
+```csharp
+options
+    .UseSnakeCaseNamingConvention()
+    .ReplaceService<IMigrationsAssembly, ExtensionMigrationsAssembly>();
+```
+
+每种数据库使用独立的 migration 和 model snapshot，并在两种类上声明 `ExtensionMigrationProviderAttribute`。snapshot 的类名和文件名包含数据库名称。设计时 factory 与运行时使用相同的 `UseSnakeCaseNamingConvention` 和 `ExtensionMigrationsAssembly` 配置。
+
 Migrations cannot contain raw SQL, foreign keys, sequences, schemas, check constraints, SQL defaults, computed SQL, or SQL index filters. Entity mappings to views, SQL queries, functions, stored procedures, or sequences are rejected. Migration history remains with retained business data so a compatible release can be reinstalled without rebuilding or downgrading the schema.
 
 SQLite rebuilds use generation-prefixed temporary identifiers. Keep table and index names short enough for both providers; model validation applies the configured provider's identifier limit before migration.

@@ -374,6 +374,8 @@ export class ExtensionHost {
         builtInView(BUILT_IN_VIEWS.chat, "main", "Chat", "MessageSquare"),
         builtInView(BUILT_IN_VIEWS.file, "main", "File", "FileText"),
         builtInView(BUILT_IN_VIEWS.jobs, "main", "Jobs", "Clock3"),
+        builtInView(BUILT_IN_VIEWS.events, "main", "Events", "Activity"),
+        builtInView(BUILT_IN_VIEWS.notifications, "main", "Notifications", "Bell"),
       ],
       entries: {
         ribbon: [
@@ -400,6 +402,22 @@ export class ExtensionHost {
             title: "Jobs",
             icon: { kind: "lucide", name: "Clock3" },
             action: { type: "openMainView", view: BUILT_IN_VIEWS.jobs },
+          },
+          {
+            id: "agw.ribbon.events",
+            extensionId: null,
+            extensionName: null,
+            title: "Events",
+            icon: { kind: "lucide", name: "Activity" },
+            action: { type: "openMainView", view: BUILT_IN_VIEWS.events },
+          },
+          {
+            id: "agw.ribbon.notifications",
+            extensionId: null,
+            extensionName: null,
+            title: "Notifications",
+            icon: { kind: "lucide", name: "Bell" },
+            action: { type: "openMainView", view: BUILT_IN_VIEWS.notifications },
           },
         ],
       },

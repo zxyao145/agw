@@ -1,0 +1,32 @@
+{
+  "name": "@agw/extension-feishu",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../clients/.oxlintrc.json ./desktop/src ./vite.config.ts ./build.mjs ./server/feishu-worker.mjs ./server/feishu-webhook.mjs ./server/feishu-event-dispatcher.mjs ./server/feishu-event-dispatcher.test.mjs",
+    "test": "tsx --test \"desktop/src/**/*.test.ts\" server/feishu-event-dispatcher.test.mjs",
+    "format": "oxfmt -c ../../clients/.oxfmtrc.json ./desktop/src ./vite.config.ts ./build.mjs ./server/feishu-event-dispatcher.mjs ./server/feishu-event-dispatcher.test.mjs *.json",
+    "format:check": "oxfmt -c ../../clients/.oxfmtrc.json --check ./desktop/src ./vite.config.ts ./build.mjs ./server/feishu-event-dispatcher.mjs ./server/feishu-event-dispatcher.test.mjs *.json"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "catalog:"
+  },
+  "devDependencies": {
+    "@agw/extension-sdk": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "esbuild": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

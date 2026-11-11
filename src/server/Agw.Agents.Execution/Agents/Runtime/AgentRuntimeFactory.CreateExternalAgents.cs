@@ -48,6 +48,15 @@ public partial class AgentRuntimeFactory
         bool isBackground = false
     )
     {
+        var engineKind = EngineKinds.Resolve(request.Agent);
+        if (request.ToolPolicy == BackgroundToolPolicy.None && !BackgroundToolPolicySupport.SupportsNoTools(engineKind))
+        {
+            throw new AgwException(
+                ErrorCodes.BackgroundToolPolicyUnsupported,
+                $"The {engineKind} engine cannot run with tools disabled."
+            );
+        }
+
         var workspace = AgentRuntimeFactoryUtil.ApplyWorkspaceSnapshot(project);
         await _services
             .GetRequiredService<IProjectWorkspaceAccess>()
@@ -70,7 +79,8 @@ public partial class AgentRuntimeFactory
                 cancellationToken,
                 defaultMode: request.DefaultMode,
                 conversationId: request.ConversationId,
-                deferHumanInteractions: request.DeferHumanInteractions
+                deferHumanInteractions: request.DeferHumanInteractions,
+                toolPolicy: request.ToolPolicy
             )
             .ConfigureAwait(false);
         AIAgent? aiAgent = null;
@@ -195,7 +205,8 @@ public partial class AgentRuntimeFactory
                     isBackground,
                     historyProvider,
                     request.PermissionMode,
-                    modelConfiguration
+                    modelConfiguration,
+                    request.ToolPolicy
                 );
                 break;
             case EngineKind.Codex:
@@ -386,7 +397,8 @@ public partial class AgentRuntimeFactory
         bool isBackground,
         AgwChatHistoryProvider historyProvider,
         AgwPermissionMode? permissionMode,
-        AgentModelRuntimeConfiguration? modelConfiguration
+        AgentModelRuntimeConfiguration? modelConfiguration,
+        BackgroundToolPolicy toolPolicy
     )
     {
         var options = BuildClaudeCodeAIAgentOptions(
@@ -396,7 +408,8 @@ public partial class AgentRuntimeFactory
             isResume,
             environmentVariables,
             historyProvider,
-            permissionMode
+            permissionMode,
+            toolPolicy
         );
         if (options == null)
         {
@@ -438,7 +451,8 @@ public partial class AgentRuntimeFactory
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         ChatHistoryProvider? chatHistoryProvider = null,
-        AgwPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null,
+        BackgroundToolPolicy toolPolicy = BackgroundToolPolicy.Default
     )
     {
         var extra = agent.Extra;
@@ -486,7 +500,8 @@ public partial class AgentRuntimeFactory
         }
 
         options = ApplyResponseSchema(options, agent.ResponseSchema);
-        return ApplyEnvironmentVariables(options, environmentVariables);
+        options = ApplyEnvironmentVariables(options, environmentVariables);
+        return BackgroundToolPolicySupport.ApplyClaudeCode(options, toolPolicy);
     }
 
     /// <summary>

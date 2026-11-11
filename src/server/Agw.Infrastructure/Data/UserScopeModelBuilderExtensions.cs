@@ -25,10 +25,12 @@ public static class UserScopeQueryFilterNames
     public const string UserScope = "UserScopeFilter";
 }
 
-internal static class UserScopeModelBuilderExtensions
+internal static partial class UserScopeModelBuilderExtensions
 {
     public static void ApplyUserScopeQueryFilters(this ModelBuilder modelBuilder, AgwDbContext context)
     {
+        ApplyEventScopeFilters(modelBuilder, context);
+        ApplyNotificationScopeFilters(modelBuilder, context);
         modelBuilder
             .Entity<AuthUser>()
             .HasQueryFilter(

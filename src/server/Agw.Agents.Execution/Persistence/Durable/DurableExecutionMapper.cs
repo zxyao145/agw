@@ -35,6 +35,7 @@ internal static class DurableExecutionMapper
             PermissionVersion = settings.PermissionVersion,
             HumanInteractionPolicy = settings.HumanInteractionPolicy,
             ResultOnly = settings.ResultOnly,
+            ToolPolicy = settings.ToolPolicy,
             Resume = settings.Resume,
         };
 
@@ -51,6 +52,7 @@ internal static class DurableExecutionMapper
             settings.Resume,
             settings.HumanInteractionPolicy,
             settings.PermissionVersion,
-            settings.ResultOnly
+            settings.ResultOnly,
+            toolPolicy: settings.ToolPolicy
         );
 }

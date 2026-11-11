@@ -108,7 +108,7 @@ test("Jobs appears below Files and opens the Jobs main view", () => {
     .getAllByRole("button");
   assert.deepEqual(
     buttons.map((button) => button.getAttribute("aria-label")),
-    ["Conversations", "Files", "Jobs"],
+    ["Conversations", "Files", "Jobs", "Events", "Notifications"],
   );
   environment.fireEvent.click(environment.screen.getByRole("button", { name: "Jobs" }));
   assert.equal(host.layout.getSnapshot().activeMainViewId, "agw.jobs");

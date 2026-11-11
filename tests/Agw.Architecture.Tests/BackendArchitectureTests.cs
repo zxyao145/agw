@@ -9,10 +9,12 @@ public sealed partial class BackendArchitectureTests
     private static readonly IReadOnlySet<string> GuardedModules = Set(
         "Agw.Agents",
         "Agw.Auth",
+        "Agw.Events",
         "Agw.Extensions",
         "Agw.Files",
         "Agw.Integrations",
         "Agw.Jobs",
+        "Agw.Notifications",
         "Agw.Projects",
         "Agw.Providers",
         "Agw.Setup",
@@ -23,11 +25,13 @@ public sealed partial class BackendArchitectureTests
 
     private static readonly IReadOnlySet<string> AllowedRootNamespaceFacadeFiles = Set(
         "Agw.Agents/DependencyInjection.cs",
+        "Agw.Events/DependencyInjection.cs",
         "Agw.Extensions/DependencyInjection.cs",
         "Agw.Extensions/ExtensionHostCapabilityServiceCollectionExtensions.cs",
         "Agw.Extensions/ExtensionOptions.cs",
         "Agw.Files/DependencyInjection.cs",
         "Agw.Jobs/DependencyInjection.cs",
+        "Agw.Notifications/DependencyInjection.cs",
         "Agw.Projects/DependencyInjection.cs",
         "Agw.Providers/DependencyInjection.cs",
         "Agw.Settings/DependencyInjection.cs",
@@ -62,11 +66,13 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents.Contracts",
                 "Agw.Agents.Execution",
                 "Agw.Auth",
+                "Agw.Events",
                 "Agw.Extensions",
                 "Agw.Infrastructure",
                 "Agw.Jobs.Contracts",
                 "Agw.Migrations.Postgres",
                 "Agw.Migrations.Sqlite",
+                "Agw.Notifications",
                 "Agw.Projects.Contracts",
                 "Agw.Setup"
             ),
@@ -76,9 +82,12 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents",
                 "Agw.Auth",
                 "Agw.Data",
+                "Agw.Events",
+                "Agw.Events.Contracts",
                 "Agw.Extensions",
                 "Agw.Integrations",
                 "Agw.Jobs",
+                "Agw.Notifications",
                 "Agw.Projects",
                 "Agw.Providers",
                 "Agw.Settings",
@@ -102,6 +111,7 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
                 "Agw.Data",
+                "Agw.Events.Contracts",
                 "Agw.Extensions.Contracts",
                 "Agw.Files",
                 "Agw.Integrations",
@@ -116,15 +126,42 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Files"] = Set("Agw.Shared"),
             ["Agw.Extensions"] = Set(
                 "Agw.Agents.Contracts",
+                "Agw.Auth",
                 "Agw.Extensions.Contracts",
                 "Agw.Extensions.Sdk",
                 "Agw.Settings",
                 "Agw.Shared",
                 "Agw.Tools.Abstractions"
             ),
-            ["Agw.Extensions.Contracts"] = Set("Agw.Tools.Abstractions"),
+            ["Agw.Extensions.Contracts"] = Set("Agw.Shared", "Agw.Tools.Abstractions"),
+            ["Agw.Events.Contracts"] = Set("Agw.Shared"),
+            ["Agw.Events"] = Set(
+                "Agw.Agents.Contracts",
+                "Agw.Auth",
+                "Agw.Data",
+                "Agw.Events.Contracts",
+                "Agw.Extensions.Contracts",
+                "Agw.Integrations.Contracts",
+                "Agw.Projects.Contracts",
+                "Agw.Shared"
+            ),
+            ["Agw.Notifications.Contracts"] = Set("Agw.Shared"),
+            ["Agw.Notifications"] = Set(
+                "Agw.Auth",
+                "Agw.Data",
+                "Agw.Events.Contracts",
+                "Agw.Extensions.Contracts",
+                "Agw.Notifications.Contracts",
+                "Agw.Shared"
+            ),
             ["Agw.Extensions.Sdk"] = Set("Agw.Extensions.Contracts", "Agw.Shared", "Agw.Tools.Abstractions"),
-            ["Agw.Extensions.Sdk.EntityFrameworkCore"] = Set("Agw.Extensions.Sdk", "Agw.Shared"),
+            ["Agw.Extensions.Sdk.EntityFrameworkCore"] = Set(
+                "Agw.Extensions.Sdk",
+                "Agw.Shared",
+                "Agw.Agents.Contracts",
+                "Agw.Events.Contracts",
+                "Agw.Notifications.Contracts"
+            ),
             ["Agw.Providers.Contracts"] = Set(),
             ["Agw.Integrations.Contracts"] = Set(),
             ["Agw.Skills.Contracts"] = Set(),
@@ -806,6 +843,20 @@ public sealed partial class BackendArchitectureTests
     )
     {
         ["Agent"] = "Agw.Agents",
+        ["BackgroundExecution"] = "Agw.Agents",
+        ["EventSource"] = "Agw.Events",
+        ["EventSourceItem"] = "Agw.Events",
+        ["EventRecord"] = "Agw.Events",
+        ["EventSubscription"] = "Agw.Events",
+        ["EventDelivery"] = "Agw.Events",
+        ["EventDeliveryAttempt"] = "Agw.Events",
+        ["EventSchedule"] = "Agw.Events",
+        ["EventOutbox"] = "Agw.Events",
+        ["Notification"] = "Agw.Notifications",
+        ["NotificationQuestion"] = "Agw.Notifications",
+        ["NotificationDispatch"] = "Agw.Notifications",
+        ["NotificationDispatchAttempt"] = "Agw.Notifications",
+        ["NotificationUpdateReceipt"] = "Agw.Notifications",
         ["AgentConnectionRelation"] = "Agw.Agents",
         ["AgentMcpServerRelation"] = "Agw.Agents",
         ["AgentSessionStateEntry"] = "Agw.Agents",
@@ -881,7 +932,7 @@ public sealed partial class BackendArchitectureTests
     private static partial Regex ModuleContractsNamespaceRegex();
 
     [GeneratedRegex(
-        @"\.Add(?:A2A|Agents|AgentExecution|Auth|Files|Integrations|Jobs|Projects|Providers|Settings|Setup|Skills|Tools)\s*\(",
+        @"\.Add(?:A2A|Agents|AgentExecution|Auth|Events|Files|Integrations|Jobs|Notifications|Projects|Providers|Settings|Setup|Skills|Tools)\s*\(",
         RegexOptions.CultureInvariant
     )]
     private static partial Regex ModuleCompositionCallRegex();

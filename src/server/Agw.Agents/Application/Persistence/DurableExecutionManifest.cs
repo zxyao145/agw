@@ -135,6 +135,8 @@ public sealed record DurableExecutionSettings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool ResultOnly { get; init; }
 
+    public BackgroundToolPolicy ToolPolicy { get; init; }
+
     /// <summary>
     /// 获取是否恢复已有 Agent 会话。
     /// </summary>

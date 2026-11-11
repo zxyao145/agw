@@ -65,6 +65,9 @@ jobs:
     - name: Install Codex app-server test dependency
       run: npm ci --prefix tests/Agw.Agents.Tests/fixtures/codex-app-server --ignore-scripts --no-audit --no-fund
 
+    - name: Install Redis test dependency
+      run: sudo apt-get update && sudo apt-get install --yes redis-server
+
     - name: build
       run: |
         dotnet test ./Agw.slnx -c Release --no-restore

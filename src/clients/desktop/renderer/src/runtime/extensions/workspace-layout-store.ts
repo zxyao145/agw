@@ -61,7 +61,7 @@ export class WorkspaceLayoutStore {
       activeSidebarViewId: id,
       openRequests: this.withRequest(id, {}),
     };
-    if (this.state.activeMainViewId === BUILT_IN_VIEWS.jobs) {
+    if (this.isFullWorkspaceView(this.state.activeMainViewId)) {
       changes.activeMainViewId =
         id === BUILT_IN_VIEWS.files ? BUILT_IN_VIEWS.file : BUILT_IN_VIEWS.chat;
     }
@@ -69,7 +69,7 @@ export class WorkspaceLayoutStore {
   }
 
   public setSidebarVisible(visible: boolean): void {
-    if (visible && this.state.activeMainViewId === BUILT_IN_VIEWS.jobs) {
+    if (visible && this.isFullWorkspaceView(this.state.activeMainViewId)) {
       this.showSidebarView(this.state.activeSidebarViewId);
       return;
     }
@@ -83,10 +83,10 @@ export class WorkspaceLayoutStore {
       activeMainViewId: id,
       openRequests: this.withRequest(id, params),
     };
-    if (id === BUILT_IN_VIEWS.jobs) {
+    if (this.isFullWorkspaceView(id)) {
       changes.sidebarVisible = false;
     } else if (
-      this.state.activeMainViewId === BUILT_IN_VIEWS.jobs &&
+      this.isFullWorkspaceView(this.state.activeMainViewId) &&
       (id === BUILT_IN_VIEWS.chat || id === BUILT_IN_VIEWS.file)
     ) {
       changes.sidebarVisible = true;
@@ -94,6 +94,14 @@ export class WorkspaceLayoutStore {
         id === BUILT_IN_VIEWS.file ? BUILT_IN_VIEWS.files : BUILT_IN_VIEWS.conversations;
     }
     this.update(changes);
+  }
+
+  private isFullWorkspaceView(id: string): boolean {
+    return (
+      id === BUILT_IN_VIEWS.jobs ||
+      id === BUILT_IN_VIEWS.events ||
+      id === BUILT_IN_VIEWS.notifications
+    );
   }
 
   private assertView(id: string, location: WorkspaceViewLocation): void {

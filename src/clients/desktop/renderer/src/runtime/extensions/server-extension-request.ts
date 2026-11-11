@@ -12,9 +12,19 @@ export function isExtensionVersionMismatch(error: unknown): boolean {
   return typeof body === "object" && body !== null && "code" in body && body.code === 4090027;
 }
 
-export function extensionServerPath(extensionName: string, path: string): string {
+export function extensionServerPath(
+  extensionName: string,
+  path: string,
+  method: string = "GET",
+): string {
   if (!TECHNICAL_NAME_PATTERN.test(extensionName)) {
     throw invalidArgument("The extension technical name is invalid.");
+  }
+  if (path === "/api/notifications/answer") {
+    if (method.toUpperCase() !== "POST") {
+      throw invalidArgument("The Notifications answer endpoint only supports POST requests.");
+    }
+    return path;
   }
   if (
     typeof path !== "string" ||

@@ -128,6 +128,9 @@ public static class DependencyInjection
         services.AddScoped<IDurableAgentExecutionFacade>(provider =>
             provider.GetRequiredService<AgentExecutionFacade>()
         );
+        services.AddScoped<IBackgroundExecutionFacade, BackgroundExecutionFacade>();
+        services.AddSingleton<BackgroundExecutionHost>();
+        services.AddHostedService(provider => provider.GetRequiredService<BackgroundExecutionHost>());
         if (registrationOptions.AddRuntime)
         {
             services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();

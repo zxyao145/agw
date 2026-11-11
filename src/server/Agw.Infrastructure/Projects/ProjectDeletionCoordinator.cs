@@ -177,6 +177,25 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
                 await DeleteDurableExecutionsAsync(target.ProjectId, null, target.OwnerUserId, token)
                     .ConfigureAwait(false);
                 await DeleteJobsAsync(target, token).ConfigureAwait(false);
+                await _dbContext
+                    .EventSubscriptions.Where(subscription =>
+                        subscription.ProjectId == target.ProjectId
+                        && subscription.CreateBy == target.OwnerUserId
+                        && subscription.Enabled
+                    )
+                    .ExecuteUpdateAsync(
+                        setters =>
+                            setters
+                                .SetProperty(subscription => subscription.Enabled, false)
+                                .SetProperty(
+                                    subscription => subscription.Version,
+                                    subscription => subscription.Version + 1
+                                )
+                                .SetProperty(subscription => subscription.UpdateBy, target.OwnerUserId)
+                                .SetProperty(subscription => subscription.UpdateTime, _timeProvider.GetUtcNow()),
+                        token
+                    )
+                    .ConfigureAwait(false);
                 await DeleteAllProjectConversationsAsync(target, token).ConfigureAwait(false);
                 await _dbContext
                     .ProjectMemories.Where(memory => memory.ProjectId == target.ProjectId)

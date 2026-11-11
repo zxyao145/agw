@@ -4,6 +4,43 @@
  */
 
 export interface paths {
+  "/api/events/webhooks/receive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query: {
+          sourceId: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Accepted */
+        202: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventWebhookReceiveResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health/live": {
     parameters: {
       query?: never;
@@ -381,6 +418,1142 @@ export interface paths {
             [name: string]: unknown;
           };
           content?: never;
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceCreateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/update": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/delete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceVersionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/enable": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceEnableRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/rotate-secret": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceVersionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceMutationResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSourceIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceTestResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSubscriptionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/update": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSubscriptionRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/subscriptions/delete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventSubscriptionDeleteRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          SourceId?: string;
+          Type?: string;
+          Subject?: string;
+          ChainId?: string;
+          From?: string;
+          To?: string;
+          Offset: number;
+          Limit: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/chain": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          chainId: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/deliveries/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          eventId?: string;
+          state?: components["schemas"]["EventDeliveryState"];
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventDeliveryResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/schedules/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventScheduleResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/deliveries/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventDeliveryActionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/deliveries/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventDeliveryActionResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/unpublished/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfUnpublishedEventRecord[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/unpublished/republish": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventRepublishRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          unreadOnly: boolean;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationListItem[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationDetail"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationReadRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/answer": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationAnswerRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationAnswerResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/delivered": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationDeliveredRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/channels": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfNotificationChannelResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/notifications/dispatches/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NotificationDispatchRetryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResult"];
+          };
         };
       };
     };
@@ -6911,6 +8084,90 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfEventDeliveryActionResponse: {
+      data?: null | components["schemas"]["EventDeliveryActionResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventDeliveryResponse[]": {
+      data?: null | components["schemas"]["EventDeliveryResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventResponse: {
+      data?: null | components["schemas"]["EventResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventResponse[]": {
+      data?: null | components["schemas"]["EventResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventScheduleResponse[]": {
+      data?: null | components["schemas"]["EventScheduleResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSourceMutationResponse: {
+      data?: null | components["schemas"]["EventSourceMutationResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSourceResponse: {
+      data?: null | components["schemas"]["EventSourceResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventSourceResponse[]": {
+      data?: null | components["schemas"]["EventSourceResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSourceTestResponse: {
+      data?: null | components["schemas"]["EventSourceTestResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventSubscriptionResponse: {
+      data?: null | components["schemas"]["EventSubscriptionResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventSubscriptionResponse[]": {
+      data?: null | components["schemas"]["EventSubscriptionResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfEventWebhookReceiveResponse: {
+      data?: null | components["schemas"]["EventWebhookReceiveResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfExecutionPermissionCapabilities: {
       data?: null | components["schemas"]["ExecutionPermissionCapabilities"];
       /** Format: int32 */
@@ -7032,6 +8289,34 @@ export interface components {
     };
     ApiResultOfModelProviderRelation: {
       data?: null | components["schemas"]["ModelProviderRelation"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfNotificationAnswerResult: {
+      data?: null | components["schemas"]["NotificationAnswerResult"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfNotificationChannelResponse[]": {
+      data?: null | components["schemas"]["NotificationChannelResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfNotificationDetail: {
+      data?: null | components["schemas"]["NotificationDetail"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfNotificationListItem[]": {
+      data?: null | components["schemas"]["NotificationListItem"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -7275,6 +8560,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    "ApiResultOfUnpublishedEventRecord[]": {
+      data?: null | components["schemas"]["UnpublishedEventRecord"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfUserMemoryDetailResponse: {
       data?: null | components["schemas"]["UserMemoryDetailResponse"];
       /** Format: int32 */
@@ -7320,6 +8612,21 @@ export interface components {
       proxyUrl?: null | string;
       /** @description 克隆到空的项目根目录。Clones into the empty project root. */
       intoRoot?: null | boolean;
+    };
+    CloudEventResponse: {
+      specversion: string;
+      id: string;
+      source: string;
+      type: string;
+      /** Format: date-time */
+      time?: null | string;
+      subject?: null | string;
+      datacontenttype?: null | string;
+      dataschema?: null | string;
+      data?: null | components["schemas"]["JsonElement"];
+      data_base64?: null | string;
+      scope?: null | string;
+      tags?: null | string[];
     };
     ConnectionCreateRequest: {
       pluginId: string;
@@ -7421,7 +8728,7 @@ export interface components {
       /** Format: int64 */
       sequence: number | string;
       /** Format: int32 */
-      stepIndex: number;
+      stepIndex: null | number;
       message: components["schemas"]["AgwMessage"];
     };
     ConversationTurnMessagesResponse: {
@@ -7541,8 +8848,215 @@ export interface components {
      *     The kind of program that executes an Agent; values match the persisted external Agent kind.
      */
     EngineKind: number;
+    EventDeliveryActionResponse: {
+      accepted: boolean;
+    };
+    EventDeliveryResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      eventId: string;
+      /** Format: uuid */
+      subscriptionId: string;
+      state: components["schemas"]["EventDeliveryState"];
+      /** Format: int32 */
+      attempt: number;
+      lastError?: null | string;
+      /** Format: date-time */
+      nextAttemptAt?: null | string;
+      /** Format: date-time */
+      completedAt?: null | string;
+    };
+    EventDeliveryState: number;
+    EventDispatchState: number;
+    EventIdRequest: {
+      /** Format: uuid */
+      id: string;
+    };
+    EventRepublishRequest: {
+      topic: string;
+      /** Format: uuid */
+      entityId: string;
+    };
+    EventResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      sourceId: string;
+      cloudEvent: components["schemas"]["CloudEventResponse"];
+      summary?: null | string;
+      link?: null | string;
+      /** Format: uuid */
+      parentEventId?: null | string;
+      /** Format: date-time */
+      receivedAt: string;
+      /** Format: uuid */
+      chainId: string;
+      /** Format: int32 */
+      hops: number;
+      dispatchState: components["schemas"]["EventDispatchState"];
+      /** Format: int32 */
+      matchedCount: number;
+    };
+    EventScheduleKind: number;
+    EventScheduleResponse: {
+      /** Format: uuid */
+      id: string;
+      kind?: null | components["schemas"]["EventScheduleKind"];
+      /** Format: date-time */
+      dueAt?: null | string;
+      interval?: null | string;
+      cron?: null | string;
+      timeZone?: null | string;
+      eventType?: null | string;
+      subject?: null | string;
+      summary?: null | string;
+      state: components["schemas"]["EventScheduleState"];
+      /** Format: int64 */
+      occurrence: number | string;
+      /** Format: date-time */
+      lastFiredAt?: null | string;
+    };
+    EventScheduleState: number;
+    EventSourceCreateRequest: {
+      name: string;
+      kind: components["schemas"]["EventSourceKind"];
+      config: components["schemas"]["JsonElement"];
+      enabled: boolean;
+      /** Format: uuid */
+      providerExtensionId?: null | string;
+      providerId?: null | string;
+      secret?: null | components["schemas"]["JsonElement"];
+    };
+    EventSourceEnableRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+      enabled: boolean;
+    };
+    EventSourceIdRequest: {
+      /** Format: uuid */
+      id: string;
+    };
+    EventSourceKind: number;
+    EventSourceMutationResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+      secret?: null | string;
+    };
+    EventSourceResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      kind: components["schemas"]["EventSourceKind"];
+      /** Format: uuid */
+      providerExtensionId?: null | string;
+      providerId?: null | string;
+      ceSource: string;
+      config: components["schemas"]["JsonElement"];
+      enabled: boolean;
+      /** Format: date-time */
+      baselineAt?: null | string;
+      /** Format: date-time */
+      nextRunAt?: null | string;
+      /** Format: date-time */
+      lastRunAt?: null | string;
+      lastError?: null | string;
+      hasSecret: boolean;
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSourceTestResponse: {
+      /** Format: int32 */
+      itemCount: number;
+    };
+    EventSourceUpdateRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+      name: string;
+      config: components["schemas"]["JsonElement"];
+      secret?: null | components["schemas"]["JsonElement"];
+    };
+    EventSourceVersionRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSubscriptionDeleteRequest: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSubscriptionManagedState: number;
+    EventSubscriptionRequest: {
+      /** Format: uuid */
+      id?: null | string;
+      /** Format: int64 */
+      version?: null | number | string;
+      name: string;
+      enabled: boolean;
+      sourceIds?: string[];
+      publisherKeys?: string[];
+      eventTypes: string[];
+      filter?: null | components["schemas"]["JsonElement"];
+      targetKind: components["schemas"]["EventSubscriptionTargetKind"];
+      /** Format: uuid */
+      agentId?: null | string;
+      /** Format: uuid */
+      projectId?: null | string;
+      instructions?: null | string;
+      /** Format: int32 */
+      permissionMode?: null | number;
+      /** Format: uuid */
+      handlerExtensionId?: null | string;
+      handlerId?: null | string;
+      handlerConfig?: null | components["schemas"]["JsonElement"];
+    };
+    EventSubscriptionResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      enabled: boolean;
+      sourceIds: string[];
+      publisherKeys: string[];
+      eventTypes: string[];
+      filter?: null | components["schemas"]["JsonElement"];
+      targetKind: components["schemas"]["EventSubscriptionTargetKind"];
+      /** Format: uuid */
+      agentId?: null | string;
+      /** Format: uuid */
+      projectId?: null | string;
+      instructions?: null | string;
+      /** Format: int32 */
+      permissionMode?: null | number;
+      /** Format: uuid */
+      handlerExtensionId?: null | string;
+      handlerId?: null | string;
+      handlerConfig?: null | components["schemas"]["JsonElement"];
+      /** Format: uuid */
+      managedByExtensionId?: null | string;
+      managedKey?: null | string;
+      /** Format: int64 */
+      managedVersion?: null | number | string;
+      managedState?: null | components["schemas"]["EventSubscriptionManagedState"];
+      /** Format: int64 */
+      version: number | string;
+    };
+    EventSubscriptionTargetKind: number;
+    EventWebhookReceiveResponse: {
+      /** Format: uuid */
+      eventId: string;
+    };
     ExecutionPermissionCapabilities: {
       supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
+      supportsNoTools: boolean;
       reason?: null | string;
     };
     ExtensionCatalog: {
@@ -7590,7 +9104,7 @@ export interface components {
       settingsVersion: number | string;
       state: components["schemas"]["ExtensionManagementState"];
       /** Format: int32 */
-      errorCode?: number;
+      errorCode?: null | number;
       errorMessage?: null | string;
       /** Format: int32 */
       activeInvocations: number;
@@ -7936,6 +9450,134 @@ export interface components {
       /** Format: int32 */
       maxOutputTokens: number;
     };
+    NotificationAnswerRequest: {
+      /** Format: uuid */
+      notificationId: string;
+      /** Format: int32 */
+      option?: null | number;
+      text?: null | string;
+    };
+    NotificationAnswerResult: {
+      /** Format: uuid */
+      notificationId: string;
+      state: components["schemas"]["NotificationState"];
+      /** Format: int64 */
+      version: number | string;
+      /** Format: int32 */
+      option?: null | number;
+      text?: null | string;
+      answeredBy?: null | string;
+      answeredVia?: null | string;
+      /** Format: date-time */
+      answeredAt?: null | string;
+    };
+    NotificationChannelResponse: {
+      channelKey: string;
+      name: string;
+      /** Format: uuid */
+      extensionId: null | string;
+      channelId: null | string;
+      targetId: null | string;
+    };
+    NotificationDeliveredRequest: {
+      /** Format: uuid */
+      notificationId: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    NotificationDetail: {
+      /** Format: uuid */
+      id: string;
+      kind: components["schemas"]["NotificationKind"];
+      state: components["schemas"]["NotificationState"];
+      title: string;
+      text: string;
+      link: null | string;
+      /** Format: date-time */
+      readAt: null | string;
+      /** Format: date-time */
+      changedAt: string;
+      /** Format: int64 */
+      version: number | string;
+      question: null | components["schemas"]["NotificationQuestionResponse"];
+      dispatches: components["schemas"]["NotificationDispatchResponse"][];
+    };
+    NotificationDispatchAttemptResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: int32 */
+      attempt: number;
+      /** Format: int64 */
+      messageVersion: number | string;
+      /** Format: date-time */
+      startedAt: string;
+      /** Format: date-time */
+      finishedAt: null | string;
+      result: components["schemas"]["NotificationDispatchAttemptResult"];
+      externalMessageId: null | string;
+      error: null | string;
+    };
+    NotificationDispatchAttemptResult: number;
+    NotificationDispatchResponse: {
+      /** Format: uuid */
+      id: string;
+      channelKey: string;
+      state: components["schemas"]["NotificationDispatchState"];
+      externalMessageId: null | string;
+      /** Format: int64 */
+      messageVersion: number | string;
+      /** Format: int64 */
+      sentVersion: number | string;
+      /** Format: int32 */
+      attempt: number;
+      /** Format: date-time */
+      nextAttemptAt: null | string;
+      lastError: null | string;
+      attempts: components["schemas"]["NotificationDispatchAttemptResponse"][];
+    };
+    NotificationDispatchRetryRequest: {
+      /** Format: uuid */
+      dispatchId: string;
+    };
+    NotificationDispatchState: number;
+    NotificationKind: number;
+    NotificationListItem: {
+      /** Format: uuid */
+      id: string;
+      kind: components["schemas"]["NotificationKind"];
+      state: components["schemas"]["NotificationState"];
+      title: string;
+      text: string;
+      link: null | string;
+      /** Format: date-time */
+      readAt: null | string;
+      /** Format: date-time */
+      changedAt: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    NotificationOption: {
+      label: string;
+      value: string;
+    };
+    NotificationQuestionResponse: {
+      options: components["schemas"]["NotificationOption"][];
+      /** Format: int32 */
+      recommend: null | number;
+      allowText: boolean;
+      /** Format: int32 */
+      answerOption: null | number;
+      answerText: null | string;
+      answeredBy: null | string;
+      answeredVia: null | string;
+      /** Format: date-time */
+      answeredAt: null | string;
+    };
+    NotificationReadRequest: {
+      /** Format: uuid */
+      notificationId: string;
+    };
+    NotificationState: number;
     OAuth2AuthorizationCodeResponse: {
       authorizationEndpoint: string;
       tokenEndpoint: string;
@@ -8109,7 +9751,7 @@ export interface components {
       type?: null | string;
       title?: null | string;
       /** Format: int32 */
-      status?: number;
+      status?: null | number;
       detail?: null | string;
       instance?: null | string;
     };
@@ -8630,6 +10272,14 @@ export interface components {
       definition: components["schemas"]["ToolDefinition"];
     };
     TriggerType: number;
+    UnpublishedEventRecord: {
+      topic: string;
+      /** Format: uuid */
+      entityId: string;
+      state: string;
+      /** Format: date-time */
+      recoverAfter: string;
+    };
     UsageDetails: {
       /** Format: int64 */
       inputTokenCount?: null | number | string;
@@ -8704,9 +10354,9 @@ export interface components {
        * Format: int32
        * @description 相对上游分支的领先、落后提交数；没有上游时为 null。Commits ahead of and behind the upstream; null without one.
        */
-      ahead?: number;
+      ahead?: null | number;
       /** Format: int32 */
-      behind?: number;
+      behind?: null | number;
       branches?: string[];
       /** @description 远程跟踪分支，例如 `origin/main`。Remote-tracking branches such as `origin/main`. */
       remoteBranches?: string[];

@@ -103,7 +103,8 @@ internal sealed class InProcessExecutionCoordinator : IExecutionCoordinator, IAs
                 request.WorkspaceSnapshot,
                 request.Settings.PermissionMode,
                 request.Settings.PermissionVersion,
-                ExecutionProvider.InProcess
+                ExecutionProvider.InProcess,
+                request.Settings.ToolPolicy
             ),
             cancellationToken
         );

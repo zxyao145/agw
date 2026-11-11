@@ -7,6 +7,7 @@ import { normalizeDocumentWithOrigins } from "./normalize-editor-document";
 import {
   MarkdownSourceMapError,
   mapSourceBlocks,
+  normalizeSourceLineEndings,
   pairSourceBlocks,
   type SourceBlock,
 } from "./source-map";
@@ -16,9 +17,9 @@ import {
 // normalize.
 
 /**
- * 基线：`source` 为换行统一为 LF 的原文 S0；`blocks[i]` 为 `doc` 第 i 个顶层子节点在 S0 中的区间。
- * The baseline: `source` is the source text S0 with LF line endings; `blocks[i]` is the range of `doc`'s i-th
- * top-level child in S0.
+ * 基线保留原文及其换行；`blocks[i]` 为 `doc` 第 i 个顶层子节点在原文中的区间。
+ * The baseline preserves the original text and line endings; `blocks[i]` is the range of `doc`'s i-th top-level child
+ * in that original source.
  */
 export type MarkdownBaseline = {
   readonly source: string;
@@ -33,17 +34,20 @@ export type LoadedMarkdown = {
 };
 
 /**
- * 载入 Markdown。`source` 由调用方从文档会话的文字得到，换行已统一为 LF；`schema` 为编辑器的 schema
- * （Node.eq 按节点类型对象对比，基线必须与编辑器使用同一个 schema）。
+ * 载入 Markdown；解析时换行统一为 LF，基线保留原文及其位置。`schema` 为编辑器的 schema（Node.eq 按节点类型对象对比，
+ * 基线必须与编辑器使用同一个 schema）。
  * 抛出 FrontMatterError（front matter 不是有效的 YAML）、MarkdownSourceMapError，或文档不符合 schema 时的 RangeError。
- * Loads Markdown. The caller derives `source` from the document session's text with LF line endings; `schema` is the
- * editor's schema (Node.eq compares node types by identity, so the baseline must use the editor's schema).
+ * Loads Markdown with LF-normalized parser input and source offsets in the original text; `schema` is the editor's
+ * schema (Node.eq compares node types by identity, so the baseline must use the editor's schema).
  * Throws FrontMatterError (invalid YAML front matter), MarkdownSourceMapError, or RangeError when the document does
  * not fit the schema.
  */
 export function loadMarkdown(source: string, schema: Schema): LoadedMarkdown {
-  const { prefix, text, body } = splitFrontMatter(source);
-  const tokenBlocks = mapSourceBlocks(body, prefix.length);
+  const normalizedSource = normalizeSourceLineEndings(source);
+  const { prefix, text, body } = splitFrontMatter(normalizedSource.text);
+  const sourcePrefixLength = normalizedSource.sourceOffsets[prefix.length];
+  const sourceBody = source.slice(sourcePrefixLength);
+  const tokenBlocks = mapSourceBlocks(sourceBody, sourcePrefixLength);
   const parsed = parseEditorMarkdown(body).content ?? [];
   const paired = pairSourceBlocks(parsed, tokenBlocks);
   const content: JSONContent[] = [...parsed];
@@ -52,8 +56,9 @@ export function loadMarkdown(source: string, schema: Schema): LoadedMarkdown {
     content.unshift({ type: "frontMatter", content: text ? [{ type: "text", text }] : undefined });
     // front matter 的区间为整个前缀，与其他块一样去掉末尾的换行。The front matter's range is the whole prefix without
     // its trailing newline, like every other block.
+    const prefixEnd = prefix.endsWith("\n") ? prefix.length - 1 : prefix.length;
     sources.unshift({
-      range: { from: 0, to: prefix.endsWith("\n") ? prefix.length - 1 : prefix.length },
+      range: { from: 0, to: normalizedSource.sourceOffsets[prefixEnd] },
       items: null,
     });
   }

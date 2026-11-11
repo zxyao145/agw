@@ -490,6 +490,117 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.ToTable("agent_skill_relation", (string)null);
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.BackgroundExecution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CallerKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("caller_key");
+
+                    b.Property<Guid>("ChainId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("chain_id");
+
+                    b.Property<long?>("CompletedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<string>("CorrelationKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_key");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error");
+
+                    b.Property<int>("Hops")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("hops");
+
+                    b.Property<long>("InputTokens")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("input_tokens");
+
+                    b.Property<long>("OutputTokens")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<Guid?>("ParentEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parent_event_id");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("RequestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("ResultText")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("result_text");
+
+                    b.Property<long?>("StartedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("started_at");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("state");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_id");
+
+                    b.Property<int?>("TargetKind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("target_kind");
+
+                    b.Property<int>("ToolPolicy")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("tool_policy");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<long?>("UpdateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_background_execution");
+
+                    b.HasIndex("State")
+                        .HasDatabaseName("ix_background_execution_state");
+
+                    b.HasIndex("CreateBy", "CallerKey", "CorrelationKey")
+                        .HasDatabaseName("ix_background_execution_create_by_caller_key_correlation_key");
+
+                    b.ToTable("background_execution", (string)null);
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.McpServer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -828,6 +939,745 @@ namespace Agw.Migrations.Sqlite.Migrations
                             Id = 1,
                             NextId = 10000L
                         });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt");
+
+                    b.Property<long?>("CompletedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_id");
+
+                    b.Property<long?>("HandlerEpoch")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("handler_epoch");
+
+                    b.Property<string>("HandlerReleaseHash")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("handler_release_hash");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_error");
+
+                    b.Property<long?>("NextAttemptAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<long>("RecoverAfter")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("recover_after");
+
+                    b.Property<string>("RequestSnapshotJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("request_snapshot_json");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("SubscriptionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subscription_id");
+
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("turn_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<long?>("UpdateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("update_time");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_delivery");
+
+                    b.HasIndex("TurnId")
+                        .HasDatabaseName("ix_event_delivery_turn_id");
+
+                    b.HasIndex("EventId", "SubscriptionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_delivery_event_id_subscription_id");
+
+                    b.HasIndex("State", "NextAttemptAt")
+                        .HasDatabaseName("ix_event_delivery_state_next_attempt_at");
+
+                    b.HasIndex("State", "RecoverAfter")
+                        .HasDatabaseName("ix_event_delivery_state_recover_after");
+
+                    b.ToTable("event_delivery", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventDeliveryAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt");
+
+                    b.Property<Guid>("DeliveryId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("delivery_id");
+
+                    b.Property<long>("EndedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error");
+
+                    b.Property<Guid?>("GenerationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("generation_id");
+
+                    b.Property<string>("HostId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("host_id");
+
+                    b.Property<int>("Result")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("result");
+
+                    b.Property<long>("StartedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_delivery_attempt");
+
+                    b.ToTable("event_delivery_attempt", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<long?>("CompletedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("entity_id");
+
+                    b.Property<long?>("PublishedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("published_at");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("state");
+
+                    b.Property<string>("Topic")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("topic");
+
+                    b.Property<string>("TransportMessageId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("transport_message_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_outbox");
+
+                    b.HasIndex("State", "PublishedAt")
+                        .HasDatabaseName("ix_event_outbox_state_published_at");
+
+                    b.HasIndex("Topic", "EntityId")
+                        .HasDatabaseName("ix_event_outbox_topic_entity_id");
+
+                    b.ToTable("event_outbox", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CeData")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ce_data");
+
+                    b.Property<string>("CeDataContentType")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ce_data_content_type");
+
+                    b.Property<bool>("CeDataIsBinary")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("ce_data_is_binary");
+
+                    b.Property<string>("CeDataSchema")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ce_data_schema");
+
+                    b.Property<string>("CeId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ce_id");
+
+                    b.Property<string>("CeSource")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ce_source");
+
+                    b.Property<string>("CeSpecVersion")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ce_spec_version");
+
+                    b.Property<long?>("CeTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("ce_time");
+
+                    b.Property<Guid>("ChainId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("chain_id");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<int>("DispatchState")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("dispatch_state");
+
+                    b.Property<int>("Hops")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("hops");
+
+                    b.Property<string>("Link")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("link");
+
+                    b.Property<int>("MatchedCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("matched_count");
+
+                    b.Property<Guid?>("ParentEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parent_event_id");
+
+                    b.Property<long>("ReceivedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("received_at");
+
+                    b.Property<long>("RecoverAfter")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("recover_after");
+
+                    b.Property<string>("Scope")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scope");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("Subject")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("TagsJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tags_json");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("type");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<long?>("UpdateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event");
+
+                    b.HasIndex("ChainId")
+                        .HasDatabaseName("ix_event_chain_id");
+
+                    b.HasIndex("CreateBy", "ReceivedAt")
+                        .HasDatabaseName("ix_event_create_by_received_at");
+
+                    b.HasIndex("DispatchState", "RecoverAfter")
+                        .HasDatabaseName("ix_event_dispatch_state_recover_after");
+
+                    b.HasIndex("CreateBy", "Type", "ReceivedAt")
+                        .HasDatabaseName("ix_event_create_by_type_received_at");
+
+                    b.HasIndex("SourceId", "CeSource", "CeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_source_id_ce_source_ce_id");
+
+                    b.ToTable("event", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BusinessKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("business_key");
+
+                    b.Property<string>("CallerKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("caller_key");
+
+                    b.Property<Guid>("ChainId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("chain_id");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Cron")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cron");
+
+                    b.Property<string>("Data")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("data");
+
+                    b.Property<string>("DataContentType")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("data_content_type");
+
+                    b.Property<bool>("DataIsBinary")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("data_is_binary");
+
+                    b.Property<string>("DataSchema")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("data_schema");
+
+                    b.Property<long?>("DueAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("due_at");
+
+                    b.Property<string>("EventType")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_type");
+
+                    b.Property<int>("Hops")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("hops");
+
+                    b.Property<TimeSpan?>("Interval")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("interval");
+
+                    b.Property<int?>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<long?>("LastFiredAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_fired_at");
+
+                    b.Property<string>("Link")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("link");
+
+                    b.Property<long>("Occurrence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("occurrence");
+
+                    b.Property<Guid?>("ParentEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parent_event_id");
+
+                    b.Property<long>("RequestSeq")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("request_seq");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("Scope")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scope");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("state");
+
+                    b.Property<string>("Subject")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("TagsJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tags_json");
+
+                    b.Property<string>("TimeZone")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("time_zone");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<long?>("UpdateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("update_time");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_schedule");
+
+                    b.HasIndex("State", "DueAt")
+                        .HasDatabaseName("ix_event_schedule_state_due_at");
+
+                    b.HasIndex("CreateBy", "CallerKey", "BusinessKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_schedule_create_by_caller_key_business_key");
+
+                    b.ToTable("event_schedule", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventSource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<long?>("BaselineAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("baseline_at");
+
+                    b.Property<string>("CeSource")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ce_source");
+
+                    b.Property<string>("ConfigJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("config_json");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("CursorJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cursor_json");
+
+                    b.Property<long?>("DeletedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_error");
+
+                    b.Property<long?>("LastRunAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_run_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<long?>("NextRunAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("next_run_at");
+
+                    b.Property<Guid?>("ProviderExtensionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider_extension_id");
+
+                    b.Property<string>("ProviderId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider_id");
+
+                    b.Property<string>("PublisherKey")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("publisher_key");
+
+                    b.Property<string>("SecretJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("secret_json");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<long?>("UpdateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("update_time");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_source");
+
+                    b.HasIndex("CreateBy", "PublisherKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_source_create_by_publisher_key")
+                        .HasFilter("publisher_key IS NOT NULL");
+
+                    b.HasIndex("Enabled", "NextRunAt")
+                        .HasDatabaseName("ix_event_source_enabled_next_run_at");
+
+                    b.ToTable("event_source", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventSourceItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ChangeSeq")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("change_seq");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("fingerprint");
+
+                    b.Property<long>("FirstSeenAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<string>("ItemKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("item_key");
+
+                    b.Property<Guid?>("LastEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_event_id");
+
+                    b.Property<long>("LastSeenAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_source_item");
+
+                    b.HasIndex("SourceId", "ItemKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_source_item_source_id_item_key");
+
+                    b.ToTable("event_source_item", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Events.EventSubscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("EventTypesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_types_json");
+
+                    b.Property<string>("FilterJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("filter_json");
+
+                    b.Property<string>("HandlerConfigJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("handler_config_json");
+
+                    b.Property<Guid?>("HandlerExtensionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("handler_extension_id");
+
+                    b.Property<string>("HandlerId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("handler_id");
+
+                    b.Property<string>("Instructions")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("instructions");
+
+                    b.Property<Guid?>("ManagedByExtensionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("managed_by_extension_id");
+
+                    b.Property<string>("ManagedKey")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("managed_key");
+
+                    b.Property<int?>("ManagedState")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("managed_state");
+
+                    b.Property<long?>("ManagedVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("managed_version");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<int?>("PermissionMode")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("permission_mode");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("PublisherKeysJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("publisher_keys_json");
+
+                    b.Property<string>("SourceIdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_ids_json");
+
+                    b.Property<int>("TargetKind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("target_kind");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<long?>("UpdateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("update_time");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_subscription");
+
+                    b.HasIndex("CreateBy", "Enabled")
+                        .HasDatabaseName("ix_event_subscription_create_by_enabled");
+
+                    b.HasIndex("CreateBy", "ManagedByExtensionId", "ManagedKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_subscription_create_by_managed_by_extension_id_managed_key")
+                        .HasFilter("managed_key IS NOT NULL");
+
+                    b.ToTable("event_subscription", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.AgentflowCheckpointRecord", b =>
@@ -1560,6 +2410,326 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasDatabaseName("ix_job_log_job_id_start_time");
 
                     b.ToTable("job_log", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Notifications.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CallerKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("caller_key");
+
+                    b.Property<Guid?>("ChainId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("chain_id");
+
+                    b.Property<long>("ChangedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("changed_at");
+
+                    b.Property<string>("CorrelationKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_key");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<long>("CreateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("create_time");
+
+                    b.Property<int>("Hops")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("hops");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Link")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("link");
+
+                    b.Property<Guid?>("OriginExtensionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("origin_extension_id");
+
+                    b.Property<Guid?>("ParentEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parent_event_id");
+
+                    b.Property<long?>("ReadAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("read_at");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("state");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("title");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<long?>("UpdateTime")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("update_time");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notification");
+
+                    b.HasIndex("CreateBy", "State")
+                        .HasDatabaseName("ix_notification_create_by_state");
+
+                    b.HasIndex("OriginExtensionId", "CorrelationKey")
+                        .HasDatabaseName("ix_notification_origin_extension_id_correlation_key");
+
+                    b.HasIndex("CreateBy", "CallerKey", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_notification_create_by_caller_key_idempotency_key");
+
+                    b.HasIndex("CreateBy", "ChangedAt", "Id")
+                        .HasDatabaseName("ix_notification_create_by_changed_at_id");
+
+                    b.ToTable("notification", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Notifications.NotificationDispatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt");
+
+                    b.Property<string>("ChannelKey")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("channel_key");
+
+                    b.Property<Guid?>("ClaimAttemptId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claim_attempt_id");
+
+                    b.Property<long?>("ClaimExpiresAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("claim_expires_at");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claimed_by");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("external_message_id");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_error");
+
+                    b.Property<long>("MessageVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("message_version");
+
+                    b.Property<long?>("NextAttemptAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<Guid>("NotificationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_id");
+
+                    b.Property<long>("RecoverAfter")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("recover_after");
+
+                    b.Property<long>("SentVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("sent_version");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("state");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notification_dispatch");
+
+                    b.HasIndex("NotificationId", "ChannelKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_notification_dispatch_notification_id_channel_key");
+
+                    b.HasIndex("State", "ClaimExpiresAt")
+                        .HasDatabaseName("ix_notification_dispatch_state_claim_expires_at");
+
+                    b.HasIndex("State", "NextAttemptAt")
+                        .HasDatabaseName("ix_notification_dispatch_state_next_attempt_at");
+
+                    b.HasIndex("State", "RecoverAfter")
+                        .HasDatabaseName("ix_notification_dispatch_state_recover_after");
+
+                    b.ToTable("notification_dispatch", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Notifications.NotificationDispatchAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt");
+
+                    b.Property<Guid>("DispatchId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("dispatch_id");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("external_message_id");
+
+                    b.Property<long?>("FinishedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("finished_at");
+
+                    b.Property<long>("MessageVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("message_version");
+
+                    b.Property<int>("Result")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("result");
+
+                    b.Property<long>("StartedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notification_dispatch_attempt");
+
+                    b.HasIndex("DispatchId", "StartedAt")
+                        .HasDatabaseName("ix_notification_dispatch_attempt_dispatch_id_started_at");
+
+                    b.ToTable("notification_dispatch_attempt", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Notifications.NotificationQuestion", b =>
+                {
+                    b.Property<Guid>("NotificationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_id");
+
+                    b.Property<bool>("AllowText")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("allow_text");
+
+                    b.Property<int?>("AnswerOption")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("answer_option");
+
+                    b.Property<string>("AnswerText")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("answer_text");
+
+                    b.Property<long?>("AnsweredAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("answered_at");
+
+                    b.Property<string>("AnsweredBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("answered_by");
+
+                    b.Property<string>("AnsweredVia")
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("answered_via");
+
+                    b.Property<string>("OptionsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("options_json");
+
+                    b.Property<int?>("Recommend")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("recommend");
+
+                    b.HasKey("NotificationId")
+                        .HasName("pk_notification_question");
+
+                    b.ToTable("notification_question", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Notifications.NotificationUpdateReceipt", b =>
+                {
+                    b.Property<Guid>("NotificationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_id");
+
+                    b.Property<long>("RequestVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("request_version");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("request_hash");
+
+                    b.HasKey("NotificationId", "RequestVersion")
+                        .HasName("pk_notification_update_receipt");
+
+                    b.ToTable("notification_update_receipt", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.AgentUsage", b =>

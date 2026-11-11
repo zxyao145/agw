@@ -4,6 +4,91 @@ namespace Agw.Shared.Exceptions;
 
 public static class ErrorCodes
 {
+    public static readonly ErrorCode ExtensionPayloadTooLarge = new(
+        413_0003,
+        "Extension request body is too large.",
+        HttpStatusCode.RequestEntityTooLarge
+    );
+    public static readonly ErrorCode EventSubscriptionModificationConflict = new(
+        409_0033,
+        "Event subscription changed concurrently.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode EventSourceModificationConflict = new(
+        409_0032,
+        "Event source changed concurrently.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode EventSourceNotFound = new(
+        404_0014,
+        "Event source was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode EventSubscriptionNotFound = new(
+        404_0015,
+        "Event subscription was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode EventDeliveryNotFound = new(
+        404_0016,
+        "Event delivery was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode NotificationNotFound = new(
+        404_0017,
+        "Notification was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode EventSubscriptionManaged = new(
+        409_0030,
+        "Event subscription is managed by an extension.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode NotificationQuestionAlreadyAnswered = new(
+        409_0031,
+        "Question was already answered.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode WebhookAuthenticationFailed = new(
+        401_0006,
+        "Webhook authentication failed.",
+        HttpStatusCode.Unauthorized
+    );
+    public static readonly ErrorCode EventPublishTypeDenied = new(
+        403_0009,
+        "Event type is not permitted for this publisher.",
+        HttpStatusCode.Forbidden
+    );
+    public static readonly ErrorCode EventTypeReserved = new(
+        403_0010,
+        "Event type is reserved for the host.",
+        HttpStatusCode.Forbidden
+    );
+    public static readonly ErrorCode NotificationAnswerForbidden = new(
+        403_0011,
+        "Notification answer is not permitted.",
+        HttpStatusCode.Forbidden
+    );
+    public static readonly ErrorCode EventPollFailed = new(
+        502_0007,
+        "Event source poll failed.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode EventTransportUnavailable = new(
+        503_0004,
+        "Event transport is unavailable.",
+        HttpStatusCode.ServiceUnavailable
+    );
+    public static readonly ErrorCode BackgroundToolPolicyUnsupported = new(
+        400_0078,
+        "Execution target does not support the requested tool policy.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode EventPayloadTooLarge = new(
+        413_0002,
+        "Event payload is too large.",
+        HttpStatusCode.RequestEntityTooLarge
+    );
     public static readonly ErrorCode ExtensionPackageInvalid = new(
         400_0077,
         "Extension package is invalid.",

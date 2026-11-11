@@ -13,7 +13,7 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
 {
     public AgwDbContext CreateDbContext(string[] args)
     {
-        var configuration = BuildConfiguration();
+        var configuration = BuildConfiguration(args);
         var settings =
             configuration.GetSection(DatabaseSettings.SectionName).Get<DatabaseSettings>() ?? new DatabaseSettings();
         var configuredProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
@@ -45,7 +45,7 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
         return new AgwDbContext(options.Options, encryptedDataProtector);
     }
 
-    private static IConfiguration BuildConfiguration()
+    private static IConfiguration BuildConfiguration(string[] args)
     {
         var hostDirectory = FindHostDirectory();
         var environment =
@@ -58,6 +58,7 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
             .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile($"appsettings.{environment}.json", optional: true)
             .AddEnvironmentVariables()
+            .AddCommandLine(args)
             .Build();
     }
 

@@ -19,7 +19,7 @@ public sealed class AgwOpenApiSchemaTransformer : IOpenApiSchemaTransformer
         var type = context.JsonTypeInfo.Type;
         if (type == typeof(int) || type == typeof(int?))
         {
-            schema.Type = JsonSchemaType.Integer;
+            schema.Type = type == typeof(int?) ? JsonSchemaType.Integer | JsonSchemaType.Null : JsonSchemaType.Integer;
             schema.Format = "int32";
             schema.Pattern = null;
         }

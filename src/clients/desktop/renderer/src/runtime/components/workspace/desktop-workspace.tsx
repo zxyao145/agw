@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { apiGet } from "@agw/api";
 import {
   ChatWorkspaceProvider,
@@ -35,6 +36,7 @@ import { LeftSidebar } from "./left-sidebar";
 import { MainWorkspace } from "./main-workspace";
 import { Ribbon } from "./ribbon";
 import { WorkspaceIconView } from "./workspace-icon";
+import { NotificationsLiveSync, useNotificationsUnreadCount } from "@agw/notifications";
 
 type AgentflowDto = { id: string; name: string; description?: string | null };
 
@@ -59,6 +61,7 @@ function DesktopWorkspaceLayout({
   tracker: HostOverlayTracker;
   viewLayout: ExtensionLayoutSampler;
 }) {
+  const searchParams = useSearchParams();
   const workspace = useChatWorkspace();
   const layout = useStore(
     host.layout.subscribe,
@@ -71,6 +74,7 @@ function DesktopWorkspaceLayout({
     queryKey: ["agentflows"],
     queryFn: async () => (await apiGet("/api/agentflows")) as AgentflowDto[],
   });
+  const unreadNotificationCount = useNotificationsUnreadCount();
 
   React.useEffect(() => host.attachWorkspace(), [host]);
 
@@ -83,6 +87,14 @@ function DesktopWorkspaceLayout({
     refreshConversations,
   } = workspace;
   const serverId = host.context.snapshot().server.id;
+  const notificationId = searchParams.get("notificationId");
+  const notificationServerId = searchParams.get("serverId");
+
+  React.useEffect(() => {
+    if (notificationId && notificationServerId === serverId) {
+      host.layout.openMainView(BUILT_IN_VIEWS.notifications, { notificationId });
+    }
+  }, [host, notificationId, notificationServerId, serverId]);
   const sourceChatContext = React.useMemo(() => {
     const filePath = workspace.selectedFile;
     if (!selectedProjectId || !filePath) return null;
@@ -155,7 +167,7 @@ function DesktopWorkspaceLayout({
 
   // 用户为每类文件选择的默认查看器，经 bridge 保存在 settings.json 中。
   // The user's default viewer per file type, kept in settings.json through the bridge.
-  const desktopBridge = window.agwDesktop ?? null;
+  const desktopBridge = typeof window === "undefined" ? null : (window.agwDesktop ?? null);
   const [fileViewerDefaults, setFileViewerDefaults] = React.useState<
     Readonly<Record<string, string>>
   >({});
@@ -300,11 +312,13 @@ function DesktopWorkspaceLayout({
       inert={workspace.isReconnecting}
       aria-hidden={workspace.isReconnecting}
     >
+      <NotificationsLiveSync desktopBridge={desktopBridge} serverId={serverId} />
       <Ribbon
         entries={registry.ribbon}
         sidebarVisible={layout.sidebarVisible}
         activeSidebarViewId={layout.activeSidebarViewId}
         activeMainViewId={layout.activeMainViewId}
+        unreadNotificationCount={unreadNotificationCount}
         onSelect={(entry) => host.runAction(entry.extensionId, entry.action, {})}
       />
       <ColResizeSplit>

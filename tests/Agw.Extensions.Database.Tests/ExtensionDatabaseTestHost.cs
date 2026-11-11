@@ -4,6 +4,10 @@ using System.Text;
 using System.Text.Json;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Events;
+using Agw.Events.Application.Persistence;
+using Agw.Events.Configuration;
+using Agw.Events.Contracts;
 using Agw.Extensions.Application.Packages;
 using Agw.Extensions.Application.Persistence;
 using Agw.Extensions.Contracts;
@@ -14,20 +18,27 @@ using Agw.Extensions.Sdk.EntityFrameworkCore;
 using Agw.Host.Data;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Configuration;
+using Agw.Infrastructure.Coordination;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
+using Agw.Infrastructure.Events;
 using Agw.Infrastructure.Settings;
 using Agw.Settings;
 using Agw.Settings.Application.Persistence;
 using Agw.Shared.Configuration;
 using Agw.Shared.Contracts;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Runtime;
+using Medallion.Threading;
+using Medallion.Threading.Postgres;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Agw.Extensions.Database.Tests;
@@ -69,9 +80,13 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
     public static async Task<ExtensionDatabaseTestHost> CreateAsync(
         ExtensionDatabaseMigrationTests.MigrationTestDatabase database,
         bool initiallyEnabled = true,
-        string packageVersion = "1.0.0"
+        string packageVersion = "1.0.0",
+        string hostRole = "DataPlane",
+        string? connectionString = null,
+        string? applicationLockConnectionString = null
     )
     {
+        string effectiveConnectionString = connectionString ?? database.ConnectionString;
         string dataRoot = Path.Combine(AppContext.BaseDirectory, $"extension-database-test-{Guid.CreateVersion7():N}");
         Directory.CreateDirectory(dataRoot);
         AgwDataPaths paths = AgwDataPaths.Resolve(dataRoot, AppContext.BaseDirectory);
@@ -106,7 +121,7 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
                     database.Provider == ExtensionDatabaseProvider.Sqlite
                         ? DatabaseProvider.Sqlite
                         : DatabaseProvider.Postgres;
-                settings.ConnectionString = database.ConnectionString;
+                settings.ConnectionString = effectiveConnectionString;
             })
             .AddScoped<ICurrentUser, UserInfoService>()
             .AddScoped<IUserInfoService, UserInfoService>()
@@ -120,11 +135,11 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
                 {
                     if (database.Provider == ExtensionDatabaseProvider.Sqlite)
                     {
-                        options.UseSqlite(database.ConnectionString);
+                        options.UseSqlite(effectiveConnectionString);
                     }
                     else
                     {
-                        options.UseNpgsql(database.ConnectionString);
+                        options.UseNpgsql(effectiveConnectionString);
                     }
 
                     options
@@ -143,8 +158,36 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
                         new Dictionary<string, string?> { ["Extensions:Directory"] = extensionDirectory }
                     )
                     .Build(),
-                "DataPlane"
+                hostRole
             );
+        services.AddOptions<EventsOptions>();
+        services.AddEvents(runWorkers: false);
+        services.AddScoped<IEventsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<PendingTransportMessages>();
+        services.AddScoped<IOutboxStaging, EventOutboxStaging>();
+        services.AddScoped<EventStaging>();
+        services.AddScoped<IEventStaging>(provider => provider.GetRequiredService<EventStaging>());
+        services.AddSingleton(provider => new CloudEventEnvelopeSerializer(
+            provider.GetRequiredService<IOptions<EventsOptions>>().Value.Payload.MaxBytes
+        ));
+        services.AddExtensionHostCapability<IEventPublisher>();
+        if (applicationLockConnectionString is null)
+        {
+            services.AddSingleton<IApplicationLock, InMemoryApplicationLock>();
+        }
+        else
+        {
+            services.AddSingleton<InMemoryApplicationLock>();
+            services.Configure<DistributedLockSettings>(settings =>
+            {
+                settings.Provider = DistributedLockProvider.Postgres;
+                settings.ConnectionString = applicationLockConnectionString;
+            });
+            services.AddSingleton<Func<DistributedLockProvider, string, IDistributedLockProvider>>(_ =>
+                (_, lockConnectionString) => new PostgresDistributedSynchronizationProvider(lockConnectionString)
+            );
+            services.AddSingleton<IApplicationLock, ApplicationLockRouter>();
+        }
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
 
         ServiceProvider serviceProvider = services.BuildServiceProvider();
@@ -153,7 +196,7 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
             paths.Root,
             Path.Combine(paths.Root, "extensions", "data", ExtensionId.ToString("N")),
             database.Provider,
-            database.ConnectionString
+            effectiveConnectionString
         );
         try
         {
@@ -194,6 +237,7 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
                 PackageDirectory = package.SnapshotDirectory,
                 EntryAssemblyPath = package.Manifest.Server!.EntryAssembly,
                 EntryType = package.Manifest.Server.EntryType,
+                EventPermissions = new ExtensionEventPermissions { Publish = ["outbox.*"], PublishRoot = true },
             },
             cancellationToken
         );

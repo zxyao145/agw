@@ -191,7 +191,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(42, entityTypes.Length);
+        Assert.Equal(56, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

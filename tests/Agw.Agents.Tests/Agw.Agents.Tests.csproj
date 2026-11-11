@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="../ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
+    <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
     <Compile Include="../RecordingHttpClientFactory.cs" Link="RecordingHttpClientFactory.cs" />
     <Compile Include="../TestFileSystems.cs" Link="TestFileSystems.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -25,6 +26,7 @@
     <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
+    <ProjectReference Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <Target Name="CopyAgentsTestExtension" AfterTargets="Build">

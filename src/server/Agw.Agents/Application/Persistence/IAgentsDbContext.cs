@@ -24,6 +24,8 @@ public interface IAgentsDbContext : IModuleDbContext
 
     DbSet<AgentSessionStateEntry> AgentSessionStates { get; }
 
+    DbSet<BackgroundExecution> BackgroundExecutions { get; }
+
     DbSet<McpServer> McpToolServers { get; }
 
     DbSet<Agentflow> Agentflows { get; }

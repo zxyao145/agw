@@ -100,7 +100,22 @@ async function overlayState(frame: FrameHandle): Promise<string> {
   );
   const visibility = runtime().views.get(frame.frameId)?.visibility;
   const documentState = await evalHost<string>("document.visibilityState");
-  return `overlays ${overlays}; slot ${slot}; visible ${frame.view.getVisible()}; visibility ${JSON.stringify(visibility)}; document ${documentState}`;
+  const frameDocumentState = await evalFrame<string>(frame, "document.visibilityState");
+  const window = hooks.mainWindow();
+  const windowState = window
+    ? {
+        visible: window.isVisible(),
+        focused: window.isFocused(),
+        minimized: window.isMinimized(),
+        bounds: window.getBounds(),
+        views: window.contentView.children.map((view) => ({
+          bounds: view.getBounds(),
+          visible: view.getVisible(),
+          target: view === frame.view,
+        })),
+      }
+    : null;
+  return `overlays ${overlays}; slot ${slot}; visible ${frame.view.getVisible()}; visibility ${JSON.stringify(visibility)}; document ${documentState}; frameDocument ${frameDocumentState}; window ${JSON.stringify(windowState)}`;
 }
 
 /** 占位组件中的截图已加载。The snapshot in the frame's slot has loaded. */
@@ -544,6 +559,7 @@ async function boot(): Promise<void> {
       console.log(`[host ${event.level}] ${event.message}`);
   });
   // 窗口被其他窗口遮住时页面处于 hidden 状态，动画帧与计时器会暂停。An occluded window pauses frames and timers.
+  hooks.mainWindow()!.setAlwaysOnTop(true);
   app.focus({ steal: true });
   hooks.mainWindow()!.show();
   hooks.mainWindow()!.focus();
@@ -580,6 +596,9 @@ async function beforeEnabling(): Promise<void> {
   assert.deepEqual(entries, [
     "agw.ribbon.conversations",
     "agw.ribbon.files",
+    "agw.ribbon.jobs",
+    "agw.ribbon.events",
+    "agw.ribbon.notifications",
     `${EXTENSION_IDS.bareRepository}:repositories`,
   ]);
   const hostInstanceId = runtime().registry.hostInstanceId;
@@ -1764,18 +1783,82 @@ async function floatingChat(): Promise<void> {
       globalY: parent.y + bounds.y + event.y,
     });
   };
+  const describeButton = async (view: WebContentsView): Promise<string> =>
+    JSON.stringify({
+      windowFocused: hooks.mainWindow()!.isFocused(),
+      visible: view.getVisible(),
+      bounds: view.getBounds(),
+      document: await view.webContents.executeJavaScript(
+        `({
+          focused: document.hasFocus(),
+          visibility: document.visibilityState,
+          button: document.querySelector(${JSON.stringify(chatButton)})?.getBoundingClientRect().toJSON(),
+          gesture: window.chatGestureTrace,
+        })`,
+      ),
+    });
+  const focusButton = async (view: WebContentsView): Promise<void> => {
+    const window = hooks.mainWindow()!;
+    app.focus({ steal: true });
+    window.focus();
+    view.webContents.focus();
+    await until(
+      async () =>
+        window.isFocused() &&
+        view.getVisible() &&
+        (await view.webContents.executeJavaScript(
+          `document.visibilityState === "visible" && document.hasFocus()`,
+        )),
+      "the native Chat button to be visible and focused",
+      undefined,
+      () => describeButton(view),
+    );
+    await view.webContents.executeJavaScript(`(async () => {
+      if (!window.chatGestureTrace) {
+        const record = (entry) => {
+          if (window.chatGestureTrace.length < 16) {
+            window.chatGestureTrace.push({ at: Date.now(), ...entry });
+          }
+        };
+        for (const type of ["pointerdown", "pointercancel", "lostpointercapture", "pointerup"]) {
+          document.addEventListener(type, (event) => record({
+            type,
+            x: event.clientX,
+            y: event.clientY,
+            buttons: event.buttons,
+            hit: event.composedPath().includes(document.querySelector(${JSON.stringify(chatButton)})),
+          }), true);
+        }
+        window.addEventListener("blur", () => record({ type: "documentBlur" }));
+        window.agwFloatingChatButton.onState(({ dragging }) => {
+          if (dragging === window.lastChatDragging) return;
+          window.lastChatDragging = dragging;
+          record({ type: "dragState", dragging });
+        });
+      }
+      window.chatGestureTrace = [];
+      window.lastChatDragging = (await window.agwFloatingChatButton.getState()).dragging;
+    })()`);
+  };
   const clickWithMouse = async (
     view: WebContentsView,
     point: { x: number; y: number },
   ): Promise<void> => {
-    const contents = view.webContents;
+    await focusButton(view);
     const before = view.getBounds();
-    contents.focus();
     mouse(view, { type: "mouseMove", ...point });
-    mouse(view, { type: "mouseDown", ...point, button: "left", clickCount: 1 });
+    mouse(view, {
+      type: "mouseDown",
+      ...point,
+      button: "left",
+      clickCount: 1,
+      modifiers: ["leftbuttondown"],
+    });
     await until(
       () => view.getBounds().width === hooks.mainWindow()!.getContentSize()[0],
       "the Chat click layer",
+      undefined,
+      () => describeButton(view),
     );
     mouse(view, {
       type: "mouseUp",
@@ -1798,17 +1881,27 @@ async function floatingChat(): Promise<void> {
     start: { x: number; y: number },
     end: { x: number; y: number },
   ): Promise<void> => {
-    const contents = view.webContents;
+    await focusButton(view);
     const origin = view.getBounds();
     const localStart = { x: start.x - origin.x, y: start.y - origin.y };
-    contents.focus();
     mouse(view, { type: "mouseMove", ...localStart });
-    mouse(view, { type: "mouseDown", ...localStart, button: "left", clickCount: 1 });
-    await until(() => {
-      const [width, height] = hooks.mainWindow()!.getContentSize();
-      const bounds = view.getBounds();
-      return bounds.width === width && bounds.height === height;
-    }, "the Chat drag layer across the application window");
+    mouse(view, {
+      type: "mouseDown",
+      ...localStart,
+      button: "left",
+      clickCount: 1,
+      modifiers: ["leftbuttondown"],
+    });
+    await until(
+      () => {
+        const [width, height] = hooks.mainWindow()!.getContentSize();
+        const bounds = view.getBounds();
+        return bounds.width === width && bounds.height === height;
+      },
+      "the Chat drag layer across the application window",
+      undefined,
+      () => describeButton(view),
+    );
     for (let step = 1; step <= 5; step += 1) {
       mouse(view, {
         type: "mouseMove",
@@ -4106,12 +4199,15 @@ async function clickInFrame(
   element: string,
   modifiers: ("meta" | "control")[] = [],
 ): Promise<void> {
-  hooks.mainWindow()!.focus();
+  const window = hooks.mainWindow()!;
+  app.focus({ steal: true });
+  window.focus();
   await until(
     async () =>
+      window.isFocused() &&
       frame.view.getVisible() &&
       (await evalFrame<boolean>(frame, `document.visibilityState === "visible"`)),
-    `frame ${frame.frameId} to be visible before clicking ${element}`,
+    `frame ${frame.frameId} to be visible in the focused window before clicking ${element}`,
     undefined,
     () => overlayState(frame),
   );

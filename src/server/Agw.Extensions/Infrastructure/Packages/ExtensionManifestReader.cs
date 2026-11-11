@@ -114,6 +114,7 @@ public static partial class ExtensionManifestReader
             ValidatePath(server.EntryAssembly);
             if (!server.EntryAssembly.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Server entry must be an assembly.");
+            ValidateEventPermissions(server.Permissions?.Events);
         }
         if (manifest.Desktop is { } desktop && desktop.GetProperty("apiVersion").GetInt32() <= 0)
             throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Desktop API version is unsupported.");
@@ -152,6 +153,36 @@ public static partial class ExtensionManifestReader
             }
             else
                 ValidateDesktopResources(property.Value, files);
+        }
+    }
+
+    private static void ValidateEventPermissions(ExtensionEventPermissions? permissions)
+    {
+        if (permissions is null || permissions.Publish is null)
+        {
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension event permissions are invalid.");
+        }
+
+        foreach (string? pattern in permissions.Publish)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+            {
+                throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension event permission is invalid.");
+            }
+
+            bool wildcard = pattern.EndsWith(".*", StringComparison.Ordinal);
+            string eventType = wildcard ? pattern[..^2] : pattern;
+            if (
+                string.IsNullOrWhiteSpace(pattern)
+                || pattern != pattern.Trim()
+                || eventType.Length == 0
+                || pattern.StartsWith("agw.", StringComparison.Ordinal)
+                || pattern.Any(character => char.IsWhiteSpace(character) || char.IsControl(character))
+                || pattern.Contains('*') && (!wildcard || pattern[..^2].Contains('*'))
+            )
+            {
+                throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension event permission is invalid.");
+            }
         }
     }
 

@@ -42,6 +42,8 @@ public sealed record AgentExecutionContext : IExecutionIdentity
 
     public long PermissionVersion { get; init; }
 
+    public BackgroundToolPolicy ToolPolicy { get; init; }
+
     public required ExecutionProvider Provider { get; init; }
 
     /// <summary>

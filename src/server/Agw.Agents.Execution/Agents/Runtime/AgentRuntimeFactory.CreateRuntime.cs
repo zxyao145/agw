@@ -86,6 +86,7 @@ public partial class AgentRuntimeFactory
             {
                 Agent = agent,
                 PermissionMode = settings.PermissionMode,
+                ToolPolicy = settings.ToolPolicy,
                 EnvironmentVariables = settings.EnvironmentVariables,
                 ProviderSessionId = providerSessionId,
                 ProjectId = projectId,

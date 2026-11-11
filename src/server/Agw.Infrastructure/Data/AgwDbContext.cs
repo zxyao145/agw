@@ -55,6 +55,14 @@ public partial class AgwDbContext
         _encryptedPropertyProcessor = new EncryptedPropertyProcessor(encryptedDataProtector);
     }
 
+    internal async Task ExecuteAndSaveAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken)
+    {
+        await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+        await action(cancellationToken);
+        await SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         PruneDeletedRelations();
@@ -287,6 +295,35 @@ public partial class AgwDbContext
                 .Entity<ProjectConversationTurn>()
                 .Property(turn => turn.UsageSettlesAt)
                 .HasConversion(new DateTimeOffsetToBinaryConverter());
+            ConfigureEventTimestampColumns(modelBuilder);
+        }
+    }
+
+    private static void ConfigureEventTimestampColumns(ModelBuilder modelBuilder)
+    {
+        var converter = new ValueConverter<DateTimeOffset, long>(
+            value => value.UtcTicks,
+            value => new DateTimeOffset(value, TimeSpan.Zero)
+        );
+        foreach (
+            var entityType in modelBuilder
+                .Model.GetEntityTypes()
+                .Where(entity =>
+                    entity.ClrType.Namespace
+                        is "Agw.Shared.Data.Entities.Events"
+                            or "Agw.Shared.Data.Entities.Notifications"
+                    || entity.ClrType == typeof(BackgroundExecution)
+                )
+        )
+        {
+            foreach (
+                var property in entityType
+                    .GetProperties()
+                    .Where(property =>
+                        (Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType) == typeof(DateTimeOffset)
+                    )
+            )
+                modelBuilder.Entity(entityType.ClrType).Property(property.Name).HasConversion(converter);
         }
     }
 

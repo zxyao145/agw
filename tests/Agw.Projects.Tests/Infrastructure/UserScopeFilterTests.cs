@@ -7,6 +7,7 @@ using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Auth;
+using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
@@ -40,7 +41,9 @@ public sealed class UserScopeFilterTests
 
         // Assert
         Assert.Equal(
-            new[] { typeof(AuthUserIdSequence) }.Select(type => type.FullName).Order(StringComparer.Ordinal),
+            new[] { typeof(AuthUserIdSequence), typeof(EventOutbox) }
+                .Select(type => type.FullName)
+                .Order(StringComparer.Ordinal),
             unfilteredEntities
         );
     }
@@ -55,9 +58,13 @@ public sealed class UserScopeFilterTests
         {
             typeof(AgentSessionStateEntry),
             typeof(AgentUsage), // Intentional retention: usage is user-scoped analytics.
+            // 保留后台执行标识用于幂等检查。Retain background execution identities for idempotency.
+            typeof(BackgroundExecution),
             typeof(AgentflowCheckpointRecord),
             typeof(AgentflowTrace),
             typeof(DurableExecutionRecord),
+            // 删除项目时停用订阅并保留投递记录。Disable subscriptions on project deletion and retain delivery history.
+            typeof(EventSubscription),
             typeof(Job),
             typeof(ProjectConnectionRelation),
             typeof(ProjectConversation),

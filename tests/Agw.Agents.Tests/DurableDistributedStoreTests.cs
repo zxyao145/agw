@@ -19,27 +19,23 @@ namespace Agw.Agents.Tests;
 /// </summary>
 public sealed class DurableDistributedStoreTests : IDisposable
 {
-    private const string PostgresVariable = "AGW_TEST_POSTGRES_CONNECTION_STRING";
-    private const string RedisVariable = "AGW_TEST_REDIS_CONNECTION_STRING";
-
     private readonly IDisposable _user = TurnPersistenceTestKit.EnterUser();
 
-    public static bool PostgresEnabled =>
-        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(PostgresVariable));
+    public static bool PostgresEnabled => !string.IsNullOrWhiteSpace(DurableTestConnections.PostgresConnectionString);
 
-    public static bool RedisEnabled => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(RedisVariable));
+    public static bool RedisEnabled => !string.IsNullOrWhiteSpace(DurableTestConnections.RedisConnectionString);
 
     public void Dispose() => _user.Dispose();
 
     [Fact(
         SkipUnless = nameof(PostgresEnabled),
-        Skip = "Set AGW_TEST_POSTGRES_CONNECTION_STRING to an isolated PostgreSQL server with CREATE DATABASE permission."
+        Skip = "Configure an isolated PostgreSQL server with CREATE DATABASE permission in .scratch/postgres-tests.json or AGW_TEST_POSTGRES_CONNECTION_STRING."
     )]
     public async Task Postgres_ConcurrentCommits_AssignContiguousSequences()
     {
         // Arrange
         await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
-            Environment.GetEnvironmentVariable(PostgresVariable)!
+            DurableTestConnections.PostgresConnectionString!
         );
         var id = await AcceptQueuedAsync(kit);
         var lease = await ClaimAsync(kit, id, "worker-a", TimeSpan.FromSeconds(30));
@@ -64,14 +60,14 @@ public sealed class DurableDistributedStoreTests : IDisposable
 
     [Fact(
         SkipUnless = nameof(PostgresEnabled),
-        Skip = "Set AGW_TEST_POSTGRES_CONNECTION_STRING to an isolated PostgreSQL server with CREATE DATABASE permission."
+        Skip = "Configure an isolated PostgreSQL server with CREATE DATABASE permission in .scratch/postgres-tests.json or AGW_TEST_POSTGRES_CONNECTION_STRING."
     )]
     public async Task Postgres_ExpiredLease_TakeoverRejectsOldInstanceWrites()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
         await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
-            Environment.GetEnvironmentVariable(PostgresVariable)!
+            DurableTestConnections.PostgresConnectionString!
         );
         var id = await AcceptQueuedAsync(kit);
         var oldLease = await ClaimAsync(kit, id, "worker-a", TimeSpan.FromSeconds(1));
@@ -119,15 +115,13 @@ public sealed class DurableDistributedStoreTests : IDisposable
 
     [Fact(
         SkipUnless = nameof(RedisEnabled),
-        Skip = "Set AGW_TEST_REDIS_CONNECTION_STRING to an isolated Redis server."
+        Skip = "Configure an isolated Redis server in .scratch/redis-tests.json or AGW_TEST_REDIS_CONNECTION_STRING."
     )]
     public async Task Redis_Projection_FillsGapsFromCommittedEventsAndReadsContiguously()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
-        await using var redis = await ConnectionMultiplexer.ConnectAsync(
-            Environment.GetEnvironmentVariable(RedisVariable)!
-        );
+        await using var redis = await ConnectionMultiplexer.ConnectAsync(DurableTestConnections.RedisConnectionString!);
         await using var kit = await TurnPersistenceTestKit.CreateAsync(
             executionOptions: new ExecutionRuntimeOptions
             {
@@ -178,7 +172,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
 
     [Fact(
         SkipUnless = nameof(PostgresEnabled),
-        Skip = "Set AGW_TEST_POSTGRES_CONNECTION_STRING to an isolated PostgreSQL server with CREATE DATABASE permission."
+        Skip = "Configure an isolated PostgreSQL server with CREATE DATABASE permission in .scratch/postgres-tests.json or AGW_TEST_POSTGRES_CONNECTION_STRING."
     )]
     [Trait("Category", "Postgres")]
     public async Task Postgres_InterruptFromAnotherInstance_CountsUsageAfterWorkerExits()
@@ -192,7 +186,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
         };
         var client = new UsageReportingChatClient();
         await using var instanceA = await TurnPersistenceTestKit.CreatePostgresAsync(
-            Environment.GetEnvironmentVariable(PostgresVariable)!,
+            DurableTestConnections.PostgresConnectionString!,
             options,
             services => DurableUsageTestServices.Add(services, client)
         );
@@ -223,7 +217,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
 
     [Fact(
         SkipUnless = nameof(PostgresEnabled),
-        Skip = "Set AGW_TEST_POSTGRES_CONNECTION_STRING to an isolated PostgreSQL server with CREATE DATABASE permission."
+        Skip = "Configure an isolated PostgreSQL server with CREATE DATABASE permission in .scratch/postgres-tests.json or AGW_TEST_POSTGRES_CONNECTION_STRING."
     )]
     [Trait("Category", "Postgres")]
     public async Task Postgres_InterruptWithStoppedHolder_CountsUsageAfterLeaseDuration()
@@ -236,7 +230,7 @@ public sealed class DurableDistributedStoreTests : IDisposable
             Distributed = new DistributedExecutionOptions { LeaseSeconds = 5 },
         };
         await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
-            Environment.GetEnvironmentVariable(PostgresVariable)!,
+            DurableTestConnections.PostgresConnectionString!,
             options
         );
         var task = await kit.SeedConversationAsync();

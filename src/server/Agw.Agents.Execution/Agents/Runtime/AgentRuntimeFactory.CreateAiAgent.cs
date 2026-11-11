@@ -45,6 +45,7 @@ public partial class AgentRuntimeFactory
                 DefaultMode = "execute",
                 DeferHumanInteractions = deferHumanInteractions,
                 PermissionMode = permissionMode,
+                ToolPolicy = _executionContext?.Current?.ToolPolicy ?? BackgroundToolPolicy.Default,
                 ExtensionPins = extensionPins,
                 ExtensionIds = extensionIds,
                 AcceptedExtensionCapabilities = acceptedExtensionCapabilities,
@@ -101,6 +102,7 @@ public partial class AgentRuntimeFactory
                 request.DefaultMode,
                 cancellationToken,
                 deferHumanInteractions: request.DeferHumanInteractions,
+                toolPolicy: request.ToolPolicy,
                 extensionPins: request.ExtensionPins,
                 acceptedExtensionCapabilities: request.AcceptedExtensionCapabilities,
                 extensionIds: request.ExtensionIds

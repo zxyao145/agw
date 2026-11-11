@@ -31,4 +31,11 @@ public sealed record ExtensionServerManifest
     public string? MinHostVersion { get; init; }
     public required string EntryAssembly { get; init; }
     public required string EntryType { get; init; }
+
+    public ExtensionServerPermissions Permissions { get; init; } = new();
+}
+
+public sealed record ExtensionServerPermissions
+{
+    public ExtensionEventPermissions Events { get; init; } = new();
 }

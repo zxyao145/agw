@@ -1,0 +1,28 @@
+{
+  "manifestVersion": 2,
+  "id": "019a4c17-5f00-7a80-8b3d-2b732f48a101",
+  "name": "taskpilot",
+  "displayName": "TaskPilot",
+  "version": "1.0.0",
+  "description": "Rules, matters, reviews and automated delivery managed through TaskPilot.",
+  "author": "Agw",
+  "targets": 3,
+  "server": {
+    "apiVersion": 1,
+    "entryAssembly": "server/Agw.Extensions.TaskPilot.dll",
+    "entryType": "Agw.Extensions.TaskPilot.TaskPilotExtension",
+    "permissions": { "events": { "publish": ["taskpilot.*"], "publishRoot": true } }
+  },
+  "desktop": {
+    "apiVersion": 1,
+    "contributes": {
+      "mainViews": [
+        { "id": "main", "title": "TaskPilot", "icon": "ListTodo", "entry": "desktop/main.html" }
+      ]
+    },
+    "permissions": ["context.project", "context.agent"]
+  },
+  "files": {
+    "desktop/main.html": "228d6a263ffb7b71121543f3a6cec1940d49f227141296b40140751615015cbb"
+  }
+}

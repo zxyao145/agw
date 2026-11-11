@@ -7,8 +7,14 @@ const { splitFrontMatter } = await import("../markdown/front-matter");
 const { withoutTrailingNewlines } = await import("../markdown/markdown-syntax");
 const { recordBlock } = await import("../markdown/markdown-blocks");
 const { lexEditorMarkdown } = await import("./markdown-parser");
-const { MarkdownSourceMapError, footnoteContainerText, mapSourceBlocks, pairSourceBlocks } =
-  await import("./source-map");
+const {
+  MarkdownSourceMapError,
+  footnoteContainerText,
+  mapSourceBlocks,
+  normalizeSourceLineEndings,
+  pairSourceBlocks,
+} = await import("./source-map");
+const { writeMarkdown } = await import("./markdown-writer");
 
 function nonSpaceTokens(body: string) {
   return lexEditorMarkdown(body).filter(
@@ -18,25 +24,37 @@ function nonSpaceTokens(body: string) {
 
 test("every input file's block and list item ranges hold their token's raw text without trailing newlines", () => {
   for (const { name, source } of readTestInputs()) {
-    const { prefix, body } = splitFrontMatter(source);
-    const blocks = mapSourceBlocks(body, prefix.length);
+    const normalized = normalizeSourceLineEndings(source);
+    const { prefix, body } = splitFrontMatter(normalized.text);
+    const sourceBodyOffset = normalized.sourceOffsets[prefix.length];
+    const blocks = mapSourceBlocks(source.slice(sourceBodyOffset), sourceBodyOffset);
     const tokens = nonSpaceTokens(body);
     assert.equal(blocks.length, tokens.length, name);
     blocks.forEach((block, index) => {
       const token = tokens[index];
       assert.equal(
-        source.slice(block.range.from, block.range.to),
+        normalizeSourceLineEndings(source.slice(block.range.from, block.range.to)).text,
         withoutTrailingNewlines(token.raw),
         `${name} block ${index}`,
       );
       const items = (token as { items?: { raw: string }[] }).items;
       assert.deepEqual(
-        block.items?.map((range) => source.slice(range.from, range.to)),
+        block.items?.map(
+          (range) => normalizeSourceLineEndings(source.slice(range.from, range.to)).text,
+        ),
         items?.map((item) => withoutTrailingNewlines(item.raw)),
         `${name} items of block ${index}`,
       );
     });
   }
+});
+
+test("CRLF input maps source ranges and an unchanged document is not written", () => {
+  const source = "---\r\ntitle: note\r\n---\r\nFirst paragraph.\r\n\r\nSecond paragraph.\r\n";
+  const { baseline } = openMarkdown(source);
+
+  assert.equal(baseline.source, source);
+  assert.equal(writeMarkdown(baseline, baseline.doc), null);
 });
 
 test("documents with and without footnotes map their blocks; the footnote container takes no position", () => {
@@ -61,7 +79,7 @@ test("the baseline maps every block of the loaded document to its source range",
     assert.equal(baseline.blocks.length, baseline.doc.childCount, name);
     baseline.doc.forEach((node, _offset, index) => {
       const { range } = baseline.blocks[index];
-      const text = source.slice(range.from, range.to);
+      const text = normalizeSourceLineEndings(source.slice(range.from, range.to)).text;
       if (node.type.name === "frontMatter") {
         assert.match(text, /^---\n[\s\S]*---$/, name);
       } else {

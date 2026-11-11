@@ -18,6 +18,13 @@ public delegate ValueTask<string> ExtensionSkillContentProvider(
     CancellationToken cancellationToken
 );
 
+public delegate ValueTask<ExtensionEventHandlerResult> ExtensionEventHandler(
+    IServiceProvider services,
+    IExtensionContext context,
+    ExtensionEventDelivery delivery,
+    CancellationToken cancellationToken
+);
+
 public interface IExtensionRegistration
 {
     JsonSerializerOptions JsonOptions { get; }
@@ -31,6 +38,17 @@ public interface IExtensionRegistration
         where TTool : class, IExtensionTool;
 
     void RegisterSkill(ExtensionSkillDescriptor descriptor, ExtensionSkillContentProvider contentProvider);
+
+    void RegisterEventHandler(ExtensionEventHandlerDescriptor descriptor, ExtensionEventHandler handler);
+
+    void RegisterEventSourceProvider<TProvider>(ExtensionEventSourceProviderDescriptor descriptor)
+        where TProvider : class, IExtensionEventSourceProvider;
+
+    void RegisterNotificationChannel<TChannel>(ExtensionNotificationChannelDescriptor descriptor)
+        where TChannel : class, IExtensionNotificationChannel;
+
+    void RegisterOutboxResultHandler<THandler>(string kind)
+        where THandler : class, IExtensionOutboxResultHandler;
 
     void RegisterBackgroundService<TService>()
         where TService : class, IExtensionBackgroundService;

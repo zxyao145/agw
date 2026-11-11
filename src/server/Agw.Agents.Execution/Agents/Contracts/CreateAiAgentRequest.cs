@@ -32,6 +32,8 @@ public sealed class CreateAiAgentRequest
     /// </summary>
     public bool DeferHumanInteractions { get; init; }
 
+    public BackgroundToolPolicy ToolPolicy { get; init; }
+
     public IReadOnlyList<ExtensionExecutionPin>? ExtensionPins { get; init; }
 
     public IReadOnlyList<Guid>? ExtensionIds { get; init; }

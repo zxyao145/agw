@@ -1,0 +1,27 @@
+{
+  "name": "@agw/extension-taskpilot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../clients/.oxlintrc.json ./desktop ./vite.config.ts ./build.mjs",
+    "format": "oxfmt -c ../../clients/.oxfmtrc.json ./desktop ./vite.config.ts ./build.mjs *.json",
+    "format:check": "oxfmt -c ../../clients/.oxfmtrc.json --check ./desktop ./vite.config.ts ./build.mjs *.json"
+  },
+  "devDependencies": {
+    "@agw/extension-sdk": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

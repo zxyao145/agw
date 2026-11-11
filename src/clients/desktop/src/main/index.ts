@@ -24,6 +24,7 @@ import {
 import started from "electron-squirrel-startup";
 
 import type {
+  DesktopNotificationFrame,
   DesktopRuntimeState,
   DesktopSettings,
   DesktopSettingsUpdate,
@@ -66,6 +67,7 @@ import { createLocalDesktopToken } from "./runtime/local-token";
 import { readLocalServerRuntime } from "./runtime/local-server-runtime";
 import { getServerDataDirectory } from "./runtime/server-data-directory";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
+import { DesktopNotificationStream, type DesktopNotificationProfile } from "./notification-stream";
 import { getTurnNotificationText, normalizeTurnNotificationRequest } from "./turn-notification";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
 import { trayIconFileName } from "./tray-icon";
@@ -106,6 +108,7 @@ let rendererRecoveryAttempt: Promise<boolean> | null = null;
 const rendererRecoveryGuard = new RendererRecoveryGuard();
 let extensionRuntime: ExtensionRuntime;
 let confirmationService: ConfirmationService;
+let notificationStream: DesktopNotificationStream | null = null;
 
 function reportMainProcessError(title: string, error: unknown): void {
   console.error(title, error);
@@ -204,6 +207,82 @@ function senderUrl(event: IpcMainInvokeEvent): string {
 }
 
 let oidcLogin: DesktopOidcLogin | null = null;
+
+async function syncDesktopNotificationStream(): Promise<void> {
+  if (!notificationStream) return;
+  const profile = currentSettings.profiles.find(
+    (item) => item.id === currentSettings.activeServerId,
+  );
+  if (!profile) {
+    notificationStream.setProfile(null);
+    return;
+  }
+  const token = await settingsStore.loadToken(profile.id);
+  if (!token) {
+    notificationStream.setProfile(null);
+    return;
+  }
+  const local = profile.kind === "local" ? await readLocalServerRuntime() : null;
+  notificationStream.setProfile({
+    serverId: profile.id,
+    baseUrl: local?.baseUrl ?? profile.baseUrl,
+    token,
+  });
+}
+
+async function markNotificationDelivered(
+  profile: DesktopNotificationProfile,
+  notification: DesktopNotificationFrame["notification"],
+): Promise<void> {
+  const response = await net.fetch(`${profile.baseUrl}/api/notifications/delivered`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${profile.token}`,
+      "Content-Type": "application/json",
+    },
+    credentials: "omit",
+    body: JSON.stringify({ notificationId: notification.id, version: notification.version }),
+  });
+  if (!response.ok) {
+    throw new Error(`Desktop notification receipt returned HTTP ${response.status}.`);
+  }
+}
+
+async function publishDesktopNotification(
+  profile: DesktopNotificationProfile,
+  notification: DesktopNotificationFrame["notification"],
+  showToast: boolean,
+): Promise<void> {
+  const frame: DesktopNotificationFrame = { serverId: profile.serverId, notification };
+  try {
+    await markNotificationDelivered(profile, notification);
+  } catch (error) {
+    console.error("Unable to acknowledge Desktop notification delivery", error);
+  }
+  const contents = mainWindow?.webContents;
+  if (contents && !contents.isDestroyed()) contents.send("agw:notification", frame);
+  if (!showToast || mainWindow?.isFocused() || !Notification.isSupported()) return;
+  const toast = new Notification({ title: notification.title, body: notification.text });
+  toast.on("click", () => {
+    void openNotificationWindow(profile.serverId, notification.id).catch((error: unknown) =>
+      reportMainProcessError("Unable to open Desktop notification", error),
+    );
+  });
+  toast.show();
+}
+
+async function openNotificationWindow(serverId: string, notificationId: string): Promise<void> {
+  if (!currentSettings.profiles.some((profile) => profile.id === serverId)) {
+    throw new Error("The notification belongs to a Server profile that no longer exists.");
+  }
+  if (currentSettings.activeServerId !== serverId) {
+    await settingsStore.save({ activeServerId: serverId });
+    currentSettings = await settingsStore.load();
+    await syncDesktopNotificationStream();
+  }
+  const pathname = `/desktop/chat/?notificationId=${encodeURIComponent(notificationId)}&serverId=${encodeURIComponent(serverId)}`;
+  await showWindow(pathname);
+}
 
 async function runtimeState(): Promise<DesktopRuntimeState> {
   const activeToken = await settingsStore.loadToken(currentSettings.activeServerId);
@@ -716,7 +795,9 @@ function registerIpc(): void {
   });
   ipcMain.handle("agw:oidc-login", async (event, profileId: string, providerId: string) => {
     assertTrustedSender(senderUrl(event));
-    return oidcLogin!.login(profileId, providerId);
+    const result = await oidcLogin!.login(profileId, providerId);
+    await syncDesktopNotificationStream();
+    return result;
   });
   ipcMain.handle("agw:oidc-cancel", async (event, profileId: string) => {
     assertTrustedSender(senderUrl(event));
@@ -724,7 +805,9 @@ function registerIpc(): void {
   });
   ipcMain.handle("agw:oidc-logout", async (event, profileId: string) => {
     assertTrustedSender(senderUrl(event));
-    return oidcLogin!.logout(profileId);
+    const result = await oidcLogin!.logout(profileId);
+    await syncDesktopNotificationStream();
+    return result;
   });
   ipcMain.handle("agw:get-runtime-state", async (event) => {
     assertTrustedSender(senderUrl(event));
@@ -745,6 +828,7 @@ function registerIpc(): void {
     if (settings.profiles) oidcLogin?.cancelAll();
     await settingsStore.save(settings);
     currentSettings = await settingsStore.load();
+    await syncDesktopNotificationStream();
     return runtimeState();
   });
   ipcMain.handle("agw:get-file-viewer-defaults", async (event) => {
@@ -763,10 +847,12 @@ function registerIpc(): void {
   ipcMain.handle("agw:save-token", async (event, profileId: string, token: string) => {
     assertTrustedSender(senderUrl(event));
     await settingsStore.saveToken(profileId, token);
+    await syncDesktopNotificationStream();
   });
   ipcMain.handle("agw:delete-token", async (event, profileId: string) => {
     assertTrustedSender(senderUrl(event));
     await settingsStore.deleteToken(profileId);
+    await syncDesktopNotificationStream();
   });
   ipcMain.handle("agw:provision-local-token", async (event) => {
     assertTrustedSender(senderUrl(event));
@@ -780,6 +866,7 @@ function registerIpc(): void {
       `Agw Desktop ${crypto.randomUUID().slice(0, 8)}`,
     );
     await settingsStore.saveToken(localProfile.id, token);
+    await syncDesktopNotificationStream();
     return token;
   });
   ipcMain.handle("agw:open-external", async (event, value: string) => {
@@ -854,6 +941,7 @@ app.on("before-quit", () => {
   isQuitting = true;
   rendererRecoveryGuard.dispose();
   oidcLogin?.cancelAll();
+  notificationStream?.stop();
 });
 
 app.on("activate", () => showWindowSafely());
@@ -883,6 +971,13 @@ void app
     const flavor = packageMetadata.packageFlavor;
     settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
     currentSettings = await settingsStore.load();
+    notificationStream = new DesktopNotificationStream({
+      fetch: (input, init) => net.fetch(input instanceof Request ? input : input.toString(), init),
+      onNotification: (profile, notification, showToast) =>
+        publishDesktopNotification(profile, notification, showToast),
+      onError: (error) => console.warn("Desktop notification stream error", error),
+    });
+    await syncDesktopNotificationStream();
     oidcLogin = new DesktopOidcLogin({
       getProfile: async (profileId) => {
         const settings = await settingsStore.load();
@@ -893,10 +988,15 @@ void app
       },
       fetch: (url, init) => net.fetch(url, init),
       openExternal: (url) => shell.openExternal(url),
-      saveToken: (profileId, token, beforeCommit) =>
-        settingsStore.saveToken(profileId, token, "oidc", beforeCommit),
+      saveToken: async (profileId, token, beforeCommit) => {
+        await settingsStore.saveToken(profileId, token, "oidc", beforeCommit);
+        await syncDesktopNotificationStream();
+      },
       loadToken: (profileId) => settingsStore.loadToken(profileId),
-      deleteToken: (profileId) => settingsStore.deleteToken(profileId),
+      deleteToken: async (profileId) => {
+        await settingsStore.deleteToken(profileId);
+        await syncDesktopNotificationStream();
+      },
     });
     daemonManager = new DaemonManager(process.platform, serverExecutablePath());
     // 用户确认与权限批准在独立的 modal 窗口中显示，主题不会作用于它们。Confirmations and permission approvals
@@ -927,6 +1027,7 @@ void app
       onViewAdded: () => floatingChatButton?.raise(),
       onSettingsChanged: async () => {
         currentSettings = await settingsStore.load();
+        await syncDesktopNotificationStream();
       },
       log: (message) => console.info(message),
     });

@@ -4,6 +4,7 @@ import type { DesktopRuntimeState } from "./runtime";
 import type { DesktopSettingsUpdate } from "./settings";
 import type { DesktopUpdateCheckResult } from "./update";
 import type { ImageContextMenuRequest } from "./image";
+import type { DesktopNotificationFrame } from "./notification";
 import type { DecodedText, EncodedText, EncodeTextOptions, TextEncodingInfo } from "./text";
 import type {
   CreateExtensionFrameRequest,
@@ -79,6 +80,7 @@ export type AgwDesktopBridge = {
   prepareUninstall(request: UninstallRequest): Promise<UninstallResult>;
   showWindow(): Promise<void>;
   showTurnNotification(request: TurnNotificationRequest): Promise<void>;
+  onNotification(listener: (frame: DesktopNotificationFrame) => void): () => void;
   quitDesktop(): Promise<void>;
 
   /* extension 管理通道 Extension management channels */

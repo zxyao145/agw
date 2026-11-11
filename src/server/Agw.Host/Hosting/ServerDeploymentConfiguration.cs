@@ -20,6 +20,7 @@ public static class ServerDeploymentConfiguration
                     ["Database:Provider"] = "sqlite",
                     ["Database:ConnectionString"] = "Data Source=agw.db",
                     ["Execution:Provider"] = "InProcess",
+                    ["Events:Transport:Provider"] = "InProcess",
                     ["DistributedLock:Provider"] = null,
                     ["DistributedLock:ConnectionString"] = string.Empty,
                 },
@@ -53,6 +54,36 @@ public static class ServerDeploymentConfiguration
         }
 
         ValidateDatabaseConnectionString(configuration);
+        ValidateEventTransport(profile, configuration);
+    }
+
+    private static void ValidateEventTransport(AgwHostProfile profile, IConfiguration configuration)
+    {
+        var provider = configuration["Events:Transport:Provider"] ?? "InProcess";
+        if (
+            !string.Equals(provider, "InProcess", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(provider, "Redis", StringComparison.OrdinalIgnoreCase)
+        )
+            throw new AgwException(
+                ErrorCodes.InvalidSetupConfiguration,
+                "Events:Transport:Provider must be InProcess or Redis."
+            );
+        if (
+            profile != AgwHostProfile.Standalone
+            && !string.Equals(provider, "Redis", StringComparison.OrdinalIgnoreCase)
+        )
+            throw new AgwException(
+                ErrorCodes.InvalidSetupConfiguration,
+                "ControlPlane and DataPlane require the Redis event transport."
+            );
+        if (
+            string.Equals(provider, "Redis", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(configuration["Events:Transport:Redis:ConnectionString"])
+        )
+            throw new AgwException(
+                ErrorCodes.InvalidSetupConfiguration,
+                "Events:Transport:Redis:ConnectionString is required."
+            );
     }
 
     private static void ValidateDatabaseConnectionString(IConfiguration configuration)

@@ -3,6 +3,7 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Providers.Contracts;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.EntityFrameworkCore;
 
@@ -98,6 +99,28 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
             AgentRuntimeType.Agentflow => await _dbContext
                 .Agentflows.AsNoTracking()
                 .AnyAsync(agentflow => agentflow.Id == id && agentflow.CreateBy == ownerUserId, cancellationToken),
+            _ => false,
+        };
+    }
+
+    public async Task<bool> SupportsNoToolsAsync(
+        AgentRuntimeType type,
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (id == Guid.Empty)
+        {
+            return false;
+        }
+
+        var ownerUserId = ResolveOwnerUserId();
+        return type switch
+        {
+            AgentRuntimeType.Agent => await SupportsNoToolsAgentAsync(id, ownerUserId, cancellationToken)
+                .ConfigureAwait(false),
+            AgentRuntimeType.Agentflow => await SupportsNoToolsAgentflowAsync(id, ownerUserId, [], cancellationToken)
+                .ConfigureAwait(false),
             _ => false,
         };
     }
@@ -211,6 +234,97 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
     }
 
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
+
+    private async Task<bool> SupportsNoToolsAgentAsync(
+        Guid agentId,
+        string ownerUserId,
+        CancellationToken cancellationToken
+    )
+    {
+        var agent = await _dbContext
+            .Agents.AsNoTracking()
+            .Where(item => item.Id == agentId && item.CreateBy == ownerUserId)
+            .Select(item => new { item.Type, item.ExternalAgentKind })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return agent != null
+            && (
+                agent.Type == AgentType.System
+                || agent.ExternalAgentKind == Agw.Agents.Contracts.Execution.EngineKind.ClaudeCode
+            );
+    }
+
+    private async Task<bool> SupportsNoToolsAgentflowAsync(
+        Guid agentflowId,
+        string ownerUserId,
+        HashSet<Guid> visited,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!visited.Add(agentflowId))
+        {
+            return true;
+        }
+
+        if (
+            !await _dbContext
+                .Agentflows.AsNoTracking()
+                .AnyAsync(flow => flow.Id == agentflowId && flow.CreateBy == ownerUserId, cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            return false;
+        }
+
+        var nodes = await _dbContext
+            .AgentflowNodes.AsNoTracking()
+            .Where(node => node.AgentflowId == agentflowId && node.CreateBy == ownerUserId)
+            .Select(node => new { node.Kind, node.RelateId })
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var agentIds = nodes
+            .Where(node => node.Kind == AgentflowNodeKind.Agent && node.RelateId.HasValue)
+            .Select(node => node.RelateId!.Value)
+            .Distinct()
+            .ToArray();
+        if (agentIds.Length > 0)
+        {
+            var supportedAgentCount = await _dbContext
+                .Agents.AsNoTracking()
+                .Where(agent =>
+                    agentIds.Contains(agent.Id)
+                    && agent.CreateBy == ownerUserId
+                    && (
+                        agent.Type == AgentType.System
+                        || agent.ExternalAgentKind == Agw.Agents.Contracts.Execution.EngineKind.ClaudeCode
+                    )
+                )
+                .CountAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (supportedAgentCount != agentIds.Length)
+            {
+                return false;
+            }
+        }
+
+        foreach (
+            var nestedAgentflowId in nodes
+                .Where(node => node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
+                .Select(node => node.RelateId!.Value)
+                .Distinct()
+        )
+        {
+            if (
+                !await SupportsNoToolsAgentflowAsync(nestedAgentflowId, ownerUserId, visited, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static AgentDescriptor Map(Agent agent)
     {

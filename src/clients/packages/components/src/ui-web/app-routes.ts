@@ -1,4 +1,6 @@
 import {
+  Activity,
+  Bell,
   Blocks,
   BookOpenText,
   Bot,
@@ -40,5 +42,7 @@ export const APP_ROUTES = {
   skills: { href: "/skills", title: "Skills", icon: Blocks },
   mcpToolServers: { href: "/mcp-tool-servers", title: "MCP Tool Servers", icon: Network },
   integrations: { href: "/integrations", title: "Integrations", icon: Cable },
+  events: { href: "/events", title: "Events", icon: Activity },
+  notifications: { href: "/notifications", title: "Notifications", icon: Bell },
   settings: { href: "/settings", title: "Settings", icon: Settings },
 } as const satisfies Record<string, AppRoute>;

@@ -85,7 +85,8 @@ public sealed class AgentCapabilityComposer
         bool deferHumanInteractions = false,
         IReadOnlyList<ExtensionExecutionPin>? extensionPins = null,
         ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
-        IReadOnlyList<Guid>? extensionIds = null
+        IReadOnlyList<Guid>? extensionIds = null,
+        BackgroundToolPolicy toolPolicy = BackgroundToolPolicy.Default
     )
     {
         var lease = new AgentResourceLease();
@@ -100,6 +101,24 @@ public sealed class AgentCapabilityComposer
         var toolWarnings = new List<string>();
         var toolInvocationWarnings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var extensionSkills = new List<AgentSkill>();
+        AgentCapabilityComposition BuildComposition(
+            IReadOnlySet<string>? declaredToolNames = null,
+            IReadOnlyList<AgentSkill>? additionalSkills = null
+        ) =>
+            new(
+                tools,
+                pluginSkills,
+                warnings,
+                contextProviders,
+                loopEvaluators,
+                autoApprovalRules,
+                planModeAllowedToolNames,
+                toolWarnings,
+                toolInvocationWarnings,
+                lease,
+                declaredToolNames,
+                additionalSkills
+            );
 
         try
         {
@@ -138,6 +157,11 @@ public sealed class AgentCapabilityComposer
 
             if (agent.Type == AgentType.External)
             {
+                if (toolPolicy == BackgroundToolPolicy.None)
+                {
+                    return BuildComposition();
+                }
+
                 var userMemoryDefinitions = resolvedToolValues
                     .ToolBlocks.Where(definition =>
                         string.Equals(
@@ -161,21 +185,15 @@ public sealed class AgentCapabilityComposer
                     contextProviders.AddRange(userMemoryContribution.ContextProviders);
                 }
 
-                return new AgentCapabilityComposition(
-                    tools,
-                    pluginSkills,
-                    warnings,
-                    contextProviders,
-                    loopEvaluators,
-                    autoApprovalRules,
-                    planModeAllowedToolNames,
-                    toolWarnings,
-                    toolInvocationWarnings,
-                    lease
-                );
+                return BuildComposition();
             }
 
             contextProviders.Add(new AgwWorkspaceProvider(agent, project, _instructionSources, _logger));
+
+            if (toolPolicy == BackgroundToolPolicy.None)
+            {
+                return BuildComposition();
+            }
 
             var toolBlockDefinitions = resolvedToolValues
                 .ToolBlocks.Where(definition =>
@@ -345,17 +363,7 @@ public sealed class AgentCapabilityComposer
             if (deferHumanInteractions)
                 contextProviders.Add(new DeferredHumanInteractionProvider());
 
-            return new AgentCapabilityComposition(
-                tools,
-                pluginSkills,
-                warnings,
-                contextProviders,
-                loopEvaluators,
-                autoApprovalRules,
-                planModeAllowedToolNames,
-                toolWarnings,
-                toolInvocationWarnings,
-                lease,
+            return BuildComposition(
                 toolContribution
                     .DynamicToolMetadata.Keys.Concat(contribution.DynamicToolMetadata.Keys)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase),

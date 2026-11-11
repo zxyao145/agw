@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using System.Text.Json;
+using Agw.Auth.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Sdk;
 using Agw.Shared.Exceptions;
@@ -373,6 +375,8 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
     private AsyncServiceScope? _hostScope;
     private string? _userId;
     private readonly Guid _invocationId;
+    private readonly Guid _callerInvocationId;
+    private readonly IExtensionCallerScope _callerContext;
     private ILogger? _logger;
     private Action? _releaseMetrics;
     private bool _disposed;
@@ -383,6 +387,8 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
         AsyncServiceScope hostScope,
         string? userId,
         Guid invocationId,
+        Guid callerInvocationId,
+        IExtensionCallerScope callerContext,
         ILogger logger,
         Action releaseMetrics
     )
@@ -392,6 +398,8 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
         _hostScope = hostScope;
         _userId = userId;
         _invocationId = invocationId;
+        _callerInvocationId = callerInvocationId;
+        _callerContext = callerContext;
         _logger = logger;
         _releaseMetrics = releaseMetrics;
     }
@@ -405,15 +413,37 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
                 throw new AgwException(ErrorCodes.ExtensionUnavailable);
             }
 
-            IDisposable capabilitiesScope = generation.HostCapabilities.Push(hostScope.ServiceProvider);
+            IDisposable? callerContextScope = null;
+            IDisposable? capabilitiesScope = null;
+            IDisposable? userContextScope = null;
+            IDisposable? hostUserContextScope = null;
             try
             {
-                IDisposable? userContextScope = generation.UserContext?.Push(_userId, _invocationId);
-                return new AmbientContextScope(capabilitiesScope, userContextScope);
+                callerContextScope = _callerContext.Push(
+                    new ExtensionCaller
+                    {
+                        ExtensionId = generation.GenerationId.ExtensionId,
+                        GenerationId = generation.GenerationId.GenerationId,
+                        UserId = _userId,
+                        InvocationId = _callerInvocationId,
+                    }
+                );
+                capabilitiesScope = generation.HostCapabilities.Push(hostScope.ServiceProvider);
+                userContextScope = generation.UserContext?.Push(_userId, _invocationId);
+                hostUserContextScope = PushHostUserContext(_userId);
+                return new AmbientContextScope(
+                    callerContextScope,
+                    capabilitiesScope,
+                    userContextScope,
+                    hostUserContextScope
+                );
             }
             catch
             {
-                capabilitiesScope.Dispose();
+                hostUserContextScope?.Dispose();
+                userContextScope?.Dispose();
+                capabilitiesScope?.Dispose();
+                callerContextScope?.Dispose();
                 throw;
             }
         }
@@ -426,6 +456,7 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
         AsyncServiceScope? hostScope;
         string? userId;
         Guid invocationId;
+        Guid callerInvocationId;
         ILogger? logger;
         Action? releaseMetrics;
         lock (_gate)
@@ -445,6 +476,7 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
             userId = _userId;
             _userId = null;
             invocationId = _invocationId;
+            callerInvocationId = _callerInvocationId;
             logger = _logger;
             _logger = null;
             releaseMetrics = _releaseMetrics;
@@ -453,10 +485,22 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
 
         IDisposable? hostCapabilitiesScope = null;
         IDisposable? userContextScope = null;
+        IDisposable? callerContextScope = null;
+        IDisposable? hostUserContextScope = null;
         if (generation is not null && hostScope is { } activeHostScope)
         {
+            callerContextScope = _callerContext.Push(
+                new ExtensionCaller
+                {
+                    ExtensionId = generation.GenerationId.ExtensionId,
+                    GenerationId = generation.GenerationId.GenerationId,
+                    UserId = userId,
+                    InvocationId = callerInvocationId,
+                }
+            );
             hostCapabilitiesScope = generation.HostCapabilities.Push(activeHostScope.ServiceProvider);
             userContextScope = generation.UserContext?.Push(userId, invocationId);
+            hostUserContextScope = PushHostUserContext(userId);
         }
 
         Exception? failure = null;
@@ -500,8 +544,10 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
         }
         finally
         {
+            hostUserContextScope?.Dispose();
             userContextScope?.Dispose();
             hostCapabilitiesScope?.Dispose();
+            callerContextScope?.Dispose();
             generation?.FinishInvocation(invocationId);
             releaseMetrics?.Invoke();
         }
@@ -512,21 +558,41 @@ internal sealed class ExtensionInvocationResources : IAsyncDisposable
         }
     }
 
+    private static IDisposable PushHostUserContext(string? userId) =>
+        UserInfoUtil.Push(
+            userId is null
+                ? null
+                : new ClaimsPrincipal(
+                    new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "ExtensionInvocation")
+                )
+        );
+
     private sealed class AmbientContextScope : IDisposable
     {
+        private IDisposable? _callerContextScope;
         private IDisposable? _capabilitiesScope;
         private IDisposable? _userContextScope;
+        private IDisposable? _hostUserContextScope;
 
-        public AmbientContextScope(IDisposable capabilitiesScope, IDisposable? userContextScope)
+        public AmbientContextScope(
+            IDisposable callerContextScope,
+            IDisposable capabilitiesScope,
+            IDisposable? userContextScope,
+            IDisposable hostUserContextScope
+        )
         {
+            _callerContextScope = callerContextScope;
             _capabilitiesScope = capabilitiesScope;
             _userContextScope = userContextScope;
+            _hostUserContextScope = hostUserContextScope;
         }
 
         public void Dispose()
         {
+            Interlocked.Exchange(ref _hostUserContextScope, null)?.Dispose();
             Interlocked.Exchange(ref _userContextScope, null)?.Dispose();
             Interlocked.Exchange(ref _capabilitiesScope, null)?.Dispose();
+            Interlocked.Exchange(ref _callerContextScope, null)?.Dispose();
         }
     }
 }

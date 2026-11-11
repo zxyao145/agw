@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <ProjectReference Include="../Agw.Auth/Agw.Auth.csproj" />
+    <ProjectReference Include="../Agw.Data/Agw.Data.csproj" />
+    <ProjectReference Include="../Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Notifications.Contracts/Agw.Notifications.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Shared/Agw.Shared.csproj" />
+  </ItemGroup>
+</Project>

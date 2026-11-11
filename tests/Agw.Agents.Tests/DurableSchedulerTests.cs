@@ -17,7 +17,7 @@ namespace Agw.Agents.Tests;
 
 public sealed class DurableSchedulerTests
 {
-    public static bool PostgresEnabled => DurableTurnUpgradeTests.PostgresEnabled;
+    public static bool PostgresEnabled => !string.IsNullOrWhiteSpace(DurableTestConnections.PostgresConnectionString);
 
     [Theory(
         SkipUnless = nameof(PostgresEnabled),
@@ -36,7 +36,7 @@ public sealed class DurableSchedulerTests
             Distributed = new DistributedExecutionOptions { MaxConcurrentExecutions = limit },
         };
         await using var kit = await TurnPersistenceTestKit.CreatePostgresAsync(
-            Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING")!,
+            DurableTestConnections.PostgresConnectionString!,
             options
         );
         using var host = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder().Build();

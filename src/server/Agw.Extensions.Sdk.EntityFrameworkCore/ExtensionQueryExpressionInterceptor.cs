@@ -13,7 +13,7 @@ internal sealed class ExtensionQueryExpressionInterceptor : IQueryExpressionInte
     {
         if (eventData.Context is not ExtensionDbContext context)
             throw new AgwException(ErrorCodes.ExtensionPackageInvalid);
-        if (!context.IsCheckingOwnership)
+        if (!context.IsCheckingOwnership && !context.IsScanningOutbox && !context.IsReadingOwnedRecords)
             new SupportedQueryVisitor().Visit(queryExpression);
         return queryExpression;
     }

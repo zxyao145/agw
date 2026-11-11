@@ -54,7 +54,7 @@ public sealed partial class ExtensionRuntime
         }
     }
 
-    private sealed class ExtensionBackgroundScheduler : IExtensionBackgroundScheduler
+    private sealed class ExtensionBackgroundScheduler : IExtensionBackgroundScheduler, IExtensionUserBackgroundScheduler
     {
         private readonly ExtensionRuntime _runtime;
         private readonly ExtensionGenerationId _generationId;
@@ -74,5 +74,19 @@ public sealed partial class ExtensionRuntime
             Func<IExtensionContext, CancellationToken, ValueTask<TResult>> work,
             CancellationToken cancellationToken = default
         ) => _runtime.ExecuteBackgroundWorkAsync(_generationId, work, cancellationToken);
+
+        public ValueTask ExecuteAsync(
+            string userId,
+            Guid invocationId,
+            Func<IExtensionContext, CancellationToken, ValueTask> work,
+            CancellationToken cancellationToken
+        ) => _runtime.ExecuteBackgroundWorkAsync(_generationId, userId, invocationId, work, cancellationToken);
+
+        public ValueTask<TResult> ExecuteAsync<TResult>(
+            string userId,
+            Guid invocationId,
+            Func<IExtensionContext, CancellationToken, ValueTask<TResult>> work,
+            CancellationToken cancellationToken
+        ) => _runtime.ExecuteBackgroundWorkAsync(_generationId, userId, invocationId, work, cancellationToken);
     }
 }

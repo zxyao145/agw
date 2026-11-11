@@ -22,6 +22,7 @@ using Agw.Extensions.Application.Persistence;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Infrastructure.Packages;
 using Agw.Extensions.Infrastructure.Runtime;
+using Agw.Host.Runtime;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Configuration;
@@ -38,8 +39,12 @@ using Agw.Projects.Contracts.Runtime;
 using Agw.Providers.Application.Facades;
 using Agw.Settings;
 using Agw.Settings.Application.Persistence;
+using Agw.Settings.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Contracts;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Contracts.Events;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
@@ -53,6 +58,16 @@ using Agw.Tools.Contracts;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Agents.AI;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -77,6 +92,357 @@ public sealed class ExtensionRuntimeTestCollection
 public sealed class ExtensionRuntimeTests
 {
     private static readonly Guid ExtensionId = Guid.Parse("019a4c17-5f00-7a80-8b3d-2b732f48a100");
+
+    [Fact]
+    public async Task CallbackHttp_RawBodyAndHeaders_ReachCurrentGenerationWithProtocolResponse()
+    {
+        await using var host = await ExtensionRuntimeTestHost.CreateAsync();
+        await LoadAndActivateAsync(host);
+        using var dataSource = new ExtensionEndpointDataSource();
+        dataSource.Publish(host.Runtime.GetSnapshots);
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.WebHost.ConfigureKestrel(options => options.Listen(System.Net.IPAddress.Loopback, 0));
+        builder.Services.AddSingleton<IExtensionGenerationCatalog>(host.Runtime);
+        builder.Services.AddSingleton<IExtensionInvoker>(host.Runtime);
+        builder.Services.AddSingleton(host.Services.GetRequiredService<IExtensionDeploymentIdentity>());
+        builder.Services.AddSingleton(host.Services.GetRequiredService<IExtensionHostIdentity>());
+        builder.Services.AddHttpClient();
+        await using var app = builder.Build();
+        ((IEndpointRouteBuilder)app).DataSources.Add(dataSource);
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            string address = app
+                .Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient();
+            const string body = "{ \"value\": \"signed payload\" }";
+            using var request = new HttpRequestMessage(HttpMethod.Post, address + "/api/ext/runtime-test/callback")
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            };
+            request.Headers.Add("X-Callback-Signature", "signature");
+            using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+            response.EnsureSuccessStatusCode();
+            using var result = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+            );
+            Assert.Equal(
+                "signature:" + Convert.ToBase64String(Encoding.UTF8.GetBytes(body)),
+                result.RootElement.GetProperty("value").GetString()
+            );
+            Assert.False(result.RootElement.TryGetProperty("code", out _));
+        }
+        finally
+        {
+            await app.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task BrowserPageHttp_UsesAuthorizationMetadataAndSkipsExtensionVersionHeader()
+    {
+        await using var host = await ExtensionRuntimeTestHost.CreateAsync();
+        await LoadAndActivateAsync(host);
+        using var dataSource = new ExtensionEndpointDataSource();
+        dataSource.Publish(host.Runtime.GetSnapshots);
+        string endpointNames = string.Join(", ", dataSource.Endpoints.Select(endpoint => endpoint.DisplayName));
+        var browserPage = dataSource.Endpoints.SingleOrDefault(endpoint =>
+            endpoint.DisplayName == "runtime-test: browser-page"
+        );
+        Assert.True(browserPage is not null, endpointNames);
+        Assert.NotNull(browserPage!.Metadata.GetMetadata<AuthorizeAttribute>());
+        Assert.Null(browserPage.Metadata.GetMetadata<AllowAnonymousAttribute>());
+        var callback = dataSource.Endpoints.Single(endpoint => endpoint.DisplayName == "runtime-test: callback");
+        Assert.NotNull(callback.Metadata.GetMetadata<AllowAnonymousAttribute>());
+
+        var builder = WebApplication.CreateSlimBuilder();
+        builder.WebHost.ConfigureKestrel(options => options.Listen(System.Net.IPAddress.Loopback, 0));
+        builder.Services.AddDataProtection();
+        builder
+            .Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            .AddCookie(options =>
+                options.Events.OnRedirectToLogin = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+            );
+        builder.Services.AddAuthorization();
+        builder.Services.AddSingleton<IExtensionGenerationCatalog>(host.Runtime);
+        builder.Services.AddSingleton<IExtensionInvoker>(host.Runtime);
+        builder.Services.AddSingleton(host.Services.GetRequiredService<IExtensionDeploymentIdentity>());
+        builder.Services.AddSingleton(host.Services.GetRequiredService<IExtensionHostIdentity>());
+        builder.Services.AddHttpClient();
+        await using var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        ((IEndpointRouteBuilder)app).DataSources.Add(dataSource);
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            string address = app
+                .Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()!
+                .Addresses.Single();
+            using var client = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient();
+            using var unauthenticatedResponse = await client.GetAsync(
+                address + "/api/ext/runtime-test/browser",
+                TestContext.Current.CancellationToken
+            );
+            Assert.Equal(StatusCodes.Status401Unauthorized, (int)unauthenticatedResponse.StatusCode);
+
+            var signInContext = new DefaultHttpContext { RequestServices = app.Services };
+            var user = new ClaimsPrincipal(
+                new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, "browser-page-user")],
+                    CookieAuthenticationDefaults.AuthenticationScheme
+                )
+            );
+            await app
+                .Services.GetRequiredService<IAuthenticationService>()
+                .SignInAsync(
+                    signInContext,
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    user,
+                    new AuthenticationProperties()
+                );
+            string cookie = signInContext.Response.Headers.SetCookie.ToString();
+            string cookieValue = cookie[..cookie.IndexOf(';')];
+
+            using var browserRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                address + "/api/ext/runtime-test/browser"
+            );
+            browserRequest.Headers.Add("Cookie", cookieValue);
+            using var browserResponse = await client.SendAsync(browserRequest, TestContext.Current.CancellationToken);
+            browserResponse.EnsureSuccessStatusCode();
+            Assert.Equal("text/html", browserResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(
+                "<html><body>Signed in</body></html>",
+                await browserResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+            );
+
+            using var missingVersionHeader = new HttpRequestMessage(
+                HttpMethod.Get,
+                address + "/api/ext/runtime-test/stream"
+            );
+            missingVersionHeader.Headers.Add("Cookie", cookieValue);
+            using var missingVersionResponse = await client.SendAsync(
+                missingVersionHeader,
+                TestContext.Current.CancellationToken
+            );
+            Assert.False(missingVersionResponse.IsSuccessStatusCode);
+            using var currentVersionRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                address + "/api/ext/runtime-test/stream"
+            );
+            currentVersionRequest.Headers.Add("Cookie", cookieValue);
+            currentVersionRequest.Headers.Add("X-Agw-Extension-Id", ExtensionId.ToString());
+            using var currentVersionResponse = await client.SendAsync(
+                currentVersionRequest,
+                TestContext.Current.CancellationToken
+            );
+            currentVersionResponse.EnsureSuccessStatusCode();
+        }
+        finally
+        {
+            await app.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task InvokeMessagingHandlers_UsesLeasedGenerationAndCallerIdentity()
+    {
+        await using var host = await ExtensionRuntimeTestHost.CreateAsync();
+        ExtensionRuntime runtime = host.Runtime;
+        ExtensionGenerationSnapshot generation = await LoadAndActivateAsync(host);
+        Assert.Contains(generation.EventHandlers, handler => handler.Id == "caller");
+        Assert.Contains(generation.EventSourceProviders, provider => provider.Id == "source");
+        Assert.Contains(generation.NotificationChannels, channel => channel.Id == "channel");
+
+        await using IExtensionGenerationLease lease = await runtime.AcquireCurrentAsync(
+            ExtensionId,
+            TestContext.Current.CancellationToken
+        );
+        Guid deliveryId = Guid.CreateVersion7();
+        var delivery = new ExtensionEventDelivery
+        {
+            Event = new CloudEventEnvelope
+            {
+                Id = "event-1",
+                Source = "/test",
+                Type = "test.event",
+            },
+            DeliveryId = deliveryId,
+            Attempt = 1,
+            SubscriptionId = Guid.CreateVersion7(),
+            EventId = Guid.CreateVersion7(),
+            SourceId = Guid.CreateVersion7(),
+            ReceivedAt = DateTimeOffset.UnixEpoch,
+            ChainId = Guid.CreateVersion7(),
+            Hops = 0,
+        };
+        ExtensionEventHandlerResult handlerResult = await runtime.InvokeEventHandlerAsync(
+            lease,
+            new ExtensionEventHandlerInvocation
+            {
+                HandlerId = "caller",
+                UserId = "handler-user",
+                Delivery = delivery,
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(ExtensionEventHandlerResultKind.Failed, handlerResult.Kind);
+        Assert.Equal(
+            $"{ExtensionId:D}|{generation.GenerationId.GenerationId:D}|handler-user|{deliveryId:D}|{deliveryId:D}",
+            handlerResult.Reason
+        );
+
+        ExtensionSourcePollResult pollResult = await runtime.InvokeSourcePollAsync(
+            lease,
+            new ExtensionSourcePollInvocation
+            {
+                ProviderId = "source",
+                UserId = "source-user",
+                InvocationId = Guid.CreateVersion7(),
+                Request = new ExtensionSourcePollRequest
+                {
+                    SourceId = Guid.CreateVersion7(),
+                    Config = JsonSerializer.SerializeToElement(new { enabled = true }),
+                    Baseline = false,
+                },
+            },
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal("source-user", Assert.Single(pollResult.Events).Subject);
+
+        ExtensionNotificationChannelResult targetsResult = await runtime.InvokeNotificationChannelAsync(
+            lease,
+            new ExtensionNotificationChannelInvocation
+            {
+                ChannelId = "channel",
+                UserId = "channel-user",
+                InvocationId = Guid.CreateVersion7(),
+                Operation = ExtensionNotificationChannelOperation.ListTargets,
+            },
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal("channel-user", Assert.Single(targetsResult.Targets!).Name);
+
+        var message = new NotificationMessage
+        {
+            NotificationId = Guid.CreateVersion7(),
+            DispatchKey = "dispatch",
+            ChannelKey = "channel",
+            IdempotencyKey = "dispatch:1",
+            ContentVersion = 1,
+            Kind = ExtensionNotificationKind.Notice,
+            State = ExtensionNotificationState.Open,
+            Title = "Notice",
+            Body = "Body",
+        };
+        ExtensionNotificationChannelResult sendResult = await runtime.InvokeNotificationChannelAsync(
+            lease,
+            new ExtensionNotificationChannelInvocation
+            {
+                ChannelId = "channel",
+                UserId = "channel-user",
+                InvocationId = Guid.CreateVersion7(),
+                Operation = ExtensionNotificationChannelOperation.Send,
+                Message = message,
+            },
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal(NotificationSendStatus.Sent, sendResult.SendResult!.Status);
+        Assert.Equal($"{message.NotificationId:D}:channel-user", sendResult.SendResult.ExternalMessageId);
+
+        ExtensionNotificationChannelResult updateResult = await runtime.InvokeNotificationChannelAsync(
+            lease,
+            new ExtensionNotificationChannelInvocation
+            {
+                ChannelId = "channel",
+                UserId = "channel-user",
+                InvocationId = Guid.CreateVersion7(),
+                Operation = ExtensionNotificationChannelOperation.Update,
+                Message = message with { ContentVersion = 2 },
+                ExternalMessageId = sendResult.SendResult.ExternalMessageId,
+            },
+            TestContext.Current.CancellationToken
+        );
+        Assert.Equal(sendResult.SendResult.ExternalMessageId, updateResult.SendResult!.ExternalMessageId);
+
+        Assert.Null(host.Services.GetRequiredService<IExtensionCallerAccessor>().Current);
+    }
+
+    [Fact]
+    public async Task InvokeSdkCapabilities_UsesApplicationLeaseAndExtensionScopedSecrets()
+    {
+        await using var host = await ExtensionRuntimeTestHost.CreateAsync();
+        ExtensionRuntime runtime = host.Runtime;
+        ExtensionGenerationSnapshot generation = await LoadAndActivateAsync(host);
+        await using IExtensionGenerationLease lease = await runtime.AcquireCurrentAsync(
+            ExtensionId,
+            TestContext.Current.CancellationToken
+        );
+
+        JsonElement? result = await InvokeEndpointAsync(runtime, lease, "sdk-capabilities");
+
+        Assert.True(result.HasValue);
+        Assert.False(result.Value.GetProperty("leaseLost").GetBoolean());
+        Assert.True(result.Value.GetProperty("secretRoundTrips").GetBoolean());
+        Assert.Equal(generation.GenerationId, lease.Snapshot.GenerationId);
+    }
+
+    [Fact]
+    public async Task Load_PreservesDeclaredEventPermissionsInGenerationSnapshot()
+    {
+        await using var host = await ExtensionRuntimeTestHost.CreateAsync();
+        ExtensionGenerationSnapshot generation = await host.Runtime.LoadAsync(
+            CreateLoadRequest(host) with
+            {
+                EventPermissions = new ExtensionEventPermissions
+                {
+                    Publish = ["com.example.issue.*"],
+                    PublishRoot = true,
+                },
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(["com.example.issue.*"], generation.EventPermissions.Publish);
+        Assert.True(generation.EventPermissions.PublishRoot);
+    }
+
+    [Fact]
+    public void ParseManifest_ReservedEventPublishPatterns_AreRejected()
+    {
+        string manifest = JsonSerializer.Serialize(
+            new
+            {
+                manifestVersion = 2,
+                id = ExtensionId.ToString("D"),
+                name = "runtime-test",
+                displayName = "Runtime Test",
+                version = "1.0.0",
+                targets = (int)ExtensionTarget.Server,
+                server = new
+                {
+                    apiVersion = 1,
+                    entryAssembly = "server/extension.dll",
+                    entryType = "Test.Extension",
+                    permissions = new { events = new { publish = new[] { "agw.*" }, publishRoot = true } },
+                },
+                files = new Dictionary<string, string> { ["server/extension.dll"] = new string('a', 64) },
+            }
+        );
+
+        AgwException exception = Assert.Throws<AgwException>(() => ExtensionManifestReader.Parse(manifest));
+
+        Assert.Equal(ErrorCodes.ExtensionPackageInvalid.Code, exception.Code);
+    }
 
     [Fact]
     public async Task Constructor_MissingHostIdentity_FailsFast()
@@ -206,6 +572,19 @@ public sealed class ExtensionRuntimeTests
     public async Task LoadAsync_InvalidEndpointPath_IsRejectedAndUnloadConfirmed(string entryTypeName)
     {
         string entryType = $"Agw.Extensions.Runtime.Tests.Fixture.{entryTypeName}";
+        await using var host = await ExtensionRuntimeTestHost.CreateAsync(entryType: entryType);
+        AgwException exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await host.Runtime.LoadAsync(CreateLoadRequest(host, entryType), CancellationToken.None)
+        );
+
+        Assert.Equal(ErrorCodes.ExtensionPackageInvalid.Code, exception.Code);
+        Assert.Empty(host.Runtime.GetSnapshots());
+    }
+
+    [Fact]
+    public async Task LoadAsync_BrowserPageWithNonGetMethod_IsRejectedAndUnloadConfirmed()
+    {
+        const string entryType = "Agw.Extensions.Runtime.Tests.Fixture.InvalidBrowserPageMethodExtension";
         await using var host = await ExtensionRuntimeTestHost.CreateAsync(entryType: entryType);
         AgwException exception = await Assert.ThrowsAsync<AgwException>(async () =>
             await host.Runtime.LoadAsync(CreateLoadRequest(host, entryType), CancellationToken.None)
@@ -1441,6 +1820,7 @@ public sealed class ExtensionRuntimeTests
                     null,
                     null,
                     extensionIds,
+                    BackgroundToolPolicy.Default,
                 ]
             )
         );
@@ -1882,6 +2262,12 @@ public sealed class ExtensionRuntimeTests
                 .Build();
             ServiceCollection serviceCollection = new ServiceCollection();
             serviceCollection
+                .AddDataProtection()
+                .PersistKeysToFileSystem(
+                    new DirectoryInfo(Path.Combine(paths.Root, "extensions", "data", ExtensionId.ToString("N"), "keys"))
+                );
+            serviceCollection.AddSingleton<IApplicationLock, InMemoryApplicationLock>();
+            serviceCollection
                 .AddLogging(builder =>
                     builder
                         .AddConsole()
@@ -1900,11 +2286,11 @@ public sealed class ExtensionRuntimeTests
                 {
                     if (databaseProvider == DatabaseProvider.Sqlite)
                     {
-                        builder.UseSqlite(connection);
+                        builder.UseSqlite(connectionString);
                     }
                     else
                     {
-                        builder.UseNpgsql(connection);
+                        builder.UseNpgsql(connectionString);
                     }
 
                     builder.UseSnakeCaseNamingConvention();
@@ -1916,10 +2302,12 @@ public sealed class ExtensionRuntimeTests
                 .AddScoped<ICurrentUser, UserInfoService>()
                 .AddScoped<IUserInfoService, UserInfoService>()
                 .AddSettings()
+                .AddSingleton<IExtensionDeploymentIdentity, ExtensionDeploymentIdentity>()
                 .AddExtensionInfrastructure()
                 .AddExtensions(extensionConfiguration, hostRole)
                 .AddProjects(new ConfigurationBuilder().Build())
-                .AddExtensionHostCapability<IProjectDefaultResolver>();
+                .AddExtensionHostCapability<IProjectDefaultResolver>()
+                .AddExtensionHostCapability<IExtensionCallerAccessor>();
             ServiceProvider services = serviceCollection.BuildServiceProvider();
             ExtensionPackageCatalog packageCatalog = services.GetRequiredService<ExtensionPackageCatalog>();
             await packageCatalog.InitializeAsync(CancellationToken.None);
@@ -1928,6 +2316,13 @@ public sealed class ExtensionRuntimeTests
             {
                 AgwDbContext db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
                 await db.Database.EnsureCreatedAsync();
+                await scope
+                    .ServiceProvider.GetRequiredService<ISettingsStore>()
+                    .TryCreateGlobalAsync(
+                        ExtensionDeploymentSettings.Key,
+                        new ExtensionDeploymentSettings { ServerId = Guid.CreateVersion7().ToString() },
+                        TestContext.Current.CancellationToken
+                    );
                 if (extensionActive)
                 {
                     IExtensionEnablementStore enablement =

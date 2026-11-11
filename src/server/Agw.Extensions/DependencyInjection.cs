@@ -45,6 +45,13 @@ public static class DependencyInjection
         services.AddSingleton<IExtensionEnablementStore, SettingsExtensionEnablementStore>();
         services.AddScoped<IExtensionAdmissionValidator, ExtensionAdmissionValidator>();
         services.AddSingleton<IExtensionRuntimeAvailability, ExtensionEnablementAvailability>();
+        services.AddSingleton<ExtensionCallerAccessor>();
+        services.AddSingleton<IExtensionCallerAccessor>(provider =>
+            provider.GetRequiredService<ExtensionCallerAccessor>()
+        );
+        services.AddSingleton<IExtensionCallerScope>(provider =>
+            provider.GetRequiredService<ExtensionCallerAccessor>()
+        );
         services.AddSingleton<ExtensionRuntime>();
         services.AddSingleton<IExtensionRuntime>(provider => provider.GetRequiredService<ExtensionRuntime>());
         services.AddSingleton<IExtensionInvoker>(provider => provider.GetRequiredService<ExtensionRuntime>());

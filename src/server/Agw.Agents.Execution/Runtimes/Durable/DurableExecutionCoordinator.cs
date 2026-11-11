@@ -564,7 +564,8 @@ internal sealed class DurableExecutionCoordinator : IExecutionCoordinator
                     manifest.WorkspaceSnapshot!,
                     manifest.Settings.PermissionMode,
                     manifest.Settings.PermissionVersion,
-                    ExecutionProvider.Distributed
+                    ExecutionProvider.Distributed,
+                    manifest.Settings.ToolPolicy
                 ),
                 ownershipLost
             )

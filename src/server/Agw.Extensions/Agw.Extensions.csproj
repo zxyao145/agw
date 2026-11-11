@@ -10,6 +10,7 @@
     <PackageReference Include="Nito.AsyncEx.Coordination" />
     <PackageReference Include="Microsoft.OpenApi" />
     <ProjectReference Include="../Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Auth/Agw.Auth.csproj" />
     <ProjectReference Include="../Agw.Extensions.Contracts/Agw.Extensions.Contracts.csproj" />
     <ProjectReference Include="../Agw.Extensions.Sdk/Agw.Extensions.Sdk.csproj" />
     <ProjectReference Include="../Agw.Shared/Agw.Shared.csproj" />

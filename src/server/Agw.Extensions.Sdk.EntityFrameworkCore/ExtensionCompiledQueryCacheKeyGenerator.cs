@@ -11,10 +11,19 @@ internal sealed class ExtensionCompiledQueryCacheKeyGenerator(
 ) : ICompiledQueryCacheKeyGenerator
 {
     public object GenerateCacheKey(Expression query, bool async) =>
-        new CacheKey(
-            provider.GenerateCacheKey(query, async),
-            currentContext.Context is ExtensionDbContext { IsCheckingOwnership: true }
-        );
+        new CacheKey
+        {
+            ProviderKey = provider.GenerateCacheKey(query, async),
+            IsCheckingOwnership = currentContext.Context is ExtensionDbContext { IsCheckingOwnership: true },
+            IsScanningOutbox = currentContext.Context is ExtensionDbContext { IsScanningOutbox: true },
+            IsReadingOwnedRecords = currentContext.Context is ExtensionDbContext { IsReadingOwnedRecords: true },
+        };
 
-    private sealed record CacheKey(object ProviderKey, bool IsCheckingOwnership);
+    private sealed record CacheKey
+    {
+        public required object ProviderKey { get; init; }
+        public required bool IsCheckingOwnership { get; init; }
+        public required bool IsScanningOutbox { get; init; }
+        public required bool IsReadingOwnedRecords { get; init; }
+    }
 }
