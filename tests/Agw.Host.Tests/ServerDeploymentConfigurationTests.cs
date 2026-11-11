@@ -17,6 +17,7 @@ public sealed class ServerDeploymentConfigurationTests
         Assert.Equal("sqlite", configuration["Database:Provider"]);
         Assert.Equal("Data Source=agw.db", configuration["Database:ConnectionString"]);
         Assert.Equal("InProcess", configuration["Execution:Provider"]);
+        Assert.Equal("InProcess", configuration["Events:Transport:Provider"]);
         Assert.Null(configuration["DistributedLock:Provider"]);
         Assert.Equal(string.Empty, configuration["DistributedLock:ConnectionString"]);
     }
@@ -82,6 +83,9 @@ public sealed class ServerDeploymentConfigurationTests
     [InlineData("Database:Provider", "sqlite")]
     [InlineData("Execution:Provider", "InProcess")]
     [InlineData("DistributedLock:Provider", "inmemory")]
+    [InlineData("Events:Transport:Provider", "InProcess")]
+    [InlineData("Events:Transport:Provider", "unsupported")]
+    [InlineData("Events:Transport:Redis:ConnectionString", "")]
     public void Validate_UninitializedControlPlane_StillRejectsInvalidDeployment(string key, string value)
     {
         using var configuration = new ConfigurationManager();
@@ -196,6 +200,8 @@ public sealed class ServerDeploymentConfigurationTests
             ["Database:Provider"] = "postgres",
             ["Database:ConnectionString"] = "Host=configured",
             ["Execution:Provider"] = "Distributed",
+            ["Events:Transport:Provider"] = "Redis",
+            ["Events:Transport:Redis:ConnectionString"] = "redis.invalid:6379",
             ["DistributedLock:Provider"] = "postgres",
             ["DistributedLock:ConnectionString"] = "Host=configured-locks",
         };

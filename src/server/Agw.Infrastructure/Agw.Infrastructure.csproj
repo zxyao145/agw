@@ -5,6 +5,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+    <ProjectReference Include="../Agw.Events.Contracts/Agw.Events.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Events/Agw.Events.csproj" />
+    <ProjectReference Include="../Agw.Notifications/Agw.Notifications.csproj" />
     <ProjectReference Include="../Agw.Extensions/Agw.Extensions.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Settings\Agw.Settings.csproj" />
@@ -18,6 +21,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CloudNative.CloudEvents" />
+    <PackageReference Include="CloudNative.CloudEvents.SystemTextJson" />
+    <PackageReference Include="CloudNative.CloudEvents.AspNetCore" />
+    <PackageReference Include="JsonLogic" />
+    <PackageReference Include="JsonPath.Net" />
+    <PackageReference Include="Meziantou.Framework.Http" />
+    <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="DistributedLock.Postgres" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

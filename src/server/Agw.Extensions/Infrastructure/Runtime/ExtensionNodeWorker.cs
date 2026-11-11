@@ -338,6 +338,7 @@ public sealed class ExtensionNodeWorker : BackgroundService, IExtensionNodeRecon
                 DataDirectory = dataDirectory,
                 EntryAssemblyPath = manifest.Server!.EntryAssembly,
                 EntryType = manifest.Server.EntryType,
+                EventPermissions = manifest.Server.Permissions.Events,
             },
             cancellationToken
         );
@@ -359,6 +360,9 @@ public sealed class ExtensionNodeWorker : BackgroundService, IExtensionNodeRecon
         }
         if (resume)
         {
+            // 在 generation 进入 Active 之前发布 Ready 路由。
+            // Publish the Ready routes before the generation becomes Active.
+            _endpoints.Publish(_runtime.GetSnapshots);
             await _runtime.ResumeAsync(snapshot.GenerationId, cancellationToken);
         }
     }

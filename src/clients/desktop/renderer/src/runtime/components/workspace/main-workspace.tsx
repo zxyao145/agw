@@ -20,6 +20,8 @@ import type { WorkspaceView } from "../../extensions/workspace-registry";
 import { ExtensionView, ExtensionViewInfo, reloadExtensionView } from "./extension-view";
 import { WindowFloatingChatButton } from "./window-floating-chat-button";
 import { JobsWorkspace } from "./jobs-workspace";
+import { EventsPage } from "@agw/events";
+import { NotificationsPage } from "@agw/notifications";
 
 export type MainWorkspaceProps = {
   host: ExtensionHost;
@@ -59,6 +61,11 @@ function SourceFloatingChatContext({
   }, [host]);
 
   return null;
+}
+
+function notificationIdFromRequest(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || !("notificationId" in value)) return null;
+  return typeof value.notificationId === "string" ? value.notificationId : null;
 }
 
 /**
@@ -123,6 +130,17 @@ export function MainWorkspace(props: MainWorkspaceProps) {
         <JobsWorkspace
           key={props.openRequests[BUILT_IN_VIEWS.jobs]?.sequence}
           onOpenChat={() => props.host.layout.openMainView(BUILT_IN_VIEWS.chat)}
+        />
+      ) : null}
+      {activeView.id === BUILT_IN_VIEWS.events ? <EventsPage /> : null}
+      {activeView.id === BUILT_IN_VIEWS.notifications ? (
+        <NotificationsPage
+          desktopBridge={typeof window === "undefined" ? null : window.agwDesktop}
+          serverId={props.host.context.snapshot().server.id}
+          initialNotificationId={notificationIdFromRequest(
+            props.openRequests[BUILT_IN_VIEWS.notifications]?.params,
+          )}
+          liveUpdatesEnabled={false}
         />
       ) : null}
       {activeView.id === BUILT_IN_VIEWS.file ? (

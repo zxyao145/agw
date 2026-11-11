@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations.Builders;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -24,6 +25,9 @@ public sealed partial class ExtensionDatabaseMigrationTests
     private static readonly string TablePrefix = $"zext_{ExtensionId:N}_";
     private static readonly string TableName = $"{TablePrefix}business_record";
     private static readonly string IndexName = $"{TablePrefix}ix_business_record_title";
+    private static readonly string InboxTableName = $"{TablePrefix}__inbox";
+    private static readonly string OutboxTableName = $"{TablePrefix}__outbox";
+    private static readonly string OutboxIdempotencyIndexName = $"{TablePrefix}uq_outbox_key";
 
     [Fact]
     public async Task PrepareAsync_MigratesSqliteAndRetainsCompatibleSchema()
@@ -585,6 +589,7 @@ public sealed partial class ExtensionDatabaseMigrationTests
                 },
                 constraints: table => table.PrimaryKey($"pk_{TableName}", row => row.id)
             );
+            CreateExtensionMessagingTables(migrationBuilder, provider);
             migrationBuilder.InsertData(
                 TableName,
                 ["id", "title", "create_by", "create_time", "update_by", "update_time"],
@@ -595,7 +600,11 @@ public sealed partial class ExtensionDatabaseMigrationTests
             );
         }
 
-        protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.DropTable(TableName);
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            DropExtensionMessagingTables(migrationBuilder);
+            migrationBuilder.DropTable(TableName);
+        }
 
         protected override void BuildTargetModel(ModelBuilder modelBuilder) =>
             ConfigureTargetModel(modelBuilder, false, false, ActiveProvider!);
@@ -691,5 +700,64 @@ public sealed partial class ExtensionDatabaseMigrationTests
                 entity.HasIndex(record => record.Title).HasDatabaseName(IndexName);
             }
         });
+        modelBuilder.UseExtensionMessaging(TablePrefix, timeType);
+    }
+
+    private static void CreateExtensionMessagingTables(MigrationBuilder migrationBuilder, string provider)
+    {
+        string textType = GetTextType(provider);
+        OperationBuilder<AddColumnOperation> Timestamp(ColumnsBuilder table, bool nullable) =>
+            provider == "Microsoft.EntityFrameworkCore.Sqlite"
+                ? table.Column<long>(type: "INTEGER", nullable: nullable)
+                : table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: nullable);
+        string guidType = provider == "Microsoft.EntityFrameworkCore.Sqlite" ? "TEXT" : "uuid";
+        migrationBuilder.CreateTable(
+            name: InboxTableName,
+            columns: table => new
+            {
+                delivery_id = table.Column<Guid>(type: guidType, nullable: false),
+                create_by = table.Column<string>(type: textType, nullable: false),
+                create_time = Timestamp(table, false),
+                update_by = table.Column<string>(type: textType, nullable: true),
+                update_time = Timestamp(table, true),
+                processed_at = Timestamp(table, false),
+                result_json = table.Column<string>(type: textType, nullable: false),
+            },
+            constraints: table => table.PrimaryKey($"pk_{InboxTableName}", row => row.delivery_id)
+        );
+        migrationBuilder.CreateTable(
+            name: OutboxTableName,
+            columns: table => new
+            {
+                id = table.Column<Guid>(type: guidType, nullable: false),
+                create_by = table.Column<string>(type: textType, nullable: false),
+                create_time = Timestamp(table, false),
+                update_by = table.Column<string>(type: textType, nullable: true),
+                update_time = Timestamp(table, true),
+                kind = table.Column<string>(type: textType, nullable: false),
+                idempotency_key = table.Column<string>(type: textType, nullable: false),
+                payload_json = table.Column<string>(type: textType, nullable: false),
+                state = table.Column<string>(type: textType, nullable: false),
+                result_json = table.Column<string>(type: textType, nullable: true),
+                error_code = table.Column<int>(type: "integer", nullable: true),
+                attempt = table.Column<int>(type: "integer", nullable: false),
+                next_attempt_at = Timestamp(table, true),
+                completed_at = Timestamp(table, true),
+                last_error = table.Column<string>(type: textType, nullable: true),
+            },
+            constraints: table => table.PrimaryKey($"pk_{OutboxTableName}", row => row.id)
+        );
+        migrationBuilder.CreateIndex(
+            name: OutboxIdempotencyIndexName,
+            table: OutboxTableName,
+            column: "idempotency_key",
+            unique: true
+        );
+    }
+
+    private static void DropExtensionMessagingTables(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropTable(OutboxTableName);
+        migrationBuilder.DropTable(InboxTableName);
     }
 }

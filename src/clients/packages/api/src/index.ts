@@ -6,5 +6,6 @@ export * from "./lib/token-usage";
 export * from "./lib/uuid";
 export type { components, operations, paths } from "./openapi";
 export * from "./types/chat-target";
+export type * from "./types/events-notifications";
 export * from "./types/message";
 export * from "./utils";

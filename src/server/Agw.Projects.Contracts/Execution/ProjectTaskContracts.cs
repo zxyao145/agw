@@ -46,7 +46,8 @@ public sealed record StartProjectTaskRequest(
     string? Title,
     string? ContextId,
     string OwnerUserId,
-    ProjectTaskStatus InitialStatus
+    ProjectTaskStatus InitialStatus,
+    string? RequesterExtensionId = null
 );
 
 public sealed record FinishProjectTaskRequest(

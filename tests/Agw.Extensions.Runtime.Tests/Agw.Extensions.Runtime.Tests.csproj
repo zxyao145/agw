@@ -18,8 +18,10 @@
     <Compile Remove="Fixture/**/*.cs" />
     <ProjectReference Include="../../src/server/Agw.Extensions/Agw.Extensions.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
     <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
     <ProjectReference Include="../../src/server/Agw.Tools/Agw.Tools.csproj" />
+    <ProjectReference Include="Fixture/Agw.Extensions.Runtime.TestExtension.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <Target Name="CopyExtensionRuntimeTestExtension" AfterTargets="Build">

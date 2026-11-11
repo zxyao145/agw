@@ -21,9 +21,13 @@ public sealed class ExecutionPermissionService
         agent.Type == AgentType.External && agent.ExternalAgentKind is EngineKind.Codex or EngineKind.Pi
             ? new(
                 [AgwPermissionMode.FullAccess],
+                SupportsNoTools: false,
                 $"The current {agent.ExternalAgentKind} SDK integration supports Full access only."
             )
-            : new([AgwPermissionMode.FullAccess, AgwPermissionMode.AlwaysAsk, AgwPermissionMode.AllowSameArguments]);
+            : new(
+                [AgwPermissionMode.FullAccess, AgwPermissionMode.AlwaysAsk, AgwPermissionMode.AllowSameArguments],
+                SupportsNoTools: agent.Type == AgentType.System || agent.ExternalAgentKind == EngineKind.ClaudeCode
+            );
 
     public static void Validate(Agent agent, AgwPermissionMode? mode) => Validate(ForAgent(agent), mode);
 
@@ -68,6 +72,7 @@ public sealed class ExecutionPermissionService
         if (!visited.Add(id))
             throw new AgwException(ErrorCodes.InvalidParam, "Recursive Agentflow references are not supported.");
         var supported = new HashSet<AgwPermissionMode>(Enum.GetValues<AgwPermissionMode>());
+        var supportsNoTools = true;
         string? reason = null;
         foreach (
             var node in flow.Nodes.Where(n =>
@@ -82,9 +87,10 @@ public sealed class ExecutionPermissionService
                 ct
             );
             supported.IntersectWith(child.SupportedPermissionModes);
+            supportsNoTools &= child.SupportsNoTools;
             reason ??= child.Reason;
         }
         visited.Remove(id);
-        return new(supported.Order().ToArray(), reason);
+        return new(supported.Order().ToArray(), supportsNoTools, reason);
     }
 }

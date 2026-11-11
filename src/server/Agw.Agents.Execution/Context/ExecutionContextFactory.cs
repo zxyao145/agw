@@ -49,6 +49,7 @@ public sealed class ExecutionContextFactory
             EngineKind = engineKind,
             PermissionMode = request.PermissionMode,
             PermissionVersion = request.PermissionVersion,
+            ToolPolicy = request.ToolPolicy,
             Provider = request.Provider,
         };
     }
@@ -81,5 +82,6 @@ public sealed record ExecutionContextRequest(
     ProjectWorkspaceSnapshot WorkspaceSnapshot,
     AgwPermissionMode? PermissionMode,
     long PermissionVersion,
-    ExecutionProvider Provider
+    ExecutionProvider Provider,
+    BackgroundToolPolicy ToolPolicy = BackgroundToolPolicy.Default
 );

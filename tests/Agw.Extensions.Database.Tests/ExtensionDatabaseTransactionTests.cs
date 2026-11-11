@@ -5,6 +5,7 @@ using Agw.Extensions.Application.Persistence;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Infrastructure.Database;
 using Agw.Extensions.Sdk.Database;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -14,6 +15,74 @@ namespace Agw.Extensions.Database.Tests;
 public sealed class ExtensionDatabaseTransactionTests
 {
     private static readonly Guid ExtensionId = ExtensionDatabaseTestHost.ExtensionId;
+    private static readonly string ProbeTableName = $"zext_{ExtensionId:N}_database_probe";
+    private static readonly string InboxTableName = $"zext_{ExtensionId:N}___inbox";
+    private static readonly string OutboxTableName = $"zext_{ExtensionId:N}___outbox";
+
+    [Fact]
+    public async Task EventHandler_RetryRollsBackInboxBusinessDataAndOutbox()
+    {
+        await using var fixture = await CreateFixtureAsync(hostRole: "Standalone");
+        Guid deliveryId = Guid.CreateVersion7();
+        await using IExtensionGenerationLease lease = await fixture.Host.Runtime.AcquireCurrentAsync(
+            ExtensionId,
+            TestContext.Current.CancellationToken
+        );
+
+        ExtensionEventHandlerResult result = await fixture.Host.Runtime.InvokeEventHandlerAsync(
+            lease,
+            new ExtensionEventHandlerInvocation
+            {
+                HandlerId = "database",
+                UserId = "alice",
+                Delivery = CreateDelivery(deliveryId, id: 101, value: "retry", retry: true),
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(ExtensionEventHandlerResultKind.Retry, result.Kind);
+        Assert.Equal(0, await CountAsync(fixture.Database, ProbeTableName));
+        Assert.Equal(0, await CountAsync(fixture.Database, InboxTableName));
+        Assert.Equal(0, await CountAsync(fixture.Database, OutboxTableName));
+    }
+
+    [Fact]
+    public async Task EventHandler_SuccessCommitsInboxBusinessDataAndOutboxAndDeduplicatesDelivery()
+    {
+        await using var fixture = await CreateFixtureAsync(hostRole: "Standalone");
+        Guid deliveryId = Guid.CreateVersion7();
+        await using IExtensionGenerationLease lease = await fixture.Host.Runtime.AcquireCurrentAsync(
+            ExtensionId,
+            TestContext.Current.CancellationToken
+        );
+        var invocation = new ExtensionEventHandlerInvocation
+        {
+            HandlerId = "database",
+            UserId = "alice",
+            Delivery = CreateDelivery(deliveryId, id: 102, value: "stored", retry: false),
+        };
+
+        ExtensionEventHandlerResult first = await fixture.Host.Runtime.InvokeEventHandlerAsync(
+            lease,
+            invocation,
+            TestContext.Current.CancellationToken
+        );
+        ExtensionEventHandlerResult duplicate = await fixture.Host.Runtime.InvokeEventHandlerAsync(
+            lease,
+            invocation,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(ExtensionEventHandlerResultKind.Succeeded, first.Kind);
+        Assert.Equal(ExtensionEventHandlerResultKind.Succeeded, duplicate.Kind);
+        Assert.Equal(1, await CountAsync(fixture.Database, ProbeTableName));
+        Assert.Equal(1, await CountAsync(fixture.Database, InboxTableName));
+        Assert.Equal(1, await CountAsync(fixture.Database, OutboxTableName));
+        Assert.Equal(
+            "alice",
+            await ReadStringAsync(fixture.Database, OutboxTableName, "create_by", "idempotency_key", "probe:102")
+        );
+    }
 
     [Fact]
     public async Task GetDatabaseValues_IgnoreQueryFilters_IsRejected()
@@ -299,7 +368,7 @@ public sealed class ExtensionDatabaseTransactionTests
         Assert.Equal(ErrorCodes.ExtensionUnavailable.Code, exception.Code);
     }
 
-    private static async Task<DatabaseFixture> CreateFixtureAsync(bool sqliteFile = true)
+    private static async Task<DatabaseFixture> CreateFixtureAsync(bool sqliteFile = true, string hostRole = "DataPlane")
     {
         ExtensionDatabaseMigrationTests.MigrationTestDatabase database =
             await ExtensionDatabaseMigrationTests.MigrationTestDatabase.CreateAsync(
@@ -307,7 +376,7 @@ public sealed class ExtensionDatabaseTransactionTests
                 null,
                 sqliteFile
             );
-        ExtensionDatabaseTestHost host = await ExtensionDatabaseTestHost.CreateAsync(database);
+        ExtensionDatabaseTestHost host = await ExtensionDatabaseTestHost.CreateAsync(database, hostRole: hostRole);
         try
         {
             ExtensionGenerationSnapshot generation = await host.LoadAndActivateAsync(
@@ -366,6 +435,63 @@ public sealed class ExtensionDatabaseTransactionTests
         parameter.DbType = type;
         parameter.Value = value;
         command.Parameters.Add(parameter);
+    }
+
+    private static ExtensionEventDelivery CreateDelivery(Guid deliveryId, int id, string value, bool retry) =>
+        new()
+        {
+            Event = new CloudEventEnvelope
+            {
+                Id = deliveryId.ToString("D"),
+                Source = "/test/database",
+                Type = "database.probe.requested",
+                Data = new CloudEventData
+                {
+                    Kind = CloudEventDataKind.Json,
+                    Json = JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            id,
+                            value,
+                            retry,
+                        }
+                    ),
+                },
+            },
+            DeliveryId = deliveryId,
+            Attempt = 1,
+            SubscriptionId = Guid.CreateVersion7(),
+            EventId = Guid.CreateVersion7(),
+            SourceId = Guid.CreateVersion7(),
+            ReceivedAt = DateTimeOffset.UnixEpoch,
+            ChainId = Guid.CreateVersion7(),
+            Hops = 0,
+        };
+
+    private static async Task<long> CountAsync(
+        ExtensionDatabaseMigrationTests.MigrationTestDatabase database,
+        string tableName
+    )
+    {
+        await using DbConnection connection = await database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using DbCommand command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM \"{tableName}\"";
+        return Convert.ToInt64(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+    }
+
+    private static async Task<string?> ReadStringAsync(
+        ExtensionDatabaseMigrationTests.MigrationTestDatabase database,
+        string tableName,
+        string selectColumn,
+        string whereColumn,
+        string value
+    )
+    {
+        await using DbConnection connection = await database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        await using DbCommand command = connection.CreateCommand();
+        command.CommandText = $"SELECT \"{selectColumn}\" FROM \"{tableName}\" WHERE \"{whereColumn}\" = @value";
+        AddParameter(command, "@value", value, DbType.String);
+        return (string?)await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
     }
 
     private sealed record DatabaseOperationRequest(

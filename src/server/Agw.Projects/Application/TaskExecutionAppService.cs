@@ -146,7 +146,8 @@ public class TaskExecutionAppService
         Guid projectId,
         Guid taskId,
         TaskCreateRequest request,
-        string user
+        string user,
+        string? requesterExtensionId = null
     )
     {
         return CreateAsync(
@@ -156,7 +157,7 @@ public class TaskExecutionAppService
             TaskExecutionStatus.Running,
             taskId,
             conversationId: null,
-            requesterExtensionId: null
+            requesterExtensionId
         );
     }
 
@@ -164,7 +165,8 @@ public class TaskExecutionAppService
         Guid projectId,
         Guid? taskId,
         TaskCreateRequest request,
-        string user
+        string user,
+        string? requesterExtensionId = null
     )
     {
         return CreateAsync(
@@ -174,7 +176,7 @@ public class TaskExecutionAppService
             TaskExecutionStatus.Pending,
             taskId,
             conversationId: null,
-            requesterExtensionId: null
+            requesterExtensionId
         );
     }
 

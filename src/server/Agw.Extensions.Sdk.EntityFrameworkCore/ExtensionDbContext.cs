@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Agw.Extensions.Sdk.EntityFrameworkCore;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -50,10 +51,74 @@ public abstract class ExtensionDbContext : DbContext
 
     internal bool IsCheckingOwnership { get; private set; }
 
+    internal bool IsScanningOutbox { get; private set; }
+
+    internal bool IsReadingOwnedRecords { get; private set; }
+
+    internal async Task<IReadOnlyList<ExtensionOwnedRecordIdentity>> ReadOwnedRecordsAsync<TRecord>(
+        Guid? recordId,
+        CancellationToken cancellationToken
+    )
+        where TRecord : class, IExtensionOwnedEntity
+    {
+        var entity =
+            Model.FindEntityType(typeof(TRecord)) ?? throw new AgwException(ErrorCodes.ExtensionPackageInvalid);
+        var key = entity.FindPrimaryKey();
+        if (key is null || key.Properties.Count != 1 || key.Properties[0].ClrType != typeof(Guid))
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid);
+        string keyName = key.Properties[0].Name;
+        IsReadingOwnedRecords = true;
+        try
+        {
+            IQueryable<TRecord> query = Set<TRecord>().AsNoTracking();
+            if (CurrentUserId is null)
+                query = query.IgnoreQueryFilters(["ExtensionUserScope"]);
+            if (recordId is { } id)
+                query = query.Where(record => EF.Property<Guid>(record, keyName) == id);
+            return await query
+                .Select(record => new ExtensionOwnedRecordIdentity(
+                    EF.Property<Guid>(record, keyName),
+                    record.CreateBy!
+                ))
+                .ToListAsync(cancellationToken);
+        }
+        finally
+        {
+            IsReadingOwnedRecords = false;
+        }
+    }
+
+    internal async Task<ExtensionOutboxRow?> ReadNextOutboxAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken
+    )
+    {
+        IsScanningOutbox = true;
+        try
+        {
+            return await Set<ExtensionOutboxRow>()
+                .IgnoreQueryFilters(["ExtensionUserScope"])
+                .AsNoTracking()
+                .Where(row =>
+                    row.State == ExtensionOutboxState.Pending && (row.NextAttemptAt == null || row.NextAttemptAt <= now)
+                )
+                .OrderBy(row => row.CreateTime)
+                .ThenBy(row => row.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        finally
+        {
+            IsScanningOutbox = false;
+        }
+    }
+
     protected sealed override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         ConfigureExtensionModel(modelBuilder);
+        string dateTimeOffsetType =
+            Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite" ? "TEXT" : "timestamp with time zone";
+        modelBuilder.UseExtensionMessaging(_identity.TablePrefix, dateTimeOffsetType);
         ApplyTableNamespace(modelBuilder);
         ApplyUserScopeFilters(modelBuilder);
     }
@@ -104,6 +169,8 @@ public abstract class ExtensionDbContext : DbContext
     }
 
     public static string GetTablePrefix(Guid extensionId) => $"zext_{extensionId:N}_";
+
+    internal DateTimeOffset GetUtcNow() => _timeProvider.GetUtcNow();
 
     private void ApplyTableNamespace(ModelBuilder modelBuilder)
     {

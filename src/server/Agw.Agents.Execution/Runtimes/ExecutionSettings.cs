@@ -18,7 +18,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow,
         long permissionVersion = 0,
         bool resultOnly = false,
-        string? extensionId = null
+        string? extensionId = null,
+        BackgroundToolPolicy toolPolicy = BackgroundToolPolicy.Default
     )
     {
         ProjectId = projectId;
@@ -32,6 +33,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         HumanInteractionPolicy = humanInteractionPolicy;
         ResultOnly = resultOnly;
         ExtensionId = extensionId;
+        ToolPolicy = toolPolicy;
     }
 
     public Guid ProjectId { get; }
@@ -68,6 +70,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     /// </summary>
     public string? ExtensionId { get; }
 
+    public BackgroundToolPolicy ToolPolicy { get; }
+
     internal IReadOnlyList<ExtensionExecutionPin>? ExtensionPins { get; init; }
 
     internal IReadOnlyList<Guid>? ExtensionIds { get; init; }
@@ -90,7 +94,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             HumanInteractionPolicy,
             PermissionMode == permissionMode ? PermissionVersion : checked(PermissionVersion + 1),
             ResultOnly,
-            ExtensionId
+            ExtensionId,
+            ToolPolicy
         )
         {
             ExtensionPins = ExtensionPins,
@@ -108,7 +113,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             HumanInteractionPolicy,
             version,
             ResultOnly,
-            ExtensionId
+            ExtensionId,
+            ToolPolicy
         )
         {
             ExtensionPins = ExtensionPins,
@@ -126,7 +132,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             policy,
             PermissionVersion,
             ResultOnly,
-            ExtensionId
+            ExtensionId,
+            ToolPolicy
         )
         {
             ExtensionPins = ExtensionPins,
@@ -144,7 +151,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             HumanInteractionPolicy,
             PermissionVersion,
             resultOnly,
-            ExtensionId
+            ExtensionId,
+            ToolPolicy
         )
         {
             ExtensionPins = ExtensionPins,
@@ -162,7 +170,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             HumanInteractionPolicy,
             PermissionVersion,
             ResultOnly,
-            ExtensionId
+            ExtensionId,
+            ToolPolicy
         )
         {
             ExtensionPins = ExtensionPins,
@@ -183,7 +192,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             HumanInteractionPolicy,
             PermissionVersion,
             ResultOnly,
-            ExtensionId
+            ExtensionId,
+            ToolPolicy
         )
         {
             ExtensionPins = extensionPins.ToArray(),
@@ -201,12 +211,32 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             HumanInteractionPolicy,
             PermissionVersion,
             ResultOnly,
-            ExtensionId
+            ExtensionId,
+            ToolPolicy
         )
         {
             ExtensionPins = null,
             ExtensionIds = extensionIds.ToArray(),
             ExtensionCapabilityLease = null,
+        };
+
+    public ExecutionSettings WithToolPolicy(BackgroundToolPolicy toolPolicy) =>
+        new(
+            ProjectId,
+            ConversationId,
+            _environmentVariables,
+            PermissionMode,
+            Resume,
+            HumanInteractionPolicy,
+            PermissionVersion,
+            ResultOnly,
+            ExtensionId,
+            toolPolicy
+        )
+        {
+            ExtensionPins = ExtensionPins,
+            ExtensionIds = ExtensionIds,
+            ExtensionCapabilityLease = ExtensionCapabilityLease,
         };
 
     internal async ValueTask DisposeExtensionCapabilityLeaseAsync()
@@ -234,6 +264,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             && PermissionMode == other.PermissionMode
             && Resume == other.Resume
             && HumanInteractionPolicy == other.HumanInteractionPolicy
+            && ToolPolicy == other.ToolPolicy
             && string.Equals(ExtensionId, other.ExtensionId, StringComparison.Ordinal)
             && ExtensionPinsEqual(ExtensionPins, other.ExtensionPins)
             && ExtensionIdsEqual(ExtensionIds, other.ExtensionIds)
@@ -250,6 +281,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         hash.Add(PermissionMode);
         hash.Add(Resume);
         hash.Add(HumanInteractionPolicy);
+        hash.Add(ToolPolicy);
         hash.Add(ExtensionId, StringComparer.Ordinal);
         if (ExtensionPins != null)
         {

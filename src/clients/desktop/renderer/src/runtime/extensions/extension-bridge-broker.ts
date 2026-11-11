@@ -1327,7 +1327,7 @@ export class ExtensionBridgeBroker {
             throw invalidArgument("query values must be strings, finite numbers or booleans.");
           }
         }
-        const path = extensionServerPath(extension.manifest.name, params.path);
+        const path = extensionServerPath(extension.manifest.name, params.path, method);
         const requestHeaders = {
           "X-Agw-Extension-Id": extension.manifest.id,
           "X-Agw-Extension-Release-Hash": extension.releaseHash,

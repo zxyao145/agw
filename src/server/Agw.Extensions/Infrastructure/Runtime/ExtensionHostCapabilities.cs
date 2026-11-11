@@ -1,4 +1,5 @@
 using System.Runtime.Loader;
+using Agw.Extensions.Contracts;
 using Agw.Extensions.Sdk;
 using Agw.Shared.Exceptions;
 
@@ -67,7 +68,11 @@ internal sealed class ExtensionHostCapabilities : IExtensionHostCapabilities
         string? namespaceName = capabilityType.Namespace;
         return capabilityType.IsInterface
             && loadContext == AssemblyLoadContext.Default
-            && assemblyName is not ("Agw.Shared" or "Agw.Extensions.Contracts" or "Agw.Extensions.Sdk")
+            && (
+                assemblyName is not ("Agw.Shared" or "Agw.Extensions.Contracts" or "Agw.Extensions.Sdk")
+                || capabilityType == typeof(IExtensionCallerAccessor)
+                || capabilityType == typeof(IExtensionServerAddress)
+            )
             && namespaceName is not null
             && namespaceName.Contains(".Contracts", StringComparison.Ordinal);
     }

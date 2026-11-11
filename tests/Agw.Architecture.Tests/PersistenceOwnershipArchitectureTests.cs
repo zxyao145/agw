@@ -214,6 +214,12 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
                 "Agw.Infrastructure/Projects/ProjectDeletionCoordinator.cs",
                 "Agw.Infrastructure/Agents/AgentDeletionCoordinator.cs",
+                "Agw.Infrastructure/Agents/BackgroundExecutionPersistence.cs",
+                "Agw.Infrastructure/Agents/BackgroundExecutionCompletionTransaction.cs",
+                "Agw.Infrastructure/Events/EventRecordRecovery.cs",
+                "Agw.Infrastructure/Events/Sources/EventWebhookReceiver.cs",
+                "Agw.Infrastructure/Notifications/NotificationDispatchStore.cs",
+                "Agw.Extensions.Sdk.EntityFrameworkCore/ExtensionDbContext.cs",
                 "Agw.Infrastructure/Data/UserScopeModelBuilderExtensions.cs",
             ],
             StringComparer.Ordinal
@@ -271,6 +277,10 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Jobs/Scheduling/Attempts/JobAttemptOutcomeRecorder.cs",
                 "Agw.Infrastructure/Auth/SettingsServerAuthStatePersistence.cs",
                 "Agw.Infrastructure/Agents/DurableExecutionScopeMaintenance.cs",
+                "Agw.Infrastructure/Events/Sources/EventSourceScanService.cs",
+                "Agw.Events/Infrastructure/Dispatch/EventDispatcher.cs",
+                "Agw.Events/Infrastructure/Delivery/EventDeliveryProcessor.cs",
+                "Agw.Events/Infrastructure/Scheduling/EventScheduleHostedService.cs",
             ],
             StringComparer.Ordinal
         );
@@ -350,9 +360,11 @@ public sealed partial class BackendArchitectureTests
     {
         ["IAgentsDbContext"] = "Agw.Agents",
         ["IAuthDbContext"] = "Agw.Auth",
+        ["IEventsDbContext"] = "Agw.Events",
         ["ISettingsDbContext"] = "Agw.Settings",
         ["IIntegrationsDbContext"] = "Agw.Integrations",
         ["IJobsDbContext"] = "Agw.Jobs",
+        ["INotificationsDbContext"] = "Agw.Notifications",
         ["IProjectsDbContext"] = "Agw.Projects",
         ["IProvidersDbContext"] = "Agw.Providers",
         ["ISkillsDbContext"] = "Agw.Skills",
@@ -364,9 +376,11 @@ public sealed partial class BackendArchitectureTests
         "Agw.Agents",
         "Agw.Agents.Execution",
         "Agw.Auth",
+        "Agw.Events",
         "Agw.Extensions",
         "Agw.Integrations",
         "Agw.Jobs",
+        "Agw.Notifications",
         "Agw.Projects",
         "Agw.Providers",
         "Agw.Setup",
@@ -387,7 +401,7 @@ public sealed partial class BackendArchitectureTests
     private static partial Regex ModuleDbSetRegex();
 
     [GeneratedRegex(
-        @"\b(?<context>I(?:Agents|Auth|Integrations|Jobs|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
+        @"\b(?<context>I(?:Agents|Auth|Events|Integrations|Jobs|Notifications|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
     )]
     private static partial Regex ModuleDbContextReferenceRegex();
 
@@ -395,7 +409,7 @@ public sealed partial class BackendArchitectureTests
     private static partial Regex ClassBaseListRegex();
 
     [GeneratedRegex(
-        @"\b(?:Microsoft\.EntityFrameworkCore|Agw\.Shared\.Data|IModuleDbContext|I(?:Agents|Auth|Integrations|Jobs|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
+        @"\b(?:Microsoft\.EntityFrameworkCore|Agw\.Shared\.Data|IModuleDbContext|I(?:Agents|Auth|Events|Integrations|Jobs|Notifications|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
     )]
     private static partial Regex ForbiddenContractsPersistenceRegex();
 

@@ -5,10 +5,9 @@ import { isRecordedBlock } from "../markdown/markdown-blocks";
 import { withoutTrailingNewlines } from "../markdown/markdown-syntax";
 import { lexEditorMarkdown } from "./markdown-parser";
 
-// 块与原文位置（设计 5.1）。顶层 token 的 raw 依次拼接等于正文；块的位置为去掉末尾换行的 raw 所占的区间，
-// 顶层列表的每个列表项同样处理。
-// Blocks and their source positions (design section 5.1). The raw texts of the top-level tokens concatenate to the
-// body; a block's range is its raw text without trailing newlines, and so is each item of a top-level list.
+// 块与原文位置（设计 5.1）。token 的 raw 使用 LF，sourceOffsets 把这些位置映射回保留原换行的原文。
+// Blocks and their source positions (design section 5.1). Token raw text uses LF; sourceOffsets map it to the original
+// source while preserving its line endings.
 
 export class MarkdownSourceMapError extends Error {
   constructor(message: string) {
@@ -27,6 +26,28 @@ export type SourceBlock = {
   /** 顶层列表的列表项区间，其他块为 null。The item ranges of a top-level list; null for other blocks. */
   readonly items: readonly SourceRange[] | null;
 };
+
+export type NormalizedSourceText = {
+  readonly text: string;
+  /** LF 文本每个 UTF-16 边界在原文中的位置。The original-source offset of every UTF-16 boundary in LF text. */
+  readonly sourceOffsets: readonly number[];
+};
+
+/** 把 CRLF 与 CR 转成 LF，同时保留到原文字位置的映射。Normalizes CRLF and CR to LF with original-text offsets. */
+export function normalizeSourceLineEndings(source: string): NormalizedSourceText {
+  const characters: string[] = [];
+  const sourceOffsets = [0];
+  for (let sourceOffset = 0; sourceOffset < source.length; sourceOffset++) {
+    let character = source[sourceOffset];
+    if (character === "\r") {
+      if (source[sourceOffset + 1] === "\n") sourceOffset++;
+      character = "\n";
+    }
+    characters.push(character);
+    sourceOffsets.push(sourceOffset + 1);
+  }
+  return { text: characters.join(""), sourceOffsets };
+}
 
 type TokenBlock = SourceBlock & { readonly type: string };
 
@@ -50,23 +71,25 @@ export function footnoteContainerText(raw: string): string {
 
 /**
  * 取得正文中每个顶层块（除 space 以外的 token）的区间。offset 为正文在原文中的起点（front matter 的长度）。
- * Finds the range of every top-level block (each token other than space) in the body. offset is where the body
- * starts in the source (the front matter's length).
+ * Finds every top-level block's range (each token other than space) in the body. offset is the body's start in the
+ * original source, after front matter.
  */
 export function mapSourceBlocks(body: string, offset: number): TokenBlock[] {
+  const normalized = normalizeSourceLineEndings(body);
   // 脚注容器中属于原文的空白按 space 处理。The source whitespace inside the footnote container is handled as space.
-  const tokens = lexEditorMarkdown(body).map((token) =>
+  const tokens = lexEditorMarkdown(normalized.text).map((token) =>
     token.type === "footnotes"
       ? ({ type: "space", raw: footnoteContainerText(token.raw) } as Token)
       : token,
   );
-  if (tokens.map((token) => token.raw).join("") !== body) {
+  if (tokens.map((token) => token.raw).join("") !== normalized.text) {
     throw new MarkdownSourceMapError("The Markdown tokens don't cover the source text exactly.");
   }
   const blocks: TokenBlock[] = [];
-  let position = offset;
+  let position = 0;
   for (const token of tokens) {
-    const start = position;
+    const tokenStart = position;
+    const start = offset + normalized.sourceOffsets[tokenStart];
     position += token.raw.length;
     if (token.type === "space") continue;
     const text = withoutTrailingNewlines(token.raw);
@@ -79,16 +102,21 @@ export function mapSourceBlocks(body: string, offset: number): TokenBlock[] {
         );
       }
       items = [];
-      let itemPosition = start;
+      let itemPosition = tokenStart;
       for (const item of listItems) {
+        const itemText = withoutTrailingNewlines(item.raw);
         items.push({
-          from: itemPosition,
-          to: itemPosition + withoutTrailingNewlines(item.raw).length,
+          from: offset + normalized.sourceOffsets[itemPosition],
+          to: offset + normalized.sourceOffsets[itemPosition + itemText.length],
         });
         itemPosition += item.raw.length;
       }
     }
-    blocks.push({ type: token.type, range: { from: start, to: start + text.length }, items });
+    blocks.push({
+      type: token.type,
+      range: { from: start, to: offset + normalized.sourceOffsets[tokenStart + text.length] },
+      items,
+    });
   }
   return blocks;
 }

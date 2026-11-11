@@ -19,6 +19,20 @@ test("extensionServerPath preserves only paths under the extension prefix", () =
   );
 });
 
+test("extensionServerPath allows the Notifications answer endpoint only on POST", () => {
+  assert.equal(
+    extensionServerPath("taskpilot", "/api/notifications/answer", "POST"),
+    "/api/notifications/answer",
+  );
+  assert.throws(() => extensionServerPath("taskpilot", "/api/notifications/answer", "GET"), {
+    code: "ERR_INVALID_ARGUMENT",
+  });
+  assert.equal(
+    extensionServerPath("taskpilot", "/api/notifications/get", "GET"),
+    "/api/ext/taskpilot/api/notifications/get",
+  );
+});
+
 test("extensionServerPath rejects path escapes and absolute URLs", () => {
   for (const path of ["../admin", "%2e%2e/admin", "appointments%2fadmin", "https://example.com"]) {
     assert.throws(() => extensionServerPath("calendar", path), { code: "ERR_INVALID_ARGUMENT" });

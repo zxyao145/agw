@@ -6,10 +6,13 @@ using Agw.Extensions.Sdk;
 using Agw.Extensions.Sdk.Database;
 using Agw.Extensions.Sdk.EntityFrameworkCore;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations.Builders;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -21,6 +24,93 @@ public sealed class DatabaseTestExtension : IServerExtension
     {
         registration.RegisterJsonContext(FixtureJsonContext.Default);
         registration.RegisterDbContext<DatabaseTestContext, DatabaseTestMigrationMarker>();
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "enqueue-outbox",
+                Method = "POST",
+                RelativePath = "enqueue-outbox",
+            },
+            static async (provider, context, _, cancellationToken) =>
+            {
+                DatabaseTestContext database = provider.GetRequiredService<DatabaseTestContext>();
+                Guid outboxId = ExtensionOutbox.Enqueue(
+                    database,
+                    ExtensionOutboxKind.PublishEvent,
+                    Guid.CreateVersion7().ToString("N"),
+                    new CloudEventDraft { Id = Guid.CreateVersion7().ToString("N"), Type = "outbox.recovery" },
+                    context.JsonOptions
+                );
+                await database.SaveChangesAsync(cancellationToken);
+                return ExtensionEndpointResponse.FromJson(
+                    JsonSerializer.SerializeToElement(new OutboxEnqueueResponse(outboxId), context.JsonOptions)
+                );
+            }
+        );
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "owned-record-create",
+                Method = "POST",
+                RelativePath = "owned-record-create",
+            },
+            static async (provider, context, request, cancellationToken) =>
+            {
+                JsonElement body = RequireBody(request);
+                var record = new DatabaseOwnedProbeRecord
+                {
+                    Id = body.GetProperty("id").GetGuid(),
+                    Value = body.GetProperty("value").GetString()!,
+                };
+                DatabaseTestContext database = provider.GetRequiredService<DatabaseTestContext>();
+                database.OwnedProbes.Add(record);
+                await database.SaveChangesAsync(cancellationToken);
+                return ExtensionEndpointResponse.FromJson(
+                    JsonSerializer.SerializeToElement(
+                        new OwnedRecordResponse(record.Id, record.CreateBy, record.Value),
+                        context.JsonOptions
+                    )
+                );
+            }
+        );
+        registration.RegisterEndpoint(
+            new ExtensionEndpointDescriptor
+            {
+                Id = "owned-record-read",
+                Method = "POST",
+                RelativePath = "owned-record-read",
+            },
+            static async (provider, context, request, cancellationToken) =>
+            {
+                Guid recordId = RequireBody(request).GetProperty("id").GetGuid();
+                var scheduler = new ExtensionOwnedRecordScheduler<DatabaseTestContext, DatabaseOwnedProbeRecord>(
+                    provider.GetRequiredService<IServiceScopeFactory>(),
+                    provider.GetRequiredService<IExtensionBackgroundScheduler>()
+                );
+                OwnedRecordResponse result = await scheduler.ExecuteAsync(
+                    recordId,
+                    (_, record, _, _) =>
+                        ValueTask.FromResult(new OwnedRecordResponse(record.Id, record.CreateBy, record.Value)),
+                    cancellationToken
+                );
+                return ExtensionEndpointResponse.FromJson(
+                    JsonSerializer.SerializeToElement(result, context.JsonOptions)
+                );
+            }
+        );
+        services.AddScoped<DatabaseEventHandler>();
+        registration.RegisterEventHandler(
+            new ExtensionEventHandlerDescriptor { Id = "database" },
+            static (provider, context, delivery, cancellationToken) =>
+                provider
+                    .GetRequiredService<DatabaseEventHandler>()
+                    .ProcessAsync(
+                        provider.GetRequiredService<DatabaseTestContext>(),
+                        context,
+                        delivery,
+                        cancellationToken
+                    )
+        );
         registration.RegisterEndpoint(
             new ExtensionEndpointDescriptor
             {
@@ -598,6 +688,41 @@ public sealed class DatabaseTestExtension : IServerExtension
     private static JsonElement RequireBody(ExtensionEndpointRequest request) =>
         request.Body ?? throw new AgwException(ErrorCodes.InvalidParam);
 
+    public sealed class DatabaseEventHandler : ExtensionEventHandlerBase<DatabaseTestContext>
+    {
+        protected override ValueTask<ExtensionEventHandlerResult> HandleEventAsync(
+            DatabaseTestContext dbContext,
+            IExtensionContext context,
+            ExtensionEventDelivery delivery,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (delivery.Event.Data?.Json is not JsonElement data)
+            {
+                throw new AgwException(ErrorCodes.InvalidParam);
+            }
+
+            int id = data.GetProperty("id").GetInt32();
+            string value = data.GetProperty("value").GetString()!;
+            dbContext.Probes.Add(new DatabaseProbeRecord { Id = id, Value = value });
+            ExtensionOutbox.Enqueue(
+                dbContext,
+                ExtensionOutboxKind.PublishEvent,
+                $"probe:{id}",
+                new CloudEventDraft { Id = $"probe:{id}", Type = "database.probe.created" },
+                context.JsonOptions
+            );
+
+            bool retry = data.TryGetProperty("retry", out JsonElement retryValue) && retryValue.GetBoolean();
+            return ValueTask.FromResult(
+                retry
+                    ? ExtensionEventHandlerResult.Retry(TimeSpan.FromSeconds(1), "Retry requested by test event.")
+                    : ExtensionEventHandlerResult.Succeeded
+            );
+        }
+    }
+
     private sealed class DatabaseTestException(string message) : Exception(message);
 }
 
@@ -611,6 +736,8 @@ public sealed class DatabaseTestContext(
     public DbSet<DatabaseProbeRecord> Probes => Set<DatabaseProbeRecord>();
 
     public DbSet<DatabaseProbeNote> Notes => Set<DatabaseProbeNote>();
+
+    public DbSet<DatabaseOwnedProbeRecord> OwnedProbes => Set<DatabaseOwnedProbeRecord>();
 
     protected override void ConfigureExtensionModel(ModelBuilder modelBuilder)
     {
@@ -635,6 +762,16 @@ public sealed class DatabaseTestContext(
             entity.Property(note => note.CreateTime).HasColumnType(timeType);
             entity.Property(note => note.UpdateBy).HasColumnType("text");
             entity.Property(note => note.UpdateTime).HasColumnType(timeType);
+        });
+        modelBuilder.Entity<DatabaseOwnedProbeRecord>(entity =>
+        {
+            entity.ToTable(DatabaseTestSchema.OwnedProbeTableName);
+            entity.HasKey(record => record.Id).HasName($"pk_{DatabaseTestSchema.OwnedProbeTableName}");
+            entity.Property(record => record.Value).HasColumnType("text");
+            entity.Property(record => record.CreateBy).HasColumnType("text");
+            entity.Property(record => record.CreateTime).HasColumnType(timeType);
+            entity.Property(record => record.UpdateBy).HasColumnType("text");
+            entity.Property(record => record.UpdateTime).HasColumnType(timeType);
         });
     }
 }
@@ -670,6 +807,23 @@ public sealed class DatabaseProbeNote : IExtensionOwnedChild<DatabaseProbeRecord
 
     public DateTimeOffset? UpdateTime { get; set; }
 }
+
+public sealed class DatabaseOwnedProbeRecord : IExtensionOwnedEntity
+{
+    public Guid Id { get; set; }
+
+    public string Value { get; set; } = string.Empty;
+
+    public string? CreateBy { get; set; }
+
+    public DateTimeOffset CreateTime { get; set; }
+
+    public string? UpdateBy { get; set; }
+
+    public DateTimeOffset? UpdateTime { get; set; }
+}
+
+public sealed record OwnedRecordResponse(Guid Id, string? CreateBy, string Value);
 
 public sealed record DatabaseInvocationResponse(Guid? InvocationId, string? UserId);
 
@@ -712,8 +866,13 @@ public sealed record DatabaseProbeOwnershipResponse(string? RootOwner, string? C
 public static class DatabaseTestSchema
 {
     public const string ExtensionId = "019a4c175f007a808b3d2b732f48a100";
+    public const string TablePrefix = $"zext_{ExtensionId}_";
     public const string TableName = $"zext_{ExtensionId}_database_probe";
     public const string NoteTableName = $"zext_{ExtensionId}_database_probe_note";
+    public const string OwnedProbeTableName = $"zext_{ExtensionId}_database_owned_probe";
+    public const string InboxTableName = $"{TablePrefix}__inbox";
+    public const string OutboxTableName = $"{TablePrefix}__outbox";
+    public const string OutboxIdempotencyIndexName = $"{TablePrefix}uq_outbox_key";
     public const string HistoryTableName = $"zext_{ExtensionId}___ef_migrations_history";
 }
 
@@ -723,10 +882,16 @@ public sealed class DatabaseTestMigrationMarker { }
 [Migration("20261107000100_Initial")]
 public sealed class DatabaseTestInitialMigration : Migration
 {
+    private OperationBuilder<AddColumnOperation> MessagingTimestamp(ColumnsBuilder table, bool nullable) =>
+        ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite"
+            ? table.Column<long>(type: "INTEGER", nullable: nullable)
+            : table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: nullable);
+
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         string timeType =
             ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite" ? "TEXT" : "timestamp with time zone";
+        string guidType = ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite" ? "TEXT" : "uuid";
         migrationBuilder.CreateTable(
             name: DatabaseTestSchema.TableName,
             columns: table => new
@@ -754,10 +919,68 @@ public sealed class DatabaseTestInitialMigration : Migration
             },
             constraints: table => table.PrimaryKey($"pk_{DatabaseTestSchema.NoteTableName}", row => row.id)
         );
+        migrationBuilder.CreateTable(
+            name: DatabaseTestSchema.OwnedProbeTableName,
+            columns: table => new
+            {
+                id = table.Column<Guid>(type: guidType, nullable: false),
+                value = table.Column<string>(type: "text", nullable: false),
+                create_by = table.Column<string>(type: "text", nullable: true),
+                create_time = table.Column<DateTimeOffset>(type: timeType, nullable: false),
+                update_by = table.Column<string>(type: "text", nullable: true),
+                update_time = table.Column<DateTimeOffset>(type: timeType, nullable: true),
+            },
+            constraints: table => table.PrimaryKey($"pk_{DatabaseTestSchema.OwnedProbeTableName}", row => row.id)
+        );
+        migrationBuilder.CreateTable(
+            name: DatabaseTestSchema.InboxTableName,
+            columns: table => new
+            {
+                delivery_id = table.Column<Guid>(type: guidType, nullable: false),
+                create_by = table.Column<string>(type: "text", nullable: false),
+                create_time = MessagingTimestamp(table, false),
+                update_by = table.Column<string>(type: "text", nullable: true),
+                update_time = MessagingTimestamp(table, true),
+                processed_at = MessagingTimestamp(table, false),
+                result_json = table.Column<string>(type: "text", nullable: false),
+            },
+            constraints: table => table.PrimaryKey($"pk_{DatabaseTestSchema.InboxTableName}", row => row.delivery_id)
+        );
+        migrationBuilder.CreateTable(
+            name: DatabaseTestSchema.OutboxTableName,
+            columns: table => new
+            {
+                id = table.Column<Guid>(type: guidType, nullable: false),
+                create_by = table.Column<string>(type: "text", nullable: false),
+                create_time = MessagingTimestamp(table, false),
+                update_by = table.Column<string>(type: "text", nullable: true),
+                update_time = MessagingTimestamp(table, true),
+                kind = table.Column<string>(type: "text", nullable: false),
+                idempotency_key = table.Column<string>(type: "text", nullable: false),
+                payload_json = table.Column<string>(type: "text", nullable: false),
+                state = table.Column<string>(type: "text", nullable: false),
+                result_json = table.Column<string>(type: "text", nullable: true),
+                error_code = table.Column<int>(type: "integer", nullable: true),
+                attempt = table.Column<int>(type: "integer", nullable: false),
+                next_attempt_at = MessagingTimestamp(table, true),
+                completed_at = MessagingTimestamp(table, true),
+                last_error = table.Column<string>(type: "text", nullable: true),
+            },
+            constraints: table => table.PrimaryKey($"pk_{DatabaseTestSchema.OutboxTableName}", row => row.id)
+        );
+        migrationBuilder.CreateIndex(
+            name: DatabaseTestSchema.OutboxIdempotencyIndexName,
+            table: DatabaseTestSchema.OutboxTableName,
+            column: "idempotency_key",
+            unique: true
+        );
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.DropTable(DatabaseTestSchema.OutboxTableName);
+        migrationBuilder.DropTable(DatabaseTestSchema.InboxTableName);
+        migrationBuilder.DropTable(DatabaseTestSchema.OwnedProbeTableName);
         migrationBuilder.DropTable(DatabaseTestSchema.NoteTableName);
         migrationBuilder.DropTable(DatabaseTestSchema.TableName);
     }
@@ -766,6 +989,7 @@ public sealed class DatabaseTestInitialMigration : Migration
     {
         string timeType =
             ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite" ? "TEXT" : "timestamp with time zone";
+        modelBuilder.UseExtensionMessaging(DatabaseTestSchema.TablePrefix, timeType);
         modelBuilder.Entity<DatabaseProbeRecord>(entity =>
         {
             entity.ToTable(DatabaseTestSchema.TableName);
@@ -788,6 +1012,20 @@ public sealed class DatabaseTestInitialMigration : Migration
             entity.Property(note => note.CreateTime).HasColumnName("create_time").HasColumnType(timeType);
             entity.Property(note => note.UpdateBy).HasColumnName("update_by").HasColumnType("text");
             entity.Property(note => note.UpdateTime).HasColumnName("update_time").HasColumnType(timeType);
+        });
+        modelBuilder.Entity<DatabaseOwnedProbeRecord>(entity =>
+        {
+            entity.ToTable(DatabaseTestSchema.OwnedProbeTableName);
+            entity.HasKey(record => record.Id).HasName($"pk_{DatabaseTestSchema.OwnedProbeTableName}");
+            entity
+                .Property(record => record.Id)
+                .HasColumnName("id")
+                .HasColumnType(ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite" ? "TEXT" : "uuid");
+            entity.Property(record => record.Value).HasColumnName("value").HasColumnType("text");
+            entity.Property(record => record.CreateBy).HasColumnName("create_by").HasColumnType("text");
+            entity.Property(record => record.CreateTime).HasColumnName("create_time").HasColumnType(timeType);
+            entity.Property(record => record.UpdateBy).HasColumnName("update_by").HasColumnType("text");
+            entity.Property(record => record.UpdateTime).HasColumnName("update_time").HasColumnType(timeType);
         });
     }
 }

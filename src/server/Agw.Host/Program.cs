@@ -5,6 +5,8 @@ using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Execution;
 using Agw.Auth.Extensions;
+using Agw.Events;
+using Agw.Events.Api;
 using Agw.Extensions;
 using Agw.Extensions.Contracts;
 using Agw.Files;
@@ -20,6 +22,8 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
+using Agw.Notifications;
+using Agw.Notifications.Api;
 using Agw.Projects;
 using Agw.Providers;
 using Agw.Settings;
@@ -284,6 +288,8 @@ public static class AgwHostApplication
                 .AddExtensionInfrastructure()
                 .AddExtensions(builder.Configuration, profile.ToString())
                 .AddExtensionCapabilities()
+                .AddEvents(runWorkers: hasControlPlane)
+                .AddNotifications(builder.Configuration, runWorkers: hasControlPlane)
                 .AddJobs(
                     builder.Configuration,
                     new Agw.Jobs.DependencyInjection.RegistrationOptions(
@@ -304,7 +310,10 @@ public static class AgwHostApplication
                 .AddIntegrations(builder.Configuration);
 
             if (hasControlPlane)
+            {
                 builder.Services.AddOidcAuthentication(builder.Configuration, builder.Environment);
+                builder.Services.AddEventWorkers();
+            }
 
             // 数据库 AuditUserId 提供者
             builder.Services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
@@ -315,6 +324,19 @@ public static class AgwHostApplication
             builder.Services.AddExtensionHostCapability<Agw.Projects.Contracts.Runtime.IProjectOwnershipFacade>();
             builder.Services.AddExtensionHostCapability<Agw.Projects.Contracts.Runtime.IProjectDefaultResolver>();
             builder.Services.AddExtensionHostCapability<Agw.Skills.Contracts.References.ISkillReferenceFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Events.Contracts.IEventPublisher>();
+            builder.Services.AddExtensionHostCapability<IExtensionCallerAccessor>();
+            builder.Services.AddSingleton<IExtensionServerAddress, ExtensionServerAddress>();
+            builder.Services.AddExtensionHostCapability<IExtensionServerAddress>();
+            builder.Services.AddExtensionHostCapability<Agw.Events.Contracts.IEventScheduler>();
+            builder.Services.AddExtensionHostCapability<Agw.Events.Contracts.IEventSubscriptionFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Events.Contracts.IEventSourceFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Events.Contracts.IEventContextFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Notifications.Contracts.INotificationFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Notifications.Contracts.INotificationAnswerFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Agents.Contracts.Execution.IBackgroundExecutionFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Agents.Contracts.Catalog.IAgentCatalogFacade>();
+            builder.Services.AddExtensionHostCapability<Agw.Integrations.Contracts.IConnectionAuthorizationFacade>();
 
             var app = builder.Build();
             var stateStore = app.Services.GetRequiredService<DatabaseInitializationStateStore>();
@@ -390,7 +412,12 @@ public static class AgwHostApplication
                 module.MapEndpoints(app);
             }
             if (hasControlPlane)
+            {
                 app.MapExtensionEndpoints();
+                app.MapEventSourcesApi();
+                app.MapEventsApi();
+                app.MapNotificationsApi();
+            }
             app.MapGet("/api/health/live", () => Results.Ok(new { status = "live", hostProfile = profile.ToString() }));
             app.MapGet(
                 "/api/health/ready",

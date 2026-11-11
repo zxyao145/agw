@@ -38,7 +38,8 @@ public partial class AgentRuntimeFactory
         bool deferHumanInteractions = false,
         IReadOnlyList<ExtensionExecutionPin>? extensionPins = null,
         ExtensionCapabilitySnapshot? acceptedExtensionCapabilities = null,
-        IReadOnlyList<Guid>? extensionIds = null
+        IReadOnlyList<Guid>? extensionIds = null,
+        BackgroundToolPolicy toolPolicy = BackgroundToolPolicy.Default
     )
     {
         if (!agentDefinition.ModelProviderId.HasValue)
@@ -101,7 +102,8 @@ public partial class AgentRuntimeFactory
                 deferHumanInteractions,
                 extensionPins,
                 acceptedExtensionCapabilities,
-                extensionIds
+                extensionIds,
+                toolPolicy: toolPolicy
             )
             .ConfigureAwait(false);
         AIAgent? aiAgent = null;

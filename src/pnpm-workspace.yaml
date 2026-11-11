@@ -13,6 +13,7 @@ packages:
 catalog:
   "@excalidraw/excalidraw": 0.18.1
   "@floating-ui/dom": 1.8.0
+  "@larksuiteoapi/node-sdk": 1.76.0
   "@microsoft/signalr": 10.0.11
   "@tabler/icons-react": 3.49.0
   "@tailwindcss/postcss": 4.3.3
@@ -165,6 +166,7 @@ allowBuilds:
   fs-xattr: true
   macos-alias: true
   node-pty: false
+  protobufjs: true
   react-native-enriched-markdown: true
   sharp: true
   unrs-resolver: true
