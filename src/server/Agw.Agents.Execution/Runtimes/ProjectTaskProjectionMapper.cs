@@ -14,7 +14,6 @@ internal static class ProjectTaskProjectionMapper
             ProjectConversationId = task.ProjectConversationId,
             ProjectId = task.ProjectId,
             ContextId = task.ContextId,
-            JobId = task.JobId,
             Title = task.Title,
             Status = task.Status switch
             {

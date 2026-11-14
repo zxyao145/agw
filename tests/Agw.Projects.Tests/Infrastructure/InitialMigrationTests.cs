@@ -74,11 +74,11 @@ public sealed class InitialMigrationTests
                 "max_context_window_tokens",
                 "max_output_tokens",
                 "ck_model_token_limits",
-                "active_turn_id",
-                "active_attempt_started_at",
-                "ix_job_active_turn_id",
                 "ix_integration_connection_create_by_alias",
-                "ck_job_active_attempt",
+                "ix_event_source_create_by_managed_by_managed_key",
+                "ix_event_subscription_create_by_managed_by_managed_key",
+                "ix_event_delivery_subscription_id_id",
+                "ix_event_delivery_attempt_delivery_id_attempt",
                 "setting",
                 "ix_setting_key",
                 "ix_setting_user_id_key",
@@ -213,9 +213,8 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "api_token", "secret_hash", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "user_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_id", cancellationToken));
-        Assert.True(await ColumnExistsAsync(connection, "job", "active_turn_id", cancellationToken));
-        Assert.True(await ColumnExistsAsync(connection, "job", "active_attempt_started_at", cancellationToken));
-        Assert.True(await IndexIsUniqueAsync(connection, "job", "ix_job_active_turn_id", cancellationToken));
+        Assert.False(await TableExistsAsync(connection, "job", cancellationToken));
+        Assert.False(await TableExistsAsync(connection, "job_log", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "enable", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agentflow", "enable", cancellationToken));
@@ -235,11 +234,6 @@ public sealed class InitialMigrationTests
         Assert.Contains(
             "ck_model_token_limits",
             await TableSqlAsync(connection, "model", cancellationToken),
-            StringComparison.OrdinalIgnoreCase
-        );
-        Assert.Contains(
-            "ck_job_active_attempt",
-            await TableSqlAsync(connection, "job", cancellationToken),
             StringComparison.OrdinalIgnoreCase
         );
         Assert.False(await ColumnExistsAsync(connection, "agent", "building_blocks", cancellationToken));

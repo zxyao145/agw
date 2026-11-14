@@ -11,7 +11,7 @@ namespace Agw.Agents.Tests;
 public sealed partial class DurableExecutionStoreTests
 {
     [Fact]
-    public async Task FacadeExecuteAsync_Distributed_AcceptsTurnAndReturnsCommittedOutcome()
+    public async Task FacadeExecuteStreamingAsync_Distributed_AcceptsTurnAndReturnsCommittedOutcome()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
@@ -36,7 +36,6 @@ public sealed partial class DurableExecutionStoreTests
                 task.ProjectConversationId,
                 task.ProjectId,
                 task.ContextId,
-                null,
                 task.Title,
                 ProjectTaskStatus.Running,
                 null,
@@ -50,7 +49,18 @@ public sealed partial class DurableExecutionStoreTests
         );
 
         // Act: the Facade accepts the turn and reads committed events; another instance claims and completes it.
-        var execution = facade.ExecuteAsync(request, token);
+        var execution = Task.Run(
+            async () =>
+            {
+                var messages = new List<AgwMessage>();
+                await foreach (var executionEvent in facade.ExecuteStreamingAsync(request, token).ConfigureAwait(false))
+                {
+                    messages.Add(executionEvent.Message);
+                }
+                return messages;
+            },
+            token
+        );
         while (!await ExecutionExistsAsync(turnId))
         {
             Assert.False(execution.IsCompleted, "The Facade stopped before accepting the turn.");
@@ -73,11 +83,11 @@ public sealed partial class DurableExecutionStoreTests
             failureReported: true,
             token
         );
-        var result = await execution.WaitAsync(TimeSpan.FromSeconds(10), token);
+        var messages = await execution.WaitAsync(TimeSpan.FromSeconds(10), token);
 
         // Assert
-        Assert.Equal(AgentExecutionState.Completed, result.State);
-        Assert.DoesNotContain(result.Messages, AgwMessageClassifier.IsTurnFinished);
+        var finished = Assert.Single(messages, AgwMessageClassifier.IsTurnFinished);
+        Assert.Equal("completed", finished.AdditionalProperties!["status"]);
         var snapshot = await Store.GetAsync(turnId, token);
         Assert.Equal(DurableExecutionStatus.Completed, snapshot.Status);
         Assert.Equal(AgwPermissionMode.FullAccess, snapshot.Manifest.Settings.PermissionMode);

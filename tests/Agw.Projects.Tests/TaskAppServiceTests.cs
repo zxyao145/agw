@@ -81,8 +81,7 @@ public partial class TaskAppServiceTests
         );
 
         Assert.NotNull(task);
-        Assert.Null(task!.JobId);
-        Assert.Equal("hello world", task.Title);
+        Assert.Equal("hello world", task!.Title);
         Assert.NotNull(await dbContext.ProjectConversations.SingleOrDefaultAsync(cancellationToken));
         Assert.NotNull(
             await dbContext.ProjectConversationChatHistories.SingleOrDefaultAsync(

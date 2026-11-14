@@ -122,6 +122,7 @@ jobs:
         run: |
           dotnet build tests/Agw.Agents.Tests -c Release
           dotnet build tests/Agw.Jobs.Tests -c Release
+          dotnet build tests/Agw.Projects.Tests -c Release
           dotnet build tests/Agw.Files.Tests -c Release
           dotnet build tests/Agw.Extensions.Database.Tests -c Release
           dotnet build tests/Agw.Extensions.Runtime.Tests -c Release
@@ -135,11 +136,17 @@ jobs:
           -filterVSTest "FullyQualifiedName~DurableDistributedStoreTests.Postgres_|FullyQualifiedName~DurableTurnUpgradeTests.Postgres_|FullyQualifiedName~DurableSchedulerTests.Postgres_|FullyQualifiedName~TurnAcceptanceLockTests.Postgres_"
           -result-trx TestResults/Postgres/results.trx
           -failSkips
-      - name: Test PostgreSQL job deletion and execution locks
+      - name: Test PostgreSQL job writes
         run: >-
           tests/Agw.Jobs.Tests/bin/Release/net10.0/Agw.Jobs.Tests
           -filterVSTest "Category=Postgres"
           -result-trx TestResults/Postgres/jobs.trx
+          -failSkips
+      - name: Test PostgreSQL Jobs/Event Timer migration
+        run: >-
+          tests/Agw.Projects.Tests/bin/Release/net10.0/Agw.Projects.Tests
+          -filterVSTest "FullyQualifiedName~JobsEventTimerMigrationTests.Upgrade_Postgres_"
+          -result-trx TestResults/Postgres/jobs-migration.trx
           -failSkips
       - name: Test PostgreSQL file write serialization across Hosts
         run: >-

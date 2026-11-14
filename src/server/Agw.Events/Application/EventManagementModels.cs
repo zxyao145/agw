@@ -55,7 +55,7 @@ public sealed record EventSubscriptionResponse
     public Guid? HandlerExtensionId { get; init; }
     public string? HandlerId { get; init; }
     public JsonElement? HandlerConfig { get; init; }
-    public Guid? ManagedByExtensionId { get; init; }
+    public required string ManagedBy { get; init; }
     public string? ManagedKey { get; init; }
     public long? ManagedVersion { get; init; }
     public EventSubscriptionManagedState? ManagedState { get; init; }

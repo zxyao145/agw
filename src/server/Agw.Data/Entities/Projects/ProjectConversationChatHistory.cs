@@ -26,8 +26,6 @@ public class ProjectConversationChatHistory
 
     public Guid TaskId { get; set; }
 
-    public Guid? JobId { get; set; }
-
     public TaskExecutionStatus Status { get; set; } = TaskExecutionStatus.Pending;
 
     public DateTimeOffset? FinishedTime { get; set; }

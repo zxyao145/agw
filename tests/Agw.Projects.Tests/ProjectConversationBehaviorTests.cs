@@ -119,14 +119,32 @@ public class ProjectConversationBehaviorTests
     }
 
     [Fact]
-    public void TryBindJob_ConversationAlreadyBound_KeepsOriginalJob()
+    public void SetOrigin_EventKindWithRelateId_WritesKindAndRelateId()
     {
-        var originalJobId = Guid.CreateVersion7();
-        var conversation = new ProjectConversation { JobId = originalJobId };
+        var relateId = Guid.CreateVersion7();
+        var conversation = new ProjectConversation();
 
-        new ProjectConversationBehavior(conversation).TryBindJob(Guid.CreateVersion7());
+        new ProjectConversationBehavior(conversation).SetOrigin("event:timer", relateId);
 
-        Assert.Equal(originalJobId, conversation.JobId);
+        Assert.Equal("event:timer", conversation.Kind);
+        Assert.Equal(relateId, conversation.RelateId);
+    }
+
+    [Theory]
+    [InlineData("native", true)]
+    [InlineData("event:timer", false)]
+    [InlineData("event:unknown", true)]
+    [InlineData("timer", false)]
+    public void SetOrigin_InvalidCombination_ThrowsInvalidParam(string kind, bool withRelateId)
+    {
+        var conversation = new ProjectConversation();
+        Guid? relateId = withRelateId ? Guid.CreateVersion7() : null;
+
+        var exception = Assert.Throws<AgwException>(() =>
+            new ProjectConversationBehavior(conversation).SetOrigin(kind, relateId)
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
     [Fact]

@@ -174,6 +174,8 @@ public static class EventSourcesEndpointRouteBuilderExtensions
             Kind = source.Kind,
             ProviderExtensionId = source.ProviderExtensionId,
             ProviderId = source.ProviderId,
+            ManagedBy = source.ManagedBy,
+            ManagedKey = source.ManagedKey,
             CeSource = source.CeSource,
             Config = config.RootElement.Clone(),
             Enabled = source.Enabled,

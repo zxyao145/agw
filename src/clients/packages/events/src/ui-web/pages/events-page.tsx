@@ -46,6 +46,7 @@ import {
   formatLocalDateTime,
 } from "@agw/components";
 import { useMutation, useQuery, useQueryClient } from "@agw/components/query";
+import { getManagedLabel } from "./managed-record";
 
 type SourceFormState = {
   name: string;
@@ -169,6 +170,17 @@ function defaultSubscriptionForm(subscription: EventSubscriptionResponse): Subsc
 
 function sourceConfigText(source: EventSourceResponse): string {
   return JSON.stringify(source.config, null, 2);
+}
+
+function ManagedBadge({
+  managedBy,
+  managedKey,
+}: {
+  managedBy: string;
+  managedKey?: string | null;
+}) {
+  const label = getManagedLabel(managedBy, managedKey);
+  return label ? <Badge variant="outline">{label}</Badge> : null;
 }
 
 export function EventsPage() {
@@ -484,7 +496,7 @@ export function EventsPage() {
   };
 
   return (
-    <section className="w-full max-w-7xl space-y-5 p-4 sm:p-6">
+    <section className="w-full space-y-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -688,6 +700,7 @@ export function EventsPage() {
                           {source.enabled ? "Enabled" : "Disabled"}
                         </Badge>
                         <Badge variant="outline">{sourceKindLabel(source.kind)}</Badge>
+                        <ManagedBadge managedBy={source.managedBy} managedKey={source.managedKey} />
                       </div>
                       <p className="break-all font-mono text-xs text-muted-foreground">
                         {source.ceSource}
@@ -702,43 +715,47 @@ export function EventsPage() {
                         <p className="break-words text-xs text-destructive">{source.lastError}</p>
                       ) : null}
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => sourceActionMutation.mutate({ action: "test", source })}
-                      >
-                        Test
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => sourceActionMutation.mutate({ action: "enable", source })}
-                      >
-                        {source.enabled ? "Disable" : "Enable"}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => beginEditSource(source)}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => sourceActionMutation.mutate({ action: "rotate", source })}
-                      >
-                        Rotate secret
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        aria-label={`Delete ${source.name}`}
-                        onClick={() => {
-                          if (window.confirm(`Delete source “${source.name}”?`))
-                            sourceActionMutation.mutate({ action: "delete", source });
-                        }}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
+                    {getManagedLabel(source.managedBy, source.managedKey) ? (
+                      <Badge variant="outline">Read only</Badge>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => sourceActionMutation.mutate({ action: "test", source })}
+                        >
+                          Test
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => sourceActionMutation.mutate({ action: "enable", source })}
+                        >
+                          {source.enabled ? "Disable" : "Enable"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => beginEditSource(source)}>
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => sourceActionMutation.mutate({ action: "rotate", source })}
+                        >
+                          Rotate secret
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          aria-label={`Delete ${source.name}`}
+                          onClick={() => {
+                            if (window.confirm(`Delete source “${source.name}”?`))
+                              sourceActionMutation.mutate({ action: "delete", source });
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -783,11 +800,10 @@ export function EventsPage() {
                         <Badge variant={subscription.enabled ? "secondary" : "outline"}>
                           {subscription.enabled ? "Enabled" : "Disabled"}
                         </Badge>
-                        {subscription.managedByExtensionId ? (
-                          <Badge variant="outline">
-                            Managed by extension {subscription.managedByExtensionId}
-                          </Badge>
-                        ) : null}
+                        <ManagedBadge
+                          managedBy={subscription.managedBy}
+                          managedKey={subscription.managedKey}
+                        />
                       </div>
                       <p className="break-words text-xs text-muted-foreground">
                         {subscription.eventTypes.join(", ")}
@@ -796,7 +812,7 @@ export function EventsPage() {
                         Target {subscription.targetKind} · v{subscription.version}
                       </p>
                     </div>
-                    {subscription.managedByExtensionId ? (
+                    {getManagedLabel(subscription.managedBy, subscription.managedKey) ? (
                       <Badge variant="outline">Read only</Badge>
                     ) : (
                       <div className="flex gap-2">

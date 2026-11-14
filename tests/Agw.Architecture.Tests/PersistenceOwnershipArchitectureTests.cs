@@ -60,6 +60,30 @@ public sealed partial class BackendArchitectureTests
     }
 
     [Fact]
+    public void EventsDbContextInterface_DeclaresOnlyDbSetProperties()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var eventsRoot = Path.Combine(GetServerRoot(), "Agw.Events", "Application", "Persistence");
+        var source = File.ReadAllText(Path.Combine(eventsRoot, "IEventsDbContext.cs"));
+        var context = CSharpSyntaxTree
+            .ParseText(source, cancellationToken: cancellationToken)
+            .GetRoot(cancellationToken)
+            .DescendantNodes()
+            .OfType<InterfaceDeclarationSyntax>()
+            .Single(declaration => declaration.Identifier.ValueText == "IEventsDbContext");
+
+        Assert.All(
+            context.Members,
+            member =>
+            {
+                var property = Assert.IsType<PropertyDeclarationSyntax>(member);
+                var type = Assert.IsType<GenericNameSyntax>(property.Type);
+                Assert.Equal("DbSet", type.Identifier.ValueText);
+            }
+        );
+    }
+
+    [Fact]
     public void ModuleSource_DoesNotReferenceForeignModuleDbContextInterfaces()
     {
         // Arrange
@@ -211,7 +235,6 @@ public sealed partial class BackendArchitectureTests
                 // Verified OIDC identities and proof-bound desktop grants cross the auth boundary.
                 "Agw.Infrastructure/Auth/EfOidcIdentityStore.cs",
                 "Agw.Infrastructure/Settings/EfSettingsPersistence.cs",
-                "Agw.Infrastructure/Repositories/JobRepo.cs",
                 "Agw.Infrastructure/Projects/ProjectDeletionCoordinator.cs",
                 "Agw.Infrastructure/Agents/AgentDeletionCoordinator.cs",
                 "Agw.Infrastructure/Agents/BackgroundExecutionPersistence.cs",
@@ -273,8 +296,6 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents.Execution/Persistence/Durable/DurableExecutionStore.cs",
                 "Agw.Auth/Contracts/UserInfoUtil.cs",
                 "Agw.Infrastructure/Data/DbSeeder.cs",
-                "Agw.Infrastructure/Repositories/JobRepo.cs",
-                "Agw.Jobs/Scheduling/Attempts/JobAttemptOutcomeRecorder.cs",
                 "Agw.Infrastructure/Auth/SettingsServerAuthStatePersistence.cs",
                 "Agw.Infrastructure/Agents/DurableExecutionScopeMaintenance.cs",
                 "Agw.Infrastructure/Events/Sources/EventSourceScanService.cs",
@@ -363,7 +384,6 @@ public sealed partial class BackendArchitectureTests
         ["IEventsDbContext"] = "Agw.Events",
         ["ISettingsDbContext"] = "Agw.Settings",
         ["IIntegrationsDbContext"] = "Agw.Integrations",
-        ["IJobsDbContext"] = "Agw.Jobs",
         ["INotificationsDbContext"] = "Agw.Notifications",
         ["IProjectsDbContext"] = "Agw.Projects",
         ["IProvidersDbContext"] = "Agw.Providers",
@@ -401,7 +421,7 @@ public sealed partial class BackendArchitectureTests
     private static partial Regex ModuleDbSetRegex();
 
     [GeneratedRegex(
-        @"\b(?<context>I(?:Agents|Auth|Events|Integrations|Jobs|Notifications|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
+        @"\b(?<context>I(?:Agents|Auth|Events|Integrations|Notifications|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
     )]
     private static partial Regex ModuleDbContextReferenceRegex();
 
@@ -409,7 +429,7 @@ public sealed partial class BackendArchitectureTests
     private static partial Regex ClassBaseListRegex();
 
     [GeneratedRegex(
-        @"\b(?:Microsoft\.EntityFrameworkCore|Agw\.Shared\.Data|IModuleDbContext|I(?:Agents|Auth|Events|Integrations|Jobs|Notifications|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
+        @"\b(?:Microsoft\.EntityFrameworkCore|Agw\.Shared\.Data|IModuleDbContext|I(?:Agents|Auth|Events|Integrations|Notifications|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
     )]
     private static partial Regex ForbiddenContractsPersistenceRegex();
 

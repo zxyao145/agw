@@ -132,7 +132,11 @@ export function MainWorkspace(props: MainWorkspaceProps) {
           onOpenChat={() => props.host.layout.openMainView(BUILT_IN_VIEWS.chat)}
         />
       ) : null}
-      {activeView.id === BUILT_IN_VIEWS.events ? <EventsPage /> : null}
+      {activeView.id === BUILT_IN_VIEWS.events ? (
+        <div className="min-h-0 flex-1 overflow-y-auto agw-scrollbar">
+          <EventsPage />
+        </div>
+      ) : null}
       {activeView.id === BUILT_IN_VIEWS.notifications ? (
         <NotificationsPage
           desktopBridge={typeof window === "undefined" ? null : window.agwDesktop}

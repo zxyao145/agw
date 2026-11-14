@@ -70,7 +70,7 @@ pnpm test:boundaries
 
 `Agw.Host` is the shared Hosting Module that composes every module's `Add<Module>()` registration. The executables are:
 
-- `Agw.ControlPlane.Host`: Setup, auth management, management APIs, OpenAPI, static Web UI, Job scheduling.
+- `Agw.ControlPlane.Host`: Setup, auth management, management APIs, OpenAPI, static Web UI, and Events workers for scheduling and delivery.
 - `Agw.DataPlane.Host`: the SignalR hub `/api/hubs/exec`, A2A routes, and durable execution workers. It does not map management controllers or Setup.
 - `Agw.Standalone.Host`: both roles in one process (assembly `agw-server`). Defaults are SQLite and InProcess execution.
 
@@ -86,7 +86,7 @@ pnpm test:boundaries
 ### Persistence
 
 - Entity CLR types and EF configurations live centrally in `Agw.Data/Entities`. Each table still has exactly one logical owner module, listed in `EntityOwners` in `BackendArchitectureTests.cs`. Adding a `[Table]` entity requires adding it there.
-- Each module declares `Application/Persistence/I<Module>DbContext` (DbSets plus the inherited `SaveChangesAsync`). The single scoped `Agw.Infrastructure/Data/AgwDbContext` implements all eleven of them. A module uses only its own interface. Reusable complex persistence and cross-module transactions are declared as interfaces in the module's `Application/Persistence` and implemented under `Agw.Infrastructure/<Module>/`.
+- Modules that own tables declare `Application/Persistence/I<Module>DbContext` (DbSets plus the inherited `SaveChangesAsync`). The single scoped `Agw.Infrastructure/Data/AgwDbContext` implements all ten of them. A module uses only its own interface. Reusable complex persistence and cross-module transactions are declared as interfaces in the module's `Application/Persistence` and implemented under `Agw.Infrastructure/<Module>/`.
 - The database has no foreign keys: `NoForeignKeyModelDiffer` strips them from migrations, so never hand-add them. Application and Infrastructure code validates references and cleans up related rows. Columns use `snake_case`.
 - `EntityCreatorInterceptor`, `EntityModifierInterceptor`, and `EntitySoftDeleteInterceptor` handle audit stamping (`CreateBy`/`CreateTime`/`UpdateBy`/`UpdateTime`), keep `CreateBy` immutable, and validate ownership.
 - Raw persistence access per file is tracked in an exact inventory (`RawPersistenceInventoryTests`, `ModuleSource_RawPersistenceAccessMatchesExactInventory`). Changing that access means updating the inventory to match exactly. Do not grow legacy allowlists.

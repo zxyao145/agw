@@ -7,9 +7,7 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Executions;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -31,15 +29,9 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var conversationId = Guid.CreateVersion7();
         var otherProjectId = Guid.CreateVersion7();
         var otherConversationId = Guid.CreateVersion7();
-        var jobId = await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
+        await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
         var turnId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
-        var otherJobId = await SeedProjectGraphAsync(
-            options,
-            otherProjectId,
-            otherConversationId,
-            "other-user",
-            "context-2"
-        );
+        await SeedProjectGraphAsync(options, otherProjectId, otherConversationId, "other-user", "context-2");
         var otherTurnId = await SeedDurableExecutionAsync(options, otherProjectId, otherConversationId, "other-user");
         await using var dbContext = new AgwDbContext(options);
         var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
@@ -118,16 +110,6 @@ public sealed partial class ProjectDeletionCoordinatorTests
             await assertContext.ProjectMemories.ToListAsync(cancellationToken),
             memory => memory.ProjectId == otherProjectId
         );
-        Assert.DoesNotContain(
-            await assertContext.Jobs.ToListAsync(cancellationToken),
-            job => job.ProjectId == projectId
-        );
-        Assert.DoesNotContain(await assertContext.JobLogs.ToListAsync(cancellationToken), log => log.JobId == jobId);
-        Assert.Contains(
-            await assertContext.Jobs.ToListAsync(cancellationToken),
-            job => job.ProjectId == otherProjectId
-        );
-        Assert.Contains(await assertContext.JobLogs.ToListAsync(cancellationToken), log => log.JobId == otherJobId);
         Assert.DoesNotContain(
             await assertContext.DurableExecutions.ToListAsync(cancellationToken),
             execution => execution.Id == turnId
@@ -427,105 +409,6 @@ public sealed partial class ProjectDeletionCoordinatorTests
     }
 
     [Fact]
-    public async Task DeleteProjectAsync_RunningJobExists_ThrowsConflictAndRollsBack()
-    {
-        // Arrange
-        using var userScope = PushUser("tester");
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = await OpenConnectionAsync();
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options);
-        var projectId = Guid.CreateVersion7();
-        var conversationId = Guid.CreateVersion7();
-        var jobId = await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            var now = TimeProvider.System.GetUtcNow();
-            seedContext.Jobs.Add(
-                new Job
-                {
-                    Id = Guid.CreateVersion7(),
-                    ProjectId = projectId,
-                    Name = "running-job",
-                    TriggerType = TriggerType.Interval,
-                    TriggerValue = "60",
-                    NextRunTime = now,
-                    Status = JobStatus.Running,
-                    ActiveTurnId = Guid.CreateVersion7(),
-                    ActiveAttemptStartedAt = now,
-                    CreateBy = "tester",
-                    CreateTime = now,
-                }
-            );
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-        await using var dbContext = new AgwDbContext(options);
-        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            coordinator.DeleteProjectAsync(new ProjectDeletionTarget(projectId, "tester"), cancellationToken)
-        );
-
-        // Assert
-        Assert.Equal(ErrorCodes.JobActiveAttemptConflict.Code, exception.Code);
-        using var systemScope = UserInfoUtil.PushSystemScope();
-        await using var assertContext = new AgwDbContext(options);
-        Assert.Contains(
-            await assertContext.Projects.ToListAsync(cancellationToken),
-            project => project.Id == projectId
-        );
-        Assert.Contains(
-            await assertContext.ProjectConversations.ToListAsync(cancellationToken),
-            conversation => conversation.Id == conversationId
-        );
-        Assert.Equal(2, await assertContext.Jobs.CountAsync(cancellationToken));
-        Assert.Contains(await assertContext.Jobs.ToListAsync(cancellationToken), job => job.Id == jobId);
-    }
-
-    [Fact]
-    public async Task DeleteProjectAsync_JobDeleteLosesRace_ThrowsConflictAndRollsBack()
-    {
-        // Arrange
-        using var userScope = PushUser("tester");
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = await OpenConnectionAsync();
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options);
-        var projectId = Guid.CreateVersion7();
-        var conversationId = Guid.CreateVersion7();
-        var jobId = await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
-        await using var dbContext = new AgwDbContext(options);
-        await dbContext.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TRIGGER skip_job_delete
-            BEFORE DELETE ON job
-            BEGIN
-                SELECT RAISE(IGNORE);
-            END;
-            """,
-            cancellationToken
-        );
-        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            coordinator.DeleteProjectAsync(new ProjectDeletionTarget(projectId, "tester"), cancellationToken)
-        );
-
-        // Assert
-        Assert.Equal(ErrorCodes.JobActiveAttemptConflict.Code, exception.Code);
-        using var systemScope = UserInfoUtil.PushSystemScope();
-        await using var assertContext = new AgwDbContext(options);
-        Assert.Contains(
-            await assertContext.Projects.ToListAsync(cancellationToken),
-            project => project.Id == projectId
-        );
-        Assert.Contains(await assertContext.Jobs.ToListAsync(cancellationToken), job => job.Id == jobId);
-        Assert.Contains(await assertContext.JobLogs.ToListAsync(cancellationToken), log => log.JobId == jobId);
-    }
-
-    [Fact]
     public async Task DeleteProjectAsync_IndexedExecutionWithCorruptCiphertext_DeletesWithoutReadingManifest()
     {
         // Arrange
@@ -571,7 +454,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         );
     }
 
-    private static async Task<Guid> SeedProjectGraphAsync(
+    private static async Task SeedProjectGraphAsync(
         DbContextOptions<AgwDbContext> options,
         Guid projectId,
         Guid conversationId,
@@ -697,33 +580,6 @@ public sealed partial class ProjectDeletionCoordinatorTests
                 UpdatedAt = now,
             }
         );
-        var jobId = Guid.CreateVersion7();
-        context.Jobs.Add(
-            new Job
-            {
-                Id = jobId,
-                ProjectId = projectId,
-                Name = $"Job-{projectId:N}",
-                TriggerType = TriggerType.Interval,
-                TriggerValue = "3600",
-                NextRunTime = now,
-                CreateBy = ownerUserId,
-                CreateTime = now,
-            }
-        );
-        context.JobLogs.Add(
-            new JobLog
-            {
-                Id = Guid.CreateVersion7(),
-                JobId = jobId,
-                TaskId = Guid.CreateVersion7(),
-                StartTime = now,
-                Success = true,
-                Attempt = 1,
-                CreateBy = ownerUserId,
-                CreateTime = now,
-            }
-        );
         context.AgentUsages.Add(
             new AgentUsage
             {
@@ -736,7 +592,6 @@ public sealed partial class ProjectDeletionCoordinatorTests
             }
         );
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-        return jobId;
     }
 
     private static async Task<Guid> SeedDurableExecutionAsync(

@@ -1,10 +1,5 @@
-using System.Security.Claims;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Contracts;
-using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Exceptions;
-using Agw.Shared.Extensions;
-using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -18,80 +13,58 @@ public static class EndpointRouteBuilderExtensions
     public static IEndpointRouteBuilder MapJobsApi(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        var routeGroup = endpoints.MapGroup("api").WithTags("Jobs");
-
-        routeGroup.MapGet("jobs", ListAsync).Produces<ApiResult<Job[]>>();
-        routeGroup.MapGet("jobs/{id:guid}", GetAsync).Produces<ApiResult<Job>>();
-        routeGroup.MapGet("jobs/{id:guid}/logs", ListLogsAsync).Produces<ApiResult<JobLogResponse[]>>();
-        routeGroup.MapPost("jobs", CreateAsync).Produces<ApiResult<Job>>();
-        routeGroup.MapPut("jobs/enabled", UpdateEnabledAsync).Produces<ApiResult<Job>>();
-        routeGroup.MapPut("jobs/{id:guid}", UpdateAsync).Produces<ApiResult<Job>>();
-        routeGroup.MapDelete("jobs/{id:guid}", DeleteAsync).Produces<ApiResult>();
-
+        var jobs = endpoints.MapGroup("api/jobs").WithTags("Jobs");
+        jobs.MapGet("list", ListAsync).Produces<ApiResult<JobResponse[]>>();
+        jobs.MapGet("get", GetAsync).Produces<ApiResult<JobResponse>>();
+        jobs.MapPost("create", CreateAsync).Produces<ApiResult<JobResponse>>();
+        jobs.MapPost("update", UpdateAsync).Produces<ApiResult<JobResponse>>();
+        jobs.MapPost("enable", SetEnabledAsync).Produces<ApiResult<JobResponse>>();
+        jobs.MapPost("delete", DeleteAsync).Produces<ApiResult<JobResponse>>();
+        jobs.MapGet("runs/list", ListRunsAsync).Produces<ApiResult<JobRunResponse[]>>();
         return endpoints;
     }
 
-    private static async Task<HttpResult> ListAsync(JobAppService jobAppService, CancellationToken cancellationToken)
-    {
-        var jobs = await jobAppService.ListAsync(cancellationToken);
-        return ApiResult.Ok(jobs);
-    }
-
-    private static async Task<HttpResult> GetAsync(Guid id, JobAppService jobAppService)
-    {
-        var job = await jobAppService.GetAsync(id);
-        return job == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(job);
-    }
-
-    private static async Task<HttpResult> ListLogsAsync(
-        Guid id,
-        JobAppService jobAppService,
+    private static async Task<HttpResult> ListAsync(
+        Guid? projectId,
+        JobAppService service,
         CancellationToken cancellationToken
-    )
-    {
-        var logs = await jobAppService.ListLogsAsync(id, cancellationToken);
-        return ApiResult.Ok(logs);
-    }
+    ) => ApiResult.Ok(await service.ListAsync(projectId, cancellationToken));
+
+    private static async Task<HttpResult> GetAsync(
+        Guid id,
+        JobAppService service,
+        CancellationToken cancellationToken
+    ) => ApiResult.Ok(await service.GetAsync(id, cancellationToken));
 
     private static async Task<HttpResult> CreateAsync(
         JobCreateRequest request,
-        JobAppService jobAppService,
-        ClaimsPrincipal user,
+        JobAppService service,
         CancellationToken cancellationToken
-    )
-    {
-        var userId = user.GetUserId();
-        var job = await jobAppService.CreateAsync(request, userId, cancellationToken);
-        return ApiResult.Ok(job);
-    }
+    ) => ApiResult.Ok(await service.CreateAsync(request, cancellationToken));
 
     private static async Task<HttpResult> UpdateAsync(
-        Guid id,
         JobUpdateRequest request,
-        JobAppService jobAppService,
-        ClaimsPrincipal user,
+        JobAppService service,
         CancellationToken cancellationToken
-    )
-    {
-        var userId = user.GetUserId();
-        var job = await jobAppService.UpdateAsync(id, request, userId, cancellationToken);
-        return job == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(job);
-    }
+    ) => ApiResult.Ok(await service.UpdateAsync(request, cancellationToken));
 
-    private static async Task<HttpResult> UpdateEnabledAsync(
-        JobEnabledUpdateRequest request,
-        JobAppService jobAppService,
-        ClaimsPrincipal user
-    )
-    {
-        var userId = user.GetUserId();
-        var job = await jobAppService.UpdateEnabledAsync(request, userId);
-        return job == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(job);
-    }
+    private static async Task<HttpResult> SetEnabledAsync(
+        JobEnableRequest request,
+        JobAppService service,
+        CancellationToken cancellationToken
+    ) => ApiResult.Ok(await service.SetEnabledAsync(request, cancellationToken));
 
-    private static async Task<HttpResult> DeleteAsync(Guid id, JobAppService jobAppService)
-    {
-        var deleted = await jobAppService.DeleteAsync(id);
-        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
-    }
+    private static async Task<HttpResult> DeleteAsync(
+        JobIdRequest request,
+        JobAppService service,
+        CancellationToken cancellationToken
+    ) => ApiResult.Ok(await service.DeleteAsync(request.Id, cancellationToken));
+
+    private static async Task<HttpResult> ListRunsAsync(
+        Guid jobId,
+        JobAppService service,
+        CancellationToken cancellationToken,
+        int offset = 0,
+        int limit = 100
+    ) => ApiResult.Ok(await service.ListRunsAsync(jobId, offset, limit, cancellationToken));
 }

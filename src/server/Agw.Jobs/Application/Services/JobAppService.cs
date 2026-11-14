@@ -1,296 +1,224 @@
 using Agw.Auth.Contracts;
-using Agw.Jobs.Application.Persistence;
+using Agw.Events.Contracts;
 using Agw.Jobs.Contracts;
-using Agw.Jobs.Domain.Behaviors;
 using Agw.Jobs.Domain.Services;
-using Agw.Jobs.Domain.ValueObjects;
-using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
-using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Application.Services;
 
-public class JobAppService
+public sealed class JobAppService
 {
-    private readonly IJobsDbContext _dbContext;
-    private readonly IApplicationLock _applicationLock;
+    private readonly IEventJobFacade _jobs;
+    private readonly JobDefinitionDomainService _definitions;
     private readonly IProjectTaskFacade _projectTasks;
-    private readonly JobDefinitionDomainService _definitionDomainService;
-    private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
+    private readonly IApplicationLock _applicationLock;
     private readonly TimeProvider _timeProvider;
-    private readonly IUserInfoService _userInfoService;
-    private readonly IJobDeletionCoordinator _deletionCoordinator;
+    private readonly IUserInfoService _userInfo;
 
     public JobAppService(
-        IJobsDbContext dbContext,
+        IEventJobFacade jobs,
+        JobDefinitionDomainService definitions,
         IProjectTaskFacade projectTasks,
-        JobDefinitionDomainService definitionDomainService,
-        JobSchedulerWakeSignal schedulerWakeSignal,
+        IApplicationLock applicationLock,
         TimeProvider timeProvider,
-        IUserInfoService userInfoService,
-        IJobDeletionCoordinator deletionCoordinator,
-        IApplicationLock? applicationLock = null
+        IUserInfoService userInfo
     )
     {
-        _dbContext = dbContext;
+        _jobs = jobs;
+        _definitions = definitions;
         _projectTasks = projectTasks;
-        _definitionDomainService = definitionDomainService;
-        _schedulerWakeSignal = schedulerWakeSignal;
+        _applicationLock = applicationLock;
         _timeProvider = timeProvider;
-        _userInfoService = userInfoService;
-        _deletionCoordinator = deletionCoordinator;
-        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
+        _userInfo = userInfo;
     }
 
-    public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
-    {
-        var ownerUserId = ResolveOwnerUserId();
-        var jobs = await _dbContext
-            .Jobs.AsNoTracking()
-            .Where(job => job.CreateBy == ownerUserId)
-            .ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<JobResponse>> ListAsync(Guid? projectId, CancellationToken cancellationToken) =>
+        (await _jobs.ListAsync(projectId, cancellationToken)).Select(ToResponse).ToArray();
 
-        return jobs.OrderBy(t => t.NextRunTime).ToList();
+    public async Task<JobResponse> GetAsync(Guid id, CancellationToken cancellationToken) =>
+        ToResponse(await _jobs.FindAsync(id, cancellationToken) ?? throw new AgwException(ErrorCodes.JobNotFound));
+
+    public async Task<JobResponse> CreateAsync(JobCreateRequest request, CancellationToken cancellationToken)
+    {
+        await using var lease = await AcquireDefinitionLockAsync(cancellationToken);
+        var definition = await ResolveDefinitionAsync(request, lease.Token);
+        return ToResponse(await _jobs.CreateAsync(definition, lease.Token));
     }
 
-    public async Task<IReadOnlyList<Job>> ListByProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var ownerUserId = ResolveOwnerUserId();
-        var jobs = await _dbContext
-            .Jobs.AsNoTracking()
-            .Where(job => job.ProjectId == projectId && job.CreateBy == ownerUserId)
-            .ToListAsync(cancellationToken);
-
-        return jobs.OrderBy(job => job.NextRunTime).ToList();
-    }
-
-    public Task<Job?> GetAsync(Guid id)
-    {
-        var ownerUserId = ResolveOwnerUserId();
-        return _dbContext.Jobs.AsNoTracking().FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == ownerUserId);
-    }
-
-    public Task<Job?> GetByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default)
-    {
-        var ownerUserId = ResolveOwnerUserId();
-        return _dbContext.Jobs.SingleOrDefaultAsync(
-            job => job.Id == id && job.ProjectId == projectId && job.CreateBy == ownerUserId,
+    public Task<JobResponse> UpdateAsync(JobUpdateRequest request, CancellationToken cancellationToken) =>
+        UpdateAsync(
+            request.Id,
+            null,
+            _ => new JobCreateRequest
+            {
+                Name = request.Name,
+                Enabled = request.Enabled,
+                ProjectId = request.ProjectId,
+                TargetKind = request.TargetKind,
+                AgentId = request.AgentId,
+                Instructions = request.Instructions,
+                Schedule = request.Schedule,
+            },
             cancellationToken
         );
+
+    public async Task<JobResponse> SetEnabledAsync(JobEnableRequest request, CancellationToken cancellationToken)
+    {
+        await using var lease = await AcquireDefinitionLockAsync(cancellationToken);
+        return ToResponse(await _jobs.SetEnabledAsync(request.Id, request.Enabled, lease.Token));
     }
 
-    public async Task<IReadOnlyList<JobLogResponse>> ListLogsAsync(
+    public async Task<JobResponse> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
+        ToResponse(await _jobs.DeleteAsync(id, cancellationToken));
+
+    public async Task<IReadOnlyList<JobRunResponse>> ListRunsAsync(
         Guid jobId,
-        CancellationToken cancellationToken = default
+        int offset,
+        int limit,
+        CancellationToken cancellationToken
     )
     {
-        var ownerUserId = ResolveOwnerUserId();
-        var jobExists = await _dbContext.Jobs.AnyAsync(
-            job => job.Id == jobId && job.CreateBy == ownerUserId,
-            cancellationToken
-        );
-        if (!jobExists)
-        {
-            throw new AgwException(ErrorCodes.ResourceNotFound);
-        }
-
-        var logs = await _dbContext
-            .JobLogs.AsNoTracking()
-            .Where(log => log.JobId == jobId)
-            .ToListAsync(cancellationToken);
-
-        if (logs.Count == 0)
-        {
-            return [];
-        }
-
-        var taskIds = logs.Select(log => log.TaskId).ToHashSet();
-        var conversationIdByTaskId = await _projectTasks
-            .ResolveConversationIdsAsync(taskIds, cancellationToken)
-            .ConfigureAwait(false);
-
-        return logs.OrderByDescending(log => log.StartTime)
-            .Select(log => new JobLogResponse(
-                log.Id,
-                log.JobId,
-                conversationIdByTaskId.TryGetValue(log.TaskId, out var conversationId) ? conversationId : null,
-                log.StartTime,
-                log.EndTime,
-                log.Success,
-                log.Attempt,
-                log.ErrorMessage
-            ))
-            .ToList();
+        var runs = await _jobs.ListRunsAsync(jobId, offset, limit, cancellationToken);
+        var turnIds = runs.Where(run => run.TurnId.HasValue).Select(run => run.TurnId!.Value).Distinct().ToArray();
+        var conversations = await _projectTasks.ResolveConversationIdsAsync(turnIds, cancellationToken);
+        return runs.Select(run => new JobRunResponse
+            {
+                Id = run.Id,
+                DeliveryId = run.DeliveryId,
+                Attempt = run.Attempt,
+                StartedAt = run.StartedAt,
+                EndedAt = run.EndedAt,
+                Result = run.Result,
+                Error = run.Error,
+                ConversationId =
+                    run.TurnId is { } turnId && conversations.TryGetValue(turnId, out var conversationId)
+                        ? conversationId
+                        : null,
+            })
+            .ToArray();
     }
 
-    public async Task<Job> CreateAsync(
-        JobCreateRequest request,
-        string user,
-        CancellationToken cancellationToken = default
-    )
+    internal async Task<JobResponse> GetForProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken)
     {
-        await using var lease = await _applicationLock.AcquireAsync(
-            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
-            cancellationToken
-        );
-        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
-        cancellationToken = mutation.Token;
-
-        await _definitionDomainService
-            .EnsureTargetsVisibleAsync(request.ProjectId, request.AgentType, request.AgentId, user)
-            .ConfigureAwait(false);
-        var now = _timeProvider.GetUtcNow();
-        var definition = new JobDefinition
-        {
-            ProjectId = request.ProjectId,
-            AgentType = request.AgentType,
-            AgentId = request.AgentId,
-            Name = await _definitionDomainService.ResolveNameAsync(request.Name, user, now),
-            Prompt = request.Prompt,
-            TriggerType = request.TriggerType,
-            TriggerValue = request.TriggerValue,
-            MaxRetryCount = request.MaxRetryCount,
-            IsEnabled = request.IsEnabled,
-        };
-        var entity = new Job
-        {
-            Id = Guid.CreateVersion7(),
-            CreateBy = user,
-            CreateTime = now,
-            UpdateBy = user,
-            UpdateTime = now,
-        };
-        new JobBehavior(entity).Create(definition, now);
-
-        await _dbContext.Jobs.AddAsync(entity, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        _schedulerWakeSignal.NotifyCreated(entity);
-        return entity;
+        var job = await GetAsync(id, cancellationToken);
+        RequireProject(job, projectId);
+        return job;
     }
 
-    public async Task<Job?> UpdateAsync(
-        Guid id,
-        JobUpdateRequest request,
-        string user,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var lease = await _applicationLock.AcquireAsync(
-            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
-            cancellationToken
-        );
-        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
-        cancellationToken = mutation.Token;
-
-        var entity = await _dbContext.Jobs.FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == user);
-        if (entity == null)
-        {
-            return null;
-        }
-
-        await _definitionDomainService
-            .EnsureTargetsVisibleAsync(request.ProjectId, request.AgentType, request.AgentId, user)
-            .ConfigureAwait(false);
-        return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true, cancellationToken);
-    }
-
-    public async Task<Job?> UpdateByProjectAsync(
+    internal Task<JobResponse> UpdateForProjectAsync(
         Guid id,
         Guid projectId,
-        JobUpdateRequest request,
-        string user,
-        bool recalculateSchedule,
-        CancellationToken cancellationToken = default
-    )
+        Func<JobResponse, JobCreateRequest> patch,
+        CancellationToken cancellationToken
+    ) => UpdateAsync(id, projectId, patch, cancellationToken);
+
+    internal async Task<JobResponse> DeleteForProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken)
     {
-        await using var lease = await _applicationLock.AcquireAsync(
-            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
-            cancellationToken
-        );
-        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
-        cancellationToken = mutation.Token;
-
-        var entity = await GetByProjectAsync(id, projectId, cancellationToken);
-        if (entity == null)
-        {
-            return null;
-        }
-
-        await _definitionDomainService
-            .EnsureTargetsVisibleAsync(projectId, request.AgentType, request.AgentId, user)
-            .ConfigureAwait(false);
-        request.ProjectId = projectId;
-        return await UpdateEntityAsync(entity, request, user, recalculateSchedule, cancellationToken);
+        await using var lease = await AcquireDefinitionLockAsync(cancellationToken);
+        _ = await GetForProjectAsync(id, projectId, lease.Token);
+        return await DeleteAsync(id, lease.Token);
     }
 
-    private async Task<Job> UpdateEntityAsync(
-        Job entity,
-        JobUpdateRequest request,
-        string user,
-        bool recalculateSchedule,
-        CancellationToken cancellationToken = default
+    private async Task<JobResponse> UpdateAsync(
+        Guid id,
+        Guid? projectId,
+        Func<JobResponse, JobCreateRequest> update,
+        CancellationToken cancellationToken
     )
     {
-        var now = _timeProvider.GetUtcNow();
-        var definition = new JobDefinition
+        await using var lease = await AcquireDefinitionLockAsync(cancellationToken);
+        var current = await GetAsync(id, lease.Token);
+        if (projectId is { } expectedProjectId)
         {
+            RequireProject(current, expectedProjectId);
+        }
+        var definition = await ResolveDefinitionAsync(update(current), lease.Token, current.ProjectId);
+        return ToResponse(await _jobs.UpdateAsync(id, definition, lease.Token, expectedProjectId: current.ProjectId));
+    }
+
+    private Task<ApplicationLockScope> AcquireDefinitionLockAsync(CancellationToken cancellationToken) =>
+        AgentDefinitionLock.AcquireScopeAsync(_applicationLock, _userInfo.RequiredUserId, cancellationToken);
+
+    private async Task<EventJobDefinition> ResolveDefinitionAsync(
+        JobCreateRequest request,
+        CancellationToken cancellationToken,
+        Guid? currentProjectId = null
+    )
+    {
+        var schedule = request.Schedule ?? throw new AgwException(ErrorCodes.InvalidParam);
+        var validTarget = Enum.IsDefined(request.TargetKind);
+        if (string.IsNullOrWhiteSpace(schedule.Kind) || !validTarget || string.IsNullOrWhiteSpace(request.Instructions))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
+        await _definitions.EnsureTargetsVisibleAsync(
+            request.ProjectId,
+            request.TargetKind,
+            request.AgentId,
+            _userInfo.RequiredUserId,
+            currentProjectId
+        );
+        var name = await _definitions.ResolveNameAsync(request.Name, _timeProvider.GetUtcNow(), cancellationToken);
+        return new EventJobDefinition
+        {
+            Name = name,
+            Enabled = request.Enabled,
             ProjectId = request.ProjectId,
-            AgentType = request.AgentType,
+            TargetKind = (EventJobTargetKind)request.TargetKind,
             AgentId = request.AgentId,
-            Name = await _definitionDomainService.ResolveNameAsync(request.Name, user, now),
-            Prompt = request.Prompt,
-            TriggerType = request.TriggerType,
-            TriggerValue = request.TriggerValue,
-            MaxRetryCount = request.MaxRetryCount,
-            IsEnabled = request.IsEnabled,
+            Instructions = request.Instructions,
+            Schedule = new EventJobSchedule
+            {
+                Kind = schedule.Kind,
+                At = schedule.At,
+                Interval = schedule.Interval,
+                Cron = schedule.Cron,
+            },
         };
-        new JobBehavior(entity).Update(definition, request.Status, recalculateSchedule, now);
-        entity.UpdateBy = user;
-        entity.UpdateTime = now;
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return entity;
     }
 
-    public async Task<Job?> UpdateEnabledAsync(JobEnabledUpdateRequest request, string user)
+    private static void RequireProject(JobResponse job, Guid projectId)
     {
-        var entity = await _dbContext.Jobs.FirstOrDefaultAsync(job => job.Id == request.JobId && job.CreateBy == user);
-        if (entity == null)
+        if (job.ProjectId != projectId)
         {
-            return null;
+            throw new AgwException(ErrorCodes.JobNotFound);
         }
-
-        entity.IsEnabled = request.IsEnabled;
-        entity.UpdateBy = user;
-        entity.UpdateTime = _timeProvider.GetUtcNow();
-
-        await _dbContext.SaveChangesAsync();
-
-        if (entity.IsEnabled)
-        {
-            _schedulerWakeSignal.NotifyChanged();
-        }
-
-        return entity;
     }
 
-    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
-        _deletionCoordinator.DeleteAsync(id, job => new JobBehavior(job).EnsureMutable(), cancellationToken);
-
-    public Task<Job?> DeleteByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default) =>
-        _deletionCoordinator.DeleteByProjectAsync(
-            id,
-            projectId,
-            job => new JobBehavior(job).EnsureMutable(),
-            cancellationToken
-        );
-
-    private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
+    private static JobResponse ToResponse(EventJob job)
+    {
+        var definition = job.Definition;
+        var schedule = definition.Schedule;
+        return new JobResponse
+        {
+            Id = job.Id,
+            Name = definition.Name,
+            Enabled = definition.Enabled,
+            ProjectId = definition.ProjectId,
+            TargetKind = (AgentRuntimeType)definition.TargetKind,
+            AgentId = definition.AgentId,
+            Instructions = definition.Instructions,
+            Schedule = new JobScheduleResponse
+            {
+                Kind = schedule.Kind,
+                At = schedule.At,
+                Interval = schedule.Interval,
+                Cron = schedule.Cron,
+            },
+            DueAt = job.DueAt,
+            ScheduleCompleted = job.ScheduleCompleted,
+            LastDelivery = job.LastDelivery is { } delivery
+                ? new JobDeliveryResponse
+                {
+                    Id = delivery.Id,
+                    State = delivery.State,
+                    Attempt = delivery.Attempt,
+                    LastError = delivery.LastError,
+                }
+                : null,
+        };
+    }
 }

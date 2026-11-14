@@ -2,7 +2,7 @@
 
 ## Control Plane
 
-The Host role that owns setup, authentication management, the Web UI, management endpoints, and Job scheduling. In a split deployment it submits durable executions but does not run Agent execution workers or expose Execution/A2A endpoints.
+The Host role that owns setup, authentication management, the Web UI, management endpoints, and Events scheduling and delivery workers. In a split deployment, Events delivery submits background executions for Data Plane workers to claim.
 
 ## Data Plane
 
@@ -14,11 +14,15 @@ The combined Host that composes the Control Plane and Data Plane assemblies. It 
 
 ## Durable Execution
 
-A PostgreSQL-owned execution lifecycle with replayable output through PostgreSQL or Redis. SignalR, distributed Jobs, and distributed A2A submit work through the same execution interface, while Data Plane workers claim and run the persisted work.
+A PostgreSQL-owned execution lifecycle with replayable output through PostgreSQL or Redis. SignalR, Events delivery, and A2A register work in the durable execution state. Data Plane workers claim and run that work.
 
 ## Module DbContext
 
-The owner Module's inward persistence interface. Agents, Projects, Jobs, Auth, Integrations, Providers, Settings, Skills, and Tools expose their owned `DbSet` values and save operations; Agents and Projects also provide generation-checked `SaveConversationChangesAsync`. A single scoped `AgwDbContext` implements every Module DbContext; this does not imply separate databases or separate EF Core contexts.
+The owner Module's inward persistence interface. Agents, Projects, Auth, Events, Integrations, Notifications, Providers, Settings, Skills, and Tools expose their owned `DbSet` values and save operations. Agents and Projects also provide generation-checked `SaveConversationChangesAsync`. A single scoped `AgwDbContext` implements all ten interfaces. Jobs manages its records through `IEventJobFacade`.
+
+## Conversation Kind
+
+The origin recorded on a Project Conversation at creation. A `native` conversation has an empty `relate_id`. An `event:<source kind>` conversation has the triggering event ID in `relate_id`. A Job creates an `event:timer` conversation.
 
 ## Creator Extension
 

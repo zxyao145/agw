@@ -3,7 +3,6 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Settings;
@@ -132,12 +131,6 @@ internal static partial class UserScopeModelBuilderExtensions
                     || context.UserScopeIsActive
                         && conversation.CreateBy == context.CurrentUserId
                         && conversation.Project!.CreateBy == context.CurrentUserId
-            );
-        modelBuilder
-            .Entity<Job>()
-            .HasQueryFilter(
-                UserScopeQueryFilterNames.UserScope,
-                job => context.UserScopeBypass || context.UserScopeIsActive && job.CreateBy == context.CurrentUserId
             );
         modelBuilder
             .Entity<PluginInstallation>()
@@ -303,15 +296,6 @@ internal static partial class UserScopeModelBuilderExtensions
                                 && conversation.CreateBy == context.CurrentUserId
                                 && conversation.Project!.CreateBy == context.CurrentUserId
                             )
-            );
-        modelBuilder
-            .Entity<JobLog>()
-            .HasQueryFilter(
-                UserScopeQueryFilterNames.UserScope,
-                log =>
-                    context.UserScopeBypass
-                    || context.UserScopeIsActive
-                        && context.Set<Job>().Any(job => job.Id == log.JobId && job.CreateBy == context.CurrentUserId)
             );
         modelBuilder
             .Entity<PluginInstallationCredential>()

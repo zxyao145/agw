@@ -583,7 +583,7 @@ in this response.
 
 For direct backend execution, set `PermissionMode` on `AgentExecuteRequest`,
 `AgentExecuteByIdRequest`, or `CreateAiAgentRequest` as appropriate; Agentflow
-runtime execution also accepts the mode. Jobs use the execution facade's
+runtime execution also accepts the mode. Job subscriptions use
 `AgentExecutionPermissionMode.FullAccess` with `HumanInteractionPolicy.Reject`.
 Ordinary tool approvals can proceed, while requests needing a real person fail
 explicitly rather than waiting indefinitely.

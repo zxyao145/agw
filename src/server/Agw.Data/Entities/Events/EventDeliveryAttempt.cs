@@ -13,6 +13,8 @@ public class EventDeliveryAttempt
 
     public int Attempt { get; set; }
 
+    public Guid? TurnId { get; set; }
+
     public string HostId { get; set; } = string.Empty;
 
     public Guid? GenerationId { get; set; }

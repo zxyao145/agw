@@ -26,7 +26,10 @@
     <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
-    <ProjectReference Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference
+      Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj"
+      ReferenceOutputAssembly="false"
+    />
   </ItemGroup>
 
   <Target Name="CopyAgentsTestExtension" AfterTargets="Build">

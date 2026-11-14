@@ -10,7 +10,6 @@ using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
@@ -65,7 +64,6 @@ public sealed class UserScopeFilterTests
             typeof(DurableExecutionRecord),
             // 删除项目时停用订阅并保留投递记录。Disable subscriptions on project deletion and retain delivery history.
             typeof(EventSubscription),
-            typeof(Job),
             typeof(ProjectConnectionRelation),
             typeof(ProjectConversation),
             typeof(ProjectMcpServerRelation),
@@ -77,7 +75,6 @@ public sealed class UserScopeFilterTests
         var expectedIndirectProjectScopedTypes = new[]
         {
             typeof(DurableExecutionEventRecord), // Deleted through matching durable execution IDs.
-            typeof(JobLog), // Deleted through project Job IDs.
             typeof(ProjectConversationChatHistory), // Deleted through project Conversation IDs.
         };
 
@@ -114,44 +111,36 @@ public sealed class UserScopeFilterTests
         var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
         var projectA = CreateProject("project-a", "user-a");
         var projectB = CreateProject("project-b", "user-b");
-        var jobA = CreateJob("job-a", "user-a");
-        var jobB = CreateJob("job-b", "user-b");
 
         await using (var seed = new AgwDbContext(options))
         {
             await seed.Database.EnsureCreatedAsync(cancellationToken);
             seed.Projects.AddRange(projectA, projectB);
-            seed.Jobs.AddRange(jobA, jobB);
             await seed.SaveChangesAsync(cancellationToken);
         }
 
         await using var context = new AgwDbContext(options);
         Assert.Empty(await context.Projects.ToListAsync(cancellationToken));
-        Assert.Empty(await context.Jobs.ToListAsync(cancellationToken));
 
         using (UserInfoUtil.Push(CreatePrincipal("user-a")))
         {
             Assert.Equal("project-a", Assert.Single(await context.Projects.ToListAsync(cancellationToken)).Name);
-            Assert.Equal("job-a", Assert.Single(await context.Jobs.ToListAsync(cancellationToken)).Name);
         }
 
         using (UserInfoUtil.Push(CreatePrincipal("user-b")))
         {
             Assert.Equal("project-b", Assert.Single(await context.Projects.ToListAsync(cancellationToken)).Name);
-            Assert.Equal("job-b", Assert.Single(await context.Jobs.ToListAsync(cancellationToken)).Name);
             Assert.Null(await new EfRepository<Project>(context).GetByIdAsync(projectA.Id));
         }
 
         using (UserInfoUtil.Push(null))
         {
             Assert.Empty(await context.Projects.ToListAsync(cancellationToken));
-            Assert.Empty(await context.Jobs.ToListAsync(cancellationToken));
         }
 
         using (UserInfoUtil.PushSystemScope())
         {
             Assert.Equal(2, await context.Projects.CountAsync(cancellationToken));
-            Assert.Equal(2, await context.Jobs.CountAsync(cancellationToken));
         }
     }
 
@@ -165,8 +154,6 @@ public sealed class UserScopeFilterTests
 
         var projectA = CreateProject("project-a", "user-a");
         var projectB = CreateProject("project-b", "user-b");
-        var jobA = CreateJob("job-a", "user-a");
-        var jobB = CreateJob("job-b", "user-b");
         var agentA = CreateAgent("agent-a", "user-a");
         var agentB = CreateAgent("agent-b", "user-b");
         var skillA = CreateSkill("skill-a", "user-a");
@@ -202,7 +189,6 @@ public sealed class UserScopeFilterTests
         {
             await seed.Database.EnsureCreatedAsync(cancellationToken);
             seed.Projects.AddRange(projectA, projectB);
-            seed.Jobs.AddRange(jobA, jobB);
             seed.Agents.AddRange(agentA, agentB);
             seed.Skills.AddRange(skillA, skillB);
             seed.AgentSkillRelations.AddRange(
@@ -245,20 +231,6 @@ public sealed class UserScopeFilterTests
                     TaskId = Guid.CreateVersion7(),
                 }
             );
-            seed.JobLogs.AddRange(
-                new JobLog
-                {
-                    Id = Guid.CreateVersion7(),
-                    JobId = jobA.Id,
-                    TaskId = Guid.CreateVersion7(),
-                },
-                new JobLog
-                {
-                    Id = Guid.CreateVersion7(),
-                    JobId = jobB.Id,
-                    TaskId = Guid.CreateVersion7(),
-                }
-            );
             seed.AgentflowNodeExecutionTraces.AddRange(
                 new AgentflowTrace
                 {
@@ -295,7 +267,6 @@ public sealed class UserScopeFilterTests
             Assert.Single(await context.ProjectConversations.ToListAsync(cancellationToken));
             Assert.Single(await context.ProjectConversationChatHistories.ToListAsync(cancellationToken));
             Assert.Single(await context.ProjectMemories.ToListAsync(cancellationToken));
-            Assert.Single(await context.JobLogs.ToListAsync(cancellationToken));
             Assert.Single(await context.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken));
             Assert.Single(await context.AgentflowNodes.ToListAsync(cancellationToken));
             Assert.Single(await context.AgentSkillRelations.ToListAsync(cancellationToken));
@@ -307,7 +278,6 @@ public sealed class UserScopeFilterTests
             Assert.Single(await context.ProjectConversations.ToListAsync(cancellationToken));
             Assert.Single(await context.ProjectConversationChatHistories.ToListAsync(cancellationToken));
             Assert.Single(await context.ProjectMemories.ToListAsync(cancellationToken));
-            Assert.Single(await context.JobLogs.ToListAsync(cancellationToken));
             Assert.Single(await context.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken));
             Assert.Single(await context.AgentflowNodes.ToListAsync(cancellationToken));
             Assert.Single(await context.AgentSkillRelations.ToListAsync(cancellationToken));
@@ -318,7 +288,6 @@ public sealed class UserScopeFilterTests
         {
             Assert.Equal(2, await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
             Assert.Equal(2, await context.ProjectMemories.CountAsync(cancellationToken));
-            Assert.Equal(2, await context.JobLogs.CountAsync(cancellationToken));
             Assert.Equal(2, await context.AgentflowNodeExecutionTraces.CountAsync(cancellationToken));
             Assert.Equal(2, await context.AgentSkillRelations.CountAsync(cancellationToken));
             Assert.Equal(2, await context.ProjectSkillRelations.CountAsync(cancellationToken));
@@ -354,10 +323,6 @@ public sealed class UserScopeFilterTests
             CreateBy = "user-b",
             CreateTime = now,
         };
-        var jobA = CreateJob("same-job", "user-a");
-        jobA.ProjectId = projectA.Id;
-        var jobB = CreateJob("same-job", "user-b");
-        jobB.ProjectId = projectB.Id;
         var providerA = new Provider
         {
             Id = Guid.CreateVersion7(),
@@ -448,7 +413,6 @@ public sealed class UserScopeFilterTests
             seed.Skills.AddRange(skillA, skillB, builtInSkill);
             seed.Projects.AddRange(projectA, projectB);
             seed.ProjectConversations.AddRange(conversationA, conversationB);
-            seed.Jobs.AddRange(jobA, jobB);
             seed.PluginInstallations.AddRange(installationA, installationB);
             seed.Connections.AddRange(connectionA, connectionB);
             seed.ApiTokens.AddRange(
@@ -511,7 +475,6 @@ public sealed class UserScopeFilterTests
                 CreateProjectConversationBinding(conversationA.Id, agentA.Id, "user-a", now),
                 CreateProjectConversationBinding(conversationB.Id, agentB.Id, "user-b", now)
             );
-            seed.JobLogs.AddRange(CreateJobLog(jobA.Id, "user-a", now), CreateJobLog(jobB.Id, "user-b", now));
             seed.PluginInstallationCredentials.AddRange(
                 CreatePluginCredential(installationA.Id, "user-a", now),
                 CreatePluginCredential(installationB.Id, "user-b", now)
@@ -626,7 +589,6 @@ public sealed class UserScopeFilterTests
         Assert.Equal(expectedSkillCount, await context.Skills.CountAsync(cancellationToken));
         Assert.Equal(1, await context.Projects.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ProjectConversations.CountAsync(cancellationToken));
-        Assert.Equal(1, await context.Jobs.CountAsync(cancellationToken));
         Assert.Equal(1, await context.PluginInstallations.CountAsync(cancellationToken));
         Assert.Equal(1, await context.Connections.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ApiTokens.CountAsync(cancellationToken));
@@ -641,7 +603,6 @@ public sealed class UserScopeFilterTests
         Assert.Equal(1, await context.ProjectMemories.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ProjectConversationBindings.CountAsync(cancellationToken));
-        Assert.Equal(1, await context.JobLogs.CountAsync(cancellationToken));
         Assert.Equal(1, await context.PluginInstallationCredentials.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ConnectionCredentials.CountAsync(cancellationToken));
         Assert.Equal(1, await context.AgentSessionStates.CountAsync(cancellationToken));
@@ -842,17 +803,6 @@ public sealed class UserScopeFilterTests
             CreateTime = now,
         };
 
-    private static JobLog CreateJobLog(Guid jobId, string owner, DateTimeOffset now) =>
-        new()
-        {
-            Id = Guid.CreateVersion7(),
-            JobId = jobId,
-            TaskId = Guid.CreateVersion7(),
-            StartTime = now,
-            CreateBy = "scheduler",
-            CreateTime = now,
-        };
-
     private static PluginInstallationCredential CreatePluginCredential(
         Guid installationId,
         string owner,
@@ -893,21 +843,6 @@ public sealed class UserScopeFilterTests
             Name = name,
             CreateBy = owner,
             CreateTime = DateTimeOffset.UtcNow,
-        };
-
-    private static Job CreateJob(string name, string owner) =>
-        new()
-        {
-            Id = Guid.CreateVersion7(),
-            ProjectId = Guid.CreateVersion7(),
-            Name = name,
-            TriggerType = TriggerType.Interval,
-            TriggerValue = "00:01:00",
-            NextRunTime = DateTimeOffset.UtcNow,
-            CreateBy = owner,
-            CreateTime = DateTimeOffset.UtcNow,
-            UpdateBy = owner,
-            UpdateTime = DateTimeOffset.UtcNow,
         };
 
     private static Agent CreateAgent(string name, string owner) =>

@@ -6,7 +6,6 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Settings;
@@ -160,11 +159,9 @@ public class EntityTypeConfigurationTests
     }
 
     [Fact]
-    public void JobAndIntegrationEntities_DeclareMatchingConfigurations()
+    public void IntegrationEntities_DeclareMatchingConfigurations()
     {
         AssertConfigured(
-            typeof(Job),
-            typeof(JobLog),
             typeof(PluginInstallation),
             typeof(PluginInstallationCredential),
             typeof(Connection),
@@ -191,7 +188,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(56, entityTypes.Length);
+        Assert.Equal(54, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

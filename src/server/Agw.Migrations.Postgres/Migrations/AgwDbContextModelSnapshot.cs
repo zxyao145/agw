@@ -1041,6 +1041,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasIndex("State", "RecoverAfter")
                         .HasDatabaseName("ix_event_delivery_state_recover_after");
 
+                    b.HasIndex("SubscriptionId", "Id")
+                        .HasDatabaseName("ix_event_delivery_subscription_id_id");
+
                     b.ToTable("event_delivery", (string)null);
                 });
 
@@ -1084,8 +1087,15 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");
 
+                    b.Property<Guid?>("TurnId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("turn_id");
+
                     b.HasKey("Id")
                         .HasName("pk_event_delivery_attempt");
+
+                    b.HasIndex("DeliveryId", "Attempt")
+                        .HasDatabaseName("ix_event_delivery_attempt_delivery_id_attempt");
 
                     b.ToTable("event_delivery_attempt", (string)null);
                 });
@@ -1470,6 +1480,18 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_run_at");
 
+                    b.Property<string>("ManagedBy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("user")
+                        .HasColumnName("managed_by");
+
+                    b.Property<string>("ManagedKey")
+                        .HasColumnType("text")
+                        .HasColumnName("managed_key");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1518,6 +1540,11 @@ namespace Agw.Migrations.Postgres.Migrations
 
                     b.HasIndex("Enabled", "NextRunAt")
                         .HasDatabaseName("ix_event_source_enabled_next_run_at");
+
+                    b.HasIndex("CreateBy", "ManagedBy", "ManagedKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_event_source_create_by_managed_by_managed_key")
+                        .HasFilter("managed_key IS NOT NULL");
 
                     b.ToTable("event_source", (string)null);
                 });
@@ -1618,9 +1645,13 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("text")
                         .HasColumnName("instructions");
 
-                    b.Property<Guid?>("ManagedByExtensionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("managed_by_extension_id");
+                    b.Property<string>("ManagedBy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("user")
+                        .HasColumnName("managed_by");
 
                     b.Property<string>("ManagedKey")
                         .HasColumnType("text")
@@ -1679,9 +1710,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasIndex("CreateBy", "Enabled")
                         .HasDatabaseName("ix_event_subscription_create_by_enabled");
 
-                    b.HasIndex("CreateBy", "ManagedByExtensionId", "ManagedKey")
+                    b.HasIndex("CreateBy", "ManagedBy", "ManagedKey")
                         .IsUnique()
-                        .HasDatabaseName("ix_event_subscription_create_by_managed_by_extension_id_manage")
+                        .HasDatabaseName("ix_event_subscription_create_by_managed_by_managed_key")
                         .HasFilter("managed_key IS NOT NULL");
 
                     b.ToTable("event_subscription", (string)null);
@@ -2243,182 +2274,6 @@ namespace Agw.Migrations.Postgres.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.Job", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset?>("ActiveAttemptStartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("active_attempt_started_at");
-
-                    b.Property<Guid?>("ActiveTurnId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("active_turn_id");
-
-                    b.Property<Guid?>("AgentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("agent_id");
-
-                    b.Property<int?>("AgentType")
-                        .HasColumnType("integer")
-                        .HasColumnName("agent_type");
-
-                    b.Property<string>("CreateBy")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("create_time");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_enabled");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("last_error");
-
-                    b.Property<int>("MaxRetryCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_retry_count");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name");
-
-                    b.Property<DateTimeOffset>("NextRunTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("next_run_time");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("project_id");
-
-                    b.Property<string>("Prompt")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
-                        .HasColumnName("prompt");
-
-                    b.Property<int>("RetryCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("retry_count");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("bytea")
-                        .HasColumnName("row_version");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasColumnName("status");
-
-                    b.Property<int>("TriggerType")
-                        .HasColumnType("integer")
-                        .HasColumnName("trigger_type");
-
-                    b.Property<string>("TriggerValue")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("trigger_value");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("Id")
-                        .HasName("pk_job");
-
-                    b.HasIndex("ActiveTurnId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_job_active_turn_id");
-
-                    b.HasIndex("ProjectId")
-                        .HasDatabaseName("ix_task_project");
-
-                    b.HasIndex("IsEnabled", "Status", "NextRunTime")
-                        .HasDatabaseName("ix_task_next_run_time");
-
-                    b.ToTable("job", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_job_active_attempt", "(status = 2 AND active_turn_id IS NOT NULL AND active_attempt_started_at IS NOT NULL) OR (status <> 2 AND active_turn_id IS NULL AND active_attempt_started_at IS NULL)");
-                        });
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.JobLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int>("Attempt")
-                        .HasColumnType("integer")
-                        .HasColumnName("attempt");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("text")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("create_time");
-
-                    b.Property<DateTimeOffset?>("EndTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("end_time");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("error_message");
-
-                    b.Property<Guid>("JobId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("job_id");
-
-                    b.Property<DateTimeOffset>("StartTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("start_time");
-
-                    b.Property<bool>("Success")
-                        .HasColumnType("boolean")
-                        .HasColumnName("success");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("task_id");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("text")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("Id")
-                        .HasName("pk_job_log");
-
-                    b.HasIndex("JobId", "StartTime")
-                        .HasDatabaseName("ix_job_log_job_id_start_time");
-
-                    b.ToTable("job_log", (string)null);
-                });
-
             modelBuilder.Entity("Agw.Shared.Data.Entities.Notifications.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2948,13 +2803,21 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("generation");
 
-                    b.Property<Guid?>("JobId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("job_id");
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("native")
+                        .HasColumnName("kind");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
+
+                    b.Property<Guid?>("RelateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("relate_id");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -2975,11 +2838,11 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_project_conversation");
 
-                    b.HasIndex("JobId")
-                        .HasDatabaseName("ix_project_conversation_job_id");
-
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_project_conversation_project_id");
+
+                    b.HasIndex("RelateId")
+                        .HasDatabaseName("ix_project_conversation_relate_id");
 
                     b.HasIndex("UpdateTime")
                         .HasDatabaseName("ix_project_conversation_update_time");
@@ -3105,10 +2968,6 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("history_scope");
-
-                    b.Property<Guid?>("JobId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("job_id");
 
                     b.Property<string>("Metadata")
                         .HasColumnType("jsonb")
@@ -3932,18 +3791,6 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Navigation("PluginInstallation");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.JobLog", b =>
-                {
-                    b.HasOne("Agw.Shared.Data.Entities.Jobs.Job", "Job")
-                        .WithMany("Logs")
-                        .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_job_log_job_job_id");
-
-                    b.Navigation("Job");
-                });
-
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConnectionRelation", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Integrations.Connection", "Connection")
@@ -4134,11 +3981,6 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.PluginInstallation", b =>
                 {
                     b.Navigation("Credentials");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.Job", b =>
-                {
-                    b.Navigation("Logs");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>

@@ -287,7 +287,6 @@ public sealed class EventDeliveryProcessor
             var executionRequest = current.RequestSnapshotJson is null
                 ? CreateAgentRequest(
                     identity,
-                    context.EventRecord,
                     context.Subscription ?? throw new AgwException(ErrorCodes.InvalidParam),
                     context.Message,
                     turnId
@@ -627,6 +626,7 @@ public sealed class EventDeliveryProcessor
                             Id = Guid.CreateVersion7(),
                             DeliveryId = current.Id,
                             Attempt = attempt,
+                            TurnId = turnId,
                             HostId = _hostIdentity.HostId,
                             GenerationId = generationLease?.Snapshot.GenerationId.GenerationId,
                             StartedAt = startedAt,
@@ -1028,7 +1028,6 @@ public sealed class EventDeliveryProcessor
 
     private BackgroundExecutionRequest CreateAgentRequest(
         DeliveryIdentity identity,
-        EventRecord eventRecord,
         EventSubscription subscription,
         CloudEventEnvelope message,
         Guid turnId
@@ -1044,7 +1043,7 @@ public sealed class EventDeliveryProcessor
             subscription.ProjectId ?? throw new AgwException(ErrorCodes.InvalidParam),
             null,
             subscription.Name,
-            CreateAgentInput(subscription, eventRecord, message),
+            CreateAgentInput(subscription, message, turnId),
             (AgentExecutionPermissionMode)(
                 subscription.PermissionMode ?? throw new AgwException(ErrorCodes.InvalidParam)
             ),
@@ -1081,11 +1080,7 @@ public sealed class EventDeliveryProcessor
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
         };
 
-    private AgwUserInput CreateAgentInput(
-        EventSubscription subscription,
-        EventRecord eventRecord,
-        CloudEventEnvelope message
-    )
+    private AgwUserInput CreateAgentInput(EventSubscription subscription, CloudEventEnvelope message, Guid turnId)
     {
         var envelope = WithoutDeliveryLocator(message);
         string? binaryInfo = null;
@@ -1105,7 +1100,7 @@ public sealed class EventDeliveryProcessor
 
         return new AgwUserInput
         {
-            MessageId = eventRecord.Id.ToString("D"),
+            MessageId = turnId.ToString("D"),
             Contents =
             [
                 new AgwTextContent { Content = subscription.Instructions ?? string.Empty },

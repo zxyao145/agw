@@ -170,7 +170,8 @@ test("getProjectConversations gets one conversation page for a project", async (
             projectId: "project-1",
             conversationId: "11111111-1111-1111-1111-000000000001",
             contextId: "context-empty",
-            jobId: null,
+            kind: "native",
+            relateId: null,
             title: "New Chat",
             latestStatus: 1,
             executionCount: 1,
@@ -183,7 +184,8 @@ test("getProjectConversations gets one conversation page for a project", async (
             projectId: "project-1",
             conversationId: "11111111-1111-1111-1111-000000000002",
             contextId: "context-1",
-            jobId: "job-1",
+            kind: "event:timer",
+            relateId: "event-1",
             title: "Tokyo trip",
             latestStatus: 2,
             executionCount: 2,
@@ -196,7 +198,8 @@ test("getProjectConversations gets one conversation page for a project", async (
             projectId: "project-1",
             conversationId: "11111111-1111-1111-1111-000000000003",
             contextId: "context-cleared",
-            jobId: null,
+            kind: "native",
+            relateId: null,
             title: "Cleared chat",
             latestStatus: null,
             executionCount: 0,
@@ -221,11 +224,14 @@ test("getProjectConversations gets one conversation page for a project", async (
   assert.equal(result.pageSize, 20);
   assert.equal(result.items[0].conversationId, "11111111-1111-1111-1111-000000000001");
   assert.equal(result.items[0].contextId, "context-empty");
+  assert.equal(result.items[0].kind, "native");
+  assert.equal(result.items[0].relateId, null);
   assert.equal(result.items[0].executionCount, 1);
   assert.equal(result.items[0].messageCount, 0);
   assert.equal(result.items[1].conversationId, "11111111-1111-1111-1111-000000000002");
   assert.equal(result.items[1].contextId, "context-1");
-  assert.equal(result.items[1].jobId, "job-1");
+  assert.equal(result.items[1].kind, "event:timer");
+  assert.equal(result.items[1].relateId, "event-1");
   assert.equal(result.items[1].executionCount, 2);
   assert.equal(result.items[2].conversationId, "11111111-1111-1111-1111-000000000003");
   assert.equal(result.items[2].contextId, "context-cleared");
@@ -257,7 +263,8 @@ test("getProjectConversationDetails encodes conversation id path parameter", asy
         projectId: "project-1",
         conversationId: "11111111-1111-1111-1111-000000000004",
         contextId: "context/a b",
-        jobId: "job-1",
+        kind: "event:timer",
+        relateId: "event-1",
         title: "Tokyo trip",
         latestStatus: 2,
         executionCount: 2,
@@ -282,7 +289,8 @@ test("getProjectConversationDetails encodes conversation id path parameter", asy
 
   assert.equal(result.conversationId, "11111111-1111-1111-1111-000000000004");
   assert.equal(result.contextId, "context/a b");
-  assert.equal(result.jobId, "job-1");
+  assert.equal(result.kind, "event:timer");
+  assert.equal(result.relateId, "event-1");
   assert.equal(result.executionCount, 2);
   assert.deepEqual(requests, [
     {

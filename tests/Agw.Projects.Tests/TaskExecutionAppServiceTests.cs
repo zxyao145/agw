@@ -1,12 +1,11 @@
 using System.Security.Claims;
 using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Projects;
 using Agw.Projects.Domain.Services;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
-using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,37 +49,30 @@ public class TaskExecutionAppServiceTests
 
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
-        var jobId = Guid.CreateVersion7();
 
         var result = await service.CreateRunningAsync(
             projectId,
-            new TaskCreateRequest(
-                JobId: jobId,
-                Input: "Run scheduled sync",
-                Title: "Nightly sync",
-                ContextId: "context-1"
-            ),
+            new TaskCreateRequest(Input: "Run task", Title: "Task", ContextId: "context-1"),
             "tester"
         );
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
         var response = Assert.IsType<TaskExecutionSnapshot>(result.Value);
-        Assert.Equal(jobId, response.JobId);
         Assert.Equal(TaskExecutionStatus.Running, response.Status);
         Assert.Equal(projectId.Normalize(), response.ProjectId);
         Assert.Equal("context-1", response.ContextId);
-        Assert.Equal("Nightly sync", response.Title);
+        Assert.Equal("Task", response.Title);
         Assert.NotEqual(Guid.Empty, response.TaskId);
 
         var context = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
         Assert.Equal("context-1", context.ContextId);
-        Assert.Equal("Nightly sync", context.Title);
-        Assert.Equal(jobId, context.JobId);
+        Assert.Equal("Task", context.Title);
+        Assert.Equal(ConversationKinds.Native, context.Kind);
+        Assert.Null(context.RelateId);
 
         var record = await dbContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
         Assert.Equal(context.Id, record.ConversationId);
         Assert.Equal(response.TaskId, record.TaskId);
-        Assert.Equal(jobId, record.JobId);
         Assert.Equal(TaskExecutionStatus.Running, record.Status);
         Assert.Null(record.ConversationPayload);
     }
@@ -121,7 +113,6 @@ public class TaskExecutionAppServiceTests
             projectId,
             Guid.CreateVersion7(),
             new TaskCreateRequest(
-                JobId: null,
                 Input: "background input",
                 Title: "background title",
                 ContextId: "background-context"
@@ -133,10 +124,12 @@ public class TaskExecutionAppServiceTests
         Assert.Equal(ApplicationResultType.Success, result.Type);
         var conversation = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
         Assert.Equal(extensionId, conversation.ExtensionId);
+        Assert.Equal(ConversationKinds.Native, conversation.Kind);
+        Assert.Null(conversation.RelateId);
     }
 
     [Fact]
-    public async Task MarkSucceededAsync_AfterCreateRunningAsync_UpdatesProjectConversationChatHistory()
+    public async Task CreateRunningForExecutionAsync_EventKind_CreatesConversationWithKindAndRelateId()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -148,101 +141,76 @@ public class TaskExecutionAppServiceTests
         var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(CreateProject(projectId, "Jobs Project"));
+            seedContext.Projects.Add(CreateProject(projectId, "Event Project"));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
-        var createResult = await service.CreateRunningAsync(
+        var eventId = Guid.CreateVersion7();
+        var result = await service.CreateRunningForExecutionAsync(
             projectId,
+            Guid.CreateVersion7(),
             new TaskCreateRequest(
-                JobId: Guid.CreateVersion7(),
-                Input: "Run scheduled sync",
-                Title: "Nightly sync",
-                ContextId: "context-1"
+                Input: "timer event input",
+                Title: "Timer event",
+                ContextId: "timer-context",
+                Kind: "event:timer",
+                RelateId: eventId
             ),
             "tester"
         );
-        var createdTask = Assert.IsType<TaskExecutionSnapshot>(createResult.Value);
 
-        var result = await service.MarkSucceededAsync(createdTask.TaskId, "tester");
-
-        Assert.NotNull(result);
-        Assert.Equal(TaskExecutionStatus.Succeeded, result.Status);
-        var record = await dbContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
-        Assert.Equal(TaskExecutionStatus.Succeeded, record.Status);
-        Assert.NotNull(record.FinishedTime);
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        var conversation = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
+        Assert.Equal("event:timer", conversation.Kind);
+        Assert.Equal(eventId, conversation.RelateId);
     }
 
-    [Theory]
-    [InlineData(TaskExecutionStatus.Succeeded, false)]
-    [InlineData(TaskExecutionStatus.Succeeded, true)]
-    [InlineData(TaskExecutionStatus.Failed, false)]
-    [InlineData(TaskExecutionStatus.Failed, true)]
-    public async Task MarkTaskAsync_RunningTask_PreservesConversationAudit(
-        TaskExecutionStatus status,
-        bool hasUpdateTime
-    )
+    [Fact]
+    public async Task CreateRunningForExecutionAsync_ExistingConversation_KeepsKindAndRelateId()
     {
-        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var now = new DateTimeOffset(2026, 9, 7, 1, 0, 0, TimeSpan.Zero);
-        var clock = new TestTimeProvider(now);
-        var userInfo = new TestUserInfoService();
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<AgwDbContext>(CreateOptions(connection))
-            .AddInterceptors(new EntityModifierInterceptor(new TestAuditUserIdProvider(), clock))
-            .Options;
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
         var projectId = Guid.CreateVersion7();
-        var conversation = CreateContext(Guid.CreateVersion7(), projectId, "context-1", "Task");
-        conversation.CreateTime = now.AddHours(-2);
-        conversation.UpdateTime = hasUpdateTime ? now.AddHours(-1) : null;
-        conversation.UpdateBy = "previous-writer";
-        var record = CreateRecord(conversation.Id, Guid.CreateVersion7());
-        record.CreateTime = now.AddHours(-1);
-        record.UpdateTime = record.CreateTime;
         await using (var seedContext = new AgwDbContext(options))
         {
-            await seedContext.Database.EnsureCreatedAsync(cancellationToken);
-            seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectConversations.Add(conversation);
-            seedContext.ProjectConversationChatHistories.Add(record);
+            seedContext.Projects.Add(CreateProject(projectId, "Event Project"));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var service = new TaskExecutionAppService(
-            dbContext,
-            new ProjectResolver(dbContext, userInfo),
-            new ConversationHistoryDomainService(),
-            clock,
-            userInfo,
-            new ConversationCreatorStore(dbContext)
+        var service = CreateService(dbContext);
+        var firstResult = await service.CreateRunningForExecutionAsync(
+            projectId,
+            Guid.CreateVersion7(),
+            new TaskCreateRequest(Input: "native input", ContextId: "shared-context"),
+            "tester"
+        );
+        Assert.Equal(ApplicationResultType.Success, firstResult.Type);
+        var conversation = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
+        var eventId = Guid.CreateVersion7();
+
+        var secondResult = await service.CreateRunningForExecutionAsync(
+            projectId,
+            Guid.CreateVersion7(),
+            new TaskCreateRequest(
+                Input: "event input",
+                ContextId: "shared-context",
+                Kind: "event:timer",
+                RelateId: eventId
+            ),
+            "tester"
         );
 
-        // Act
-        var result =
-            status == TaskExecutionStatus.Succeeded
-                ? await service.MarkSucceededAsync(record.TaskId, "tester")
-                : await service.MarkFailedAsync(record.TaskId, "Execution failed", "tester");
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(status, result.Status);
-        await using var verifyContext = new AgwDbContext(options);
-        var persistedConversation = await verifyContext.ProjectConversations.SingleAsync(cancellationToken);
-        Assert.Equal(conversation.UpdateTime, persistedConversation.UpdateTime);
-        Assert.Equal(conversation.UpdateBy, persistedConversation.UpdateBy);
-        var persistedRecord = await verifyContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
-        Assert.Equal(status, persistedRecord.Status);
-        Assert.Equal(now, persistedRecord.UpdateTime);
-        Assert.Equal(now, persistedRecord.FinishedTime);
-        Assert.Equal(
-            status == TaskExecutionStatus.Failed ? "Execution failed" : null,
-            persistedRecord.TaskErrorMessage
-        );
+        Assert.Equal(ApplicationResultType.Success, secondResult.Type);
+        Assert.Equal(ConversationKinds.Native, conversation.Kind);
+        Assert.Null(conversation.RelateId);
     }
 
     [Fact]
@@ -269,7 +237,7 @@ public class TaskExecutionAppServiceTests
         var result = await service.CreateForExecutionAsync(
             projectId,
             taskId,
-            new TaskCreateRequest(JobId: null, Input: "Run scheduled sync", Title: "Nightly sync"),
+            new TaskCreateRequest(Input: "Run task", Title: "Task"),
             "tester"
         );
 
@@ -303,17 +271,13 @@ public class TaskExecutionAppServiceTests
         var uppercaseResult = await service.CreateForExecutionAsync(
             projectId,
             taskId: null,
-            new TaskCreateRequest(
-                JobId: null,
-                Input: "First task",
-                ContextId: contextGuid.ToString("D").ToUpperInvariant()
-            ),
+            new TaskCreateRequest(Input: "First task", ContextId: contextGuid.ToString("D").ToUpperInvariant()),
             "tester"
         );
         var lowercaseResult = await service.CreateForExecutionAsync(
             projectId,
             taskId: null,
-            new TaskCreateRequest(JobId: null, Input: "Second task", ContextId: contextGuid.Normalize()),
+            new TaskCreateRequest(Input: "Second task", ContextId: contextGuid.Normalize()),
             "tester"
         );
 
@@ -359,7 +323,7 @@ public class TaskExecutionAppServiceTests
         var result = await service.CreateForExecutionAsync(
             projectId,
             taskId: null,
-            new TaskCreateRequest(JobId: null, Input: "Continue task", ContextId: contextGuid.Normalize()),
+            new TaskCreateRequest(Input: "Continue task", ContextId: contextGuid.Normalize()),
             "tester"
         );
 

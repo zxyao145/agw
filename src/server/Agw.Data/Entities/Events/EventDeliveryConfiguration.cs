@@ -15,6 +15,7 @@ public sealed class EventDeliveryConfiguration : IEntityTypeConfiguration<EventD
         builder.Property(entity => entity.RecoverAfter).IsRequired();
         builder.Property(entity => entity.Version).IsConcurrencyToken();
         builder.HasIndex(entity => new { entity.EventId, entity.SubscriptionId }).IsUnique();
+        builder.HasIndex(entity => new { entity.SubscriptionId, entity.Id });
         builder.HasIndex(entity => new { entity.State, entity.NextAttemptAt });
         builder.HasIndex(entity => new { entity.State, entity.RecoverAfter });
         builder.HasIndex(entity => entity.TurnId);

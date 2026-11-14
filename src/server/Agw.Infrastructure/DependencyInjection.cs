@@ -11,7 +11,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Extensions;
-using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Providers;
 using Agw.Infrastructure.Repositories;
@@ -19,16 +18,12 @@ using Agw.Infrastructure.Settings;
 using Agw.Infrastructure.Skills;
 using Agw.Infrastructure.Tools;
 using Agw.Integrations.Application.Persistence;
-using Agw.Jobs.Application.Persistence;
-using Agw.Jobs.Scheduling;
-using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
 using Agw.Settings.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Persistence;
 using Agw.Shared.Coordination;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
@@ -130,7 +125,6 @@ public static partial class DependencyInjection
         services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IProjectsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
-        services.AddScoped<IJobsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAuthDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IIntegrationsDbContext>(serviceProvider =>
             serviceProvider.GetRequiredService<AgwDbContext>()
@@ -152,17 +146,11 @@ public static partial class DependencyInjection
         services.AddScoped<IProviderModelDeletionCoordinator, ProviderModelDeletionCoordinator>();
         services.AddScoped<IProjectProviderSessionCoordinator, ProjectProviderSessionCoordinator>();
         services.AddScoped<IConversationCreatorStore, ConversationCreatorStore>();
-        services.AddScoped<IJobOutcomeTransaction, JobOutcomeTransaction>();
-        services.AddScoped<IJobDeletionCoordinator, JobDeletionCoordinator>();
         services.AddScoped<Agw.Projects.Contracts.Execution.IConversationExecutionGate, ConversationExecutionGate>();
         services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
-        services.AddScoped<JobRepo>();
-        services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
-        services.AddScoped<IJobStore, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IUnitOfWork>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
 
-        services.AddSingleton<InMemoryProjectExecutionLock>();
         services.AddSingleton<Func<DistributedLockProvider, string, IDistributedLockProvider>>(_ =>
             (provider, connectionString) =>
                 provider switch
@@ -176,7 +164,6 @@ public static partial class DependencyInjection
                     ),
                 }
         );
-        services.AddSingleton<IProjectExecutionLock, ProjectExecutionLockRouter>();
         services.AddSingleton<IRemoteSkillRefreshLock, RemoteSkillRefreshLockRouter>();
         services.AddSingleton<InMemoryApplicationLock>();
         services.AddSingleton<IApplicationLock, ApplicationLockRouter>();

@@ -59,7 +59,7 @@ flowchart TB
     Factory --> Engines["Agents / Agentflows 引擎"]
     Durable --> Session["DurableExecutionAttachment"]
     Session --> Coordinator["DurableExecutionCoordinator"]
-    Facades["A2A / Jobs Facades"] -->|InProcess| Engines
+    Facades["A2A / Events delivery facades"] -->|InProcess| Engines
     Facades -->|Distributed| Client["IDurableExecutionClient"]
     Client --> Coordinator
     Coordinator --> Store["DurableExecutionStore"]
@@ -68,7 +68,7 @@ flowchart TB
     Executor --> Engines
 ```
 
-`IExecutionStarter` 统一的是**当前连接接受一次启动**。A2A、Jobs 通过既有 Facade 使用执行服务；它们的 Durable 路径经 Client 汇入同一个 Coordinator，不需要创建 SignalR 连接或 attachment。
+`IExecutionStarter` 统一的是**当前连接接受一次启动**。A2A 和 Events 投递通过各自的执行 Facade 使用执行服务；Distributed 路径经 Client 汇入同一个 Coordinator，不需要创建 SignalR 连接或 attachment。
 
 <a id="abstractions"></a>
 

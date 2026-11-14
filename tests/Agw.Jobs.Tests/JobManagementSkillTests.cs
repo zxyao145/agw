@@ -1,59 +1,35 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Agw.Agents.Contracts.Messages;
 using Agw.Agents.Execution.Context;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
-using Agw.Agents.Execution.Outbound;
-using Agw.Auth.Application;
+using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Jobs;
-using Agw.Infrastructure.Repositories;
-using Agw.Jobs.Application.Persistence;
-using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Contracts.Tools;
-using Agw.Jobs.Domain.Repositories;
-using Agw.Jobs.Domain.Services;
-using Agw.Jobs.Infrastructure;
-using Agw.Jobs.Scheduling.Coordination;
-using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Coordination;
-using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-using Agw.Testing;
-using Agw.Tools.Abstractions;
+using Agw.Skills.Contracts.Registration;
+using Agw.Tests;
 using Agw.Tools.Abstractions.Generated;
 using Agw.Tools.Generated;
-using Microsoft.Agents.AI;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Jobs.Tests;
 
-public class JobManagementSkillTests : IDisposable
+public class JobManagementSkillTests
 {
-    private static readonly DateTimeOffset UtcNow = new(2026, 7, 26, 10, 0, 0, TimeSpan.Zero);
-    private readonly IDisposable _userScope = UserInfoUtil.Push(CreatePrincipal("seed"));
-
-    public void Dispose() => _userScope.Dispose();
-
     [Fact]
-    public async Task SkillMetadata_ProvidesInstructionsAndResource_WithoutLegacyScripts()
+    public async Task SkillMetadata_ProvidesInstructionsAndScheduleReference()
     {
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var skill = fixture.CreateSkill(Guid.CreateVersion7());
+        var skill = fixture.Registration.Create(Guid.CreateVersion7());
 
         Assert.Equal("agw-job", skill.Frontmatter.Name);
-        Assert.Contains("scheduled jobs", skill.Frontmatter.Description, StringComparison.OrdinalIgnoreCase);
-
         var resource = await skill.GetResourceAsync("job-trigger-reference", TestContext.Current.CancellationToken);
         Assert.NotNull(resource);
         var resourceResult = await resource.ReadAsync(serviceProvider: null, TestContext.Current.CancellationToken);
@@ -61,346 +37,141 @@ public class JobManagementSkillTests : IDisposable
             ? resourceElement.GetString()
             : Assert.IsType<string>(resourceResult);
         Assert.NotNull(content);
-        Assert.Contains("RFC 3339", content, StringComparison.Ordinal);
-        Assert.Contains("five-field cron", content, StringComparison.Ordinal);
-
-        foreach (var scriptName in new[] { "list-jobs", "get-job", "create-job", "update-job", "delete-job" })
-        {
-            Assert.Null(await skill.GetScriptAsync(scriptName, TestContext.Current.CancellationToken));
-        }
+        Assert.Contains("ISO 8601", content, StringComparison.Ordinal);
+        Assert.Contains("targetKind", content, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ListAndGetJobs_WithoutInteractiveContext_StayWithinCapturedProject()
+    public async Task CreateJobAsync_IntervalJob_ReturnsScheduleAndDueAt()
     {
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var otherProjectId = Guid.CreateVersion7();
-        var projectJob = await fixture.SeedJobAsync(projectId, "Project job");
-        var otherJob = await fixture.SeedJobAsync(otherProjectId, "Other job");
-        var tools = fixture.CreateTools(projectId);
-
-        var jobs = await RunToolAsync<JobToolResponse[]>(tools, "agw_job_list", new { });
-
-        var listed = Assert.Single(jobs);
-        Assert.Equal(projectJob.Id, listed.Id);
-        Assert.Equal(projectId, listed.ProjectId);
-
-        var found = await RunToolAsync<JobToolResponse>(tools, "agw_job_get", new { jobId = projectJob.Id });
-        Assert.Equal(projectJob.Id, found.Id);
-
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(tools, "agw_job_get", new { jobId = otherJob.Id })
-        );
-        Assert.Equal(ErrorCodes.JobNotFound.Code, exception.Code);
-    }
-
-    [Fact]
-    public async Task CreateJob_UsesInteractiveProjectAndUserAndCalculatesNextRun()
-    {
-        await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var agentId = Guid.CreateVersion7();
-        var tools = fixture.CreateTools(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "skill-user");
+        var targets = await fixture.SeedTargetsAsync("tester");
+        var tools = fixture.CreateTools(targets.ProjectId);
+        using var context = fixture.PushInteractiveContext(targets.ProjectId, "tester");
 
         var created = await RunToolAsync<JobToolResponse>(
             tools,
             "agw_job_create",
             new
             {
-                prompt = "Run a status check",
-                agentType = AgentRuntimeType.Agent,
-                agentId,
-                triggerType = TriggerType.Interval,
-                triggerValue = "00:15:00",
-                name = "Status check",
-                maxRetryCount = 5,
-                isEnabled = true,
+                instructions = "Run the scheduled task.",
+                targetKind = "Agent",
+                agentId = targets.AgentId,
+                kind = "Interval",
+                interval = "PT15M",
+                name = "Interval Job",
             }
         );
 
-        Assert.Equal(projectId, created.ProjectId);
-        Assert.Equal(agentId, created.AgentId);
-        Assert.Equal(UtcNow.AddMinutes(15), created.NextRunTime);
-        Assert.DoesNotContain(
-            created.GetType().GetProperties(),
-            property => string.Equals(property.Name, "RowVersion", StringComparison.Ordinal)
-        );
-
-        var persisted = await fixture.GetJobAsync(created.Id);
-        Assert.Equal("skill-user", persisted.CreateBy);
-        Assert.Equal("skill-user", persisted.UpdateBy);
-        Assert.Equal(projectId, persisted.ProjectId);
+        Assert.Equal("Interval", created.Schedule.Kind);
+        Assert.Equal("PT15M", created.Schedule.Interval);
+        Assert.NotNull(created.DueAt);
     }
 
     [Fact]
-    public async Task UpdateJob_PatchPreservesOmittedFieldsAndSupportsClearPrompt()
+    public async Task UpdateJobAsync_NoFields_ThrowsNoChangesToMake()
     {
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var existing = await fixture.SeedJobAsync(projectId, "Existing job", "Keep or clear", "patch-user");
-        var tools = fixture.CreateTools(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "patch-user");
+        var targets = await fixture.SeedTargetsAsync("tester");
+        var tools = fixture.CreateTools(targets.ProjectId);
+        using var context = fixture.PushInteractiveContext(targets.ProjectId, "tester");
+        var created = await CreateJobAsync(tools, targets.AgentId);
 
-        var updated = await RunToolAsync<JobToolResponse>(
-            tools,
-            "agw_job_update",
-            new
-            {
-                jobId = existing.Id,
-                clearPrompt = true,
-                isEnabled = false,
-            }
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            RunToolAsync<JobToolResponse>(tools, "agw_job_update", new { jobId = created.Id })
         );
 
-        Assert.Equal(existing.Name, updated.Name);
-        Assert.Equal(existing.AgentType, updated.AgentType);
-        Assert.Equal(existing.AgentId, updated.AgentId);
-        Assert.Equal(existing.TriggerType, updated.TriggerType);
-        Assert.Equal(existing.TriggerValue, updated.TriggerValue);
-        Assert.Equal(existing.NextRunTime, updated.NextRunTime);
-        Assert.Null(updated.Prompt);
-        Assert.False(updated.IsEnabled);
-
-        var persisted = await fixture.GetJobAsync(existing.Id);
-        Assert.Equal("patch-user", persisted.UpdateBy);
+        Assert.Equal(ErrorCodes.NoChangesToMake.Code, exception.Code);
     }
 
     [Fact]
-    public async Task UpdateJob_TriggerPatchRecalculatesNextRunTime()
+    public async Task UpdateJobAsync_OnlyCron_ReplacesCronAndKeepsOtherFields()
     {
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var existing = await fixture.SeedJobAsync(projectId, "Existing job", ownerUserId: "schedule-user");
-        var tools = fixture.CreateTools(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "schedule-user");
-
-        var updated = await RunToolAsync<JobToolResponse>(
-            tools,
-            "agw_job_update",
-            new { jobId = existing.Id, triggerValue = "01:00:00" }
-        );
-
-        Assert.Equal(TriggerType.Interval, updated.TriggerType);
-        Assert.Equal("01:00:00", updated.TriggerValue);
-        Assert.Equal(UtcNow.AddHours(1), updated.NextRunTime);
-        Assert.Equal(existing.Prompt, updated.Prompt);
-        Assert.Equal(existing.AgentId, updated.AgentId);
-    }
-
-    [Fact]
-    public async Task UpdateJob_RejectsEmptyPatchAndIncompleteAgentTarget()
-    {
-        await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var existing = await fixture.SeedJobAsync(projectId, "Existing job", ownerUserId: "patch-user");
-        var tools = fixture.CreateTools(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "patch-user");
-
-        var emptyPatch = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(tools, "agw_job_update", new { jobId = existing.Id })
-        );
-        Assert.Equal(ErrorCodes.NoChangesToMake.Code, emptyPatch.Code);
-
-        var incompleteAgentTarget = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(
-                tools,
-                "agw_job_update",
-                new { jobId = existing.Id, agentType = AgentRuntimeType.Agentflow }
-            )
-        );
-        Assert.Equal(ErrorCodes.InvalidParam.Code, incompleteAgentTarget.Code);
-
-        var blankPrompt = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(tools, "agw_job_update", new { jobId = existing.Id, prompt = " " })
-        );
-        Assert.Equal(ErrorCodes.InvalidParam.Code, blankPrompt.Code);
-    }
-
-    [Fact]
-    public async Task WriteTools_WithoutMatchingInteractiveContext_AreRejected()
-    {
-        await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var existing = await fixture.SeedJobAsync(projectId, "Existing job");
-        var tools = fixture.CreateTools(projectId);
-
-        var createException = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(
-                tools,
-                "agw_job_create",
-                new
-                {
-                    prompt = "Run",
-                    agentType = AgentRuntimeType.Agent,
-                    agentId = Guid.CreateVersion7(),
-                    triggerType = TriggerType.Interval,
-                    triggerValue = "00:05:00",
-                }
-            )
-        );
-        Assert.Equal(ErrorCodes.InteractiveAdminRequired.Code, createException.Code);
-
-        using var wrongProjectConversation = fixture.PushInteractiveContext(
-            Guid.CreateVersion7(),
-            "wrong-project-user"
-        );
-        var updateException = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(tools, "agw_job_update", new { jobId = existing.Id, isEnabled = false })
-        );
-        Assert.Equal(ErrorCodes.InteractiveAdminRequired.Code, updateException.Code);
-
-        var deleteException = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(
-                tools,
-                "agw_job_delete",
-                new { jobId = existing.Id, confirmation = existing.Id.ToString() }
-            )
-        );
-        Assert.Equal(ErrorCodes.InteractiveAdminRequired.Code, deleteException.Code);
-    }
-
-    [Fact]
-    public async Task DeleteJob_RequiresExactConfirmationAndProjectScope()
-    {
-        await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var otherProjectId = Guid.CreateVersion7();
-        var projectJob = await fixture.SeedJobAsync(projectId, "Project job", ownerUserId: "delete-user");
-        var otherJob = await fixture.SeedJobAsync(otherProjectId, "Other job", ownerUserId: "delete-user");
-        var tools = fixture.CreateTools(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "delete-user");
-
-        var confirmationException = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(
-                tools,
-                "agw_job_delete",
-                new { jobId = projectJob.Id, confirmation = Guid.CreateVersion7().ToString() }
-            )
-        );
-        Assert.Equal(ErrorCodes.InvalidParam.Code, confirmationException.Code);
-
-        var scopedException = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(
-                tools,
-                "agw_job_delete",
-                new { jobId = otherJob.Id, confirmation = otherJob.Id.ToString() }
-            )
-        );
-        Assert.Equal(ErrorCodes.JobNotFound.Code, scopedException.Code);
-
-        var deleted = await RunToolAsync<JobToolResponse>(
-            tools,
-            "agw_job_delete",
-            new { jobId = projectJob.Id, confirmation = projectJob.Id.ToString() }
-        );
-        Assert.Equal(projectJob.Id, deleted.Id);
-        Assert.Equal(projectId, deleted.ProjectId);
-        Assert.Equal(projectJob.TriggerValue, deleted.TriggerValue);
-        Assert.Null(await fixture.GetJobOrDefaultAsync(projectJob.Id));
-        Assert.NotNull(await fixture.GetJobOrDefaultAsync(otherJob.Id));
-    }
-
-    [Fact]
-    public async Task ToolDeclarations_MaterializedForDifferentProjects_KeepIndependentBindings()
-    {
-        // Arrange
-        await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var firstProject = Guid.CreateVersion7();
-        var secondProject = Guid.CreateVersion7();
-        var firstJob = await fixture.SeedJobAsync(firstProject, "First");
-        var secondJob = await fixture.SeedJobAsync(secondProject, "Second");
-        var firstTools = fixture.CreateTools(firstProject);
-        var secondTools = fixture.CreateTools(secondProject);
-
-        // Act
-        var second = await RunToolAsync<JobToolResponse[]>(secondTools, "agw_job_list", new { });
-        var first = await RunToolAsync<JobToolResponse[]>(firstTools, "agw_job_list", new { });
-
-        // Assert
-        Assert.Equal(secondJob.Id, Assert.Single(second).Id);
-        Assert.Equal(firstJob.Id, Assert.Single(first).Id);
-        Assert.All(
-            fixture.ToolDeclarations,
-            tool =>
-            {
-                var expectedReadOnly = tool.Name is "agw_job_list" or "agw_job_get";
-                Assert.Equal(
-                    expectedReadOnly ? AgwToolPermission.ReadOnly : AgwToolPermission.Write,
-                    tool.RequiredPermission
-                );
-                Assert.Equal(expectedReadOnly, tool.AllowInPlanMode);
-                var schema = firstTools[tool.Name].JsonSchema.GetProperty("properties");
-                Assert.False(schema.TryGetProperty("projectId", out _));
-                Assert.False(schema.TryGetProperty("userId", out _));
-            }
-        );
-    }
-
-    [Fact]
-    public async Task Tools_ForeignOwnerInSameProject_ReturnNotFoundAndDoNotMutate()
-    {
-        // Arrange
-        await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var own = await fixture.SeedJobAsync(projectId, "Own", ownerUserId: "owner");
-        var foreign = await fixture.SeedJobAsync(projectId, "Foreign", ownerUserId: "other");
-        var tools = fixture.CreateTools(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "owner");
-
-        // Act
-        var jobs = await RunToolAsync<JobToolResponse[]>(tools, "agw_job_list", new { });
-        var read = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(tools, "agw_job_get", new { jobId = foreign.Id })
-        );
-        var update = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(tools, "agw_job_update", new { jobId = foreign.Id, name = "Changed" })
-        );
-        var delete = await Assert.ThrowsAsync<AgwException>(() =>
-            RunToolAsync<JobToolResponse>(
-                tools,
-                "agw_job_delete",
-                new { jobId = foreign.Id, confirmation = foreign.Id.ToString() }
-            )
-        );
-
-        // Assert
-        Assert.Equal(own.Id, Assert.Single(jobs).Id);
-        Assert.All(new[] { read, update, delete }, error => Assert.Equal(ErrorCodes.JobNotFound.Code, error.Code));
-        using var foreignOwner = UserInfoUtil.Push(CreatePrincipal("other"));
-        Assert.Equal("Foreign", (await fixture.GetJobAsync(foreign.Id)).Name);
-    }
-
-    [Fact]
-    public async Task CreateTool_OmittedOptionalArguments_PreservesDefaults()
-    {
-        // Arrange
-        await using var fixture = await JobManagementSkillFixture.CreateAsync();
-        var projectId = Guid.CreateVersion7();
-        var tools = fixture.CreateTools(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "owner");
-
-        // Act
-        var result = await RunToolAsync<JobToolResponse>(
+        var targets = await fixture.SeedTargetsAsync("tester");
+        var tools = fixture.CreateTools(targets.ProjectId);
+        using var context = fixture.PushInteractiveContext(targets.ProjectId, "tester");
+        var created = await RunToolAsync<JobToolResponse>(
             tools,
             "agw_job_create",
             new
             {
-                prompt = "Scheduled check",
-                agentType = "Agent",
-                agentId = Guid.CreateVersion7(),
-                triggerType = "Interval",
-                triggerValue = "00:05:00",
+                instructions = "Run the scheduled task.",
+                targetKind = "Agent",
+                agentId = targets.AgentId,
+                kind = "Cron",
+                cron = "0 9 * * 1-5",
+                name = "Weekday Job",
+                enabled = false,
             }
         );
 
-        // Assert
-        Assert.Equal(3, result.MaxRetryCount);
-        Assert.True(result.IsEnabled);
-        Assert.Equal(UtcNow.AddMinutes(5), result.NextRunTime);
-        Assert.False(string.IsNullOrWhiteSpace(result.Name));
+        var updated = await RunToolAsync<JobToolResponse>(
+            tools,
+            "agw_job_update",
+            new { jobId = created.Id, cron = "*/10 * * * *" }
+        );
+
+        Assert.Equal(created.Id, updated.Id);
+        Assert.Equal(created.Name, updated.Name);
+        Assert.Equal(created.Instructions, updated.Instructions);
+        Assert.False(updated.Enabled);
+        Assert.Equal("Cron", updated.Schedule.Kind);
+        Assert.Equal("*/10 * * * *", updated.Schedule.Cron);
     }
+
+    [Fact]
+    public async Task GetJobAsync_JobInOtherProject_ThrowsJobNotFound()
+    {
+        await using var fixture = await JobManagementSkillFixture.CreateAsync();
+        var firstTargets = await fixture.SeedTargetsAsync("tester");
+        var secondTargets = await fixture.SeedTargetsAsync("tester");
+        var firstTools = fixture.CreateTools(firstTargets.ProjectId);
+        using var context = fixture.PushInteractiveContext(firstTargets.ProjectId, "tester");
+        var created = await CreateJobAsync(firstTools, firstTargets.AgentId);
+        var secondTools = fixture.CreateTools(secondTargets.ProjectId);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            RunToolAsync<JobToolResponse>(secondTools, "agw_job_get", new { jobId = created.Id })
+        );
+
+        Assert.Equal(ErrorCodes.JobNotFound.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task DeleteJobAsync_ConfirmationMismatch_ThrowsInvalidParam()
+    {
+        await using var fixture = await JobManagementSkillFixture.CreateAsync();
+        var targets = await fixture.SeedTargetsAsync("tester");
+        var tools = fixture.CreateTools(targets.ProjectId);
+        using var context = fixture.PushInteractiveContext(targets.ProjectId, "tester");
+        var created = await CreateJobAsync(tools, targets.AgentId);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            RunToolAsync<JobToolResponse>(
+                tools,
+                "agw_job_delete",
+                new { jobId = created.Id, confirmation = Guid.CreateVersion7().ToString("D") }
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    private static Task<JobToolResponse> CreateJobAsync(IReadOnlyDictionary<string, AIFunction> tools, Guid agentId) =>
+        RunToolAsync<JobToolResponse>(
+            tools,
+            "agw_job_create",
+            new
+            {
+                instructions = "Run the scheduled task.",
+                targetKind = "Agent",
+                agentId,
+                kind = "Interval",
+                interval = "PT15M",
+                name = "Interval Job",
+            }
+        );
 
     private static async Task<T> RunToolAsync<T>(
         IReadOnlyDictionary<string, AIFunction> tools,
@@ -426,28 +197,31 @@ public class JobManagementSkillTests : IDisposable
             ?? throw new Xunit.Sdk.XunitException($"Tool '{toolName}' returned no {typeof(T).Name} result.");
     }
 
-    private static ClaimsPrincipal CreatePrincipal(string userId) =>
-        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], authenticationType: "Test"));
+    private sealed record SeededTargets(Guid ProjectId, Guid AgentId);
 
     private sealed class JobManagementSkillFixture : IAsyncDisposable
     {
-        private readonly SqliteConnection _connection;
-        private readonly ServiceProvider _serviceProvider;
+        private readonly ModuleCompositionTestHost _host;
+        private readonly string _workspaceRoot;
 
-        private JobManagementSkillFixture(
-            SqliteConnection connection,
-            ServiceProvider serviceProvider,
-            JobManagementSkillRegistration registration
-        )
+        private JobManagementSkillFixture(ModuleCompositionTestHost host)
         {
-            _connection = connection;
-            _serviceProvider = serviceProvider;
-            Registration = registration;
+            _host = host;
+            _workspaceRoot = Path.Combine(
+                AppContext.BaseDirectory,
+                ".scratch",
+                "jobs-skill-tests",
+                Guid.CreateVersion7().ToString("N")
+            );
+            Registration = host
+                .Services.GetServices<IAgentSkillRegistration>()
+                .OfType<JobManagementSkillRegistration>()
+                .Single();
+            GeneratedCatalog = host.Services.GetRequiredService<AgwGeneratedToolCatalog>();
         }
 
-        private JobManagementSkillRegistration Registration { get; }
-
-        public AgentSkill CreateSkill(Guid projectId) => Registration.Create(projectId);
+        public JobManagementSkillRegistration Registration { get; }
+        private AgwGeneratedToolCatalog GeneratedCatalog { get; }
 
         public IReadOnlyList<AgwGeneratedToolDescriptor> ToolDeclarations =>
             Registration.ToolTypes.SelectMany(type => GeneratedCatalog.GetTools(type)).ToArray();
@@ -458,12 +232,10 @@ public class JobManagementSkillTests : IDisposable
                 tool => Assert.IsAssignableFrom<AIFunction>(GeneratedCatalog.Create(tool, projectId))
             );
 
-        private AgwGeneratedToolCatalog GeneratedCatalog =>
-            _serviceProvider.GetRequiredService<AgwGeneratedToolCatalog>();
-
         public IDisposable PushInteractiveContext(Guid projectId, string userId)
         {
             var agentId = Guid.CreateVersion7();
+            var turnId = Guid.CreateVersion7();
             var context = new AgentExecutionContext
             {
                 UserId = userId,
@@ -472,106 +244,62 @@ public class JobManagementSkillTests : IDisposable
                 ContextId = Guid.CreateVersion7().ToString("D"),
                 Generation = 0,
                 WorkspaceSnapshot = new ProjectWorkspaceSnapshot("/workspace", [], "fingerprint"),
-                TurnId = Guid.CreateVersion7(),
+                TurnId = turnId,
                 TurnTargetId = agentId,
                 RuntimeType = AgentRuntimeType.Agent,
                 AgentId = agentId,
                 EngineKind = EngineKind.Maf,
                 Provider = ExecutionProvider.InProcess,
             };
-            // 连接先以命令发送者的身份建立用户上下文，再进入该用户的执行作用域。
-            // The connection establishes the sender's user context before entering that user's execution scope.
             var userScope = UserInfoUtil.Push(CreatePrincipal(userId));
+            var output = new TurnBroadcast(turnId, userId, _host.Services.GetRequiredService<TimeProvider>());
             var executionScope = ExecutionScope
-                .Create(
-                    context,
-                    Guid.CreateVersion7(),
-                    new CollectingMessageSink(),
-                    new InMemoryPendingInteractionSet(null)
-                )
+                .Create(context, turnId, output, new InMemoryPendingInteractionSet(null))
                 .Push();
             return new CompositeScope(executionScope, userScope);
         }
 
-        public static async Task<JobManagementSkillFixture> CreateAsync()
+        public async Task<SeededTargets> SeedTargetsAsync(string ownerUserId)
         {
-            var cancellationToken = TestContext.Current.CancellationToken;
-            var connection = new SqliteConnection("Data Source=:memory:");
-            await connection.OpenAsync(cancellationToken);
-            var options = new DbContextOptionsBuilder<AgwDbContext>()
-                .UseSqlite(connection)
-                .UseSnakeCaseNamingConvention()
-                .Options;
-            var timeProvider = new TestTimeProvider(UtcNow);
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddSingleton<TimeProvider>(timeProvider);
-            services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
-            services.AddSingleton<IProjectTaskFacade, NoopProjectTaskFacade>();
-            services.AddScoped<IJobRepository, JobRepository>();
-            services.AddScoped<JobDefinitionDomainService>();
-            services.AddScoped<IJobDeletionCoordinator, JobDeletionCoordinator>();
-            services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
-            services.AddSingleton<JobSchedulerWakeSignal>();
-            services.AddScoped<IUserInfoService, UserInfoService>();
-            services.AddScoped<Agw.Projects.Contracts.Runtime.IProjectRuntimeFacade, TestProjectRuntimeFacade>();
-            services.AddScoped<Agw.Agents.Contracts.Catalog.IAgentCatalogFacade, TestAgentCatalogFacade>();
-            services.AddScoped(_ => new AgwDbContext(options));
-            services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
-            services.AddScoped<IJobsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
-            services.AddScoped<IUnitOfWork>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
-            services.AddScoped<IRepository<Job>>(serviceProvider => new JobRepo(
-                serviceProvider.GetRequiredService<DbContext>(),
-                serviceProvider.GetRequiredService<TimeProvider>()
-            ));
-            services.AddScoped<IRepository<JobLog>, EfRepository<JobLog>>();
-            services.AddScoped<
-                IRepository<ProjectConversationChatHistory>,
-                EfRepository<ProjectConversationChatHistory>
-            >();
-            services.AddScoped<IRepository<ProjectConversation>, EfRepository<ProjectConversation>>();
-            services.AddScoped<JobAppService>();
-            services.AddSingleton<IAgwGeneratedToolModule>(Agw.Generated.Agw.Jobs.AgwToolModule.Instance);
-            services.AddSingleton<AgwGeneratedToolCatalog>();
-            services.AddScoped<TestToolInvocationContext>();
-            services.AddScoped<IAgwToolInvocationContext>(serviceProvider =>
-                serviceProvider.GetRequiredService<TestToolInvocationContext>()
+            var projectId = Guid.CreateVersion7();
+            var agentId = Guid.CreateVersion7();
+            var workspace = Path.Combine(_workspaceRoot, $"workspace-{projectId:N}");
+            Directory.CreateDirectory(workspace);
+            using var userScope = UserInfoUtil.Push(CreatePrincipal(ownerUserId));
+            await using var scope = _host.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            db.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = $"Project {projectId:N}",
+                    Workspace = workspace,
+                }
             );
-            services.AddScoped<IAgwToolInvocationContextInitializer>(serviceProvider =>
-                serviceProvider.GetRequiredService<TestToolInvocationContext>()
+            db.Agents.Add(
+                new Agent
+                {
+                    Id = agentId,
+                    Name = $"agent-{agentId:N}",
+                    DisplayName = "Test Agent",
+                }
             );
-            foreach (
-                Type toolType in Agw
-                    .Generated.Agw.Jobs.AgwToolModule.Instance.Tools.Select(tool => tool.DeclaringType)
-                    .Distinct()
-            )
-            {
-                services.AddScoped(toolType);
-            }
-            var serviceProvider = services.BuildServiceProvider();
-
-            await using (var scope = serviceProvider.CreateAsyncScope())
-            {
-                var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
-                await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-            }
-
-            var registration = new JobManagementSkillRegistration();
-            return new JobManagementSkillFixture(connection, serviceProvider, registration);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            return new SeededTargets(projectId, agentId);
         }
 
-        /// <summary>
-        /// 保存执行作用域输出的消息；这些测试只调用 Job 工具，不读取输出。
-        /// Keeps messages written to the execution scope output; these tests only invoke Job tools and never read it.
-        /// </summary>
-        private sealed class CollectingMessageSink : IExecutionMessageSink
+        public static async Task<JobManagementSkillFixture> CreateAsync()
         {
-            public List<AgwMessage> Messages { get; } = [];
+            var host = await ModuleCompositionTestHost.CreateAsync();
+            return new JobManagementSkillFixture(host);
+        }
 
-            public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
+        public async ValueTask DisposeAsync()
+        {
+            await _host.DisposeAsync();
+            if (Directory.Exists(_workspaceRoot))
             {
-                Messages.Add(message);
-                return ValueTask.CompletedTask;
+                Directory.Delete(_workspaceRoot, recursive: true);
             }
         }
 
@@ -592,101 +320,8 @@ public class JobManagementSkillTests : IDisposable
                 _userScope.Dispose();
             }
         }
-
-        private sealed class TestToolInvocationContext : IAgwToolInvocationContext, IAgwToolInvocationContextInitializer
-        {
-            public Guid ProjectId { get; private set; }
-
-            public void Initialize(Guid projectId)
-            {
-                ProjectId = projectId;
-            }
-        }
-
-        public async Task<Job> SeedJobAsync(
-            Guid projectId,
-            string name,
-            string? prompt = "Prompt",
-            string ownerUserId = "seed"
-        )
-        {
-            await using var scope = _serviceProvider.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
-            var job = new Job
-            {
-                Id = Guid.CreateVersion7(),
-                ProjectId = projectId,
-                AgentType = AgentRuntimeType.Agent,
-                AgentId = Guid.CreateVersion7(),
-                Name = name,
-                Prompt = prompt,
-                TriggerType = TriggerType.Interval,
-                TriggerValue = "00:30:00",
-                NextRunTime = UtcNow.AddMinutes(10),
-                Status = JobStatus.Pending,
-                IsEnabled = true,
-                MaxRetryCount = 3,
-                CreateBy = ownerUserId,
-                CreateTime = UtcNow,
-                UpdateBy = ownerUserId,
-                UpdateTime = UtcNow,
-            };
-            dbContext.Jobs.Add(job);
-            await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
-            return job;
-        }
-
-        public async Task<Job> GetJobAsync(Guid id) =>
-            await GetJobOrDefaultAsync(id) ?? throw new Xunit.Sdk.XunitException($"Job {id} was not found.");
-
-        public async Task<Job?> GetJobOrDefaultAsync(Guid id)
-        {
-            await using var scope = _serviceProvider.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
-            return await dbContext
-                .Jobs.AsNoTracking()
-                .SingleOrDefaultAsync(job => job.Id == id, TestContext.Current.CancellationToken);
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await _serviceProvider.DisposeAsync();
-            await _connection.DisposeAsync();
-        }
-
-        private sealed class NoopProjectTaskFacade : IProjectTaskFacade
-        {
-            public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
-                Task.FromResult<int?>(0);
-
-            public Task<string?> FindContextIdAsync(
-                Guid projectId,
-                Guid conversationId,
-                CancellationToken cancellationToken = default
-            ) => throw new NotSupportedException();
-
-            public Task<ProjectTaskSnapshot> ResolveAsync(
-                ResolveProjectTaskRequest request,
-                CancellationToken cancellationToken = default
-            ) => throw new NotSupportedException();
-
-            public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
-                Task.FromResult<ProjectTaskSnapshot?>(null);
-
-            public Task<ProjectTaskSnapshot> GetOrCreateAsync(
-                StartProjectTaskRequest request,
-                CancellationToken cancellationToken = default
-            ) => throw new NotSupportedException();
-
-            public Task<ProjectTaskSnapshot?> FinishAsync(
-                FinishProjectTaskRequest request,
-                CancellationToken cancellationToken = default
-            ) => Task.FromResult<ProjectTaskSnapshot?>(null);
-
-            public Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
-                IReadOnlyCollection<Guid> taskIds,
-                CancellationToken cancellationToken = default
-            ) => Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(new Dictionary<Guid, Guid>());
-        }
     }
+
+    private static ClaimsPrincipal CreatePrincipal(string userId) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], authenticationType: "Test"));
 }

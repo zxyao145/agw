@@ -85,22 +85,28 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
             throw new AgwException(ErrorCodes.ResourceNotFound, "A2A project was not found.");
         }
 
-        var task = await services
-            .GetRequiredService<IProjectTaskFacade>()
-            .GetOrCreateAsync(
-                new StartProjectTaskRequest(
-                    projectId.Value,
-                    turnId,
-                    JobId: null,
-                    GetInputText(input),
-                    agentName,
-                    context.ContextId,
-                    ownerUserId,
-                    ProjectTaskStatus.Running
-                ),
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        var notifier = services.GetRequiredService<AgwChannelEventNotifier>();
+        ProjectTaskSnapshot task;
+        // 执行准备和 A2A 任务快照使用同一把锁，避免同时创建会话。
+        // Execution setup and A2A task snapshots share the lock to serialize conversation creation.
+        await using (await notifier.AcquireTaskLockAsync(context.TaskId, cancellationToken).ConfigureAwait(false))
+        {
+            task = await services
+                .GetRequiredService<IProjectTaskFacade>()
+                .GetOrCreateAsync(
+                    new StartProjectTaskRequest(
+                        projectId.Value,
+                        turnId,
+                        GetInputText(input),
+                        agentName,
+                        context.ContextId,
+                        ownerUserId,
+                        ProjectTaskStatus.Running
+                    ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
         var executions = services.GetRequiredService<IAgentExecutionFacade>();
         await foreach (
             var executionEvent in executions

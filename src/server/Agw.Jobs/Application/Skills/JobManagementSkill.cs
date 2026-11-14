@@ -21,26 +21,25 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             - Read job-trigger-reference before creating a job or changing its schedule.
             - agw_job_create and agw_job_update require an interactive user context.
             - agw_job_update has patch semantics. Omitted values remain unchanged.
-            - To clear a prompt, set clearPrompt to true. Do not send prompt and clearPrompt together.
-            - When changing the agent target, provide both agentType and agentId.
+            - When changing the target, provide both targetKind and agentId.
             - Before deleting, show the job details and ask the user to confirm the exact job ID.
             - Call agw_job_delete only after confirmation, passing the same job ID in confirmation.
-            - Report the returned job ID and nextRunTime. Never claim a write succeeded without a successful tool result.
+            - Report the returned job ID and dueAt. Never claim a write succeeded without a successful tool result.
             """;
 
     [AgentSkillResource("job-trigger-reference")]
-    [Description("Valid trigger types and values for scheduled jobs.")]
+    [Description("Valid schedule kinds and values for scheduled jobs.")]
     public string JobTriggerReference =>
         """
-            # Job trigger reference
+            # Job schedule reference
 
             All schedules are evaluated in UTC.
 
-            - Once: an RFC 3339 timestamp with `Z` or an explicit offset, for example `2026-08-01T09:00:00Z`.
-            - Interval: a positive .NET TimeSpan value, for example `00:15:00` for fifteen minutes.
-            - Cron: a standard five-field cron expression interpreted in UTC, for example `0 9 * * 1-5`.
+            - Once: set kind to `Once` and `at` to an RFC 3339 timestamp, for example `2026-08-01T09:00:00Z`. A time that is not in the future runs once immediately.
+            - Interval: set kind to `Interval` and `interval` to a positive ISO 8601 duration, for example `PT15M`.
+            - Cron: set kind to `Cron` and `cron` to a standard five-field cron expression, for example `0 9 * * 1-5`.
 
-            AgentType values are `Agent` and `Agentflow`.
+            targetKind values are `Agent` and `Agentflow`.
             """;
 }
 

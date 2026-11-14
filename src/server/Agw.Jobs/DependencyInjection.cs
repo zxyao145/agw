@@ -2,48 +2,20 @@ using Agw.Jobs.Application.Facades;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Contracts.Metrics;
-using Agw.Jobs.Domain.Repositories;
 using Agw.Jobs.Domain.Services;
-using Agw.Jobs.Execution;
-using Agw.Jobs.Infrastructure;
-using Agw.Jobs.Scheduling.Attempts;
-using Agw.Jobs.Scheduling.Coordination;
 using Agw.Skills.Contracts.Registration;
 using Agw.Tools.Abstractions.Generated;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Jobs;
 
 public static class DependencyInjection
 {
-    public sealed record RegistrationOptions(bool AddScheduler = true, bool UseDurableExecution = false);
-
-    public static IServiceCollection AddJobs(
-        this IServiceCollection services,
-        IConfiguration configuration,
-        RegistrationOptions? registrationOptions = null
-    )
+    public static IServiceCollection AddJobs(this IServiceCollection services)
     {
-        registrationOptions ??= new RegistrationOptions();
-        if (registrationOptions.AddScheduler)
-        {
-            services.AddSingleton(registrationOptions);
-            services.AddSingleton<InProcessJobRecovery>();
-            services.AddHostedService<JobHostedService>();
-            services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
-            if (registrationOptions.UseDurableExecution)
-            {
-                services.AddHostedService<DurableJobRecoveryHostedService>();
-            }
-            services.AddScoped<JobAttemptRunner>();
-            services.AddScoped<IJobAttemptOutcomeRecorder, JobAttemptOutcomeRecorder>();
-            services.AddSingleton<JobSchedulerWakeSignal>();
-        }
         services.AddSingleton<IAgentSkillRegistration, JobManagementSkillRegistration>();
         services.AddSingleton<IAgwGeneratedToolModule>(Agw.Generated.Agw.Jobs.AgwToolModule.Instance);
         services.AddScoped<Application.Tools.JobManagementToolExecutor>();
-        services.AddScoped<IJobRepository, JobRepository>();
         services.AddScoped<JobDefinitionDomainService>();
         services.AddScoped<JobAppService>();
         services.AddScoped<IJobMetricsFacade, JobMetricsFacade>();

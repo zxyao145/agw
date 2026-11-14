@@ -107,7 +107,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/jobs": {
+  "/api/jobs/list": {
     parameters: {
       query?: never;
       header?: never;
@@ -116,7 +116,9 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
+        query?: {
+          projectId?: string;
+        };
         header?: never;
         path?: never;
         cookie?: never;
@@ -129,11 +131,64 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob[]"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse[]"];
           };
         };
       };
     };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/get": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          id: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/create": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
     put?: never;
     post: {
       parameters: {
@@ -154,7 +209,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
           };
         };
       };
@@ -165,42 +220,20 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/jobs/{id}": {
+  "/api/jobs/update": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    get: {
+    get?: never;
+    put?: never;
+    post: {
       parameters: {
         query?: never;
         header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
+        path?: never;
         cookie?: never;
       };
       requestBody: {
@@ -215,77 +248,18 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
           };
         };
       };
     };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/jobs/{id}/logs": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "application/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  "/api/jobs/enabled": {
+  "/api/jobs/enable": {
     parameters: {
       query?: never;
       header?: never;
@@ -293,7 +267,8 @@ export interface paths {
       cookie?: never;
     };
     get?: never;
-    put: {
+    put?: never;
+    post: {
       parameters: {
         query?: never;
         header?: never;
@@ -302,7 +277,7 @@ export interface paths {
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["JobEnabledUpdateRequest"];
+          "application/json": components["schemas"]["JobEnableRequest"];
         };
       };
       responses: {
@@ -312,11 +287,88 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfJob"];
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
           };
         };
       };
     };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/delete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["JobIdRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfJobResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/jobs/runs/list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query: {
+          jobId: string;
+          offset?: number;
+          limit?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfJobRunResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -7797,6 +7849,7 @@ export interface components {
       resultFormat: components["schemas"]["ResultFormat"];
       responseSchema?: null | string;
     };
+    /** @description Agent Runtime Type */
     AgentRuntimeType: number;
     AgentSkillRelation: {
       /** Format: uuid */
@@ -8245,22 +8298,22 @@ export interface components {
       title: string;
       detail?: null | string;
     };
-    ApiResultOfJob: {
-      data?: null | components["schemas"]["Job"];
+    ApiResultOfJobResponse: {
+      data?: null | components["schemas"]["JobResponse"];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfJob[]": {
-      data?: null | components["schemas"]["Job"][];
+    "ApiResultOfJobResponse[]": {
+      data?: null | components["schemas"]["JobResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfJobLogResponse[]": {
-      data?: null | components["schemas"]["JobLogResponse"][];
+    "ApiResultOfJobRunResponse[]": {
+      data?: null | components["schemas"]["JobRunResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -8955,6 +9008,8 @@ export interface components {
       /** Format: uuid */
       providerExtensionId?: null | string;
       providerId?: null | string;
+      managedBy: string;
+      managedKey?: null | string;
       ceSource: string;
       config: components["schemas"]["JsonElement"];
       enabled: boolean;
@@ -9040,8 +9095,7 @@ export interface components {
       handlerExtensionId?: null | string;
       handlerId?: null | string;
       handlerConfig?: null | components["schemas"]["JsonElement"];
-      /** Format: uuid */
-      managedByExtensionId?: null | string;
+      managedBy: string;
       managedKey?: null | string;
       /** Format: int64 */
       managedVersion?: null | number | string;
@@ -9194,86 +9248,95 @@ export interface components {
     FormFieldTypeResponse: "Text" | "Secret" | "Url";
     /** Format: binary */
     IFormFile: string;
-    Job: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
-      /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt?: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
-      /** Format: date-time */
-      nextRunTime: string;
-      status: components["schemas"]["JobStatus"];
-      isEnabled: boolean;
-      /** Format: int32 */
-      retryCount: number;
-      /** Format: int32 */
-      maxRetryCount: number;
-      lastError?: null | string;
-      /** Format: byte */
-      rowVersion?: string;
-      /** Format: date-time */
-      createTime: string;
-      createBy?: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy?: null | string;
-    };
     JobCreateRequest: {
+      name?: null | string;
+      enabled: boolean;
       /** Format: uuid */
       projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
+      targetKind: components["schemas"]["AgentRuntimeType"];
       /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt?: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
-      /** Format: int32 */
-      maxRetryCount: number;
-      isEnabled: boolean;
+      agentId: string;
+      instructions?: null | string;
+      schedule?: null | components["schemas"]["JobScheduleDto"];
     };
-    JobEnabledUpdateRequest: {
-      /** Format: uuid */
-      jobId: string;
-      isEnabled: boolean;
-    };
-    JobLogResponse: {
+    JobDeliveryResponse: {
       /** Format: uuid */
       id: string;
-      /** Format: uuid */
-      jobId: string;
-      /** Format: uuid */
-      conversationId: null | string;
-      /** Format: date-time */
-      startTime: string;
-      /** Format: date-time */
-      endTime: null | string;
-      success: boolean;
+      /** Format: int32 */
+      state: number;
       /** Format: int32 */
       attempt: number;
-      errorMessage: null | string;
+      lastError?: null | string;
     };
-    JobStatus: number;
-    JobUpdateRequest: {
+    JobEnableRequest: {
+      /** Format: uuid */
+      id: string;
+      enabled: boolean;
+    };
+    JobIdRequest: {
+      /** Format: uuid */
+      id: string;
+    };
+    JobResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      enabled: boolean;
       /** Format: uuid */
       projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
+      targetKind: components["schemas"]["AgentRuntimeType"];
       /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt?: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
+      agentId: string;
+      instructions: string;
+      schedule: components["schemas"]["JobScheduleResponse"];
+      /** Format: date-time */
+      dueAt?: null | string;
+      scheduleCompleted: boolean;
+      lastDelivery?: null | components["schemas"]["JobDeliveryResponse"];
+    };
+    JobRunResponse: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      deliveryId: string;
       /** Format: int32 */
-      maxRetryCount: number;
-      isEnabled: boolean;
-      status: components["schemas"]["JobStatus"];
+      attempt: number;
+      /** Format: date-time */
+      startedAt: string;
+      /** Format: date-time */
+      endedAt: string;
+      /** Format: int32 */
+      result: number;
+      error?: null | string;
+      /** Format: uuid */
+      conversationId?: null | string;
+    };
+    JobScheduleDto: {
+      kind?: null | string;
+      /** Format: date-time */
+      at?: null | string;
+      interval?: null | string;
+      cron?: null | string;
+    };
+    JobScheduleResponse: {
+      kind: string;
+      /** Format: date-time */
+      at?: null | string;
+      interval?: null | string;
+      cron?: null | string;
+    };
+    JobUpdateRequest: {
+      /** Format: uuid */
+      id: string;
+      name?: null | string;
+      enabled: boolean;
+      /** Format: uuid */
+      projectId: string;
+      targetKind: components["schemas"]["AgentRuntimeType"];
+      /** Format: uuid */
+      agentId: string;
+      instructions?: null | string;
+      schedule?: null | components["schemas"]["JobScheduleDto"];
     };
     JsonElement: unknown;
     LoginRequest: {
@@ -9785,8 +9848,9 @@ export interface components {
       /** Format: uuid */
       conversationId: string;
       contextId: string;
+      kind: string;
       /** Format: uuid */
-      jobId: null | string;
+      relateId: null | string;
       title: string;
       latestStatus: null | components["schemas"]["TaskExecutionStatus"];
       /** Format: int32 */
@@ -9813,8 +9877,9 @@ export interface components {
       /** Format: uuid */
       conversationId: string;
       contextId: string;
+      kind: string;
       /** Format: uuid */
-      jobId: null | string;
+      relateId: null | string;
       title: string;
       latestStatus: null | components["schemas"]["TaskExecutionStatus"];
       /** Format: int32 */
@@ -10271,7 +10336,6 @@ export interface components {
       kind: "tool";
       definition: components["schemas"]["ToolDefinition"];
     };
-    TriggerType: number;
     UnpublishedEventRecord: {
       topic: string;
       /** Format: uuid */

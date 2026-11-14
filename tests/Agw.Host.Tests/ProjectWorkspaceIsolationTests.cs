@@ -238,7 +238,7 @@ public sealed class ProjectWorkspaceIsolationTests
                 .AddAgents(configuration)
                 .AddFiles(configuration)
                 .AddInfrastructure(configuration)
-                .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
+                .AddJobs()
                 .AddProviders(configuration)
                 .AddSkills(configuration)
                 .AddProjects(configuration)

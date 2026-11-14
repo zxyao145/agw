@@ -1008,11 +1008,6 @@ public class ExecutionConnectionTests
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
-        public Task<ProjectTaskSnapshot?> FinishAsync(
-            FinishProjectTaskRequest request,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
         public Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
             IReadOnlyCollection<Guid> taskIds,
             CancellationToken cancellationToken = default
@@ -1049,7 +1044,6 @@ public class ExecutionConnectionTests
             task.ProjectConversationId,
             task.ProjectId,
             task.ContextId,
-            task.JobId,
             task.Title,
             ProjectTaskStatus.Pending,
             task.ErrorMessage,

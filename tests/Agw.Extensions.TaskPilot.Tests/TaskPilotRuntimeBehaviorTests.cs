@@ -22,6 +22,7 @@ using Agw.Notifications;
 using Agw.Providers;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agents;
@@ -761,6 +762,58 @@ public sealed class TaskPilotRuntimeBehaviorTests
             );
             Assert.Equal(1, await assertions.MatterActivities.CountAsync(TestContext.Current.CancellationToken));
             Assert.Equal(1, await assertions.ConcurrencySlots.CountAsync(TestContext.Current.CancellationToken));
+        }
+    }
+
+    [Fact]
+    public async Task RuleEvent_BackgroundExecution_CreatesNativeConversation()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var (host, generation) = await CreateHostAsync();
+        await using var runtimeHost = host;
+        var rule = NewRule();
+        await using (var db = CreateDbContext(host, generation))
+        {
+            db.Rules.Add(rule);
+            db.RuleRevisions.Add(
+                new TaskPilotRuleRevision
+                {
+                    RootId = rule.Id,
+                    Version = rule.Version,
+                    SnapshotJson = JsonSerializer.Serialize(ToRuleDetails(rule), JsonOptions),
+                }
+            );
+            db.UserStates.Add(NewUserState());
+            await db.SaveChangesAsync(token);
+        }
+
+        var result = await host.InvokeEventHandlerAsync(
+            ExtensionId,
+            RuleEventInvocation(rule.Id, NewRuleEvent("native-background-execution")),
+            token
+        );
+        Assert.Equal(ExtensionEventHandlerResultKind.Succeeded, result.Kind);
+
+        using var user = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, UserId)], "Test"))
+        );
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        await using var scope = host.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        while (true)
+        {
+            var conversation = await context
+                .ProjectConversations.AsNoTracking()
+                .SingleOrDefaultAsync(row => row.ProjectId == ProjectId, timeout.Token);
+            if (conversation is not null)
+            {
+                Assert.Equal(ConversationKinds.Native, conversation.Kind);
+                Assert.Null(conversation.RelateId);
+                Assert.Equal(ExtensionId.ToString("D"), conversation.ExtensionId);
+                break;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(50), timeout.Token);
         }
     }
 
@@ -2005,7 +2058,7 @@ public sealed class TaskPilotRuntimeBehaviorTests
             await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
             AgwDbContext db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
             EventSubscription? subscription = await db.EventSubscriptions.SingleOrDefaultAsync(
-                row => row.ManagedByExtensionId == ExtensionId && row.ManagedKey == managedKey,
+                row => row.ManagedBy == EventManagedBy.ForExtension(ExtensionId) && row.ManagedKey == managedKey,
                 TestContext.Current.CancellationToken
             );
             if (

@@ -17,7 +17,6 @@
     <ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
     <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
     <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />
-    <ProjectReference Include="..\Agw.Jobs\Agw.Jobs.csproj" />
   </ItemGroup>
 
   <ItemGroup>

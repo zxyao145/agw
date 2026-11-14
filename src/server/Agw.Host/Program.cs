@@ -290,17 +290,7 @@ public static class AgwHostApplication
                 .AddExtensionCapabilities()
                 .AddEvents(runWorkers: hasControlPlane)
                 .AddNotifications(builder.Configuration, runWorkers: hasControlPlane)
-                .AddJobs(
-                    builder.Configuration,
-                    new Agw.Jobs.DependencyInjection.RegistrationOptions(
-                        AddScheduler: hasControlPlane,
-                        UseDurableExecution: string.Equals(
-                            builder.Configuration["Execution:Provider"],
-                            "Distributed",
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                    )
-                )
+                .AddJobs()
                 .AddProviders(builder.Configuration)
                 .AddSkills(builder.Configuration)
                 .AddProjects(builder.Configuration)

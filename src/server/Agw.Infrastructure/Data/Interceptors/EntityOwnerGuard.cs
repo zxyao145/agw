@@ -1,7 +1,6 @@
 using System.Globalization;
 using Agw.Auth.Contracts;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -29,13 +28,6 @@ internal static class EntityOwnerGuard
         if (entry.Entity is Setting { UserId: null })
             return;
         if (!UserInfoUtil.IsContextActive || UserInfoUtil.IsSystemScopeActive)
-        {
-            return;
-        }
-
-        // JobLog 由调度上下文代写，新建时不要求所有者等于当前用户。
-        // JobLog rows are written on behalf of the scheduler, so creation does not require the owner to be the current user.
-        if (stage == EntityOwnerStage.Created && entry.Entity is JobLog)
         {
             return;
         }

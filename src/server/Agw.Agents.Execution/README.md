@@ -2,7 +2,7 @@
 
 `Agw.Agents.Execution.csproj` 是 Agents 逻辑模块的执行实现程序集，单向引用 `Agw.Agents`。Host 分别调用 `AddAgents` 与 `AddAgentExecution`；定义管理通过 Contracts 中的 `IAgentflowMermaidProvider` 查询 Mermaid。启动清单的纯数据结构与持久化接口留在 Agents，运行时映射留在此工程。程序集职责见 [项目架构](../../../docs/2.Architecture.md)。
 
-`Execution` 负责把客户端命令转换为 Agent 或 Agentflow 的一次次执行 turn，并管理连接状态、运行时复用、中断、HumanGate、用户信息交互、消息输出和资源释放。它既包含 SignalR 实时执行入口，也提供给 A2A、Jobs 等模块复用的 Agent/Agentflow 执行服务。
+`Execution` 负责把客户端命令转换为 Agent 或 Agentflow 的一次次执行 turn，并管理连接状态、运行时复用、中断、HumanGate、用户信息交互、消息输出和资源释放。SignalR、A2A 和 Events 投递都使用这里的 Agent 和 Agentflow 执行服务。
 
 Connection 生命周期、Command Handler 接入与状态所有权见 [执行协议](../../../docs/ws-flow.md)。
 
@@ -86,7 +86,7 @@ InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查�
 
 ## 两套执行提供者
 
-实时执行保留两套实现，并通过 `Execution:Provider` 在进程启动时二选一。它不是按请求动态切换；同一套部署中的所有 Host 必须使用相同配置。拆分部署中，Data Plane 映射 SignalR/A2A 并运行 worker，Control Plane 只为 Jobs 注册 durable client，Standalone 同时组合两者。
+实时执行在进程启动时通过 `Execution:Provider` 选择实现，同一套部署中的所有 Host 必须使用相同配置。独立部署中，Data Plane 映射 SignalR 和 A2A 并运行执行 worker。Control Plane 的 Events worker 通过 `IBackgroundExecutionFacade` 提交投递执行。Standalone 同时提供两个 Host 的职责。
 
 | 能力 | `InProcess`（默认） | `Distributed`（集群） |
 | --- | --- | --- |
@@ -101,7 +101,7 @@ InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查�
 
 默认值仍为 `InProcess`，因此没有配置集群依赖的现有部署行为不变。选择 `Distributed` 时会在启动阶段校验 PostgreSQL 与 PostgreSQL DistributedLock，不会静默降级到进程内实现。消息回放默认也使用 PostgreSQL；只有显式选择 Redis provider 时才要求 Redis connection string。
 
-当前 `Distributed` provider 只接受 `ExecCommand.stream=true`。非流式缓冲若要跨多个 HITL segment 保持与进程内模式完全一致，需要另行定义持久缓冲语义；本实现选择明确拒绝，而不是静默丢失或提前发送缓冲消息。Distributed Jobs 与 A2A 通过 transport-neutral durable request Interface 登记同一状态机；Jobs 固定使用 Full access 自动批准普通工具调用，但拒绝需要用户回答或人工关卡的 HITL；A2A 沿用调用方权限设置，未处理的等待状态会失败或中断。
+`Distributed` provider 要求 `ExecCommand.stream=true`。Events 投递和 A2A 都使用 durable 执行状态机。Job 订阅以 `FullAccess` 执行普通工具调用，人工交互策略为 `Reject`。A2A 沿用调用方权限设置，遇到未处理的人工等待会失败或中断。
 
 ## 关键目录与入口
 
@@ -112,7 +112,7 @@ Agw.Agents.Execution/
 ├── Inbound/
 │   ├── SignalR/            # Hub 与连接注册
 │   ├── Connections/        # 连接生命周期与状态
-│   └── Facades/            # A2A、Jobs 执行入口
+│   └── Facades/            # A2A 和 Events 执行入口
 ├── Outbound/
 │   ├── IExecutionMessageSink.cs
 │   ├── SignalR/            # SignalR Sink 与客户端消息回调契约
@@ -426,7 +426,7 @@ sequenceDiagram
 1. `ExecCommandHandler` 校验 `agentId`，然后把命令交给 connection context。
 2. Context 用 `ExecutionBusy` 拒绝同一条 connection 上的并发 turn；进程内 turn 已经通过广播写出结束消息时视为正在收尾，Context 等待它空闲后受理新命令，因此客户端收到 `turn-finished` 后立即发出的下一轮不会被拒绝。没有 settings 时创建内置 project 的默认快照，并绑定本命令的对话。
 3. `conversationId` 必须与连接配置的对话一致，写入检查通过之后，`IProjectTaskFacade` 按当前用户和 Project 创建或读取该 conversation：已有对话沿用保存的 `ContextId`，新对话在首次受理时生成 UUIDv7 `ContextId`；同一次提交中写入初始 task record，提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。解析请求带 `RequesterExtensionId`（`Settings.ExtensionId`）：新对话的创建方 `ExtensionId` 记为请求方（宿主为 `host`），与这一轮之后是否受理成功无关；extension 在开放对话（创建方为 `host`、generation 为 0、没有已受理的 Turn）中解析任务时，`IConversationCreatorStore` 在对话行锁内重新判断并把创建方记为该 extension，后来的 extension 读到已确定的创建方而被拒绝。
-4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint。客户端不再发送它；Facade 与 A2A、Job 等内部入口仍可以按已知的 `contextId` 创建或定位对话，并校验它与对话一致。
+4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint。客户端不再发送它；A2A 和 Events 后台执行 Facade 通过受理流程创建或定位对话，并校验 `contextId` 与对话一致。
 5. target 改变时释放旧 runtime；同一 Agent target 在每个新 turn 开始前查询当前用户的 definition 更新时间，只有项目、context、generation 和 definition 版本均匹配才复用。definition 版本包含 `background-agents` Tool Block 所允许的子 Agent definition，子 Agent 修改后父 runtime 同样重建。definition 修改后整体重建 runtime，使模型、provider、凭证、环境变量及 Extra 同步更新；保留 conversation 和外部 provider session 绑定，沿用恢复流程。当前运行或等待人工响应的 turn 不受影响，SignalR 连接无需断开。重建失败时清除已释放的 runtime 引用，后续请求可重试。
 6. Context 从当前 connection 状态创建 `ExecutionStartRequest`；`InProcessExecutionStarter` 结合绑定的用户、message sink 和回调生成 `RuntimeTurnContext`，再调用 RuntimeFactory。
 7. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
@@ -572,7 +572,7 @@ Execution.Provider
 
 PostgreSQL event stream 另使用一张 `execution_stream_entry` append-only 表，保存 `TurnId + SegmentIndex + Sequence + 加密 PayloadJson`。这张表不能与状态行合并：流式 token 数量无界且写入频繁，把它们放入 `durable_execution` 会持续放大单行、制造状态更新冲突。它也不能复用对话历史表，因为对话历史不具备 execution cursor 和逐条传输消息语义。
 
-无人值守的 Durable Job 不消费 event stream。Control Plane 通过轻量 outcome 投影每秒检查一次状态，只在失败终态额外读取加密错误；A2A 和交互式连接仍按 cursor 消费消息流。这样 Job 完成等待不会按运行时长持续加载 manifest 或回放输出。
+Job 执行是 Events 投递的一部分。Control Plane 和 Standalone 的 Events workers 处理 Timer 计划与投递；每次投递通过 `IBackgroundExecutionFacade` 提交后台执行。Distributed 部署由 Data Plane worker 执行已提交的请求，Events 根据完成结果更新投递和尝试记录。Jobs API 从这些尝试记录生成运行历史，并通过 `turn_id` 定位项目会话。
 
 因此新增实体严格保持为两张表：一张有界状态快照，一张可选的 PostgreSQL 消息流。单行状态快照保证一次 segment 的 checkpoint、pending 和状态一起成功或一起失败；任意 event stream 实现都不保存执行事实。消息流完全不可用时，执行仍能等待、回答、恢复，并根据 PostgreSQL 状态合成 pending/terminal 消息。
 
@@ -902,17 +902,14 @@ dotnet test tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj
 
 ```bash
 dotnet test tests/Agw.A2A.Tests/Agw.A2A.Tests.csproj
-dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
+dotnet test tests/Agw.Events.Tests/Agw.Events.Tests.csproj
 ```
 
 ## 非 SignalR 调用
 
-A2A 和 Jobs 不经过 `ExecutionHub`、connection registry 或 command dispatcher。它们只调用 `Agw.Agents.Contracts` 中的 `IAgentExecutionFacade`：
+A2A 调用 `IAgentExecutionFacade.ExecuteStreamingAsync`，将统一执行事件映射为 A2A 协议事件。Events 投递 worker 通过 `IBackgroundExecutionFacade` 提交执行，并通过执行完成事件更新投递和运行尝试。
 
-- A2A 使用 streaming 方法并把统一执行事件映射为 A2A 协议事件；
-- Jobs 使用非 streaming 方法等待执行结果，显式传入 `PermissionMode = FullAccess` 和 `HumanInteractionPolicy = Reject`；
-- 权限通过执行契约传入 InProcess Agent/Agentflow，并随 durable manifest 保存，worker 恢复时继续使用。普通工具审批返回 `always-tool` 响应后继续执行；`ask_user_question` 和 HumanGate 不会被自动批准，无人值守时明确失败；
-- Full access 对 Codex 同时映射为 `SandboxMode = DangerFullAccess` 与 `ApprovalPolicy = Never`，对 Claude Code 映射为 `bypassPermissions`；保留工作目录配置及用户资源归属限制。未指定权限的调用方保持原配置；
-- InProcess / Distributed 的选择以及 Agent / Agentflow runtime 的差异都留在 Agents 模块内部；恢复和中断仅通过独立的 `IDurableAgentExecutionFacade` 暴露。
-
-因此，修改 Agent/Agentflow 构造或 session 持久化时，调用方不需要了解 runtime 实现；修改公开 Contracts 时才需要同时检查 A2A 和 Jobs。只修改 connection command 时，影响范围通常局限在实时执行链路。
+- Job 订阅以 `FullAccess` 执行，人工交互策略为 `Reject`。新建会话记录 `kind = event:timer` 和触发事件的 `relate_id`。
+- 执行权限随请求传入 InProcess Agent 或 Agentflow，并保存在 durable manifest 中供 worker 恢复使用。普通工具审批收到 `always-tool` 响应后继续执行。无人值守执行遇到 `ask_user_question` 或 HumanGate 时返回失败。
+- `FullAccess` 对 Codex 映射为 `SandboxMode = DangerFullAccess` 和 `ApprovalPolicy = Never`，对 Claude Code 映射为 `bypassPermissions`。工作目录和用户资源归属限制继续适用。
+- Agents 模块根据 `Execution:Provider` 选择运行方式。`IDurableAgentExecutionFacade` 提供 durable 执行的恢复和中断入口。

@@ -4,10 +4,7 @@ using Agw.Infrastructure;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
-using Agw.Infrastructure.Jobs;
 using Agw.Integrations.Application.Persistence;
-using Agw.Jobs.Application.Persistence;
-using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
 using Agw.Shared.Configuration;
@@ -17,7 +14,6 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application.Persistence;
 using Agw.Tools.Application.Persistence;
-using Medallion.Threading;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -32,26 +28,6 @@ public class InfrastructureRegistrationTests
     public void DistributedLockProvider_BelongsToInfrastructureConfiguration()
     {
         Assert.Equal("Agw.Infrastructure.Configuration", typeof(DistributedLockProvider).Namespace);
-    }
-
-    [Fact]
-    public void AddInfrastructure_RegistersProjectExecutionLockRouter()
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" })
-            .Build();
-        var services = new ServiceCollection();
-
-        services.AddInfrastructure(configuration);
-
-        var descriptor = services.Last(x => x.ServiceType == typeof(IProjectExecutionLock));
-        Assert.Equal(typeof(ProjectExecutionLockRouter), descriptor.ImplementationType);
-        Assert.Contains(services, x => x.ServiceType == typeof(InMemoryProjectExecutionLock));
-        Assert.Contains(
-            services,
-            x => x.ServiceType == typeof(Func<DistributedLockProvider, string, IDistributedLockProvider>)
-        );
-        Assert.Contains(services, x => x.ServiceType == typeof(IConfigureOptions<DistributedLockSettings>));
     }
 
     [Fact]
@@ -156,7 +132,6 @@ public class InfrastructureRegistrationTests
             Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
             Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IAgentsDbContext>());
             Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IProjectsDbContext>());
-            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IJobsDbContext>());
             Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IAuthDbContext>());
             Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IIntegrationsDbContext>());
             Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IProvidersDbContext>());

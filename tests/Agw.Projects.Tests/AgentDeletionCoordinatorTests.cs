@@ -2,10 +2,11 @@ using System.Data.Common;
 using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -17,8 +18,8 @@ public sealed partial class ProjectDeletionCoordinatorTests
 {
     [Theory]
     [InlineData("workflow")]
-    [InlineData("enabled-job")]
-    [InlineData("disabled-job")]
+    [InlineData("enabled-job-subscription")]
+    [InlineData("disabled-job-subscription")]
     public async Task DeleteAgentAsync_DefinitionReference_RejectsWithoutDeletingState(string reference)
     {
         using var user = PushUser("tester");
@@ -47,18 +48,19 @@ public sealed partial class ProjectDeletionCoordinatorTests
                 }
             );
         }
-        else
+        else if (reference is "enabled-job-subscription" or "disabled-job-subscription")
         {
-            context.Jobs.Add(
-                new Job
+            context.EventSubscriptions.Add(
+                new EventSubscription
                 {
-                    Id = Guid.NewGuid(),
-                    ProjectId = project.Id,
+                    Id = Guid.CreateVersion7(),
                     CreateBy = "tester",
-                    Name = "dependent",
+                    ProjectId = project.Id,
+                    TargetKind = EventSubscriptionTargetKind.Agent,
                     AgentId = agent.Id,
-                    AgentType = AgentRuntimeType.Agent,
-                    IsEnabled = reference == "enabled-job",
+                    ManagedBy = EventManagedBy.Job,
+                    ManagedKey = Guid.CreateVersion7().ToString("D"),
+                    Enabled = reference == "enabled-job-subscription",
                 }
             );
         }
@@ -72,6 +74,39 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.True(await context.Agents.AnyAsync(item => item.Id == agent.Id, token));
         Assert.Equal(1, await context.AgentSessionStates.CountAsync(token));
         Assert.Equal(1, await context.ProjectConversationBindings.CountAsync(token));
+    }
+
+    [Fact]
+    public async Task DeleteAgentAsync_UserSubscriptionReference_DeletesAgent()
+    {
+        using var user = PushUser("tester");
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync();
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options);
+        await using var context = new AgwDbContext(options);
+        var (agent, project, _) = await SeedAgentStateAsync(context);
+        context.EventSubscriptions.Add(
+            new EventSubscription
+            {
+                Id = Guid.CreateVersion7(),
+                CreateBy = "tester",
+                ProjectId = project.Id,
+                TargetKind = EventSubscriptionTargetKind.Agent,
+                AgentId = agent.Id,
+                Enabled = true,
+            }
+        );
+        await context.SaveChangesAsync(token);
+
+        var deleted = await new AgentDeletionCoordinator(context, InMemoryApplicationLock.Shared).DeleteAsync(
+            agent.Id,
+            "tester",
+            token
+        );
+
+        Assert.True(deleted);
+        Assert.False(await context.Agents.AnyAsync(item => item.Id == agent.Id, token));
     }
 
     [Fact]

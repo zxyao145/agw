@@ -32,7 +32,7 @@ Domain entities hold state. A Behavior handles rules within one Aggregate, while
 
 Each table has one owning module. Sharing entity types and a database does not permit direct access to another module’s tables; use that module’s published interfaces.
 
-Each module that owns tables declares its persistence interface `I<Module>DbContext` in `Application/Persistence`. There are nine: Agents, Auth, Integrations, Jobs, Projects, Providers, Settings, Skills, and Tools. Files, Setup, and A2A own no tables and have no such interface. Within a request, one `AgwDbContext` instance implements these interfaces. Modules share database resources while limiting the data each can access. Cross-module calls use Contracts; approved Infrastructure adapters handle cross-module transactions.
+Each module that owns tables declares its persistence interface `I<Module>DbContext` in `Application/Persistence`. The ten modules are Agents, Auth, Events, Integrations, Notifications, Projects, Providers, Settings, Skills, and Tools. Files, Setup, A2A, and Jobs own no tables and have no such interface. Within a request, one `AgwDbContext` instance implements these interfaces. Modules share database resources while limiting the data each can access. Cross-module calls use Contracts, and approved Infrastructure adapters handle cross-module transactions.
 
 `Agw.Agents.Execution → Agw.Agents` is one-way; both assemblies belong to the Agents module. Selective DDD for Agentflows does not extend to ordinary CRUD modules.
 

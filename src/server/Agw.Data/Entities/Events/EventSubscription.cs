@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Agw.Shared.Contracts.Events;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Events;
@@ -37,7 +38,7 @@ public class EventSubscription : BaseEntity
 
     public string? HandlerConfigJson { get; set; }
 
-    public Guid? ManagedByExtensionId { get; set; }
+    public string ManagedBy { get; set; } = EventManagedBy.User;
 
     public string? ManagedKey { get; set; }
 

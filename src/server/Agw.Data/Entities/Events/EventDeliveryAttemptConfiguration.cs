@@ -15,5 +15,6 @@ public sealed class EventDeliveryAttemptConfiguration : IEntityTypeConfiguration
         builder.Property(entity => entity.StartedAt).IsRequired();
         builder.Property(entity => entity.EndedAt).IsRequired();
         builder.Property(entity => entity.Result).HasConversion<int>().IsRequired();
+        builder.HasIndex(entity => new { entity.DeliveryId, entity.Attempt });
     }
 }

@@ -240,8 +240,11 @@ public sealed class EventManagementAppService
 
     private static void CheckEditable(EventSubscription subscription, long? version)
     {
-        if (subscription.ManagedByExtensionId.HasValue)
-            throw new AgwException(ErrorCodes.EventSubscriptionManaged);
+        EventManagedRecordGuard.EnsureUserManaged(
+            subscription.ManagedBy,
+            ErrorCodes.EventSubscriptionManaged,
+            "Event subscription"
+        );
         if (version != subscription.Version)
             throw new AgwException(ErrorCodes.EventSubscriptionModificationConflict);
     }
@@ -281,7 +284,7 @@ public sealed class EventManagementAppService
             HandlerExtensionId = row.HandlerExtensionId,
             HandlerId = row.HandlerId,
             HandlerConfig = Parse(row.HandlerConfigJson),
-            ManagedByExtensionId = row.ManagedByExtensionId,
+            ManagedBy = row.ManagedBy,
             ManagedKey = row.ManagedKey,
             ManagedVersion = row.ManagedVersion,
             ManagedState = row.ManagedState,

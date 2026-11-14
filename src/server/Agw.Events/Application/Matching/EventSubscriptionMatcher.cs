@@ -51,16 +51,18 @@ public static class EventSubscriptionMatcher
 
     private static bool IsTrustedPublisher(EventRecord eventRecord, EventSource source, EventSubscription subscription)
     {
-        if (subscription.ManagedByExtensionId is not { } extensionId || source.Kind != EventSourceKind.Publisher)
+        if (!EventManagedBy.IsExtension(subscription.ManagedBy) || source.Kind != EventSourceKind.Publisher)
         {
             return true;
         }
 
+        // extension 的 publisher key 与 managed_by 的写法相同：ext:<extensionId>。
+        // An extension's publisher key has the same form as managed_by: ext:<extensionId>.
         var trustedPublisherKey =
             source.PublisherKey == "agw.execution"
             || source.PublisherKey == "agw.notifications"
-            || source.PublisherKey == $"ext:{extensionId}"
-            || source.PublisherKey == $"agw.scheduler:ext:{extensionId}";
+            || source.PublisherKey == subscription.ManagedBy
+            || source.PublisherKey == $"agw.scheduler:{subscription.ManagedBy}";
         return trustedPublisherKey && eventRecord.CreateBy == source.CreateBy;
     }
 

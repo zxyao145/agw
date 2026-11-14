@@ -1,11 +1,18 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Projects.Contracts;
 
-public record TaskCreateRequest(Guid? JobId, string Input, string? Title = null, string? ContextId = null);
+public record TaskCreateRequest(
+    string Input,
+    string? Title = null,
+    string? ContextId = null,
+    string Kind = ConversationKinds.Native,
+    Guid? RelateId = null
+);
 
 public record ProjectConversationTitleUpdateRequest(string Title);
 
@@ -49,7 +56,8 @@ public record ProjectConversationSummaryResponse(
     string ProjectId,
     Guid ConversationId,
     string ContextId,
-    Guid? JobId,
+    string Kind,
+    Guid? RelateId,
     string Title,
     TaskExecutionStatus? LatestStatus,
     int ExecutionCount,
@@ -65,7 +73,8 @@ public record ProjectConversationResponse(
     string ProjectId,
     Guid ConversationId,
     string ContextId,
-    Guid? JobId,
+    string Kind,
+    Guid? RelateId,
     string Title,
     TaskExecutionStatus? LatestStatus,
     int ExecutionCount,

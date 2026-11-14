@@ -129,7 +129,7 @@ export default function ProjectDetailsPage() {
 
   const createTaskMutation = useMutation({
     mutationFn: async (body: ReturnType<typeof buildCreateTaskJobRequest>) => {
-      return await apiPost("/api/jobs" as never, { body } as never);
+      return await apiPost("/api/jobs/create", { body });
     },
     onSuccess: async () => {
       toast.success("Task created.");

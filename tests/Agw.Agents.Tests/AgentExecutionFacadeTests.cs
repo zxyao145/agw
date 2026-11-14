@@ -24,7 +24,7 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
     [Theory]
     [InlineData(null)]
     [InlineData(AgentExecutionPermissionMode.FullAccess)]
-    public async Task ExecuteAsync_InProcess_RunsTurnAndRestoresUserContext(
+    public async Task ExecuteStreamingAsync_InProcess_RunsTurnAndRestoresUserContext(
         AgentExecutionPermissionMode? permissionMode
     )
     {
@@ -38,17 +38,23 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
         UserInfoUtil.Current = previousUser;
         try
         {
-            var result = await facade.ExecuteAsync(
-                await SeedAsync(CreateRequest(turnId, agentId, permissionMode: permissionMode)),
-                cancellationToken
-            );
+            var messages = new List<AgwMessage>();
+            await foreach (
+                var executionEvent in facade.ExecuteStreamingAsync(
+                    await SeedAsync(CreateRequest(turnId, agentId, permissionMode: permissionMode)),
+                    cancellationToken
+                )
+            )
+            {
+                messages.Add(executionEvent.Message);
+            }
 
-            Assert.Equal(AgentExecutionState.Completed, result.State);
+            var finished = Assert.Single(messages, AgwMessageClassifier.IsTurnFinished);
+            Assert.Equal("completed", finished.AdditionalProperties!["status"]);
             Assert.Contains(
-                result.Messages,
+                messages,
                 message => message.Contents.OfType<AgwTextContent>().Any(content => content.Content == "done")
             );
-            Assert.DoesNotContain(result.Messages, AgwMessageClassifier.IsTurnFinished);
             Assert.Equal(
                 Agw.Shared.Data.Entities.Projects.ProjectConversationTurnStatus.Completed,
                 (await _persistence.ReadTurnAsync(turnId)).Status
@@ -96,26 +102,33 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExecuteAsync_InProcessAllowPolicy_StillUsesUnattendedRules()
+    public async Task ExecuteStreamingAsync_InProcessAllowPolicy_StillUsesUnattendedRules()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var agentId = await AddAgentAsync("owner", cancellationToken);
         _kit.Runtimes.RequestsApproval = true;
         var facade = CreateInProcessFacade();
 
-        var result = await facade.ExecuteAsync(
-            await SeedAsync(
-                CreateRequest(
-                    Guid.CreateVersion7(),
-                    agentId,
-                    HumanInteractionPolicy.Allow,
-                    AgentExecutionPermissionMode.FullAccess
-                )
-            ),
-            cancellationToken
-        );
+        var messages = new List<AgwMessage>();
+        await foreach (
+            var executionEvent in facade.ExecuteStreamingAsync(
+                await SeedAsync(
+                    CreateRequest(
+                        Guid.CreateVersion7(),
+                        agentId,
+                        HumanInteractionPolicy.Allow,
+                        AgentExecutionPermissionMode.FullAccess
+                    )
+                ),
+                cancellationToken
+            )
+        )
+        {
+            messages.Add(executionEvent.Message);
+        }
 
-        Assert.Equal(AgentExecutionState.Completed, result.State);
+        var finished = Assert.Single(messages, AgwMessageClassifier.IsTurnFinished);
+        Assert.Equal("completed", finished.AdditionalProperties!["status"]);
         Assert.Equal(2, _kit.Runtimes.TurnContexts.Count);
     }
 
@@ -183,7 +196,6 @@ public sealed class AgentExecutionFacadeTests : IAsyncLifetime
                 Guid.CreateVersion7(),
                 Guid.CreateVersion7(),
                 "context",
-                null,
                 "Task",
                 ProjectTaskStatus.Running,
                 null,

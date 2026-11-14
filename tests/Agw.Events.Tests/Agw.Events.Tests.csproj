@@ -13,6 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
+    <Compile Include="../ModuleCompositionTestHost.cs" Link="ModuleCompositionTestHost.cs" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
     <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />

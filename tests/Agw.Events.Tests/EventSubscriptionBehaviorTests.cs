@@ -1,5 +1,6 @@
 using Agw.Events.Domain.Behaviors;
 using Agw.Events.Domain.ValueObjects;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
 using Xunit;
 
@@ -7,6 +8,8 @@ namespace Agw.Events.Tests;
 
 public sealed class EventSubscriptionBehaviorTests
 {
+    private static readonly Guid ExtensionId = Guid.Parse("019a4c17-0000-7000-8000-000000000001");
+
     [Fact]
     public void Upsert_ManagedSubscriptionBySequence_IgnoresStaleRequest()
     {
@@ -30,6 +33,7 @@ public sealed class EventSubscriptionBehaviorTests
         Assert.Equal("current", staleName);
         Assert.True(newerAccepted);
         Assert.Equal("newer", subscription.Name);
+        Assert.Equal(ExtensionId, subscription.HandlerExtensionId);
         Assert.Equal(8L, subscription.ManagedVersion);
         Assert.Equal(EventSubscriptionManagedState.Active, subscription.ManagedState);
         Assert.Equal(3, subscription.Version);
@@ -41,7 +45,7 @@ public sealed class EventSubscriptionBehaviorTests
         var subscription = new EventSubscription
         {
             CreateBy = "owner",
-            ManagedByExtensionId = Guid.CreateVersion7(),
+            ManagedBy = EventManagedBy.ForExtension(ExtensionId),
             ManagedKey = "rule:42",
         };
         var behavior = new EventSubscriptionBehavior(subscription);
@@ -62,6 +66,7 @@ public sealed class EventSubscriptionBehaviorTests
             SourceIdsJson = "[]",
             PublisherKeysJson = "[]",
             EventTypesJson = "[\"com.example.updated\"]",
+            HandlerExtensionId = ExtensionId,
             HandlerId = "handler",
             HandlerConfigJson = "{}",
         };

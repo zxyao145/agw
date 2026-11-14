@@ -6,7 +6,7 @@ lastmod: 2026-09-25
 translationKey: docs/operations/split
 ---
 
-分离部署把管理和调度放在 Control Plane（控制面），把任务执行放在 Data Plane（数据面）。需要单独维护执行环境或增加执行节点时，可以采用这种方式；只在一台主机试用时，[Standalone]({{< relref "/docs/operations/standalone" >}})更容易配置。
+分离部署由 Control Plane（控制面）运行管理 API、Events Timer 计划和投递 Worker，Data Plane（数据面）运行 Distributed 执行 Worker。需要单独维护执行环境或增加执行节点时，可以采用这种方式；只在一台主机试用时，[Standalone]({{< relref "/docs/operations/standalone" >}})更容易配置。
 
 本页面向熟悉容器、数据库和反向代理的部署者。开始前，准备共享 PostgreSQL、用于解密凭据的 Data Protection 密钥，以及各执行节点都能访问的工作目录。入口代理还需要支持 WebSocket，以便持续传输对话事件。
 
@@ -14,8 +14,8 @@ translationKey: docs/operations/split
 
 | Host | 职责 |
 | --- | --- |
-| Control Plane | Setup、Web、管理 API、Jobs 调度 |
-| Data Plane | SignalR Execution、A2A、持久化执行 workers |
+| Control Plane | Setup、Web、管理 API、Events Timer 计划和投递 Worker |
+| Data Plane | SignalR Execution、A2A、Distributed 执行 Worker |
 | Standalone | 合并两种职责，适合单机 |
 
 分离部署使用 Distributed 执行模式。在这种模式下，Chat 中直接运行 External Agent（Claude Code、Codex、Pi）的回合会报错 “Distributed execution currently supports System Agents only.”；需要直接使用这些外部 Agent 时，应选择 InProcess 执行的 Standalone。

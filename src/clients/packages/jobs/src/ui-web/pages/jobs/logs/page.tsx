@@ -7,31 +7,20 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { apiGet } from "@agw/api";
+import type { components } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
 import { buildChatHref } from "@agw/chat";
 import { StaticTable } from "@agw/components";
-import { Badge } from "@agw/components";
 import { Button } from "@agw/components";
 import { Empty } from "@agw/components";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@agw/components";
 import { formatLocalDateTime } from "@agw/components";
+import { JobRunPagination } from "../job-run-pagination";
+import { JobRunResultBadge } from "../job-run-result";
+import { useJobRunPage } from "../use-job-run-page";
 
-type JobDto = {
-  id: string;
-  projectId: string;
-  name: string;
-};
-
-type JobLogDto = {
-  id: string;
-  jobId: string;
-  conversationId: string | null;
-  startTime: string;
-  endTime: string | null;
-  success: boolean;
-  attempt: number;
-  errorMessage: string | null;
-};
+type JobDto = components["schemas"]["JobResponse"];
+type JobRunDto = components["schemas"]["JobRunResponse"];
 
 export default function JobLogsPage({
   chatBasePath,
@@ -52,27 +41,21 @@ export default function JobLogsPage({
     queryKey: ["job", jobId],
     enabled: Boolean(jobId),
     queryFn: async () =>
-      (await apiGet("/api/jobs/{id}", {
-        params: { path: { id: jobId } },
+      (await apiGet("/api/jobs/get", {
+        params: { query: { id: jobId } },
       })) as JobDto,
   });
 
-  const logsQuery = useQuery({
-    queryKey: ["job-logs", jobId],
-    enabled: Boolean(jobId),
-    queryFn: async () =>
-      (await apiGet("/api/jobs/{id}/logs", {
-        params: { path: { id: jobId } },
-      })) as JobLogDto[],
-  });
+  const jobRunPage = useJobRunPage(jobId || null, Boolean(jobId));
+  const logsQuery = jobRunPage.logsQuery;
 
   const job = jobQuery.data;
 
   const getChatHref = React.useCallback(
-    (log: JobLogDto) =>
+    (log: JobRunDto) =>
       buildChatHref(chatBasePath, {
         projectId: job?.projectId ?? null,
-        conversationId: log.conversationId,
+        conversationId: log.conversationId ?? null,
       }),
     [chatBasePath, job],
   );
@@ -127,33 +110,31 @@ export default function JobLogsPage({
           </Empty>
           <TableHeader>
             <TableRow>
-              <TableHead>Status</TableHead>
+              <TableHead>Result</TableHead>
               <TableHead>Attempt</TableHead>
-              <TableHead>Job ID</TableHead>
+              <TableHead>Delivery ID</TableHead>
               <TableHead>Time</TableHead>
               <TableHead>Error</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {logsQuery.data?.map((log) => (
+            {jobRunPage.logs?.map((log) => (
               <TableRow key={log.id}>
                 <TableCell>
-                  <Badge variant={log.success ? "default" : "destructive"}>
-                    {log.success ? "Succeeded" : "Failed"}
-                  </Badge>
+                  <JobRunResultBadge result={log.result} />
                 </TableCell>
                 <TableCell className="font-medium">#{log.attempt}</TableCell>
-                <TableCell className="font-mono text-xs break-all">{log.jobId}</TableCell>
+                <TableCell className="font-mono text-xs break-all">{log.deliveryId}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {formatLocalDateTime(log.startTime)}
-                  {log.endTime ? ` -> ${formatLocalDateTime(log.endTime)}` : ""}
+                  {formatLocalDateTime(log.startedAt)}
+                  {` -> ${formatLocalDateTime(log.endedAt)}`}
                 </TableCell>
                 <TableCell className="max-w-90 text-sm text-muted-foreground">
-                  <div className="line-clamp-2 wrap-break-word">{log.errorMessage ?? "-"}</div>
+                  <div className="line-clamp-2 wrap-break-word">{log.error ?? "-"}</div>
                 </TableCell>
                 <TableCell className="text-right">
-                  {job ? (
+                  {job && log.conversationId ? (
                     <Button type="button" variant="outline" size="sm" asChild>
                       <Link href={getChatHref(log)} onClick={onOpenChat}>
                         <MessageSquareText className="mr-2 h-4 w-4" />
@@ -172,6 +153,16 @@ export default function JobLogsPage({
           </TableBody>
         </StaticTable>
       )}
+      {jobId ? (
+        <JobRunPagination
+          offset={jobRunPage.offset}
+          hasNextPage={jobRunPage.hasNextPage}
+          isLoading={logsQuery.isFetching}
+          isError={logsQuery.isError}
+          onPrevious={jobRunPage.goToPreviousPage}
+          onNext={jobRunPage.goToNextPage}
+        />
+      ) : null}
     </div>
   );
 }

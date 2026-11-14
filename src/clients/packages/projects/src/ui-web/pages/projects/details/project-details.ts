@@ -17,21 +17,18 @@ export type ProjectDetailItem = {
 };
 
 export type CreateTaskJobRequest = {
-  projectId: string;
-  agentType: 0 | 1;
-  agentId: string;
   name: string;
-  prompt: string;
-  triggerType: number;
-  triggerValue: string;
-  maxRetryCount: number;
-  isEnabled: boolean;
+  enabled: boolean;
+  projectId: string;
+  targetKind: 0 | 1;
+  agentId: string;
+  instructions: string;
+  schedule: { kind: "Once"; at: string };
 };
 
 export const CREATE_TASK_DIALOG_TITLE = "Create Task";
 export const CREATE_TASK_DIALOG_DESCRIPTION = "Create a one-time job for the current project.";
 export const CREATE_TASK_PROMPT_HELPER_TEXT = "Prompt is required for task execution.";
-export const QUICK_TASK_TRIGGER_TYPE = 1;
 export const QUICK_TASK_DELAY_MS = 10_000;
 export const DETAILS_BUTTON_LABEL = "Details";
 export const CREATE_TASK_BUTTON_LABEL = "Create Task";
@@ -62,7 +59,7 @@ export function createDefaultTaskJobName(now = new Date(), randomNumber?: number
   return `Job-${year}${month}${day}-${randomSuffix}`;
 }
 
-export function createQuickTaskTriggerValue(now = new Date()): string {
+export function createQuickTaskAt(now = new Date()): string {
   return new Date(now.getTime() + QUICK_TASK_DELAY_MS).toISOString();
 }
 
@@ -94,15 +91,13 @@ export function buildCreateTaskJobRequest({
   }
 
   return {
-    projectId,
-    agentType: parsedTarget.type === "agent" ? 0 : 1,
-    agentId: parsedTarget.id,
     name: trimmedJobName,
-    prompt: trimmedPrompt,
-    triggerType: QUICK_TASK_TRIGGER_TYPE,
-    triggerValue: createQuickTaskTriggerValue(now),
-    maxRetryCount: 0,
-    isEnabled: true,
+    enabled: true,
+    projectId,
+    targetKind: parsedTarget.type === "agent" ? 0 : 1,
+    agentId: parsedTarget.id,
+    instructions: trimmedPrompt,
+    schedule: { kind: "Once", at: createQuickTaskAt(now) },
   };
 }
 

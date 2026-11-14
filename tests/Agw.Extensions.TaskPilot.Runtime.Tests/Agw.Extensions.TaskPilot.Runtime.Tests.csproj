@@ -16,12 +16,30 @@
     <ProjectReference Include="../../src/server/Agw.Tools/Agw.Tools.csproj" />
     <Compile Include="../ExtensionRuntimeIntegrationHost.cs" Link="ExtensionRuntimeIntegrationHost.cs" />
     <Compile Include="../IsolatedTestConnections.cs" Link="IsolatedTestConnections.cs" />
-    <Compile Include="../Agw.Extensions.TaskPilot.Tests/TaskPilotPackageMigrationTests.cs" Link="TaskPilotPackageMigrationTests.cs" />
-    <Compile Include="../Agw.Extensions.TaskPilot.Tests/TaskPilotRuntimeBehaviorTests.cs" Link="TaskPilotRuntimeBehaviorTests.cs" />
-    <Compile Include="../../src/extensions/taskpilot/server/TaskPilotApiContracts.cs" Link="TaskPilot/TaskPilotApiContracts.cs" />
-    <Compile Include="../../src/extensions/taskpilot/server/TaskPilotDbContext.cs" Link="TaskPilot/TaskPilotDbContext.cs" />
-    <Compile Include="../../src/extensions/taskpilot/server/TaskPilotEntities.cs" Link="TaskPilot/TaskPilotEntities.cs" />
-    <Compile Include="../../src/extensions/taskpilot/server/TaskPilotInternalContracts.cs" Link="TaskPilot/TaskPilotInternalContracts.cs" />
+    <Compile
+      Include="../Agw.Extensions.TaskPilot.Tests/TaskPilotPackageMigrationTests.cs"
+      Link="TaskPilotPackageMigrationTests.cs"
+    />
+    <Compile
+      Include="../Agw.Extensions.TaskPilot.Tests/TaskPilotRuntimeBehaviorTests.cs"
+      Link="TaskPilotRuntimeBehaviorTests.cs"
+    />
+    <Compile
+      Include="../../src/extensions/taskpilot/server/TaskPilotApiContracts.cs"
+      Link="TaskPilot/TaskPilotApiContracts.cs"
+    />
+    <Compile
+      Include="../../src/extensions/taskpilot/server/TaskPilotDbContext.cs"
+      Link="TaskPilot/TaskPilotDbContext.cs"
+    />
+    <Compile
+      Include="../../src/extensions/taskpilot/server/TaskPilotEntities.cs"
+      Link="TaskPilot/TaskPilotEntities.cs"
+    />
+    <Compile
+      Include="../../src/extensions/taskpilot/server/TaskPilotInternalContracts.cs"
+      Link="TaskPilot/TaskPilotInternalContracts.cs"
+    />
     <Compile Include="../../src/extensions/taskpilot/server/TaskPilotReceipt.cs" Link="TaskPilot/TaskPilotReceipt.cs" />
   </ItemGroup>
 </Project>

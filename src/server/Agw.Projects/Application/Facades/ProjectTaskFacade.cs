@@ -103,7 +103,13 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             return Map(existing);
         }
 
-        var createRequest = new TaskCreateRequest(request.JobId, request.Input, request.Title, request.ContextId);
+        var createRequest = new TaskCreateRequest(
+            request.Input,
+            request.Title,
+            request.ContextId,
+            request.Kind,
+            request.RelateId
+        );
         var result =
             request.InitialStatus == ProjectTaskStatus.Running
                 ? await _taskService
@@ -136,25 +142,6 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
         return created == null
             ? throw new AgwException(ErrorCodes.TaskCreationFailed, "Failed to reload the execution task.")
             : Map(created);
-    }
-
-    public async Task<ProjectTaskSnapshot?> FinishAsync(
-        FinishProjectTaskRequest request,
-        CancellationToken cancellationToken = default
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        TaskProjection? task = request.Status switch
-        {
-            ProjectTaskStatus.Succeeded => await _taskService
-                .MarkSucceededAsync(request.TaskId, request.OwnerUserId)
-                .ConfigureAwait(false),
-            ProjectTaskStatus.Failed => await _taskService
-                .MarkFailedAsync(request.TaskId, request.ErrorMessage ?? "The execution failed.", request.OwnerUserId)
-                .ConfigureAwait(false),
-            _ => throw new AgwException(ErrorCodes.InvalidParam, $"Task outcome '{request.Status}' is not supported."),
-        };
-        return task == null ? null : Map(task);
     }
 
     public async Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
@@ -194,7 +181,6 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             task.ProjectConversationId,
             task.ProjectId,
             task.ContextId,
-            task.JobId,
             task.Title,
             Map(task.Status),
             task.ErrorMessage,

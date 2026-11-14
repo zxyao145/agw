@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Events;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -15,6 +16,12 @@ public sealed class EventSubscriptionConfiguration : IEntityTypeConfiguration<Ev
         builder.Property(entity => entity.EventTypesJson).IsRequired();
         builder.Property(entity => entity.TargetKind).HasConversion<int>().IsRequired();
         builder.Property(entity => entity.ManagedState).HasConversion<int?>();
+        builder
+            .Property(entity => entity.ManagedBy)
+            .HasColumnName("managed_by")
+            .IsRequired()
+            .HasMaxLength(64)
+            .HasDefaultValue(EventManagedBy.User);
         builder.Property(entity => entity.ManagedKey).HasColumnName("managed_key");
         builder.Property(entity => entity.Version).IsConcurrencyToken();
         builder.HasIndex(entity => new { entity.CreateBy, entity.Enabled });
@@ -22,7 +29,7 @@ public sealed class EventSubscriptionConfiguration : IEntityTypeConfiguration<Ev
             .HasIndex(entity => new
             {
                 entity.CreateBy,
-                entity.ManagedByExtensionId,
+                entity.ManagedBy,
                 entity.ManagedKey,
             })
             .IsUnique()

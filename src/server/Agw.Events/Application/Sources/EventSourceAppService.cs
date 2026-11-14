@@ -3,7 +3,6 @@ using System.Text.Json;
 using Agw.Auth.Contracts;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Configuration;
-using Agw.Events.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
@@ -17,7 +16,7 @@ namespace Agw.Events.Application.Sources;
 public sealed class EventSourceAppService
 {
     private readonly IEventsDbContext _db;
-    private readonly IEventScheduler _scheduler;
+    private readonly EventTimerScheduleSync _timerSchedule;
     private readonly IEventSourcePollService _pollService;
     private readonly IEventIngestTransaction _transaction;
     private readonly IExtensionGenerationCatalog _generationCatalog;
@@ -26,7 +25,7 @@ public sealed class EventSourceAppService
 
     public EventSourceAppService(
         IEventsDbContext db,
-        IEventScheduler scheduler,
+        EventTimerScheduleSync timerSchedule,
         IEventSourcePollService pollService,
         IEventIngestTransaction transaction,
         IExtensionGenerationCatalog generationCatalog,
@@ -35,7 +34,7 @@ public sealed class EventSourceAppService
     )
     {
         _db = db;
-        _scheduler = scheduler;
+        _timerSchedule = timerSchedule;
         _pollService = pollService;
         _transaction = transaction;
         _generationCatalog = generationCatalog;
@@ -105,7 +104,7 @@ public sealed class EventSourceAppService
                     _db.EventSources.Add(source);
                     if (source.Kind == EventSourceKind.Timer && source.Enabled)
                     {
-                        await SyncTimerAsync(source, requestSeq: 1, token);
+                        await _timerSchedule.SyncAsync(source, requestSeq: 1, token);
                     }
                 },
                 cancellationToken
@@ -158,7 +157,7 @@ public sealed class EventSourceAppService
                 {
                     if (source.Kind == EventSourceKind.Timer)
                     {
-                        await SyncTimerAsync(source, request.Version + 1, token);
+                        await _timerSchedule.SyncAsync(source, request.Version + 1, token);
                     }
                 },
                 cancellationToken
@@ -198,7 +197,7 @@ public sealed class EventSourceAppService
                 {
                     if (source.Kind == EventSourceKind.Timer)
                     {
-                        await SyncTimerAsync(source, request.Version + 1, token);
+                        await _timerSchedule.SyncAsync(source, request.Version + 1, token);
                     }
                 },
                 cancellationToken
@@ -228,7 +227,7 @@ public sealed class EventSourceAppService
                 {
                     if (source.Kind == EventSourceKind.Timer)
                     {
-                        await _scheduler.CancelAsync($"source:{source.Id}", request.Version + 1, token);
+                        await _timerSchedule.SyncAsync(source, request.Version + 1, token);
                     }
                 },
                 cancellationToken
@@ -397,78 +396,6 @@ public sealed class EventSourceAppService
         return now + _options.HttpPoll.MinInterval;
     }
 
-    private async Task SyncTimerAsync(EventSource source, long requestSeq, CancellationToken cancellationToken)
-    {
-        if (!source.Enabled || source.DeletedAt is not null)
-        {
-            await _scheduler.CancelAsync($"source:{source.Id}", requestSeq, cancellationToken);
-            return;
-        }
-
-        using var configDocument = JsonDocument.Parse(source.ConfigJson);
-        var config = EventSourceConfigParser.ParseTimer(configDocument.RootElement);
-        TimeSpan? interval = config.Interval is null ? null : System.Xml.XmlConvert.ToTimeSpan(config.Interval);
-        var eventData = ParseTemplateData(config.Event);
-        await _scheduler.UpsertAsync(
-            new ScheduleRequest
-            {
-                BusinessKey = $"source:{source.Id}",
-                RequestSeq = requestSeq,
-                Kind = config.Kind switch
-                {
-                    "Once" => ScheduleKind.Once,
-                    "Interval" => ScheduleKind.Interval,
-                    "Cron" => ScheduleKind.Cron,
-                    _ => throw new AgwException(ErrorCodes.InvalidParam),
-                },
-                At = config.Kind == "Once" ? config.At : null,
-                Interval = interval,
-                Cron = config.Cron,
-                TimeZone = config.TimeZone,
-                Event = new CloudEventDraft
-                {
-                    Id = "source-template",
-                    Type = config.Event.Type,
-                    Source = source.CeSource,
-                    Time = config.Event.Time,
-                    Subject = config.Event.Subject,
-                    DataContentType = config.Event.DataContentType,
-                    DataSchema = config.Event.DataSchema,
-                    Data = eventData,
-                    Scope = config.Event.Scope,
-                    Tags = config.Event.Tags,
-                    Summary = config.Event.Summary,
-                    Link = config.Event.Link,
-                },
-            },
-            cancellationToken
-        );
-    }
-
-    private static CloudEventData? ParseTemplateData(EventSourceEventTemplate template)
-    {
-        if (template.DataBase64 is not null)
-        {
-            return new CloudEventData
-            {
-                Kind = CloudEventDataKind.Binary,
-                Binary = Convert.FromBase64String(template.DataBase64),
-            };
-        }
-
-        if (template.Data is { } data)
-        {
-            return new CloudEventData
-            {
-                Kind = CloudEventDataKind.Json,
-                Text = data.GetRawText(),
-                Json = data.Clone(),
-            };
-        }
-
-        return null;
-    }
-
     private static JsonElement? ParseSecret(string secretJson)
     {
         using var document = JsonDocument.Parse(secretJson);
@@ -486,6 +413,7 @@ public sealed class EventSourceAppService
 
     private static void EnsureEditable(EventSource source)
     {
+        EventManagedRecordGuard.EnsureUserManaged(source.ManagedBy, ErrorCodes.EventSourceManaged, "Event source");
         if (source.Kind == EventSourceKind.Publisher)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Publisher sources are managed by the event publisher.");

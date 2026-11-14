@@ -3,7 +3,6 @@ using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Integrations.Application.Persistence;
-using Agw.Jobs.Application.Persistence;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
 using Agw.Settings.Application.Persistence;
@@ -13,7 +12,6 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Settings;
@@ -32,7 +30,6 @@ public partial class AgwDbContext
     : EFContext,
         IAgentsDbContext,
         IProjectsDbContext,
-        IJobsDbContext,
         IAuthDbContext,
         ISettingsDbContext,
         IIntegrationsDbContext,
@@ -66,7 +63,6 @@ public partial class AgwDbContext
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         PruneDeletedRelations();
-        StampJobRowVersions();
         return SaveChangesWithEncryption(acceptAllChangesOnSuccess);
     }
 
@@ -76,7 +72,6 @@ public partial class AgwDbContext
     )
     {
         PruneDeletedRelations();
-        StampJobRowVersions();
         return SaveChangesWithEncryptionAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
@@ -132,8 +127,6 @@ public partial class AgwDbContext
     public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories =>
         Set<ProjectConversationChatHistory>();
     public DbSet<ProjectConversationTurn> ProjectConversationTurns => Set<ProjectConversationTurn>();
-    public DbSet<Job> Jobs => Set<Job>();
-    public DbSet<JobLog> JobLogs => Set<JobLog>();
 
     public DbSet<PluginInstallation> PluginInstallations => Set<PluginInstallation>();
     public DbSet<PluginInstallationCredential> PluginInstallationCredentials => Set<PluginInstallationCredential>();
@@ -243,17 +236,6 @@ public partial class AgwDbContext
             }
 
             ChangeTracker.AutoDetectChangesEnabled = autoDetectChangesEnabled;
-        }
-    }
-
-    private void StampJobRowVersions()
-    {
-        foreach (var entry in ChangeTracker.Entries<Job>())
-        {
-            if (entry.State is EntityState.Added or EntityState.Modified)
-            {
-                entry.Entity.RowVersion = Guid.CreateVersion7().ToByteArray();
-            }
         }
     }
 

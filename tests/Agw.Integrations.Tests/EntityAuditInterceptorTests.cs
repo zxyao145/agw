@@ -3,7 +3,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Providers.Contracts;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
@@ -185,39 +184,6 @@ public class EntityAuditInterceptorTests
         Assert.Equal("CreateBy must match the current user.", exception.Message);
     }
 
-    [Fact]
-    public async Task SaveChanges_JobLogOwnedByAnotherUser_IsAllowedOnCreateAndRejectedOnUpdate()
-    {
-        using var userScope = PushUser("user-1");
-        // 生产迁移不生成外键，测试连接同样关闭外键强制。
-        // Production migrations emit no foreign keys, so the test connection disables their enforcement too.
-        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await using var context = CreateOwnedContext(connection);
-        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-
-        // JobLog 由调度上下文代写，新建放行；同一条规则在修改阶段不放行。
-        // JobLog rows are written on behalf of the scheduler, so creation passes while modification does not.
-        var log = new JobLog
-        {
-            Id = Guid.CreateVersion7(),
-            JobId = Guid.CreateVersion7(),
-            TaskId = Guid.CreateVersion7(),
-            StartTime = DateTimeOffset.UnixEpoch,
-            CreateBy = "user-2",
-        };
-        context.JobLogs.Add(log);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-        Assert.Equal("user-2", log.CreateBy);
-
-        log.Success = true;
-
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            context.SaveChangesAsync(TestContext.Current.CancellationToken)
-        );
-        Assert.Equal("CreateBy must match the current user.", exception.Message);
-    }
-
     private static IDisposable PushUser(string userId) =>
         UserInfoUtil.Push(
             new ClaimsPrincipal(
@@ -258,13 +224,10 @@ public class EntityAuditInterceptorTests
 
         public DbSet<OwnedEntity> Entities => Set<OwnedEntity>();
 
-        public DbSet<JobLog> JobLogs => Set<JobLog>();
-
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<OwnedEntity>();
-            modelBuilder.Entity<JobLog>().Ignore(entity => entity.Job);
         }
     }
 

@@ -64,7 +64,6 @@ public class TaskAppService : ITaskAppService
     {
         var normalizedInput = input.Trim();
         var request = new TaskCreateRequest(
-            JobId: null,
             Input: normalizedInput,
             Title: ProjectConversationBehavior.DeriveTitle(normalizedInput),
             ContextId: contextId

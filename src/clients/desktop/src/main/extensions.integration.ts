@@ -1400,6 +1400,98 @@ async function viewsAndLayout(): Promise<void> {
   pass("views follow their slots and retained main views keep their page state");
 }
 
+/**
+ * Events 视图铺满 Main Workspace；内容高于视图时，滚轮把最后一行滚入视图。
+ * The Events view fills the Main Workspace; when its content is taller than the view, the wheel scrolls the last row
+ * into view.
+ */
+async function eventsViewLayout(): Promise<void> {
+  type SourceVersion = { id: string; version: number | string };
+  const sources: SourceVersion[] = [];
+  for (let index = 1; index <= 30; index += 1) {
+    sources.push(
+      await hostSend<SourceVersion>("POST", "/api/events/sources/create", {
+        name: `Layout source ${index}`,
+        kind: 1,
+        config: { format: "cloudevents", auth: { kind: "BearerToken" } },
+        secret: `layout-token-${index}`,
+        enabled: true,
+      }),
+    );
+  }
+  const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
+  await clickHost('.agw-ribbon [data-entry-id="agw.ribbon.events"]');
+  const page = `[...document.querySelectorAll('.agw-main-workspace[data-view-id="agw.events"] h1')].find((item) => item.textContent === "Events")?.closest("section")`;
+  await untilHost(`Boolean(${page})`, "the Events view");
+  // Radix Tabs 在 mousedown 时切换。Radix Tabs switch on mousedown.
+  await evalHost(`(() => {
+    const tab = [...document.querySelectorAll('.agw-main-workspace [role="tab"]')].find((item) => item.textContent === "Sources");
+    tab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    return true;
+  })()`);
+  const lastDelete = `[...document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete Layout source"]')].at(-1)`;
+  await untilHost(
+    `document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete Layout source"]').length === 30`,
+    "the Layout sources",
+  );
+
+  host().setZoomFactor(0.75);
+  await untilHost("window.innerWidth > 1800", "the zoomed-out host");
+  const widths = await evalHost<{ main: number; scroller: number; client: number; page: number }>(
+    `(() => {
+      const page = ${page};
+      const scroller = page.parentElement;
+      return {
+        main: document.querySelector(".agw-main-workspace").getBoundingClientRect().width,
+        scroller: scroller.getBoundingClientRect().width,
+        client: scroller.clientWidth,
+        page: page.getBoundingClientRect().width,
+      };
+    })()`,
+  );
+  host().setZoomFactor(1);
+  await untilHost("window.innerWidth <= 1440", "the host at zoom 1");
+  assert.ok(widths.main > 1300, `the zoomed-out Main Workspace is wider than 1300: ${widths.main}`);
+  assert.ok(Math.abs(widths.scroller - widths.main) <= 1, JSON.stringify(widths));
+  assert.ok(Math.abs(widths.page - widths.client) <= 1, JSON.stringify(widths));
+
+  const position = () =>
+    evalHost<{
+      visible: boolean;
+      scrollHeight: number;
+      clientHeight: number;
+      point: { x: number; y: number };
+    }>(`(() => {
+      const scroller = (${page}).parentElement;
+      const area = scroller.getBoundingClientRect();
+      const button = (${lastDelete}).getBoundingClientRect();
+      return {
+        visible: button.top >= area.top && button.bottom <= area.bottom,
+        scrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+        point: { x: Math.round(area.left + area.width / 2), y: Math.round(area.top + area.height / 2) },
+      };
+    })()`);
+  const start = await position();
+  assert.ok(start.scrollHeight > start.clientHeight, JSON.stringify(start));
+  assert.equal(start.visible, false);
+  host().sendInputEvent({ type: "mouseMove", ...start.point });
+  await until(async () => {
+    host().sendInputEvent({ type: "mouseWheel", ...start.point, deltaX: 0, deltaY: -600 });
+    return (await position()).visible;
+  }, "the wheel to scroll the last Layout source into view");
+
+  for (const source of sources) {
+    await hostSend("POST", "/api/events/sources/delete", {
+      id: source.id,
+      version: source.version,
+    });
+  }
+  await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]`);
+  await until(() => main.view.getVisible(), "the sample main view to show");
+  pass("the Events view fills the Main Workspace and scrolls to its last row");
+}
+
 async function hostOverlays(): Promise<void> {
   await goToChat();
   const main = await untilFrame(EXTENSION_IDS.sample, "mainView");
@@ -10122,6 +10214,7 @@ async function run(): Promise<void> {
   await enableSample();
   await processIsolation();
   await viewsAndLayout();
+  await eventsViewLayout();
   await hostOverlays();
   await leaveChatRoute();
   await contextAndFiles();

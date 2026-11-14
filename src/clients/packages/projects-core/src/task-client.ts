@@ -77,7 +77,8 @@ export interface ConversationSummary {
   projectId: string;
   conversationId: string;
   contextId: string;
-  jobId?: string | null;
+  kind: string;
+  relateId?: string | null;
   title: string;
   latestStatus?: number | null;
   executionCount: number;
@@ -136,7 +137,8 @@ export type ProjectConversationSummaryResponse = {
   projectId: string;
   conversationId: string;
   contextId: string;
-  jobId?: string | null;
+  kind: string;
+  relateId?: string | null;
   title: string;
   latestStatus?: number | null;
   executionCount: number;
@@ -180,7 +182,8 @@ function toConversationSummary(
     projectId: conversation.projectId,
     conversationId: conversation.conversationId,
     contextId: conversation.contextId,
-    jobId: conversation.jobId ?? null,
+    kind: conversation.kind,
+    relateId: conversation.relateId ?? null,
     title: conversation.title,
     latestStatus: conversation.latestStatus ?? null,
     executionCount: conversation.executionCount,

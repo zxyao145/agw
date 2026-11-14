@@ -783,6 +783,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
           projectId: "project-1",
           conversationId: "conversation-2",
           contextId: "context-2",
+          kind: "native",
+          relateId: null,
           title: "Second",
           executionCount: 1,
           messageCount: 0,

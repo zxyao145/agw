@@ -16,7 +16,9 @@ public class ProjectConversation : BaseEntity
 
     public Guid ProjectId { get; set; }
 
-    public Guid? JobId { get; set; }
+    public string Kind { get; set; } = ConversationKinds.Native;
+
+    public Guid? RelateId { get; set; }
 
     public string ContextId { get; set; } = string.Empty;
 
