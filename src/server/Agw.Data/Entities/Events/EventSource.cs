@@ -22,6 +22,10 @@ public class EventSource : BaseEntity
 
     public string? PublisherKey { get; set; }
 
+    public string ManagedBy { get; set; } = EventManagedBy.User;
+
+    public string? ManagedKey { get; set; }
+
     public string CeSource { get; set; } = string.Empty;
 
     public string ConfigJson { get; set; } = string.Empty;

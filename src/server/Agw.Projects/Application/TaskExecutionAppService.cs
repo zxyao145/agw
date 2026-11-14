@@ -246,7 +246,6 @@ public class TaskExecutionAppService
             Id = Guid.CreateVersion7(),
             ConversationId = conversation.Id,
             TaskId = taskId,
-            JobId = request.JobId,
             Status = initialStatus,
             CreateTime = now,
             UpdateTime = now,
@@ -373,60 +372,6 @@ public class TaskExecutionAppService
         return _historyDomainService.GetLatest(records);
     }
 
-    public Task<TaskProjection?> MarkSucceededAsync(Guid id, string user) =>
-        MarkTaskAsync(id, TaskExecutionStatus.Succeeded, null, user);
-
-    public Task<TaskProjection?> MarkFailedAsync(Guid id, string errorMessage, string user) =>
-        MarkTaskAsync(id, TaskExecutionStatus.Failed, errorMessage, user);
-
-    private async Task<TaskProjection?> MarkTaskAsync(
-        Guid id,
-        TaskExecutionStatus status,
-        string? errorMessage,
-        string user
-    )
-    {
-        var records = _historyDomainService.Order(
-            await _dbContext
-                .ProjectConversationChatHistories.Where(record =>
-                    record.TaskId == id
-                    && record.ProjectConversation!.CreateBy == user
-                    && record.ProjectConversation.Project!.CreateBy == user
-                )
-                .ToListAsync()
-                .ConfigureAwait(false)
-        );
-        if (records.Count == 0)
-        {
-            return null;
-        }
-
-        var context = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
-            item.Id == records[0].ConversationId && item.CreateBy == user
-        );
-        if (context == null)
-        {
-            return null;
-        }
-
-        var task = TaskExecutionMapper.ToTask(context, records);
-        var finished = _historyDomainService.TryFinishTask(
-            records,
-            task.Status,
-            status,
-            errorMessage,
-            _timeProvider.GetUtcNow()
-        );
-        if (!finished)
-        {
-            return null;
-        }
-
-        await _dbContext.SaveChangesAsync();
-
-        return TaskExecutionMapper.ToTask(context, records);
-    }
-
     /// <summary>
     /// 获取或创建 Project Conversation，并复用及规范化 SQLite 中仅 GUID 大小写不同的 context ID。
     /// </summary>
@@ -486,7 +431,6 @@ public class TaskExecutionAppService
         {
             Id = conversationId ?? Guid.CreateVersion7(),
             ProjectId = projectId,
-            JobId = request.JobId,
             ContextId = requestedContextId ?? ContextIdUtil.CreateConversationContextId(),
             ExtensionId = requesterExtensionId ?? ConversationCreators.Host,
             CreateBy = user,
@@ -494,7 +438,9 @@ public class TaskExecutionAppService
             UpdateBy = user,
             UpdateTime = now,
         };
-        new ProjectConversationBehavior(conversation).SetInitialTitle(request.Title, request.Input);
+        var behavior = new ProjectConversationBehavior(conversation);
+        behavior.SetOrigin(request.Kind, request.RelateId);
+        behavior.SetInitialTitle(request.Title, request.Input);
         await _dbContext.ProjectConversations.AddAsync(conversation);
         return (conversation, true);
     }
@@ -543,7 +489,6 @@ public class TaskExecutionAppService
     {
         var behavior = new ProjectConversationBehavior(conversation);
         behavior.TryAdoptRequestedTitle(request.Title, request.Input);
-        behavior.TryBindJob(request.JobId);
         behavior.StampUpdate(user, now);
     }
 

@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:31983/"
+      "url": "http://127.0.0.1:30918/"
     }
   ],
   "paths": {
@@ -64,10 +64,20 @@
         }
       }
     },
-    "/api/jobs": {
+    "/api/jobs/list": {
       "get": {
         "tags": [
           "Jobs"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -75,13 +85,45 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob[]"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse[]"
                 }
               }
             }
           }
         }
-      },
+      }
+    },
+    "/api/jobs/get": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/create": {
       "post": {
         "tags": [
           "Jobs"
@@ -102,7 +144,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
                 }
               }
             }
@@ -110,49 +152,10 @@
         }
       }
     },
-    "/api/jobs/{id}": {
-      "get": {
+    "/api/jobs/update": {
+      "post": {
         "tags": [
           "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
         ],
         "requestBody": {
           "content": {
@@ -170,35 +173,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
                 }
               }
             }
@@ -206,38 +181,8 @@
         }
       }
     },
-    "/api/jobs/{id}/logs": {
-      "get": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/jobs/enabled": {
-      "put": {
+    "/api/jobs/enable": {
+      "post": {
         "tags": [
           "Jobs"
         ],
@@ -245,7 +190,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JobEnabledUpdateRequest"
+                "$ref": "#/components/schemas/JobEnableRequest"
               }
             }
           },
@@ -257,7 +202,84 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/delete": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobIdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJobResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/runs/list": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJobRunResponse[]"
                 }
               }
             }
@@ -10277,7 +10299,8 @@
         }
       },
       "AgentRuntimeType": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Agent Runtime Type"
       },
       "AgentSkillRelation": {
         "required": [
@@ -12205,7 +12228,7 @@
           }
         }
       },
-      "ApiResultOfJob": {
+      "ApiResultOfJobResponse": {
         "required": [
           "code",
           "title"
@@ -12218,7 +12241,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/Job"
+                "$ref": "#/components/schemas/JobResponse"
               }
             ]
           },
@@ -12237,7 +12260,7 @@
           }
         }
       },
-      "ApiResultOfJob[]": {
+      "ApiResultOfJobResponse[]": {
         "required": [
           "code",
           "title"
@@ -12250,7 +12273,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/Job"
+              "$ref": "#/components/schemas/JobResponse"
             }
           },
           "code": {
@@ -12268,7 +12291,7 @@
           }
         }
       },
-      "ApiResultOfJobLogResponse[]": {
+      "ApiResultOfJobRunResponse[]": {
         "required": [
           "code",
           "title"
@@ -12281,7 +12304,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/JobLogResponse"
+              "$ref": "#/components/schemas/JobRunResponse"
             }
           },
           "code": {
@@ -14962,6 +14985,7 @@
           "id",
           "name",
           "kind",
+          "managedBy",
           "ceSource",
           "config",
           "enabled",
@@ -14988,6 +15012,15 @@
             "format": "uuid"
           },
           "providerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "managedBy": {
+            "type": "string"
+          },
+          "managedKey": {
             "type": [
               "null",
               "string"
@@ -15262,6 +15295,7 @@
           "publisherKeys",
           "eventTypes",
           "targetKind",
+          "managedBy",
           "version"
         ],
         "type": "object",
@@ -15358,12 +15392,8 @@
               }
             ]
           },
-          "managedByExtensionId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
+          "managedBy": {
+            "type": "string"
           },
           "managedKey": {
             "type": [
@@ -15857,19 +15887,58 @@
         "type": "string",
         "format": "binary"
       },
-      "Job": {
+      "JobCreateRequest": {
+        "required": [
+          "enabled",
+          "projectId",
+          "targetKind",
+          "agentId"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetKind": {
+            "$ref": "#/components/schemas/AgentRuntimeType"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JobScheduleDto"
+              }
+            ]
+          }
+        }
+      },
+      "JobDeliveryResponse": {
         "required": [
           "id",
-          "projectId",
-          "name",
-          "triggerType",
-          "triggerValue",
-          "nextRunTime",
-          "status",
-          "isEnabled",
-          "retryCount",
-          "maxRetryCount",
-          "createTime"
+          "state",
+          "attempt"
         ],
         "type": "object",
         "properties": {
@@ -15877,57 +15946,11 @@
             "type": "string",
             "format": "uuid"
           },
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "agentType": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AgentRuntimeType"
-              }
-            ]
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "triggerType": {
-            "$ref": "#/components/schemas/TriggerType"
-          },
-          "triggerValue": {
-            "type": "string"
-          },
-          "nextRunTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "status": {
-            "$ref": "#/components/schemas/JobStatus"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          },
-          "retryCount": {
+          "state": {
             "type": "integer",
             "format": "int32"
           },
-          "maxRetryCount": {
+          "attempt": {
             "type": "integer",
             "format": "int32"
           },
@@ -15936,118 +15959,13 @@
               "null",
               "string"
             ]
-          },
-          "rowVersion": {
-            "type": "string",
-            "format": "byte"
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         }
       },
-      "JobCreateRequest": {
-        "required": [
-          "projectId",
-          "name",
-          "triggerType",
-          "triggerValue",
-          "maxRetryCount",
-          "isEnabled"
-        ],
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "agentType": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AgentRuntimeType"
-              }
-            ]
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "triggerType": {
-            "$ref": "#/components/schemas/TriggerType"
-          },
-          "triggerValue": {
-            "type": "string"
-          },
-          "maxRetryCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          }
-        }
-      },
-      "JobEnabledUpdateRequest": {
-        "required": [
-          "jobId",
-          "isEnabled"
-        ],
-        "type": "object",
-        "properties": {
-          "jobId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          }
-        }
-      },
-      "JobLogResponse": {
+      "JobEnableRequest": {
         "required": [
           "id",
-          "jobId",
-          "conversationId",
-          "startTime",
-          "endTime",
-          "success",
-          "attempt",
-          "errorMessage"
+          "enabled"
         ],
         "type": "object",
         "properties": {
@@ -16055,9 +15973,126 @@
             "type": "string",
             "format": "uuid"
           },
-          "jobId": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "JobIdRequest": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "JobResponse": {
+        "required": [
+          "id",
+          "name",
+          "enabled",
+          "projectId",
+          "targetKind",
+          "agentId",
+          "instructions",
+          "schedule",
+          "scheduleCompleted"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetKind": {
+            "$ref": "#/components/schemas/AgentRuntimeType"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/JobScheduleResponse"
+          },
+          "dueAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "scheduleCompleted": {
+            "type": "boolean"
+          },
+          "lastDelivery": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JobDeliveryResponse"
+              }
+            ]
+          }
+        }
+      },
+      "JobRunResponse": {
+        "required": [
+          "id",
+          "deliveryId",
+          "attempt",
+          "startedAt",
+          "endedAt",
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deliveryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attempt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "conversationId": {
             "type": [
@@ -16065,26 +16100,32 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "JobScheduleDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
-          "startTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endTime": {
+          "at": {
             "type": [
               "null",
               "string"
             ],
             "format": "date-time"
           },
-          "success": {
-            "type": "boolean"
+          "interval": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
-          "attempt": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "errorMessage": {
+          "cron": {
             "type": [
               "null",
               "string"
@@ -16092,66 +16133,85 @@
           }
         }
       },
-      "JobStatus": {
-        "type": "integer"
-      },
-      "JobUpdateRequest": {
+      "JobScheduleResponse": {
         "required": [
-          "projectId",
-          "name",
-          "triggerType",
-          "triggerValue",
-          "maxRetryCount",
-          "isEnabled",
-          "status"
+          "kind"
         ],
         "type": "object",
         "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "at": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "interval": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cron": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "JobUpdateRequest": {
+        "required": [
+          "id",
+          "enabled",
+          "projectId",
+          "targetKind",
+          "agentId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
           "projectId": {
             "type": "string",
             "format": "uuid"
           },
-          "agentType": {
+          "targetKind": {
+            "$ref": "#/components/schemas/AgentRuntimeType"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "schedule": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AgentRuntimeType"
+                "$ref": "#/components/schemas/JobScheduleDto"
               }
             ]
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "triggerType": {
-            "$ref": "#/components/schemas/TriggerType"
-          },
-          "triggerValue": {
-            "type": "string"
-          },
-          "maxRetryCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "isEnabled": {
-            "type": "boolean"
-          },
-          "status": {
-            "$ref": "#/components/schemas/JobStatus"
           }
         }
       },
@@ -18036,7 +18096,8 @@
           "projectId",
           "conversationId",
           "contextId",
-          "jobId",
+          "kind",
+          "relateId",
           "title",
           "latestStatus",
           "executionCount",
@@ -18061,7 +18122,10 @@
           "contextId": {
             "type": "string"
           },
-          "jobId": {
+          "kind": {
+            "type": "string"
+          },
+          "relateId": {
             "type": [
               "null",
               "string"
@@ -18160,7 +18224,8 @@
           "projectId",
           "conversationId",
           "contextId",
-          "jobId",
+          "kind",
+          "relateId",
           "title",
           "latestStatus",
           "executionCount",
@@ -18183,7 +18248,10 @@
           "contextId": {
             "type": "string"
           },
-          "jobId": {
+          "kind": {
+            "type": "string"
+          },
+          "relateId": {
             "type": [
               "null",
               "string"
@@ -19986,9 +20054,6 @@
             "$ref": "#/components/schemas/ToolDefinition"
           }
         }
-      },
-      "TriggerType": {
-        "type": "integer"
       },
       "UnpublishedEventRecord": {
         "required": [

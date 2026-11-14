@@ -85,7 +85,7 @@ Persistence/
 ```mermaid
 flowchart TB
     SignalR["SignalR 命令"] --> Session["DurableExecutionAttachment"]
-    Facade["A2A / Jobs 执行 Facade"] --> Acceptance["TurnAcceptanceService"]
+    Facade["A2A / Events 执行 Facade"] --> Acceptance["TurnAcceptanceService"]
     Session --> Coordinator["DurableExecutionCoordinator"]
     Acceptance --> Coordinator
     Coordinator --> Store["DurableExecutionStore"]
@@ -120,7 +120,7 @@ flowchart TB
 - Distributed 额外注册 `DurableExecutionStore`、SegmentExecutor 等 Scoped 服务，以及 Singleton 的 Coordinator、Client 和 EventStream；按 Host 选项注册 Worker。
 - Coordinator 每次访问持久状态都创建独立 scope；Worker 也为扫描和分段处理创建 scope，避免连接断开后后台任务继续使用已释放的请求 DbContext。
 - Infrastructure 将 `IAgentsDbContext` 映射到同一 Scoped `AgwDbContext`，并注册 Session / Checkpoint 适配器。
-- Standalone 组合执行入口和 Worker；拆分部署中 Data Plane 负责 SignalR / A2A 和 Worker，Control Plane 为 Jobs 提供 durable client。
+- Standalone 组合执行入口和 Worker；分离部署中 Data Plane 负责 SignalR / A2A 和执行 Worker，Control Plane 的 Events workers 通过 `IBackgroundExecutionFacade` 提交投递执行。
 
 ## 4. 持久状态的数据模型
 
@@ -443,9 +443,9 @@ Redis 是事件回放的可选实现，启用后仍需要 PostgreSQL 状态库�
 
 ### 9.3 后端模块接入与内部开发
 
-A2A、Jobs 等跨模块调用通过 [`IAgentExecutionFacade` / `IDurableAgentExecutionFacade`](../../Agw.Agents.Contracts/Execution/AgentExecutionContracts.cs) 接入。[`AgentExecutionFacade`](../Inbound/Facades/AgentExecutionFacade.cs) 经 `TurnAcceptanceService` 受理 Turn，再通过 `IExecutionCoordinator` 启动执行；Distributed 模式使用 `DurableExecutionCoordinator`。外部模块通过 Facade 查询结果和中断执行。
+A2A 使用 [`IAgentExecutionFacade` / `IDurableAgentExecutionFacade`](../../Agw.Agents.Contracts/Execution/AgentExecutionContracts.cs) 接入；Events 投递通过 [`IBackgroundExecutionFacade`](../../Agw.Agents.Contracts/Execution/BackgroundExecutionContracts.cs) 提交后台执行。`BackgroundExecutionFacade` 使用 `AgentExecutionFacade` 受理 Turn，再通过 `IExecutionCoordinator` 启动执行；Distributed 模式使用 `DurableExecutionCoordinator`。外部模块通过各自的 Facade 查询结果和中断执行。
 
-无人值守的 Durable Job 通过轻量 outcome 查询等待状态变化，无需回放整条事件流。Jobs 固定使用 Full access 自动批准普通工具调用，并拒绝需要真实用户回答的交互；A2A 沿用执行请求的权限策略。当前以独立 Agent 为目标（`AgentRuntimeType.Agent`）的 durable 执行只支持 System Agent，External Agent 会返回不支持的分段失败。
+Events 持有投递尝试状态和重试计划。`IBackgroundExecutionFacade` 登记后台 turn，执行完成后由 Events 更新投递和尝试记录；Jobs API 从这些记录生成运行历史。Job 订阅使用 Full access，并拒绝需要真实用户回答的交互；A2A 沿用执行请求的权限策略。当前以独立 Agent 为目标（`AgentRuntimeType.Agent`）的 Distributed 执行只支持 System Agent，External Agent 会返回不支持的分段失败。
 
 修改本目录时，保留以下约束：
 

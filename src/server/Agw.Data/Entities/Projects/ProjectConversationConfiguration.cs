@@ -10,14 +10,15 @@ public class ProjectConversationConfiguration : IEntityTypeConfiguration<Project
     {
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Generation).HasDefaultValue(0).IsConcurrencyToken();
-        builder.Property(e => e.JobId);
+        builder.Property(e => e.Kind).IsRequired().HasMaxLength(64).HasDefaultValue(ConversationKinds.Native);
+        builder.Property(e => e.RelateId);
         builder.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
         builder.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
         builder.Property(e => e.ExtensionId).IsRequired().HasMaxLength(64).HasDefaultValue(ConversationCreators.Host);
 
         builder.HasIndex(e => new { e.ProjectId, e.ContextId }).IsUnique();
         builder.HasIndex(e => e.ProjectId);
-        builder.HasIndex(e => e.JobId);
+        builder.HasIndex(e => e.RelateId);
         builder.HasIndex(e => e.UpdateTime);
 
         builder

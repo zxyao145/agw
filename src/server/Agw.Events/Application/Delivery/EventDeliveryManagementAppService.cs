@@ -15,6 +15,8 @@ namespace Agw.Events.Application.Delivery;
 
 public sealed class EventDeliveryManagementAppService
 {
+    private const string CancellationReason = "The event delivery was cancelled.";
+
     private readonly IEventsDbContext _db;
     private readonly IEventIngestTransaction _transaction;
     private readonly IOutboxStaging _outbox;
@@ -152,7 +154,7 @@ public sealed class EventDeliveryManagementAppService
                             turnId,
                             $"delivery:{deliveryId:D}",
                             delivery.EventId,
-                            "The event delivery was cancelled."
+                            CancellationReason
                         ),
                         cancellationToken
                     )
@@ -199,6 +201,10 @@ public sealed class EventDeliveryManagementAppService
                         .ConfigureAwait(false);
                     if (updated == 1)
                     {
+                        if (delivery.State == EventDeliveryState.WaitingExecution)
+                        {
+                            await MarkAttemptCancelledAsync(delivery, now, token).ConfigureAwait(false);
+                        }
                         await _outbox.CompleteAsync(EventTopics.Delivery, deliveryId, token).ConfigureAwait(false);
                         cancelled = true;
                     }
@@ -211,6 +217,29 @@ public sealed class EventDeliveryManagementAppService
             RecordTransition(EventDeliveryState.Cancelled);
         }
         return cancelled;
+    }
+
+    private async Task MarkAttemptCancelledAsync(
+        EventDelivery delivery,
+        DateTimeOffset endedAt,
+        CancellationToken cancellationToken
+    )
+    {
+        var updated = await _db
+            .EventDeliveryAttempts.Where(row => row.DeliveryId == delivery.Id && row.Attempt == delivery.Attempt)
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(row => row.EndedAt, endedAt)
+                        .SetProperty(row => row.Result, EventDeliveryAttemptResult.Failed)
+                        .SetProperty(row => row.Error, CancellationReason),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (updated != 1)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "The event delivery attempt record is missing.");
+        }
     }
 
     private static void RecordTransition(EventDeliveryState state) =>

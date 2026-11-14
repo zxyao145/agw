@@ -1,5 +1,6 @@
 using Agw.Events.Application;
 using Agw.Events.Application.Delivery;
+using Agw.Events.Application.Jobs;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Application.Sources;
 using Agw.Events.Contracts;
@@ -22,6 +23,8 @@ public static class DependencyInjection
         services.AddScoped<EventScheduleRunner>();
         services.AddScoped<EventManagementAppService>();
         services.AddScoped<EventSourceAppService>();
+        services.AddScoped<EventTimerScheduleSync>();
+        services.AddScoped<IEventJobFacade, EventJobFacade>();
         services.AddScoped<EventDeliveryProcessor>();
         services.AddScoped<EventDeliveryManagementAppService>();
         services.AddScoped<IEventExecutionCompletionHandler, EventExecutionCompletionHandler>();

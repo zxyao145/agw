@@ -184,7 +184,12 @@ public sealed class EventScheduler : IEventScheduler
             };
         }
         catch (Exception exception)
-            when (exception is CronFormatException or TimeZoneNotFoundException or InvalidTimeZoneException)
+            when (exception
+                    is CronFormatException
+                        or TimeZoneNotFoundException
+                        or InvalidTimeZoneException
+                        or ArgumentOutOfRangeException
+            )
         {
             _logger.LogWarning(exception, "Event schedule configuration is invalid.");
             throw new AgwException(ErrorCodes.InvalidParam, "Schedule or time zone is invalid.", exception);

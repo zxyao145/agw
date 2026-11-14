@@ -2,8 +2,9 @@ using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Coordination;
-using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -165,18 +166,9 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             target.OwnerUserId,
             async token =>
             {
-                if (
-                    !await _dbContext
-                        .LockOwnedProjectAsync(target.ProjectId, target.OwnerUserId, token)
-                        .ConfigureAwait(false)
-                )
-                {
-                    return false;
-                }
-
                 await DeleteDurableExecutionsAsync(target.ProjectId, null, target.OwnerUserId, token)
                     .ConfigureAwait(false);
-                await DeleteJobsAsync(target, token).ConfigureAwait(false);
+                await DeleteEventJobsAsync(target, token).ConfigureAwait(false);
                 await _dbContext
                     .EventSubscriptions.Where(subscription =>
                         subscription.ProjectId == target.ProjectId
@@ -222,36 +214,73 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             cancellationToken
         );
 
-    private async Task DeleteJobsAsync(ProjectDeletionTarget target, CancellationToken cancellationToken)
+    private async Task DeleteEventJobsAsync(ProjectDeletionTarget target, CancellationToken cancellationToken)
     {
-        var jobIds = await _dbContext
-            .Jobs.Where(job => job.ProjectId == target.ProjectId && job.CreateBy == target.OwnerUserId)
-            .Select(job => job.Id)
+        var subscriptions = _dbContext.EventSubscriptions.Where(row =>
+            row.ProjectId == target.ProjectId
+            && row.CreateBy == target.OwnerUserId
+            && row.ManagedBy == EventManagedBy.Job
+        );
+        var jobKeys = await subscriptions
+            .Select(row => row.ManagedKey)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (jobIds.Length == 0)
+        if (jobKeys.Length == 0)
         {
             return;
         }
 
-        await _dbContext
-            .JobLogs.Where(log => jobIds.Contains(log.JobId))
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var deletedJobCount = await _dbContext
-            .Jobs.Where(job =>
-                jobIds.Contains(job.Id)
-                && job.ProjectId == target.ProjectId
-                && job.CreateBy == target.OwnerUserId
-                && job.Status != JobStatus.Running
-                && job.ActiveTurnId == null
+        var sources = _dbContext.EventSources.Where(row =>
+            row.CreateBy == target.OwnerUserId
+            && row.Kind == EventSourceKind.Timer
+            && row.ManagedBy == EventManagedBy.Job
+            && jobKeys.Contains(row.ManagedKey)
+        );
+        var sourceIds = await sources.Select(row => row.Id).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+        var scheduleKeys = sourceIds.Select(id => $"source:{id}").ToArray();
+        var now = _timeProvider.GetUtcNow();
+        await CancelJobSchedulesAsync(target.OwnerUserId, scheduleKeys, now, cancellationToken).ConfigureAwait(false);
+        await sources
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(row => row.Enabled, false)
+                        .SetProperty(row => row.NextRunAt, (DateTimeOffset?)null)
+                        .SetProperty(row => row.DeletedAt, now)
+                        .SetProperty(row => row.Version, row => row.Version + 1)
+                        .SetProperty(row => row.UpdateBy, target.OwnerUserId)
+                        .SetProperty(row => row.UpdateTime, now),
+                cancellationToken
             )
-            .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (deletedJobCount != jobIds.Length)
-        {
-            throw new AgwException(ErrorCodes.JobActiveAttemptConflict);
-        }
+        await subscriptions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task CancelJobSchedulesAsync(
+        string ownerUserId,
+        string[] scheduleKeys,
+        DateTimeOffset now,
+        CancellationToken cancellationToken
+    )
+    {
+        await _dbContext
+            .EventSchedules.Where(row =>
+                row.CreateBy == ownerUserId
+                && scheduleKeys.Contains(row.CallerKey)
+                && row.State == EventScheduleState.Active
+            )
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(row => row.State, EventScheduleState.Cancelled)
+                        .SetProperty(row => row.DueAt, (DateTimeOffset?)null)
+                        .SetProperty(row => row.Revision, row => row.Revision + 1)
+                        .SetProperty(row => row.Version, row => row.Version + 1)
+                        .SetProperty(row => row.UpdateBy, ownerUserId)
+                        .SetProperty(row => row.UpdateTime, now),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task DeleteAllProjectConversationsAsync(

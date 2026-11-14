@@ -115,7 +115,7 @@ public sealed class EventSubscriptionMatcherTests
         var subscription = CreateSubscription(
             eventTypes: "[\"com.example.updated\"]",
             publisherKeys: "[]",
-            managedByExtensionId: ownExtensionId
+            managedBy: EventManagedBy.ForExtension(ownExtensionId)
         );
         var foreignSource = new EventSource
         {
@@ -174,7 +174,7 @@ public sealed class EventSubscriptionMatcherTests
         string eventTypes,
         string? filter = null,
         string publisherKeys = "[]",
-        Guid? managedByExtensionId = null
+        string managedBy = EventManagedBy.User
     ) =>
         new()
         {
@@ -187,7 +187,7 @@ public sealed class EventSubscriptionMatcherTests
             EventTypesJson = eventTypes,
             FilterJson = filter,
             TargetKind = EventSubscriptionTargetKind.ExtensionHandler,
-            ManagedByExtensionId = managedByExtensionId,
-            ManagedState = managedByExtensionId is null ? null : EventSubscriptionManagedState.Active,
+            ManagedBy = managedBy,
+            ManagedState = EventManagedBy.IsExtension(managedBy) ? EventSubscriptionManagedState.Active : null,
         };
 }

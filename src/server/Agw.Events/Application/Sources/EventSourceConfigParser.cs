@@ -370,11 +370,11 @@ public static class EventSourceConfigParser
         {
             return XmlConvert.ToTimeSpan(interval);
         }
-        catch (FormatException exception)
+        catch (Exception exception) when (exception is FormatException or OverflowException)
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "Timer source interval must be an ISO 8601 duration.",
+                "Timer source interval must be an ISO 8601 duration within the supported range.",
                 exception
             );
         }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Behaviors;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -56,7 +57,7 @@ public class ProjectConversationAppService
 
         var histories = _dbContext.ProjectConversationChatHistories.AsNoTracking();
         conversationsQuery = conversationsQuery.Where(conversation =>
-            conversation.JobId == null
+            conversation.Kind == ConversationKinds.Native
             || histories.Any(record =>
                 record.ConversationId == conversation.Id
                 && record.ConversationPayload != null
@@ -102,7 +103,6 @@ public class ProjectConversationAppService
                 Id = record.Id,
                 ConversationId = record.ConversationId,
                 TaskId = record.TaskId,
-                JobId = record.JobId,
                 Status = record.Status,
                 FinishedTime = record.FinishedTime,
                 TaskErrorMessage = record.TaskErrorMessage,
@@ -477,7 +477,8 @@ public class ProjectConversationAppService
             conversation.ProjectId.Normalize(),
             conversation.Id,
             conversation.ContextId,
-            conversation.JobId,
+            conversation.Kind,
+            conversation.RelateId,
             conversation.Title,
             latestRecord?.Status,
             executionCount,
@@ -584,7 +585,8 @@ public class ProjectConversationAppService
             Generation = conversation.Generation,
             ProjectId = conversation.ProjectId,
             ContextId = conversation.ContextId,
-            JobId = conversation.JobId,
+            Kind = conversation.Kind,
+            RelateId = conversation.RelateId,
             Title = conversation.Title,
             CreateTime = conversation.CreateTime,
             UpdateTime = conversation.UpdateTime,
@@ -599,7 +601,8 @@ public class ProjectConversationAppService
             conversation.ProjectId.Normalize(),
             conversation.Id,
             conversation.ContextId,
-            conversation.JobId,
+            conversation.Kind,
+            conversation.RelateId,
             conversation.Title,
             latestTask?.Status,
             aggregate?.ExecutionCount ?? 0,
@@ -892,7 +895,8 @@ public class ProjectConversationAppService
             Id = conversation.Id,
             Generation = conversation.Generation,
             ProjectId = conversation.ProjectId,
-            JobId = conversation.JobId,
+            Kind = conversation.Kind,
+            RelateId = conversation.RelateId,
             ContextId = conversation.ContextId,
             Title = conversation.Title,
             ExtensionId = conversation.ExtensionId,
@@ -919,7 +923,8 @@ public class ProjectConversationAppService
         public Guid Id { get; init; }
         public int Generation { get; init; }
         public Guid ProjectId { get; init; }
-        public Guid? JobId { get; init; }
+        public string Kind { get; init; } = string.Empty;
+        public Guid? RelateId { get; init; }
         public string ContextId { get; init; } = string.Empty;
         public string Title { get; init; } = string.Empty;
         public string ExtensionId { get; init; } = string.Empty;

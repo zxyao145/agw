@@ -406,7 +406,7 @@ InProcess 保留异步等待 Task；先登记再发布，因此客户端立即�
 
 `scope` 的准确 JSON 值是 `Once`、`AlwaysTool`、`AlwaysArguments`。拒绝时发送 `approved: false` 和 `scope: "Once"`。服务端在接收响应时按本轮权限快照归一，客户端不能通过修改 `scope` 越过当前模式允许的授权范围，也不能在这个响应中替换工具参数。
 
-直接从后端执行时，根据入口设置 `AgentExecuteRequest`、`AgentExecuteByIdRequest` 或 `CreateAiAgentRequest` 的 `PermissionMode`；Agentflow runtime 执行入口也接受该模式。Jobs 使用执行 Facade 的 `AgentExecutionPermissionMode.FullAccess`，同时指定 `HumanInteractionPolicy.Reject`：普通工具审批可以继续，需要真实用户决定的请求会明确失败，不会无限等待。
+直接从后端执行时，根据入口设置 `AgentExecuteRequest`、`AgentExecuteByIdRequest` 或 `CreateAiAgentRequest` 的 `PermissionMode`；Agentflow runtime 执行入口也接受该模式。Job 订阅使用 `AgentExecutionPermissionMode.FullAccess`，同时指定 `HumanInteractionPolicy.Reject`：普通工具审批可以继续，需要真实用户决定的请求会明确失败，不会无限等待。
 
 ### 与 Plan 模式、用户输入及 External Agent 的边界
 

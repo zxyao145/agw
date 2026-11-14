@@ -480,13 +480,15 @@ public class ProjectConversationAppServiceTests
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
-        var jobId = Guid.CreateVersion7();
+        var eventId = Guid.CreateVersion7();
         var firstTaskId = Guid.CreateVersion7();
         var secondTaskId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Trip", jobId));
+            seedContext.ProjectConversations.Add(
+                CreateContext(contextId, projectId, "context-1", "Trip", "event:timer", eventId)
+            );
             seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(contextId, firstTaskId, 0, "Tokyo trip", TaskExecutionStatus.Succeeded),
                 CreateRecord(contextId, secondTaskId, 0, "Hotels", TaskExecutionStatus.Running)
@@ -507,7 +509,8 @@ public class ProjectConversationAppServiceTests
         Assert.Equal(projectId.Normalize(), context.ProjectId);
         Assert.Equal(contextId, context.ConversationId);
         Assert.Equal("context-1", context.ContextId);
-        Assert.Equal(jobId, context.JobId);
+        Assert.Equal("event:timer", context.Kind);
+        Assert.Equal(eventId, context.RelateId);
         Assert.Equal("Trip", context.Title);
         Assert.Equal(2, context.ExecutionCount);
         Assert.Equal(2, context.MessageCount);
@@ -526,18 +529,39 @@ public class ProjectConversationAppServiceTests
 
         var projectId = Guid.CreateVersion7();
         var interactiveContextId = Guid.CreateVersion7();
-        var emptyJobContextId = Guid.CreateVersion7();
-        var persistedJobContextId = Guid.CreateVersion7();
-        var neverStartedJobContextId = Guid.CreateVersion7();
-        var jobId = Guid.CreateVersion7();
+        var emptyEventContextId = Guid.CreateVersion7();
+        var persistedEventContextId = Guid.CreateVersion7();
+        var neverStartedEventContextId = Guid.CreateVersion7();
+        var eventId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
             seedContext.ProjectConversations.AddRange(
                 CreateContext(interactiveContextId, projectId, "interactive-context", "New Chat"),
-                CreateContext(emptyJobContextId, projectId, "empty-job-context", "Queued run", jobId),
-                CreateContext(persistedJobContextId, projectId, "persisted-job-context", "Persisted", jobId),
-                CreateContext(neverStartedJobContextId, projectId, "never-started-job", "Never started", jobId)
+                CreateContext(
+                    emptyEventContextId,
+                    projectId,
+                    "empty-event-context",
+                    "Queued run",
+                    "event:timer",
+                    eventId
+                ),
+                CreateContext(
+                    persistedEventContextId,
+                    projectId,
+                    "persisted-event-context",
+                    "Persisted",
+                    "event:timer",
+                    eventId
+                ),
+                CreateContext(
+                    neverStartedEventContextId,
+                    projectId,
+                    "never-started-event",
+                    "Never started",
+                    "event:timer",
+                    eventId
+                )
             );
             seedContext.ProjectConversationChatHistories.AddRange(
                 new ProjectConversationChatHistory
@@ -552,13 +576,13 @@ public class ProjectConversationAppServiceTests
                 new ProjectConversationChatHistory
                 {
                     Id = Guid.CreateVersion7(),
-                    ConversationId = emptyJobContextId,
+                    ConversationId = emptyEventContextId,
                     TaskId = Guid.CreateVersion7(),
                     Status = TaskExecutionStatus.Running,
                     CreateTime = TimeProvider.System.GetUtcNow(),
                     UpdateTime = TimeProvider.System.GetUtcNow(),
                 },
-                CreateRecord(persistedJobContextId, Guid.CreateVersion7(), 0, "hello", TaskExecutionStatus.Running)
+                CreateRecord(persistedEventContextId, Guid.CreateVersion7(), 0, "hello", TaskExecutionStatus.Running)
             );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -578,9 +602,9 @@ public class ProjectConversationAppServiceTests
         Assert.Equal("interactive-context", interactiveContext.ContextId);
         Assert.Equal(1, interactiveContext.ExecutionCount);
         Assert.Equal(0, interactiveContext.MessageCount);
-        Assert.Contains(persistedJobContextId, contextsById.Keys);
-        Assert.Contains(neverStartedJobContextId, contextsById.Keys);
-        Assert.DoesNotContain(emptyJobContextId, contextsById.Keys);
+        Assert.Contains(persistedEventContextId, contextsById.Keys);
+        Assert.Contains(neverStartedEventContextId, contextsById.Keys);
+        Assert.DoesNotContain(emptyEventContextId, contextsById.Keys);
     }
 
     [Fact]
@@ -595,7 +619,7 @@ public class ProjectConversationAppServiceTests
 
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7();
-        var jobId = Guid.CreateVersion7();
+        var eventId = Guid.CreateVersion7();
         var otherContextId = Guid.CreateVersion7();
         var firstTaskId = Guid.CreateVersion7();
         var secondTaskId = Guid.CreateVersion7();
@@ -610,7 +634,7 @@ public class ProjectConversationAppServiceTests
         };
         await using (var seedContext = new AgwDbContext(options))
         {
-            var requestedContext = CreateContext(contextId, projectId, "context-1", "Trip", jobId);
+            var requestedContext = CreateContext(contextId, projectId, "context-1", "Trip", "event:timer", eventId);
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
             seedContext.ProjectConversations.AddRange(
                 requestedContext,
@@ -635,7 +659,8 @@ public class ProjectConversationAppServiceTests
         var context = await service.GetResponseAsync(projectId, contextId, cancellationToken);
 
         Assert.NotNull(context);
-        Assert.Equal(jobId, context.JobId);
+        Assert.Equal("event:timer", context.Kind);
+        Assert.Equal(eventId, context.RelateId);
         Assert.Equal(contextId, context.ConversationId);
         Assert.Equal("context-1", context.ContextId);
         Assert.Equal("Trip", context.Title);
@@ -1786,14 +1811,16 @@ public class ProjectConversationAppServiceTests
         Guid projectId,
         string contextId,
         string title,
-        Guid? jobId = null
+        string kind = ConversationKinds.Native,
+        Guid? relateId = null
     ) =>
         new()
         {
             Id = id,
             ProjectId = projectId,
             ContextId = contextId,
-            JobId = jobId,
+            Kind = kind,
+            RelateId = relateId,
             Title = title,
             CreateBy = "tester",
             CreateTime = TimeProvider.System.GetUtcNow(),

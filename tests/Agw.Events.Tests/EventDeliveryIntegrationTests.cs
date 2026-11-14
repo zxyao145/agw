@@ -1,51 +1,35 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
-using Agw.Agents;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Contracts.Messages;
-using Agw.Agents.Execution;
 using Agw.Auth.Contracts;
-using Agw.Auth.Extensions;
 using Agw.Events.Application;
 using Agw.Events.Application.Delivery;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Contracts;
 using Agw.Events.Contracts.Transport;
 using Agw.Events.Infrastructure.Dispatch;
-using Agw.Extensions;
-using Agw.Extensions.Contracts;
-using Agw.Extensions.Infrastructure.Packages;
-using Agw.Files;
-using Agw.Host.Data;
-using Agw.Host.Runtime;
-using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Events.Transport;
-using Agw.Integrations.Extensions;
-using Agw.Jobs;
-using Agw.Notifications;
 using Agw.Notifications.Application.Persistence;
-using Agw.Projects;
-using Agw.Providers;
-using Agw.Settings;
-using Agw.Settings.Contracts;
-using Agw.Setup.Services;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Contracts.Events;
-using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Notifications;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
-using Agw.Skills;
-using Agw.Tools;
-using Microsoft.AspNetCore.DataProtection;
+using Agw.Testing;
+using Agw.Tests;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
+using static Agw.Tests.ModuleCompositionTestHost;
 
 namespace Agw.Events.Infrastructure.Delivery;
 
@@ -53,13 +37,502 @@ public sealed class EventDeliveryIntegrationTests
 {
     private const string OwnerUserId = "event-delivery-integration-owner";
 
+    [Fact]
+    public async Task ProcessAsync_FailedJobDelivery_RetriesInAnotherRelatedConversation()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var user = PushUser(OwnerUserId);
+        await using var host = await ModuleCompositionTestHost.CreateAsync(
+            settings: new Dictionary<string, string?> { ["Events:Delivery:MaxAttempts"] = "1" }
+        );
+        await using var scope = host.Services.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var db = services.GetRequiredService<AgwDbContext>();
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "event-agent",
+            DisplayName = "Event Agent",
+        };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Event project",
+            Workspace = services.GetRequiredService<AgwDataPaths>().UserHomeDirectory,
+        };
+        db.Agents.Add(agent);
+        db.Projects.Add(project);
+        await db.SaveChangesAsync(cancellationToken);
+        var job = await services
+            .GetRequiredService<IEventJobFacade>()
+            .CreateAsync(
+                new EventJobDefinition
+                {
+                    Name = "Event conversation job",
+                    Enabled = true,
+                    ProjectId = project.Id,
+                    TargetKind = EventJobTargetKind.Agent,
+                    AgentId = agent.Id,
+                    Instructions = "Run the scheduled work.",
+                    Schedule = new EventJobSchedule
+                    {
+                        Kind = "Once",
+                        At = TimeProvider.System.GetUtcNow().AddMinutes(-1),
+                    },
+                },
+                cancellationToken
+            );
+        var scheduleId = await db.EventSchedules.Select(row => row.Id).SingleAsync(cancellationToken);
+        var transport = services.GetRequiredService<IEventTransport>();
+
+        Assert.True(await services.GetRequiredService<EventScheduleRunner>().RunAsync(scheduleId, cancellationToken));
+        var accepted = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+        await services.GetRequiredService<EventDispatcher>().DispatchAsync(accepted, cancellationToken);
+        var pending = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+        await services.GetRequiredService<EventDeliveryProcessor>().ProcessAsync(pending, cancellationToken);
+        db.ChangeTracker.Clear();
+
+        var jobKey = job.Id.ToString("D");
+        var source = await db.EventSources.SingleAsync(
+            row => row.ManagedBy == EventManagedBy.Job && row.ManagedKey == jobKey,
+            cancellationToken
+        );
+        var delivery = await db.EventDeliveries.SingleAsync(cancellationToken);
+        var eventId = await db
+            .Events.Where(row => row.SourceId == source.Id)
+            .Select(row => row.Id)
+            .SingleAsync(cancellationToken);
+        var conversation = await db.ProjectConversations.SingleAsync(
+            row => row.ProjectId == project.Id,
+            cancellationToken
+        );
+        Assert.Equal(EventDeliveryState.WaitingExecution, delivery.State);
+        Assert.Equal(ConversationKinds.ForEventSource(source.Kind), conversation.Kind);
+        Assert.Equal(eventId, conversation.RelateId);
+
+        var firstTurnId = Assert.IsType<Guid>(delivery.TurnId);
+        Assert.True(
+            await services
+                .GetRequiredService<IBackgroundExecutionCompletionTransaction>()
+                .CompleteAsync(
+                    new BackgroundExecutionCompletion
+                    {
+                        TurnId = firstTurnId,
+                        OwnerUserId = OwnerUserId,
+                        State = AgentExecutionState.Failed,
+                        Error = "Execution failed.",
+                        InputTokens = 0,
+                        OutputTokens = 0,
+                        CompletedAt = TimeProvider.System.GetUtcNow(),
+                    },
+                    cancellationToken
+                )
+        );
+        var completed = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+        await services.GetRequiredService<EventDispatcher>().DispatchAsync(completed, cancellationToken);
+        Assert.True(
+            await services
+                .GetRequiredService<EventDeliveryManagementAppService>()
+                .RetryAsync(delivery.Id, cancellationToken)
+        );
+        db.ChangeTracker.Clear();
+        var retry = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+        await services.GetRequiredService<EventDeliveryProcessor>().ProcessAsync(retry, cancellationToken);
+        db.ChangeTracker.Clear();
+
+        var retriedDelivery = await db.EventDeliveries.SingleAsync(cancellationToken);
+        Assert.Equal(EventDeliveryState.WaitingExecution, retriedDelivery.State);
+        Assert.NotEqual(firstTurnId, retriedDelivery.TurnId);
+        var retryConversation = await db.ProjectConversations.SingleAsync(
+            row => row.ProjectId == project.Id && row.Id != conversation.Id,
+            cancellationToken
+        );
+        Assert.Equal(conversation.Kind, retryConversation.Kind);
+        Assert.Equal(eventId, retryConversation.RelateId);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RecurringJob_RunsNextOccurrenceWhileFirstExecutionIsWaiting()
+    {
+        using var user = PushUser(OwnerUserId);
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 14, 0, 0, 0, TimeSpan.Zero));
+        await using var host = await TimeControlledHost.CreateAsync(clock);
+        await using var scope = host.Services.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var db = services.GetRequiredService<AgwDbContext>();
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "recurring-event-agent",
+            DisplayName = "Recurring Event Agent",
+        };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Recurring event project",
+            Workspace = services.GetRequiredService<AgwDataPaths>().UserHomeDirectory,
+        };
+        db.AddRange(agent, project);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var job = await services
+            .GetRequiredService<IEventJobFacade>()
+            .CreateAsync(
+                new EventJobDefinition
+                {
+                    Name = "Recurring event job",
+                    Enabled = true,
+                    ProjectId = project.Id,
+                    TargetKind = EventJobTargetKind.Agent,
+                    AgentId = agent.Id,
+                    Instructions = "Run the scheduled work.",
+                    Schedule = new EventJobSchedule { Kind = "Interval", Interval = "PT1M" },
+                },
+                TestContext.Current.CancellationToken
+            );
+        var scheduleId = await db
+            .EventSchedules.Select(row => row.Id)
+            .SingleAsync(TestContext.Current.CancellationToken);
+        var runner = services.GetRequiredService<EventScheduleRunner>();
+        var dispatcher = services.GetRequiredService<EventDispatcher>();
+        var processor = services.GetRequiredService<EventDeliveryProcessor>();
+        var transport = services.GetRequiredService<IEventTransport>();
+
+        async Task<EventDelivery> ExecuteOccurrenceAsync()
+        {
+            Assert.True(await runner.RunAsync(scheduleId, TestContext.Current.CancellationToken));
+            var accepted = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+            await dispatcher.DispatchAsync(accepted, TestContext.Current.CancellationToken);
+            var pending = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+            var deliveryId = Guid.Parse(pending.Message.Extensions["agwdeliveryid"].Value);
+            await processor.ProcessAsync(pending, TestContext.Current.CancellationToken);
+            db.ChangeTracker.Clear();
+            return await db
+                .EventDeliveries.AsNoTracking()
+                .SingleAsync(row => row.Id == deliveryId, TestContext.Current.CancellationToken);
+        }
+
+        var firstDueAt = (
+            await db
+                .EventSchedules.AsNoTracking()
+                .SingleAsync(row => row.Id == scheduleId, TestContext.Current.CancellationToken)
+        ).DueAt;
+        clock.SetUtcNow(firstDueAt!.Value);
+        var first = await ExecuteOccurrenceAsync();
+        Assert.Equal(EventDeliveryState.WaitingExecution, first.State);
+        var nextDueAt = (
+            await db
+                .EventSchedules.AsNoTracking()
+                .SingleAsync(row => row.Id == scheduleId, TestContext.Current.CancellationToken)
+        ).DueAt;
+        clock.SetUtcNow(nextDueAt!.Value);
+
+        var second = await ExecuteOccurrenceAsync();
+
+        var deliveries = await db
+            .EventDeliveries.AsNoTracking()
+            .OrderBy(row => row.Attempt)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, deliveries.Count);
+        Assert.All(deliveries, delivery => Assert.Equal(EventDeliveryState.WaitingExecution, delivery.State));
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.NotEqual(first.TurnId, second.TurnId);
+        Assert.True(
+            (
+                await services
+                    .GetRequiredService<IEventJobFacade>()
+                    .FindAsync(job.Id, TestContext.Current.CancellationToken)
+            )!
+                .Definition
+                .Enabled
+        );
+    }
+
+    [Fact]
+    public async Task RecoverDueRetriesAsync_ParksFailedJobDelivery_LeavesJobEnabledForNextTimer()
+    {
+        using var user = PushUser(OwnerUserId);
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 14, 0, 0, 0, TimeSpan.Zero));
+        await using var host = await TimeControlledHost.CreateAsync(
+            clock,
+            new Dictionary<string, string?> { ["Events:Delivery:MaxAttempts"] = "2" }
+        );
+        await using var scope = host.Services.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var db = services.GetRequiredService<AgwDbContext>();
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Retry event project",
+            Workspace = services.GetRequiredService<AgwDataPaths>().UserHomeDirectory,
+        };
+        db.Projects.Add(project);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var job = await services
+            .GetRequiredService<IEventJobFacade>()
+            .CreateAsync(
+                new EventJobDefinition
+                {
+                    Name = "Retry event job",
+                    Enabled = true,
+                    ProjectId = project.Id,
+                    TargetKind = EventJobTargetKind.Agent,
+                    AgentId = Guid.CreateVersion7(),
+                    Instructions = "Run the scheduled work.",
+                    Schedule = new EventJobSchedule { Kind = "Interval", Interval = "PT1M" },
+                },
+                TestContext.Current.CancellationToken
+            );
+        var scheduleId = await db
+            .EventSchedules.Select(row => row.Id)
+            .SingleAsync(TestContext.Current.CancellationToken);
+        var firstDueAt = (
+            await db
+                .EventSchedules.AsNoTracking()
+                .SingleAsync(row => row.Id == scheduleId, TestContext.Current.CancellationToken)
+        ).DueAt;
+        clock.SetUtcNow(firstDueAt!.Value);
+        var runner = services.GetRequiredService<EventScheduleRunner>();
+        var dispatcher = services.GetRequiredService<EventDispatcher>();
+        var processor = services.GetRequiredService<EventDeliveryProcessor>();
+        var transport = services.GetRequiredService<IEventTransport>();
+
+        Assert.True(await runner.RunAsync(scheduleId, TestContext.Current.CancellationToken));
+        var accepted = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+        await dispatcher.DispatchAsync(accepted, TestContext.Current.CancellationToken);
+        var initialRetry = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+        await processor.ProcessAsync(initialRetry, TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+        var scheduledRetry = await db.EventDeliveries.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(EventDeliveryState.RetryScheduled, scheduledRetry.State);
+        Assert.NotNull(scheduledRetry.NextAttemptAt);
+        clock.SetUtcNow(scheduledRetry.NextAttemptAt!.Value);
+
+        Assert.Equal(
+            1,
+            await services
+                .GetRequiredService<Agw.Infrastructure.Events.EventRecordRecovery>()
+                .RecoverDueRetriesAsync(TestContext.Current.CancellationToken)
+        );
+        var retry = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+        await processor.ProcessAsync(retry, TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+        var parked = await db.EventDeliveries.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(EventDeliveryState.Parked, parked.State);
+        Assert.True(
+            (
+                await services
+                    .GetRequiredService<IEventJobFacade>()
+                    .FindAsync(job.Id, TestContext.Current.CancellationToken)
+            )!
+                .Definition
+                .Enabled
+        );
+
+        var nextDueAt = (
+            await db
+                .EventSchedules.AsNoTracking()
+                .SingleAsync(row => row.Id == scheduleId, TestContext.Current.CancellationToken)
+        ).DueAt;
+        clock.SetUtcNow(nextDueAt!.Value);
+        Assert.True(await runner.RunAsync(scheduleId, TestContext.Current.CancellationToken));
+        accepted = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+        await dispatcher.DispatchAsync(accepted, TestContext.Current.CancellationToken);
+        var nextTimerDelivery = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+        await processor.ProcessAsync(nextTimerDelivery, TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        Assert.Equal(
+            2,
+            await db.Events.CountAsync(row => row.Type == "job.timer.fired", TestContext.Current.CancellationToken)
+        );
+        Assert.Equal(2, await db.EventDeliveries.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            EventScheduleState.Active,
+            (
+                await db
+                    .EventSchedules.AsNoTracking()
+                    .SingleAsync(row => row.Id == scheduleId, TestContext.Current.CancellationToken)
+            ).State
+        );
+    }
+
+    [Fact]
+    public async Task DeleteAsync_JobWithWaitingRetryWithoutRequest_CancelsRetry()
+    {
+        using var user = PushUser(OwnerUserId);
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 14, 0, 0, 0, TimeSpan.Zero));
+        await using var host = await TimeControlledHost.CreateAsync(clock);
+        await using var scope = host.Services.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var db = services.GetRequiredService<AgwDbContext>();
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Waiting retry project",
+            Workspace = services.GetRequiredService<AgwDataPaths>().UserHomeDirectory,
+        };
+        db.Projects.Add(project);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var job = await services
+            .GetRequiredService<IEventJobFacade>()
+            .CreateAsync(
+                new EventJobDefinition
+                {
+                    Name = "Waiting retry job",
+                    Enabled = true,
+                    ProjectId = project.Id,
+                    TargetKind = EventJobTargetKind.Agent,
+                    AgentId = Guid.CreateVersion7(),
+                    Instructions = "Run the scheduled work.",
+                    Schedule = new EventJobSchedule { Kind = "Once", At = clock.GetUtcNow().AddMinutes(-1) },
+                },
+                TestContext.Current.CancellationToken
+            );
+        var scheduleId = await db
+            .EventSchedules.Select(row => row.Id)
+            .SingleAsync(TestContext.Current.CancellationToken);
+        Assert.True(
+            await services
+                .GetRequiredService<EventScheduleRunner>()
+                .RunAsync(scheduleId, TestContext.Current.CancellationToken)
+        );
+        var transport = services.GetRequiredService<IEventTransport>();
+        var accepted = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+        await services
+            .GetRequiredService<EventDispatcher>()
+            .DispatchAsync(accepted, TestContext.Current.CancellationToken);
+        var delivery = await db.EventDeliveries.SingleAsync(TestContext.Current.CancellationToken);
+        delivery.State = EventDeliveryState.RetryScheduled;
+        delivery.Attempt = 1;
+        delivery.NextAttemptAt = clock.GetUtcNow().AddSeconds(-1);
+        delivery.TurnId = null;
+        delivery.RequestSnapshotJson = null;
+        delivery.Version++;
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        await services.GetRequiredService<IEventJobFacade>().DeleteAsync(job.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(
+            1,
+            await services
+                .GetRequiredService<Agw.Infrastructure.Events.EventRecordRecovery>()
+                .RecoverDueRetriesAsync(TestContext.Current.CancellationToken)
+        );
+        var retry = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+        await services
+            .GetRequiredService<EventDeliveryProcessor>()
+            .ProcessAsync(retry, TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        var cancelled = await db.EventDeliveries.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(EventDeliveryState.Cancelled, cancelled.State);
+        Assert.Null(cancelled.TurnId);
+        Assert.Null(cancelled.RequestSnapshotJson);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_JobWithSubmittedExecution_AllowsExecutionToFinish()
+    {
+        using var user = PushUser(OwnerUserId);
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 14, 0, 0, 0, TimeSpan.Zero));
+        await using var host = await TimeControlledHost.CreateAsync(clock);
+        await using var scope = host.Services.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var db = services.GetRequiredService<AgwDbContext>();
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "submitted-event-agent",
+            DisplayName = "Submitted Event Agent",
+        };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Submitted event project",
+            Workspace = services.GetRequiredService<AgwDataPaths>().UserHomeDirectory,
+        };
+        db.AddRange(agent, project);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var job = await services
+            .GetRequiredService<IEventJobFacade>()
+            .CreateAsync(
+                new EventJobDefinition
+                {
+                    Name = "Submitted execution job",
+                    Enabled = true,
+                    ProjectId = project.Id,
+                    TargetKind = EventJobTargetKind.Agent,
+                    AgentId = agent.Id,
+                    Instructions = "Run the scheduled work.",
+                    Schedule = new EventJobSchedule { Kind = "Once", At = clock.GetUtcNow().AddMinutes(-1) },
+                },
+                TestContext.Current.CancellationToken
+            );
+        var scheduleId = await db
+            .EventSchedules.Select(row => row.Id)
+            .SingleAsync(TestContext.Current.CancellationToken);
+        Assert.True(
+            await services
+                .GetRequiredService<EventScheduleRunner>()
+                .RunAsync(scheduleId, TestContext.Current.CancellationToken)
+        );
+        var transport = services.GetRequiredService<IEventTransport>();
+        var accepted = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+        await services
+            .GetRequiredService<EventDispatcher>()
+            .DispatchAsync(accepted, TestContext.Current.CancellationToken);
+        var pending = await ReadTransportDeliveryAsync(transport, EventTopics.Delivery);
+        await services
+            .GetRequiredService<EventDeliveryProcessor>()
+            .ProcessAsync(pending, TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+        var delivery = await db.EventDeliveries.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(EventDeliveryState.WaitingExecution, delivery.State);
+        var turnId = Assert.IsType<Guid>(delivery.TurnId);
+
+        await services.GetRequiredService<IEventJobFacade>().DeleteAsync(job.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(
+            EventDeliveryState.WaitingExecution,
+            (await db.EventDeliveries.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).State
+        );
+        Assert.True(
+            await services
+                .GetRequiredService<IBackgroundExecutionCompletionTransaction>()
+                .CompleteAsync(
+                    new BackgroundExecutionCompletion
+                    {
+                        TurnId = turnId,
+                        OwnerUserId = OwnerUserId,
+                        State = AgentExecutionState.Completed,
+                        Error = null,
+                        InputTokens = 0,
+                        OutputTokens = 0,
+                        CompletedAt = clock.GetUtcNow(),
+                    },
+                    TestContext.Current.CancellationToken
+                )
+        );
+        var completed = await ReadTransportDeliveryAsync(transport, EventTopics.Accepted);
+        await services
+            .GetRequiredService<EventDispatcher>()
+            .DispatchAsync(completed, TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        var finished = await db.EventDeliveries.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(EventDeliveryState.Succeeded, finished.State);
+        Assert.Equal(
+            EventDeliveryAttemptResult.Succeeded,
+            (await db.EventDeliveryAttempts.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).Result
+        );
+    }
+
     [Theory]
     [InlineData("""{"===":[{"var":"data"},{"state":"open"}]}""", "Cannot identify rule for state")]
     [InlineData("""{"===":[{"var":"type"}]}""", "needs an array with 2 parameters")]
     public async Task SaveSubscriptionAsync_InvalidFilter_ReturnsRestrictionAndReason(string filter, string reason)
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         using var document = JsonDocument.Parse(filter);
         var request = new EventSubscriptionRequest
@@ -87,7 +560,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task ProcessAsync_UnavailableExtension_HoldsDeliveryWithoutAttempt()
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -157,7 +630,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task RetryAsync_ParkedDelivery_RequeuesAndPublishesDelivery()
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -208,13 +681,14 @@ public sealed class EventDeliveryIntegrationTests
     public async Task CancelAsync_WaitingExecution_RegistersDeliveryOwnedCancellation()
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
         var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
         var deliveryId = Guid.CreateVersion7();
         var turnId = Guid.CreateVersion7();
+        var startedAt = TimeProvider.System.GetUtcNow().AddMinutes(-1);
         db.EventDeliveries.Add(
             new EventDelivery
             {
@@ -226,6 +700,18 @@ public sealed class EventDeliveryIntegrationTests
                 Attempt = 1,
                 TurnId = turnId,
                 RecoverAfter = TimeProvider.System.GetUtcNow(),
+            }
+        );
+        db.EventDeliveryAttempts.Add(
+            new EventDeliveryAttempt
+            {
+                Id = Guid.CreateVersion7(),
+                DeliveryId = deliveryId,
+                Attempt = 1,
+                TurnId = turnId,
+                StartedAt = startedAt,
+                EndedAt = startedAt,
+                Result = EventDeliveryAttemptResult.Retry,
             }
         );
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -247,6 +733,13 @@ public sealed class EventDeliveryIntegrationTests
         Assert.Equal(AgentExecutionState.Interrupted, execution.State);
         Assert.Equal($"delivery:{deliveryId:D}", execution.CallerKey);
         Assert.Equal(eventId, execution.ParentEventId);
+        var attempt = await db
+            .EventDeliveryAttempts.AsNoTracking()
+            .SingleAsync(row => row.DeliveryId == deliveryId, TestContext.Current.CancellationToken);
+        Assert.Equal(EventDeliveryAttemptResult.Failed, attempt.Result);
+        Assert.Equal("The event delivery was cancelled.", attempt.Error);
+        Assert.True(attempt.EndedAt > attempt.StartedAt);
+        Assert.Equal(turnId, attempt.TurnId);
     }
 
     [Theory]
@@ -260,7 +753,7 @@ public sealed class EventDeliveryIntegrationTests
     )
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -343,7 +836,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task RecoverDueRetriesAsync_DueRetryScheduledDelivery_RequeuesAndPublishes(bool outboxEnabled)
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync(outboxEnabled);
+        await using var host = await ModuleCompositionTestHost.CreateAsync(outboxEnabled);
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -424,7 +917,7 @@ public sealed class EventDeliveryIntegrationTests
     )
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync(outboxEnabled);
+        await using var host = await ModuleCompositionTestHost.CreateAsync(outboxEnabled);
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -539,7 +1032,7 @@ public sealed class EventDeliveryIntegrationTests
                 string eventIdText;
                 string eventSource;
                 await using (
-                    var firstHost = await DeliveryTestHost.CreateAsync(
+                    var firstHost = await ModuleCompositionTestHost.CreateAsync(
                         outboxEnabled,
                         root,
                         "Redis",
@@ -662,7 +1155,7 @@ public sealed class EventDeliveryIntegrationTests
                 }
 
                 await Task.Delay(staleAfter + TimeSpan.FromMilliseconds(25), TestContext.Current.CancellationToken);
-                await using var restartedHost = await DeliveryTestHost.CreateAsync(
+                await using var restartedHost = await ModuleCompositionTestHost.CreateAsync(
                     outboxEnabled,
                     root,
                     "Redis",
@@ -708,7 +1201,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task ProcessAsync_DeliveryEnvelopeIdentityMismatch_LeavesDeliveryPending(string mismatch)
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -767,10 +1260,25 @@ public sealed class EventDeliveryIntegrationTests
     public async Task ProcessAsync_AmbiguousAgentRetry_ReusesTurnIdAndOriginalRequestSnapshot()
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 14, 0, 0, 0, TimeSpan.Zero));
+        await using var host = await TimeControlledHost.CreateAsync(clock);
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "retry-event-agent",
+            DisplayName = "Retry Event Agent",
+        };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Retry event project",
+            Workspace = services.GetRequiredService<AgwDataPaths>().UserHomeDirectory,
+        };
+        db.AddRange(agent, project);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
         var deliveryId = Guid.CreateVersion7();
         var subscriptionId = Guid.CreateVersion7();
@@ -782,8 +1290,8 @@ public sealed class EventDeliveryIntegrationTests
                 Name = "original name",
                 Enabled = true,
                 TargetKind = EventSubscriptionTargetKind.Agent,
-                AgentId = Guid.CreateVersion7(),
-                ProjectId = Guid.CreateVersion7(),
+                AgentId = agent.Id,
+                ProjectId = project.Id,
                 Instructions = "original instructions",
                 PermissionMode = 0,
             }
@@ -796,7 +1304,7 @@ public sealed class EventDeliveryIntegrationTests
                 EventId = eventId,
                 SubscriptionId = subscriptionId,
                 State = EventDeliveryState.Pending,
-                RecoverAfter = TimeProvider.System.GetUtcNow(),
+                RecoverAfter = clock.GetUtcNow(),
             }
         );
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -825,9 +1333,12 @@ public sealed class EventDeliveryIntegrationTests
         var firstAttempt = await db
             .EventDeliveries.AsNoTracking()
             .SingleAsync(row => row.Id == deliveryId, TestContext.Current.CancellationToken);
-        Assert.Equal(EventDeliveryState.RetryScheduled, firstAttempt.State);
+        Assert.Equal(EventDeliveryState.WaitingExecution, firstAttempt.State);
         var turnId = Assert.IsType<Guid>(firstAttempt.TurnId);
         var requestSnapshot = Assert.IsType<string>(firstAttempt.RequestSnapshotJson);
+        var firstConversation = await db
+            .ProjectConversations.AsNoTracking()
+            .SingleAsync(row => row.ProjectId == project.Id, TestContext.Current.CancellationToken);
         var encryptedSnapshot = await db
             .Database.SqlQueryRaw<string>(
                 "SELECT request_snapshot_json AS Value FROM event_delivery WHERE id = {0}",
@@ -850,16 +1361,13 @@ public sealed class EventDeliveryIntegrationTests
         );
         subscription.Name = "edited name";
         subscription.Instructions = "edited instructions";
-        subscription.TargetKind = EventSubscriptionTargetKind.ExtensionHandler;
-        subscription.HandlerExtensionId = Guid.CreateVersion7();
-        subscription.HandlerId = "edited-handler";
         var retry = await db.EventDeliveries.SingleAsync(
             row => row.Id == deliveryId,
             TestContext.Current.CancellationToken
         );
         retry.State = EventDeliveryState.Pending;
         retry.NextAttemptAt = null;
-        retry.RecoverAfter = TimeProvider.System.GetUtcNow();
+        retry.RecoverAfter = clock.GetUtcNow();
         retry.Version++;
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var secondMessage = firstMessage with { Type = "transport.second", Data = JsonData("{\"value\":\"second\"}") };
@@ -884,7 +1392,17 @@ public sealed class EventDeliveryIntegrationTests
             .SingleAsync(row => row.Id == deliveryId, TestContext.Current.CancellationToken);
         Assert.Equal(turnId, retriedDelivery.TurnId);
         Assert.Equal(requestSnapshot, retriedDelivery.RequestSnapshotJson);
-        Assert.Equal(EventDeliveryState.RetryScheduled, retriedDelivery.State);
+        Assert.Equal(EventDeliveryState.WaitingExecution, retriedDelivery.State);
+        var retriedConversation = await db
+            .ProjectConversations.AsNoTracking()
+            .SingleAsync(row => row.ProjectId == project.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(firstConversation.Id, retriedConversation.Id);
+        var attempts = await db
+            .EventDeliveryAttempts.AsNoTracking()
+            .Where(row => row.DeliveryId == deliveryId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, attempts.Count);
+        Assert.All(attempts, attempt => Assert.Equal(turnId, attempt.TurnId));
     }
 
     [Theory]
@@ -893,7 +1411,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task ProcessAsync_InvalidAgentRequestPreparation_UsesBoundedAttempt(bool invalidSnapshot)
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -956,7 +1474,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task ProcessAsync_AgentReference_OmitsBinaryEventData()
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -1029,7 +1547,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task HandleAsync_LateCompletionForRequeuedDeliveryWithSameTurnId_SettlesDelivery()
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -1107,7 +1625,7 @@ public sealed class EventDeliveryIntegrationTests
     public async Task HandleAsync_LateCompletionForOlderTurnId_DoesNotChangeNewExecution()
     {
         using var user = PushUser(OwnerUserId);
-        await using var host = await DeliveryTestHost.CreateAsync();
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
@@ -1230,152 +1748,43 @@ public sealed class EventDeliveryIntegrationTests
         };
     }
 
-    private static async Task<TransportDelivery> ReadTransportDeliveryAsync(IEventTransport transport, string topic)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5), TimeProvider.System);
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            timeout.Token,
-            TestContext.Current.CancellationToken
-        );
-        await using var enumerator = transport
-            .ConsumeAsync(topic, "event-delivery-integration", cancellation.Token)
-            .GetAsyncEnumerator(cancellation.Token);
-        Assert.True(await enumerator.MoveNextAsync());
-        return enumerator.Current;
-    }
-
     private static IDisposable PushUser(string userId) =>
         UserInfoUtil.Push(
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "test"))
         );
 
-    private sealed class DeliveryTestHost : IAsyncDisposable
+    private sealed class TimeControlledHost : IAsyncDisposable
     {
         private readonly string _root;
         private readonly ServiceProvider _services;
-        private readonly bool _ownsRoot;
 
-        private DeliveryTestHost(string root, ServiceProvider services, bool ownsRoot)
+        private TimeControlledHost(string root, ServiceProvider services)
         {
             _root = root;
             _services = services;
-            _ownsRoot = ownsRoot;
         }
 
         public IServiceProvider Services => _services;
 
-        public static async Task<DeliveryTestHost> CreateAsync(
-            bool outboxEnabled = false,
-            string? rootDirectory = null,
-            string transportProvider = "InProcess",
-            string? redisConnectionString = null,
-            TimeSpan? staleAfter = null
+        public static async Task<TimeControlledHost> CreateAsync(
+            TestTimeProvider timeProvider,
+            IReadOnlyDictionary<string, string?>? settings = null
         )
         {
-            var ownsRoot = rootDirectory is null;
-            var root =
-                rootDirectory ?? Path.Combine(AppContext.BaseDirectory, $"event-delivery-{Guid.CreateVersion7():N}");
-            Directory.CreateDirectory(root);
-            var databasePath = Path.Combine(root, "events.db");
-            var connectionString = $"Data Source={databasePath};Pooling=False";
-            var extensionDirectory = Path.Combine(root, "extension-sources");
-            var keysDirectory = Path.Combine(root, "data-protection-keys");
-            Directory.CreateDirectory(extensionDirectory);
-            Directory.CreateDirectory(keysDirectory);
-            var paths = AgwDataPaths.Resolve(Path.Combine(root, "data"), root, Path.Combine(root, "logs"));
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(
-                    new Dictionary<string, string?>
-                    {
-                        ["Database:Provider"] = "Sqlite",
-                        ["Database:ConnectionString"] = connectionString,
-                        ["Execution:Provider"] = "InProcess",
-                        ["Events:Outbox:Enabled"] = outboxEnabled.ToString(),
-                        ["Events:Delivery:MaxAttempts"] = "3",
-                        ["Events:Outbox:StaleAfter"] = (staleAfter ?? TimeSpan.FromMinutes(5)).ToString("c"),
-                        ["Events:Transport:Provider"] = transportProvider,
-                        ["Events:Transport:Redis:ConnectionString"] = redisConnectionString,
-                        ["Extensions:Directory"] = extensionDirectory,
-                    }
-                )
-                .Build();
-            var environment = Microsoft
-                .Extensions.Hosting.Host.CreateApplicationBuilder(
-                    new HostApplicationBuilderSettings
-                    {
-                        ContentRootPath = AppContext.BaseDirectory,
-                        DisableDefaults = true,
-                    }
-                )
-                .Environment;
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddSingleton(paths);
-            services.AddSingleton<IConfiguration>(configuration);
-            services.AddSingleton<TimeProvider>(TimeProvider.System);
-            services.AddSingleton<IHostEnvironment>(environment);
-            services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-            services.AddHttpClient();
-            services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
-            services.AddScoped<IExtensionDeploymentIdentity, ExtensionDeploymentIdentity>();
-            services
-                .AddTools(configuration)
-                .AddAgents(configuration)
-                .AddAgentExecution(
-                    configuration,
-                    new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(
-                        AddExecutionTransport: false,
-                        AddDistributedWorker: false,
-                        AddTraceCollector: false
-                    )
-                )
-                .AddFiles(configuration)
-                .AddInfrastructure(configuration)
-                .AddExtensionInfrastructure()
-                .AddExtensions(configuration, "Standalone")
-                .AddExtensionCapabilities()
-                .AddEvents(runWorkers: false)
-                .AddNotifications(configuration, runWorkers: false)
-                .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
-                .AddProviders(configuration)
-                .AddSkills(configuration)
-                .AddProjects(configuration)
-                .AddAuth()
-                .AddSettings()
-                .AddSetup(configuration)
-                .AddIntegrations(configuration);
-            services.AddExtensionHostCapability<Agw.Projects.Contracts.Runtime.IProjectDefaultResolver>();
-            services.AddExtensionHostCapability<IExtensionCallerAccessor>();
-            services.AddExtensionHostCapability<IEventPublisher>();
-            services.AddExtensionHostCapability<IEventContextFacade>();
-            services.AddExtensionHostCapability<Agw.Agents.Contracts.Execution.IBackgroundExecutionFacade>();
-
-            var provider = services.BuildServiceProvider();
-            await provider
-                .GetRequiredService<ExtensionPackageCatalog>()
-                .InitializeAsync(TestContext.Current.CancellationToken);
-            await using var scope = provider.CreateAsyncScope();
-            await scope
-                .ServiceProvider.GetRequiredService<AgwDbContext>()
-                .Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-            if (string.Equals(transportProvider, "Redis", StringComparison.OrdinalIgnoreCase))
-            {
-                using var systemScope = UserInfoUtil.PushSystemScope();
-                await scope
-                    .ServiceProvider.GetRequiredService<ISettingsStore>()
-                    .TryCreateGlobalAsync(
-                        ExtensionDeploymentSettings.Key,
-                        new ExtensionDeploymentSettings { ServerId = Guid.CreateVersion7().ToString("D") },
-                        TestContext.Current.CancellationToken
-                    );
-            }
-            return new DeliveryTestHost(root, provider, ownsRoot);
+            var root = Path.Combine(AppContext.BaseDirectory, $"event-delivery-composition-{Guid.CreateVersion7():N}");
+            var descriptors = new ServiceCollection();
+            ModuleCompositionTestHost.ConfigureServices(descriptors, root, settings);
+            descriptors.RemoveAll<TimeProvider>();
+            descriptors.AddSingleton<TimeProvider>(timeProvider);
+            var services = descriptors.BuildServiceProvider();
+            await ModuleCompositionTestHost.InitializeAsync(services);
+            return new TimeControlledHost(root, services);
         }
 
         public async ValueTask DisposeAsync()
         {
             await _services.DisposeAsync();
-            if (_ownsRoot && Directory.Exists(_root))
+            if (Directory.Exists(_root))
             {
                 Directory.Delete(_root, recursive: true);
             }

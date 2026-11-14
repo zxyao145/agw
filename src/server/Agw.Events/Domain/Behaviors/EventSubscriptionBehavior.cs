@@ -30,7 +30,7 @@ public sealed class EventSubscriptionBehavior
         _subscription.ProjectId = null;
         _subscription.Instructions = null;
         _subscription.PermissionMode = null;
-        _subscription.HandlerExtensionId = _subscription.ManagedByExtensionId;
+        _subscription.HandlerExtensionId = definition.HandlerExtensionId;
         _subscription.HandlerId = definition.HandlerId;
         _subscription.HandlerConfigJson = definition.HandlerConfigJson;
         _subscription.ManagedVersion = managedVersion;

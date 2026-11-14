@@ -12,6 +12,8 @@ public sealed record ManagedEventSubscriptionDefinition
 
     public string? FilterJson { get; init; }
 
+    public required Guid HandlerExtensionId { get; init; }
+
     public required string HandlerId { get; init; }
 
     public required string HandlerConfigJson { get; init; }

@@ -6,7 +6,7 @@ lastmod: 2026-09-25
 translationKey: docs/operations/split
 ---
 
-Split deployment runs management and scheduling in Control Plane and task execution in Data Plane. Use it when execution environments need separate maintenance or additional nodes. For a trial on one host, [Standalone]({{< relref "/docs/operations/standalone" >}}) is simpler to configure.
+Split deployment runs management APIs and Events Timer scheduling and delivery workers in Control Plane; Data Plane runs distributed execution workers. Use it when execution environments need separate maintenance or additional nodes. For a trial on one host, [Standalone]({{< relref "/docs/operations/standalone" >}}) is simpler to configure.
 
 This page assumes familiarity with containers, databases, and reverse proxies. Prepare shared PostgreSQL, Data Protection keys for decrypting credentials, and workspaces accessible to every execution node. The entry proxy must support WebSocket for conversation events.
 
@@ -14,8 +14,8 @@ This page assumes familiarity with containers, databases, and reverse proxies. P
 
 | Host | Responsibility |
 | --- | --- |
-| Control Plane | Setup, Web, management APIs, Job scheduling |
-| Data Plane | SignalR Execution, A2A, durable execution workers |
+| Control Plane | Setup, Web, management APIs, Events Timer scheduling and delivery workers |
+| Data Plane | SignalR Execution, A2A, Distributed execution workers |
 | Standalone | Both roles combined for a single-server setup |
 
 Split deployment uses Distributed execution. In this mode, turns that run an External Agent (Claude Code, Codex, or Pi) directly in Chat fail with “Distributed execution currently supports System Agents only.” To use those external agents directly, choose Standalone with InProcess execution.
