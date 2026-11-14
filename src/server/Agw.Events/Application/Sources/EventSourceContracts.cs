@@ -3,6 +3,13 @@ using Agw.Shared.Contracts.Events;
 
 namespace Agw.Events.Application.Sources;
 
+public sealed record EventSourceOption
+{
+    public required Guid Id { get; init; }
+
+    public required string Name { get; init; }
+}
+
 public sealed record EventSourceCreateCommand
 {
     public required string Name { get; init; }

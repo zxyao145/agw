@@ -9,6 +9,7 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
+using Agw.Shared.Pagination;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 
@@ -40,7 +41,7 @@ public class ProjectConversationAppService
         CancellationToken cancellationToken = default
     )
     {
-        ValidateConversationListQuery(query);
+        PageValidation.Validate(query.PageIndex, query.PageSize);
         var project = await _projectResolver.ResolveRequiredAsync(projectId, cancellationToken);
         if (project == null)
         {
@@ -831,19 +832,6 @@ public class ProjectConversationAppService
             .ThenByDescending(task => task.CreateTime)
             .ThenByDescending(task => task.TaskId)
             .FirstOrDefault();
-
-    private static void ValidateConversationListQuery(ProjectConversationListQuery query)
-    {
-        if (query.PageIndex < 1)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "pageIndex must be at least 1.");
-        }
-
-        if (query.PageSize is not (10 or 20 or 50))
-        {
-            throw new AgwException(ErrorCodes.InvalidPageSize, "pageSize must be one of 10, 20, or 50.");
-        }
-    }
 
     private static async Task<IReadOnlyList<ConversationListRow>> GetConversationPageAsync(
         IQueryable<ProjectConversation> query,

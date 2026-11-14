@@ -78,6 +78,6 @@ public sealed record EventListQuery
     public Guid? ChainId { get; init; }
     public DateTimeOffset? From { get; init; }
     public DateTimeOffset? To { get; init; }
-    public int Offset { get; init; }
-    public int Limit { get; init; } = 100;
+    public int? PageIndex { get; init; }
+    public int? PageSize { get; init; }
 }

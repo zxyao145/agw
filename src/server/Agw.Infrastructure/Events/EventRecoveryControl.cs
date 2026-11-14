@@ -3,6 +3,7 @@ using Agw.Events.Configuration;
 using Agw.Events.Contracts;
 using Agw.Events.Contracts.Transport;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Notifications;
 using Agw.Shared.Exceptions;
@@ -37,22 +38,34 @@ public sealed class EventRecoveryControl : IEventRecoveryControl
         _timeProvider = timeProvider;
     }
 
-    public async Task<IReadOnlyList<UnpublishedEventRecord>> ListAsync(CancellationToken cancellationToken)
+    public Task<PagedResult<UnpublishedEventRecord>> ListAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken
+    )
     {
         var now = _timeProvider.GetUtcNow();
-        var events = await _db
+        var events = _db
             .Events.AsNoTracking()
             .Where(row => row.DispatchState == EventDispatchState.Pending && row.RecoverAfter <= now)
-            .OrderBy(row => row.RecoverAfter)
-            .Take(200)
-            .ToListAsync(cancellationToken);
-        var deliveries = await _db
+            .Select(row => new WaitingRow
+            {
+                Topic = EventMessages.Accepted,
+                EntityId = row.Id,
+                NotificationState = null,
+                RecoverAfter = row.RecoverAfter,
+            });
+        var deliveries = _db
             .EventDeliveries.AsNoTracking()
             .Where(row => row.State == EventDeliveryState.Pending && row.RecoverAfter <= now)
-            .OrderBy(row => row.RecoverAfter)
-            .Take(200)
-            .ToListAsync(cancellationToken);
-        var notifications = await _db
+            .Select(row => new WaitingRow
+            {
+                Topic = EventMessages.Delivery,
+                EntityId = row.Id,
+                NotificationState = null,
+                RecoverAfter = row.RecoverAfter,
+            });
+        var notifications = _db
             .NotificationDispatches.AsNoTracking()
             .Where(row =>
                 row.ChannelKey != "desktop"
@@ -66,38 +79,30 @@ public sealed class EventRecoveryControl : IEventRecoveryControl
                     ) || (row.State == NotificationDispatchState.Sending && row.ClaimExpiresAt <= now)
                 )
             )
-            .OrderBy(row => row.RecoverAfter)
-            .Take(200)
-            .ToListAsync(cancellationToken);
-        return events
-            .Select(row => new UnpublishedEventRecord
+            .Select(row => new WaitingRow
             {
-                Topic = EventMessages.Accepted,
+                Topic = EventMessages.NotificationDispatch,
                 EntityId = row.Id,
-                State = row.DispatchState.ToString(),
+                NotificationState = row.State,
                 RecoverAfter = row.RecoverAfter,
-            })
-            .Concat(
-                deliveries.Select(row => new UnpublishedEventRecord
-                {
-                    Topic = EventMessages.Delivery,
-                    EntityId = row.Id,
-                    State = row.State.ToString(),
-                    RecoverAfter = row.RecoverAfter,
-                })
-            )
-            .Concat(
-                notifications.Select(row => new UnpublishedEventRecord
-                {
-                    Topic = EventMessages.NotificationDispatch,
-                    EntityId = row.Id,
-                    State = row.State.ToString(),
-                    RecoverAfter = row.RecoverAfter,
-                })
-            )
+            });
+
+        var rows = events
+            .Concat(deliveries)
+            .Concat(notifications)
             .OrderBy(row => row.RecoverAfter)
-            .ToArray();
+            .ThenBy(row => row.EntityId);
+        return EventPaging.ToPagedResultAsync(rows, pageIndex, pageSize, ToUnpublishedRecord, cancellationToken);
     }
+
+    private static UnpublishedEventRecord ToUnpublishedRecord(WaitingRow row) =>
+        new()
+        {
+            Topic = row.Topic,
+            EntityId = row.EntityId,
+            State = row.NotificationState?.ToString() ?? nameof(EventDispatchState.Pending),
+            RecoverAfter = row.RecoverAfter,
+        };
 
     public async Task RepublishAsync(string topic, Guid entityId, CancellationToken cancellationToken)
     {
@@ -166,5 +171,13 @@ public sealed class EventRecoveryControl : IEventRecoveryControl
                             .SetProperty(row => row.PublishedAt, now),
                     cancellationToken
                 );
+    }
+
+    private sealed record WaitingRow
+    {
+        public required string Topic { get; init; }
+        public required Guid EntityId { get; init; }
+        public required NotificationDispatchState? NotificationState { get; init; }
+        public required DateTimeOffset RecoverAfter { get; init; }
     }
 }

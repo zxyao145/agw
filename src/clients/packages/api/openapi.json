@@ -348,13 +348,52 @@
         "tags": [
           "Event Sources"
         ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfEventSourceResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventSourceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/options": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceOptionResponse[]"
                 }
               }
             }
@@ -571,13 +610,33 @@
         "tags": [
           "Events"
         ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfEventSubscriptionResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventSubscriptionResponse"
                 }
               }
             }
@@ -755,20 +814,24 @@
             }
           },
           {
-            "name": "Offset",
+            "name": "PageIndex",
             "in": "query",
-            "required": true,
             "schema": {
-              "type": "integer",
+              "type": [
+                "null",
+                "integer"
+              ],
               "format": "int32"
             }
           },
           {
-            "name": "Limit",
+            "name": "PageSize",
             "in": "query",
-            "required": true,
             "schema": {
-              "type": "integer",
+              "type": [
+                "null",
+                "integer"
+              ],
               "format": "int32"
             }
           }
@@ -779,7 +842,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfEventResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventResponse"
                 }
               }
             }
@@ -867,6 +930,24 @@
             "schema": {
               "$ref": "#/components/schemas/EventDeliveryState"
             }
+          },
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
           }
         ],
         "responses": {
@@ -875,7 +956,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfEventDeliveryResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventDeliveryResponse"
                 }
               }
             }
@@ -888,13 +969,33 @@
         "tags": [
           "Events"
         ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfEventScheduleResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfEventScheduleResponse"
                 }
               }
             }
@@ -965,13 +1066,33 @@
         "tags": [
           "Events"
         ],
+        "parameters": [
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfUnpublishedEventRecord[]"
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfUnpublishedEventRecord"
                 }
               }
             }
@@ -11533,37 +11654,6 @@
           }
         }
       },
-      "ApiResultOfEventDeliveryResponse[]": {
-        "required": [
-          "code",
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/EventDeliveryResponse"
-            }
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "ApiResultOfEventResponse": {
         "required": [
           "code",
@@ -11627,37 +11717,6 @@
           }
         }
       },
-      "ApiResultOfEventScheduleResponse[]": {
-        "required": [
-          "code",
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/EventScheduleResponse"
-            }
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "ApiResultOfEventSourceMutationResponse": {
         "required": [
           "code",
@@ -11690,7 +11749,7 @@
           }
         }
       },
-      "ApiResultOfEventSourceResponse": {
+      "ApiResultOfEventSourceOptionResponse[]": {
         "required": [
           "code",
           "title"
@@ -11698,14 +11757,13 @@
         "type": "object",
         "properties": {
           "data": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/EventSourceResponse"
-              }
-            ]
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EventSourceOptionResponse"
+            }
           },
           "code": {
             "type": "integer",
@@ -11722,7 +11780,7 @@
           }
         }
       },
-      "ApiResultOfEventSourceResponse[]": {
+      "ApiResultOfEventSourceResponse": {
         "required": [
           "code",
           "title"
@@ -11730,13 +11788,14 @@
         "type": "object",
         "properties": {
           "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/EventSourceResponse"
-            }
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventSourceResponse"
+              }
+            ]
           },
           "code": {
             "type": "integer",
@@ -11801,37 +11860,6 @@
                 "$ref": "#/components/schemas/EventSubscriptionResponse"
               }
             ]
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ApiResultOfEventSubscriptionResponse[]": {
-        "required": [
-          "code",
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/EventSubscriptionResponse"
-            }
           },
           "code": {
             "type": "integer",
@@ -12849,6 +12877,166 @@
           }
         }
       },
+      "ApiResultOfPagedResultOfEventDeliveryResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventDeliveryResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventScheduleResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventScheduleResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventSourceResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventSourceResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfEventSubscriptionResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfEventSubscriptionResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfPagedResultOfMcpServer": {
         "required": [
           "code",
@@ -12927,6 +13115,38 @@
               },
               {
                 "$ref": "#/components/schemas/PagedResultOfSkillResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfUnpublishedEventRecord": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfUnpublishedEventRecord"
               }
             ]
           },
@@ -13622,37 +13842,6 @@
             ],
             "items": {
               "$ref": "#/components/schemas/ToolLiteInfo"
-            }
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ApiResultOfUnpublishedEventRecord[]": {
-        "required": [
-          "code",
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/UnpublishedEventRecord"
             }
           },
           "code": {
@@ -14977,6 +15166,22 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "EventSourceOptionResponse": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -17652,6 +17857,171 @@
           }
         }
       },
+      "PagedResultOfEventDeliveryResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventDeliveryResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventScheduleResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventScheduleResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventSourceResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSourceResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfEventSubscriptionResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSubscriptionResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "PagedResultOfMcpServer": {
         "required": [
           "items",
@@ -17731,6 +18101,39 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SkillResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfUnpublishedEventRecord": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnpublishedEventRecord"
             }
           },
           "total": {

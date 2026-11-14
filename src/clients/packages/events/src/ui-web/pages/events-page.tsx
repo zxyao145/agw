@@ -38,6 +38,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  TablePagination,
   Tabs,
   TabsContent,
   TabsList,
@@ -47,6 +48,11 @@ import {
 } from "@agw/components";
 import { useMutation, useQuery, useQueryClient } from "@agw/components/query";
 import { getManagedLabel } from "./managed-record";
+import {
+  EVENT_PAGE_SIZE_OPTIONS,
+  useEventListPage,
+  type EventListPage,
+} from "./use-event-list-page";
 
 type SourceFormState = {
   name: string;
@@ -198,47 +204,44 @@ export function EventsPage() {
   const [subscriptionForm, setSubscriptionForm] =
     React.useState<SubscriptionFormState>(emptySubscriptionForm);
 
-  const eventsQuery = useQuery({
+  const eventsPage = useEventListPage({
     queryKey: ["events", "list", filters],
-    queryFn: () =>
+    enabled: tab === "events",
+    fetchPage: ({ pageIndex, pageSize }) =>
       apiGet("/api/events/list", {
         params: {
           query: {
-            SourceId: undefined,
             Type: filters.type,
             Subject: filters.subject,
             ChainId: filters.chainId,
-            From: undefined,
-            To: undefined,
-            Offset: 0,
-            Limit: 100,
+            PageIndex: pageIndex,
+            PageSize: pageSize,
           },
         },
       }),
-    enabled: tab === "events",
   });
   const eventQuery = useQuery({
     queryKey: ["events", "detail", selectedEventId],
     queryFn: () => apiGet("/api/events/get", { params: { query: { id: selectedEventId! } } }),
     enabled: Boolean(selectedEventId) && tab === "events",
   });
-  const sourcesQuery = useQuery({
+  const sourcesPage = useEventListPage({
     queryKey: ["events", "sources"],
-    queryFn: () => apiGet("/api/events/sources/list"),
-    enabled: tab === "sources" || tab === "subscriptions",
+    enabled: tab === "sources",
+    fetchPage: (query) => apiGet("/api/events/sources/list", { params: { query } }),
   });
-  const subscriptionsQuery = useQuery({
+  const subscriptionsPage = useEventListPage({
     queryKey: ["events", "subscriptions"],
-    queryFn: () => apiGet("/api/events/subscriptions/list"),
     enabled: tab === "subscriptions",
+    fetchPage: (query) => apiGet("/api/events/subscriptions/list", { params: { query } }),
   });
-  const deliveriesQuery = useQuery({
+  const deliveriesPage = useEventListPage({
     queryKey: ["events", "deliveries", selectedEventId],
-    queryFn: () =>
-      apiGet("/api/events/deliveries/list", {
-        params: { query: { eventId: selectedEventId ?? undefined } },
-      }),
     enabled: tab === "deliveries",
+    fetchPage: (query) =>
+      apiGet("/api/events/deliveries/list", {
+        params: { query: { ...query, eventId: selectedEventId ?? undefined } },
+      }),
   });
   const deliveryActionMutation = useMutation({
     mutationFn: ({ action, id }: { action: "retry" | "cancel"; id: string }) =>
@@ -257,15 +260,15 @@ export function EventsPage() {
     },
     onError: (error) => toast.error(`Delivery action failed: ${getApiErrorMessage(error)}`),
   });
-  const schedulesQuery = useQuery({
+  const schedulesPage = useEventListPage({
     queryKey: ["events", "schedules"],
-    queryFn: () => apiGet("/api/events/schedules/list"),
     enabled: tab === "schedules",
+    fetchPage: (query) => apiGet("/api/events/schedules/list", { params: { query } }),
   });
-  const unpublishedQuery = useQuery({
+  const unpublishedPage = useEventListPage({
     queryKey: ["events", "unpublished"],
-    queryFn: () => apiGet("/api/events/unpublished/list"),
     enabled: tab === "unpublished",
+    fetchPage: (query) => apiGet("/api/events/unpublished/list", { params: { query } }),
   });
 
   const invalidateEvents = async () => {
@@ -373,12 +376,12 @@ export function EventsPage() {
     onError: (error) => toast.error(`Unable to republish record: ${getApiErrorMessage(error)}`),
   });
 
-  const events = eventsQuery.data ?? [];
-  const sources = sourcesQuery.data ?? [];
-  const subscriptions = subscriptionsQuery.data ?? [];
-  const deliveries = deliveriesQuery.data ?? [];
-  const schedules = schedulesQuery.data ?? [];
-  const unpublished = unpublishedQuery.data ?? [];
+  const { query: eventsQuery, items: events } = eventsPage;
+  const { query: sourcesQuery, items: sources } = sourcesPage;
+  const { query: subscriptionsQuery, items: subscriptions } = subscriptionsPage;
+  const { query: deliveriesQuery, items: deliveries } = deliveriesPage;
+  const { query: schedulesQuery, items: schedules } = schedulesPage;
+  const { query: unpublishedQuery, items: unpublished } = unpublishedPage;
 
   const beginCreateSource = () => {
     setEditingSource(null);
@@ -567,7 +570,13 @@ export function EventsPage() {
                 />
               </div>
               <div className="flex items-end">
-                <Button type="button" onClick={() => setFilters({ ...draftFilters })}>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setFilters({ ...draftFilters });
+                    eventsPage.onPageIndexChange(1);
+                  }}
+                >
                   Apply filters
                 </Button>
               </div>
@@ -577,7 +586,7 @@ export function EventsPage() {
             <Card className="min-h-0 overflow-hidden">
               <CardHeader className="border-b py-4">
                 <CardTitle className="text-base">Event stream</CardTitle>
-                <CardDescription>{events.length} events</CardDescription>
+                <CardDescription>{eventsPage.total} events</CardDescription>
               </CardHeader>
               <CardContent className="max-h-[38rem] overflow-auto p-0">
                 {eventsQuery.isPending ? (
@@ -631,6 +640,7 @@ export function EventsPage() {
                   </ul>
                 )}
               </CardContent>
+              <EventListPagination page={eventsPage} />
             </Card>
             <Card className="min-h-0 overflow-hidden">
               <CardHeader className="border-b py-4">
@@ -654,6 +664,7 @@ export function EventsPage() {
                     onOpenChain={(chainId) => {
                       setDraftFilters((current) => ({ ...current, chainId }));
                       setFilters((current) => ({ ...current, chainId }));
+                      eventsPage.onPageIndexChange(1);
                     }}
                   />
                 ) : (
@@ -760,6 +771,7 @@ export function EventsPage() {
                 ))
               )}
             </CardContent>
+            <EventListPagination page={sourcesPage} />
           </Card>
         </TabsContent>
 
@@ -839,6 +851,7 @@ export function EventsPage() {
                 ))
               )}
             </CardContent>
+            <EventListPagination page={subscriptionsPage} />
           </Card>
         </TabsContent>
 
@@ -858,7 +871,10 @@ export function EventsPage() {
                 <Input
                   id="delivery-event-id"
                   value={selectedEventId ?? ""}
-                  onChange={(event) => setSelectedEventId(event.target.value.trim() || null)}
+                  onChange={(event) => {
+                    setSelectedEventId(event.target.value.trim() || null);
+                    deliveriesPage.onPageIndexChange(1);
+                  }}
                   placeholder="Event ID"
                 />
               </div>
@@ -935,6 +951,7 @@ export function EventsPage() {
                 </div>
               )}
             </CardContent>
+            <EventListPagination page={deliveriesPage} />
           </Card>
         </TabsContent>
 
@@ -993,6 +1010,7 @@ export function EventsPage() {
                 ))
               )}
             </CardContent>
+            <EventListPagination page={schedulesPage} />
           </Card>
         </TabsContent>
 
@@ -1049,6 +1067,7 @@ export function EventsPage() {
                 ))
               )}
             </CardContent>
+            <EventListPagination page={unpublishedPage} />
           </Card>
         </TabsContent>
       </Tabs>
@@ -1066,13 +1085,26 @@ export function EventsPage() {
         open={subscriptionDialogOpen}
         editingSubscription={editingSubscription}
         form={subscriptionForm}
-        sources={sources}
         pending={saveSubscriptionMutation.isPending}
         onFormChange={setSubscriptionForm}
         onOpenChange={setSubscriptionDialogOpen}
         onSubmit={saveSubscription}
       />
     </section>
+  );
+}
+
+function EventListPagination({ page }: { page: EventListPage<unknown> }) {
+  return (
+    <TablePagination
+      pageIndex={page.pageIndex}
+      pageSize={page.pageSize}
+      total={page.total}
+      isFetching={page.query.isFetching}
+      pageSizeOptions={EVENT_PAGE_SIZE_OPTIONS}
+      onPageIndexChange={page.onPageIndexChange}
+      onPageSizeChange={page.onPageSizeChange}
+    />
   );
 }
 
@@ -1256,7 +1288,6 @@ function SubscriptionDialog({
   open,
   editingSubscription,
   form,
-  sources,
   pending,
   onFormChange,
   onOpenChange,
@@ -1265,7 +1296,6 @@ function SubscriptionDialog({
   open: boolean;
   editingSubscription: EventSubscriptionResponse | null;
   form: SubscriptionFormState;
-  sources: EventSourceResponse[];
   pending: boolean;
   onFormChange: React.Dispatch<React.SetStateAction<SubscriptionFormState>>;
   onOpenChange(open: boolean): void;
@@ -1274,6 +1304,11 @@ function SubscriptionDialog({
   const isAgentflow = form.targetKind === 1;
   const isExtension = form.targetKind === 2;
   const targetLabel = isAgentflow ? "Agentflow" : "Agent";
+  const sourceOptionsQuery = useQuery({
+    queryKey: ["events", "sources", "options"],
+    queryFn: () => apiGet("/api/events/sources/options"),
+    enabled: open,
+  });
   const agentsQuery = useQuery({
     queryKey: ["agents"],
     queryFn: () => apiGet("/api/agents"),
@@ -1291,6 +1326,7 @@ function SubscriptionDialog({
   });
 
   const targetsQuery = isAgentflow ? agentflowsQuery : agentsQuery;
+  const sources = sourceOptionsQuery.data ?? [];
   const targets = targetsQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
   const hasTarget = targets.some((target) => target.id === form.agentId);

@@ -7,6 +7,7 @@ using Agw.Events.Application.Persistence;
 using Agw.Extensions.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Events;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,8 @@ namespace Agw.Events.Application;
 
 public sealed class EventManagementAppService
 {
+    private const int ChainEventLimit = 500;
+
     private readonly IEventsDbContext _db;
     private readonly IAgentCatalogFacade _agents;
     private readonly IProjectOwnershipFacade _projects;
@@ -33,10 +36,18 @@ public sealed class EventManagementAppService
         _extensions = extensions;
     }
 
-    public async Task<EventSubscriptionResponse[]> ListSubscriptionsAsync(CancellationToken cancellationToken) =>
-        (await _db.EventSubscriptions.AsNoTracking().OrderBy(row => row.Name).ToListAsync(cancellationToken))
-            .Select(Subscription)
-            .ToArray();
+    public Task<PagedResult<EventSubscriptionResponse>> ListSubscriptionsAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken
+    ) =>
+        EventPaging.ToPagedResultAsync(
+            _db.EventSubscriptions.AsNoTracking().OrderBy(row => row.Name).ThenBy(row => row.Id),
+            pageIndex,
+            pageSize,
+            Subscription,
+            cancellationToken
+        );
 
     public async Task<EventSubscriptionResponse> GetSubscriptionAsync(Guid id, CancellationToken cancellationToken) =>
         Subscription(await FindSubscriptionAsync(id, cancellationToken));
@@ -96,13 +107,13 @@ public sealed class EventManagementAppService
         await SaveAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<EventView>> ListEventsAsync(
+    public Task<PagedResult<EventView>> ListEventsAsync(
         EventListFilter query,
+        int pageIndex,
+        int pageSize,
         CancellationToken cancellationToken
     )
     {
-        if (query.Offset < 0 || query.Limit is < 1 or > 500)
-            throw new AgwException(ErrorCodes.InvalidParam);
         var records = _db.Events.AsNoTracking().AsQueryable();
         if (query.SourceId.HasValue)
             records = records.Where(row => row.SourceId == query.SourceId);
@@ -116,16 +127,26 @@ public sealed class EventManagementAppService
             records = records.Where(row => row.ReceivedAt >= query.From);
         if (query.To.HasValue)
             records = records.Where(row => row.ReceivedAt <= query.To);
-        return (
-            await records
-                .OrderByDescending(row => row.ReceivedAt)
-                .ThenByDescending(row => row.Id)
-                .Skip(query.Offset)
-                .Take(query.Limit)
-                .ToListAsync(cancellationToken)
-        )
-            .Select(Event)
-            .ToArray();
+        return EventPaging.ToPagedResultAsync(
+            records.OrderByDescending(row => row.ReceivedAt).ThenByDescending(row => row.Id),
+            pageIndex,
+            pageSize,
+            Event,
+            cancellationToken
+        );
+    }
+
+    public async Task<IReadOnlyList<EventView>> ListChainAsync(Guid chainId, CancellationToken cancellationToken)
+    {
+        var records = await _db
+            .Events.AsNoTracking()
+            .Where(row => row.ChainId == chainId)
+            .OrderByDescending(row => row.ReceivedAt)
+            .ThenByDescending(row => row.Id)
+            .Take(ChainEventLimit)
+            .ToListAsync(cancellationToken);
+
+        return records.Select(Event).ToArray();
     }
 
     public async Task<EventView> GetEventAsync(Guid id, CancellationToken cancellationToken) =>
@@ -134,16 +155,18 @@ public sealed class EventManagementAppService
                 ?? throw new AgwException(ErrorCodes.ResourceNotFound)
         );
 
-    public async Task<EventDeliveryResponse[]> ListDeliveriesAsync(
+    public Task<PagedResult<EventDeliveryResponse>> ListDeliveriesAsync(
         Guid? eventId,
         EventDeliveryState? state,
+        int pageIndex,
+        int pageSize,
         CancellationToken cancellationToken
-    ) =>
-        await _db
+    )
+    {
+        var rows = _db
             .EventDeliveries.AsNoTracking()
             .Where(row => (!eventId.HasValue || row.EventId == eventId) && (!state.HasValue || row.State == state))
             .OrderByDescending(row => row.Id)
-            .Take(200)
             .Select(row => new EventDeliveryResponse
             {
                 Id = row.Id,
@@ -154,14 +177,22 @@ public sealed class EventManagementAppService
                 LastError = row.LastError,
                 NextAttemptAt = row.NextAttemptAt,
                 CompletedAt = row.CompletedAt,
-            })
-            .ToArrayAsync(cancellationToken);
+            });
 
-    public async Task<EventScheduleResponse[]> ListSchedulesAsync(CancellationToken cancellationToken) =>
-        await _db
+        return EventPaging.ToPagedResultAsync(rows, pageIndex, pageSize, static row => row, cancellationToken);
+    }
+
+    public Task<PagedResult<EventScheduleResponse>> ListSchedulesAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = _db
             .EventSchedules.AsNoTracking()
-            .OrderBy(row => row.DueAt)
-            .Take(200)
+            .OrderBy(row => row.DueAt == null)
+            .ThenBy(row => row.DueAt)
+            .ThenBy(row => row.Id)
             .Select(row => new EventScheduleResponse
             {
                 Id = row.Id,
@@ -176,8 +207,10 @@ public sealed class EventManagementAppService
                 State = row.State,
                 Occurrence = row.Occurrence,
                 LastFiredAt = row.LastFiredAt,
-            })
-            .ToArrayAsync(cancellationToken);
+            });
+
+        return EventPaging.ToPagedResultAsync(rows, pageIndex, pageSize, static row => row, cancellationToken);
+    }
 
     private async Task<EventSubscription> FindSubscriptionAsync(Guid id, CancellationToken cancellationToken) =>
         await _db.EventSubscriptions.SingleOrDefaultAsync(row => row.Id == id, cancellationToken)

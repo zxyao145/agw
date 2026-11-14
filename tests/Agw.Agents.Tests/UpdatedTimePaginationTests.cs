@@ -153,12 +153,14 @@ public class UpdatedTimePaginationTests : IDisposable
     }
 
     [Theory]
-    [InlineData(0, 20, 400_0001)]
-    [InlineData(1, 25, 400_0025)]
+    [InlineData(0, 20, 400_0001, "pageIndex must be at least 1.")]
+    [InlineData(1, 25, 400_0025, "pageSize must be one of 10, 20, or 50.")]
+    [InlineData(1, 100, 400_0025, "pageSize must be one of 10, 20, or 50.")]
     public async Task ToPagedResultAsync_WithInvalidPaging_ThrowsAgwException(
         int pageIndex,
         int pageSize,
-        int expectedErrorCode
+        int expectedErrorCode,
+        string expectedMessage
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -177,6 +179,7 @@ public class UpdatedTimePaginationTests : IDisposable
         );
 
         Assert.Equal(expectedErrorCode, exception.Code);
+        Assert.Equal(expectedMessage, exception.Message);
     }
 
     private static Agent BuildAgent(Guid id, DateTimeOffset createTime, DateTimeOffset? updateTime)

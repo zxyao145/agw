@@ -488,6 +488,44 @@ export interface paths {
     };
     get: {
       parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventSourceResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/options": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
         query?: never;
         header?: never;
         path?: never;
@@ -501,7 +539,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfEventSourceResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfEventSourceOptionResponse[]"];
           };
         };
       };
@@ -794,7 +832,10 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
         header?: never;
         path?: never;
         cookie?: never;
@@ -807,7 +848,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfEventSubscriptionResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventSubscriptionResponse"];
           };
         };
       };
@@ -983,15 +1024,15 @@ export interface paths {
     };
     get: {
       parameters: {
-        query: {
+        query?: {
           SourceId?: string;
           Type?: string;
           Subject?: string;
           ChainId?: string;
           From?: string;
           To?: string;
-          Offset: number;
-          Limit: number;
+          PageIndex?: null | number;
+          PageSize?: null | number;
         };
         header?: never;
         path?: never;
@@ -1005,7 +1046,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfEventResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventResponse"];
           };
         };
       };
@@ -1104,6 +1145,8 @@ export interface paths {
         query?: {
           eventId?: string;
           state?: components["schemas"]["EventDeliveryState"];
+          pageIndex?: number;
+          pageSize?: number;
         };
         header?: never;
         path?: never;
@@ -1117,7 +1160,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfEventDeliveryResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventDeliveryResponse"];
           };
         };
       };
@@ -1139,7 +1182,10 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
         header?: never;
         path?: never;
         cookie?: never;
@@ -1152,7 +1198,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfEventScheduleResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfEventScheduleResponse"];
           };
         };
       };
@@ -1252,7 +1298,10 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
         header?: never;
         path?: never;
         cookie?: never;
@@ -1265,7 +1314,7 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "application/json": components["schemas"]["ApiResultOfUnpublishedEventRecord[]"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfUnpublishedEventRecord"];
           };
         };
       };
@@ -8144,13 +8193,6 @@ export interface components {
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfEventDeliveryResponse[]": {
-      data?: null | components["schemas"]["EventDeliveryResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail?: null | string;
-    };
     ApiResultOfEventResponse: {
       data?: null | components["schemas"]["EventResponse"];
       /** Format: int32 */
@@ -8165,13 +8207,6 @@ export interface components {
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfEventScheduleResponse[]": {
-      data?: null | components["schemas"]["EventScheduleResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail?: null | string;
-    };
     ApiResultOfEventSourceMutationResponse: {
       data?: null | components["schemas"]["EventSourceMutationResponse"];
       /** Format: int32 */
@@ -8179,15 +8214,15 @@ export interface components {
       title: string;
       detail?: null | string;
     };
-    ApiResultOfEventSourceResponse: {
-      data?: null | components["schemas"]["EventSourceResponse"];
+    "ApiResultOfEventSourceOptionResponse[]": {
+      data?: null | components["schemas"]["EventSourceOptionResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
       detail?: null | string;
     };
-    "ApiResultOfEventSourceResponse[]": {
-      data?: null | components["schemas"]["EventSourceResponse"][];
+    ApiResultOfEventSourceResponse: {
+      data?: null | components["schemas"]["EventSourceResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -8202,13 +8237,6 @@ export interface components {
     };
     ApiResultOfEventSubscriptionResponse: {
       data?: null | components["schemas"]["EventSubscriptionResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail?: null | string;
-    };
-    "ApiResultOfEventSubscriptionResponse[]": {
-      data?: null | components["schemas"]["EventSubscriptionResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -8438,6 +8466,41 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfPagedResultOfEventDeliveryResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventDeliveryResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventScheduleResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventScheduleResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventSourceResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventSourceResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfEventSubscriptionResponse: {
+      data?: null | components["schemas"]["PagedResultOfEventSubscriptionResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfPagedResultOfMcpServer: {
       data?: null | components["schemas"]["PagedResultOfMcpServer"];
       /** Format: int32 */
@@ -8454,6 +8517,13 @@ export interface components {
     };
     ApiResultOfPagedResultOfSkillResponse: {
       data?: null | components["schemas"]["PagedResultOfSkillResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    ApiResultOfPagedResultOfUnpublishedEventRecord: {
+      data?: null | components["schemas"]["PagedResultOfUnpublishedEventRecord"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -8608,13 +8678,6 @@ export interface components {
     };
     "ApiResultOfToolLiteInfo[]": {
       data?: null | components["schemas"]["ToolLiteInfo"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail?: null | string;
-    };
-    "ApiResultOfUnpublishedEventRecord[]": {
-      data?: null | components["schemas"]["UnpublishedEventRecord"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -8999,6 +9062,11 @@ export interface components {
       /** Format: int64 */
       version: number | string;
       secret?: null | string;
+    };
+    EventSourceOptionResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
     };
     EventSourceResponse: {
       /** Format: uuid */
@@ -9723,6 +9791,51 @@ export interface components {
       /** Format: int32 */
       pageSize: number;
     };
+    PagedResultOfEventDeliveryResponse: {
+      items: components["schemas"]["EventDeliveryResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventResponse: {
+      items: components["schemas"]["EventResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventScheduleResponse: {
+      items: components["schemas"]["EventScheduleResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventSourceResponse: {
+      items: components["schemas"]["EventSourceResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfEventSubscriptionResponse: {
+      items: components["schemas"]["EventSubscriptionResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
     PagedResultOfMcpServer: {
       items: components["schemas"]["McpServer"][];
       /** Format: int64 */
@@ -9743,6 +9856,15 @@ export interface components {
     };
     PagedResultOfSkillResponse: {
       items: components["schemas"]["SkillResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfUnpublishedEventRecord: {
+      items: components["schemas"]["UnpublishedEventRecord"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */
