@@ -8,10 +8,11 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@agw/components/query";
-import { Eye, ListChecks, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { Eye, ListChecks, Pencil, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { apiDelete, apiGet, apiPost, apiPut } from "@agw/api";
+import { apiGet, apiPost } from "@agw/api";
+import type { components } from "@agw/api";
 import { AgentSelector } from "@agw/chat";
 import { DateTimePicker } from "@agw/components";
 import { StaticTable } from "@agw/components";
@@ -33,75 +34,38 @@ import { Switch } from "@agw/components";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@agw/components";
 import { Textarea } from "@agw/components";
 import { getApiErrorMessage } from "@agw/api";
-import { formatLocalDateTime, parseApiDateTime } from "@agw/components";
+import { formatLocalDateTime } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
 import {
-  getTriggerValueError,
+  getDeliveryStateLabel,
+  getNextRunState,
+  getScheduleError,
   isCronValue,
-  isPositiveIntervalValue,
-  TRIGGER_TYPE_CRON,
-  TRIGGER_TYPE_INTERVAL,
-  TRIGGER_TYPE_ONCE,
-} from "./trigger-value";
+  isPositiveIsoDuration,
+  SCHEDULE_KIND_CRON,
+  SCHEDULE_KIND_INTERVAL,
+  SCHEDULE_KIND_ONCE,
+  type JobSchedule,
+} from "./schedule-value";
+import { JobRunPagination } from "./job-run-pagination";
+import { JobRunResultBadge } from "./job-run-result";
+import { useJobRunPage } from "./use-job-run-page";
 
-type JobDto = {
-  id: string;
-  projectId: string;
-  agentType: number | null;
-  agentId: string | null;
-  name: string;
-  prompt: string | null;
-  triggerType: number;
-  triggerValue: string;
-  nextRunTime: string;
-  status: number;
-  isEnabled: boolean;
-  retryCount: number;
-  maxRetryCount: number;
-  lastError: string | null;
-};
-
-type JobExecutionLogDto = {
-  id: string;
-  jobId: string;
-  conversationId: string | null;
-  startTime: string;
-  endTime: string | null;
-  success: boolean;
-  attempt: number;
-  errorMessage: string | null;
-};
+type JobDto = components["schemas"]["JobResponse"];
+type JobRunDto = components["schemas"]["JobRunResponse"];
+type JobCreateRequest = components["schemas"]["JobCreateRequest"];
+type JobUpdateRequest = components["schemas"]["JobUpdateRequest"];
+type JobEnableRequest = components["schemas"]["JobEnableRequest"];
+type JobIdRequest = components["schemas"]["JobIdRequest"];
 
 type JobFormState = {
   projectId: string;
-  agentType: number | null;
+  targetKind: number | null;
   agentId: string;
   name: string;
-  prompt: string;
-  triggerType: number;
-  triggerValue: string;
-  nextRunTime: string;
-  maxRetryCount: number;
-  isEnabled: boolean;
-  status?: number;
-};
-
-type JobRequest = {
-  projectId: string;
-  agentType: number | null;
-  agentId: string | null;
-  name: string;
-  prompt: string | null;
-  triggerType: number;
-  triggerValue: string;
-  maxRetryCount: number;
-  isEnabled: boolean;
-  status?: number;
-};
-
-type JobEnabledUpdateRequest = {
-  jobId: string;
-  isEnabled: boolean;
+  instructions: string;
+  schedule: JobSchedule;
+  enabled: boolean;
 };
 
 type ProjectDto = {
@@ -120,170 +84,103 @@ type JobDialogProps = {
   isSubmitting: boolean;
 };
 
-const jobsPath = "/api/jobs";
-const jobEnabledPath = "/api/jobs/enabled";
-const jobItemPath = "/api/jobs/{id}";
-const jobLogsPath = "/api/jobs/{id}/logs";
-const DEFAULT_INTERVAL_TRIGGER_VALUE = "00:01:00";
-const DEFAULT_CRON_TRIGGER_VALUE = "*/1 * * * *";
+const jobsPath = "/api/jobs/list";
+const jobPath = "/api/jobs/get";
+const jobCreatePath = "/api/jobs/create";
+const jobUpdatePath = "/api/jobs/update";
+const jobEnablePath = "/api/jobs/enable";
+const jobDeletePath = "/api/jobs/delete";
+const DEFAULT_INTERVAL = "PT1M";
+const DEFAULT_CRON = "*/1 * * * *";
 
-function createDefaultOnceRunTime(): string {
+function createDefaultOnceAt(): string {
   return new Date(Date.now() + 3 * 60 * 1000).toISOString();
+}
+
+function createDefaultSchedule(): JobSchedule {
+  return { kind: SCHEDULE_KIND_CRON, cron: DEFAULT_CRON };
 }
 
 function createDefaultJobFormState(): JobFormState {
   return {
     projectId: "11111111-1111-1111-1111-000000000001",
-    agentType: null,
+    targetKind: null,
     agentId: "",
     name: "",
-    prompt: "",
-    triggerType: TRIGGER_TYPE_CRON,
-    triggerValue: DEFAULT_CRON_TRIGGER_VALUE,
-    nextRunTime: createDefaultOnceRunTime(),
-    maxRetryCount: 3,
-    isEnabled: true,
+    instructions: "",
+    schedule: createDefaultSchedule(),
+    enabled: true,
   };
 }
 
 function createEditFormState(job: JobDto): JobFormState {
-  const nextRunTime =
-    job.triggerType === TRIGGER_TYPE_ONCE && isValidDateTimeValue(job.triggerValue)
-      ? job.triggerValue
-      : job.nextRunTime;
-
   return {
     projectId: job.projectId,
-    agentType: job.agentType,
-    agentId: job.agentId ?? "",
+    targetKind: job.targetKind,
+    agentId: job.agentId,
     name: job.name,
-    prompt: job.prompt ?? "",
-    triggerType: job.triggerType,
-    triggerValue: job.triggerValue,
-    nextRunTime,
-    maxRetryCount: job.maxRetryCount,
-    isEnabled: job.isEnabled,
-    status: job.status,
+    instructions: job.instructions,
+    schedule: {
+      kind: job.schedule.kind,
+      at: job.schedule.at,
+      interval: job.schedule.interval,
+      cron: job.schedule.cron,
+    },
+    enabled: job.enabled,
   };
 }
 
-function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobRequest {
-  const triggerValueError = getTriggerValueError(form.triggerType, form.triggerValue);
-  if (triggerValueError) {
-    throw new Error(triggerValueError);
+function buildJobRequest(form: JobFormState): JobCreateRequest {
+  const scheduleError = getScheduleError(form.schedule);
+  if (scheduleError) {
+    throw new Error(scheduleError);
   }
 
-  const triggerValue = resolveTriggerValue(form);
-  const payload: JobRequest = {
-    projectId: form.projectId.trim(),
-    agentType: form.agentType,
-    agentId: form.agentId.trim() || null,
+  const projectId = form.projectId.trim();
+  const agentId = form.agentId.trim();
+  if (!projectId) {
+    throw new Error("Project is required.");
+  }
+  if (form.targetKind === null || !agentId) {
+    throw new Error("Execution target is required.");
+  }
+  const instructions = form.instructions.trim();
+  if (!instructions) {
+    throw new Error("Instructions are required.");
+  }
+
+  return {
+    projectId,
+    targetKind: form.targetKind,
+    agentId,
     name: form.name.trim(),
-    prompt: form.prompt.trim() || null,
-    triggerType: form.triggerType,
-    triggerValue,
-    maxRetryCount: form.maxRetryCount,
-    isEnabled: form.isEnabled,
-    status: mode === "edit" ? form.status : undefined,
+    instructions,
+    schedule: form.schedule,
+    enabled: form.enabled,
   };
-
-  if (!payload.projectId) {
-    throw new Error("Project ID is required.");
-  }
-
-  if (!payload.triggerValue) {
-    throw new Error("Trigger value is required.");
-  }
-
-  if (
-    ![TRIGGER_TYPE_ONCE, TRIGGER_TYPE_INTERVAL, TRIGGER_TYPE_CRON].includes(payload.triggerType)
-  ) {
-    throw new Error("Trigger type is invalid.");
-  }
-
-  if (payload.agentType !== null && ![0, 1].includes(payload.agentType)) {
-    throw new Error("Agent type is invalid.");
-  }
-
-  if (!Number.isFinite(payload.maxRetryCount) || payload.maxRetryCount < 0) {
-    throw new Error("Max retry count must be zero or greater.");
-  }
-
-  if (mode === "edit" && payload.status !== undefined && ![1, 2, 3].includes(payload.status)) {
-    throw new Error("Status is invalid.");
-  }
-
-  return payload;
 }
 
-function isValidDateTimeValue(value?: string | null): value is string {
-  if (!value) {
-    return false;
-  }
-
-  return parseApiDateTime(value) !== null;
-}
-
-function getNextRunTimeForOnce(form: JobFormState): string {
-  if (isValidDateTimeValue(form.triggerValue)) {
-    return form.triggerValue;
-  }
-
-  return createDefaultOnceRunTime();
-}
-
-function resolveTriggerValue(form: JobFormState): string {
-  return form.triggerType === TRIGGER_TYPE_ONCE
-    ? getNextRunTimeForOnce(form).trim()
-    : form.triggerValue.trim();
-}
-
-function getTriggerTypeLabel(triggerType: number): string {
-  switch (triggerType) {
-    case TRIGGER_TYPE_ONCE:
-      return "Once";
-    case TRIGGER_TYPE_INTERVAL:
-      return "Interval";
-    case TRIGGER_TYPE_CRON:
-      return "Cron";
-    default:
-      return `Unknown (${triggerType})`;
-  }
-}
-
-function getStatusLabel(status: number): string {
-  switch (status) {
-    case 1:
-      return "Pending";
-    case 2:
-      return "Running";
-    case 3:
-      return "Paused";
-    default:
-      return `Unknown (${status})`;
-  }
-}
-
-function getStatusVariant(status: number): "default" | "secondary" | "outline" {
-  switch (status) {
-    case 2:
-      return "default";
-    case 3:
-      return "outline";
-    case 1:
-    default:
-      return "secondary";
-  }
-}
-
-function getAgentTypeLabel(agentType: number | null): string {
-  switch (agentType) {
+function getTargetKindLabel(targetKind: number): string {
+  switch (targetKind) {
     case 0:
       return "Agent";
     case 1:
       return "Agentflow";
     default:
-      return "Not assigned";
+      return `Unknown (${targetKind})`;
+  }
+}
+
+function getScheduleValue(schedule: JobSchedule): string {
+  switch (schedule.kind) {
+    case SCHEDULE_KIND_ONCE:
+      return schedule.at ? formatLocalDateTime(schedule.at) : "-";
+    case SCHEDULE_KIND_INTERVAL:
+      return schedule.interval ?? "-";
+    case SCHEDULE_KIND_CRON:
+      return schedule.cron ?? "-";
+    default:
+      return "-";
   }
 }
 
@@ -330,23 +227,17 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
     queryKey: ["job", viewingJobId],
     enabled: Boolean(detailsOpen && viewingJobId),
     queryFn: async () =>
-      (await apiGet(jobItemPath, {
-        params: { path: { id: viewingJobId as string } },
+      (await apiGet(jobPath, {
+        params: { query: { id: viewingJobId as string } },
       })) as JobDto,
   });
 
-  const jobLogsQuery = useQuery({
-    queryKey: ["job-logs", viewingJobId],
-    enabled: Boolean(detailsOpen && viewingJobId),
-    queryFn: async () =>
-      (await apiGet(jobLogsPath, {
-        params: { path: { id: viewingJobId as string } },
-      })) as JobExecutionLogDto[],
-  });
+  const jobRunPage = useJobRunPage(viewingJobId, detailsOpen);
+  const jobLogsQuery = jobRunPage.logsQuery;
 
   const createMutation = useMutation({
-    mutationFn: async (body: JobRequest) => {
-      return await apiPost(jobsPath, { body });
+    mutationFn: async (body: JobCreateRequest) => {
+      return await apiPost(jobCreatePath, { body });
     },
     onSuccess: async () => {
       toast.success("Job created");
@@ -360,11 +251,8 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: JobRequest & { status: number } }) => {
-      return await apiPut(jobItemPath, {
-        params: { path: { id } },
-        body,
-      });
+    mutationFn: async (body: JobUpdateRequest) => {
+      return await apiPost(jobUpdatePath, { body });
     },
     onSuccess: async (_, variables) => {
       toast.success("Job updated");
@@ -381,8 +269,8 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
   });
 
   const updateEnabledMutation = useMutation({
-    mutationFn: async (body: JobEnabledUpdateRequest) =>
-      (await apiPut(jobEnabledPath, { body })) as JobDto,
+    mutationFn: async (body: JobEnableRequest) =>
+      (await apiPost(jobEnablePath, { body })) as JobDto,
     onSuccess: (updatedJob) => {
       queryClient.setQueryData<JobDto[]>(["jobs"], (jobs) =>
         jobs?.map((job) => (job.id === updatedJob.id ? updatedJob : job)),
@@ -394,7 +282,7 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
     onSettled: (_data, _error, variables) => {
       setPendingEnabledJobIds((current) => {
         const next = new Set(current);
-        next.delete(variables.jobId);
+        next.delete(variables.id);
         return next;
       });
     },
@@ -402,9 +290,8 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete(jobItemPath, {
-        params: { path: { id } },
-      });
+      const request: JobIdRequest = { id };
+      return await apiPost(jobDeletePath, { body: request });
     },
     onSuccess: async (_, deletedId) => {
       toast.success("Job deleted");
@@ -443,7 +330,7 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
     if (pendingEnabledJobIds.has(job.id)) return;
 
     setPendingEnabledJobIds((current) => new Set(current).add(job.id));
-    updateEnabledMutation.mutate({ jobId: job.id, isEnabled });
+    updateEnabledMutation.mutate({ id: job.id, enabled: isEnabled });
   };
 
   const closeCreateDialog = (open: boolean) => {
@@ -477,7 +364,7 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
 
   const submitCreate = () => {
     try {
-      createMutation.mutate(buildJobRequest(createForm, "create"));
+      createMutation.mutate(buildJobRequest(createForm));
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }
@@ -487,13 +374,7 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
     if (!editingJob) return;
 
     try {
-      updateMutation.mutate({
-        id: editingJob.id,
-        body: {
-          ...buildJobRequest(editForm, "edit"),
-          status: editForm.status ?? editingJob.status,
-        },
-      });
+      updateMutation.mutate({ ...buildJobRequest(editForm), id: editingJob.id });
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     }
@@ -541,10 +422,10 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Project / Agent</TableHead>
-              <TableHead>Trigger</TableHead>
+              <TableHead>Schedule</TableHead>
               <TableHead>Next Run</TableHead>
               <TableHead>Enabled</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Last Delivery</TableHead>
               <TableHead className="w-40 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -560,48 +441,60 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
                     {projectsQuery.data?.find((project) => project.id === job.projectId)?.name ??
                       job.projectId}
                   </div>
-                  <div
-                    className="text-xs break-all text-muted-foreground"
-                    title={job.agentId ?? undefined}
-                  >
-                    {getAgentTypeLabel(job.agentType)}
-                    {job.agentId
-                      ? ` · ${(job.agentType === 1 ? agentflowsQuery.data : agentsQuery.data)?.find((agent) => agent.id === job.agentId)?.name ?? job.agentId}`
-                      : ""}
+                  <div className="text-xs break-all text-muted-foreground" title={job.agentId}>
+                    {getTargetKindLabel(job.targetKind)}
+                    {` · ${(job.targetKind === 1 ? agentflowsQuery.data : agentsQuery.data)?.find((agent) => agent.id === job.agentId)?.name ?? job.agentId}`}
                   </div>
                 </TableCell>
                 <TableCell className="min-w-52">
-                  <div className="font-medium">{getTriggerTypeLabel(job.triggerType)}</div>
+                  <div className="font-medium">{job.schedule.kind}</div>
                   <div className="font-mono text-xs break-all text-muted-foreground">
-                    {job.triggerType === TRIGGER_TYPE_ONCE
-                      ? formatLocalDateTime(job.triggerValue)
-                      : job.triggerValue}
+                    {getScheduleValue({
+                      kind: job.schedule.kind,
+                      at: job.schedule.at,
+                      interval: job.schedule.interval,
+                      cron: job.schedule.cron,
+                    })}
                   </div>
                 </TableCell>
                 <TableCell className="min-w-44 text-sm text-muted-foreground">
-                  <div>{formatLocalDateTime(job.nextRunTime)}</div>
+                  <div>{getNextRunDisplay(job)}</div>
                 </TableCell>
                 <TableCell>
                   <Switch
                     className="cursor-pointer"
-                    checked={job.isEnabled}
+                    checked={job.enabled}
                     onCheckedChange={(isEnabled) => toggleJobEnabled(job, isEnabled)}
                     disabled={pendingEnabledJobIds.has(job.id)}
                     aria-label={`${job.name} enabled`}
                   />
                 </TableCell>
                 <TableCell className="min-w-52">
-                  <div className="flex flex-col items-start gap-2">
-                    <Badge variant={getStatusVariant(job.status)}>
-                      {getStatusLabel(job.status)}
-                    </Badge>
-                    <div className="text-xs text-muted-foreground">
-                      Retry {job.retryCount}/{job.maxRetryCount}
+                  {job.lastDelivery ? (
+                    <div className="flex flex-col items-start gap-2">
+                      <Badge
+                        variant={
+                          job.lastDelivery.state === 3
+                            ? "default"
+                            : job.lastDelivery.state === 6
+                              ? "destructive"
+                              : "secondary"
+                        }
+                      >
+                        {getDeliveryStateLabel(job.lastDelivery.state)}
+                      </Badge>
+                      <div className="text-xs text-muted-foreground">
+                        Attempt {job.lastDelivery.attempt}
+                      </div>
+                      {job.lastDelivery.lastError ? (
+                        <div className="line-clamp-2 text-xs text-destructive">
+                          {job.lastDelivery.lastError}
+                        </div>
+                      ) : null}
                     </div>
-                    {job.lastError ? (
-                      <div className="line-clamp-2 text-xs text-destructive">{job.lastError}</div>
-                    ) : null}
-                  </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
@@ -693,9 +586,14 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
         detailJob={jobDetailQuery.data ?? viewingJob}
         detailLoading={jobDetailQuery.isLoading}
         detailError={jobDetailQuery.isError ? getApiErrorMessage(jobDetailQuery.error) : null}
-        logs={jobLogsQuery.data ?? []}
-        logsLoading={jobLogsQuery.isLoading}
+        logs={jobRunPage.logs ?? []}
+        logsLoading={jobLogsQuery.isPending}
         logsError={jobLogsQuery.isError ? getApiErrorMessage(jobLogsQuery.error) : null}
+        logsOffset={jobRunPage.offset}
+        logsHasNextPage={jobRunPage.hasNextPage}
+        logsBusy={jobLogsQuery.isFetching}
+        onPreviousLogs={jobRunPage.goToPreviousPage}
+        onNextLogs={jobRunPage.goToNextPage}
         onEdit={(job) => {
           setDetailsOpen(false);
           openEditDialog(job);
@@ -703,6 +601,13 @@ export default function JobsPage({ onViewLogs }: { onViewLogs?: (jobId: string) 
       />
     </div>
   );
+}
+
+function getNextRunDisplay(job: JobDto): string {
+  const state = getNextRunState(job);
+  if (state === "ended") return "Ended";
+  if (state === "scheduled" && job.dueAt) return formatLocalDateTime(job.dueAt);
+  return "-";
 }
 
 function DeleteJobDialog({
@@ -761,64 +666,69 @@ function JobDialog({
 }: JobDialogProps) {
   const title = mode === "create" ? "Create Job" : "Edit Job";
   const submitLabel = mode === "create" ? "Create Job" : "Save Changes";
-  const isOnceTrigger = form.triggerType === TRIGGER_TYPE_ONCE;
-  const isIntervalTrigger = form.triggerType === TRIGGER_TYPE_INTERVAL;
-  const isCronTrigger = form.triggerType === TRIGGER_TYPE_CRON;
-  const triggerValueError = getTriggerValueError(form.triggerType, form.triggerValue);
+  const isOnceSchedule = form.schedule.kind === SCHEDULE_KIND_ONCE;
+  const isIntervalSchedule = form.schedule.kind === SCHEDULE_KIND_INTERVAL;
+  const isCronSchedule = form.schedule.kind === SCHEDULE_KIND_CRON;
+  const scheduleError = getScheduleError(form.schedule);
+  const targetError =
+    form.targetKind === null || !form.agentId ? "Select an execution target." : null;
+  const instructionsError = form.instructions.trim() ? null : "Instructions are required.";
   const [isAdvanced, setIsAdvanced] = React.useState(false);
+  const [showValidation, setShowValidation] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
       setIsAdvanced(false);
+      setShowValidation(false);
     }
   }, [open]);
 
   React.useEffect(() => {
     setForm((current) => {
-      if (current.triggerType === TRIGGER_TYPE_ONCE) {
-        const onceRunTime = getNextRunTimeForOnce(current);
-        if (current.triggerValue === onceRunTime && current.nextRunTime === onceRunTime) {
+      if (current.schedule.kind === SCHEDULE_KIND_ONCE) {
+        const at =
+          current.schedule.at && !Number.isNaN(Date.parse(current.schedule.at))
+            ? current.schedule.at
+            : createDefaultOnceAt();
+        if (current.schedule.at === at) {
           return current;
         }
 
         return {
           ...current,
-          triggerValue: onceRunTime,
-          nextRunTime: onceRunTime,
+          schedule: { kind: SCHEDULE_KIND_ONCE, at },
         };
       }
 
-      if (current.triggerType === TRIGGER_TYPE_INTERVAL) {
-        const nextTriggerValue = isPositiveIntervalValue(current.triggerValue)
-          ? current.triggerValue
-          : DEFAULT_INTERVAL_TRIGGER_VALUE;
-        if (current.triggerValue === nextTriggerValue) {
+      if (current.schedule.kind === SCHEDULE_KIND_INTERVAL) {
+        const interval = isPositiveIsoDuration(current.schedule.interval)
+          ? current.schedule.interval
+          : DEFAULT_INTERVAL;
+        if (current.schedule.interval === interval) {
           return current;
         }
 
         return {
           ...current,
-          triggerValue: nextTriggerValue,
+          schedule: { kind: SCHEDULE_KIND_INTERVAL, interval },
         };
       }
 
-      if (current.triggerType === TRIGGER_TYPE_CRON) {
-        const nextTriggerValue = isCronValue(current.triggerValue)
-          ? current.triggerValue
-          : DEFAULT_CRON_TRIGGER_VALUE;
-        if (current.triggerValue === nextTriggerValue) {
+      if (current.schedule.kind === SCHEDULE_KIND_CRON) {
+        const cron = isCronValue(current.schedule.cron) ? current.schedule.cron : DEFAULT_CRON;
+        if (current.schedule.cron === cron) {
           return current;
         }
 
         return {
           ...current,
-          triggerValue: nextTriggerValue,
+          schedule: { kind: SCHEDULE_KIND_CRON, cron },
         };
       }
 
-      return current;
+      return { ...current, schedule: createDefaultSchedule() };
     });
-  }, [form.triggerType, setForm]);
+  }, [form.schedule.kind, setForm]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -826,7 +736,7 @@ function JobDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Configure the project target, agent routing, and trigger schedule for this job.
+            Configure the project, execution target, instructions, and schedule for this job.
           </DialogDescription>
         </DialogHeader>
 
@@ -856,14 +766,14 @@ function JobDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={`${mode}-agent-id`}>Agent ID</Label>
+            <Label htmlFor={`${mode}-agent-id`}>Execution Target</Label>
             <AgentSelector
               id={`${mode}-agent-id`}
               projectId={form.projectId}
               value={
-                form.agentType !== null && form.agentId
+                form.targetKind !== null && form.agentId
                   ? {
-                      agentType: form.agentType as 0 | 1,
+                      agentType: form.targetKind as 0 | 1,
                       agentId: form.agentId,
                     }
                   : null
@@ -871,89 +781,94 @@ function JobDialog({
               onSelect={({ agentType, agentId }) =>
                 setForm((current) => ({
                   ...current,
-                  agentType,
+                  targetKind: agentType,
                   agentId,
                 }))
               }
               onClear={() =>
                 setForm((current) => ({
                   ...current,
-                  agentType: null,
+                  targetKind: null,
                   agentId: "",
                 }))
               }
-              placeholder="Not assigned"
+              placeholder="Select an agent or agentflow"
               clearable
             />
+            {showValidation && targetError ? (
+              <p className="text-xs text-destructive">{targetError}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={`${mode}-trigger-type`}>Trigger Type</Label>
+            <Label htmlFor={`${mode}-schedule-kind`}>Schedule Type</Label>
             <Select
-              value={String(form.triggerType)}
-              onValueChange={(value) =>
+              value={form.schedule.kind}
+              onValueChange={(kind) =>
                 setForm((current) => ({
                   ...current,
-                  triggerType: Number(value),
+                  schedule: { kind },
                 }))
               }
             >
-              <SelectTrigger id={`${mode}-trigger-type`} className="w-full">
-                <SelectValue placeholder="Select trigger type" />
+              <SelectTrigger id={`${mode}-schedule-kind`} className="w-full">
+                <SelectValue placeholder="Select schedule type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={String(TRIGGER_TYPE_ONCE)}>Once</SelectItem>
-                <SelectItem value={String(TRIGGER_TYPE_INTERVAL)}>Interval</SelectItem>
-                <SelectItem value={String(TRIGGER_TYPE_CRON)}>Cron</SelectItem>
+                <SelectItem value={SCHEDULE_KIND_ONCE}>Once</SelectItem>
+                <SelectItem value={SCHEDULE_KIND_INTERVAL}>Interval</SelectItem>
+                <SelectItem value={SCHEDULE_KIND_CRON}>Cron</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {isOnceTrigger ? (
+          {isOnceSchedule ? (
             <div className="space-y-2">
-              <Label htmlFor={`${mode}-next-run-time-date`}>Run Time</Label>
+              <Label htmlFor={`${mode}-schedule-at`}>Run Time</Label>
               <DateTimePicker
-                id={`${mode}-next-run-time`}
-                value={getNextRunTimeForOnce(form)}
-                onChange={(nextRunTime) =>
+                id={`${mode}-schedule-at`}
+                value={form.schedule.at ?? createDefaultOnceAt()}
+                onChange={(at) =>
                   setForm((current) => ({
                     ...current,
-                    nextRunTime,
-                    triggerValue: nextRunTime,
+                    schedule: { kind: SCHEDULE_KIND_ONCE, at },
                   }))
                 }
               />
               <p className="text-xs text-muted-foreground">
-                Pick the exact time to run this job once. This value will be sent as the once
-                trigger value.
+                Pick the exact time to run this job once.
               </p>
             </div>
           ) : null}
 
-          {isIntervalTrigger || isCronTrigger ? (
+          {isIntervalSchedule || isCronSchedule ? (
             <div className="space-y-2">
-              <Label htmlFor={`${mode}-trigger-value`}>
-                {isIntervalTrigger ? "Interval" : "Trigger Value"}
+              <Label htmlFor={`${mode}-schedule-value`}>
+                {isIntervalSchedule ? "Interval" : "Cron"}
               </Label>
               <Input
-                id={`${mode}-trigger-value`}
-                value={form.triggerValue}
-                placeholder={isIntervalTrigger ? DEFAULT_INTERVAL_TRIGGER_VALUE : "*/5 * * * *"}
-                aria-invalid={triggerValueError !== null}
+                id={`${mode}-schedule-value`}
+                value={
+                  isIntervalSchedule ? (form.schedule.interval ?? "") : (form.schedule.cron ?? "")
+                }
+                placeholder={isIntervalSchedule ? DEFAULT_INTERVAL : DEFAULT_CRON}
+                aria-invalid={scheduleError !== null}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    triggerValue: event.target.value,
+                    schedule: isIntervalSchedule
+                      ? { kind: SCHEDULE_KIND_INTERVAL, interval: event.target.value }
+                      : { kind: SCHEDULE_KIND_CRON, cron: event.target.value },
                   }))
                 }
               />
-              {triggerValueError ? (
-                <p className="text-xs text-destructive">{triggerValueError}</p>
+              {scheduleError ? (
+                <p className="text-xs text-destructive">{scheduleError}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  {isIntervalTrigger
-                    ? "Use a .NET TimeSpan value such as 00:01:00 for a one-minute interval."
-                    : "Use a standard cron string such as */5 * * * *."}
+                  {isIntervalSchedule
+                    ? "Use a positive ISO 8601 duration such as PT1M."
+                    : "Use a standard five-field cron expression such as */1 * * * *."}
                 </p>
               )}
             </div>
@@ -976,32 +891,16 @@ function JobDialog({
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor={`${mode}-max-retry-count`}>Max Retry Count</Label>
-                <Input
-                  id={`${mode}-max-retry-count`}
-                  type="number"
-                  min={0}
-                  value={String(form.maxRetryCount)}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      maxRetryCount: Number(event.target.value || 0),
-                    }))
-                  }
-                />
-              </div>
-
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor={`${mode}-enabled`}>Enabled</Label>
                 <div className="flex min-h-9 items-center rounded-md border px-3">
                   <Switch
                     id={`${mode}-enabled`}
-                    checked={form.isEnabled}
+                    checked={form.enabled}
                     onCheckedChange={(checked) =>
                       setForm((current) => ({
                         ...current,
-                        isEnabled: checked,
+                        enabled: checked,
                       }))
                     }
                   />
@@ -1014,22 +913,26 @@ function JobDialog({
           ) : null}
 
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-prompt`}>Prompt</Label>
+            <Label htmlFor={`${mode}-instructions`}>Instructions</Label>
             <p className="text-xs text-muted-foreground">
-              Optional execution prompt passed into the scheduled run.
+              Instructions passed to the selected target for each scheduled run.
             </p>
             <Textarea
-              id={`${mode}-prompt`}
+              id={`${mode}-instructions`}
               rows={6}
-              value={form.prompt}
+              value={form.instructions}
               placeholder="Summarize the latest project activity and post the result to the team channel."
+              aria-invalid={instructionsError !== null}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
-                  prompt: event.target.value,
+                  instructions: event.target.value,
                 }))
               }
             />
+            {showValidation && instructionsError ? (
+              <p className="text-xs text-destructive">{instructionsError}</p>
+            ) : null}
           </div>
         </div>
 
@@ -1057,8 +960,11 @@ function JobDialog({
           <Button
             size="sm"
             type="button"
-            onClick={onSubmit}
-            disabled={isSubmitting || triggerValueError !== null}
+            onClick={() => {
+              setShowValidation(true);
+              onSubmit();
+            }}
+            disabled={isSubmitting || scheduleError !== null}
           >
             {isSubmitting ? "Saving..." : submitLabel}
           </Button>
@@ -1078,6 +984,11 @@ function JobDetailsDialog({
   logs,
   logsLoading,
   logsError,
+  logsOffset,
+  logsHasNextPage,
+  logsBusy,
+  onPreviousLogs,
+  onNextLogs,
   onEdit,
 }: {
   open: boolean;
@@ -1086,9 +997,14 @@ function JobDetailsDialog({
   detailJob: JobDto | null | undefined;
   detailLoading: boolean;
   detailError: string | null;
-  logs: JobExecutionLogDto[];
+  logs: JobRunDto[];
   logsLoading: boolean;
   logsError: string | null;
+  logsOffset: number;
+  logsHasNextPage: boolean;
+  logsBusy: boolean;
+  onPreviousLogs: () => void;
+  onNextLogs: () => void;
   onEdit: (job: JobDto) => void;
 }) {
   const job = detailJob ?? viewingJob;
@@ -1113,38 +1029,43 @@ function JobDetailsDialog({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <DetailField label="Job ID" value={job.id} mono />
                 <DetailField label="Project ID" value={job.projectId} mono />
-                <DetailField label="Agent Type" value={getAgentTypeLabel(job.agentType)} />
-                <DetailField label="Agent ID" value={job.agentId ?? "-"} mono />
-                <DetailField label="Trigger Type" value={getTriggerTypeLabel(job.triggerType)} />
+                <DetailField label="Target Kind" value={getTargetKindLabel(job.targetKind)} />
+                <DetailField label="Agent ID" value={job.agentId} mono />
+                <DetailField label="Schedule Type" value={job.schedule.kind} />
                 <DetailField
-                  label="Trigger Value"
-                  value={
-                    job.triggerType === TRIGGER_TYPE_ONCE
-                      ? formatLocalDateTime(job.triggerValue)
-                      : job.triggerValue
-                  }
+                  label="Schedule Value"
+                  value={getScheduleValue({
+                    kind: job.schedule.kind,
+                    at: job.schedule.at,
+                    interval: job.schedule.interval,
+                    cron: job.schedule.cron,
+                  })}
                   mono
                 />
-                <DetailField label="Next Run" value={formatLocalDateTime(job.nextRunTime)} />
-                <DetailField label="Status" value={getStatusLabel(job.status)} />
+                <DetailField label="Next Run" value={getNextRunDisplay(job)} />
+                <DetailField label="Enabled" value={job.enabled ? "Enabled" : "Disabled"} />
                 <DetailField
-                  label="Execution"
-                  value={`${job.isEnabled ? "Enabled" : "Disabled"} · Retry ${job.retryCount}/${job.maxRetryCount}`}
+                  label="Last Delivery"
+                  value={
+                    job.lastDelivery
+                      ? `${getDeliveryStateLabel(job.lastDelivery.state)} · Attempt ${job.lastDelivery.attempt}`
+                      : "-"
+                  }
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Prompt</Label>
+                <Label>Instructions</Label>
                 <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm whitespace-pre-wrap break-words text-muted-foreground">
-                  {job.prompt?.trim() ? job.prompt : "No prompt configured."}
+                  {job.instructions}
                 </div>
               </div>
 
-              {job.lastError ? (
+              {job.lastDelivery?.lastError ? (
                 <div className="space-y-2">
                   <Label>Last Error</Label>
                   <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm whitespace-pre-wrap break-words text-destructive">
-                    {job.lastError}
+                    {job.lastDelivery.lastError}
                   </div>
                 </div>
               ) : null}
@@ -1169,25 +1090,31 @@ function JobDetailsDialog({
                       <div key={log.id} className="rounded-md border px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <Badge variant={log.success ? "default" : "destructive"}>
-                              {log.success ? "Succeeded" : "Failed"}
-                            </Badge>
+                            <JobRunResultBadge result={log.result} />
                             <span className="text-sm font-medium">Attempt {log.attempt}</span>
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {formatLocalDateTime(log.startTime)}
-                            {log.endTime ? ` -> ${formatLocalDateTime(log.endTime)}` : ""}
+                            {formatLocalDateTime(log.startedAt)}
+                            {` -> ${formatLocalDateTime(log.endedAt)}`}
                           </div>
                         </div>
-                        {log.errorMessage ? (
+                        {log.error ? (
                           <div className="mt-2 text-sm whitespace-pre-wrap break-words text-destructive">
-                            {log.errorMessage}
+                            {log.error}
                           </div>
                         ) : null}
                       </div>
                     ))}
                   </div>
                 )}
+                <JobRunPagination
+                  offset={logsOffset}
+                  hasNextPage={logsHasNextPage}
+                  isLoading={logsBusy}
+                  isError={Boolean(logsError)}
+                  onPrevious={onPreviousLogs}
+                  onNext={onNextLogs}
+                />
               </div>
             </>
           ) : (

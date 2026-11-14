@@ -3,7 +3,6 @@ using Agw.Auth.Contracts;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Contracts;
 using Agw.Jobs.Contracts.Tools;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Abstractions;
 using Agw.Tools.Abstractions.Attributes;
@@ -29,11 +28,7 @@ public sealed class JobManagementToolExecutor
     public async Task<IReadOnlyList<JobToolResponse>> ListJobsAsync(
         [AgwToolService] IAgwToolInvocationContext invocationContext,
         CancellationToken cancellationToken
-    )
-    {
-        var jobs = await _service.ListByProjectAsync(GetProjectId(invocationContext), cancellationToken);
-        return jobs.Select(Map).ToArray();
-    }
+    ) => (await _service.ListAsync(GetProjectId(invocationContext), cancellationToken)).Select(Map).ToArray();
 
     [AgwTool(Name = "agw_job_get")]
     [Description("Gets one scheduled job in the current project by job ID.")]
@@ -41,61 +36,44 @@ public sealed class JobManagementToolExecutor
         Guid jobId,
         [AgwToolService] IAgwToolInvocationContext invocationContext,
         CancellationToken cancellationToken
-    )
-    {
-        var projectId = GetProjectId(invocationContext);
-        var job =
-            await _service.GetByProjectAsync(jobId, projectId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.JobNotFound);
-        return Map(job);
-    }
+    ) => Map(await _service.GetForProjectAsync(jobId, GetProjectId(invocationContext), cancellationToken));
 
     [AgwTool("agw_job_create", AgwToolPermission.Write, AllowInPlanMode = false)]
     [Description("Creates a scheduled job in the current project.")]
     public async Task<JobToolResponse> CreateJobAsync(
-        string prompt,
-        AgentRuntimeType agentType,
+        string instructions,
+        AgentRuntimeType targetKind,
         Guid agentId,
-        TriggerType triggerType,
-        string triggerValue,
+        string kind,
         [AgwToolService] IAgwToolInvocationContext invocationContext,
         string? name = null,
-        int maxRetryCount = 3,
-        bool isEnabled = true,
+        DateTimeOffset? at = null,
+        string? interval = null,
+        string? cron = null,
+        bool enabled = true,
         CancellationToken cancellationToken = default
     )
     {
         var projectId = GetProjectId(invocationContext);
-        var userId = RequireInteractiveUserId(projectId);
-        if (string.IsNullOrWhiteSpace(prompt))
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Job prompt is required.");
-        }
-
-        if (agentId == Guid.Empty)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "agentId cannot be empty.");
-        }
-
-        if (maxRetryCount < 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Job maxRetryCount cannot be negative.");
-        }
-
+        RequireInteractiveUser(projectId);
         var job = await _service.CreateAsync(
             new JobCreateRequest
             {
+                Name = name,
+                Enabled = enabled,
                 ProjectId = projectId,
-                AgentType = agentType,
+                TargetKind = targetKind,
                 AgentId = agentId,
-                Name = name ?? string.Empty,
-                Prompt = prompt,
-                TriggerType = triggerType,
-                TriggerValue = triggerValue,
-                MaxRetryCount = maxRetryCount,
-                IsEnabled = isEnabled,
+                Instructions = instructions,
+                Schedule = new JobScheduleDto
+                {
+                    Kind = kind,
+                    At = at,
+                    Interval = interval,
+                    Cron = cron,
+                },
             },
-            userId
+            cancellationToken
         );
         return Map(job);
     }
@@ -106,56 +84,68 @@ public sealed class JobManagementToolExecutor
         Guid jobId,
         [AgwToolService] IAgwToolInvocationContext invocationContext,
         string? name = null,
-        string? prompt = null,
-        bool clearPrompt = false,
-        AgentRuntimeType? agentType = null,
+        string? instructions = null,
+        AgentRuntimeType? targetKind = null,
         Guid? agentId = null,
-        TriggerType? triggerType = null,
-        string? triggerValue = null,
-        int? maxRetryCount = null,
-        bool? isEnabled = null,
+        string? kind = null,
+        DateTimeOffset? at = null,
+        string? interval = null,
+        string? cron = null,
+        bool? enabled = null,
         CancellationToken cancellationToken = default
     )
     {
         var projectId = GetProjectId(invocationContext);
-        var userId = RequireInteractiveUserId(projectId);
-        ValidatePatch(
-            name,
-            prompt,
-            clearPrompt,
-            agentType,
-            agentId,
-            triggerType,
-            triggerValue,
-            maxRetryCount,
-            isEnabled
-        );
+        RequireInteractiveUser(projectId);
+        var hasNoChanges =
+            name is null
+            && instructions is null
+            && targetKind is null
+            && agentId is null
+            && kind is null
+            && at is null
+            && interval is null
+            && cron is null
+            && enabled is null;
+        if (hasNoChanges)
+        {
+            throw new AgwException(ErrorCodes.NoChangesToMake);
+        }
+        if (name is not null && string.IsNullOrWhiteSpace(name))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Job name cannot be blank.");
+        }
+        if (instructions is not null && string.IsNullOrWhiteSpace(instructions))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Job instructions cannot be blank.");
+        }
+        if (targetKind.HasValue != agentId.HasValue)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "targetKind and agentId must be supplied together.");
+        }
 
-        var existing =
-            await _service.GetByProjectAsync(jobId, projectId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.JobNotFound);
-        var updated = await _service.UpdateByProjectAsync(
+        var job = await _service.UpdateForProjectAsync(
             jobId,
             projectId,
-            new JobUpdateRequest
+            current => new JobCreateRequest
             {
+                Name = name ?? current.Name,
+                Enabled = enabled ?? current.Enabled,
                 ProjectId = projectId,
-                AgentType = agentType ?? existing.AgentType,
-                AgentId = agentId ?? existing.AgentId,
-                Name = name ?? existing.Name,
-                Prompt = clearPrompt ? null : prompt ?? existing.Prompt,
-                TriggerType = triggerType ?? existing.TriggerType,
-                TriggerValue = triggerValue ?? existing.TriggerValue,
-                MaxRetryCount = maxRetryCount ?? existing.MaxRetryCount,
-                IsEnabled = isEnabled ?? existing.IsEnabled,
-                Status = existing.Status,
+                TargetKind = targetKind ?? current.TargetKind,
+                AgentId = agentId ?? current.AgentId,
+                Instructions = instructions ?? current.Instructions,
+                Schedule = new JobScheduleDto
+                {
+                    Kind = kind ?? current.Schedule.Kind,
+                    At = at ?? current.Schedule.At,
+                    Interval = interval ?? current.Schedule.Interval,
+                    Cron = cron ?? current.Schedule.Cron,
+                },
             },
-            userId,
-            recalculateSchedule: triggerType != null || triggerValue != null,
-            cancellationToken: cancellationToken
+            cancellationToken
         );
-
-        return Map(updated ?? throw new AgwException(ErrorCodes.JobNotFound));
+        return Map(job);
     }
 
     [AgwTool("agw_job_delete", AgwToolPermission.Write, AllowInPlanMode = false)]
@@ -168,17 +158,16 @@ public sealed class JobManagementToolExecutor
     )
     {
         var projectId = GetProjectId(invocationContext);
-        _ = RequireInteractiveUserId(projectId);
+        RequireInteractiveUser(projectId);
         if (!Guid.TryParse(confirmation, out var confirmedJobId) || confirmedJobId != jobId)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Delete confirmation must exactly match the job ID.");
         }
 
-        var deleted = await _service.DeleteByProjectAsync(jobId, projectId, cancellationToken);
-        return Map(deleted ?? throw new AgwException(ErrorCodes.JobNotFound));
+        return Map(await _service.DeleteForProjectAsync(jobId, projectId, cancellationToken));
     }
 
-    private string RequireInteractiveUserId(Guid projectId)
+    private void RequireInteractiveUser(Guid projectId)
     {
         var context = _executionContext.Current;
         if (context == null || ProjectDefaults.GetDefaultProjectIdentifier(context.ProjectId) != projectId)
@@ -193,89 +182,24 @@ public sealed class JobManagementToolExecutor
         {
             throw new AgwException(ErrorCodes.AuthenticationRequired, "A stable user id is required.");
         }
-
-        return context.UserId;
     }
 
     private static Guid GetProjectId(IAgwToolInvocationContext invocationContext) =>
         ProjectDefaults.GetDefaultProjectIdentifier(invocationContext.ProjectId);
 
-    private static void ValidatePatch(
-        string? name,
-        string? prompt,
-        bool clearPrompt,
-        AgentRuntimeType? agentType,
-        Guid? agentId,
-        TriggerType? triggerType,
-        string? triggerValue,
-        int? maxRetryCount,
-        bool? isEnabled
-    )
-    {
-        if (
-            name == null
-            && prompt == null
-            && !clearPrompt
-            && agentType == null
-            && agentId == null
-            && triggerType == null
-            && triggerValue == null
-            && maxRetryCount == null
-            && isEnabled == null
-        )
+    private static JobToolResponse Map(JobResponse job) =>
+        new()
         {
-            throw new AgwException(ErrorCodes.NoChangesToMake);
-        }
-
-        if (name != null && string.IsNullOrWhiteSpace(name))
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Job name cannot be blank.");
-        }
-
-        if (clearPrompt && prompt != null)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "prompt and clearPrompt cannot be supplied together.");
-        }
-
-        if (prompt != null && string.IsNullOrWhiteSpace(prompt))
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Job prompt cannot be blank. Use clearPrompt to remove it."
-            );
-        }
-
-        if (agentType.HasValue != agentId.HasValue)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "agentType and agentId must be supplied together.");
-        }
-
-        if (agentId == Guid.Empty)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "agentId cannot be empty.");
-        }
-
-        if (maxRetryCount < 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Job maxRetryCount cannot be negative.");
-        }
-    }
-
-    private static JobToolResponse Map(Job job) =>
-        new(
-            job.Id,
-            job.ProjectId,
-            job.AgentType,
-            job.AgentId,
-            job.Name,
-            job.Prompt,
-            job.TriggerType,
-            job.TriggerValue,
-            job.NextRunTime,
-            job.Status,
-            job.IsEnabled,
-            job.RetryCount,
-            job.MaxRetryCount,
-            job.LastError
-        );
+            Id = job.Id,
+            Name = job.Name,
+            Enabled = job.Enabled,
+            ProjectId = job.ProjectId,
+            TargetKind = job.TargetKind,
+            AgentId = job.AgentId,
+            Instructions = job.Instructions,
+            Schedule = job.Schedule,
+            DueAt = job.DueAt,
+            ScheduleCompleted = job.ScheduleCompleted,
+            LastDelivery = job.LastDelivery,
+        };
 }

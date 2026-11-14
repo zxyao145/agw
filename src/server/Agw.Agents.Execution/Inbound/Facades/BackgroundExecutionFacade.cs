@@ -11,6 +11,7 @@ using Agw.Auth.Contracts;
 using Agw.Events.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Projects.Contracts.Execution;
+using Agw.Shared.Contracts.Conversations;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
@@ -28,6 +29,7 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
     private readonly IBackgroundExecutionCompletionTransaction _completion;
     private readonly IExtensionCallerAccessor _extensionCallerAccessor;
     private readonly IEventContextFacade _eventContexts;
+    private readonly IEventSourceFacade _eventSources;
     private readonly IUserInfoService _userInfoService;
     private readonly IApplicationLock _applicationLock;
     private readonly BackgroundExecutionHost _host;
@@ -43,6 +45,7 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
         IBackgroundExecutionCompletionTransaction completion,
         IExtensionCallerAccessor extensionCallerAccessor,
         IEventContextFacade eventContexts,
+        IEventSourceFacade eventSources,
         IUserInfoService userInfoService,
         IApplicationLock applicationLock,
         BackgroundExecutionHost host,
@@ -58,6 +61,7 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
         _completion = completion;
         _extensionCallerAccessor = extensionCallerAccessor;
         _eventContexts = eventContexts;
+        _eventSources = eventSources;
         _userInfoService = userInfoService;
         _applicationLock = applicationLock;
         _host = host;
@@ -75,6 +79,11 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
         ValidateRequest(request);
         cancellationToken.ThrowIfCancellationRequested();
         var caller = ResolveCaller(request.CorrelationKey);
+        var fromEvent = caller.RequesterExtensionId is null;
+        if (fromEvent && request.ParentEventId is null)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "An event delivery requires a parent event.");
+        }
         using var userScope = PushUser(caller.UserId);
         var requestHash = ComputeRequestHash(request, caller);
         await using var lease = await _applicationLock.AcquireAsync(GetLockName(request.TurnId), cancellationToken);
@@ -86,10 +95,13 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
             return ExistingReceipt(existing, caller, request.CorrelationKey, requestHash, request.ParentEventId);
         }
 
+        var lineage = await ResolveLineageAsync(request.ParentEventId, request.TurnId, cancellationToken)
+            .ConfigureAwait(false);
+        var kind = fromEvent
+            ? await ResolveEventConversationKindAsync(lineage.SourceId!.Value, cancellationToken).ConfigureAwait(false)
+            : ConversationKinds.Native;
         var target = await _executions
             .ResolveBackgroundTargetAsync(request.Target, caller.UserId, request.ToolPolicy, cancellationToken)
-            .ConfigureAwait(false);
-        var lineage = await ResolveLineageAsync(request.ParentEventId, request.TurnId, cancellationToken)
             .ConfigureAwait(false);
         var contextId = await ResolveContextIdAsync(request, cancellationToken).ConfigureAwait(false);
         var projectTask = await _projectTasks
@@ -97,13 +109,14 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
                 new StartProjectTaskRequest(
                     request.ProjectId,
                     request.TurnId,
-                    null,
                     AgwMessageUtil.ExtractInputText(request.Input),
                     request.Title,
                     contextId,
                     caller.UserId,
                     ProjectTaskStatus.Running,
-                    caller.RequesterExtensionId?.ToString("D")
+                    caller.RequesterExtensionId?.ToString("D"),
+                    kind,
+                    fromEvent ? request.ParentEventId : null
                 ),
                 cancellationToken
             )
@@ -345,7 +358,15 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
         var parent =
             await _eventContexts.GetAsync(parentEventId.Value, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.ResourceNotFound);
-        return new EventLineage(parent.ChainId, parent.Hops);
+        return new EventLineage(parent.ChainId, parent.Hops, parent.SourceId);
+    }
+
+    private async Task<string> ResolveEventConversationKindAsync(Guid sourceId, CancellationToken cancellationToken)
+    {
+        var source =
+            await _eventSources.GetAsync(sourceId, cancellationToken).ConfigureAwait(false)
+            ?? throw new AgwException(ErrorCodes.ResourceNotFound);
+        return ConversationKinds.ForEventSource(source.Kind);
     }
 
     private async Task<string> ResolveContextIdAsync(
@@ -540,7 +561,7 @@ internal sealed class BackgroundExecutionFacade : IBackgroundExecutionFacade
 
     private sealed record BackgroundExecutionCaller(string UserId, string CallerKey, Guid? RequesterExtensionId);
 
-    private sealed record EventLineage(Guid ChainId, int Hops);
+    private sealed record EventLineage(Guid ChainId, int Hops, Guid? SourceId = null);
 
     // 字段顺序用于稳定 RequestHash 的序列化结果。
     // Keep field order stable for RequestHash serialization.

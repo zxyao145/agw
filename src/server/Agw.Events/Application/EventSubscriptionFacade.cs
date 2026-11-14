@@ -6,6 +6,7 @@ using Agw.Events.Contracts;
 using Agw.Events.Domain.Behaviors;
 using Agw.Events.Domain.ValueObjects;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,7 @@ public sealed class EventSubscriptionFacade : IEventSubscriptionFacade
                 PublisherKeysJson = JsonSerializer.Serialize(request.PublisherKeys),
                 EventTypesJson = JsonSerializer.Serialize(request.EventTypes),
                 FilterJson = request.Filter?.GetRawText(),
+                HandlerExtensionId = extensionId,
                 HandlerId = request.HandlerId,
                 HandlerConfigJson = request.HandlerConfig.GetRawText(),
             }
@@ -90,11 +92,14 @@ public sealed class EventSubscriptionFacade : IEventSubscriptionFacade
         return State(record, accepted);
     }
 
-    private Task<EventSubscription?> FindAsync(Guid extensionId, string key, CancellationToken cancellationToken) =>
-        _db.EventSubscriptions.SingleOrDefaultAsync(
-            row => row.ManagedByExtensionId == extensionId && row.ManagedKey == key,
+    private Task<EventSubscription?> FindAsync(Guid extensionId, string key, CancellationToken cancellationToken)
+    {
+        var managedBy = EventManagedBy.ForExtension(extensionId);
+        return _db.EventSubscriptions.SingleOrDefaultAsync(
+            row => row.ManagedBy == managedBy && row.ManagedKey == key,
             cancellationToken
         );
+    }
 
     private EventSubscription Create(Guid extensionId, string key)
     {
@@ -102,7 +107,7 @@ public sealed class EventSubscriptionFacade : IEventSubscriptionFacade
         {
             Id = Guid.CreateVersion7(),
             CreateBy = UserInfoUtil.RequiredUserId,
-            ManagedByExtensionId = extensionId,
+            ManagedBy = EventManagedBy.ForExtension(extensionId),
             ManagedKey = key,
             TargetKind = EventSubscriptionTargetKind.ExtensionHandler,
         };

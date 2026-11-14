@@ -1,377 +1,55 @@
-# Agw.Jobs
+# Jobs
 
-`Agw.Jobs` 是 Agw 的持久化任务调度模块。它把数据库中的 `Job` 转换为 Agent 或 Agentflow 执行：数据库负责保存任务状态和运行记录，内存优先队列负责到点唤醒，项目级锁负责串行化同一项目的定时任务，`Agw.Projects` 和 `Agw.Agents` 则负责创建逻辑任务并真正执行 Agent。
+Jobs 提供定时任务的 API、Agent 工具、请求校验和默认名称。每个 Job 对应 Events 中的一个 Timer 来源和一条 Agent 或 Agentflow 订阅。两条记录的 `managedBy` 都是 `job`，`managedKey` 保存同一个 Job ID。Jobs 通过 `IEventJobFacade` 管理这些记录，Events 管理计划、投递、重试和运行历史。
 
-这个边界很重要：`Agw.Jobs` 不是独立的通用消息队列，也不直接拥有 EF Core 实现或 Agent runtime。维护调度行为时，需要同时理解 `Agw.Jobs`、`Agw.Infrastructure`、`Agw.Projects` 和 `Agw.Agents` 之间的协作关系。
+## 创建和更新
 
-## 设计目标
-
-- **持久化调度状态**：Host 重启后，可以从数据库重新预取尚未执行的任务。
-- **兼顾持久性和调度精度**：数据库保存事实状态，进程内 `PriorityQueue` 按 `NextRunTime` 等待和派发。
-- **按项目串行执行**：同一项目的定时任务依次运行，不同项目可以并行运行。
-- **统一执行入口**：定时任务最终创建普通的项目 Task 和 Context，再复用 Agent 或 Agentflow runtime。
-- **记录重试和历史**：每次尝试都会更新 `Job` 状态，并写入 `JobLog`。
-- **保持时间语义一致**：调度计算基于 `TimeProvider` 和 UTC，API 时间值使用带时区的 RFC 3339 字符串。
-
-## agw-job 内置 Skill
-
-绑定 `agw-job` 后，System Agent 获得五个独立工具。Skill ID、名称和已有绑定保持不变；`load_skill` 读取使用说明，`read_skill_resource` 读取 `job-trigger-reference`，具体操作直接调用下列工具。
-
-| 工具 | 权限 | Plan 模式 |
-| --- | --- | --- |
-| `agw_job_list` | ReadOnly | 允许 |
-| `agw_job_get` | ReadOnly | 允许 |
-| `agw_job_create` | Write | 禁止 |
-| `agw_job_update` | Write | 禁止 |
-| `agw_job_delete` | Write | 禁止 |
-
-工具声明及运行时执行适配位于 `Application/Tools`，响应为 `Contracts/Tools/JobToolResponse`。声明通过 `Agw.Tools.Abstractions` 复用公共契约；Jobs 不引用 `Agw.Tools` 实现。它们通过 Skill 注册显式提供，不进入全局 `/api/tools` 目录，也不新增持久化 Tool Definition。
-
-项目在装配时绑定，模型不能提供 `projectId` 或 `userId` 切换作用域。查询受当前用户隔离；写操作要求匹配项目的交互用户上下文。更新保持 patch 语义，省略字段保持原值，`clearPrompt` 用于清空提示词。删除前先展示任务并取得用户确认，`confirmation` 必须与 `jobId` 相同。执行权限由现有审批管线处理，FullAccess 不绕过业务身份与删除确认校验。
-
-旧 `list-jobs`、`get-job`、`create-job`、`update-job`、`delete-job` 脚本入口已退役；不要再通过 `run_skill_script` 调用它们。发布前需结束仍使用旧入口的活跃或待审批回合。已有历史记录保留，无数据库迁移。其他 Skill 的脚本执行规则保持原样。
-
-## 模块边界
-
-| 职责 | 所在位置 |
-| --- | --- |
-| Job CRUD 和用例协调 | `Agw.Jobs.Application` |
-| Minimal API 端点和请求/响应 DTO | `Agw.Jobs.Api`、`Agw.Jobs.Contracts` |
-| 触发时间计算、调度快照和持久化端口 | `Agw.Jobs.Scheduling` |
-| 预取、内存排队、唤醒和按项目派发 | `Agw.Jobs.Scheduling.Coordination` |
-| 单次执行状态迁移、日志和重试 | `Agw.Jobs.Scheduling.Attempts` |
-| Agent / Agentflow 执行适配 | `Agw.Jobs.Execution` |
-| `Job`、`JobLog`、状态和触发器实体 | `Agw.Data/Entities/Jobs` |
-| EF Core 仓储和 `IJobStore` 实现 | `Agw.Infrastructure.Repositories.JobRepo` |
-| 内存锁、PostgreSQL 分布式锁和锁路由 | `Agw.Infrastructure.Jobs` |
-| 项目 Task、Context 及执行状态 | `Agw.Projects` |
-| Agent 和 Agentflow runtime | `Agw.Agents` |
-
-`Agw.Jobs` 定义 `IJobStore` 和 `IProjectExecutionLock` 等所需端口，具体基础设施由 `Agw.Infrastructure` 提供。这样调度器不依赖 EF Core 或 PostgreSQL 锁的实现细节。
-
-## 总体架构
-
-```mermaid
-flowchart LR
-    Client["Web UI / API Client"] --> Endpoints["EndpointRouteBuilderExtensions"]
-    Endpoints --> AppService["JobAppService"]
-    AppService --> Repository["IRepository<Job>"]
-    AppService --> Calculator["JobScheduleCalculator"]
-    AppService --> WakeSignal["JobSchedulerWakeSignal"]
-
-    Repository --> Database[("Job / JobLog")]
-    WakeSignal -.->|近期开跑的 Once Job| Scheduler["JobHostedService"]
-    Scheduler --> Store["IJobStore / JobRepo"]
-    Store --> Database
-    Scheduler --> Queue["PriorityQueue + project backlog"]
-    Queue --> Lock["IProjectExecutionLock"]
-    Lock --> InMemoryLock["In-memory lock"]
-    Lock --> PostgresLock["PostgreSQL distributed lock"]
-
-    Lock --> Runner["JobAttemptRunner"]
-    Runner --> Store
-    Runner --> Executor["JobAgentExecutor"]
-    Runner --> Outcome["JobAttemptOutcomeRecorder"]
-    Outcome --> Store
-    Outcome --> Projects
-    Executor --> Projects["TaskExecutionAppService"]
-    Executor --> AgentRuntime["AgentRuntimeService"]
-    Executor --> FlowRuntime["AgentflowRuntimeService"]
-    Projects --> TaskData[("ProjectConversation / ProjectConversationChatHistory")]
-```
-
-### 主要组件
-
-#### `EndpointRouteBuilderExtensions`
-
-通过 `MapJobsApi()` 注册 `/api/jobs` 下的 CRUD 和执行日志查询端点。所有响应都直接使用 `ApiResult`，因此客户端收到的是 Bens.Results 响应封装，而不是裸 JSON 模型。
-
-#### `JobAppService`
-
-负责创建、查询、更新和删除 Job。创建或更新时，它通过 `JobScheduleCalculator` 从当前 UTC 时间计算 `NextRunTime`。名称为空时，会生成 `job-{序号}-{yyyyMMdd}` 格式的名称。
-
-创建成功后会调用 `JobSchedulerWakeSignal.NotifyCreated`。当前只有已启用、状态为 `Pending` 且即将在一分钟内执行的 `Once` Job 会唤醒预取循环。专用的启用状态更新在把 Job 设为启用时调用 `NotifyChanged`；其他完整更新仍由周期性预取发现。这里使用的是模块内的调度协作信号，不是领域事件总线。
-
-#### `JobHostedService`
-
-这是调度核心。服务会先等待 Agw 完成初始化，然后同时运行两个循环：
-
-- 预取循环每分钟查询一次未来 10 分钟内的可执行 Job；
-- 执行循环从内存优先队列取出到期 Job，再按 `ProjectId` 派发。
-
-内存中的 `_jobMap` 为每个 Job 保存最新版本，优先队列里的旧版本会在出队时惰性丢弃。`_runningProjects` 和 `_projectBacklog` 保证单个进程内同一项目只有一条执行链。
-
-这些时间窗口目前是代码常量：预取间隔 1 分钟、预取窗口 10 分钟、重试间隔 30 秒，没有对应的 `appsettings.json` 配置项。
-
-#### `JobAttemptRunner`
-
-负责认领 `Pending` Job 并调用执行适配器。认领会同时生成并持久化本次 `ActiveTurnId` 和开始时间；成功或异常随后统一交给 `JobAttemptOutcomeRecorder`。后者标记项目 Task、计算下一次运行或重试，并在一次数据库保存中更新 Job、清除 active attempt 和写入 JobLog。正常执行与重启恢复因此使用同一套结算语义。
-
-#### `JobAgentExecutor`
-
-每次运行都会生成新的 `contextId`，并通过 `IProjectTaskFacade` 使用认领阶段生成的 turnId 创建项目 Task。随后把目标类型和 ID 交给 `IAgentExecutionFacade`：
-
-- Agents 模块内部根据目标类型选择 Agent 或 Agentflow runtime；
-- Agents 模块内部根据 `Execution:Provider` 选择 InProcess 或 Distributed；
-- Jobs 不再引用具体 RuntimeService、durable client 或 Projects AppService。
-
-执行成功后，项目 Task 标记为成功；发生异常时，项目 Task 标记为失败，异常继续交给调度器处理重试。Job 没有 `AgentId` 或 `AgentType` 时，创建接口仍可保存它，但真正执行时会失败。
-
-#### `JobRepo`
-
-`JobRepo` 同时实现通用的 `IRepository<Job>` 和调度专用的 `IJobStore`。前者供 CRUD 使用，后者封装预取、状态迁移和日志落库，避免调度代码直接操作 `DbContext`。
-
-## 数据模型与状态
-
-### `Job`
-
-| 字段 | 作用 |
-| --- | --- |
-| `ProjectId` | 本次执行所属项目，也是串行化执行的分组键 |
-| `AgentType` / `AgentId` | 目标类型和目标 Agent 或 Agentflow 标识 |
-| `Prompt` | 传给目标 runtime 的输入；为空时使用 Job 名称生成默认提示词 |
-| `TriggerType` / `TriggerValue` | 触发器类型和对应的字符串配置 |
-| `NextRunTime` | 下一次执行时间，由服务端计算 |
-| `Status` / `IsEnabled` | 调度状态和总开关 |
-| `RetryCount` / `MaxRetryCount` | 当前失败重试次数和允许的最大重试次数 |
-| `LastError` | 上一次执行错误 |
-| `ActiveTurnId` / `ActiveAttemptStartedAt` | 当前 Running attempt 的内部身份与起点；不进入 REST/OpenAPI |
-
-`JobStatus` 包含三个值：`Pending = 1`、`Running = 2`、`Paused = 3`。
-
-正常状态流如下：
-
-```mermaid
-stateDiagram-v2
-    [*] --> Pending: 创建或恢复
-    Pending --> Running: TryStartAttempt 原子认领
-    Running --> Pending: 成功且存在下一次运行时间
-    Running --> Paused: 一次性任务完成
-    Running --> Pending: 失败但仍可重试
-    Running --> Paused: 重试耗尽
-    Paused --> Pending: 通过更新接口重新启用
-```
-
-一次性 Job 成功后会被设为 `Paused` 并关闭 `IsEnabled`。周期 Job 成功后回到 `Pending`，清空 `RetryCount` 和 `LastError`，并保存新的 `NextRunTime`。失败且仍可重试时，Job 在 30 秒后重新进入队列；重试耗尽后会暂停并禁用。
-
-`MaxRetryCount` 表示首次尝试之后还能重试多少次。例如值为 `3` 时，最多发生 1 次首次尝试和 3 次重试。
-
-### `JobLog`
-
-进入执行阶段的每次尝试都会写入一条日志，包含开始/结束时间、成功状态、尝试序号和错误信息。数据库实体还保存内部 `TaskId`，查询 API 会通过 `ProjectConversationChatHistory` 和 `ProjectConversation` 将它转换为当前用户所属会话的 `ConversationId`，不会直接暴露 `TaskId`。客户端的 Go to Chat 用这个 ID 打开对应会话；找不到所属会话时 `ConversationId` 为 `null`。
-
-## 核心数据流
-
-### 1. 创建或更新 Job
-
-1. 客户端调用 `POST /api/jobs` 或 `PUT /api/jobs/{id}`；
-2. `JobAppService` 规范化名称，并根据触发器计算 `NextRunTime`；
-3. Job 和审计字段写入数据库；
-4. 创建操作通知 `JobSchedulerWakeSignal`；
-5. 已启用且近期执行的 `Once` Job 会唤醒预取循环，其他 Job 等待下一轮周期预取。
-
-`PUT /api/jobs/enabled` 在启用 Job 时会唤醒预取循环，但完整更新和删除当前不会向调度器派发队列失效事件。仍位于预取窗口内的更新会在下一次预取时用版本号替换旧内存项；禁用、暂停或删除的 Job 会在执行前重新检查持久化状态并丢弃。但如果只是把 `NextRunTime` 移到预取窗口之外，旧内存项不会因此立即失效。因此不要把更新接口理解为对内存队列的同步修改；需要严格的即时改期或取消语义时，应先补充对应事件和队列失效机制。
-
-### 2. 预取与到期派发
-
-1. `JobRepo.PrefetchAsync` 查询 `IsEnabled = true`、`Status = Pending` 且 `NextRunTime` 位于预取窗口内的 Job；
-2. `JobHostedService` 把它们写入 `_jobMap`，并按 `NextRunTime` 加入 `PriorityQueue`；
-3. 执行循环等待最早的 Job 到期；
-4. 同一项目已有 Job 运行时，新 Job 进入该项目的 backlog；
-5. 获得 `IProjectExecutionLock` 后，调度器调用 `JobAttemptRunner`；
-6. `JobAttemptRunner` 通过 `TryStartAttemptAsync` 再次确认持久化状态，同时保存 turnId 和 attempt 起点后进入执行流程。
-
-项目锁只保证同一项目的定时任务不会并发运行，不等同于持久化消息队列的 exactly-once 投递保证。需要严格一次性语义时，还需要基于数据库租约、幂等键或原子认领设计额外机制。
-
-### 3. Agent 执行
-
-1. `JobAgentExecutor` 为本次运行生成独立 `contextId`；
-2. 使用本次 active turnId 在目标项目中创建状态为 Running 的逻辑 Task，执行 owner 继承 Job 创建者；
-3. 根据 `AgentType` 调用 Agent 或 Agentflow runtime；
-4. runtime 返回成功或抛出异常后，由共享 outcome recorder 标记项目 Task 并结算 Job；
-5. Control Plane 重启后，恢复服务直接使用 Job 上的 active turnId 查询 durable outcome，不从聊天历史猜测本次执行。
-
-所以 Job 执行历史既存在于 `JobLog` 中，也会以普通项目 Task 和 Context 的形式进入项目历史。`JobLog` 负责描述“第几次调度尝试”，项目记录负责保存实际对话和执行内容。
-
-### 4. 成功、重试与失败
-
-执行成功时，`JobAttemptRunner` 重新计算下一次运行时间：
-
-- 仍有下一次运行时间：Job 回到 `Pending` 并重新入队；
-- 没有下一次运行时间：Job 设为 `Paused` 且禁用，常见于 `Once`；
-- 无论哪种情况，都会写入成功日志。
-
-执行失败时：
-
-- `RetryCount <= MaxRetryCount`：保存错误，30 秒后重试，并写入失败日志；
-- 超过上限：保存最后错误，将 Job 暂停并禁用，再写入失败日志。
-
-## 使用方式
-
-### 在 Host 中注册
-
-`Agw.Host` 已在组合根中注册所需模块：
-
-```csharp
-builder.Services
-    .AddAgents(builder.Configuration)
-    .AddAgentExecution(builder.Configuration)
-    .AddInfrastructure(builder.Configuration)
-    .AddJobs(builder.Configuration)
-    .AddProjects(builder.Configuration);
-```
-
-如果在其他 Host 中复用 `Agw.Jobs`，除了 `AddJobs`，还必须提供 `IJobStore`、`IProjectExecutionLock`、项目执行服务、Agent runtime、`TimeProvider` 和服务器初始化状态。当前标准实现由 `Agw.Infrastructure`、`Agw.Projects` 、`Agw.Agents` 和 `Agw.Agents.Execution` 注册。
-
-### 通过 Web UI 使用
-
-启动后端和 Web 客户端后，打开 `http://localhost:3001/jobs`。页面支持创建、查看、编辑、删除 Job，以及查看执行记录。
-
-```bash
-# 仓库根目录
-dotnet run --project src/server/Agw.Standalone.Host
-
-# 另一个终端，从客户端 Workspace 根目录运行
-cd src/clients
-pnpm dev:web
-```
-
-Web 客户端会把 `/api/*` 代理到后端；默认后端地址是 `http://localhost:30816`。
-
-### 通过 REST API 使用
-
-Job API 受 Host 认证边界保护。下面使用 API Token，避免基于 Cookie 或本地可信身份调用写接口时还需要携带 CSRF Token。
-
-创建一个每天 UTC 01:00 运行的 Agent Job：
-
-```bash
-curl 'http://localhost:30816/api/jobs' \
-  --request POST \
-  --header 'Authorization: Bearer agw_...' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "projectId": "11111111-1111-1111-1111-000000000001",
-    "agentType": 0,
-    "agentId": "22222222-2222-2222-2222-000000000001",
-    "name": "daily-summary",
-    "prompt": "Summarize the latest project progress.",
-    "triggerType": 3,
-    "triggerValue": "0 1 * * *",
-    "maxRetryCount": 3,
-    "isEnabled": true
-  }'
-```
-
-常用接口：
-
-| 方法与路由 | 作用 |
-| --- | --- |
-| `GET /api/jobs` | 按 `NextRunTime` 列出 Job |
-| `GET /api/jobs/{id}` | 查询单个 Job |
-| `GET /api/jobs/{id}/logs` | 查询 Job 执行日志，按开始时间倒序返回 |
-| `POST /api/jobs` | 创建 Job |
-| `PUT /api/jobs/{id}` | 完整更新 Job 并重新计算下一次执行时间 |
-| `PUT /api/jobs/enabled` | 只更新一个 Job 的启用状态；启用时唤醒调度器 |
-| `DELETE /api/jobs/{id}` | 删除 Job |
-
-查询日志：
-
-```bash
-curl 'http://localhost:30816/api/jobs/33333333-3333-3333-3333-000000000001/logs' \
-  --header 'Authorization: Bearer agw_...'
-```
-
-完整更新接口使用 `JobUpdateRequest`，除了创建字段还必须传入 `status`。`Running` 由调度器独占，客户端不能手工写入；存在 active attempt 时，完整更新和删除返回 409。只切换总开关时应使用 `PUT /api/jobs/enabled`：禁用不会中断当前 attempt，但其结算完成后不会再次入队。
-
-### 触发器格式
-
-| `triggerType` | 名称 | `triggerValue` 示例 | 说明 |
-| --- | --- | --- | --- |
-| `1` | Once | `2026-07-16T09:00:00Z` | 应使用可解析、晚于当前时间且带时区的 RFC 3339 时间 |
-| `2` | Interval | `00:15:00` | 使用 .NET `TimeSpan` 格式，且必须大于零 |
-| `3` | Cron | `0 1 * * *` | Cronos 标准 5 段表达式，按 UTC 计算 |
-
-三种触发值无法解析时，创建或更新分别返回 `InvalidOnceTriggerValue`、`InvalidIntervalTriggerValue` 或 `InvalidCronTriggerValue`（400）。客户端表单在 Interval 不是正数的 `TimeSpan`、或 Cron 不是 5 段时显示错误并禁止保存。
-
-过去的 `Once` 时间不会立即执行。创建或更新时，当前实现会把无法得到下一次运行时间的 Job 设为 `DateTimeOffset.MaxValue`，所以创建或恢复一次性任务时应始终传入未来时间。
-
-`agentType` 使用 `0` 表示 Agent，`1` 表示 Agentflow。`agentId` 必须指向对应类型且可用的目标，否则 Job 会在执行阶段失败并进入重试流程。
-
-### 配置项目级锁
-
-默认配置位于 `src/server/Agw.Host/appsettings.json`：
+`projectId`、`targetKind`、`agentId`、`instructions` 和 `schedule` 用于定义任务。`targetKind` 为 `0` 时目标是 Agent，为 `1` 时目标是 Agentflow。Project 和目标必须属于当前用户。`instructions` 必须包含内容。省略名称或传入空白名称时，Jobs 根据当前用户的任务数量生成 `job-{序号}-{yyyyMMdd}`，日期采用 UTC。名称最多 200 个字符。
 
 ```json
 {
-  "Database": {
-    "Provider": "sqlite",
-    "ConnectionString": "Data Source=agw.db"
-  },
-  "DistributedLock": {
-    "Provider": null,
-    "ConnectionString": ""
-  }
+  "name": "Daily review",
+  "enabled": true,
+  "projectId": "019a4c17-0000-7000-8000-000000000001",
+  "targetKind": 0,
+  "agentId": "019a4c17-0000-7000-8000-000000000002",
+  "instructions": "Review the open items in the project.",
+  "schedule": { "kind": "Cron", "cron": "0 9 * * 1-5" }
 }
 ```
 
-`DistributedLock:Provider` 为空时，会跟随数据库类型：
+- `Once` 使用 `at`，值为 RFC 3339 时间。到期后执行一次。时间已经过去时，建立计划后立即触发。
+- `Interval` 使用 `interval`，值为大于零的 ISO 8601 时长，例如 `PT15M` 或 `P1D`。首次触发时间是建立计划的时间加上这个间隔。
+- `Cron` 使用 `cron`，值为标准五段表达式。下一次触发按 UTC 计算。
 
-| 数据库 | 默认锁实现 |
-| --- | --- |
-| SQLite | `inmemory`，只在当前进程内有效 |
-| PostgreSQL | `postgres`，使用 PostgreSQL advisory lock |
+## API
 
-显式使用独立 PostgreSQL 锁库时，可以配置：
+所有接口返回 Bens.Results 响应。创建、更新、启停和删除返回 Job。
 
-```json
-{
-  "DistributedLock": {
-    "Provider": "postgres",
-    "ConnectionString": "Host=locks;Database=agw_locks;Username=agw;Password=..."
-  }
-}
-```
+- `GET /api/jobs/list` 列出当前用户的 Job。可传 `projectId` 筛选。
+- `GET /api/jobs/get?id=...` 获取一个 Job。
+- `POST /api/jobs/create` 接收上面的定义。
+- `POST /api/jobs/update` 接收完整定义和 `id`。
+- `POST /api/jobs/enable` 接收 `id` 和 `enabled`。
+- `POST /api/jobs/delete` 接收 `id`。
+- `GET /api/jobs/runs/list?jobId=...&offset=0&limit=100` 读取已结束的尝试。`offset` 从零开始，`limit` 范围是 1 到 500。
 
-PostgreSQL 模式的锁名是 `agw:jobs:project-lock:{projectId}`。连接字符串为空时复用 `Database:ConnectionString`。`inmemory` 和 `postgres` 是当前仅支持的两个 provider；多实例部署不能使用 `inmemory` 来协调不同进程。
+`dueAt` 是当前计划的下次触发时间。一次性计划结束或计划停用时，`dueAt` 为空。`scheduleCompleted` 表示当前计划已经完成，Jobs 页面据此显示 Once Job 的 `Ended` 状态。`lastDelivery` 包含最近一次投递的 `id`、`state`、`attempt` 和 `lastError`。运行历史按 `startedAt` 倒序分页。每条记录包含 `deliveryId`、`attempt`、`startedAt`、`endedAt`、`result`、`error` 和 `conversationId`。`result` 的 `0`、`1`、`2` 分别表示成功、等待重试和失败。
 
-## 扩展点
+## Agent 工具
 
-| 需求 | 扩展位置 |
-| --- | --- |
-| 增加或修改触发器计算 | `JobScheduleCalculator` |
-| 更换持久化实现 | `IJobStore` |
-| 更换项目锁实现 | `IProjectExecutionLock` |
-| 改变 Agent 执行适配 | `IJobAgentExecutor` |
-| 修改单次执行、日志或重试流程 | `JobAttemptRunner` 与 `JobAttemptOutcomeRecorder` |
-| 修改创建后的预取唤醒条件 | `JobSchedulerWakeSignal` |
-| 让更新、删除即时影响调度队列 | `JobHostedService` 的队列失效协议（当前尚未实现） |
+为 Agent 绑定 `agw-job` skill 后，可在当前 Project 中使用以下工具。
 
-新增触发器时，还要同步更新 `TriggerType`、API 契约、Web 表单、OpenAPI 生成类型和测试。预期的配置或应用失败应使用 `AgwException` 与已有 `ErrorCodes`，不要在后台循环中引入无法稳定识别的通用异常。
+- `agw_job_list` 列出 Job。
+- `agw_job_get` 接收 `jobId`。
+- `agw_job_create` 接收 `instructions`、`targetKind`、`agentId`、`kind`，以及相应的 `at`、`interval` 或 `cron`。可以提供 `name` 和 `enabled`。
+- `agw_job_update` 接收 `jobId` 和需要修改的字段。修改执行目标时同时提供 `targetKind` 和 `agentId`。
+- `agw_job_delete` 接收 `jobId` 和用户确认的 `confirmation`。两者必须匹配。
 
-## 测试
+## 执行和管理
 
-从仓库根目录运行：
+Timer 到期时发布 `job.timer.fired` 事件，事件的 `subject` 是 Job ID。Events 投递 worker 使用订阅里的 Project、目标和指令提交执行。执行使用新会话，`kind` 为 `event:timer`，`relateId` 指向触发事件。运行记录通过 `conversationId` 打开对应会话。
 
-```bash
-dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
-```
+修改时间规则或启用 Job 时重新建立计划。只修改名称、Project、执行目标或指令时，原定触发时间保持不变。已经完成的 `Once` Job 停用后再启用，会按原来的 `at` 再触发一次。
 
-只验证模块编译：
-
-```bash
-dotnet build src/server/Agw.Jobs/Agw.Jobs.csproj
-```
-
-现有测试覆盖 Minimal API 响应封装、Job 名称生成、触发时间计算、创建唤醒条件、单次执行的成功与重试状态迁移、`JobRepo` 日志持久化、锁配置解析、内存项目锁和锁路由。修改 `JobHostedService` 的预取、排队或按项目串行逻辑时，仍应补充对应的调度宿主测试。
-
-## 常见问题
-
-- **Job 一直不执行**：检查 Host 是否完成初始化、`IsEnabled` 是否为 `true`、`Status` 是否为 `Pending`、`NextRunTime` 是否在未来，以及目标 Agent/Agentflow 是否存在并可运行。
-- **Cron 时间与预期不一致**：Cron 表达式固定按 UTC 计算，时区转换应由客户端处理。
-- **创建成功但运行后失败**：创建接口不会提前验证 Agent 目标是否完整；缺少或无效的 `AgentType`、`AgentId` 会在执行阶段进入失败和重试流程。
-- **更新后没有立刻改期**：更新不会直接修改内存队列，通常要等下一轮预取。对严格即时取消或改期有要求时，需要扩展调度信号和队列失效机制。
-- **多实例仍使用内存锁**：`inmemory` 只能协调单个进程。共享 PostgreSQL 数据库的多实例部署应使用 `postgres` 锁 provider。
-- **把项目锁当作 exactly-once**：项目锁解决的是同项目并发，不是消息去重或分布式任务认领。外部副作用仍应设计幂等性。
-- **误解重试次数**：`MaxRetryCount` 不包含首次尝试；总尝试上限是 `1 + MaxRetryCount`。
-
-简单来说，`Agw.Jobs` 的运行链路是“数据库持久化 → 窗口预取 → 内存定时 → 项目级串行 → 项目 Task → Agent/Agentflow → 状态与日志回写”。排查问题时沿着这条链逐层确认，通常比只盯着 Job 表或内存队列更有效。
+每次触发独立产生投递。执行失败后的重试遵循 Events 的退避和最大尝试次数设置。停用 Job 会取消后续计划。删除 Job 会停用并标记 Timer、取消计划和删除订阅。Events 页面会在来源和订阅上显示 `Managed by Job` 和所属 Job 的 ID，在 Jobs 页面修改这些记录。执行和重试规则详见设计文档。[触发事件并执行 Agent](../../../docs/designs/2026-11-12-jobs-event-timer.md#触发事件并执行-agent)

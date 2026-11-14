@@ -17,6 +17,9 @@
     "@agw/api": "workspace:*",
     "@agw/components": "workspace:*"
   },
+  "devDependencies": {
+    "@agw/test-harness": "workspace:*"
+  },
   "peerDependencies": {
     "lucide-react": "catalog:",
     "next": "catalog:",

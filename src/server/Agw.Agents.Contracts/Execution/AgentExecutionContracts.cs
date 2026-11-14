@@ -63,11 +63,6 @@ public sealed record AgentExecutionEvent(string? Cursor, AgwMessage Message);
 
 public interface IAgentExecutionFacade
 {
-    Task<AgentExecutionResult> ExecuteAsync(
-        AgentExecutionRequest request,
-        CancellationToken cancellationToken = default
-    );
-
     IAsyncEnumerable<AgentExecutionEvent> ExecuteStreamingAsync(
         AgentExecutionRequest request,
         CancellationToken cancellationToken = default

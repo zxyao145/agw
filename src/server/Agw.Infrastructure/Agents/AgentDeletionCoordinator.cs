@@ -1,9 +1,10 @@
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Contracts.Execution;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,8 +45,12 @@ public sealed class AgentDeletionCoordinator : IAgentDeletionCoordinator
                 node => node.Kind == AgentflowNodeKind.Agent && node.RelateId == agentId,
                 cancellationToken
             )
-            || await _dbContext.Jobs.AnyAsync(
-                job => job.AgentType == AgentRuntimeType.Agent && job.AgentId == agentId,
+            || await _dbContext.EventSubscriptions.AnyAsync(
+                row =>
+                    row.ManagedBy == EventManagedBy.Job
+                    && row.TargetKind == EventSubscriptionTargetKind.Agent
+                    && row.AgentId == agentId
+                    && row.CreateBy == ownerUserId,
                 cancellationToken
             )
         )

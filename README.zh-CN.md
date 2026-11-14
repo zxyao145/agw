@@ -10,7 +10,7 @@ Agw 是一个面向个人用户和小型研发团队的、自托管的后台工�
 - 自定义创建 Agent
 - 集成外部 Agent：Claude Code、Codex 和 Pi
 
-除此之外，Agw 还具备 Job 和 Agent Workflow（Agentflow）能力，可以用于创建定时任务、周期任务，以及对 Agent 进行编排。
+除此之外，Agw 还提供 Jobs 和 Agent Workflow（Agentflow）。Jobs 通过 Events Timer 事件按计划运行 Agent 或 Agentflow。
 
 本项目主要基于 [MAF](https://github.com/microsoft/agent-framework) 开发。访问[首页](https://agw-ai.dev/zh/)和[用户文档](https://docs.agw-ai.dev/zh/)。
 
@@ -23,7 +23,7 @@ Agw 是一个面向个人用户和小型研发团队的、自托管的后台工�
 - **外部 Agent：** 运行 Claude Code、Codex 或 Pi，并可以选择使用 Agw 中配置的 Model Provider。
 - **Chat 与 Project：** 对话归属于 Project。Chat 支持图片输入、在同一个对话中切换 Agent、按照权限模式请求工具审批，并在一轮执行（Turn）进行期间把新的输入加入队列。Files 视图可以浏览 Project Workspace、查看 Git 变更，并把行级评论发送给 Agent。
 - **Agentflow：** 把 Agent、嵌套 Agentflow、Human Gate，以及并发（Concurrent）、交接（Handoff）、群聊（Group Chat）和 Magentic 模块连接成可以执行的图，并支持 Checkpoint。
-- **Job：** 按照一次性、固定间隔或 Cron（按照 UTC 计算）的方式运行 Agent 或 Agentflow，支持失败重试和每次尝试的执行日志。
+- **Jobs：** 通过 Events Timer 来源安排 Agent 和 Agentflow 执行；Events 负责投递重试和每次尝试的记录。
 - **集成（Integrations）：** 基于内置集成（OAuth 2.0、API Key 或 AK/SK，其中包括 GitHub）创建每个用户自己的 Connection，并绑定到 Agent 和 Project。
 - **记忆（Memory）：** User Memory 和 Project Memory 让 Agent 保存并复用个人偏好和项目知识。
 - **认证：** 管理员密码、具名 API Token，以及可选的 OIDC 或 OAuth2 登录。每个第三方账号对应一个数据隔离的本地用户。
@@ -286,7 +286,7 @@ git push origin v0.1.0
 
 Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是共享 Hosting Module，负责组合所有模块的注册。可执行 Host 包括：
 
-- `Agw.ControlPlane.Host`：Setup、认证管理、管理 API、OpenAPI、静态 Web UI 和 Job 调度。
+- `Agw.ControlPlane.Host`：Setup、认证管理、管理 API、OpenAPI、静态 Web UI，以及 Events Timer 和投递 Worker。
 - `Agw.DataPlane.Host`：SignalR 执行 Hub `/api/hubs/exec`、A2A 路由和持久化执行 Worker。
 - `Agw.Standalone.Host`：在一个进程中同时承担两种角色（程序集名称是 `agw-server`），默认使用 SQLite 和 InProcess 执行。
 
@@ -298,7 +298,7 @@ Controller -> Application -> I<Module>DbContext / persistence adapter -> EF Core
 
 跨模块调用通过 `Agw.<Module>.Contracts` 中的接口完成。实体类型集中放在 `Agw.Data`，每张表都只有一个所属模块。
 
-后端与 Pi SDK 的简化依赖概览：省略 Contracts 项目、`Agw.Tools.Abstractions`、`Agw.Tools.Generators` 源代码生成器及其相关引用，并省略可以通过其他路径表达的重复连线；不包含测试项目和 NuGet 包。图从上往下排列，`A --> B` 表示 A 引用 B：
+后端与 Pi SDK 的简化依赖概览：省略 Contracts 项目（图中保留 `Agw.Events.Contracts` 以展示 Jobs 到 Events 的模块边界）、`Agw.Tools.Abstractions`、`Agw.Tools.Generators` 源代码生成器及其相关引用，并省略可以通过其他路径表达的重复连线；不包含测试项目和 NuGet 包。图从上往下排列，`A --> B` 表示 A 引用 B：
 
 ```mermaid
 flowchart TB
@@ -342,6 +342,10 @@ flowchart TB
         end
     end
 
+    subgraph contracts["选定的模块接口"]
+        agwEventsContracts["Agw.Events.Contracts"]
+    end
+
     subgraph foundation["数据与共享"]
         agwData["Agw.Data"]
         agwShared["Agw.Shared"]
@@ -356,16 +360,16 @@ flowchart TB
     agwControlPlaneHost --> agwHost
     agwDataPlaneHost --> agwHost
     agwHost --> agwMigrationsPostgres & agwMigrationsSqlite & agwSetup
-    agwHost --> agwA2A & agwAgentsExecution
+    agwHost --> agwA2A & agwAgentsExecution & agwJobs
     agwMigrationsPostgres --> agwInfrastructure
     agwMigrationsSqlite --> agwInfrastructure
-    agwInfrastructure --> agwAgents & agwProjects & agwJobs
+    agwInfrastructure --> agwAgents & agwProjects
     agwInfrastructure --> agwIntegrations & agwProviders & agwSettings
     agwSetup --> agwAuth
     agwA2A --> agwAuth
     agwAgentsExecution --> agwAgents & agwIntegrations & agwProviders & agwSkills
     agwProjects --> agwFiles & agwAuth
-    agwJobs --> agwSkills & agwAuth
+    agwJobs --> agwEventsContracts & agwSkills & agwAuth
     agwAgents --> agwTools & piAgentSdkMAF
     agwIntegrations --> agwAuth
     agwProviders --> agwData
@@ -386,7 +390,7 @@ flowchart TB
 - **Agw.Integrations：** 内置集成目录、每个用户的安装配置与 Connection、OAuth，以及绑定到 Connection 的原生工具和 MCP 工具。
 - **Agw.Projects：** Project、对话和聊天历史。每个对话都归属于一个 Project。
 - **Agw.Files：** 基于宿主机可见的本地 Workspace 提供项目级文件 API 与 Git 操作。
-- **Agw.Jobs：** 通过 Once、Interval 和 Cron 触发器定时运行 Agent 与 Agentflow，支持重试和执行日志。
+- **Agw.Jobs：** 提供 Job 管理 API 和 Agent 工具，管理 Events Timer 来源与订阅。Events 负责计划、投递重试和尝试记录。
 - **Agw.A2A：** 通过 A2A 协议对外提供 Agent。
 - **Agw.Auth：** 管理员与 OIDC/OAuth2 认证、本地用户、API Token、CSRF 防护和授权。
 - **Agw.Setup：** 首次运行的管理员初始化，以及保存在数据库中的初始化状态。

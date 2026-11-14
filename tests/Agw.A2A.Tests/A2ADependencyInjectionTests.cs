@@ -115,18 +115,6 @@ public class A2ADependencyInjectionTests
     {
         public Agw.Agents.Contracts.Execution.AgentExecutionRequest? Request { get; private set; }
 
-        public Task<Agw.Agents.Contracts.Execution.AgentExecutionResult> ExecuteAsync(
-            Agw.Agents.Contracts.Execution.AgentExecutionRequest request,
-            CancellationToken cancellationToken = default
-        ) =>
-            Task.FromResult(
-                new Agw.Agents.Contracts.Execution.AgentExecutionResult(
-                    request.TurnId,
-                    AgentExecutionState.Completed,
-                    []
-                )
-            );
-
         public async IAsyncEnumerable<AgentExecutionEvent> ExecuteStreamingAsync(
             Agw.Agents.Contracts.Execution.AgentExecutionRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default
@@ -197,7 +185,6 @@ public class A2ADependencyInjectionTests
                     Guid.CreateVersion7(),
                     request.ProjectId,
                     request.ContextId ?? request.TaskId.ToString("D"),
-                    request.JobId,
                     request.Title ?? "A2A Task",
                     request.InitialStatus,
                     null,
@@ -206,11 +193,6 @@ public class A2ADependencyInjectionTests
                     null
                 )
             );
-
-        public Task<ProjectTaskSnapshot?> FinishAsync(
-            FinishProjectTaskRequest request,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<ProjectTaskSnapshot?>(null);
 
         public Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
             IReadOnlyCollection<Guid> taskIds,

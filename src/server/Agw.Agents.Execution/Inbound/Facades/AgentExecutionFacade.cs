@@ -49,38 +49,6 @@ internal sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgen
         _durableCoordinator = durableCoordinator;
     }
 
-    /// <summary>
-    /// 执行到终态并返回消息流中的全部消息；Durable 执行进入人工等待且允许交互时返回 WaitingForHuman。
-    /// Runs to a terminal state and returns every message of the stream; a durable execution that waits for a human with interaction allowed returns WaitingForHuman.
-    /// </summary>
-    public async Task<AgentExecutionResult> ExecuteAsync(
-        AgentExecutionRequest request,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var messages = new List<AgwMessage>();
-        await foreach (var message in RunTurnAsync(request, cancellationToken).ConfigureAwait(false))
-        {
-            if (AgwMessageClassifier.TryGetTurnFinishedStatus(message, out var status))
-            {
-                if (status is AgwTurnStatus.Failed or AgwTurnStatus.Interrupted)
-                {
-                    throw new AgwException(ErrorCodes.AgentExecutionFailed, FindErrorText(messages));
-                }
-                return new AgentExecutionResult(request.TurnId, AgentExecutionState.Completed, messages);
-            }
-            messages.Add(message);
-            if (IsHumanInteraction(message))
-            {
-                return new AgentExecutionResult(request.TurnId, AgentExecutionState.WaitingForHuman, messages);
-            }
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        throw new AgwException(ErrorCodes.AgentExecutionFailed, "The execution ended without a terminal message.");
-    }
-
     public async IAsyncEnumerable<AgentExecutionEvent> ExecuteStreamingAsync(
         AgentExecutionRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default

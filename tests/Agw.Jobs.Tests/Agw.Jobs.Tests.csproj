@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <Compile Include="../ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
+    <Compile Include="../ModuleCompositionTestHost.cs" Link="ModuleCompositionTestHost.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);MAAI001</NoWarn>
@@ -21,6 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Events/Agw.Events.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Jobs/Agw.Jobs.csproj" />
     <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />

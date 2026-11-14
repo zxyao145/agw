@@ -1,17 +1,16 @@
 using System.Security.Claims;
 using Agw.Agents.Contracts.Catalog;
-using Agw.Agents.Definitions.Facades;
 using Agw.Auth.Contracts;
+using Agw.Events.Contracts;
 using Agw.Host.Controllers;
 using Agw.Infrastructure.Data;
-using Agw.Jobs.Application.Facades;
 using Agw.Jobs.Contracts.Metrics;
-using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Metrics;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Tests;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Agw.Host.Tests;
@@ -46,15 +45,16 @@ public class DashboardControllerTests : IDisposable
     public async Task GetStats_MultipleAgentUsages_SumsAllTokenUsage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
+        await using var scope = host.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
         var projectId = Guid.CreateVersion7();
         dbContext.AgentUsages.AddRange(
             CreateAgentUsage(projectId, "context-1", 10, 20, 30),
             CreateAgentUsage(projectId, "context-2", 5, 7, 12)
         );
         await dbContext.SaveChangesAsync(cancellationToken);
-        var controller = CreateController(dbContext);
+        var controller = CreateController(scope.ServiceProvider);
 
         var result = await controller.GetStats(cancellationToken);
 
@@ -68,9 +68,9 @@ public class DashboardControllerTests : IDisposable
     public async Task GetStats_NoAgentUsages_ReturnsZeroTokenUsage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
-        var controller = CreateController(dbContext);
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
+        await using var scope = host.Services.CreateAsyncScope();
+        var controller = CreateController(scope.ServiceProvider);
 
         var result = await controller.GetStats(cancellationToken);
 
@@ -84,8 +84,9 @@ public class DashboardControllerTests : IDisposable
     public async Task GetStats_ProjectDeleted_IncludesRetainedUsage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
+        await using var scope = host.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
         var projectId = Guid.CreateVersion7();
         dbContext.Projects.Add(
             new Project
@@ -115,40 +116,67 @@ public class DashboardControllerTests : IDisposable
 
         Assert.Empty(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
-        var stats = ReadStats(await CreateController(dbContext).GetStats(cancellationToken));
+        var stats = ReadStats(await CreateController(scope.ServiceProvider).GetStats(cancellationToken));
         Assert.Equal(30L, ReadLongProperty(stats, "UsageTotalTokenCount"));
     }
 
-    private static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    [Fact]
+    public async Task GetStats_UserHasJobs_ReturnsOwnJobCount()
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-        return connection;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var host = await ModuleCompositionTestHost.CreateAsync();
+        await using var scope = host.Services.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var eventJobs = services.GetRequiredService<IEventJobFacade>();
+        var projectId = await CreateJobProjectAsync(services, cancellationToken);
+        await eventJobs.CreateAsync(CreateJobDefinition("Current user job", projectId), cancellationToken);
+        var deletedJob = await eventJobs.CreateAsync(CreateJobDefinition("Deleted job", projectId), cancellationToken);
+        await eventJobs.DeleteAsync(deletedJob.Id, cancellationToken);
+
+        using (
+            UserInfoUtil.Push(
+                new ClaimsPrincipal(
+                    new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "other")], authenticationType: "Test")
+                )
+            )
+        )
+        {
+            await using var otherScope = host.Services.CreateAsyncScope();
+            var otherServices = otherScope.ServiceProvider;
+            var otherProjectId = await CreateJobProjectAsync(otherServices, cancellationToken);
+            await otherServices
+                .GetRequiredService<IEventJobFacade>()
+                .CreateAsync(CreateJobDefinition("Other user job", otherProjectId), cancellationToken);
+        }
+
+        var stats = ReadStats(await CreateController(scope.ServiceProvider).GetStats(cancellationToken));
+
+        Assert.Equal(1, stats.JobCount);
     }
 
-    private static async Task<AgwDbContext> CreateDbContextAsync(
-        SqliteConnection connection,
-        CancellationToken cancellationToken
-    )
+    private static DashboardController CreateController(IServiceProvider services) =>
+        ActivatorUtilities.CreateInstance<DashboardController>(services);
+
+    private static async Task<Guid> CreateJobProjectAsync(IServiceProvider services, CancellationToken token)
     {
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        var dbContext = new AgwDbContext(options);
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-        return dbContext;
+        var db = services.GetRequiredService<AgwDbContext>();
+        var project = new Project { Id = Guid.CreateVersion7(), Name = "Dashboard jobs project" };
+        db.Projects.Add(project);
+        await db.SaveChangesAsync(token);
+        return project.Id;
     }
 
-    private static DashboardController CreateController(AgwDbContext dbContext)
-    {
-        var userInfo = new TestUserInfoService();
-        return new DashboardController(
-            new JobMetricsFacade(dbContext, userInfo),
-            new ProjectMetricsFacade(dbContext, userInfo),
-            new AgentCatalogFacade(dbContext, userInfo)
-        );
-    }
+    private static EventJobDefinition CreateJobDefinition(string name, Guid projectId) =>
+        new()
+        {
+            Name = name,
+            Enabled = true,
+            ProjectId = projectId,
+            TargetKind = EventJobTargetKind.Agent,
+            AgentId = Guid.CreateVersion7(),
+            Instructions = "Run",
+            Schedule = new EventJobSchedule { Kind = "Interval", Interval = "PT1M" },
+        };
 
     private static AgentUsage CreateAgentUsage(
         Guid projectId,

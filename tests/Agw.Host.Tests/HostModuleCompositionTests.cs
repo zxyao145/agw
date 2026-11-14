@@ -5,9 +5,6 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution;
 using Agw.Agents.Execution.Agents.Runtime;
-using Agw.Agents.Execution.Context;
-using Agw.Auth.Application;
-using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.ControlPlane.Host;
 using Agw.DataPlane.Host;
@@ -16,30 +13,23 @@ using Agw.Files;
 using Agw.Host.Data;
 using Agw.Host.Hosting;
 using Agw.Infrastructure;
-using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Jobs;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
-using Agw.Jobs.Application.Persistence;
-using Agw.Jobs.Execution;
-using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Providers;
 using Agw.Settings;
 using Agw.Setup.Services;
-using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Coordination;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Runtime;
 using Agw.Skills;
+using Agw.Tests;
 using Agw.Tools;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -181,7 +171,7 @@ public sealed class HostModuleCompositionTests
                 .AddFiles(configuration)
                 .AddInfrastructure(configuration)
                 .AddExtensionInfrastructure()
-                .AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false))
+                .AddJobs()
                 .AddProviders(configuration)
                 .AddSkills(configuration)
                 .AddProjects(configuration)
@@ -214,43 +204,6 @@ public sealed class HostModuleCompositionTests
     }
 
     [Fact]
-    public void JobRegistration_DisabledScheduler_DoesNotRegisterJobHostedService()
-    {
-        var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder().Build();
-
-        services.AddJobs(configuration, new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false));
-
-        Assert.DoesNotContain(
-            services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService)),
-            descriptor => descriptor.ImplementationType?.Name == "JobHostedService"
-        );
-    }
-
-    [Fact]
-    public void JobRegistration_DurableScheduler_UsesTopologyNeutralExecutor()
-    {
-        var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder().Build();
-
-        services.AddJobs(
-            configuration,
-            new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: true, UseDurableExecution: true)
-        );
-
-        Assert.Contains(
-            services,
-            descriptor =>
-                descriptor.ServiceType == typeof(IJobAgentExecutor)
-                && descriptor.ImplementationType == typeof(JobAgentExecutor)
-        );
-        Assert.Contains(
-            services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService)),
-            descriptor => descriptor.ImplementationType?.Name == "DurableJobRecoveryHostedService"
-        );
-    }
-
-    [Fact]
     public async Task DataPlaneModule_MapsOnlyExecutionAndA2ARoutes()
     {
         var builder = CreateValidatedBuilder();
@@ -273,7 +226,7 @@ public sealed class HostModuleCompositionTests
                 .ToArray();
             Assert.Contains("/api/hubs/exec", patterns);
             Assert.Contains("/.well-known/agents.json", patterns);
-            Assert.DoesNotContain("api/jobs", patterns);
+            Assert.DoesNotContain("api/jobs/list", patterns);
             Assert.DoesNotContain("setup", patterns);
         }
         finally
@@ -283,36 +236,52 @@ public sealed class HostModuleCompositionTests
     }
 
     [Fact]
+    public void AddJobs_Registration_AddsNoHostedService()
+    {
+        var services = new ServiceCollection();
+
+        services.AddJobs();
+
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IHostedService));
+    }
+
+    [Fact]
     public async Task ControlPlaneModule_DoesNotMapExecutionOrA2ARoutes()
     {
         var builder = CreateValidatedBuilder();
         builder.WebHost.UseTestServer();
         var mvcBuilder = builder.Services.AddControllers();
-        AddControlPlaneTestDependencies(builder.Services);
-        builder.Services.AddJobs(
-            new ConfigurationBuilder().Build(),
-            new Agw.Jobs.DependencyInjection.RegistrationOptions(AddScheduler: false)
+        var root = Path.Combine(
+            AppContext.BaseDirectory,
+            ".scratch",
+            $"control-plane-module-{Guid.CreateVersion7():N}"
         );
+        ModuleCompositionTestHost.ConfigureServices(builder.Services, root);
         var module = new ControlPlaneHostModule();
         module.AddApplicationParts(mvcBuilder.PartManager);
         var app = builder.Build();
 
-        module.MapEndpoints(app);
-        await app.StartAsync(TestContext.Current.CancellationToken);
         try
         {
+            module.MapEndpoints(app);
+            await ModuleCompositionTestHost.InitializeAsync(app.Services);
+            await app.StartAsync(TestContext.Current.CancellationToken);
             var patterns = app
                 .Services.GetRequiredService<EndpointDataSource>()
                 .Endpoints.OfType<RouteEndpoint>()
                 .Select(endpoint => endpoint.RoutePattern.RawText)
                 .ToArray();
-            Assert.Contains("api/jobs", patterns);
+            Assert.Contains("api/jobs/list", patterns);
             Assert.DoesNotContain("/api/hubs/exec", patterns);
             Assert.DoesNotContain("/.well-known/agents.json", patterns);
         }
         finally
         {
             await app.DisposeAsync();
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
         }
     }
 
@@ -338,32 +307,6 @@ public sealed class HostModuleCompositionTests
         return builder;
     }
 
-    private static void AddControlPlaneTestDependencies(IServiceCollection services)
-    {
-        services.AddSingleton<TimeProvider>(TimeProvider.System);
-        services.AddSingleton<JobSchedulerWakeSignal>();
-        services.AddSingleton<IAgentExecutionContextAccessor, AgentExecutionContextAccessor>();
-        services.AddScoped<IUserInfoService, UserInfoService>();
-        services.AddScoped<IProjectRuntimeFacade, EmptyProjectRuntimeFacade>();
-        services.AddScoped<IAgentCatalogFacade, EmptyAgentCatalogFacade>();
-        services.AddDbContext<AgwDbContext>(options => options.UseSqlite("Data Source=:memory:;Foreign Keys=False"));
-        services.AddScoped<IJobsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
-        services.AddSingleton<IApplicationLock, InMemoryApplicationLock>();
-        services.AddScoped<IJobDeletionCoordinator, JobDeletionCoordinator>();
-        services.AddScoped<IProjectTaskFacade, EmptyProjectTaskFacade>();
-    }
-
-    private sealed class EmptyProjectRuntimeFacade : IProjectRuntimeFacade
-    {
-        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
-            Guid projectId,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<ProjectRuntimeSnapshot?>(null);
-
-        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
-    }
-
     private sealed class EmptyProjectDefaults : IProjectDefaultResolver
     {
         public Task<Guid?> ResolveDefaultProjectIdAsync(CancellationToken cancellationToken = default) =>
@@ -371,41 +314,6 @@ public sealed class HostModuleCompositionTests
 
         public Task<Guid?> ResolveA2AProjectIdAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<Guid?>(null);
-    }
-
-    private sealed class EmptyProjectTaskFacade : IProjectTaskFacade
-    {
-        public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<int?>(0);
-
-        public Task<string?> FindContextIdAsync(
-            Guid projectId,
-            Guid conversationId,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<ProjectTaskSnapshot> ResolveAsync(
-            ResolveProjectTaskRequest request,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<ProjectTaskSnapshot?>(null);
-
-        public Task<ProjectTaskSnapshot> GetOrCreateAsync(
-            StartProjectTaskRequest request,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<ProjectTaskSnapshot?> FinishAsync(
-            FinishProjectTaskRequest request,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<ProjectTaskSnapshot?>(null);
-
-        public Task<IReadOnlyDictionary<Guid, Guid>> ResolveConversationIdsAsync(
-            IReadOnlyCollection<Guid> taskIds,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(new Dictionary<Guid, Guid>());
     }
 
     private sealed class EmptyAgentCatalogFacade : IAgentCatalogFacade

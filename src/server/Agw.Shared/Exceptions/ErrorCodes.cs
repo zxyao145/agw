@@ -9,6 +9,11 @@ public static class ErrorCodes
         "Extension request body is too large.",
         HttpStatusCode.RequestEntityTooLarge
     );
+    public static readonly ErrorCode EventSourceManaged = new(
+        409_0034,
+        "Event source is managed by a Job.",
+        HttpStatusCode.Conflict
+    );
     public static readonly ErrorCode EventSubscriptionModificationConflict = new(
         409_0033,
         "Event subscription changed concurrently.",
@@ -273,16 +278,6 @@ public static class ErrorCodes
         "URI must be a data URI.",
         HttpStatusCode.BadRequest
     );
-    public static readonly ErrorCode InvalidOnceTriggerValue = new(
-        400_0032,
-        "Invalid once trigger value.",
-        HttpStatusCode.BadRequest
-    );
-    public static readonly ErrorCode InvalidIntervalTriggerValue = new(
-        400_0033,
-        "Invalid interval trigger value.",
-        HttpStatusCode.BadRequest
-    );
     public static readonly ErrorCode MagenticRequiresAtLeastTwoAgents = new(
         400_0034,
         "Magentic pattern requires at least two agents.",
@@ -291,11 +286,6 @@ public static class ErrorCodes
     public static readonly ErrorCode SystemAgentRequiresModelProvider = new(
         400_0035,
         "System agents must have a model provider.",
-        HttpStatusCode.BadRequest
-    );
-    public static readonly ErrorCode JobAgentTargetRequired = new(
-        400_0036,
-        "Job agent target is required.",
         HttpStatusCode.BadRequest
     );
     public static readonly ErrorCode McpStdioCommandRequired = new(
@@ -455,11 +445,6 @@ public static class ErrorCodes
     public static readonly ErrorCode UserMemoryContentRequired = new(
         400_0075,
         "User memory content is required.",
-        HttpStatusCode.BadRequest
-    );
-    public static readonly ErrorCode InvalidCronTriggerValue = new(
-        400_0076,
-        "Invalid cron trigger value.",
         HttpStatusCode.BadRequest
     );
 
@@ -662,11 +647,6 @@ public static class ErrorCodes
         HttpStatusCode.Conflict
     );
 
-    public static readonly ErrorCode JobActiveAttemptConflict = new(
-        409_0017,
-        "A Job with an active attempt cannot be updated or deleted.",
-        HttpStatusCode.Conflict
-    );
     public static readonly ErrorCode QuickPromptConflict = new(
         409_0020,
         "Quick prompts changed. Reload and try again.",
@@ -865,11 +845,6 @@ public static class ErrorCodes
     public static readonly ErrorCode UnsupportedAgentType = new(
         501_0002,
         "Agent type is not supported.",
-        HttpStatusCode.NotImplemented
-    );
-    public static readonly ErrorCode UnsupportedTriggerType = new(
-        501_0003,
-        "Trigger type is not supported.",
         HttpStatusCode.NotImplemented
     );
     public static readonly ErrorCode UnsupportedProviderType = new(

@@ -18,16 +18,10 @@ agent_tests = (
     "Postgres_TurnAcceptance_EnabledExtensionAdmissionBlocksDisableUntilCommit",
 )
 job_tests = (
-    "AcquireAsync_PostgresLeaseLoss_CancelsHeldOperation",
-    "RecoverAsync_ActiveTurnChangesAfterSnapshot_DoesNotRecordStaleOutcome",
-    "Delete_ConcurrentAttemptClaim_PreservesJobLogs(deleteByProject: False)",
-    "Delete_ConcurrentAttemptClaim_PreservesJobLogs(deleteByProject: True)",
-    "ExecuteAsync_PostgresLeaseLost_CancelsDatabaseOperation(durableRecovery: False)",
-    "ExecuteAsync_PostgresLeaseLost_CancelsDatabaseOperation(durableRecovery: True)",
-    "TryAcquireAsync_PostgresContention_ReturnsNullUntilLeaseReleased",
-    "RecoverAsync_PostgresLeaseLost_CancelsInProcessRecovery",
-    "Delete_ConcurrentMutableUpdate_ReturnsModificationConflictAndPreservesJobLogs",
-    "Delete_ConcurrentProjectDeletion_ReturnsSameMissingResult",
+    "Update_ProjectDeletedAfterJobRead_ReturnsConflict",
+    "Update_ProjectDeletedAfterJobRead_ThrowsConflictAndLeavesNoJobRecords",
+    "Enable_ConcurrentRequests_KeepTimerSubscriptionAndScheduleConsistent",
+    "Upgrade_Postgres_RemovesJobTablesAndAddsConversationKind",
 )
 file_tests = (
     "WriteAsync_TwoHostsWithSameExpectedSha256_SerializesAndOnlyOneSucceeds",

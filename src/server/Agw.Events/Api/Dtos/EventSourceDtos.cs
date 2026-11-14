@@ -66,6 +66,10 @@ public sealed record EventSourceResponse
 
     public string? ProviderId { get; init; }
 
+    public required string ManagedBy { get; init; }
+
+    public string? ManagedKey { get; init; }
+
     public required string CeSource { get; init; }
 
     public required JsonElement Config { get; init; }

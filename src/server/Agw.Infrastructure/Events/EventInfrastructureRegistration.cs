@@ -45,6 +45,7 @@ public static partial class DependencyInjection
         services.AddScoped<IEventContextFacade>(provider => provider.GetRequiredService<EventStaging>());
         services.AddScoped<IEventTemplateValidator, EventTemplateValidator>();
         services.AddScoped<IEventIngestTransaction, EventIngestTransaction>();
+        services.AddScoped<IEventJobProjectLock, EventJobProjectLock>();
         services.AddScoped<IEventScheduledPublisher, EventScheduledPublisher>();
         services.AddScoped<IEventDispatchNoticeStaging, EventDispatchNoticeStaging>();
         services.AddScoped<IBackgroundExecutionPersistence, BackgroundExecutionPersistence>();

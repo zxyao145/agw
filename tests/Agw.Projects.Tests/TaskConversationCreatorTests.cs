@@ -1,4 +1,3 @@
-using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Execution;
@@ -47,7 +46,9 @@ public partial class TaskAppServiceTests
             .ResolveTaskAsync(CreateRequest(projectId, conversationId, requesterExtensionId: null), token);
 
         Assert.Null(result.Error);
-        Assert.Equal(ConversationCreators.Host, (await ReadConversationAsync(database, conversationId)).ExtensionId);
+        var conversation = await ReadConversationAsync(database, conversationId);
+        Assert.Equal(ConversationCreators.Host, conversation.ExtensionId);
+        Assert.Equal(ConversationKinds.Native, conversation.Kind);
     }
 
     [Fact]

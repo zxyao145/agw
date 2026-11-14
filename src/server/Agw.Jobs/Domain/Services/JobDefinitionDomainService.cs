@@ -1,6 +1,6 @@
 using System.Globalization;
 using Agw.Agents.Contracts.Catalog;
-using Agw.Jobs.Domain.Repositories;
+using Agw.Events.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
 
@@ -12,12 +12,12 @@ namespace Agw.Jobs.Domain.Services;
 /// </summary>
 public sealed class JobDefinitionDomainService
 {
-    private readonly IJobRepository _jobs;
+    private readonly IEventJobFacade _jobs;
     private readonly IProjectRuntimeFacade _projects;
     private readonly IAgentCatalogFacade _agentCatalog;
 
     public JobDefinitionDomainService(
-        IJobRepository jobs,
+        IEventJobFacade jobs,
         IProjectRuntimeFacade projects,
         IAgentCatalogFacade agentCatalog
     )
@@ -28,27 +28,25 @@ public sealed class JobDefinitionDomainService
     }
 
     /// <summary>
-    /// <para>任务所在项目必须对所有者可见；同时指定 Agent 类型与 Id 时，该目标必须属于所有者。</para>
-    /// <para>The job's project must be visible to the owner; when both agent type and ID are set, that target must belong to the owner.</para>
+    /// <para>任务所在 Project 和执行目标必须属于当前用户。</para>
+    /// <para>The job's Project and execution target must belong to the current user.</para>
     /// </summary>
     public async Task EnsureTargetsVisibleAsync(
         Guid projectId,
-        AgentRuntimeType? agentType,
-        Guid? agentId,
-        string ownerUserId
+        AgentRuntimeType targetKind,
+        Guid agentId,
+        string ownerUserId,
+        Guid? currentProjectId
     )
     {
         if (await _projects.GetForCurrentUserAsync(projectId).ConfigureAwait(false) == null)
         {
-            throw new AgwException(ErrorCodes.ResourceNotFound);
+            throw new AgwException(
+                projectId == currentProjectId ? ErrorCodes.JobModificationConflict : ErrorCodes.ResourceNotFound
+            );
         }
 
-        if (!agentType.HasValue || !agentId.HasValue)
-        {
-            return;
-        }
-
-        if (!await _agentCatalog.IsOwnedTargetAsync(agentType.Value, agentId.Value, ownerUserId).ConfigureAwait(false))
+        if (!await _agentCatalog.IsOwnedTargetAsync(targetKind, agentId, ownerUserId).ConfigureAwait(false))
         {
             throw new AgwException(ErrorCodes.InvalidParam);
         }
@@ -58,14 +56,18 @@ public sealed class JobDefinitionDomainService
     /// <para>名称去除两端空白后使用；未命名的任务按所有者已有任务数量生成 job-{序号}-{UTC 日期}。</para>
     /// <para>A name is used trimmed; an unnamed job gets job-{number}-{UTC date} from the owner's current job count.</para>
     /// </summary>
-    public async Task<string> ResolveNameAsync(string? requestedName, string ownerUserId, DateTimeOffset now)
+    public async Task<string> ResolveNameAsync(
+        string? requestedName,
+        DateTimeOffset now,
+        CancellationToken cancellationToken
+    )
     {
         if (!string.IsNullOrWhiteSpace(requestedName))
         {
             return requestedName.Trim();
         }
 
-        var count = await _jobs.CountByOwnerAsync(ownerUserId).ConfigureAwait(false);
+        var count = await _jobs.CountAsync(cancellationToken).ConfigureAwait(false);
         return $"job-{count + 1}-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
     }
 }

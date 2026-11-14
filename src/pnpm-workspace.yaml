@@ -80,6 +80,7 @@ catalog:
   jsdom: 30.1.0
   iconv-lite: 0.7.3
   idb: 8.0.3
+  iso8601-duration: 2.2.0
   ini: 6.0.0
   monaco-editor: 0.57.0
   playwright: 1.63.0
