@@ -2,6 +2,7 @@ using Agw.Events.Api.Dtos;
 using Agw.Events.Application;
 using Agw.Events.Application.Delivery;
 using Agw.Events.Application.Persistence;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Events;
 using Bens.Results;
 using Microsoft.AspNetCore.Builder;
@@ -18,10 +19,10 @@ public static class EndpointRouteBuilderExtensions
         group
             .MapGet(
                 "subscriptions/list",
-                async (EventManagementAppService service, CancellationToken ct) =>
-                    ApiResult.Ok(await service.ListSubscriptionsAsync(ct))
+                async (EventManagementAppService service, CancellationToken ct, int pageIndex = 1, int pageSize = 20) =>
+                    ApiResult.Ok(await service.ListSubscriptionsAsync(pageIndex, pageSize, ct))
             )
-            .Produces<ApiResult<EventSubscriptionResponse[]>>();
+            .Produces<ApiResult<PagedResult<EventSubscriptionResponse>>>();
         group
             .MapGet(
                 "subscriptions/get",
@@ -64,9 +65,25 @@ public static class EndpointRouteBuilderExtensions
             .MapGet(
                 "list",
                 async ([AsParameters] EventListQuery query, EventManagementAppService service, CancellationToken ct) =>
-                    ApiResult.Ok((await service.ListEventsAsync(ToFilter(query), ct)).Select(ToResponse).ToArray())
+                {
+                    var page = await service.ListEventsAsync(
+                        ToFilter(query),
+                        query.PageIndex ?? 1,
+                        query.PageSize ?? 20,
+                        ct
+                    );
+                    return ApiResult.Ok(
+                        new PagedResult<EventResponse>
+                        {
+                            Items = page.Items.Select(ToResponse).ToArray(),
+                            Total = page.Total,
+                            PageIndex = page.PageIndex,
+                            PageSize = page.PageSize,
+                        }
+                    );
+                }
             )
-            .Produces<ApiResult<EventResponse[]>>();
+            .Produces<ApiResult<PagedResult<EventResponse>>>();
         group
             .MapGet(
                 "get",
@@ -78,11 +95,7 @@ public static class EndpointRouteBuilderExtensions
             .MapGet(
                 "chain",
                 async (Guid chainId, EventManagementAppService service, CancellationToken ct) =>
-                    ApiResult.Ok(
-                        (await service.ListEventsAsync(new EventListFilter { ChainId = chainId, Limit = 500 }, ct))
-                            .Select(ToResponse)
-                            .ToArray()
-                    )
+                    ApiResult.Ok((await service.ListChainAsync(chainId, ct)).Select(ToResponse).ToArray())
             )
             .Produces<ApiResult<EventResponse[]>>();
         group
@@ -92,17 +105,19 @@ public static class EndpointRouteBuilderExtensions
                     Guid? eventId,
                     EventDeliveryState? state,
                     EventManagementAppService service,
-                    CancellationToken ct
-                ) => ApiResult.Ok(await service.ListDeliveriesAsync(eventId, state, ct))
+                    CancellationToken ct,
+                    int pageIndex = 1,
+                    int pageSize = 20
+                ) => ApiResult.Ok(await service.ListDeliveriesAsync(eventId, state, pageIndex, pageSize, ct))
             )
-            .Produces<ApiResult<EventDeliveryResponse[]>>();
+            .Produces<ApiResult<PagedResult<EventDeliveryResponse>>>();
         group
             .MapGet(
                 "schedules/list",
-                async (EventManagementAppService service, CancellationToken ct) =>
-                    ApiResult.Ok(await service.ListSchedulesAsync(ct))
+                async (EventManagementAppService service, CancellationToken ct, int pageIndex = 1, int pageSize = 20) =>
+                    ApiResult.Ok(await service.ListSchedulesAsync(pageIndex, pageSize, ct))
             )
-            .Produces<ApiResult<EventScheduleResponse[]>>();
+            .Produces<ApiResult<PagedResult<EventScheduleResponse>>>();
         group
             .MapPost(
                 "deliveries/retry",
@@ -120,10 +135,10 @@ public static class EndpointRouteBuilderExtensions
         group
             .MapGet(
                 "unpublished/list",
-                async (IEventRecoveryControl recovery, CancellationToken ct) =>
-                    ApiResult.Ok(await recovery.ListAsync(ct))
+                async (IEventRecoveryControl recovery, CancellationToken ct, int pageIndex = 1, int pageSize = 20) =>
+                    ApiResult.Ok(await recovery.ListAsync(pageIndex, pageSize, ct))
             )
-            .Produces<ApiResult<UnpublishedEventRecord[]>>();
+            .Produces<ApiResult<PagedResult<UnpublishedEventRecord>>>();
         group
             .MapPost(
                 "unpublished/republish",
@@ -146,8 +161,6 @@ public static class EndpointRouteBuilderExtensions
             ChainId = query.ChainId,
             From = query.From,
             To = query.To,
-            Offset = query.Offset,
-            Limit = query.Limit,
         };
 
     private static EventResponse ToResponse(EventView view) =>

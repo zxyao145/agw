@@ -2,6 +2,7 @@ using Agw.Events.Api.Dtos;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Application.Sources;
 using Agw.Shared.Contracts.Events;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
@@ -20,7 +21,8 @@ public static class EventSourcesEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
         var sources = endpoints.MapGroup("api/events/sources").WithTags("Event Sources").RequireAuthorization();
 
-        sources.MapGet("list", ListAsync).Produces<ApiResult<EventSourceResponse[]>>();
+        sources.MapGet("list", ListAsync).Produces<ApiResult<PagedResult<EventSourceResponse>>>();
+        sources.MapGet("options", ListOptionsAsync).Produces<ApiResult<EventSourceOptionResponse[]>>();
         sources.MapGet("get", GetAsync).Produces<ApiResult<EventSourceResponse>>();
         sources.MapPost("create", CreateAsync).Produces<ApiResult<EventSourceMutationResponse>>();
         sources.MapPost("update", UpdateAsync).Produces<ApiResult<EventSourceMutationResponse>>();
@@ -38,10 +40,34 @@ public static class EventSourcesEndpointRouteBuilderExtensions
         return endpoints;
     }
 
-    private static async Task<HttpResult> ListAsync(EventSourceAppService service, CancellationToken cancellationToken)
+    private static async Task<HttpResult> ListAsync(
+        EventSourceAppService service,
+        CancellationToken cancellationToken,
+        int pageIndex = 1,
+        int pageSize = 20
+    )
     {
-        var sources = await service.ListAsync(cancellationToken);
-        return ApiResult.Ok(sources.Select(ToResponse).ToArray());
+        var page = await service.ListAsync(pageIndex, pageSize, cancellationToken);
+        return ApiResult.Ok(
+            new PagedResult<EventSourceResponse>
+            {
+                Items = page.Items.Select(ToResponse).ToArray(),
+                Total = page.Total,
+                PageIndex = page.PageIndex,
+                PageSize = page.PageSize,
+            }
+        );
+    }
+
+    private static async Task<HttpResult> ListOptionsAsync(
+        EventSourceAppService service,
+        CancellationToken cancellationToken
+    )
+    {
+        var options = await service.ListOptionsAsync(cancellationToken);
+        return ApiResult.Ok(
+            options.Select(option => new EventSourceOptionResponse { Id = option.Id, Name = option.Name }).ToArray()
+        );
     }
 
     private static async Task<HttpResult> GetAsync(

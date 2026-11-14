@@ -15,15 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 type TablePaginationProps = {
   pageIndex: number;
   pageSize: number;
+  pageSizeOptions?: readonly number[];
   total: number;
   isFetching: boolean;
   onPageIndexChange: (pageIndex: number) => void;
   onPageSizeChange: (pageSize: number) => void;
 };
 
-function TablePagination({
+export function TablePagination({
   pageIndex,
   pageSize,
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
   total,
   isFetching,
   onPageIndexChange,
@@ -55,7 +57,7 @@ function TablePagination({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {PAGE_SIZE_OPTIONS.map((size) => (
+              {pageSizeOptions.map((size) => (
                 <SelectItem key={size} value={String(size)}>
                   {size}
                 </SelectItem>

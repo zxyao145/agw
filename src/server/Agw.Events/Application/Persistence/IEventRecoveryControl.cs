@@ -1,8 +1,14 @@
+using Agw.Shared.Contracts.Pagination;
+
 namespace Agw.Events.Application.Persistence;
 
 public interface IEventRecoveryControl
 {
-    Task<IReadOnlyList<UnpublishedEventRecord>> ListAsync(CancellationToken cancellationToken);
+    Task<PagedResult<UnpublishedEventRecord>> ListAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken
+    );
     Task RepublishAsync(string topic, Guid entityId, CancellationToken cancellationToken);
 }
 

@@ -1,14 +1,12 @@
 using System.Linq.Expressions;
 using Agw.Shared.Contracts.Pagination;
-using Agw.Shared.Exceptions;
+using Agw.Shared.Pagination;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Pagination;
 
 public static class UpdatedTimePagination
 {
-    private static readonly int[] SupportedPageSizes = [10, 20, 50];
-
     public static async Task<PagedResult<TEntity>> ToPagedResultAsync<TEntity>(
         IQueryable<TEntity> queryable,
         Expression<Func<TEntity, Guid>> idSelector,
@@ -18,7 +16,7 @@ public static class UpdatedTimePagination
     )
         where TEntity : BaseEntity
     {
-        ValidatePaging(pageIndex, pageSize);
+        PageValidation.Validate(pageIndex, pageSize);
 
         queryable = queryable.AsNoTracking();
 
@@ -62,19 +60,6 @@ public static class UpdatedTimePagination
             PageIndex = pageIndex,
             PageSize = pageSize,
         };
-    }
-
-    private static void ValidatePaging(int pageIndex, int pageSize)
-    {
-        if (pageIndex < 1)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "pageIndex must be at least 1.");
-        }
-
-        if (!SupportedPageSizes.Contains(pageSize))
-        {
-            throw new AgwException(ErrorCodes.InvalidPageSize, "pageSize must be one of 10, 20, or 50.");
-        }
     }
 
     private static bool IsDateTimeOffsetQueryTranslationException(Exception exception)

@@ -5,6 +5,7 @@ using Agw.Events.Application.Persistence;
 using Agw.Events.Configuration;
 using Agw.Extensions.Contracts;
 using Agw.Shared.Contracts.Events;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.WebUtilities;
@@ -42,15 +43,22 @@ public sealed class EventSourceAppService
         _timeProvider = timeProvider;
     }
 
-    public async Task<IReadOnlyList<EventSource>> ListAsync(CancellationToken cancellationToken)
+    public Task<PagedResult<EventSource>> ListAsync(int pageIndex, int pageSize, CancellationToken cancellationToken) =>
+        EventPaging.ToPagedResultAsync(QuerySources(), pageIndex, pageSize, static source => source, cancellationToken);
+
+    public async Task<IReadOnlyList<EventSourceOption>> ListOptionsAsync(CancellationToken cancellationToken) =>
+        await QuerySources()
+            .Select(source => new EventSourceOption { Id = source.Id, Name = source.Name })
+            .ToListAsync(cancellationToken);
+
+    private IOrderedQueryable<EventSource> QuerySources()
     {
         var userId = UserInfoUtil.RequiredUserId;
-        return await _db
+        return _db
             .EventSources.AsNoTracking()
             .Where(source => source.CreateBy == userId && source.DeletedAt == null)
             .OrderBy(source => source.Name)
-            .ThenBy(source => source.Id)
-            .ToArrayAsync(cancellationToken);
+            .ThenBy(source => source.Id);
     }
 
     public Task<EventSource?> GetAsync(Guid id, CancellationToken cancellationToken)

@@ -8,6 +8,7 @@ const { PaginatedTable } = await import("./table-pagination.tsx");
 type PaginationState = {
   pageIndex?: number;
   pageSize?: number;
+  pageSizeOptions?: readonly number[];
   total?: number;
   isFetching?: boolean;
   onPageIndexChange?: (pageIndex: number) => void;
@@ -19,6 +20,7 @@ function renderPaginatedTable(state: PaginationState = {}) {
     React.createElement(PaginatedTable, {
       pageIndex: state.pageIndex ?? 1,
       pageSize: state.pageSize ?? 20,
+      pageSizeOptions: state.pageSizeOptions,
       total: state.total ?? 45,
       isFetching: state.isFetching ?? false,
       onPageIndexChange: state.onPageIndexChange ?? (() => {}),
@@ -84,6 +86,24 @@ test("choosing a page size reports the new size", async () => {
   });
 
   assert.deepEqual(requestedSizes, [50]);
+});
+
+test("custom page size options replace the default choices", async () => {
+  renderPaginatedTable({ pageSizeOptions: [10, 20, 50, 100] });
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Rows per page"));
+  });
+  const options = (await screen.findAllByRole("option")).map((option) => option.textContent);
+  assert.deepEqual(options, ["10", "20", "50", "100"]);
+});
+
+test("the default page size options stay 10, 20 and 50", async () => {
+  renderPaginatedTable();
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Rows per page"));
+  });
+  const options = (await screen.findAllByRole("option")).map((option) => option.textContent);
+  assert.deepEqual(options, ["10", "20", "50"]);
 });
 
 test("an empty result hides the pagination controls and keeps the table", () => {

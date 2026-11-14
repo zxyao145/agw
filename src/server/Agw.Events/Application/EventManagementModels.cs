@@ -34,8 +34,6 @@ public sealed record EventListFilter
     public Guid? ChainId { get; init; }
     public DateTimeOffset? From { get; init; }
     public DateTimeOffset? To { get; init; }
-    public int Offset { get; init; }
-    public int Limit { get; init; } = 100;
 }
 
 public sealed record EventSubscriptionResponse

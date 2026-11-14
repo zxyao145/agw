@@ -124,6 +124,7 @@ jobs:
           dotnet build tests/Agw.Jobs.Tests -c Release
           dotnet build tests/Agw.Projects.Tests -c Release
           dotnet build tests/Agw.Files.Tests -c Release
+          dotnet build tests/Agw.Events.Tests -c Release
           dotnet build tests/Agw.Extensions.Database.Tests -c Release
           dotnet build tests/Agw.Extensions.Runtime.Tests -c Release
       - name: Configure PostgreSQL test databases
@@ -153,6 +154,12 @@ jobs:
           tests/Agw.Files.Tests/bin/Release/net10.0/Agw.Files.Tests
           -filterVSTest "Category=Postgres"
           -result-trx TestResults/Postgres/files.trx
+          -failSkips
+      - name: Test PostgreSQL event list paging
+        run: >-
+          tests/Agw.Events.Tests/bin/Release/net10.0/Agw.Events.Tests
+          -filterVSTest "Category=Postgres"
+          -result-trx TestResults/Postgres/events.trx
           -failSkips
       - name: Test PostgreSQL extension migrations, isolation and settings propagation
         run: >-

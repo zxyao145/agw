@@ -2,6 +2,7 @@ using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Pagination;
 using Agw.Tools.Application.Persistence;
 using Agw.Tools.Domain.Behaviors;
 using Agw.Tools.Domain.Services;
@@ -32,8 +33,6 @@ public sealed class UserMemoryAppService
 {
     public const int MaxUserIdLength = 256;
 
-    private static readonly int[] SupportedPageSizes = [10, 20, 50];
-
     private readonly IToolsDbContext _dbContext;
     private readonly UserMemoryNameUniquenessDomainService _nameUniquenessDomainService;
     private readonly IApplicationLock _applicationLock;
@@ -59,7 +58,7 @@ public sealed class UserMemoryAppService
     )
     {
         var normalizedUserId = GetCurrentUserId();
-        ValidatePaging(pageIndex, pageSize);
+        PageValidation.Validate(pageIndex, pageSize);
 
         var query = _dbContext.UserMemories.AsNoTracking().Where(memory => memory.UserId == normalizedUserId);
         var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
@@ -325,19 +324,6 @@ public sealed class UserMemoryAppService
         }
 
         return normalized;
-    }
-
-    private static void ValidatePaging(int pageIndex, int pageSize)
-    {
-        if (pageIndex < 1)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "pageIndex must be at least 1.");
-        }
-
-        if (!SupportedPageSizes.Contains(pageSize))
-        {
-            throw new AgwException(ErrorCodes.InvalidPageSize, "pageSize must be one of 10, 20, or 50.");
-        }
     }
 
     private static bool IsDateTimeOffsetQueryTranslationException(Exception exception) =>

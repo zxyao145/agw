@@ -1401,9 +1401,8 @@ async function viewsAndLayout(): Promise<void> {
 }
 
 /**
- * Events 视图铺满 Main Workspace；内容高于视图时，滚轮把最后一行滚入视图。
- * The Events view fills the Main Workspace; when its content is taller than the view, the wheel scrolls the last row
- * into view.
+ * Events 视图铺满 Main Workspace，Sources 按页显示，滚轮可以滚动到翻页栏。
+ * The Events view fills the Main Workspace, pages its sources and scrolls to the pagination bar.
  */
 async function eventsViewLayout(): Promise<void> {
   type SourceVersion = { id: string; version: number | string };
@@ -1429,11 +1428,16 @@ async function eventsViewLayout(): Promise<void> {
     tab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
     return true;
   })()`);
-  const lastDelete = `[...document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete Layout source"]')].at(-1)`;
+  const pagination = `document.querySelector('.agw-main-workspace [aria-label="Rows per page"]')`;
   await untilHost(
-    `document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete Layout source"]').length === 30`,
-    "the Layout sources",
+    `document.querySelectorAll('.agw-main-workspace button[aria-label^="Delete Layout source"]').length === 20`,
+    "the first page of Layout sources",
   );
+  const workspaceText = await evalHost<string>(
+    `document.querySelector(".agw-main-workspace").textContent`,
+  );
+  assert.match(workspaceText, /Showing 1–20 of 30/u);
+  assert.equal(await evalHost<boolean>(`Boolean(${pagination})`), true);
 
   host().setZoomFactor(0.75);
   await untilHost("window.innerWidth > 1800", "the zoomed-out host");
@@ -1464,7 +1468,7 @@ async function eventsViewLayout(): Promise<void> {
     }>(`(() => {
       const scroller = (${page}).parentElement;
       const area = scroller.getBoundingClientRect();
-      const button = (${lastDelete}).getBoundingClientRect();
+      const button = (${pagination}).getBoundingClientRect();
       return {
         visible: button.top >= area.top && button.bottom <= area.bottom,
         scrollHeight: scroller.scrollHeight,
@@ -1479,7 +1483,7 @@ async function eventsViewLayout(): Promise<void> {
   await until(async () => {
     host().sendInputEvent({ type: "mouseWheel", ...start.point, deltaX: 0, deltaY: -600 });
     return (await position()).visible;
-  }, "the wheel to scroll the last Layout source into view");
+  }, "the wheel to scroll the pagination bar into view");
 
   for (const source of sources) {
     await hostSend("POST", "/api/events/sources/delete", {
@@ -1489,7 +1493,9 @@ async function eventsViewLayout(): Promise<void> {
   }
   await clickHost(`.agw-ribbon [data-entry-id="${EXTENSION_IDS.sample}:open"]`);
   await until(() => main.view.getVisible(), "the sample main view to show");
-  pass("the Events view fills the Main Workspace and scrolls to its last row");
+  pass(
+    "the Events view fills the Main Workspace, pages its rows and scrolls to its pagination bar",
+  );
 }
 
 async function hostOverlays(): Promise<void> {

@@ -89,6 +89,13 @@ public sealed record EventSourceResponse
     public required long Version { get; init; }
 }
 
+public sealed record EventSourceOptionResponse
+{
+    public required Guid Id { get; init; }
+
+    public required string Name { get; init; }
+}
+
 public sealed record EventSourceMutationResponse
 {
     public required Guid Id { get; init; }
