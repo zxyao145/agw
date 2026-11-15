@@ -9,6 +9,7 @@ using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
+using Agw.Notifications;
 using Agw.Projects;
 using Agw.Projects.Application;
 using Agw.Providers;
@@ -235,6 +236,7 @@ public sealed class ProjectWorkspaceIsolationTests
             services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(paths.KeysDirectory));
             services
                 .AddTools(configuration)
+                .AddNotifications(configuration, runWorkers: false)
                 .AddAgents(configuration)
                 .AddFiles(configuration)
                 .AddInfrastructure(configuration)

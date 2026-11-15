@@ -15,6 +15,7 @@ using Agw.Host.Hosting;
 using Agw.Infrastructure;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
+using Agw.Notifications;
 using Agw.Projects;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
@@ -164,6 +165,7 @@ public sealed class HostModuleCompositionTests
             services.AddHybridCache();
             services
                 .AddTools(configuration)
+                .AddNotifications(configuration, runWorkers: false)
                 .AddAgents(configuration)
                 .AddAgentExecution(configuration)
                 .AddExtensions(configuration, "Standalone")

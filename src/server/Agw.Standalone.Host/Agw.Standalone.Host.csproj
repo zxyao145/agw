@@ -30,5 +30,12 @@
       Link="appsettings.Development.json"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="..\Extensions\**\*"
+      Exclude="..\Extensions\**\.DS_Store"
+      Link="Extensions\%(RecursiveDir)%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="Never"
+    />
   </ItemGroup>
 </Project>
