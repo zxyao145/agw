@@ -152,7 +152,9 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Events.Contracts",
                 "Agw.Extensions.Contracts",
                 "Agw.Notifications.Contracts",
-                "Agw.Shared"
+                "Agw.Shared",
+                "Agw.Tools.Abstractions",
+                "Agw.Tools.Generators"
             ),
             ["Agw.Extensions.Sdk"] = Set("Agw.Extensions.Contracts", "Agw.Shared", "Agw.Tools.Abstractions"),
             ["Agw.Extensions.Sdk.EntityFrameworkCore"] = Set(

@@ -390,3 +390,4 @@ appsettings.setup.json
 
 # extension 安装包处理源码。Extension package source files.
 !src/server/Agw.Extensions/Infrastructure/Packages/*.cs
+/src/server/Extensions/

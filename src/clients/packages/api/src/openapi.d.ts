@@ -10342,7 +10342,8 @@ export interface components {
       | components["schemas"]["ToolBlockDefinitionUserMemoryToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionFileAccessToolBlockDefinition"]
-      | components["schemas"]["ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"];
+      | components["schemas"]["ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionNotificationToolBlockDefinition"];
     ToolBlockDefinitionBackgroundAgentsToolBlockDefinition: {
       /** @enum {string} */
       name: "background-agents";
@@ -10361,6 +10362,11 @@ export interface components {
     ToolBlockDefinitionModeToolBlockDefinition: {
       /** @enum {string} */
       name: "mode";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolBlockDefinitionNotificationToolBlockDefinition: {
+      /** @enum {string} */
+      name: "notification";
       options: components["schemas"]["EmptyToolOptions"];
     };
     ToolBlockDefinitionProjectMemoryToolBlockDefinition: {

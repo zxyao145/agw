@@ -378,7 +378,7 @@ function ExtensionCard({
                 <Badge variant="outline">Permission approval required</Badge>
               ) : null}
             </div>
-            <p className="text-xs text-muted-foreground" data-testid="extension-id">
+            <p className="text-xs wrap-anywhere text-muted-foreground" data-testid="extension-id">
               {extension.id}
               {manifest?.author ? ` · ${manifest.author}` : ""}
             </p>

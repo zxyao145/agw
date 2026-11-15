@@ -20010,6 +20010,9 @@
           },
           {
             "$ref": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolBlockDefinitionNotificationToolBlockDefinition"
           }
         ],
         "discriminator": {
@@ -20021,7 +20024,8 @@
             "user-memory": "#/components/schemas/ToolBlockDefinitionUserMemoryToolBlockDefinition",
             "file-readonly-access": "#/components/schemas/ToolBlockDefinitionFileReadonlyAccessToolBlockDefinition",
             "file-access": "#/components/schemas/ToolBlockDefinitionFileAccessToolBlockDefinition",
-            "background-agents": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"
+            "background-agents": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition",
+            "notification": "#/components/schemas/ToolBlockDefinitionNotificationToolBlockDefinition"
           }
         }
       },
@@ -20085,6 +20089,23 @@
           "name": {
             "enum": [
               "mode"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolBlockDefinitionNotificationToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "notification"
             ],
             "type": "string"
           },

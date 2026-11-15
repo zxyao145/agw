@@ -144,7 +144,7 @@ public sealed partial class ExtensionRuntime
         InvocationScope scope = await BeginInvocationAsync(
             generation,
             allowDraining: false,
-            backgroundWork: true,
+            backgroundWork: invocation.Operation != ExtensionNotificationChannelOperation.ListTargets,
             token => _availability.CanAcceptNewWorkAsync(lease.Pin, token),
             cancellationToken,
             invocation.UserId,

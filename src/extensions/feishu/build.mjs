@@ -54,6 +54,7 @@ const manifest = {
       mainViews: [
         { id: "settings", title: "Feishu", icon: "MessageSquare", entry: "desktop/index.html" },
       ],
+      settings: { entry: "desktop/index.html" },
     },
     permissions: [],
   },

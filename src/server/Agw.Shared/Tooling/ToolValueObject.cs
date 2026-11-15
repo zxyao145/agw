@@ -42,9 +42,10 @@ public static class ToolBlockDefinitionNames
     public const string FileReadonlyAccess = "file-readonly-access";
     public const string FileAccess = "file-access";
     public const string BackgroundAgents = "background-agents";
+    public const string Notification = "notification";
 
     public static IReadOnlyList<string> All { get; } =
-    [Todo, Mode, ProjectMemory, UserMemory, FileReadonlyAccess, FileAccess, BackgroundAgents];
+    [Todo, Mode, ProjectMemory, UserMemory, FileReadonlyAccess, FileAccess, BackgroundAgents, Notification];
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
@@ -149,6 +150,7 @@ public sealed record ExtensionToolDefinition : ToolDefinition
 [JsonDerivedType(typeof(FileReadonlyAccessToolBlockDefinition), ToolBlockDefinitionNames.FileReadonlyAccess)]
 [JsonDerivedType(typeof(FileAccessToolBlockDefinition), ToolBlockDefinitionNames.FileAccess)]
 [JsonDerivedType(typeof(BackgroundAgentsToolBlockDefinition), ToolBlockDefinitionNames.BackgroundAgents)]
+[JsonDerivedType(typeof(NotificationToolBlockDefinition), ToolBlockDefinitionNames.Notification)]
 public abstract record ToolBlockDefinition
 {
     public abstract string GetDefinitionName();
@@ -213,6 +215,11 @@ public sealed record FileAccessToolBlockDefinition : ToolBlockDefinition<EmptyTo
 public sealed record BackgroundAgentsToolBlockDefinition : ToolBlockDefinition<BackgroundAgentsToolBlockOptions>
 {
     public override string GetDefinitionName() => ToolBlockDefinitionNames.BackgroundAgents;
+}
+
+public sealed record NotificationToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>
+{
+    public override string GetDefinitionName() => ToolBlockDefinitionNames.Notification;
 }
 
 public sealed record BackgroundAgentsToolBlockOptions

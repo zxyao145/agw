@@ -1,7 +1,11 @@
 using System.Data.Common;
+using System.IO.Compression;
+using System.Text.Json;
+using Agw.Extensions.Application.Packages;
 using Agw.Extensions.TestSupport;
 using Agw.Shared.Configuration;
 using Agw.Tests;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
 
@@ -10,6 +14,36 @@ namespace Agw.Extensions.Feishu.Tests;
 public sealed class FeishuPackageMigrationTests
 {
     public static bool PostgresConfigured => IsolatedTestConnections.Postgres is not null;
+
+    [Fact]
+    public async Task GetDesktopPackage_FeishuPackage_IncludesSettingsPage()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await using ExtensionRuntimeIntegrationHost host = await ExtensionRuntimeIntegrationHost.CreateAsync(
+            GetPackageDirectory(),
+            cancellationToken: cancellationToken
+        );
+        var catalog = host.Services.GetRequiredService<IExtensionPackageCatalog>();
+        ExtensionLocalPackage package = Assert.Single(catalog.GetEntries());
+        await using Stream stream = await catalog.GetDesktopPackageAsync(
+            package.ExtensionId,
+            package.ReleaseHash,
+            cancellationToken
+        );
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        ZipArchiveEntry manifestEntry = Assert.Single(archive.Entries, entry => entry.FullName == "manifest.json");
+        await using Stream manifestStream = manifestEntry.Open();
+        using JsonDocument manifest = await JsonDocument.ParseAsync(
+            manifestStream,
+            cancellationToken: cancellationToken
+        );
+        JsonElement contributes = manifest.RootElement.GetProperty("desktop").GetProperty("contributes");
+
+        Assert.True(contributes.TryGetProperty("settings", out JsonElement settings));
+        string? settingsEntry = settings.GetProperty("entry").GetString();
+        Assert.Equal("desktop/index.html", settingsEntry);
+        Assert.NotNull(archive.GetEntry("desktop/index.html"));
+    }
 
     [Fact]
     public async Task LoadAndActivate_SignedPackageAppliesSqliteMigrations()

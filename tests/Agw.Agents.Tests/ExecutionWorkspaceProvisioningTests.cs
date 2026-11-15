@@ -14,6 +14,7 @@ using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
+using Agw.Notifications;
 using Agw.Projects;
 using Agw.Projects.Application;
 using Agw.Providers;
@@ -296,6 +297,7 @@ public sealed partial class ExecutionWorkspaceProvisioningTests : IDisposable
             services.AddScoped<IEntityAuditUserIdProvider, AuditUserIdProvider>();
             services
                 .AddTools(configuration)
+                .AddNotifications(configuration, runWorkers: false)
                 .AddAgents(configuration)
                 .AddAgentExecution(
                     configuration,

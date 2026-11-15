@@ -22,7 +22,8 @@
           "icon": "MessageSquare",
           "entry": "desktop/index.html"
         }
-      ]
+      ],
+      "settings": { "entry": "desktop/index.html" }
     },
     "permissions": []
   },

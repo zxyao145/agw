@@ -19,7 +19,8 @@ export type ToolBlockName =
   | "user-memory"
   | "file-readonly-access"
   | "file-access"
-  | "background-agents";
+  | "background-agents"
+  | "notification";
 
 export type EmptyToolOptions = Record<string, never>;
 
