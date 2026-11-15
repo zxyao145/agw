@@ -44,6 +44,7 @@ import {
   TabsList,
   TabsTrigger,
   Textarea,
+  cn,
   formatLocalDateTime,
 } from "@agw/components";
 import { useMutation, useQuery, useQueryClient } from "@agw/components/query";
@@ -1162,6 +1163,11 @@ function DetailValue({ label, value }: { label: string; value: string }) {
   );
 }
 
+const eventDialogFormClassName = cn(
+  "-ms-1 max-h-[65vh] overflow-y-auto p-1 scroll-py-1",
+  "[&_:is([data-slot=input],[data-slot=select-trigger],[data-slot=textarea]):focus-visible]:ring-2",
+);
+
 function SourceDialog({
   open,
   editingSource,
@@ -1189,7 +1195,7 @@ function SourceDialog({
             created or rotated.
           </DialogDescription>
         </DialogHeader>
-        <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+        <div className={cn(eventDialogFormClassName, "space-y-4")}>
           <div className="space-y-2">
             <Label htmlFor="source-name">Name</Label>
             <Input
@@ -1349,7 +1355,7 @@ function SubscriptionDialog({
             Choose event types and the target that will process matching events.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid max-h-[65vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2">
+        <div className={cn(eventDialogFormClassName, "grid gap-4 md:grid-cols-2")}>
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="subscription-name">Name</Label>
             <Input

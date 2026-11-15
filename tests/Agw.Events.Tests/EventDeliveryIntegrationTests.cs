@@ -236,6 +236,16 @@ public sealed class EventDeliveryIntegrationTests
         Assert.All(deliveries, delivery => Assert.Equal(EventDeliveryState.WaitingExecution, delivery.State));
         Assert.NotEqual(first.Id, second.Id);
         Assert.NotEqual(first.TurnId, second.TurnId);
+        var titles = await db
+            .ProjectConversations.AsNoTracking()
+            .Where(row => row.ProjectId == project.Id)
+            .OrderBy(row => row.Title)
+            .Select(row => row.Title)
+            .ToArrayAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(
+            ["Recurring event job 2026-11-14 00:01:00 UTC", "Recurring event job 2026-11-14 00:02:00 UTC"],
+            titles
+        );
         Assert.True(
             (
                 await services

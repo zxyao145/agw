@@ -1042,7 +1042,11 @@ public sealed class EventDeliveryProcessor
             ),
             subscription.ProjectId ?? throw new AgwException(ErrorCodes.InvalidParam),
             null,
-            subscription.Name,
+            subscription.ManagedBy == EventManagedBy.Job
+                ? FormattableString.Invariant(
+                    $"{subscription.Name} {_timeProvider.GetUtcNow():yyyy-MM-dd HH:mm:ss} UTC"
+                )
+                : subscription.Name,
             CreateAgentInput(subscription, message, turnId),
             (AgentExecutionPermissionMode)(
                 subscription.PermissionMode ?? throw new AgwException(ErrorCodes.InvalidParam)
