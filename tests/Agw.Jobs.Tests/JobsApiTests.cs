@@ -18,6 +18,7 @@ using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+using Agw.Testing;
 using Agw.Tests;
 using Bens.Results;
 using Microsoft.AspNetCore.Builder;
@@ -345,7 +346,15 @@ public class JobsApiTests
     public async Task RunsList_CancelledDelivery_ReturnsFailedRunWithConversationId()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
+        var clock = new TestTimeProvider(new DateTimeOffset(2026, 11, 15, 6, 7, 8, TimeSpan.Zero));
+        await using var fixture = await JobsApiFixture.CreateAsync(
+            cancellationToken,
+            configureServices: services =>
+            {
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton<TimeProvider>(clock);
+            }
+        );
         var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
         var request = CreateRequest(
             targets,
@@ -367,7 +376,10 @@ public class JobsApiTests
         var run = Assert.Single(body.RootElement.GetProperty("data").EnumerateArray());
         Assert.Equal(2, run.GetProperty("result").GetInt32());
         Assert.Equal(conversationId.ToString("D"), run.GetProperty("conversationId").GetString());
-        Assert.Equal("Cancelled Run Job", await fixture.GetConversationTitleAsync(conversationId, cancellationToken));
+        Assert.Equal(
+            "Cancelled Run Job 2026-11-15 06:07:08 UTC",
+            await fixture.GetConversationTitleAsync(conversationId, cancellationToken)
+        );
     }
 
     private static JobCreateRequest CreateRequest(
