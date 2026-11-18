@@ -59,7 +59,7 @@ pnpm test:boundaries
 
 - One package: `pnpm exec turbo run test --filter=@agw/chat-core`, or `pnpm --filter @agw/mobile test`.
 - One test file: packages and Desktop use the Node test runner through `tsx`, for example `pnpm --filter @agw/chat-core exec tsx --test src/auto-scroll.test.ts`. Mobile uses Jest.
-- Web e2e: `pnpm --filter @agw/web exec playwright install chromium`, then `pnpm --filter @agw/web test:e2e`. It runs its own server on `127.0.0.1:3101` with stubbed APIs.
+- For Web e2e, run `dotnet build src/server/Agw.Standalone.Host` from the repository root. From `src/clients`, run `pnpm --filter @agw/web exec playwright install chromium`, then `pnpm --filter @agw/web test:e2e`. Playwright starts the Web server on `127.0.0.1:3101` and launches an isolated Standalone Host for the Diff mode file-view tests.
 - Desktop extension integration tests: `pnpm --filter @agw/desktop test:extensions`. Ask the user for confirmation before every run.
 - `pnpm test` runs `test:boundaries` first (manifest checks plus dependency-cruiser with `.dependency-cruiser.cjs`), then every package's `typecheck` and `test`.
 - Desktop installers: `AGW_PACKAGE_FLAVOR=client|full pnpm make:desktop [-- --arch=x64]`.

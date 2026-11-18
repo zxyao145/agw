@@ -18,6 +18,7 @@ import {
   getProjectDirectories,
   getFileDiff,
   readFile,
+  shouldShowFileDiff,
   type GitDiffResponse,
   type GitDiffScope,
   type ProjectDirectory,
@@ -135,9 +136,10 @@ export type ChatWorkspaceProviderProps = {
    */
   confirmFileChange?: () => Promise<boolean>;
   /**
-   * 选中文件时为 Source 读取文字，缺省为 true。Desktop 的 Source 由自己的文档读取，传 false 时只更新选择。
-   * Reads the text for Source when a file is selected; true by default. Desktop's Source reads through its own
-   * document, so false only updates the selection.
+   * 控制工作区是否为 Source 读取文字，缺省为 true。
+   * Desktop 通过 SourceDocument 读取 Source 的文字。
+   * Controls whether the workspace reads Source text and defaults to true.
+   * Desktop reads Source text through SourceDocument.
    */
   readSourceContent?: boolean;
   children?: React.ReactNode;
@@ -182,6 +184,10 @@ export type ChatWorkspaceContextValue = {
 
   onlyDiff: boolean;
   setOnlyDiff: (onlyDiff: boolean) => void;
+  /** Diff 模式下主区显示文件本身。In Diff mode the main area shows the file itself. */
+  diffFileView: boolean;
+  /** 在 diff 与文件查看之间切换。Switches between the diff and the file view. */
+  setDiffFileView: (diffFileView: boolean) => void;
   recursiveMode: boolean;
   /** 选中文件；文件与 diff scope 都未变化时不重新加载。Selects a file; nothing reloads when neither the file nor the diff scope changes. */
   selectFile: (filePath: string | null, scope?: GitDiffScope) => void;
@@ -194,8 +200,8 @@ export type ChatWorkspaceContextValue = {
   handleFileReset: (filePath: string | null) => void;
   handleFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
   /**
-   * 文件被写入后调用（Desktop）：目录与当前目录相同、path 是当前文件且不在 Only diff 模式时重新读取 Source，行评论保留；文件树刷新。
-   * Called after a file is written (Desktop): rereads Source when the directory is the current one, path is the current file and Only diff is off, keeping line comments; refreshes the file tree.
+   * 文件写入后刷新文件树，并在文件查看中更新当前文件的预览状态。
+   * Refreshes the file tree after a write and updates the current file's preview state in file view.
    */
   handleFileWritten: (directoryId: string | null, path: string) => void;
   /** 每次文件被写入加 1，传给 Explorer。Increments on every file write; passed to Explorer. */
@@ -498,6 +504,17 @@ function ProjectRequiredState() {
   );
 }
 
+type WorkspaceFileLocation = {
+  projectId: string | null;
+  directoryId: string | null;
+  path: string;
+};
+
+type FilePreviewSelection = WorkspaceFileLocation & {
+  diffScope?: GitDiffScope;
+  workspace: string;
+};
+
 /**
  * 对话工作区中与布局无关的状态、effect 与回调，并渲染重连对话框。对话框按绝对定位覆盖最近的定位祖先，
  * 因此 Provider 应放在定位容器中。
@@ -556,12 +573,17 @@ export function ChatWorkspaceProvider({
   const [isLoadingConversation, setIsLoadingConversation] = React.useState(false);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
-  const [selectedDiffScope, setSelectedDiffScope] = React.useState<GitDiffScope | undefined>();
+  const [fileSelection, setFileSelection] = React.useState<FilePreviewSelection | null>(null);
   const [fileContent, setFileContent] = React.useState("");
   const [isLoadingContent, setIsLoadingContent] = React.useState(false);
   const [contentError, setContentError] = React.useState<string | null>(null);
-  const [onlyDiff, setOnlyDiff] = React.useState(false);
+  const [onlyDiff, setOnlyDiffState] = React.useState(false);
+  const [diffFileView, setDiffFileView] = React.useState(false);
+  const showDiff = shouldShowFileDiff(onlyDiff, diffFileView);
+  const setOnlyDiff = React.useCallback((value: boolean) => {
+    setOnlyDiffState(value);
+    setDiffFileView(false);
+  }, []);
   const [recursiveMode] = React.useState(true);
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
@@ -630,6 +652,16 @@ export function ChatWorkspaceProvider({
     projectDirectories.find((directory) => directory.id === selectedDirectoryId) ??
     projectDirectories[0];
   const resolvedWorkspace = selectedDirectory?.path ?? "";
+  const resolvedDirectoryId = selectedDirectory?.id ?? null;
+  const selectionInDirectory = fileInDirectory(
+    fileSelection,
+    selectedProjectId,
+    resolvedDirectoryId,
+  );
+  const currentFileSelection =
+    selectionInDirectory?.workspace === resolvedWorkspace ? selectionInDirectory : null;
+  const selectedFile = currentFileSelection?.path ?? null;
+  const selectedDiffScope = currentFileSelection?.diffScope;
   React.useEffect(() => {
     setSelectedDirectoryId(null);
   }, [selectedProjectId]);
@@ -678,13 +710,29 @@ export function ChatWorkspaceProvider({
   const clearFilePreview = React.useCallback((clearComments = true) => {
     fileLoadGenerationRef.current += 1;
     setIsLoadingContent(false);
-    setSelectedFile(null);
-    setSelectedDiffScope(undefined);
+    setFileSelection(null);
+    setDiffFileView(false);
     setFileContent("");
     setContentError(null);
     setDiffContentData(null);
     if (clearComments) setComments([]);
   }, []);
+
+  const selectFileForPreview = React.useCallback(
+    (path: string, diffScope?: GitDiffScope) => {
+      fileLoadGenerationRef.current += 1;
+      setIsLoadingContent(true);
+      setFileSelection({
+        path,
+        diffScope,
+        projectId: selectedProjectId,
+        directoryId: resolvedDirectoryId,
+        workspace: resolvedWorkspace,
+      });
+      setDiffFileView(false);
+    },
+    [resolvedDirectoryId, resolvedWorkspace, selectedProjectId],
+  );
 
   const handlePendingFileCommentsRemove = React.useCallback((commentIds: readonly string[]) => {
     if (commentIds.length === 0) return;
@@ -732,45 +780,32 @@ export function ChatWorkspaceProvider({
   }, [envVars]);
 
   const loadFileContent = React.useCallback(
-    async (filePath: string, diffScope?: GitDiffScope) => {
+    async (filePath: string, diffScope: GitDiffScope | undefined, readDiff: boolean) => {
       const generation = ++fileLoadGenerationRef.current;
       setIsLoadingContent(true);
       setContentError(null);
+      setFileContent("");
       setDiffContentData(null);
 
       try {
-        if (onlyDiff) {
-          if (!selectedProjectId) {
-            throw new Error("Select a project before loading files");
-          }
+        if (!selectedProjectId) throw new Error("Select a project before loading files");
+        if (readDiff) {
           const diff = await getFileDiff(
             selectedProjectId,
             filePath,
             diffScope,
             undefined,
-            selectedDirectory?.id,
+            resolvedDirectoryId,
           );
-          if (generation !== fileLoadGenerationRef.current) {
-            return;
-          }
-          setDiffContentData(diff);
-          setFileContent("");
-          setSelectedFile(filePath);
-          setSelectedDiffScope(diffScope);
-        } else {
-          if (!selectedProjectId) {
-            throw new Error("Select a project before loading files");
-          }
-          const content = readSourceContent
-            ? await readFile(selectedProjectId, filePath, undefined, selectedDirectory?.id)
-            : "";
-          if (generation !== fileLoadGenerationRef.current) {
-            return;
-          }
-          setFileContent(content);
-          setDiffContentData(null);
-          setSelectedFile(filePath);
-          setSelectedDiffScope(diffScope);
+          if (generation === fileLoadGenerationRef.current) setDiffContentData(diff);
+        } else if (readSourceContent) {
+          const content = await readFile(
+            selectedProjectId,
+            filePath,
+            undefined,
+            resolvedDirectoryId,
+          );
+          if (generation === fileLoadGenerationRef.current) setFileContent(content);
         }
       } catch (error) {
         if (generation !== fileLoadGenerationRef.current) {
@@ -778,15 +813,13 @@ export function ChatWorkspaceProvider({
         }
         console.error("Error loading file:", error);
         setContentError((error as Error).message);
-        setFileContent("");
-        setDiffContentData(null);
       } finally {
         if (generation === fileLoadGenerationRef.current) {
           setIsLoadingContent(false);
         }
       }
     },
-    [onlyDiff, readSourceContent, selectedProjectId, selectedDirectory?.id],
+    [readSourceContent, resolvedDirectoryId, selectedProjectId],
   );
 
   const handleOnFileDeleted = React.useCallback(
@@ -801,62 +834,62 @@ export function ChatWorkspaceProvider({
   const handleOnFileReseted = React.useCallback(
     (filePath: string | null) => {
       if (selectedFile && selectedFile === filePath) {
-        void loadFileContent(selectedFile, selectedDiffScope);
+        void loadFileContent(selectedFile, selectedDiffScope, showDiff);
       }
     },
-    [loadFileContent, selectedDiffScope, selectedFile],
+    [loadFileContent, selectedDiffScope, selectedFile, showDiff],
   );
 
-  // 文件被写入：当前文件的 Source 重新读取（行评论保留），文件树刷新。
-  // A file was written: reread the current file's Source (line comments stay) and refresh the file tree.
   const handleFileWritten = React.useCallback(
     (directoryId: string | null, path: string) => {
-      if (directoryId === (selectedDirectory?.id ?? null) && path === selectedFile && !onlyDiff) {
-        void loadFileContent(path, selectedDiffScope);
+      if (directoryId === resolvedDirectoryId && path === selectedFile && !showDiff) {
+        void loadFileContent(path, selectedDiffScope, false);
       }
       setFileTreeRefreshSignal((signal) => signal + 1);
     },
-    [loadFileContent, onlyDiff, selectedDiffScope, selectedDirectory?.id, selectedFile],
+    [loadFileContent, resolvedDirectoryId, selectedDiffScope, selectedFile, showDiff],
   );
 
   const handleOnFileGitScopeChanged = React.useCallback(
     (path: string, targetScope: GitDiffScope) => {
       const directoryPrefix = `${path.replace(/\/+$/u, "")}/`;
-      if (selectedFile === path || selectedFile?.startsWith(directoryPrefix)) {
-        setSelectedDiffScope(targetScope);
-      }
+      setFileSelection((selection) => {
+        if (!selection || selection.diffScope === targetScope) return selection;
+        const affectsSelection =
+          selection.path === path || selection.path.startsWith(directoryPrefix);
+        return affectsSelection ? { ...selection, diffScope: targetScope } : selection;
+      });
     },
-    [selectedFile],
+    [],
   );
 
   const handleOnFileSelected = React.useCallback(
     (filePath: string | null, scope?: GitDiffScope) => {
-      if (!filePath || (filePath === selectedFile && scope === selectedDiffScope)) return;
+      if (!filePath) return;
       if (filePath === selectedFile) {
-        void loadFileContent(filePath, scope);
+        if (scope !== selectedDiffScope) selectFileForPreview(filePath, scope);
         return;
       }
-      afterFileChangeConfirmed(() => void loadFileContent(filePath, scope));
+      afterFileChangeConfirmed(() => selectFileForPreview(filePath, scope));
     },
-    [afterFileChangeConfirmed, loadFileContent, selectedDiffScope, selectedFile],
+    [afterFileChangeConfirmed, selectFileForPreview, selectedDiffScope, selectedFile],
   );
 
   // 其他目录中的文件在目录切换并清空预览之后加载。A file in another directory loads after the switch clears the preview.
-  const pendingFileRef = React.useRef<{ directoryId: string | null; path: string } | null>(null);
+  const pendingFileRef = React.useRef<WorkspaceFileLocation | null>(null);
   const openFile = React.useCallback(
     async (directoryId: string | null, filePath: string) => {
-      const currentDirectoryId = selectedDirectory?.id ?? null;
-      if (directoryId === currentDirectoryId && filePath === selectedFile) return true;
+      if (directoryId === resolvedDirectoryId && filePath === selectedFile) return true;
       if (!(await guardFileChange())) return false;
-      if (directoryId === currentDirectoryId) {
-        await loadFileContent(filePath);
+      if (directoryId === resolvedDirectoryId) {
+        selectFileForPreview(filePath);
       } else {
-        pendingFileRef.current = { directoryId, path: filePath };
+        pendingFileRef.current = { projectId: selectedProjectId, directoryId, path: filePath };
         setSelectedDirectoryId(directoryId);
       }
       return true;
     },
-    [guardFileChange, loadFileContent, selectedDirectory?.id, selectedFile],
+    [guardFileChange, resolvedDirectoryId, selectFileForPreview, selectedFile, selectedProjectId],
   );
 
   const selectDirectory = React.useCallback(
@@ -981,20 +1014,17 @@ export function ChatWorkspaceProvider({
   }, [getProjectSettingsDraft, selectedProjectId]);
 
   React.useEffect(() => {
-    if (selectedFile) {
-      void loadFileContent(selectedFile, selectedDiffScope);
+    if (currentFileSelection) {
+      void loadFileContent(currentFileSelection.path, currentFileSelection.diffScope, showDiff);
     }
-  }, [loadFileContent, onlyDiff, selectedDiffScope, selectedFile]);
+  }, [currentFileSelection, loadFileContent, showDiff]);
 
   React.useEffect(() => {
     clearFilePreview(false);
-  }, [clearFilePreview, resolvedWorkspace, selectedProjectId, selectedDirectory?.id]);
-  React.useEffect(() => {
-    const pending = pendingFileRef.current;
-    if (!pending || (selectedDirectory?.id ?? null) !== pending.directoryId) return;
+    const pending = fileInDirectory(pendingFileRef.current, selectedProjectId, resolvedDirectoryId);
     pendingFileRef.current = null;
-    void loadFileContent(pending.path);
-  }, [loadFileContent, selectedDirectory?.id]);
+    if (pending) selectFileForPreview(pending.path);
+  }, [clearFilePreview, resolvedDirectoryId, selectFileForPreview, selectedProjectId]);
   React.useEffect(() => {
     setComments([]);
   }, [selectedProjectId]);
@@ -1381,6 +1411,8 @@ export function ChatWorkspaceProvider({
       saveSettings: handleSaveChatSettings,
       onlyDiff,
       setOnlyDiff,
+      diffFileView,
+      setDiffFileView,
       recursiveMode,
       selectFile: handleOnFileSelected,
       openFile,
@@ -1421,6 +1453,7 @@ export function ChatWorkspaceProvider({
       currentConversationTurnId,
       dependencyErrorMessage,
       diffContentData,
+      diffFileView,
       environmentVariables,
       fileContent,
       fileTreeRefreshSignal,
@@ -1461,6 +1494,7 @@ export function ChatWorkspaceProvider({
       selectedProject,
       selectedProjectId,
       selectedTarget,
+      setOnlyDiff,
       startNewConversation,
       targetOptions,
     ],
@@ -1477,6 +1511,14 @@ export function ChatWorkspaceProvider({
       ) : null}
     </ChatWorkspaceContext>
   );
+}
+
+function fileInDirectory<T extends WorkspaceFileLocation>(
+  file: T | null,
+  projectId: string | null,
+  directoryId: string | null,
+): T | null {
+  return file && file.projectId === projectId && file.directoryId === directoryId ? file : null;
 }
 
 export type ChatConversationSidebarProps = {
@@ -1697,6 +1739,8 @@ export function ChatFilePane({
       isLoadingContent={workspace.isLoadingContent}
       contentError={workspace.contentError}
       onlyDiff={workspace.onlyDiff}
+      diffFileView={workspace.diffFileView}
+      onDiffFileViewChange={workspace.setDiffFileView}
       diffContentData={workspace.diffContentData}
       comments={workspace.comments}
       setComments={workspace.setComments}

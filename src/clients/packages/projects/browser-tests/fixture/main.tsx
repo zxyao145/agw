@@ -49,6 +49,7 @@ export interface Scenario {
   handlers?: Handler[];
   defaultFileViewerId?: string | null;
   onlyDiff?: boolean;
+  diffFileView?: boolean;
   diff?: GitDiffResponse;
   diffScope?: GitDiffScope;
   comments?: CommentData[];
@@ -163,6 +164,8 @@ function App({ scenario, model }: { scenario: Scenario; model: CodeTextModel | n
           isLoadingContent={false}
           contentError={null}
           onlyDiff={scenario.onlyDiff ?? false}
+          diffFileView={scenario.diffFileView}
+          onDiffFileViewChange={(value) => record("onDiffFileViewChange", value)}
           diffContentData={scenario.diff ?? null}
           diffScope={scenario.diffScope}
           comments={comments}
