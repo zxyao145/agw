@@ -890,25 +890,106 @@ test("FileContent_EditableSource_CommentsFollowEditsAndKeepTheirLineAfterReload"
   done();
 });
 
-test("FileContent_OnlyDiff_IgnoresTheEditableSource", async (t) => {
+const FILE_VIEW_DIFF = {
+  diff: "@@ -1 +1 @@\n-a\n+b\n",
+  unchanged: false,
+  isBinary: false,
+  originalContent: "a\n",
+  modifiedContent: "b\n",
+};
+
+function headerButtonNames(button: Locator) {
+  return button
+    .locator("..")
+    .locator("button")
+    .evaluateAll((buttons) => buttons.map((item) => item.getAttribute("aria-label")));
+}
+
+test("FileContent_DiffMode_DisplaysReadOnlyChanges", async (t) => {
   const { page, done } = await open(t, {
     selectedFile: "src/calc.ts",
     onlyDiff: true,
     diffScope: "staged",
     editable: CLEAN,
-    diff: {
-      diff: "@@ -1 +1 @@\n-a\n+b\n",
-      unchanged: false,
-      isBinary: false,
-      originalContent: "a\n",
-      modifiedContent: "b\n",
-    },
+    diff: FILE_VIEW_DIFF,
   });
   await page.locator(".line-insert").first().waitFor({ state: "attached" });
   assert.equal(await page.getByRole("button", { name: "More" }).count(), 0);
   assert.deepEqual(
     (await calls(page)).filter((call) => call[0] === "show"),
     [],
+  );
+  done();
+});
+
+test("FileContent_DiffMode_ShowsOnlyViewFileInHeader", async (t) => {
+  const { page, done } = await open(t, {
+    selectedFile: "src/app.ts",
+    onlyDiff: true,
+    diffScope: "unstaged",
+    diff: FILE_VIEW_DIFF,
+  });
+  await page.locator(".line-insert").first().waitFor({ state: "attached" });
+  assert.deepEqual(await tabs(page), []);
+  assert.equal(await page.getByRole("button", { name: "More" }).count(), 0);
+  const toggle = page.getByRole("button", { name: "View file", exact: true });
+  assert.equal(await toggle.getAttribute("title"), "View file");
+  assert.deepEqual(await headerButtonNames(toggle), ["View file"]);
+  await toggle.click();
+  assert.deepEqual(await calls(page), [["onDiffFileViewChange", true]]);
+  done();
+});
+
+test("FileContent_DiffModeWithUnsavedSource_MarksViewFile", async (t) => {
+  const { page, done } = await open(t, {
+    selectedFile: "src/app.ts",
+    onlyDiff: true,
+    diff: FILE_VIEW_DIFF,
+    editable: { ...CLEAN, status: "dirty", saveStatus: "unsaved", unsaved: true },
+  });
+  const toggle = page.getByRole("button", { name: "View file, unsaved changes" });
+  await toggle.waitFor();
+  assert.equal(await toggle.getAttribute("title"), "View file, unsaved changes");
+  assert.equal(await toggle.locator("span[aria-hidden=true]").count(), 1);
+  assert.equal(await saveStatusText(page), null);
+  assert.deepEqual(
+    (await calls(page)).filter((call) => call[0] === "show"),
+    [],
+  );
+  done();
+});
+
+test("FileContent_FileViewInDiffMode_EnablesEditableSource", async (t) => {
+  const { page, done } = await open(t, {
+    selectedFile: "src/app.ts",
+    fileContent: UNFORMATTED,
+    onlyDiff: true,
+    diffFileView: true,
+    diffScope: "staged",
+    diff: FILE_VIEW_DIFF,
+    editable: CLEAN,
+  });
+  await page.locator(STATUS_BAR).waitFor();
+  assert.deepEqual(
+    (await calls(page)).filter((call) => call[0] === "show"),
+    [["show", "src/app.ts"]],
+  );
+  assert.equal(await saveStatusText(page), "Saved");
+  assert.deepEqual(await menuTexts(await openMoreMenu(page)), [
+    "Reload file",
+    "Format",
+    "Word wrap",
+    "Save",
+  ]);
+  await closeMenu(page);
+  const viewChanges = page.getByRole("button", { name: "View changes", exact: true });
+  assert.deepEqual(await headerButtonNames(viewChanges), ["More", "View changes"]);
+  await setDocument(page, { status: "dirty", saveStatus: "unsaved", unsaved: true });
+  await chooseMoreItem(page, "Save");
+  await viewChanges.click();
+  assert.deepEqual(
+    (await calls(page)).filter((call) => call[0] === "save" || call[0] === "onDiffFileViewChange"),
+    [["save"], ["onDiffFileViewChange", false]],
   );
   done();
 });

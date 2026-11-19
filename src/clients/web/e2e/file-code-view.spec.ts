@@ -2,6 +2,14 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { mockChatApi, projectId } from "./chat-api";
 import { DIFF_MODIFIED, DIFF_ORIGINAL, mockFilesApi, SOURCE_TEXT } from "./files-api";
+import {
+  fetchFromStandaloneHost,
+  fileProjectTest,
+  GUIDE_FILE,
+  NOTES_FILE,
+  STAGED_FILE,
+  WORKING_FILE,
+} from "./standalone-file-project";
 
 const SOURCE = '[data-code-view="source"]';
 const DIFF = '[data-code-view="diff"]';
@@ -50,6 +58,15 @@ function editorText(editor: Locator) {
   );
 }
 
+async function expectReadOnlySource(page: Page, source: Locator, text: string) {
+  await source.locator(".view-lines").click();
+  await expect
+    .poll(() => source.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(true);
+  await page.keyboard.type("typed");
+  expect(await editorText(source)).toBe(text);
+}
+
 /** 鼠标移到行号上，点击行号旁出现的 "Add comment"。Hovers a line number and clicks the "Add comment" beside it. */
 async function addCommentOn(editor: Locator, line: number) {
   await editor.locator(".line-numbers", { hasText: new RegExp(`^${line}$`, "u") }).hover();
@@ -76,9 +93,7 @@ test("Source loads Monaco on demand and shows the file read-only with highlighti
     .poll(() => source.locator('.view-line span[class*="mtk"]:not(.mtk1)').count())
     .toBeGreaterThan(0);
 
-  await source.locator(".view-lines").click();
-  await page.keyboard.type("typed");
-  expect(await editorText(source)).toBe(SOURCE_TEXT);
+  await expectReadOnlySource(page, source, SOURCE_TEXT);
   expect(messages.filter((message) => message.includes(WORKER_FALLBACK))).toEqual([]);
 
   // 状态栏与 Desktop 相同，只读时没有编码，换行为文字。The status bar matches Desktop; read-only has no encoding and shows
@@ -120,7 +135,7 @@ test("Source comments are added beside line numbers and keep keys away from Mona
   await expect(zone.getByText("Check the greeting")).toBeVisible();
 });
 
-test("Only diff shows both sides in Monaco's diff editor with its worker", async ({ page }) => {
+test("ChatFilePane_DiffMode_RendersBothSidesWithMonacoWorker", async ({ page }) => {
   const messages = consoleMessages(page);
   const workers: string[] = [];
   page.on("worker", (worker) => workers.push(worker.url()));
@@ -147,6 +162,168 @@ test("Only diff shows both sides in Monaco's diff editor with its worker", async
   await expect(page.locator('[data-comment-line="4"]').getByText("New constant")).toBeVisible();
   expect(messages.filter((message) => message.includes(WORKER_FALLBACK))).toEqual([]);
 });
+
+async function openProjectDiff(page: Page, id: string) {
+  await page.goto(`/chat/?projectId=${id}`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "Files" }).click();
+  await page.getByRole("switch", { name: "Diff" }).click();
+}
+
+function changedFile(page: Page, group: "Staged" | "Unstaged", name: string) {
+  return page
+    .getByRole("button", { name: new RegExp(`^${group} `) })
+    .locator("..")
+    .getByText(name, { exact: true });
+}
+
+function observeFileReads(page: Page) {
+  const reads: URL[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/files/read" || url.pathname === "/api/files/diff") reads.push(url);
+  });
+  return reads;
+}
+
+function viewFile(page: Page) {
+  return page.getByRole("button", { name: "View file", exact: true }).click();
+}
+
+function viewChanges(page: Page) {
+  return page.getByRole("button", { name: "View changes", exact: true }).click();
+}
+
+function expectModifiedText(page: Page, text: string) {
+  return expect.poll(() => editorText(page.locator(DIFF).locator(".editor.modified"))).toBe(text);
+}
+
+fileProjectTest(
+  "ChatFilePane_DiffMode_ShowsWorkingFileAndReadsEachScopeOnce",
+  async ({ page, fileProject }) => {
+    const reads = observeFileReads(page);
+    await openProjectDiff(page, fileProject.id);
+    const staged = changedFile(page, "Staged", "calc.ts");
+    const unstaged = changedFile(page, "Unstaged", "calc.ts");
+    await staged.click();
+    await expectModifiedText(page, STAGED_FILE);
+    expect(reads.map((url) => url.searchParams.get("scope"))).toEqual(["staged"]);
+
+    await viewFile(page);
+    const source = page.locator(SOURCE);
+    await expect.poll(() => editorText(source)).toBe(WORKING_FILE);
+    await expectReadOnlySource(page, source, WORKING_FILE);
+    await expect(page.locator(DIFF)).toHaveCount(0);
+    await staged.click();
+    await expect(page.getByRole("button", { name: "View changes" })).toBeVisible();
+
+    await unstaged.click();
+    await expectModifiedText(page, WORKING_FILE);
+    await viewFile(page);
+    await expect.poll(() => editorText(source)).toBe(WORKING_FILE);
+    await page.getByRole("button", { name: "Stage file calc.ts", exact: true }).click();
+    await expect(unstaged).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "View changes" })).toBeVisible();
+
+    await viewChanges(page);
+    await expect(page.locator('[data-diff-side="modified"]')).toHaveText("Staged");
+    await expectModifiedText(page, WORKING_FILE);
+    await expect(source).toHaveCount(0);
+    expect(reads.map((url) => [url.pathname, url.searchParams.get("scope")])).toEqual([
+      ["/api/files/diff", "staged"],
+      ["/api/files/read", null],
+      ["/api/files/diff", "unstaged"],
+      ["/api/files/read", null],
+      ["/api/files/read", null],
+      ["/api/files/diff", "staged"],
+    ]);
+  },
+);
+
+fileProjectTest(
+  "ChatFilePane_SelectionChangesInDiffMode_LoadsTheSelectedFile",
+  async ({ page, fileProject }) => {
+    const reads = observeFileReads(page);
+    await openProjectDiff(page, fileProject.id);
+    await changedFile(page, "Unstaged", "calc.ts").click();
+    await expectModifiedText(page, WORKING_FILE);
+    await viewFile(page);
+    await expect(page.locator(SOURCE)).toBeVisible();
+    await changedFile(page, "Unstaged", "guide.ts").click();
+    await expectModifiedText(page, GUIDE_FILE);
+
+    const diffSwitch = page.getByRole("switch", { name: "Diff" });
+    await viewFile(page);
+    await expect(page.locator(SOURCE)).toBeVisible();
+    await diffSwitch.click();
+    await expect(page.getByRole("button", { name: "View changes" })).toHaveCount(0);
+    await diffSwitch.click();
+    await expectModifiedText(page, GUIDE_FILE);
+
+    await viewFile(page);
+    await expect(page.locator(SOURCE)).toBeVisible();
+    await page.getByRole("combobox", { name: "Project directory" }).click();
+    await page.getByRole("option", { name: /^extra /u }).click();
+    await expect(page.getByText("Select a file to view its contents")).toBeVisible();
+    await changedFile(page, "Unstaged", "notes.ts").click();
+    await expectModifiedText(page, NOTES_FILE);
+    expect(
+      reads
+        .filter((url) => url.searchParams.get("directoryId") === fileProject.extraDirectoryId)
+        .map((url) => url.searchParams.get("path")),
+    ).toEqual(["notes.ts"]);
+  },
+);
+
+fileProjectTest(
+  "ChatFilePane_DelayedSourceError_KeepsTheLatestDiff",
+  async ({ page, fileProject }) => {
+    await openProjectDiff(page, fileProject.id);
+    await changedFile(page, "Unstaged", "deleted.ts").click();
+    const diff = page.locator(DIFF).locator(".monaco-diff-editor");
+    await expect(diff).toBeVisible();
+
+    const readHeld = Promise.withResolvers<void>();
+    const releaseRead = Promise.withResolvers<void>();
+    const isSourceRead = (url: URL) => url.pathname === "/api/files/read";
+    await page.route(
+      isSourceRead,
+      async (route) => {
+        const response = await fetchFromStandaloneHost(route, fileProject.origin);
+        readHeld.resolve();
+        await releaseRead.promise;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+
+    try {
+      await viewFile(page);
+      await readHeld.promise;
+      await viewChanges(page);
+      await expect(diff).toBeVisible();
+      const readFinished = page.waitForEvent("requestfinished", (request) =>
+        isSourceRead(new URL(request.url())),
+      );
+      releaseRead.resolve();
+      await readFinished;
+    } finally {
+      releaseRead.resolve();
+    }
+    await page.evaluate(
+      () =>
+        new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done())),
+        ),
+    );
+    await expect(diff).toBeVisible();
+    await expect(page.getByText(/^Error loading file:/u)).toHaveCount(0);
+
+    await viewFile(page);
+    await expect(page.getByText(/^Error loading file:/u)).toBeVisible();
+    await viewChanges(page);
+    await expect(diff).toBeVisible();
+  },
+);
 
 test("the editor follows the dark mode", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });

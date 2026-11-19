@@ -1,6 +1,7 @@
 export { default as Explorer } from "./explorer";
 export {
   default as FileContent,
+  shouldShowFileDiff,
   type FileViewerOption,
   type FileViewerSaveStatus,
 } from "./file-content";

@@ -10,7 +10,7 @@ It is designed to be reusable across pages, but it is still intentionally aligne
 
 ```ts
 export { default as Explorer } from "./explorer";
-export { default as FileContent, type FileViewerOption } from "./file-content";
+export { default as FileContent, shouldShowFileDiff, type FileViewerOption } from "./file-content";
 export { fileViewerFileType } from "./file-viewer-file-type";
 export { FileViewerMenuEntries, type FileViewerMenuEntry } from "./file-viewer-menu";
 export type { CommentSide, LineComment } from "./types";
@@ -58,7 +58,9 @@ Right-panel viewer for the currently selected file. It handles:
 - Source: the file in a Monaco editor with a status bar (`@agw/code-view`, loaded on first display); read-only in
   Web, and editable in Desktop through `editableSource`
 - the title row's "More" menu, which also offers Source's Reload file, Format, Word wrap and Save
-- Only diff: both full texts in Monaco's side-by-side diff editor, plus unchanged, binary and metadata-only views
+- Diff mode shows both full texts in Monaco's side-by-side diff editor, with views for unchanged, binary and metadata-only files.
+- In Diff mode, the title row's rightmost button (`onDiffFileViewChange`) switches between the diff and the file.
+  When `diffFileView` is true, the file uses the same viewers and Source as when Diff mode is off.
 - line comments beside line numbers, shown in zones below their lines; in editable Source they follow the edits
 
 `FileContent` does not fetch by itself. The parent provides the selected file, raw content (Web), diff payload
@@ -256,7 +258,7 @@ export function ExampleFileExplorer({
   the save shortcut
 - `source-document.ts`: `EditableSource` and `SourceDocumentState`, the editable document Desktop provides
 - `source-encoding-menu.tsx`, `source-document-error.tsx`: the status bar's encoding menu and the failed-read panel
-- `git-diff-view.tsx`: the Only diff views; changed files use `CodeDiffViewer`
+- `git-diff-view.tsx` displays the diff in Diff mode using `CodeDiffViewer` for changed text files.
 - `use-line-comment-zones.tsx`: line comments as `@agw/code-view` line zones and the "Add comment" action
 - `line-comments.ts`: matching, grouping, creating and remapping line comments
 - `comment-section.tsx`: create, edit, and delete comments

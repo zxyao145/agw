@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import { basename, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -2825,11 +2825,20 @@ function viewerTab(id: string): string {
 }
 
 /**
- * Source（Monaco）显示的文字：只有可见的行在 DOM 中，按行的位置排列，Monaco 的不换行空格还原为空格。
- * The text Source (Monaco) shows: only visible lines are in the DOM, ordered by position, with Monaco's no-break spaces
- * turned back into spaces.
+ * 读取 Monaco 中可见行的文字，按位置排列，并将不换行空格还原为空格。
+ * Reads Monaco's visible lines in position order and converts non-breaking spaces to regular spaces.
  */
-const SOURCE_TEXT = `[...document.querySelectorAll('.agw-main-workspace [data-code-view="source"] .view-line')].map((line) => [parseFloat(line.style.top), line.textContent.replace(/\\u00a0/g, " ")]).sort((left, right) => left[0] - right[0]).map((entry) => entry[1]).join("\\n")`;
+function visibleMonacoText(editor: string): string {
+  return `[...document.querySelectorAll(${JSON.stringify(`${editor} .view-line`)})]
+    .map((line) => [parseFloat(line.style.top), line.textContent.replace(/\\u00a0/g, " ")])
+    .sort((left, right) => left[0] - right[0])
+    .map((entry) => entry[1])
+    .join("\\n")`;
+}
+
+const FILE_DIFF = '.agw-main-workspace [data-code-view="diff"]';
+const SOURCE_TEXT = visibleMonacoText('.agw-main-workspace [data-code-view="source"]');
+const MODIFIED_DIFF_TEXT = visibleMonacoText(`${FILE_DIFF} .editor.modified`);
 
 function sourceIncludes(text: string): string {
   return `(${SOURCE_TEXT}).includes(${JSON.stringify(text)})`;
@@ -2869,20 +2878,19 @@ function hostCenter(element: string) {
 }
 
 /**
- * Only diff 使用 Monaco DiffEditor：worker 在 agw:// 页面中运行，工作区的改动显示为插入的行，修改侧的行评论进入输入框的
- * 待发送评论。测试项目临时成为 git 仓库，结束时恢复。
- * Only diff uses Monaco's DiffEditor: its worker runs on the agw:// page, a working-tree change shows as an inserted
- * line, and a modified-side line comment becomes a pending comment in the composer. The test project is a git
- * repository only for this step.
+ * 使用临时 Git 仓库验证 agw:// 页面中的 Monaco worker、diff 插入行与修改侧的待发送评论。
+ * Tests the agw:// Monaco worker, diff insertions and pending modified-side comments in a temporary Git repository.
  */
 async function monacoDiffAndComments(): Promise<void> {
   const project = config.projectDirectory;
   const git = (...args: string[]) =>
     execFileSync("git", ["-c", "core.autocrlf=false", ...args], { cwd: project, stdio: "pipe" });
   const readmePath = join(project, "readme.md");
+  const logoPath = join(project, "images", "logo.png");
   const readme = await readFile(readmePath, "utf8");
+  const logo = await readFile(logoPath);
   git("init", "--quiet");
-  git("add", "readme.md");
+  git("add", "readme.md", "images/logo.png");
   git(
     "-c",
     "user.name=Agw Tests",
@@ -2895,16 +2903,16 @@ async function monacoDiffAndComments(): Promise<void> {
     "-m",
     "fixture",
   );
-  await writeFile(readmePath, `${readme}changed line\n`);
   try {
+    await writeFile(readmePath, `${readme}changed line\n`);
+    await copyFile(resolve("assets", "tray-icon.png"), logoPath);
     await clickFileInTree("readme.md");
     await clickHost("#diff-mode");
     // 等变更树加载完成，再点击 Unstaged 中的文件。Wait for the change tree, then click the file under Unstaged.
     await untilHost(`Boolean(${treeItem("Unstaged")})`, "the Unstaged group");
     await clickFileInTree("readme.md");
-    const diff = '.agw-main-workspace [data-code-view="diff"]';
     await untilHost(
-      `Boolean(document.querySelector('${diff} .line-insert'))`,
+      `Boolean(document.querySelector('${FILE_DIFF} .line-insert'))`,
       "the inserted line in the diff",
     );
     assert.equal(
@@ -2913,10 +2921,10 @@ async function monacoDiffAndComments(): Promise<void> {
     );
 
     // 鼠标移到修改侧第 2 行的行号上，按下行号旁的 "Add comment"。Hover modified line 2 and press its "Add comment".
-    const lineNumber = `[...document.querySelectorAll('${diff} .editor.modified .line-numbers')].find((element) => element.textContent === "2")`;
+    const lineNumber = `[...document.querySelectorAll('${FILE_DIFF} .editor.modified .line-numbers')].find((element) => element.textContent === "2")`;
     host().sendInputEvent({ type: "mouseMove", ...(await hostCenter(lineNumber)) });
     const button = await hostCenter(
-      `document.querySelector('${diff} .editor.modified [aria-label="Add comment, line 2"]:not(.is-hidden)')`,
+      `document.querySelector('${FILE_DIFF} .editor.modified [aria-label="Add comment, line 2"]:not(.is-hidden)')`,
     );
     host().sendInputEvent({ type: "mouseMove", ...button });
     host().sendInputEvent({ type: "mouseDown", ...button, button: "left", clickCount: 1 });
@@ -2948,18 +2956,90 @@ async function monacoDiffAndComments(): Promise<void> {
       "the cleared code comment",
     );
     await clickFileInTree("readme.md");
+    await diffModeFileView(readmePath, readme);
     await clickHost("#diff-mode");
     await untilHost(
       `document.querySelector("#diff-mode")?.getAttribute("aria-checked") === "false"`,
       "Diff mode off",
     );
     pass(
-      "Only diff shows a working-tree change in Monaco's diff editor with its worker, and a modified-side comment becomes a pending code comment",
+      "Diff mode shows a working-tree change in Monaco's diff editor with its worker, and a modified-side comment becomes a pending code comment",
     );
   } finally {
     await writeFile(readmePath, readme);
+    await writeFile(logoPath, logo);
     await rm(join(project, ".git"), { recursive: true, force: true });
   }
+}
+
+const VIEW_FILE_BUTTON = '.agw-main-workspace button[aria-label="View file"]';
+const VIEW_UNSAVED_FILE_BUTTON =
+  '.agw-main-workspace button[aria-label="View file, unsaved changes"]';
+const VIEW_CHANGES_BUTTON = '.agw-main-workspace button[aria-label="View changes"]';
+
+async function diffModeFileView(readmePath: string, readme: string): Promise<void> {
+  await clickHost(VIEW_FILE_BUTTON);
+  await untilHost(selectedViewerIs(MIXED_VIEWER), "the Mixed viewer in Diff mode");
+  assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [
+    MIXED_VIEWER,
+    MARKDOWN_VIEWER,
+    "source",
+  ]);
+  await untilHost(
+    `Boolean(document.querySelector('${VIEW_CHANGES_BUTTON}'))`,
+    "the View changes button",
+  );
+  await diffModeSourceEdits(readmePath, readme);
+
+  await clickFileInTree("images/logo.png");
+  await untilHost(
+    `document.querySelector('.agw-main-workspace')?.textContent.includes("Binary file; its contents are not shown.")`,
+    "the binary diff",
+  );
+  await clickHost(VIEW_FILE_BUTTON);
+  await untilHost(selectedViewerIs(IMAGE_VIEWER), "the Image viewer in Diff mode");
+  assert.deepEqual(await evalHost<string[]>(FILE_VIEWER_TABS), [IMAGE_VIEWER, "source"]);
+  pass(
+    "Diff mode switches to the file view: readme.md opens in Mixed, Source edits survive returning to the diff " +
+      "and a save shows in it, and a changed image opens in the Image viewer",
+  );
+}
+
+async function diffModeSourceEdits(readmePath: string, readme: string): Promise<void> {
+  await selectViewer("source");
+  await untilHost(sourceIncludes("changed line"), "the file text in Source");
+  await focusSourceEditor();
+  moveSourceCursor("end");
+  await typeInSource("file view edit");
+  await untilHost(SOURCE_UNSAVED, "the unsaved Source edit");
+
+  await clickHost(VIEW_CHANGES_BUTTON);
+  await untilHost(
+    `(${MODIFIED_DIFF_TEXT}).includes("changed line")`,
+    "the diff after leaving Source",
+  );
+  await untilHost(
+    `Boolean(document.querySelector('${VIEW_UNSAVED_FILE_BUTTON}'))`,
+    "the unsaved mark on View file",
+  );
+  assert.equal((await evalHost<string>(MODIFIED_DIFF_TEXT)).includes("file view edit"), false);
+
+  await clickHost(VIEW_UNSAVED_FILE_BUTTON);
+  await untilHost(selectedViewerIs("source"), "Source after returning from the diff");
+  await untilHost(sourceIncludes("file view edit"), "the preserved Source edit");
+  await focusSourceEditor();
+  saveInSource();
+  await untilFileText(
+    readmePath,
+    `${readme}changed line\nfile view edit`,
+    "the saved file view edit",
+  );
+  await untilHost(saveStatusIs("saved"), "the saved Source status");
+  await clickHost(VIEW_CHANGES_BUTTON);
+  await untilHost(
+    `(${MODIFIED_DIFF_TEXT}).includes("file view edit")`,
+    "the saved line in the diff",
+  );
 }
 
 const MARKDOWN_VIEWER = `${EXTENSION_IDS.markdown}:preview`;

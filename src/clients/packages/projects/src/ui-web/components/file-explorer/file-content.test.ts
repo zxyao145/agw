@@ -4,10 +4,8 @@ import { setupDomEnvironment } from "@agw/test-harness";
 
 import type { FileViewerOption } from "./file-content.tsx";
 
-// 这里只测试选中 extension 查看器时的行为：Source 使用 Monaco，jsdom 不能运行，渲染 Source 的用例在
-// browser-tests/file-content.test.ts 中。
-// Only behavior with an extension viewer selected is tested here: Source uses Monaco, which jsdom cannot run, so the
-// cases that render Source are in browser-tests/file-content.test.ts.
+// jsdom 覆盖 extension 查看器、二进制 diff 和读取错误。Chromium 覆盖使用 Monaco 的场景。
+// jsdom covers extension viewers, binary diffs, and read errors. Chromium covers the cases that use Monaco.
 const { React, act, fireEvent, render, screen, within } = await setupDomEnvironment();
 const { default: FileContent } = await import("./file-content.tsx");
 
@@ -30,16 +28,19 @@ const VIEWERS: FileViewerOption[] = [
   },
 ];
 
-function element(
-  selectedFile: string,
-  fileViewers?: readonly FileViewerOption[],
-  onReloadFileViewer?: (viewerId: string) => void,
-  onReloadFileViewerDocument?: (viewerId: string) => void,
-) {
+const BINARY_DIFF = {
+  diff: "Binary files a/logo.png and b/logo.png differ\n",
+  unchanged: false,
+  isBinary: true,
+  originalContent: null,
+  modifiedContent: null,
+};
+
+function element(props: Partial<Parameters<typeof FileContent>[0]> = {}) {
   return React.createElement(FileContent, {
     projectId: "project-1",
     directoryId: "workspace",
-    selectedFile,
+    selectedFile: "README.md",
     isLoadingContent: false,
     contentError: null,
     onlyDiff: false,
@@ -47,13 +48,16 @@ function element(
     comments: [],
     setComments() {},
     fileContent: "# Title",
-    fileViewers,
+    fileViewers: VIEWERS,
     renderFileViewer: (viewerId: string) =>
       React.createElement("div", { "data-testid": "viewer" }, `viewer ${viewerId}`),
-    onReloadFileViewer,
-    onReloadFileViewerDocument,
+    ...props,
   });
 }
+
+/** 标题行中的按钮名称。The names of the buttons in the title row. */
+const buttonNames = () =>
+  screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"));
 
 /** 文件名后显示的保存状态。The save status shown after the file name. */
 function saveStatus(): { status: string | null; text: string } | null {
@@ -78,7 +82,7 @@ async function selectTab(id: string) {
 }
 
 test("FileContent_WithViewers_SelectsFirstViewerAndListsSource", async () => {
-  render(element("README.md", VIEWERS));
+  render(element());
 
   assert.deepEqual(tabs(), [
     { id: "markdown-preview:preview", selected: true, text: "Preview" },
@@ -88,6 +92,78 @@ test("FileContent_WithViewers_SelectsFirstViewerAndListsSource", async () => {
   assert.equal(screen.getByLabelText("Unsaved changes").textContent, "●");
   assert.equal(screen.getByTestId("viewer").textContent, "viewer markdown-preview:preview");
   assert.equal(screen.queryByText("# Title"), null);
+});
+
+test("FileContent_FileViewInDiffMode_ShowsViewerTabsAndActions", async () => {
+  const calls: boolean[] = [];
+  render(
+    element({
+      onlyDiff: true,
+      diffFileView: true,
+      onDiffFileViewChange: (value) => calls.push(value),
+      onReloadFileViewer() {},
+      onSetDefaultFileViewer() {},
+    }),
+  );
+
+  assert.deepEqual(tabs(), [
+    { id: "markdown-preview:preview", selected: true, text: "Preview" },
+    { id: "other:outline", selected: false, text: "●Outline" },
+    { id: "source", selected: false, text: "Source" },
+  ]);
+  assert.equal(screen.getByTestId("viewer").textContent, "viewer markdown-preview:preview");
+  assert.deepEqual(menuTexts(await openMoreMenu()), [
+    "Reload view",
+    "Open with Preview by default for *.md",
+  ]);
+  await act(async () => fireEvent.keyDown(document, { key: "Escape" }));
+  await menuClosed();
+  assert.deepEqual(buttonNames(), ["More", "View changes"]);
+  const toggle = screen.getByRole("button", { name: "View changes" });
+  assert.equal(toggle.getAttribute("title"), "View changes");
+  await act(async () => fireEvent.click(toggle));
+  assert.deepEqual(calls, [false]);
+});
+
+test("FileContent_DiffModeOff_HasNoViewToggle", () => {
+  render(element({ onDiffFileViewChange() {} }));
+
+  assert.equal(screen.queryByRole("button", { name: "View file" }), null);
+  assert.equal(screen.queryByRole("button", { name: "View changes" }), null);
+});
+
+test("FileContent_DiffModeWithUnsavedViewer_MarksViewFile", async () => {
+  const calls: boolean[] = [];
+  render(
+    element({
+      onlyDiff: true,
+      diffContentData: BINARY_DIFF,
+      onDiffFileViewChange: (value) => calls.push(value),
+    }),
+  );
+
+  assert.deepEqual(screen.queryAllByRole("tab"), []);
+  assert.ok(screen.getByText("Binary file; its contents are not shown."));
+  assert.deepEqual(buttonNames(), ["View file, unsaved changes"]);
+  const toggle = screen.getByRole("button", { name: "View file, unsaved changes" });
+  assert.equal(toggle.getAttribute("title"), "View file, unsaved changes");
+  await act(async () => fireEvent.click(toggle));
+  assert.deepEqual(calls, [true]);
+});
+
+test("FileContent_FileViewReadErrorInDiffMode_KeepsViewChangesToggle", () => {
+  render(
+    element({
+      onlyDiff: true,
+      diffFileView: true,
+      fileViewers: [],
+      contentError: "File not found",
+      onDiffFileViewChange() {},
+    }),
+  );
+
+  assert.ok(screen.getByText("Error loading file: File not found"));
+  assert.deepEqual(buttonNames(), ["More", "View changes"]);
 });
 
 /** Radix 关闭菜单后的清理在下一个宏任务中完成。Radix finishes closing a menu in the next macrotask. */
@@ -106,7 +182,7 @@ async function chooseMoreItem(text: string) {
 
 test("FileContent_ReloadView_ReloadsSelectedViewer", async () => {
   const reloads: string[] = [];
-  render(element("README.md", VIEWERS, (viewerId) => reloads.push(viewerId)));
+  render(element({ onReloadFileViewer: (viewerId) => reloads.push(viewerId) }));
 
   await chooseMoreItem("Reload view");
   await selectTab("other:outline");
@@ -117,7 +193,7 @@ test("FileContent_ReloadView_ReloadsSelectedViewer", async () => {
 
 test("FileContent_ChangedOnDiskReload_AsksSelectedViewerToReadFileAgain", async () => {
   const reloads: string[] = [];
-  render(element("README.md", VIEWERS, undefined, (viewerId) => reloads.push(viewerId)));
+  render(element({ onReloadFileViewerDocument: (viewerId) => reloads.push(viewerId) }));
   await selectTab("other:outline");
 
   await act(async () => {
@@ -128,7 +204,7 @@ test("FileContent_ChangedOnDiskReload_AsksSelectedViewerToReadFileAgain", async 
 });
 
 test("FileContent_WithoutReloadDocumentHandler_ShowsChangedOnDiskWithoutReload", async () => {
-  render(element("README.md", VIEWERS));
+  render(element());
   await selectTab("other:outline");
 
   assert.deepEqual(saveStatus(), { status: "changed-on-disk", text: "Changed on disk" });
@@ -136,39 +212,15 @@ test("FileContent_WithoutReloadDocumentHandler_ShowsChangedOnDiskWithoutReload",
 });
 
 test("FileContent_FileChanges_ReturnsToDefaultViewer", async () => {
-  const view = render(element("README.md", VIEWERS));
+  const view = render(element());
   await selectTab("other:outline");
   assert.equal(screen.getByTestId("viewer").textContent, "viewer other:outline");
 
-  view.rerender(element("docs/notes.md", VIEWERS));
+  view.rerender(element({ selectedFile: "docs/notes.md" }));
 
   assert.equal(tabs().find((tab) => tab.selected)?.id, "markdown-preview:preview");
   assert.equal(screen.getByTestId("viewer").textContent, "viewer markdown-preview:preview");
 });
-
-function elementWithDefaults(
-  selectedFile: string,
-  defaultFileViewerId: string | null | undefined,
-  onSetDefaultFileViewer?: (viewerId: string | null) => void,
-) {
-  return React.createElement(FileContent, {
-    projectId: "project-1",
-    directoryId: "workspace",
-    selectedFile,
-    isLoadingContent: false,
-    contentError: null,
-    onlyDiff: false,
-    diffContentData: null,
-    comments: [],
-    setComments() {},
-    fileContent: "# Title",
-    fileViewers: VIEWERS,
-    renderFileViewer: (viewerId: string) =>
-      React.createElement("div", { "data-testid": "viewer" }, `viewer ${viewerId}`),
-    defaultFileViewerId,
-    onSetDefaultFileViewer,
-  });
-}
 
 async function openMoreMenu() {
   const trigger = screen.getByRole("button", { name: "More" });
@@ -187,21 +239,26 @@ function menuTexts(menu: HTMLElement): string[] {
 }
 
 test("FileContent_DefaultViewerIdMatchesViewer_SelectsItInitially", () => {
-  render(elementWithDefaults("README.md", "other:outline"));
+  render(element({ defaultFileViewerId: "other:outline" }));
 
   assert.equal(tabs().find((tab) => tab.selected)?.id, "other:outline");
   assert.equal(screen.getByTestId("viewer").textContent, "viewer other:outline");
 });
 
 test("FileContent_DefaultViewerIdMatchesNothing_KeepsFirstViewer", () => {
-  render(elementWithDefaults("README.md", "gone:viewer"));
+  render(element({ defaultFileViewerId: "gone:viewer" }));
 
   assert.equal(tabs().find((tab) => tab.selected)?.id, "markdown-preview:preview");
 });
 
 test("FileContent_MoreMenu_SetsSelectedViewerAsDefaultForFileType", async () => {
   const calls: (string | null)[] = [];
-  render(elementWithDefaults("docs/README.MD", null, (viewerId) => calls.push(viewerId)));
+  render(
+    element({
+      selectedFile: "docs/README.MD",
+      onSetDefaultFileViewer: (viewerId) => calls.push(viewerId),
+    }),
+  );
 
   await selectTab("other:outline");
   const menu = await openMoreMenu();
@@ -216,9 +273,10 @@ test("FileContent_MoreMenu_SetsSelectedViewerAsDefaultForFileType", async () => 
 test("FileContent_MoreMenu_WithDefaultOffersReset", async () => {
   const calls: (string | null)[] = [];
   render(
-    elementWithDefaults("README.md", "markdown-preview:preview", (viewerId) =>
-      calls.push(viewerId),
-    ),
+    element({
+      defaultFileViewerId: "markdown-preview:preview",
+      onSetDefaultFileViewer: (viewerId) => calls.push(viewerId),
+    }),
   );
 
   const menu = await openMoreMenu();
@@ -236,14 +294,14 @@ test("FileContent_MoreMenu_WithDefaultOffersReset", async () => {
 test("FileContent_ResetDefaultWhileDefaultViewerShown_KeepsThatViewerSelected", async () => {
   const calls: (string | null)[] = [];
   const onSetDefaultFileViewer = (viewerId: string | null) => calls.push(viewerId);
-  const view = render(elementWithDefaults("README.md", "other:outline", onSetDefaultFileViewer));
+  const view = render(element({ defaultFileViewerId: "other:outline", onSetDefaultFileViewer }));
   assert.equal(tabs().find((tab) => tab.selected)?.id, "other:outline");
 
   const menu = await openMoreMenu();
   await act(async () => {
     fireEvent.click(within(menu).getByText("Reset default for *.md"));
   });
-  view.rerender(elementWithDefaults("README.md", null, onSetDefaultFileViewer));
+  view.rerender(element({ defaultFileViewerId: null, onSetDefaultFileViewer }));
 
   assert.deepEqual(calls, [null]);
   assert.equal(tabs().find((tab) => tab.selected)?.id, "other:outline");
@@ -251,7 +309,7 @@ test("FileContent_ResetDefaultWhileDefaultViewerShown_KeepsThatViewerSelected", 
 });
 
 test("FileContent_WithoutOnSetDefaultFileViewer_HasNoMoreMenu", () => {
-  render(elementWithDefaults("README.md", "markdown-preview:preview"));
+  render(element({ defaultFileViewerId: "markdown-preview:preview" }));
 
   assert.equal(screen.queryByRole("button", { name: "More" }), null);
 });
@@ -278,36 +336,15 @@ const VIEWERS_WITH_ITEMS: FileViewerOption[] = [
   VIEWERS[1],
 ];
 
-function elementWithItems(
-  onSelectFileViewerItem: (viewerId: string, itemId: string, entryId: string | null) => void,
-  onSetDefaultFileViewer?: (viewerId: string | null) => void,
-) {
-  return React.createElement(FileContent, {
-    projectId: "project-1",
-    directoryId: "workspace",
-    selectedFile: "README.md",
-    isLoadingContent: false,
-    contentError: null,
-    onlyDiff: false,
-    diffContentData: null,
-    comments: [],
-    setComments() {},
-    fileContent: "# Title",
-    fileViewers: VIEWERS_WITH_ITEMS,
-    renderFileViewer: (viewerId: string) =>
-      React.createElement("div", { "data-testid": "viewer" }, `viewer ${viewerId}`),
-    onSelectFileViewerItem,
-    onSetDefaultFileViewer,
-  });
-}
-
 test("FileContent_MoreMenu_ListsSelectedViewerItemsAfterDefaultEntries", async () => {
   const chosen: [string, string, string | null][] = [];
   render(
-    elementWithItems(
-      (viewerId, itemId, entryId) => chosen.push([viewerId, itemId, entryId]),
-      () => undefined,
-    ),
+    element({
+      fileViewers: VIEWERS_WITH_ITEMS,
+      onSelectFileViewerItem: (viewerId, itemId, entryId) =>
+        chosen.push([viewerId, itemId, entryId]),
+      onSetDefaultFileViewer: () => undefined,
+    }),
   );
 
   const menu = await openMoreMenu();
@@ -334,7 +371,7 @@ test("FileContent_MoreMenu_ListsSelectedViewerItemsAfterDefaultEntries", async (
 });
 
 test("FileContent_MoreMenu_ViewerItemsWithoutDefaultHandler_ListsOnlyItems", async () => {
-  render(elementWithItems(() => undefined));
+  render(element({ fileViewers: VIEWERS_WITH_ITEMS, onSelectFileViewerItem: () => undefined }));
 
   const menu = await openMoreMenu();
   assert.deepEqual(menuTexts(menu), ["Export", "Indentation"]);

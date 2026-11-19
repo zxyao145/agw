@@ -10,7 +10,7 @@ import {
   ErrorBoundary,
   cn,
 } from "@agw/components";
-import { MoreHorizontal } from "lucide-react";
+import { Eye, FileDiff, MoreHorizontal } from "lucide-react";
 
 import { ProjectFileScopeContext, type ProjectFileScope } from "./project-file-scope";
 import type { GitDiffResponse, GitDiffScope } from "../../../services/files";
@@ -74,6 +74,16 @@ interface FileContentProps extends ProjectFileScope {
   isLoadingContent: boolean;
   contentError: string | null;
   onlyDiff: boolean;
+  /**
+   * Diff 模式下主区显示文件本身，与 Diff 开关关闭时相同。
+   * In Diff mode the main area shows the file itself, as with the Diff switch off.
+   */
+  diffFileView?: boolean;
+  /**
+   * 有值时 Diff 模式的标题行最右侧显示查看切换按钮。
+   * When set, Diff mode shows the view toggle at the far right of the title row.
+   */
+  onDiffFileViewChange?: (diffFileView: boolean) => void;
   diffContentData: GitDiffResponse | null;
   comments: LineComment[];
   setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
@@ -140,6 +150,8 @@ export default function FileContent({
   isLoadingContent,
   contentError,
   onlyDiff,
+  diffFileView = false,
+  onDiffFileViewChange,
   diffContentData,
   comments,
   setComments,
@@ -168,7 +180,8 @@ export default function FileContent({
     /** 选中 Source 之前的查看器。The viewer selected before Source. */
     previousViewerId: string | null;
   } | null>(null);
-  const viewers = onlyDiff || !renderFileViewer ? [] : fileViewers;
+  const showDiff = shouldShowFileDiff(onlyDiff, diffFileView);
+  const viewers = showDiff || !renderFileViewer ? [] : fileViewers;
   const currentChoice = choice?.file === selectedFile ? choice : null;
   const chosen = currentChoice?.viewerId ?? defaultFileViewerId ?? null;
   const activeViewerId =
@@ -202,8 +215,8 @@ export default function FileContent({
       : (viewers.find((viewer) => viewer.id === activeViewerId)?.title ?? activeViewerId);
   const activeViewer = viewers.find((viewer) => viewer.id === activeViewerId);
   const sourceSelected = activeViewerId === SOURCE_VIEWER_ID;
-  // Only diff 显示 diff，Source 的编辑与条目都不出现。Only diff shows the diff without Source's editing and items.
-  const sourceEditing = onlyDiff ? undefined : editableSource;
+  // 显示 diff 时隐藏 Source 的编辑与条目。Source editing and items are hidden while the diff is shown.
+  const sourceEditing = showDiff ? undefined : editableSource;
   const sourceDocument = sourceEditing?.document ?? null;
   const sourceShown =
     sourceDocument !== null &&
@@ -230,7 +243,7 @@ export default function FileContent({
   // Source 的条目（设计文档第 4 节）：Format 与 Save 只在编辑器显示可编辑文档时出现；Word wrap 在 Web 与 Desktop 都有。
   // Source's items (design section 4): Format and Save appear only while the editor shows an editable document; Word
   // wrap exists in both Web and Desktop.
-  const sourceEntries: FileViewerMenuEntry[] = onlyDiff
+  const sourceEntries: FileViewerMenuEntry[] = showDiff
     ? []
     : sourceEditing === undefined
       ? [{ id: SOURCE_ITEMS.wordWrap, label: "Word wrap", checked: wordWrap }]
@@ -253,7 +266,7 @@ export default function FileContent({
         ? undefined
         : () => sourceDocument.reload();
   const reload = sourceSelected
-    ? !onlyDiff && sourceReload && { label: "Reload file", run: sourceReload }
+    ? !showDiff && sourceReload && { label: "Reload file", run: sourceReload }
     : onReloadFileViewer && {
         label: "Reload view",
         run: () => onReloadFileViewer(activeViewerId),
@@ -312,6 +325,16 @@ export default function FileContent({
       : [],
     viewerItems(activeViewer?.bottomItems ?? []),
   ].filter((group) => group.length > 0);
+  const showViewToggle = onlyDiff && onDiffFileViewChange !== undefined;
+  const hasHeaderActions = viewers.length > 0 || moreMenuGroups.length > 0 || showViewToggle;
+  const hasUnsavedFileView =
+    showDiff &&
+    ((editableSource?.document?.unsaved ?? false) || fileViewers.some((viewer) => viewer.unsaved));
+  const viewToggleLabel = showDiff
+    ? hasUnsavedFileView
+      ? "View file, unsaved changes"
+      : "View file"
+    : "View changes";
 
   return (
     <div className="flex h-full min-w-0 w-full flex-col">
@@ -345,7 +368,7 @@ export default function FileContent({
                   ) : undefined
                 }
                 actions={
-                  viewers.length > 0 || moreMenuGroups.length > 0 ? (
+                  hasHeaderActions ? (
                     <>
                       {viewers.length > 0 ? (
                         <div
@@ -410,6 +433,29 @@ export default function FileContent({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : null}
+                      {showViewToggle ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="relative size-6"
+                          aria-label={viewToggleLabel}
+                          title={viewToggleLabel}
+                          onClick={() => onDiffFileViewChange(showDiff)}
+                        >
+                          {showDiff ? (
+                            <Eye className="size-3.5" />
+                          ) : (
+                            <FileDiff className="size-3.5" />
+                          )}
+                          {hasUnsavedFileView ? (
+                            <span
+                              aria-hidden="true"
+                              className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-foreground"
+                            />
+                          ) : null}
+                        </Button>
+                      ) : null}
                     </>
                   ) : undefined
                 }
@@ -429,10 +475,10 @@ export default function FileContent({
                     <FileError message={contentError} />
                   ) : (
                     <ErrorBoundary
-                      resetKeys={[selectedFile, onlyDiff, diffScope]}
+                      resetKeys={[selectedFile, showDiff, diffScope]}
                       fallback={CodeViewError}
                     >
-                      {onlyDiff && diffContentData ? (
+                      {showDiff && diffContentData ? (
                         <GitDiffView
                           diff={diffContentData}
                           filePath={selectedFile}
@@ -461,4 +507,8 @@ export default function FileContent({
       </ProjectFileScopeContext.Provider>
     </div>
   );
+}
+
+export function shouldShowFileDiff(onlyDiff: boolean, diffFileView: boolean): boolean {
+  return onlyDiff && !diffFileView;
 }

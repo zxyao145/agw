@@ -18,6 +18,7 @@ import { ExecutionReconnectingDialog } from "../../components/message/execution-
 import { QueryClient, QueryClientProvider, useQueryClient } from "@agw/components/query";
 import * as chatRuntime from "@agw/chat-runtime";
 import type { ExecutionHubHandlers, ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime";
+import { shouldShowFileDiff } from "@agw/projects";
 
 async function checkConversationSession(kind: string, strictMode = false) {
   const failHistory = kind === "restore-failure";
@@ -279,6 +280,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "next/navigation": { useRouter: () => router, useSearchParams: () => searchParams },
     sonner: { toast: { error: (error: unknown) => errors.push(error) } },
     "@agw/projects": {
+      shouldShowFileDiff,
       getProjectDirectories: () => [
         { id: null, name: "primary", path: "/primary", isPrimary: true },
         ...(hasAdditionalDirectory
