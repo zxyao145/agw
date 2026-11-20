@@ -168,7 +168,7 @@ git config core.hooksPath .githooks
 dotnet restore Agw.slnx
 dotnet tool restore
 
-cd src/clients
+cd src
 pnpm install
 ```
 
@@ -178,17 +178,17 @@ pnpm install
 dotnet watch --project src/server/Agw.Standalone.Host
 ```
 
-在另一个终端从 `src/clients` 启动 Web，然后打开 `http://localhost:3001`：
+在另一个终端从 `src` 启动 Web，然后打开 `http://localhost:3001`：
 
 ```bash
-cd src/clients
+cd src
 pnpm dev:web
 ```
 
 Web 会把 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按照顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30816`。
 
-- **Desktop：** 保持后端运行，在 `src/clients` 下执行 `pnpm dev:desktop`。Desktop renderer 使用 `http://localhost:3000`，不需要同时启动 Web 开发服务器。
-- **Mobile：** 在 `src/clients` 下执行 `pnpm dev:mobile`、`pnpm android:mobile` 或 `pnpm ios:mobile`。原生工程由 Expo CNG 生成，不需要手工维护。
+- 启动 **Desktop** 时，保持后端运行，在 `src` 目录执行 `pnpm dev:desktop`。Desktop renderer 独立运行，监听 `http://localhost:3000`。
+- **Mobile：** 在 `src` 下执行 `pnpm dev:mobile`、`pnpm android:mobile` 或 `pnpm ios:mobile`。原生工程由 Expo CNG 生成，不需要手工维护。
 - **分离的 Host：** 执行 `dotnet run --project src/server/Agw.ControlPlane.Host` 和 `dotnet run --project src/server/Agw.DataPlane.Host`（Data Plane 使用 `http://localhost:30817`），两者都需要 PostgreSQL 和 `Execution:Provider=Distributed`。
 
 提交改动前，运行主要校验命令：
@@ -199,20 +199,20 @@ dotnet build Agw.slnx
 dotnet test Agw.slnx
 dotnet csharpier check .
 
-# src/clients
+# src
 pnpm build
 pnpm lint
 pnpm test
 pnpm fmt:check
 ```
 
-修改后端 API 定义后，需要在 `src/clients` 下执行 `pnpm gen:api`，重新生成类型化客户端。修改项目引用、模块边界、持久化访问、实体或 Behavior 后，需要执行 `dotnet test tests/Agw.Architecture.Tests`。运行单个测试的命令、EF Core migration 命令、依赖 PostgreSQL 的测试和 package 级任务详见[开发指南](docs/1.Development.md)。
+修改后端 API 定义后，需要在 `src` 下执行 `pnpm gen:api`，重新生成类型化客户端。修改项目引用、模块边界、持久化访问、实体或 Behavior 后，需要执行 `dotnet test tests/Agw.Architecture.Tests`。运行单个测试的命令、EF Core migration 命令、依赖 PostgreSQL 的测试和 package 级任务详见[开发指南](docs/1.Development.md)。
 
 ### 调试
 
 - **后端：** 在 .NET 调试器中使用 launch profile 启动 `src/server/Agw.Standalone.Host`。它会设置 `ASPNETCORE_ENVIRONMENT=Development`，此时可以访问只在开发环境开放的 OpenAPI 和 Scalar 端点。Server 日志同时输出到控制台和 `AgwLogDir` 下按照 Host 角色区分的文件。
 - **Web：** 执行 `pnpm dev:web`，通过浏览器开发者工具调试客户端代码和网络请求，并在 Next.js 终端查看服务端输出。需要连接其他后端时，可以执行 `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`。
-- **Desktop：** 执行 `pnpm dev:desktop`。Electron main process 日志和构建输出显示在启动终端，preload 与 renderer 代码可以通过 Electron DevTools 检查。
+- 调试 **Desktop** 时，在 `src` 目录执行 `pnpm dev:desktop`。启动终端显示 Electron main process 日志和构建输出。通过 Electron DevTools 检查 preload 与 renderer 代码。
 - **单个测试：** 后端可以执行 `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"`；客户端可以在 `src/clients` 下执行 `pnpm exec turbo run test --filter=@agw/web`，并按需替换 package filter。
 
 ## 发布

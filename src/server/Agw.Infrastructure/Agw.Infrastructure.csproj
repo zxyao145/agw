@@ -25,7 +25,6 @@
     <PackageReference Include="CloudNative.CloudEvents.AspNetCore" />
     <PackageReference Include="JsonLogic" />
     <PackageReference Include="JsonPath.Net" />
-    <PackageReference Include="Meziantou.Framework.Http" />
     <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="DistributedLock.Postgres" />
     <PackageReference Include="EFCore.NamingConventions" />

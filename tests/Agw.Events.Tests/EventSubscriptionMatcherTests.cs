@@ -88,33 +88,47 @@ public sealed class EventSubscriptionMatcherTests
     }
 
     [Fact]
-    public void Match_PublisherKeys_IgnoresExternalSourceWithSameType()
+    public void Match_SourceIdsContainBuiltInAndJobTimer_MatchesBoth()
     {
-        var source = new EventSource
+        var builtIn = new EventSource
         {
             Id = Guid.CreateVersion7(),
             CreateBy = "owner",
             Kind = EventSourceKind.Publisher,
-            PublisherKey = "ext:other-extension",
+            ManagedBy = EventManagedBy.Agw,
+            Name = EventBuiltInSources.Execution,
         };
-        var eventRecord = CreateEvent(source, "com.example.updated");
+        var timer = new EventSource
+        {
+            Id = Guid.CreateVersion7(),
+            CreateBy = "owner",
+            Kind = EventSourceKind.Timer,
+            ManagedBy = EventManagedBy.Job,
+        };
+        var webhook = new EventSource
+        {
+            Id = Guid.CreateVersion7(),
+            CreateBy = "owner",
+            Kind = EventSourceKind.Webhook,
+        };
         var subscription = CreateSubscription(
-            eventTypes: "[\"com.example.updated\"]",
-            publisherKeys: "[\"ext:trusted-extension\"]"
+            eventTypes: "[\"agw.execution.completed\",\"job.timer.fired\"]",
+            sourceIds: [builtIn.Id, timer.Id]
         );
 
-        var result = EventSubscriptionMatcher.Match(eventRecord, source, [subscription]);
-
-        Assert.Empty(result);
+        Assert.Single(
+            EventSubscriptionMatcher.Match(CreateEvent(builtIn, "agw.execution.completed"), builtIn, [subscription])
+        );
+        Assert.Single(EventSubscriptionMatcher.Match(CreateEvent(timer, "job.timer.fired"), timer, [subscription]));
+        Assert.Empty(EventSubscriptionMatcher.Match(CreateEvent(webhook, "job.timer.fired"), webhook, [subscription]));
     }
 
     [Fact]
-    public void Match_ManagedSubscriptionWithEmptyPublisherKeys_RejectsForeignPublisher()
+    public void Match_ExtensionSubscriptionWithOtherExtensionSource_DoesNotMatch()
     {
         var ownExtensionId = Guid.CreateVersion7();
         var subscription = CreateSubscription(
             eventTypes: "[\"com.example.updated\"]",
-            publisherKeys: "[]",
             managedBy: EventManagedBy.ForExtension(ownExtensionId)
         );
         var foreignSource = new EventSource
@@ -122,14 +136,14 @@ public sealed class EventSubscriptionMatcherTests
             Id = Guid.CreateVersion7(),
             CreateBy = "owner",
             Kind = EventSourceKind.Publisher,
-            PublisherKey = "ext:foreign-extension",
+            ManagedBy = EventManagedBy.ForExtension(Guid.CreateVersion7()),
         };
         var trustedSource = new EventSource
         {
             Id = Guid.CreateVersion7(),
             CreateBy = "owner",
             Kind = EventSourceKind.Publisher,
-            PublisherKey = $"ext:{ownExtensionId}",
+            ManagedBy = EventManagedBy.ForExtension(ownExtensionId),
         };
         var webhookSource = new EventSource
         {
@@ -159,6 +173,67 @@ public sealed class EventSubscriptionMatcherTests
         Assert.Equal(new[] { subscription.Id }, webhookMatches.Select(matched => matched.Id));
     }
 
+    [Theory]
+    [InlineData("""{"and":[{"in":[{"var":"subject"},["issue-42"]]}]}""")]
+    [InlineData("""{"and":[{"in":[{"var":"scope"},["project-1"]]}]}""")]
+    [InlineData("""{"and":[{"some":[{"var":"tags"},{"in":[{"var":""},["urgent"]]}]}]}""")]
+    [InlineData("""{"and":[{"in":[{"cat":[{"var":"data.status"}]},["open"]]}]}""")]
+    public void Match_GeneratedFilters_EvaluateExpectedResults(string filter)
+    {
+        var source = new EventSource
+        {
+            Id = Guid.CreateVersion7(),
+            CreateBy = "owner",
+            Kind = EventSourceKind.Webhook,
+        };
+        var record = CreateEvent(source, "demo.updated");
+        record.Subject = "issue-42";
+        record.Scope = "project-1";
+        record.TagsJson = "[\"urgent\"]";
+        record.CeDataContentType = "application/json";
+        record.CeData = "{\"status\":\"open\"}";
+        var subscription = CreateSubscription(eventTypes: "[\"demo.updated\"]", filter: filter);
+
+        Assert.Single(EventSubscriptionMatcher.Match(record, source, [subscription]));
+        record.Scope = "other-project";
+        record.Subject = "other-issue";
+        record.TagsJson = "[]";
+        record.CeData = "{\"status\":\"closed\"}";
+        Assert.Empty(EventSubscriptionMatcher.Match(record, source, [subscription]));
+    }
+
+    [Fact]
+    public void Match_GeneratedFilters_MatchesEitherScopeAndNumericDataValue()
+    {
+        var source = new EventSource
+        {
+            Id = Guid.CreateVersion7(),
+            CreateBy = "owner",
+            Kind = EventSourceKind.Webhook,
+        };
+        var record = CreateEvent(source, "demo.updated");
+        record.CeDataContentType = "application/json";
+        var subscription = CreateSubscription(
+            eventTypes: "[\"demo.updated\"]",
+            filter: """{"and":[{"in":[{"var":"scope"},["proj1","proj2"]]},{"in":[{"cat":[{"var":"data.count"}]},["1","2"]]}]}"""
+        );
+
+        record.Scope = "proj1";
+        record.CeData = "{\"count\":1}";
+        Assert.Single(EventSubscriptionMatcher.Match(record, source, [subscription]));
+
+        record.Scope = "proj2";
+        record.CeData = "{\"count\":2}";
+        Assert.Single(EventSubscriptionMatcher.Match(record, source, [subscription]));
+
+        record.Scope = "proj3";
+        Assert.Empty(EventSubscriptionMatcher.Match(record, source, [subscription]));
+
+        record.Scope = "proj1";
+        record.CeData = "{\"count\":3}";
+        Assert.Empty(EventSubscriptionMatcher.Match(record, source, [subscription]));
+    }
+
     private static EventRecord CreateEvent(EventSource source, string type) =>
         new()
         {
@@ -173,7 +248,7 @@ public sealed class EventSubscriptionMatcherTests
     private static EventSubscription CreateSubscription(
         string eventTypes,
         string? filter = null,
-        string publisherKeys = "[]",
+        IReadOnlyList<Guid>? sourceIds = null,
         string managedBy = EventManagedBy.User
     ) =>
         new()
@@ -182,8 +257,7 @@ public sealed class EventSubscriptionMatcherTests
             CreateBy = "owner",
             Name = "subscription",
             Enabled = true,
-            SourceIdsJson = "[]",
-            PublisherKeysJson = publisherKeys,
+            SourceIdsJson = JsonSerializer.Serialize(sourceIds ?? []),
             EventTypesJson = eventTypes,
             FilterJson = filter,
             TargetKind = EventSubscriptionTargetKind.ExtensionHandler,

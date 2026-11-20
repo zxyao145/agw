@@ -46,7 +46,10 @@ public sealed class JobManagementToolExecutor
         Guid agentId,
         string kind,
         [AgwToolService] IAgwToolInvocationContext invocationContext,
-        string? name = null,
+        [Description(
+            "Optional job name using lowercase letters, digits, '-' and '.'; begins and ends with a letter or digit."
+        )]
+            string? name = null,
         DateTimeOffset? at = null,
         string? interval = null,
         string? cron = null,
@@ -83,7 +86,8 @@ public sealed class JobManagementToolExecutor
     public async Task<JobToolResponse> UpdateJobAsync(
         Guid jobId,
         [AgwToolService] IAgwToolInvocationContext invocationContext,
-        string? name = null,
+        [Description("Job name using lowercase letters, digits, '-' and '.'; begins and ends with a letter or digit.")]
+            string? name = null,
         string? instructions = null,
         AgentRuntimeType? targetKind = null,
         Guid? agentId = null,

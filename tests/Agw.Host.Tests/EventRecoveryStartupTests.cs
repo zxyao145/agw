@@ -22,10 +22,82 @@ namespace Agw.Host.Tests;
 public sealed class EventRecoveryStartupTests
 {
     private const string CheckpointError = "Event dispatch interrupted at the recovery checkpoint";
-    private const string WebhookSecret = "event-recovery-test-webhook";
     private const string WebhookBody = """
         {"specversion":"1.0","id":"process-restart","source":"/test","type":"example.updated","data":{"count":3}}
         """;
+
+    [Fact]
+    public async Task ReceiveWebhook_UndeclaredType_ReturnsAcceptedWithDiscarded()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "test-data", $"webhook-discard-{Guid.CreateVersion7():N}");
+        var data = Path.Combine(root, "data");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var server = StartSourceServer(root, data);
+            await server.WaitUntilReadyAsync(Path.Combine(data, "runtime", "server.json"));
+            using var client = server.CreateClient();
+            var (sourceId, secret) = await CreateWebhookAsync(client, "example.created");
+            using var request = CreateWebhookRequest(sourceId, secret, forwarded: false);
+
+            using var response = await client.SendAsync(request, CancellationToken);
+
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            var payload = await ReadDataAsync(response);
+            Assert.Equal(JsonValueKind.Null, payload.GetProperty("eventId").ValueKind);
+            Assert.True(payload.GetProperty("discarded").GetBoolean());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetHttpPollOptions_CustomLimitAndCursorPaths_ReturnsEffectiveRules()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "test-data", $"http-poll-options-{Guid.CreateVersion7():N}");
+        var data = Path.Combine(root, "data");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var server = StartSourceServer(root, data, "--Events:HttpPoll:MaxPages=4");
+            await server.WaitUntilReadyAsync(Path.Combine(data, "runtime", "server.json"));
+            using var client = server.CreateClient();
+
+            using var valid = await client.GetAsync(
+                "/api/events/sources/http-poll-options?cursorPath=%24.next",
+                CancellationToken
+            );
+            using var invalid = await client.GetAsync(
+                "/api/events/sources/http-poll-options?cursorPath=not-a-path",
+                CancellationToken
+            );
+
+            var rules = await ReadDataAsync(valid);
+            Assert.Equal(4, rules.GetProperty("maxPages").GetInt32());
+            Assert.True(rules.GetProperty("cursorPathValid").GetBoolean());
+            Assert.False((await ReadDataAsync(invalid)).GetProperty("cursorPathValid").GetBoolean());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static ServerProcess StartSourceServer(string root, string data, params string[] arguments) =>
+        ServerProcess.Start(
+            root,
+            AppContext.BaseDirectory,
+            [
+                "serve",
+                $"--AgwDataDir={data}",
+                $"--Setup:AdminPassword={Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24))}",
+                $"--Extensions:Directory={Path.Combine(root, "extensions")}",
+                "--Events:Transport:Provider=InProcess",
+                .. arguments,
+            ]
+        );
 
     [Theory]
     [InlineData(false)]
@@ -148,6 +220,7 @@ public sealed class EventRecoveryStartupTests
         try
         {
             Guid sourceId;
+            string webhookSecret;
             Guid eventId;
             var firstConnection = checkpoint switch
             {
@@ -165,11 +238,11 @@ public sealed class EventRecoveryStartupTests
                     using var serverInfo = await client.GetAsync("/api/server-info", CancellationToken);
                     streamPrefix = $"agw:{(await ReadDataAsync(serverInfo)).GetProperty("serverId").GetString()}:";
                 }
-                sourceId = await CreateWebhookAsync(client);
+                (sourceId, webhookSecret) = await CreateWebhookAsync(client);
                 if (checkpoint == Checkpoint.DispatchCommit)
                     await InterruptDispatchCommitAsync(database);
 
-                eventId = await ReceiveWebhookAsync(client, sourceId);
+                eventId = await ReceiveWebhookAsync(client, sourceId, webhookSecret);
                 if (checkpoint is Checkpoint.Consumption or Checkpoint.Acknowledgement)
                 {
                     var stream = streamPrefix + EventTopics.Accepted;
@@ -235,8 +308,8 @@ public sealed class EventRecoveryStartupTests
                     restarted
                 );
             }
-            Assert.Equal(eventId, await ReceiveWebhookAsync(recoveredClient, sourceId, forwarded: true));
-            using var invalid = CreateWebhookRequest(sourceId, forwarded: true);
+            Assert.Equal(eventId, await ReceiveWebhookAsync(recoveredClient, sourceId, webhookSecret, forwarded: true));
+            using var invalid = CreateWebhookRequest(sourceId, webhookSecret, forwarded: true);
             invalid.Headers.Remove("X-Hub-Signature-256");
             using var rejection = await recoveredClient.SendAsync(invalid, CancellationToken);
             Assert.Equal(ErrorCodes.WebhookAuthenticationFailed.StatusCode, rejection.StatusCode);
@@ -276,7 +349,10 @@ public sealed class EventRecoveryStartupTests
 
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
-    private static async Task<Guid> CreateWebhookAsync(HttpClient client)
+    private static async Task<(Guid Id, string Secret)> CreateWebhookAsync(
+        HttpClient client,
+        string eventType = "example.updated"
+    )
     {
         using var antiforgery = await client.GetAsync("/api/auth/antiforgery", CancellationToken);
         var token = (await ReadDataAsync(antiforgery)).GetProperty("requestToken").GetString();
@@ -285,38 +361,44 @@ public sealed class EventRecoveryStartupTests
         request.Content = JsonContent.Create(
             new
             {
-                name = "Process restart webhook",
+                name = "webhook.process-restart",
                 kind = EventSourceKind.Webhook,
                 enabled = true,
                 config = new
                 {
+                    eventTypes = new[] { eventType },
                     format = "cloudevents",
                     auth = new { kind = "HmacSha256" },
                     contentTypes = new[] { "application/cloudevents+json" },
                 },
-                secret = WebhookSecret,
             }
         );
         using var response = await client.SendAsync(request, CancellationToken);
-        return (await ReadDataAsync(response)).GetProperty("id").GetGuid();
+        var result = await ReadDataAsync(response);
+        return (result.GetProperty("id").GetGuid(), result.GetProperty("secret").GetString()!);
     }
 
-    private static async Task<Guid> ReceiveWebhookAsync(HttpClient client, Guid sourceId, bool forwarded = false)
+    private static async Task<Guid> ReceiveWebhookAsync(
+        HttpClient client,
+        Guid sourceId,
+        string secret,
+        bool forwarded = false
+    )
     {
-        using var request = CreateWebhookRequest(sourceId, forwarded);
+        using var request = CreateWebhookRequest(sourceId, secret, forwarded);
         using var response = await client.SendAsync(request, CancellationToken);
         var data = await ReadDataAsync(response);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         return data.GetProperty("eventId").GetGuid();
     }
 
-    private static HttpRequestMessage CreateWebhookRequest(Guid sourceId, bool forwarded)
+    private static HttpRequestMessage CreateWebhookRequest(Guid sourceId, string secret, bool forwarded)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, $"{EventWebhookRoute.Receive}?sourceId={sourceId:D}")
         {
             Content = new StringContent(WebhookBody, Encoding.UTF8, "application/cloudevents+json"),
         };
-        var signature = HMACSHA256.HashData(Encoding.UTF8.GetBytes(WebhookSecret), Encoding.UTF8.GetBytes(WebhookBody));
+        var signature = HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(WebhookBody));
         request.Headers.Add("X-Hub-Signature-256", $"sha256={Convert.ToHexStringLower(signature)}");
         if (forwarded)
             request.Headers.Add("Forwarded", "for=192.0.2.1");

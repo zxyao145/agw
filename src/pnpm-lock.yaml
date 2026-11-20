@@ -1283,6 +1283,9 @@ importers:
       '@agw/components':
         specifier: workspace:*
         version: link:../components
+      iso8601-duration:
+        specifier: 'catalog:'
+        version: 2.2.0
     devDependencies:
       '@agw/test-harness':
         specifier: workspace:*

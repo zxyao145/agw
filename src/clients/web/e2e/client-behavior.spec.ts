@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { fulfillApiData, fulfillShellRead } from "./web-session-api";
 
 const agentflow = { id: "flow-1", name: "Review flow", enable: true, description: "" };
 
@@ -10,14 +11,9 @@ async function mockApi(page: Page, handleWrite?: (route: Route) => Promise<void>
       if (handleWrite) return handleWrite(route);
       throw new Error(`Unexpected mutation: ${request.method()} ${path}`);
     }
+    const shellResponse = fulfillShellRead(route, path);
+    if (shellResponse) return shellResponse;
     const responses: Record<string, unknown> = {
-      "/api/auth/session": {
-        authenticated: true,
-        accessMode: "cookie",
-        apiMajorVersion: 1,
-        userId: "1001",
-      },
-      "/api/auth/antiforgery": { requestToken: "test-csrf" },
       "/api/auth/oidc/providers": [],
       "/api/agentflows/paged": { items: [agentflow], total: 1 },
       "/api/agentflows": [agentflow],
@@ -38,7 +34,7 @@ async function mockApi(page: Page, handleWrite?: (route: Route) => Promise<void>
       ],
     };
     if (!(path in responses)) throw new Error(`Unexpected query: ${path}`);
-    await route.fulfill({ json: { code: 0, title: "OK", data: responses[path] } });
+    return fulfillApiData(route, responses[path]);
   });
 }
 

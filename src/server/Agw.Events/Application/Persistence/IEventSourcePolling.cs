@@ -22,6 +22,11 @@ public interface IEventWebhookReceiver
     );
 }
 
+public interface IEventWebhookSourceLookup
+{
+    Task<EventSource?> FindEnabledAsync(Guid sourceId, CancellationToken cancellationToken);
+}
+
 public sealed record EventSourcePollTestResult(int ItemCount);
 
-public sealed record EventWebhookReceiveResult(Guid EventId, bool Duplicate);
+public sealed record EventWebhookReceiveResult(Guid? EventId, bool Duplicate, bool Discarded);

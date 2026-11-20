@@ -6,6 +6,7 @@ using Agw.Infrastructure.Data;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
+using Agw.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,7 @@ public sealed partial class EventStagingTests
             var result = await scope
                 .ServiceProvider.GetRequiredService<IEventWebhookReceiver>()
                 .ReceiveAsync(id, Webhook(body), TestContext.Current.CancellationToken);
-            eventId = result.EventId;
+            eventId = result.EventId!.Value;
             Assert.False(result.Duplicate);
         }
         await using (var scope = host.Services.CreateAsyncScope())
@@ -49,33 +50,142 @@ public sealed partial class EventStagingTests
         Assert.Single(await db.EventOutbox.ToArrayAsync(TestContext.Current.CancellationToken));
     }
 
-    [Theory]
-    [InlineData(
-        "{\"specversion\":\"1.0\",\"id\":\"id\",\"source\":\"/external\",\"type\":\"agw.execution.completed\"}",
-        false
-    )]
-    [InlineData(
-        "{\"specversion\":\"1.0\",\"id\":\"id\",\"source\":\"/external\",\"type\":\"example.updated\",\"agwforged\":\"value\"}",
-        true
-    )]
-    public async Task ReceiveAsync_StructuredWebhook_RejectsPlatformIdentity(string body, bool attribute)
+    [Fact]
+    public async Task ReceiveAsync_MappedUndeclaredType_Discards()
+    {
+        await using var host = await StagingHost.CreateAsync(true);
+        var id = await AddWebhookAsync(host, "mapped", eventTypes: ["demo.*"], mappedType: "other.created");
+        await using var scope = host.Services.CreateAsyncScope();
+
+        var result = await scope
+            .ServiceProvider.GetRequiredService<IEventWebhookReceiver>()
+            .ReceiveAsync(id, Webhook("{\"title\":\"Other\"}"), TestContext.Current.CancellationToken);
+
+        Assert.True(result.Discarded);
+        Assert.Null(result.EventId);
+        using var owner = PushUser("owner");
+        var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        Assert.Empty(await db.Events.ToArrayAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            "other.created",
+            (await db.EventSources.FindAsync([id], TestContext.Current.CancellationToken))!.LastDiscardedType
+        );
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_StructuredWebhook_RejectsPlatformAttribute()
     {
         await using var host = await StagingHost.CreateAsync(true);
         var id = await AddWebhookAsync(host, "cloudevents");
         await using var scope = host.Services.CreateAsyncScope();
-        var context = Webhook(body, "application/cloudevents+json");
+        var context = Webhook(
+            """{"specversion":"1.0","id":"id","source":"/external","type":"example.updated","agwforged":"value"}""",
+            "application/cloudevents+json"
+        );
         var error = await Assert.ThrowsAsync<AgwException>(() =>
             scope
                 .ServiceProvider.GetRequiredService<IEventWebhookReceiver>()
                 .ReceiveAsync(id, context, TestContext.Current.CancellationToken)
         );
-        Assert.Equal(attribute ? ErrorCodes.InvalidParam.Code : ErrorCodes.EventTypeReserved.Code, error.Code);
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
         using var owner = PushUser("owner");
         Assert.Empty(
             await scope
                 .ServiceProvider.GetRequiredService<AgwDbContext>()
                 .Events.ToArrayAsync(TestContext.Current.CancellationToken)
         );
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_FixedType_ReplacesType()
+    {
+        await using var host = await StagingHost.CreateAsync(true);
+        var id = await AddWebhookAsync(host, "cloudevents", "demo.ticket.created");
+        const string body =
+            """{"specversion":"1.0","id":"external-1","source":"/external","type":"external.any","data":{"value":7}}""";
+        await using var scope = host.Services.CreateAsyncScope();
+
+        var result = await scope
+            .ServiceProvider.GetRequiredService<IEventWebhookReceiver>()
+            .ReceiveAsync(id, Webhook(body, "application/cloudevents+json"), TestContext.Current.CancellationToken);
+
+        Assert.False(result.Discarded);
+        using var owner = PushUser("owner");
+        var record = await scope
+            .ServiceProvider.GetRequiredService<AgwDbContext>()
+            .Events.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("demo.ticket.created", record.Type);
+        Assert.Equal("external-1", record.CeId);
+        Assert.Equal("/external", record.CeSource);
+        Assert.Equal("{\"value\":7}", record.CeData);
+    }
+
+    [Theory]
+    [InlineData("other.created")]
+    [InlineData("agw.execution.completed")]
+    public async Task ReceiveAsync_UndeclaredType_ReturnsDiscarded(string eventType)
+    {
+        await using var host = await StagingHost.CreateAsync(true);
+        var id = await AddWebhookAsync(host, "cloudevents", eventTypes: ["demo.*"]);
+        var body = JsonSerializer.Serialize(
+            new
+            {
+                specversion = "1.0",
+                id = "external-1",
+                source = "/external",
+                type = eventType,
+            }
+        );
+        await using var scope = host.Services.CreateAsyncScope();
+
+        var result = await scope
+            .ServiceProvider.GetRequiredService<IEventWebhookReceiver>()
+            .ReceiveAsync(id, Webhook(body, "application/cloudevents+json"), TestContext.Current.CancellationToken);
+
+        Assert.True(result.Discarded);
+        Assert.Null(result.EventId);
+        using var owner = PushUser("owner");
+        var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        Assert.Empty(await db.Events.ToArrayAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(await db.EventOutbox.ToArrayAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            eventType,
+            (await db.EventSources.FindAsync([id], TestContext.Current.CancellationToken))!.LastDiscardedType
+        );
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_DiscardedTwice_UpdatesLastDiscardedAt()
+    {
+        var firstTime = new DateTimeOffset(2026, 11, 15, 1, 0, 0, TimeSpan.Zero);
+        var timeProvider = new TestTimeProvider(firstTime);
+        await using var host = await StagingHost.CreateAsync(true, timeProvider);
+        var id = await AddWebhookAsync(host, "cloudevents", eventTypes: ["demo.*"]);
+        const string body = """{"specversion":"1.0","id":"external-1","source":"/external","type":"other.created"}""";
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var result = await scope
+                .ServiceProvider.GetRequiredService<IEventWebhookReceiver>()
+                .ReceiveAsync(id, Webhook(body, "application/cloudevents+json"), TestContext.Current.CancellationToken);
+            Assert.True(result.Discarded);
+        }
+
+        var secondTime = firstTime.AddMinutes(5);
+        timeProvider.SetUtcNow(secondTime);
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var result = await scope
+                .ServiceProvider.GetRequiredService<IEventWebhookReceiver>()
+                .ReceiveAsync(id, Webhook(body, "application/cloudevents+json"), TestContext.Current.CancellationToken);
+            Assert.True(result.Discarded);
+            using var owner = PushUser("owner");
+            var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            Assert.Equal(
+                secondTime,
+                (await db.EventSources.FindAsync([id], TestContext.Current.CancellationToken))!.LastDiscardedAt
+            );
+            Assert.Empty(await db.Events.ToArrayAsync(TestContext.Current.CancellationToken));
+        }
     }
 
     [Fact]
@@ -118,7 +228,13 @@ public sealed partial class EventStagingTests
         Assert.Equal(ErrorCodes.WebhookAuthenticationFailed.Code, error.Code);
     }
 
-    private static async Task<Guid> AddWebhookAsync(StagingHost host, string format)
+    private static async Task<Guid> AddWebhookAsync(
+        StagingHost host,
+        string format,
+        string? fixedType = null,
+        string[]? eventTypes = null,
+        string mappedType = "example.updated"
+    )
     {
         using var owner = PushUser("owner");
         await using var scope = host.Services.CreateAsyncScope();
@@ -137,13 +253,15 @@ public sealed partial class EventStagingTests
                 ConfigJson = JsonSerializer.Serialize(
                     new
                     {
+                        eventTypes = fixedType is null ? eventTypes ?? ["example.updated"] : null,
+                        fixedType,
                         format,
                         auth = new { kind = "HmacSha256" },
                         contentTypes = new[] { "application/json", "application/cloudevents+json" },
                         mapping = new Dictionary<string, object>
                         {
                             ["id"] = new Dictionary<string, string> { ["var"] = "headers.X-GitHub-Delivery" },
-                            ["type"] = "example.updated",
+                            ["type"] = mappedType,
                         },
                     }
                 ),

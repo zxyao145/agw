@@ -45,7 +45,7 @@ dotnet test Agw.slnx
 - EF migrations are never added or applied automatically. A model change needs matching migrations in both `Agw.Migrations.Sqlite` and `Agw.Migrations.Postgres`. Generate them only when asked, using the provider-specific commands in `docs/1.Development.md`.
 - Release packaging goes through `publish.sh` (`PUBLISH_MODE=portable|docker|all`).
 
-### Clients (run from `src/clients`)
+### Clients (run from `src`)
 
 ```bash
 pnpm install
@@ -53,7 +53,7 @@ pnpm dev:web        # http://localhost:3001, proxies /api and /openapi to :30816
 pnpm dev:desktop    # renderer on http://localhost:3000; does not need dev:web
 pnpm dev:mobile     # also android:mobile / ios:mobile
 pnpm build | typecheck | lint | test | fmt | fmt:check
-pnpm gen:api        # regenerate packages/api/src/openapi.d.ts after backend contract changes
+pnpm gen:api        # regenerate clients/packages/api/src/openapi.d.ts after backend contract changes
 pnpm test:boundaries
 ```
 

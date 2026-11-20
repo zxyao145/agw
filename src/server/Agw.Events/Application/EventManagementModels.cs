@@ -11,7 +11,6 @@ public sealed record EventSubscriptionRequest
     public required string Name { get; init; }
     public bool Enabled { get; init; } = true;
     public IReadOnlyList<Guid> SourceIds { get; init; } = [];
-    public IReadOnlyList<string> PublisherKeys { get; init; } = [];
     public required IReadOnlyList<string> EventTypes { get; init; }
     public JsonElement? Filter { get; init; }
     public required EventSubscriptionTargetKind TargetKind { get; init; }
@@ -42,7 +41,6 @@ public sealed record EventSubscriptionResponse
     public required string Name { get; init; }
     public required bool Enabled { get; init; }
     public required IReadOnlyList<Guid> SourceIds { get; init; }
-    public required IReadOnlyList<string> PublisherKeys { get; init; }
     public required IReadOnlyList<string> EventTypes { get; init; }
     public JsonElement? Filter { get; init; }
     public required EventSubscriptionTargetKind TargetKind { get; init; }

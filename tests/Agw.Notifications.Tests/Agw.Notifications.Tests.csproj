@@ -14,6 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Extensions/Agw.Extensions.csproj" />
     <ProjectReference Include="../../src/server/Agw.Notifications/Agw.Notifications.csproj" />
   </ItemGroup>
 </Project>

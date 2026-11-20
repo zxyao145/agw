@@ -41,6 +41,7 @@ public sealed class ExtensionEndpointDataSourceTests
         {
             GenerationId = new ExtensionGenerationId(extensionId, generationId),
             Name = "runtime-test",
+            DisplayName = "Runtime Test",
             Version = "1.0.0",
             ReleaseHash = $"release-{epoch}",
             Epoch = epoch,

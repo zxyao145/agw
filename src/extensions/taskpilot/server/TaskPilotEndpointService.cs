@@ -799,6 +799,7 @@ internal sealed class TaskPilotEndpointService
                 || eventType.StartsWith("agw.", StringComparison.Ordinal)
                 || !eventType.StartsWith("taskpilot.", StringComparison.Ordinal)
                 || eventType.Contains('*', StringComparison.Ordinal)
+                || TaskPilotSystemSubscription.SystemTypes.Contains(eventType, StringComparer.Ordinal)
             )
             || request.Retry.DelayMinutes.Count == 0
             || request.Retry.DelayMinutes.Any(delay => delay <= 0)

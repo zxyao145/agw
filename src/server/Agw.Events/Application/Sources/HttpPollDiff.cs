@@ -2,7 +2,7 @@ using System.Text.Json;
 using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 
-namespace Agw.Events.Application.Persistence;
+namespace Agw.Events.Application.Sources;
 
 public sealed record HttpPollItem(string Key, string Fingerprint, JsonElement Data);
 

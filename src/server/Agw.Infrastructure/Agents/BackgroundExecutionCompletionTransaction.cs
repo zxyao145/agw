@@ -123,12 +123,12 @@ public sealed class BackgroundExecutionCompletionTransaction : IBackgroundExecut
         return _eventStaging.StageAsync(
             new EventStagingRequest
             {
-                PublisherKey = "agw.execution",
+                BuiltInSource = EventBuiltInSources.Execution,
                 Event = new CloudEventDraft
                 {
                     Id = $"{execution.Id:D}:completed",
-                    Type = "agw.execution.completed",
-                    Source = "/agw/executions",
+                    Type = EventBuiltInSources.ExecutionCompletedType,
+                    Source = EventBuiltInSources.ExecutionCeSource,
                     Time = execution.CompletedAt,
                     Subject = execution.Id.ToString("D"),
                     DataContentType = "application/json",

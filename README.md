@@ -169,7 +169,7 @@ git config core.hooksPath .githooks
 dotnet restore Agw.slnx
 dotnet tool restore
 
-cd src/clients
+cd src
 pnpm install
 ```
 
@@ -179,17 +179,17 @@ Run the backend with hot reload from the repository root. It listens on `http://
 dotnet watch --project src/server/Agw.Standalone.Host
 ```
 
-Start Web from `src/clients` in another terminal, then open `http://localhost:3001`:
+Start Web from `src` in another terminal, then open `http://localhost:3001`:
 
 ```bash
-cd src/clients
+cd src
 pnpm dev:web
 ```
 
 Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30816`.
 
-- **Desktop:** Keep the backend running and run `pnpm dev:desktop` from `src/clients`. The Desktop renderer runs on `http://localhost:3000`; it does not require the Web development server.
-- **Mobile:** Run `pnpm dev:mobile`, `pnpm android:mobile`, or `pnpm ios:mobile` from `src/clients`. Its native projects are generated through Expo CNG and are not hand-maintained.
+- To start **Desktop**, keep the backend running and run `pnpm dev:desktop` from `src`. Its renderer runs independently on `http://localhost:3000`.
+- **Mobile:** Run `pnpm dev:mobile`, `pnpm android:mobile`, or `pnpm ios:mobile` from `src`. Its native projects are generated through Expo CNG and are not hand-maintained.
 - **Split Hosts:** `dotnet run --project src/server/Agw.ControlPlane.Host` and `dotnet run --project src/server/Agw.DataPlane.Host` (Data Plane on `http://localhost:30817`). They require PostgreSQL and `Execution:Provider=Distributed`.
 
 Run the main verification commands before submitting a change:
@@ -200,20 +200,20 @@ dotnet build Agw.slnx
 dotnet test Agw.slnx
 dotnet csharpier check .
 
-# src/clients
+# src
 pnpm build
 pnpm lint
 pnpm test
 pnpm fmt:check
 ```
 
-After changing a backend API contract, run `pnpm gen:api` from `src/clients` to regenerate the typed client. After changing project references, module boundaries, persistence access, entities, or Behaviors, run `dotnet test tests/Agw.Architecture.Tests`. See the [Development Guide](docs/1.Development.md) for focused test commands, EF Core migration commands, PostgreSQL-backed tests, and package-specific tasks.
+After changing a backend API contract, run `pnpm gen:api` from `src` to regenerate the typed client. After changing project references, module boundaries, persistence access, entities, or Behaviors, run `dotnet test tests/Agw.Architecture.Tests`. See the [Development Guide](docs/1.Development.md) for focused test commands, EF Core migration commands, PostgreSQL-backed tests, and package-specific tasks.
 
 ### Debugging
 
 - **Backend:** Start `src/server/Agw.Standalone.Host` with its launch profile in a .NET debugger. It sets `ASPNETCORE_ENVIRONMENT=Development`; the Development-only OpenAPI and Scalar endpoints are then available. Server logs are written to the console and to role-specific files in `AgwLogDir`.
 - **Web:** Run `pnpm dev:web`, use the browser developer tools for client code and network requests, and inspect the Next.js terminal for server-side output. To target another backend, start Web with `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`.
-- **Desktop:** Run `pnpm dev:desktop`. Main-process logs and build output appear in the terminal; preload and renderer code can be inspected with Electron DevTools.
+- For **Desktop** debugging, run `pnpm dev:desktop` from `src`. The terminal shows main-process logs and build output. Use Electron DevTools to inspect preload and renderer code.
 - **Focused tests:** Use `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"` for a backend test, or `pnpm exec turbo run test --filter=@agw/web` (replace the package filter as needed) from `src/clients`.
 
 ## Publishing

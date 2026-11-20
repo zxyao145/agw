@@ -77,9 +77,6 @@ public sealed class EventManagementAppService
         subscription.Name = request.Name.Trim();
         subscription.Enabled = request.Enabled;
         subscription.SourceIdsJson = JsonSerializer.Serialize(request.SourceIds.Distinct());
-        subscription.PublisherKeysJson = JsonSerializer.Serialize(
-            request.PublisherKeys.Distinct(StringComparer.Ordinal)
-        );
         subscription.EventTypesJson = JsonSerializer.Serialize(request.EventTypes.Distinct(StringComparer.Ordinal));
         subscription.FilterJson = request.Filter?.GetRawText();
         subscription.TargetKind = request.TargetKind;
@@ -221,11 +218,7 @@ public sealed class EventManagementAppService
         if (
             string.IsNullOrWhiteSpace(request.Name)
             || request.EventTypes.Count == 0
-            || request.EventTypes.Any(pattern =>
-                string.IsNullOrWhiteSpace(pattern)
-                || pattern.Contains('*')
-                    && (!pattern.EndsWith(".*", StringComparison.Ordinal) || pattern[..^1].Contains('*'))
-            )
+            || request.EventTypes.Any(pattern => !EventTypePatterns.IsValidPattern(pattern))
             || !Enum.IsDefined(request.TargetKind)
         )
             throw new AgwException(ErrorCodes.InvalidParam);
@@ -306,7 +299,6 @@ public sealed class EventManagementAppService
             Enabled = row.Enabled,
             Version = row.Version,
             SourceIds = JsonSerializer.Deserialize<Guid[]>(row.SourceIdsJson)!,
-            PublisherKeys = JsonSerializer.Deserialize<string[]>(row.PublisherKeysJson ?? "[]")!,
             EventTypes = JsonSerializer.Deserialize<string[]>(row.EventTypesJson)!,
             Filter = Parse(row.FilterJson),
             TargetKind = row.TargetKind,

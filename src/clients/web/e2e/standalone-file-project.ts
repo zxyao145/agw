@@ -33,6 +33,10 @@ export const fileProjectTest = test.extend<{ fileProject: FileProject }>({
         // 转发真实的 Server 响应，Web 页面仍使用同源 API 地址。
         // Forward real Server responses while the Web page uses same-origin API URLs.
         await page.route("**/api/**", async (route) => {
+          const requestUrl = new URL(route.request().url());
+          if (requestUrl.pathname === "/api/notifications/stream") {
+            return route.continue({ url: standaloneRequestUrl(requestUrl, origin) });
+          }
           await route.fulfill({ response: await fetchFromStandaloneHost(route, origin) });
         });
         await use({
@@ -171,8 +175,12 @@ async function createProject(
 }
 
 export function fetchFromStandaloneHost(route: Route, origin: string) {
-  const { pathname, search } = new URL(route.request().url());
-  return route.fetch({ url: `${origin}${pathname}${search}`, maxRedirects: 0 });
+  const requestUrl = new URL(route.request().url());
+  return route.fetch({ url: standaloneRequestUrl(requestUrl, origin), maxRedirects: 0 });
+}
+
+function standaloneRequestUrl({ pathname, search }: URL, origin: string) {
+  return `${origin}${pathname}${search}`;
 }
 
 async function stopServer(server: ChildProcess) {

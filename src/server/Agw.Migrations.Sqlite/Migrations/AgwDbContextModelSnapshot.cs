@@ -1465,6 +1465,15 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("kind");
 
+                    b.Property<long?>("LastDiscardedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_discarded_at");
+
+                    b.Property<string>("LastDiscardedType")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_discarded_type");
+
                     b.Property<string>("LastError")
                         .HasColumnType("TEXT")
                         .HasColumnName("last_error");
@@ -1487,6 +1496,7 @@ namespace Agw.Migrations.Sqlite.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
@@ -1501,10 +1511,6 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<string>("ProviderId")
                         .HasColumnType("TEXT")
                         .HasColumnName("provider_id");
-
-                    b.Property<string>("PublisherKey")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("publisher_key");
 
                     b.Property<string>("SecretJson")
                         .HasColumnType("TEXT")
@@ -1526,10 +1532,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.HasKey("Id")
                         .HasName("pk_event_source");
 
-                    b.HasIndex("CreateBy", "PublisherKey")
+                    b.HasIndex("CreateBy", "Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_event_source_create_by_publisher_key")
-                        .HasFilter("publisher_key IS NOT NULL");
+                        .HasDatabaseName("ix_event_source_create_by_name")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("Enabled", "NextRunAt")
                         .HasDatabaseName("ix_event_source_enabled_next_run_at");
@@ -1670,10 +1676,6 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<Guid?>("ProjectId")
                         .HasColumnType("TEXT")
                         .HasColumnName("project_id");
-
-                    b.Property<string>("PublisherKeysJson")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("publisher_keys_json");
 
                     b.Property<string>("SourceIdsJson")
                         .IsRequired()

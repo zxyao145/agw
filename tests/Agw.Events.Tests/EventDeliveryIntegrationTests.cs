@@ -8,6 +8,7 @@ using Agw.Auth.Contracts;
 using Agw.Events.Application;
 using Agw.Events.Application.Delivery;
 using Agw.Events.Application.Persistence;
+using Agw.Events.Application.Sources;
 using Agw.Events.Contracts;
 using Agw.Events.Contracts.Transport;
 using Agw.Events.Infrastructure.Dispatch;
@@ -68,7 +69,7 @@ public sealed class EventDeliveryIntegrationTests
             .CreateAsync(
                 new EventJobDefinition
                 {
-                    Name = "Event conversation job",
+                    Name = "event-conversation-job",
                     Enabled = true,
                     ProjectId = project.Id,
                     TargetKind = EventJobTargetKind.Agent,
@@ -179,7 +180,7 @@ public sealed class EventDeliveryIntegrationTests
             .CreateAsync(
                 new EventJobDefinition
                 {
-                    Name = "Recurring event job",
+                    Name = "recurring-event-job",
                     Enabled = true,
                     ProjectId = project.Id,
                     TargetKind = EventJobTargetKind.Agent,
@@ -243,7 +244,7 @@ public sealed class EventDeliveryIntegrationTests
             .Select(row => row.Title)
             .ToArrayAsync(TestContext.Current.CancellationToken);
         Assert.Equal(
-            ["Recurring event job 2026-11-14 00:01:00 UTC", "Recurring event job 2026-11-14 00:02:00 UTC"],
+            ["recurring-event-job 2026-11-14 00:01:00 UTC", "recurring-event-job 2026-11-14 00:02:00 UTC"],
             titles
         );
         Assert.True(
@@ -282,7 +283,7 @@ public sealed class EventDeliveryIntegrationTests
             .CreateAsync(
                 new EventJobDefinition
                 {
-                    Name = "Retry event job",
+                    Name = "retry-event-job",
                     Enabled = true,
                     ProjectId = project.Id,
                     TargetKind = EventJobTargetKind.Agent,
@@ -388,7 +389,7 @@ public sealed class EventDeliveryIntegrationTests
             .CreateAsync(
                 new EventJobDefinition
                 {
-                    Name = "Waiting retry job",
+                    Name = "waiting-retry-job",
                     Enabled = true,
                     ProjectId = project.Id,
                     TargetKind = EventJobTargetKind.Agent,
@@ -468,7 +469,7 @@ public sealed class EventDeliveryIntegrationTests
             .CreateAsync(
                 new EventJobDefinition
                 {
-                    Name = "Submitted execution job",
+                    Name = "submitted-execution-job",
                     Enabled = true,
                     ProjectId = project.Id,
                     TargetKind = EventJobTargetKind.Agent,
@@ -574,7 +575,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var deliveryId = Guid.CreateVersion7();
         var subscriptionId = Guid.CreateVersion7();
         db.EventSubscriptions.Add(
@@ -644,7 +645,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var deliveryId = Guid.CreateVersion7();
         var turnId = Guid.CreateVersion7();
         var requestSnapshot = "persisted request snapshot";
@@ -695,7 +696,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var deliveryId = Guid.CreateVersion7();
         var turnId = Guid.CreateVersion7();
         var startedAt = TimeProvider.System.GetUtcNow().AddMinutes(-1);
@@ -850,7 +851,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var now = TimeProvider.System.GetUtcNow();
         var record = await db.Events.SingleAsync(row => row.Id == eventId, TestContext.Current.CancellationToken);
         record.DispatchState = EventDispatchState.Dispatched;
@@ -931,7 +932,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var now = TimeProvider.System.GetUtcNow();
         var record = await db.Events.SingleAsync(row => row.Id == eventId, TestContext.Current.CancellationToken);
         record.DispatchState = EventDispatchState.Dispatched;
@@ -1055,11 +1056,7 @@ public sealed class EventDeliveryIntegrationTests
                     await using var scope = firstHost.Services.CreateAsyncScope();
                     var services = scope.ServiceProvider;
                     var db = services.GetRequiredService<AgwDbContext>();
-                    var eventId = await StageEventAsync(
-                        services,
-                        "example.updated",
-                        "ext:019a4c17-0000-7000-8000-000000000001"
-                    );
+                    var eventId = await StageEventAsync(services, "example.updated");
                     var record = await db.Events.SingleAsync(
                         row => row.Id == eventId,
                         TestContext.Current.CancellationToken
@@ -1215,7 +1212,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var deliveryId = Guid.CreateVersion7();
         var subscriptionId = Guid.CreateVersion7();
         db.EventSubscriptions.Add(
@@ -1289,7 +1286,7 @@ public sealed class EventDeliveryIntegrationTests
         };
         db.AddRange(agent, project);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var deliveryId = Guid.CreateVersion7();
         var subscriptionId = Guid.CreateVersion7();
         db.EventSubscriptions.Add(
@@ -1425,7 +1422,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var deliveryId = Guid.CreateVersion7();
         var subscriptionId = Guid.CreateVersion7();
         var turnId = invalidSnapshot ? Guid.CreateVersion7() : (Guid?)null;
@@ -1488,7 +1485,7 @@ public sealed class EventDeliveryIntegrationTests
         await using var scope = host.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<AgwDbContext>();
-        var eventId = await StageEventAsync(services, "example.updated", "ext:019a4c17-0000-7000-8000-000000000001");
+        var eventId = await StageEventAsync(services, "example.updated");
         var deliveryId = Guid.CreateVersion7();
         var subscriptionId = Guid.CreateVersion7();
         db.EventSubscriptions.Add(
@@ -1716,35 +1713,60 @@ public sealed class EventDeliveryIntegrationTests
     private static async Task<Guid> StageEventAsync(
         IServiceProvider services,
         string type,
-        string publisherKey,
+        string? builtInSource = null,
         JsonElement? data = null,
         string? source = null
     )
     {
-        var request = new EventStagingRequest
+        var draft = new CloudEventDraft
         {
-            PublisherKey = publisherKey,
-            Event = new CloudEventDraft
-            {
-                Id = Guid.CreateVersion7().ToString("D"),
-                Source = source,
-                Type = type,
-                DataContentType = data.HasValue ? "application/json" : null,
-                Data = data is { } value
-                    ? new CloudEventData
-                    {
-                        Kind = CloudEventDataKind.Json,
-                        Text = value.GetRawText(),
-                        Json = value,
-                    }
-                    : null,
-            },
+            Id = Guid.CreateVersion7().ToString("D"),
+            Source = source,
+            Type = type,
+            DataContentType = data.HasValue ? "application/json" : null,
+            Data = data is { } value
+                ? new CloudEventData
+                {
+                    Kind = CloudEventDataKind.Json,
+                    Text = value.GetRawText(),
+                    Json = value,
+                }
+                : null,
         };
-        var result = await services
-            .GetRequiredService<IEventStaging>()
-            .StageAsync(request, TestContext.Current.CancellationToken);
-        await services.GetRequiredService<AgwDbContext>().SaveChangesAsync(TestContext.Current.CancellationToken);
-        return result.EventId;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var staging = services.GetRequiredService<EventStaging>();
+        var eventId = builtInSource is null
+            ? await StageWebhookEventAsync(services, staging, draft, cancellationToken)
+            : (
+                await staging.StageAsync(
+                    new EventStagingRequest { BuiltInSource = builtInSource, Event = draft },
+                    cancellationToken
+                )
+            ).EventId;
+        await services.GetRequiredService<AgwDbContext>().SaveChangesAsync(cancellationToken);
+        return eventId;
+    }
+
+    private static async Task<Guid> StageWebhookEventAsync(
+        IServiceProvider services,
+        EventStaging staging,
+        CloudEventDraft draft,
+        CancellationToken cancellationToken
+    )
+    {
+        var sources = services.GetRequiredService<EventSourceAppService>();
+        var created = await sources.CreateAsync(
+            new EventSourceCreateCommand
+            {
+                Name = $"webhook.delivery-test-{Guid.CreateVersion7():N}",
+                Kind = EventSourceKind.Webhook,
+                Config = JsonSerializer.SerializeToElement(new { fixedType = draft.Type }),
+            },
+            cancellationToken
+        );
+        var source = Assert.IsType<EventSource>(await sources.GetAsync(created.Id, cancellationToken));
+        var result = await staging.StageExternalAsync(source, draft, cancellationToken);
+        return Assert.IsType<Guid>(result.EventId);
     }
 
     private static CloudEventData JsonData(string json)

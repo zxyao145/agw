@@ -68,6 +68,12 @@ public sealed class JobDefinitionDomainService
         }
 
         var count = await _jobs.CountAsync(cancellationToken).ConfigureAwait(false);
-        return $"job-{count + 1}-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
+        var date = now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        for (var sequence = count + 1; ; sequence++)
+        {
+            var name = $"job-{sequence}-{date}";
+            if (await _jobs.IsNameAvailableAsync(name, cancellationToken).ConfigureAwait(false))
+                return name;
+        }
     }
 }

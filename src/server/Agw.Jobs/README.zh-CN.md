@@ -4,11 +4,11 @@ Jobs 提供定时任务的 API、Agent 工具、请求校验和默认名称。�
 
 ## 创建和更新
 
-`projectId`、`targetKind`、`agentId`、`instructions` 和 `schedule` 用于定义任务。`targetKind` 为 `0` 时目标是 Agent，为 `1` 时目标是 Agentflow。Project 和目标必须属于当前用户。`instructions` 必须包含内容。省略名称或传入空白名称时，Jobs 根据当前用户的任务数量生成 `job-{序号}-{yyyyMMdd}`，日期采用 UTC。名称最多 200 个字符。
+`projectId`、`targetKind`、`agentId`、`instructions` 和 `schedule` 用于定义任务。`targetKind` 为 `0` 时目标是 Agent，为 `1` 时目标是 Agentflow。Project 和目标必须属于当前用户。`instructions` 必须包含内容。Job 名称只能使用小写字母、数字、`-`、`.`，开头和结尾必须是字母或数字，不能包含连续的 `.`。Job 名称最多 190 个字符，对应的 Timer 来源名称为 `agw.timer.<Job 名称>`。同一用户的来源名称不能重复。省略名称或传入空白名称时，Jobs 根据当前用户的任务数量生成 `job-{序号}-{yyyyMMdd}`，日期采用 UTC，已有名称会跳过。
 
 ```json
 {
-  "name": "Daily review",
+  "name": "daily-review",
   "enabled": true,
   "projectId": "019a4c17-0000-7000-8000-000000000001",
   "targetKind": 0,

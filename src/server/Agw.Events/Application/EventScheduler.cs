@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Agw.Auth.Contracts;
 using Agw.Events.Application.Persistence;
+using Agw.Events.Application.Sources;
 using Agw.Events.Contracts;
 using Agw.Events.Domain.Behaviors;
 using Agw.Events.Domain.ValueObjects;
@@ -125,23 +126,26 @@ public sealed class EventScheduler : IEventScheduler
     private async Task<string> CallerKeyAsync(string businessKey, CancellationToken cancellationToken)
     {
         if (_callerAccessor.Current is not null)
-            return $"ext:{_caller.RequiredExtension().GenerationId.ExtensionId}";
-        if (
-            !businessKey.StartsWith("source:", StringComparison.Ordinal) || !Guid.TryParse(businessKey[7..], out var id)
-        )
+            return EventManagedBy.ForExtension(_caller.RequiredExtension().GenerationId.ExtensionId);
+        var sourceId =
+            businessKey.StartsWith(EventTimerScheduleSync.SourceKeyPrefix, StringComparison.Ordinal)
+            && Guid.TryParse(businessKey.AsSpan(EventTimerScheduleSync.SourceKeyPrefix.Length), out var parsedId)
+                ? parsedId
+                : (Guid?)null;
+        if (sourceId is not { } id)
             throw new AgwException(ErrorCodes.EventSourceNotFound);
         var owner = UserInfoUtil.RequiredUserId;
-        if (
-            !_db.EventSources.Local.Any(row =>
+        var sourceExists =
+            _db.EventSources.Local.Any(row =>
                 row.Id == id && row.Kind == EventSourceKind.Timer && row.CreateBy == owner
             )
-            && !await _db.EventSources.AnyAsync(
+            || await _db.EventSources.AnyAsync(
                 row => row.Id == id && row.Kind == EventSourceKind.Timer,
                 cancellationToken
-            )
-        )
+            );
+        if (!sourceExists)
             throw new AgwException(ErrorCodes.EventSourceNotFound);
-        return $"source:{id}";
+        return EventTimerScheduleSync.GetSourceKey(id);
     }
 
     private Task<EventSchedule?> FindAsync(string callerKey, string businessKey, CancellationToken cancellationToken) =>

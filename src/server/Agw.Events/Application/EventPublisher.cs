@@ -22,7 +22,7 @@ public sealed class EventPublisher : IEventPublisher
         var extension = _caller.RequiredExtension();
         _caller.ValidateType(extension, draft.Type, draft.ParentEventId is null);
         var result = await _staging.StageAsync(
-            new EventStagingRequest { PublisherKey = $"ext:{extension.GenerationId.ExtensionId}", Event = draft },
+            new EventStagingRequest { ExtensionId = extension.GenerationId.ExtensionId, Event = draft },
             cancellationToken
         );
         await _db.SaveChangesAsync(cancellationToken);

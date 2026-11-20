@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Agw.Shared.Contracts.Events;
 using Microsoft.Agents.AI;
 
 namespace Agw.Jobs.Application.Skills;
@@ -21,6 +22,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             - Read job-trigger-reference before creating a job or changing its schedule.
             - agw_job_create and agw_job_update require an interactive user context.
             - agw_job_update has patch semantics. Omitted values remain unchanged.
+            - Job names use lowercase letters, digits, '-' and '.', begin and end with a letter or digit, and contain no consecutive dots. A blank name on create is generated automatically.
             - When changing the target, provide both targetKind and agentId.
             - Before deleting, show the job details and ask the user to confirm the exact job ID.
             - Call agw_job_delete only after confirmation, passing the same job ID in confirmation.
@@ -30,7 +32,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
     [AgentSkillResource("job-trigger-reference")]
     [Description("Valid schedule kinds and values for scheduled jobs.")]
     public string JobTriggerReference =>
-        """
+        $"""
             # Job schedule reference
 
             All schedules are evaluated in UTC.
@@ -40,6 +42,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             - Cron: set kind to `Cron` and `cron` to a standard five-field cron expression, for example `0 9 * * 1-5`.
 
             targetKind values are `Agent` and `Agentflow`.
+            Job names use lowercase letters, digits, '-' and '.', begin and end with a letter or digit, and contain no consecutive dots. The maximum length is {EventSourceNames.MaxJobNameLength} characters.
             """;
 }
 

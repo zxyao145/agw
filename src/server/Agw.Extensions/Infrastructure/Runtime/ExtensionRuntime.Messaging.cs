@@ -95,10 +95,9 @@ public sealed partial class ExtensionRuntime
                     scope.Services.GetRequiredService(providerRegistration.ProviderType);
                 ExtensionSourcePollRequest request = invocation.Request with
                 {
-                    Config = invocation.Request.Config.Clone(),
+                    Configuration = invocation.Request.Configuration?.Clone(),
                     Cursor = invocation.Request.Cursor?.Clone(),
                 };
-                await provider.ValidateConfigAsync(request.Config, cancellationToken);
                 ExtensionSourcePollResult result = await provider.PollAsync(request, cancellationToken);
                 if (result is null || result.Events is null || result.Events.Any(item => item is null))
                 {

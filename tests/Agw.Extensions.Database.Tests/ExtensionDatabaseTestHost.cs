@@ -165,8 +165,8 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
         services.AddScoped<IEventsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddScoped<PendingTransportMessages>();
         services.AddScoped<IOutboxStaging, EventOutboxStaging>();
-        services.AddScoped<EventStaging>();
-        services.AddScoped<IEventStaging>(provider => provider.GetRequiredService<EventStaging>());
+        services.AddScoped<IEventRecordStaging, EventRecordStaging>();
+        services.AddScoped<IEventIngestTransaction, EventIngestTransaction>();
         services.AddSingleton(provider => new CloudEventEnvelopeSerializer(
             provider.GetRequiredService<IOptions<EventsOptions>>().Value.Payload.MaxBytes
         ));
@@ -230,6 +230,7 @@ internal sealed class ExtensionDatabaseTestHost : IAsyncDisposable
             {
                 ExtensionId = ExtensionId,
                 Name = package.Manifest.Name,
+                DisplayName = package.Manifest.DisplayName,
                 Version = package.Manifest.Version,
                 ReleaseHash = package.ReleaseHash,
                 Epoch = enablement.Version,

@@ -12,7 +12,20 @@ public sealed record ExtensionEventSourceProviderDescriptor
 {
     public required string Id { get; init; }
 
-    public JsonElement? ConfigSchema { get; init; }
+    public required IReadOnlyList<string> EventTypes { get; init; }
+
+    public IReadOnlyList<ExtensionEventSourceConfiguration> Configurations { get; init; } = [];
+}
+
+public sealed record ExtensionEventSourceConfiguration
+{
+    public required string Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Description { get; init; }
+
+    public required JsonElement Config { get; init; }
 }
 
 public sealed record ExtensionEventDelivery
@@ -83,8 +96,6 @@ public sealed record ExtensionEventHandlerResult
 
 public interface IExtensionEventSourceProvider
 {
-    ValueTask ValidateConfigAsync(JsonElement config, CancellationToken cancellationToken);
-
     ValueTask<ExtensionSourcePollResult> PollAsync(
         ExtensionSourcePollRequest request,
         CancellationToken cancellationToken
@@ -95,7 +106,9 @@ public sealed record ExtensionSourcePollRequest
 {
     public required Guid SourceId { get; init; }
 
-    public required JsonElement Config { get; init; }
+    public string? ConfigurationId { get; init; }
+
+    public JsonElement? Configuration { get; init; }
 
     public JsonElement? Cursor { get; init; }
 

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using Agw.Infrastructure.Events.Sources;
+using Agw.Events.Infrastructure.Sources;
 using Xunit;
 
 namespace Agw.Events.Tests;

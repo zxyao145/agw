@@ -25,6 +25,7 @@
     <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
     <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Extensions/Agw.Extensions.csproj" />
     <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
     <ProjectReference
       Include="../Agw.Extensions.Runtime.Tests/Fixture/Agw.Extensions.Runtime.TestExtension.csproj"

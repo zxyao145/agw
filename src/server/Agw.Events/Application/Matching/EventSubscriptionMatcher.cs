@@ -37,9 +37,8 @@ public static class EventSubscriptionMatcher
             || subscription.CreateBy != eventRecord.CreateBy
             || subscription.CreateBy != source.CreateBy
             || eventRecord.SourceId != source.Id
-            || !IsTrustedPublisher(eventRecord, source, subscription)
+            || !IsTrustedPublisher(source, subscription.ManagedBy)
             || !MatchesSourceIds(source, subscription)
-            || !MatchesPublisherKeys(source, subscription)
             || !MatchesEventType(eventRecord.Type, subscription.EventTypesJson)
         )
         {
@@ -49,52 +48,22 @@ public static class EventSubscriptionMatcher
         return MatchesFilter(eventRecord, subscription.FilterJson, onFilterFailure);
     }
 
-    private static bool IsTrustedPublisher(EventRecord eventRecord, EventSource source, EventSubscription subscription)
-    {
-        if (!EventManagedBy.IsExtension(subscription.ManagedBy) || source.Kind != EventSourceKind.Publisher)
-        {
-            return true;
-        }
-
-        // extension 的 publisher key 与 managed_by 的写法相同：ext:<extensionId>。
-        // An extension's publisher key has the same form as managed_by: ext:<extensionId>.
-        var trustedPublisherKey =
-            source.PublisherKey == "agw.execution"
-            || source.PublisherKey == "agw.notifications"
-            || source.PublisherKey == subscription.ManagedBy
-            || source.PublisherKey == $"agw.scheduler:{subscription.ManagedBy}";
-        return trustedPublisherKey && eventRecord.CreateBy == source.CreateBy;
-    }
-
     private static bool MatchesSourceIds(EventSource source, EventSubscription subscription)
     {
         var sourceIds = JsonSerializer.Deserialize<Guid[]>(subscription.SourceIdsJson) ?? [];
         return sourceIds.Length == 0 || sourceIds.Contains(source.Id);
     }
 
-    private static bool MatchesPublisherKeys(EventSource source, EventSubscription subscription)
-    {
-        if (string.IsNullOrEmpty(subscription.PublisherKeysJson))
-        {
-            return true;
-        }
-
-        var publisherKeys = JsonSerializer.Deserialize<string[]>(subscription.PublisherKeysJson) ?? [];
-        return publisherKeys.Length == 0
-            || (
-                source.Kind == EventSourceKind.Publisher
-                && publisherKeys.Contains(source.PublisherKey, StringComparer.Ordinal)
-            );
-    }
+    internal static bool IsTrustedPublisher(EventSource source, string subscriptionManagedBy) =>
+        !EventManagedBy.IsExtension(subscriptionManagedBy)
+        || source.Kind != EventSourceKind.Publisher
+        || source.ManagedBy == EventManagedBy.Agw
+        || source.ManagedBy == subscriptionManagedBy;
 
     private static bool MatchesEventType(string eventType, string eventTypesJson)
     {
         var patterns = JsonSerializer.Deserialize<string[]>(eventTypesJson) ?? [];
-        return patterns.Any(pattern =>
-            pattern.EndsWith(".*", StringComparison.Ordinal)
-                ? eventType.StartsWith(pattern[..^1], StringComparison.Ordinal)
-                : eventType == pattern
-        );
+        return EventTypePatterns.MatchesAny(patterns, eventType);
     }
 
     private static bool MatchesFilter(EventRecord eventRecord, string? filterJson, Action<string> onFilterFailure)

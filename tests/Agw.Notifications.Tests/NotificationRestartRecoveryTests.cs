@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Agw.Auth.Contracts;
+using Agw.Events;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Configuration;
 using Agw.Events.Contracts;
@@ -288,10 +289,12 @@ public sealed class NotificationRestartRecoveryTests
     private sealed class RestartHost : IAsyncDisposable
     {
         private readonly ServiceProvider _services;
+        private readonly string _extensionRoot;
 
-        private RestartHost(ServiceProvider services)
+        private RestartHost(ServiceProvider services, string extensionRoot)
         {
             _services = services;
+            _extensionRoot = extensionRoot;
         }
 
         public ServiceProvider Services => _services;
@@ -326,6 +329,11 @@ public sealed class NotificationRestartRecoveryTests
             services.AddSingleton<IApplicationLock>(new InMemoryApplicationLock());
             services.AddSingleton<IOptions<EventsOptions>>(Options.Create(eventsOptions));
             services.AddSingleton<IOptions<NotificationDispatchOptions>>(Options.Create(dispatchOptions));
+            var extensionRoot = Path.Combine(
+                AppContext.BaseDirectory,
+                $"notification-restart-extensions-{Guid.CreateVersion7():N}"
+            );
+            NotificationTestFixture.RegisterExtensionCatalog(services, extensionRoot);
             services.AddSingleton(new CloudEventEnvelopeSerializer());
             services.AddSingleton<IEventTransport, InProcessEventTransport>();
             services.AddSingleton<Agw.Shared.Data.Abstractions.IEntityAuditUserIdProvider>(
@@ -358,8 +366,8 @@ public sealed class NotificationRestartRecoveryTests
             );
             services.AddScoped<PendingTransportMessages>();
             services.AddScoped<IOutboxStaging, EventOutboxStaging>();
-            services.AddScoped<EventStaging>();
-            services.AddScoped<IEventStaging>(provider => provider.GetRequiredService<EventStaging>());
+            services.AddScoped<IEventRecordStaging, EventRecordStaging>();
+            services.AddEvents(runWorkers: false);
             services.AddScoped<IEventsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
             services.AddScoped<INotificationsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
             services.AddScoped<INotificationTransaction, NotificationTransaction>();
@@ -372,9 +380,14 @@ public sealed class NotificationRestartRecoveryTests
                 await scope
                     .ServiceProvider.GetRequiredService<AgwDbContext>()
                     .Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-            return new RestartHost(provider);
+            return new RestartHost(provider, extensionRoot);
         }
 
-        public ValueTask DisposeAsync() => _services.DisposeAsync();
+        public async ValueTask DisposeAsync()
+        {
+            await _services.DisposeAsync();
+            if (Directory.Exists(_extensionRoot))
+                Directory.Delete(_extensionRoot, recursive: true);
+        }
     }
 }

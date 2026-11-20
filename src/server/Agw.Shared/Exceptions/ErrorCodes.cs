@@ -4,6 +4,11 @@ namespace Agw.Shared.Exceptions;
 
 public static class ErrorCodes
 {
+    public static readonly ErrorCode EventSourceNameConflict = new(
+        409_0035,
+        "Event source name is already used.",
+        HttpStatusCode.Conflict
+    );
     public static readonly ErrorCode ExtensionPayloadTooLarge = new(
         413_0003,
         "Extension request body is too large.",

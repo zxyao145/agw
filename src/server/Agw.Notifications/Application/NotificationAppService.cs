@@ -288,12 +288,12 @@ public sealed class NotificationAppService
         var eventJson = JsonSerializer.SerializeToElement(eventData, JsonOptions);
         var eventRequest = new EventStagingRequest
         {
-            PublisherKey = "agw.notifications",
+            BuiltInSource = EventBuiltInSources.Notifications,
             Event = new CloudEventDraft
             {
                 Id = $"{notification.Id:D}:answered",
-                Type = "agw.notification.answered",
-                Source = "/agw/notifications",
+                Type = EventBuiltInSources.NotificationAnsweredType,
+                Source = EventBuiltInSources.NotificationsCeSource,
                 Time = now,
                 Subject = notification.Id.ToString("D"),
                 DataContentType = "application/json",

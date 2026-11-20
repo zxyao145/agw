@@ -11,8 +11,7 @@ public sealed class EventSourceConfiguration : IEntityTypeConfiguration<EventSou
         builder.ToTable("event_source");
         builder.HasKey(entity => entity.Id);
         builder.Property(entity => entity.CreateBy).IsRequired();
-        builder.Property(entity => entity.Name).IsRequired();
-        builder.Property(entity => entity.PublisherKey).HasColumnName("publisher_key");
+        builder.Property(entity => entity.Name).IsRequired().HasMaxLength(EventSourceNames.MaxLength);
         builder
             .Property(entity => entity.ManagedBy)
             .HasColumnName("managed_by")
@@ -23,12 +22,10 @@ public sealed class EventSourceConfiguration : IEntityTypeConfiguration<EventSou
         builder.Property(entity => entity.Kind).HasConversion<int>().IsRequired();
         builder.Property(entity => entity.CeSource).IsRequired();
         builder.Property(entity => entity.ConfigJson).IsRequired();
-        builder.Property(entity => entity.DeletedAt).IsRequired(false);
+        builder.Property(entity => entity.LastDiscardedType).HasMaxLength(EventSource.DiscardedTypeMaxLength);
+        builder.Property(entity => entity.DeletedAt).HasColumnName("deleted_at").IsRequired(false);
         builder.Property(entity => entity.Version).IsConcurrencyToken();
-        builder
-            .HasIndex(entity => new { entity.CreateBy, entity.PublisherKey })
-            .IsUnique()
-            .HasFilter("publisher_key IS NOT NULL");
+        builder.HasIndex(entity => new { entity.CreateBy, entity.Name }).IsUnique().HasFilter("deleted_at IS NULL");
         builder
             .HasIndex(entity => new
             {

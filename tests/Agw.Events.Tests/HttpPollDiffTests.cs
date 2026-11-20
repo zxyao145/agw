@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Agw.Events.Application.Persistence;
+using Agw.Events.Application.Sources;
 using Agw.Shared.Data.Entities.Events;
 using Xunit;
 

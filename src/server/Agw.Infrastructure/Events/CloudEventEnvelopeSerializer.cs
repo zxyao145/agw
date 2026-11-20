@@ -13,6 +13,7 @@ namespace Agw.Infrastructure.Events;
 
 public sealed class CloudEventEnvelopeSerializer : ICloudEventEnvelopeSerializer
 {
+    public const string BatchContentType = ICloudEventEnvelopeSerializer.BatchContentType;
     private const int DefaultMaxPayloadBytes = 262144;
     private const string StructuredContentType = "application/cloudevents+json";
     private const string DataPropertyName = "data";
@@ -118,30 +119,52 @@ public sealed class CloudEventEnvelopeSerializer : ICloudEventEnvelopeSerializer
                 new ContentType(StructuredContentType),
                 _extensionAttributeList
             );
-            if (!cloudEvent.IsValid)
-                throw InvalidParam();
-            if (cloudEvent.SpecVersion.VersionId != "1.0")
-                throw InvalidParam();
-
-            var data = ReadData(document.RootElement, cloudEvent);
-            EnsurePayloadWithinLimit(data);
-            return new CloudEventEnvelope
-            {
-                Id = cloudEvent.Id!,
-                Source = cloudEvent.Source!.OriginalString,
-                Type = cloudEvent.Type!,
-                Time = cloudEvent.Time,
-                Subject = cloudEvent.Subject,
-                DataContentType = cloudEvent.DataContentType,
-                DataSchema = cloudEvent.DataSchema?.OriginalString,
-                Data = data,
-                Extensions = ReadExtensions(cloudEvent),
-            };
+            return FromCloudEvent(document.RootElement, cloudEvent);
         }
         catch (Exception exception) when (IsInvalidCloudEventException(exception))
         {
             throw InvalidParam(exception);
         }
+    }
+
+    public IReadOnlyList<CloudEventEnvelope> DeserializeBatch(ReadOnlyMemory<byte> body, string? contentType)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var events = _formatter.DecodeBatchModeMessage(
+                body,
+                new ContentType(contentType ?? BatchContentType),
+                _extensionAttributeList
+            );
+            var elements = document.RootElement.EnumerateArray().ToArray();
+            return events.Select((cloudEvent, index) => FromCloudEvent(elements[index], cloudEvent)).ToArray();
+        }
+        catch (Exception exception) when (IsInvalidCloudEventException(exception))
+        {
+            throw InvalidParam(exception);
+        }
+    }
+
+    private CloudEventEnvelope FromCloudEvent(JsonElement root, CloudEvent cloudEvent)
+    {
+        if (!cloudEvent.IsValid || cloudEvent.SpecVersion.VersionId != "1.0")
+            throw InvalidParam();
+
+        var data = ReadData(root, cloudEvent);
+        EnsurePayloadWithinLimit(data);
+        return new CloudEventEnvelope
+        {
+            Id = cloudEvent.Id!,
+            Source = cloudEvent.Source!.OriginalString,
+            Type = cloudEvent.Type!,
+            Time = cloudEvent.Time,
+            Subject = cloudEvent.Subject,
+            DataContentType = cloudEvent.DataContentType,
+            DataSchema = cloudEvent.DataSchema?.OriginalString,
+            Data = data,
+            Extensions = ReadExtensions(cloudEvent),
+        };
     }
 
     public async Task<CloudEventEnvelope> DeserializeHttpAsync(HttpRequest request, CancellationToken cancellationToken)

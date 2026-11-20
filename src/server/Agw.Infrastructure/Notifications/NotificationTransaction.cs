@@ -79,7 +79,7 @@ public sealed class NotificationTransaction : INotificationTransaction
         var message = new CloudEventEnvelope
         {
             Id = $"{dispatch.Id:D}:{dispatch.MessageVersion}",
-            Source = "/agw/notifications",
+            Source = EventBuiltInSources.NotificationsCeSource,
             Type = "agw.notification.dispatch",
             DataContentType = "application/json",
             Data = new CloudEventData

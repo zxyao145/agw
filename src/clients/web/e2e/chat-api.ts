@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { fulfillApiData, fulfillShellRead } from "./web-session-api";
 
 export const projectId = "11111111-1111-4111-8111-111111111111";
 export const conversationId = "22222222-2222-4222-8222-222222222222";
@@ -68,15 +69,10 @@ export async function mockChatApi(page: Page) {
     const path = new URL(request.url()).pathname;
     if (request.method() !== "GET")
       throw new Error(`Unexpected mutation: ${request.method()} ${path}`);
+    const shellResponse = fulfillShellRead(route, path);
+    if (shellResponse) return shellResponse;
     const conversationPath = `/api/projects/${projectId}/conversations`;
     const responses: Record<string, unknown> = {
-      "/api/auth/session": {
-        authenticated: true,
-        accessMode: "cookie",
-        apiMajorVersion: 1,
-        userId: "1001",
-      },
-      "/api/auth/antiforgery": { requestToken: "test-csrf" },
       "/api/agents": [],
       "/api/agentflows": [],
       "/api/quick-prompts": [],
@@ -100,6 +96,6 @@ export async function mockChatApi(page: Page) {
       },
     };
     if (!(path in responses)) throw new Error(`Unexpected query: ${path}`);
-    await route.fulfill({ json: { code: 0, title: "OK", data: responses[path] } });
+    return fulfillApiData(route, responses[path]);
   });
 }

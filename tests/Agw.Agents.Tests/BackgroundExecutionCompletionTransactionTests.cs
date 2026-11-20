@@ -1,13 +1,22 @@
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
+using Agw.Events.Application.Sources;
 using Agw.Events.Configuration;
+using Agw.Events.Domain.Services;
+using Agw.Events.Infrastructure;
+using Agw.Extensions;
+using Agw.Extensions.Contracts;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Events;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Runtime;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
@@ -23,10 +32,10 @@ public sealed class BackgroundExecutionCompletionTransactionTests
         await using var db = CreateDbContext(connection);
         await db.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
         await using var pending = new PendingTransportMessages();
-        var eventStaging = CreateEventStaging(db, pending);
+        await using var staging = CreateEventStaging(db, pending);
         var transaction = new BackgroundExecutionCompletionTransaction(
             db,
-            eventStaging,
+            staging.EventStaging,
             InMemoryApplicationLock.Shared
         );
         var turnId = Guid.CreateVersion7();
@@ -81,10 +90,10 @@ public sealed class BackgroundExecutionCompletionTransactionTests
         await using var db = CreateDbContext(connection);
         await db.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
         await using var pending = new PendingTransportMessages();
-        var eventStaging = CreateEventStaging(db, pending);
+        await using var staging = CreateEventStaging(db, pending);
         var transaction = new BackgroundExecutionCompletionTransaction(
             db,
-            eventStaging,
+            staging.EventStaging,
             InMemoryApplicationLock.Shared
         );
         var turnId = Guid.CreateVersion7();
@@ -135,21 +144,55 @@ public sealed class BackgroundExecutionCompletionTransactionTests
     }
 
     private static AgwDbContext CreateDbContext(SqliteConnection connection) =>
-        new(new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options);
+        new(new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options);
 
-    private static EventStaging CreateEventStaging(AgwDbContext db, PendingTransportMessages pending)
+    private static StagingFixture CreateEventStaging(AgwDbContext db, PendingTransportMessages pending)
     {
         var options = Options.Create(new EventsOptions());
         var outbox = new EventOutboxStaging(db, options, pending, TimeProvider.System);
-        return new EventStaging(
-            db,
-            outbox,
-            pending,
-            InMemoryApplicationLock.Shared,
-            new CloudEventEnvelopeSerializer(),
-            options,
-            TimeProvider.System
+        var root = Path.Combine(AppContext.BaseDirectory, $"completion-extensions-{Guid.CreateVersion7():N}");
+        Directory.CreateDirectory(root);
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(AgwDataPaths.Resolve(Path.Combine(root, "data"), root, Path.Combine(root, "logs")));
+        services.AddSingleton<IHostEnvironment>(_ =>
+            Microsoft
+                .Extensions.Hosting.Host.CreateApplicationBuilder(
+                    new HostApplicationBuilderSettings { ContentRootPath = root, DisableDefaults = true }
+                )
+                .Environment
         );
+        services.AddExtensions(new ConfigurationBuilder().Build(), "Standalone");
+        var extensionServices = services.BuildServiceProvider();
+        var extensions = extensionServices.GetRequiredService<IExtensionGenerationCatalog>();
+        var sources = new EventPublisherSources(
+            db,
+            new EventIngestTransaction(db, pending, InMemoryApplicationLock.Shared),
+            extensions,
+            new EventSourceNameDomainService(new EventSourceNameRepository(db))
+        );
+        var eventStaging = new EventStaging(
+            sources,
+            new EventRecordStaging(db, outbox, new CloudEventEnvelopeSerializer(), options, TimeProvider.System),
+            extensions,
+            TimeProvider.System,
+            extensionServices.GetRequiredService<Microsoft.Extensions.Logging.ILogger<EventStaging>>()
+        );
+        return new StagingFixture(eventStaging, extensionServices, root);
+    }
+
+    private sealed class StagingFixture(EventStaging eventStaging, ServiceProvider extensionServices, string root)
+        : IAsyncDisposable
+    {
+        public EventStaging EventStaging { get; } = eventStaging;
+
+        public async ValueTask DisposeAsync()
+        {
+            await extensionServices.DisposeAsync();
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 
     private static IDisposable PushUser(string userId) =>

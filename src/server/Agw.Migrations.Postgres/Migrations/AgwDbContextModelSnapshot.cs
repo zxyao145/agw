@@ -1472,6 +1472,15 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("kind");
 
+                    b.Property<DateTimeOffset?>("LastDiscardedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_discarded_at");
+
+                    b.Property<string>("LastDiscardedType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("last_discarded_type");
+
                     b.Property<string>("LastError")
                         .HasColumnType("text")
                         .HasColumnName("last_error");
@@ -1494,7 +1503,8 @@ namespace Agw.Migrations.Postgres.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
                         .HasColumnName("name");
 
                     b.Property<DateTimeOffset?>("NextRunAt")
@@ -1508,10 +1518,6 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<string>("ProviderId")
                         .HasColumnType("text")
                         .HasColumnName("provider_id");
-
-                    b.Property<string>("PublisherKey")
-                        .HasColumnType("text")
-                        .HasColumnName("publisher_key");
 
                     b.Property<string>("SecretJson")
                         .HasColumnType("text")
@@ -1533,10 +1539,10 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_event_source");
 
-                    b.HasIndex("CreateBy", "PublisherKey")
+                    b.HasIndex("CreateBy", "Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_event_source_create_by_publisher_key")
-                        .HasFilter("publisher_key IS NOT NULL");
+                        .HasDatabaseName("ix_event_source_create_by_name")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("Enabled", "NextRunAt")
                         .HasDatabaseName("ix_event_source_enabled_next_run_at");
@@ -1677,10 +1683,6 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<Guid?>("ProjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("project_id");
-
-                    b.Property<string>("PublisherKeysJson")
-                        .HasColumnType("text")
-                        .HasColumnName("publisher_keys_json");
 
                     b.Property<string>("SourceIdsJson")
                         .IsRequired()

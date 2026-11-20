@@ -1157,15 +1157,16 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
     private static ExtensionRuntimeLoadRequest NormalizeRequest(ExtensionRuntimeLoadRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (
+        var invalidRequest =
             request.ExtensionId == Guid.Empty
             || string.IsNullOrWhiteSpace(request.Name)
+            || string.IsNullOrWhiteSpace(request.DisplayName)
             || string.IsNullOrWhiteSpace(request.ReleaseHash)
             || string.IsNullOrWhiteSpace(request.PackageDirectory)
             || string.IsNullOrWhiteSpace(request.EntryAssemblyPath)
             || string.IsNullOrWhiteSpace(request.EntryType)
-            || string.IsNullOrWhiteSpace(request.DataDirectory)
-        )
+            || string.IsNullOrWhiteSpace(request.DataDirectory);
+        if (invalidRequest)
         {
             throw new AgwException(ErrorCodes.ExtensionPackageInvalid);
         }
@@ -1221,6 +1222,7 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
         {
             GenerationId = generationId,
             Name = request.Name,
+            DisplayName = request.DisplayName,
             Version = request.Version,
             ReleaseHash = request.ReleaseHash,
             Epoch = request.Epoch,
@@ -1230,12 +1232,7 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
             Skills = registration.Skills.Select(skill => skill.Descriptor).ToArray(),
             EventHandlers = registration.EventHandlers.Select(handler => handler.Descriptor).ToArray(),
             EventSourceProviders = registration
-                .EventSourceProviders.Select(provider =>
-                    provider.Descriptor with
-                    {
-                        ConfigSchema = provider.Descriptor.ConfigSchema?.Clone(),
-                    }
-                )
+                .EventSourceProviders.Select(provider => EventSourceProviderDescriptorCloner.Clone(provider.Descriptor))
                 .ToArray(),
             NotificationChannels = registration.NotificationChannels.Select(channel => channel.Descriptor).ToArray(),
             EventPermissions = request.EventPermissions with { Publish = request.EventPermissions.Publish.ToArray() },
@@ -1262,12 +1259,7 @@ public sealed partial class ExtensionRuntime : IExtensionRuntime, IExtensionInvo
                 .ToArray(),
             EventHandlers = generation.Snapshot.EventHandlers.ToArray(),
             EventSourceProviders = generation
-                .Snapshot.EventSourceProviders.Select(provider =>
-                    provider with
-                    {
-                        ConfigSchema = provider.ConfigSchema?.Clone(),
-                    }
-                )
+                .Snapshot.EventSourceProviders.Select(EventSourceProviderDescriptorCloner.Clone)
                 .ToArray(),
             NotificationChannels = generation.Snapshot.NotificationChannels.ToArray(),
             EventPermissions = generation.Snapshot.EventPermissions with

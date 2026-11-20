@@ -3,12 +3,14 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml;
 using Agw.Events.Configuration;
+using Agw.Extensions.Contracts;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 using Cronos;
 using Json.Logic;
 using Json.Path;
 
-namespace Agw.Events.Application.Persistence;
+namespace Agw.Events.Application.Sources;
 
 public static class EventSourceConfigParser
 {
@@ -20,49 +22,53 @@ public static class EventSourceConfigParser
     public static EventWebhookSourceConfig ParseWebhook(JsonElement config)
     {
         var parsed = Deserialize<EventWebhookSourceConfig>(config);
-        if (
-            parsed.Format is not ("mapped" or "cloudevents")
-            || parsed.ContentTypes.Count == 0
-            || parsed.Auth.Kind is not ("HmacSha256" or "BearerToken")
-        )
-        {
+        ValidateTypeDeclaration(parsed.EventTypes, parsed.FixedType);
+        var supportedFormat = parsed.Format is EventSourceFormats.Mapped or EventSourceFormats.CloudEvents;
+        var supportedAuth = parsed.Auth is { Kind: "HmacSha256" or "BearerToken" };
+        if (!supportedFormat || !supportedAuth || parsed.ContentTypes is null)
             throw new AgwException(ErrorCodes.InvalidParam, "Webhook source configuration is invalid.");
-        }
 
-        try
-        {
-            foreach (var contentType in parsed.ContentTypes)
-            {
-                _ = MediaTypeHeaderValue.Parse(contentType);
-            }
-        }
-        catch (FormatException exception)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Webhook content type is invalid.", exception);
-        }
+        var contentTypes =
+            parsed.ContentTypes.Count > 0 ? parsed.ContentTypes
+            : parsed.Format == EventSourceFormats.CloudEvents ? ["application/cloudevents+json", "application/json"]
+            : ["application/json"];
+        if (contentTypes.Any(contentType => !MediaTypeHeaderValue.TryParse(contentType, out _)))
+            throw new AgwException(ErrorCodes.InvalidParam, "Webhook content type is invalid.");
 
-        if (
-            parsed.Format == "mapped"
-            && (
-                parsed.Mapping is null
-                || parsed.Mapping.Id.ValueKind == JsonValueKind.Undefined
-                || parsed.Mapping.Type.ValueKind == JsonValueKind.Undefined
-            )
-        )
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "Mapped webhook sources require id and type rules.");
-        }
+        var mappingIncomplete =
+            parsed.Mapping is null
+            || parsed.Mapping.Id.ValueKind == JsonValueKind.Undefined
+            || parsed.FixedType is null && parsed.Mapping.Type is null or { ValueKind: JsonValueKind.Undefined };
+        if (parsed.Format == EventSourceFormats.Mapped && mappingIncomplete)
+            throw new AgwException(ErrorCodes.InvalidParam, "Mapped webhook source configuration is incomplete.");
 
-        if (
-            parsed.Auth.MaxClockSkewSeconds is < 0
-            || parsed.Auth.MaxClockSkewSeconds > 3600
-            || parsed.Auth.TimestampHeader is not null && parsed.Auth.Kind != "HmacSha256"
-            || parsed.Auth.MaxClockSkewSeconds is not null && parsed.Auth.TimestampHeader is null
-        )
-        {
+        var auth = NormalizeWebhookAuth(parsed.Auth);
+        ValidateWebhookRules(parsed);
+        return parsed with { Auth = auth, ContentTypes = contentTypes };
+    }
+
+    private static EventWebhookAuthConfig NormalizeWebhookAuth(EventWebhookAuthConfig auth)
+    {
+        var invalidAuth =
+            auth.MaxClockSkewSeconds is < 0 or > 3600
+            || auth.TimestampHeader is not null && auth.Kind != "HmacSha256"
+            || auth.MaxClockSkewSeconds is not null && auth.TimestampHeader is null;
+        if (invalidAuth)
             throw new AgwException(ErrorCodes.InvalidParam, "Webhook authentication configuration is invalid.");
-        }
 
+        var tokenHeader = auth.TokenHeader?.Trim();
+        return auth.Kind == "BearerToken"
+            ? auth with
+            {
+                TokenHeader = tokenHeader is { Length: > 0 }
+                    ? tokenHeader
+                    : Microsoft.Net.Http.Headers.HeaderNames.Authorization,
+            }
+            : auth;
+    }
+
+    private static void ValidateWebhookRules(EventWebhookSourceConfig parsed)
+    {
         ValidateRule(parsed.Mapping?.Id);
         ValidateRule(parsed.Mapping?.Type);
         ValidateRule(parsed.Mapping?.Subject);
@@ -74,88 +80,97 @@ public static class EventSourceConfigParser
         ValidateRule(parsed.Mapping?.Link);
         ValidateRule(parsed.CloudEvent?.Summary);
         ValidateRule(parsed.CloudEvent?.Link);
-        return parsed;
     }
 
     public static EventHttpPollSourceConfig ParseHttpPoll(JsonElement config, EventHttpPollOptions options)
     {
         var parsed = Deserialize<EventHttpPollSourceConfig>(config);
-        if (
-            !parsed.Request.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
-            && !parsed.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)
-        )
-        {
+        ValidateTypeDeclaration(parsed.EventTypes, parsed.FixedType);
+        var supportedFormat = parsed.Format is EventSourceFormats.Mapped or EventSourceFormats.CloudEvents;
+        if (!supportedFormat || parsed.Request is null)
+            throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll source configuration is invalid.");
+
+        ValidateHttpPollRequestLocation(parsed.Request);
+        var mapped = parsed.Format == EventSourceFormats.Mapped;
+        if (mapped)
+            ValidateHttpPollMappingShape(parsed.Mapping);
+        var pagination = NormalizeHttpPollPagination(parsed, options.MaxPages);
+        ValidateHttpPollAuth(parsed.Request.Auth);
+        if (mapped)
+            ValidateHttpPollMappingRules(parsed, parsed.Mapping!);
+        ValidateHttpPollInterval(parsed.Interval, options.MinInterval);
+        return parsed with { Pagination = pagination };
+    }
+
+    private static void ValidateHttpPollRequestLocation(EventHttpPollRequestConfig request)
+    {
+        var supportedMethod =
+            string.Equals(request.Method, "GET", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(request.Method, "POST", StringComparison.OrdinalIgnoreCase);
+        if (!supportedMethod)
             throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll method must be GET or POST.");
-        }
 
-        if (
-            !Uri.TryCreate(parsed.Request.Url, UriKind.Absolute, out var uri)
-            || uri.Scheme is not ("http" or "https")
-            || !string.IsNullOrEmpty(uri.UserInfo)
-        )
-        {
+        var validUri =
+            Uri.TryCreate(request.Url, UriKind.Absolute, out var uri)
+            && uri.Scheme is ("http" or "https")
+            && string.IsNullOrEmpty(uri.UserInfo);
+        if (!validUri)
             throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll URL must be an absolute HTTP or HTTPS URL.");
-        }
+    }
 
-        if (!JsonPath.TryParse(parsed.Items, out _))
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll items JSONPath is invalid.");
-        }
+    private static void ValidateHttpPollMappingShape(EventHttpPollMappingConfig? mapping)
+    {
+        var validMapping =
+            mapping is not null && IsValidJsonPath(mapping.Items) && mapping.Key.ValueKind != JsonValueKind.Undefined;
+        if (!validMapping)
+            throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll mapping is invalid.");
+    }
 
-        if (parsed.Pagination.Kind is not ("none" or "linkHeader" or "cursor" or "page"))
+    private static void ValidateHttpPollAuth(EventHttpPollAuthConfig? auth)
+    {
+        var validAuth = auth?.Kind switch
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll pagination kind is invalid.");
-        }
-
-        if (
-            parsed.Pagination.MaxPages is < 1
-            || parsed.Pagination.MaxPages > options.MaxPages
-            || parsed.Pagination.Kind == "cursor"
-                && (
-                    string.IsNullOrWhiteSpace(parsed.Pagination.CursorPath)
-                    || string.IsNullOrWhiteSpace(parsed.Pagination.CursorParameter)
-                )
-            || parsed.Pagination.Kind == "cursor" && !JsonPath.TryParse(parsed.Pagination.CursorPath!, out _)
-        )
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll pagination configuration is invalid.");
-        }
-
-        if (
-            parsed.Request.Auth.Kind is not ("none" or "bearer" or "basic" or "header" or "connection")
-            || parsed.Request.Auth.Kind == "connection" && parsed.Request.Auth.ConnectionId is null
-            || parsed.Request.Auth.Kind == "header" && string.IsNullOrWhiteSpace(parsed.Request.Auth.HeaderName)
-        )
-        {
+            "none" or "bearer" or "basic" => true,
+            "connection" => auth.ConnectionId is not null,
+            "header" => !string.IsNullOrWhiteSpace(auth.HeaderName),
+            _ => false,
+        };
+        if (!validAuth)
             throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll authentication configuration is invalid.");
-        }
+    }
 
-        if (
-            parsed.Change.Kind is not ("field" or "content")
-            || parsed.Change.Kind == "field" && parsed.Change.Value is null
-            || parsed.Event.TypeOnNew.StartsWith("agw.", StringComparison.Ordinal)
-            || parsed.Event.TypeOnChange.StartsWith("agw.", StringComparison.Ordinal)
-        )
-        {
+    private static void ValidateHttpPollMappingRules(
+        EventHttpPollSourceConfig config,
+        EventHttpPollMappingConfig mapping
+    )
+    {
+        var change = mapping.Change;
+        var validChange = change is { Kind: "content" } or { Kind: "field", Value: not null };
+        var eventMapping = mapping.Event;
+        var invalidEventTypes =
+            config.FixedType is null
+            && (
+                !DeclaredTypeMatches(config.EventTypes!, eventMapping?.TypeOnNew)
+                || !DeclaredTypeMatches(config.EventTypes!, eventMapping?.TypeOnChange)
+            );
+        if (!validChange || eventMapping is null || invalidEventTypes)
             throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll change or event configuration is invalid.");
-        }
 
-        if (parsed.Change.Value is not null)
-        {
-            ValidateRule(parsed.Change.Value);
-        }
+        ValidateRule(change!.Value);
+        ValidateRule(mapping.Key);
+        ValidateRule(eventMapping.Subject);
+        ValidateRule(eventMapping.Time);
+        ValidateRule(eventMapping.Tags);
+        ValidateRule(eventMapping.Summary);
+        ValidateRule(eventMapping.Link);
+    }
 
-        ValidateRule(parsed.Key);
-        ValidateRule(parsed.Event.Subject);
-        ValidateRule(parsed.Event.Time);
-        ValidateRule(parsed.Event.Tags);
-        ValidateRule(parsed.Event.Summary);
-        ValidateRule(parsed.Event.Link);
-
+    private static void ValidateHttpPollInterval(string intervalText, TimeSpan minimum)
+    {
         TimeSpan interval;
         try
         {
-            interval = XmlConvert.ToTimeSpan(parsed.Interval);
+            interval = XmlConvert.ToTimeSpan(intervalText);
         }
         catch (FormatException exception)
         {
@@ -166,9 +181,64 @@ public static class EventSourceConfigParser
             );
         }
 
-        if (interval < options.MinInterval)
+        if (interval < minimum)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll interval is below the configured minimum.");
+        }
+    }
+
+    private static EventHttpPollPaginationConfig NormalizeHttpPollPagination(
+        EventHttpPollSourceConfig config,
+        int maxPages
+    )
+    {
+        var pagination = config.Pagination;
+        var usesCursor = pagination.Kind == EventHttpPollPaginationConfig.Cursor;
+        var supportedKind =
+            pagination.Kind
+            is EventHttpPollPaginationConfig.None
+                or EventHttpPollPaginationConfig.LinkHeader
+                or EventHttpPollPaginationConfig.Page
+                or EventHttpPollPaginationConfig.Cursor;
+        if (!supportedKind || usesCursor && config.Format == EventSourceFormats.CloudEvents)
+            throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll pagination kind is invalid.");
+
+        var invalidPageLimit = pagination.MaxPages is < 1 || pagination.MaxPages > maxPages;
+        var invalidCursor =
+            usesCursor
+            && (!IsValidJsonPath(pagination.CursorPath) || string.IsNullOrWhiteSpace(pagination.CursorParameter));
+        if (invalidPageLimit || invalidCursor)
+            throw new AgwException(ErrorCodes.InvalidParam, "HTTP poll pagination configuration is invalid.");
+
+        var pageParameter = pagination.PageParameter?.Trim();
+        return pagination with
+        {
+            PageParameter = pageParameter is { Length: > 0 } ? pageParameter : null,
+            CursorParameter = pagination.CursorParameter?.Trim(),
+        };
+    }
+
+    internal static bool IsValidJsonPath(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && JsonPath.TryParse(path, out _);
+
+    public static string Serialize<T>(T config) => JsonSerializer.Serialize(config, JsonOptions);
+
+    public static EventProviderSourceConfig ParseProvider(
+        JsonElement config,
+        ExtensionEventSourceProviderDescriptor provider
+    )
+    {
+        var parsed = Deserialize<EventProviderSourceConfig>(config);
+        var invalidConfiguration =
+            provider.Configurations.Count == 0 && parsed.ConfigurationId is not null
+            || provider.Configurations.Count > 0
+                && (
+                    string.IsNullOrWhiteSpace(parsed.ConfigurationId)
+                    || !provider.Configurations.Any(item => item.Id == parsed.ConfigurationId)
+                );
+        if (invalidConfiguration)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "The selected source configuration is unavailable.");
         }
 
         return parsed;
@@ -181,7 +251,7 @@ public static class EventSourceConfigParser
             parsed.Kind is not ("Once" or "Interval" or "Cron")
             || string.IsNullOrWhiteSpace(parsed.TimeZone)
             || string.IsNullOrWhiteSpace(parsed.Event.Type)
-            || parsed.Event.Type.StartsWith("agw.", StringComparison.Ordinal)
+            || EventTypePatterns.IsReserved(parsed.Event.Type)
         )
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Timer source configuration is invalid.");
@@ -325,7 +395,7 @@ public static class EventSourceConfigParser
         }
     }
 
-    private static T Deserialize<T>(JsonElement config)
+    internal static T Deserialize<T>(JsonElement config)
     {
         if (config.ValueKind != JsonValueKind.Object)
         {
@@ -342,6 +412,24 @@ public static class EventSourceConfigParser
             throw new AgwException(ErrorCodes.InvalidParam, "Source configuration is invalid.", exception);
         }
     }
+
+    private static void ValidateTypeDeclaration(IReadOnlyList<string>? eventTypes, string? fixedType)
+    {
+        var validDeclaration = (eventTypes, fixedType) switch
+        {
+            ({ Count: > 0 } patterns, null) => patterns.All(EventTypePatterns.IsDeclaredExternalPattern),
+            (null, { } type) => EventTypePatterns.IsExactType(type) && !EventTypePatterns.IsReserved(type),
+            _ => false,
+        };
+        if (!validDeclaration)
+            throw new AgwException(ErrorCodes.InvalidParam, "Source event type declaration is invalid.");
+    }
+
+    private static bool DeclaredTypeMatches(IReadOnlyList<string> eventTypes, string? eventType) =>
+        eventType is not null
+        && EventTypePatterns.IsExactType(eventType)
+        && !EventTypePatterns.IsReserved(eventType)
+        && EventTypePatterns.MatchesAny(eventTypes, eventType);
 
     private static void ValidateRule(JsonElement? rule)
     {

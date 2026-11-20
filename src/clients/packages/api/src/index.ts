@@ -1,6 +1,7 @@
 export * from "./client";
 export * from "./quick-prompts";
 export * from "./lib/chat-target-options";
+export * from "./lib/event-source-names";
 export * from "./lib/guid";
 export * from "./lib/token-usage";
 export * from "./lib/uuid";

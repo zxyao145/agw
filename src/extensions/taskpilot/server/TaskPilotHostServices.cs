@@ -3,6 +3,7 @@ using Agw.Events.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Sdk;
 using Agw.Extensions.Sdk.EntityFrameworkCore;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,6 +38,8 @@ internal static class TaskPilotSystemSubscription
     public const string RoundRetry = "taskpilot.round.retry";
     public const string DeliveryTick = "taskpilot.delivery.tick";
 
+    public static IReadOnlyList<string> SystemTypes { get; } = [ReviewDue, RoundRetry, DeliveryTick];
+
     private static readonly string[] EventTypes =
     [
         ExecutionCompleted,
@@ -46,7 +49,11 @@ internal static class TaskPilotSystemSubscription
         DeliveryTick,
     ];
 
-    public static ManagedSubscriptionRequest CreateRequest(IExtensionContext context, long version)
+    public static ManagedSubscriptionRequest CreateRequest(
+        IExtensionContext context,
+        long version,
+        IReadOnlyList<Guid> sourceIds
+    )
     {
         Guid extensionId = context.ExtensionId;
         using JsonDocument filter = JsonDocument.Parse(
@@ -72,7 +79,7 @@ internal static class TaskPilotSystemSubscription
             ManagedKey = "system",
             ManagedVersion = version,
             Name = "TaskPilot system events",
-            PublisherKeys = ["agw.execution", "agw.notifications", $"agw.scheduler:ext:{extensionId:D}"],
+            SourceIds = sourceIds,
             EventTypes = EventTypes,
             Filter = filter.RootElement.Clone(),
             HandlerId = TaskPilotEventHandlers.SystemEvents,
@@ -108,7 +115,14 @@ internal static class TaskPilotSystemSubscription
             state.SystemSubscriptionVersion++;
         }
 
-        ManagedSubscriptionRequest request = CreateRequest(context, state.SystemSubscriptionVersion);
+        var sources = context.HostCapabilities.GetRequired<IEventSourceFacade>();
+        var sourceIds = new[]
+        {
+            await sources.GetBuiltInSourceIdAsync(EventBuiltInSources.Execution, cancellationToken),
+            await sources.GetBuiltInSourceIdAsync(EventBuiltInSources.Notifications, cancellationToken),
+            await sources.GetExtensionSourceIdAsync(cancellationToken),
+        };
+        ManagedSubscriptionRequest request = CreateRequest(context, state.SystemSubscriptionVersion, sourceIds);
         state.SystemSubscriptionOutboxId = ExtensionOutbox.Enqueue(
             dbContext,
             ExtensionOutboxKind.UpsertManagedSubscription,

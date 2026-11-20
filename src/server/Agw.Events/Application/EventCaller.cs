@@ -1,5 +1,6 @@
 using Agw.Auth.Contracts;
 using Agw.Extensions.Contracts;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Events.Application;
@@ -32,17 +33,11 @@ public sealed class EventCaller
 
     public void ValidateType(ExtensionGenerationSnapshot extension, string eventType, bool root)
     {
-        if (eventType.StartsWith("agw.", StringComparison.Ordinal))
+        if (EventTypePatterns.IsReserved(eventType))
             throw new AgwException(ErrorCodes.EventTypeReserved);
         if (root && !extension.EventPermissions.PublishRoot)
             throw new AgwException(ErrorCodes.EventPublishTypeDenied);
-        if (!extension.EventPermissions.Publish.Any(pattern => Matches(pattern, eventType)))
+        if (!EventTypePatterns.MatchesAny(extension.EventPermissions.Publish, eventType))
             throw new AgwException(ErrorCodes.EventPublishTypeDenied);
     }
-
-    private static bool Matches(string pattern, string eventType) =>
-        pattern == "*"
-        || pattern == eventType
-        || pattern.EndsWith(".*", StringComparison.Ordinal)
-            && eventType.StartsWith(pattern[..^1], StringComparison.Ordinal);
 }

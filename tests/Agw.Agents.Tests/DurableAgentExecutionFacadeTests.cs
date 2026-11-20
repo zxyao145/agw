@@ -87,7 +87,8 @@ public sealed partial class DurableExecutionStoreTests
 
         // Assert
         var finished = Assert.Single(messages, AgwMessageClassifier.IsTurnFinished);
-        Assert.Equal("completed", finished.AdditionalProperties!["status"]);
+        Assert.True(AgwMessageClassifier.TryGetTurnFinishedStatus(finished, out var status));
+        Assert.Equal(AgwTurnStatus.Completed, status);
         var snapshot = await Store.GetAsync(turnId, token);
         Assert.Equal(DurableExecutionStatus.Completed, snapshot.Status);
         Assert.Equal(AgwPermissionMode.FullAccess, snapshot.Manifest.Settings.PermissionMode);

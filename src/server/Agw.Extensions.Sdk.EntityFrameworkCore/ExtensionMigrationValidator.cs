@@ -40,6 +40,9 @@ internal static class ExtensionMigrationValidator
         {
             switch (operation)
             {
+                case ExtensionUpdateAllRowsOperation updateAll:
+                    ValidateUpdateAllRows(updateAll, options, maximumIdentifierBytes);
+                    break;
                 case SqlOperation:
                 case AddForeignKeyOperation:
                 case DropForeignKeyOperation:
@@ -325,6 +328,29 @@ internal static class ExtensionMigrationValidator
                 maximumIdentifierBytes
             );
         }
+    }
+
+    private static void ValidateUpdateAllRows(
+        ExtensionUpdateAllRowsOperation operation,
+        ExtensionDatabaseSchemaMetadata options,
+        int maximumIdentifierBytes
+    )
+    {
+        ValidateTableName(operation.Table, null, options, maximumIdentifierBytes);
+        var shortName = operation.Table[options.TablePrefix.Length..];
+        if (shortName is "__inbox" or "__outbox")
+            throw ExtensionDatabaseModelValidator.MigrationInvalid(
+                "SDK messaging tables do not allow full-table updates."
+            );
+
+        var columns = operation.Assignments.Select(assignment => assignment.Key);
+        var invalidAssignments =
+            operation.Assignments.Count == 0
+            || columns.Distinct(StringComparer.Ordinal).Count() != operation.Assignments.Count;
+        if (invalidAssignments)
+            throw ExtensionDatabaseModelValidator.MigrationInvalid("The extension row update is invalid.");
+
+        ValidateColumns(columns, maximumIdentifierBytes);
     }
 
     private static void ValidateColumns(IEnumerable<string> columns, int maximumIdentifierBytes)

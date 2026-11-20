@@ -8,6 +8,36 @@ public sealed record EventSourceOption
     public required Guid Id { get; init; }
 
     public required string Name { get; init; }
+
+    public required EventSourceKind Kind { get; init; }
+
+    public required string ManagedBy { get; init; }
+
+    public required IReadOnlyList<string> EventTypes { get; init; }
+}
+
+public sealed record EventSourceProviderOption
+{
+    public required Guid ExtensionId { get; init; }
+
+    public required string ExtensionName { get; init; }
+
+    public required string ExtensionDisplayName { get; init; }
+
+    public required string ProviderId { get; init; }
+
+    public required IReadOnlyList<string> EventTypes { get; init; }
+
+    public required IReadOnlyList<EventSourceProviderConfigurationOption> Configurations { get; init; }
+}
+
+public sealed record EventSourceProviderConfigurationOption
+{
+    public required string Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Description { get; init; }
 }
 
 public sealed record EventSourceCreateCommand

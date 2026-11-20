@@ -22,7 +22,6 @@ public sealed class EventSubscriptionBehavior
         _subscription.Name = definition.Name;
         _subscription.Enabled = true;
         _subscription.SourceIdsJson = definition.SourceIdsJson;
-        _subscription.PublisherKeysJson = definition.PublisherKeysJson;
         _subscription.EventTypesJson = definition.EventTypesJson;
         _subscription.FilterJson = definition.FilterJson;
         _subscription.TargetKind = EventSubscriptionTargetKind.ExtensionHandler;

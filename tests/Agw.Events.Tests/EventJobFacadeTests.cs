@@ -45,6 +45,8 @@ public sealed class EventJobFacadeTests
         var template = config.RootElement.GetProperty("event");
 
         Assert.Equal(EventSourceKind.Timer, source.Kind);
+        Assert.Equal("agw.timer.job", source.Name);
+        Assert.Equal("job", job.Definition.Name);
         Assert.Equal(EventManagedBy.Job, source.ManagedBy);
         Assert.Equal(job.Id.ToString("D"), source.ManagedKey);
         Assert.Equal(EventManagedBy.Job, subscription.ManagedBy);
@@ -110,6 +112,7 @@ public sealed class EventJobFacadeTests
 
     [Theory]
     [InlineData(201, "run")]
+    [InlineData(191, "run")]
     [InlineData(0, "run")]
     [InlineData(10, " ")]
     public async Task CreateAsync_InvalidNameOrInstructions_ThrowsInvalidParam(int nameLength, string instructions)
@@ -124,11 +127,39 @@ public sealed class EventJobFacadeTests
     }
 
     [Fact]
+    public async Task CreateAsync_JobNameBreaksRule_ThrowsInvalidParam()
+    {
+        using var user = PushUser();
+        await using var fixture = await Fixture.CreateAsync();
+
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Jobs.CreateAsync(Definition() with { Name = "Daily review" }, Ct)
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+        Assert.Contains("lowercase letters, digits, '-' and '.'", error.Message);
+        Assert.Empty(await fixture.Db.EventSources.ToArrayAsync(Ct));
+        Assert.Empty(await fixture.Db.EventSubscriptions.ToArrayAsync(Ct));
+    }
+
+    [Fact]
+    public async Task CreateAsync_DuplicateJobName_ThrowsNameConflict()
+    {
+        using var user = PushUser();
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.Jobs.CreateAsync(Definition(), Ct);
+
+        var error = await Assert.ThrowsAsync<AgwException>(() => fixture.Jobs.CreateAsync(Definition(), Ct));
+
+        Assert.Equal(ErrorCodes.EventSourceNameConflict.Code, error.Code);
+    }
+
+    [Fact]
     public async Task CreateAsync_NameAtLimit_CreatesJob()
     {
         using var user = PushUser();
         await using var fixture = await Fixture.CreateAsync();
-        var name = new string('a', 200);
+        var name = new string('a', 190);
 
         var job = await fixture.Jobs.CreateAsync(Definition() with { Name = name }, Ct);
 
@@ -193,7 +224,7 @@ public sealed class EventJobFacadeTests
         Assert.Equal(before.DueAt, after.DueAt);
         Assert.Equal(before.Revision, after.Revision);
         Assert.Equal(definition, updated.Definition);
-        Assert.Equal(definition.Name, (await fixture.SourceAsync(job.Id)).Name);
+        Assert.Equal($"agw.timer.{definition.Name}", (await fixture.SourceAsync(job.Id)).Name);
         Assert.Equal(definition.Name, (await fixture.SubscriptionAsync(job.Id)).Name);
     }
 
@@ -468,8 +499,12 @@ public sealed class EventJobFacadeTests
         await using var fixture = await Fixture.CreateAsync();
         var definition = OnceInPast();
         var first = await fixture.Jobs.CreateAsync(definition, Ct);
-        var disabled = await fixture.Jobs.CreateAsync(definition with { Enabled = false }, Ct);
-        var anotherProjectDefinition = Definition() with { ProjectId = Guid.CreateVersion7() };
+        var disabled = await fixture.Jobs.CreateAsync(definition with { Name = "disabled", Enabled = false }, Ct);
+        var anotherProjectDefinition = Definition() with
+        {
+            Name = "another-project",
+            ProjectId = Guid.CreateVersion7(),
+        };
         await fixture.SeedProjectAsync(anotherProjectDefinition.ProjectId);
         var anotherProject = await fixture.Jobs.CreateAsync(anotherProjectDefinition, Ct);
         var subscription = await fixture.SubscriptionAsync(first.Id);
@@ -553,7 +588,7 @@ public sealed class EventJobFacadeTests
         using var user = PushUser();
         await using var fixture = await Fixture.CreateAsync();
         await fixture.Jobs.CreateAsync(Definition(), Ct);
-        var deleted = await fixture.Jobs.CreateAsync(Definition(), Ct);
+        var deleted = await fixture.Jobs.CreateAsync(Definition() with { Name = "deleted" }, Ct);
         await fixture.Jobs.DeleteAsync(deleted.Id, Ct);
         using (PushUser("other"))
         {
@@ -568,7 +603,7 @@ public sealed class EventJobFacadeTests
     private static EventJobDefinition Definition() =>
         new()
         {
-            Name = "Job",
+            Name = "job",
             Enabled = true,
             ProjectId = DefaultProjectId,
             TargetKind = EventJobTargetKind.Agent,

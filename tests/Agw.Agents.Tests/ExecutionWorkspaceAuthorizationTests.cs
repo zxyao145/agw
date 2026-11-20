@@ -134,6 +134,7 @@ public sealed class ExecutionWorkspaceAuthorizationTests
             {
                 ExtensionId = extensionId,
                 Name = package.Manifest.Name,
+                DisplayName = package.Manifest.DisplayName,
                 Version = package.Manifest.Version,
                 ReleaseHash = package.ReleaseHash,
                 Epoch = 0,
