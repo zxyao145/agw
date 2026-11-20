@@ -237,7 +237,10 @@ public partial class AgentRuntimeFactory
             BaseUrl = provider.Endpoint,
         };
         var client = new AnthropicClient(anthropicClientOptions);
-        return AnthropicReasoningChatClient.Create(client.AsIChatClient(model.Name), new Uri(provider.Endpoint));
+        return AnthropicReasoningChatClient.Create(
+            AnthropicPromptCachingChatClient.Create(client, model.Name),
+            new Uri(provider.Endpoint)
+        );
     }
 
     private IChatClient CreateOpenAiResponsesChatClient(

@@ -192,6 +192,35 @@ public sealed class ToolResultEvictionCompactionStrategyTests
     }
 
     [Theory]
+    [InlineData(12, 0)]
+    [InlineData(13, 1)]
+    public async Task Create_LargeContextWindow_EvictsOldToolResultsAbove64000Tokens(int groups, int expectedEvictions)
+    {
+        var messages = CreateConversation(groups);
+        var strategy = ContextWindowCompactionPipeline.Create(
+            maxContextWindowTokens: 1_000_000,
+            maxOutputTokens: 128_000
+        );
+
+        var compacted = await CompactionProvider.CompactAsync(
+            strategy,
+            messages,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        var results = compacted.SelectMany(message => message.Contents.OfType<FunctionResultContent>()).ToList();
+        Assert.Equal(groups, results.Count);
+        Assert.Equal(
+            expectedEvictions,
+            results.Count(result => Equals(result.Result, ToolResultEvictionCompactionStrategy.EvictedResultText))
+        );
+        Assert.All(
+            results.TakeLast(2),
+            result => Assert.Equal(ResultLength, Assert.IsType<string>(result.Result).Length)
+        );
+    }
+
+    [Theory]
     [InlineData(0, 0)]
     [InlineData(1_000, -1)]
     [InlineData(1_000, 1_000)]

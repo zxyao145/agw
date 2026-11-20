@@ -9,14 +9,17 @@ namespace Agw.Agents.Execution.Agents.History;
 /// <para>Builds the two-stage compaction strategy of Definition Agents from the model context window.</para>
 /// </summary>
 /// <remarks>
-/// <para>有效输入预算为上下文窗口减去输出上限。达到预算 50% 时清空较旧 Tool call 组的结果正文，达到 80% 时截断较旧的消息组；两阶段都保留最近 2 个非 System 组。</para>
-/// <para>The effective input budget is the context window minus the output limit. At 50% of the budget, result bodies of older tool-call groups are evicted; at 80%, older message groups are truncated. Both stages preserve the 2 most recent non-system groups.</para>
+/// <para>输入预算为上下文窗口减去输出上限。旧工具结果的清理阈值为输入预算的 50%，最高 64,000 Token。
+/// 消息截断阈值为输入预算的 80%。两个阶段都保留最近两个非 System 消息组。</para>
+/// <para>The input budget is the context window minus the output limit. Tool results are evicted above half that budget
+/// or 64,000 tokens, whichever is lower. Message truncation starts above 80%. Both stages retain two non-system groups.</para>
 /// </remarks>
 internal static class ContextWindowCompactionPipeline
 {
     public const double ToolEvictionThreshold = 0.5;
     public const double TruncationThreshold = 0.8;
     public const int MinimumPreservedGroups = 2;
+    private const int MaxToolEvictionThresholdTokens = 64_000;
 
     /// <summary>
     /// <para>创建 Tool result 清空与消息截断组成的压缩 pipeline。</para>
@@ -41,9 +44,13 @@ internal static class ContextWindowCompactionPipeline
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(maxOutputTokens, maxContextWindowTokens);
 
         var inputBudgetTokens = maxContextWindowTokens - maxOutputTokens;
+        var toolEvictionTokens = Math.Min(
+            (int)(inputBudgetTokens * ToolEvictionThreshold),
+            MaxToolEvictionThresholdTokens
+        );
         return new PipelineCompactionStrategy(
             new ToolResultEvictionCompactionStrategy(
-                CompactionTriggers.TokensExceed((int)(inputBudgetTokens * ToolEvictionThreshold)),
+                CompactionTriggers.TokensExceed(toolEvictionTokens),
                 MinimumPreservedGroups
             ),
             new TruncationCompactionStrategy(
