@@ -25,6 +25,9 @@ ToolBlock 可以包含另一个 ToolBlock，前提是以相同声明列出被包
   Agent、Project 和会话使用，但其他用户不可见。
 - `file-access`：限定在本轮目录快照下的文件读取与写入工具，可用 `directoryId` 选择 Project 附加目录，省略时使用主目录 `Project.Workspace`；它包含 `file-readonly-access`。
 - `file-readonly-access`：只提供 `file-access` 中的 `file_access_read`、`file_access_read_lines`、`file_access_ls`、`file_access_grep`，工具实例与成员声明都相同。
+  `file_access_grep` 每页最多返回 20 个匹配行，按文件分组。继续查询时沿用相同的搜索条件并传入返回的 `continuation`。
+  使用 `file_access_read_lines` 的 `startLine` 和 `endLine` 读取匹配行附近的代码。
+  一次搜索最多检查 10,000 个符合条件的文件。工作区文件数量超过上限时，可用 `directory` 和 `globPattern` 指定搜索范围。
 - `background-agents`：只允许一层的后台 Agent 委派工具。
 - `background-agents` 的全部成员统一声明 `ReadOnly`，包括启动、继续和清理任务，父级工具调用均免审批；Plan 模式可用性仍独立声明。
 
@@ -149,9 +152,9 @@ AsAgwAgent
 InputBudget = MaxContextWindowTokens - MaxOutputTokens
 ```
 
-MAF 核心包的 `ContextWindowCompactionStrategy` 按有效输入预算的默认阈值工作：达到 50% 时压缩较旧的 Tool call/result，达到 80% 时截断较旧消息。Tool call 与对应 result 作为原子消息组处理，不会只保留其中一部分。框架按 token 估算值判断阈值，该值不等同于字符数，也可能与模型提供方的最终计数略有差异。
+`ContextWindowCompactionPipeline` 在输入 Token 估算值超过 `min(InputBudget × 50%, 64_000)` 时清理旧工具结果，超过输入预算的 80% 时截短旧消息。每个工具调用和对应结果按组处理。最终 Token 数由模型供应商报告。
 
-默认配置 `256_000 / 64_000` 对应 `192_000` 的有效输入预算，因此两个阈值分别约为 `96_000` 和 `153_600` 个输入 token。Compaction Provider 位于函数调用循环内部，并在逐次历史持久化层之后运行，所以一次 Tool 调用前后的每次模型请求都会重新检查预算。压缩只改变当前发给模型的请求；EF Core 仍保存完整原始历史，压缩状态随 `AgentSession.StateBag` 持久化。External Agent 与一次性 Summary client 不经过这条管线。
+默认配置 `256_000 / 64_000` 对应 `192_000` 的有效输入预算，两个阈值分别为 `64_000` 和 `153_600` 个输入 Token。Compaction Provider 位于函数调用循环内部，在每次模型请求前、历史写入之后检查预算。EF Core 保存完整原始历史，压缩状态随 `AgentSession.StateBag` 持久化。External Agent 与一次性 Summary client 使用各自的请求流程。
 
 Catalog 构建和运行时组合都会校验名称：
 

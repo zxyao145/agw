@@ -45,13 +45,11 @@ internal sealed class AgwFileAccessProvider : AIContextProvider
         Use these tools to read input data provided by the user, write output artifacts, and manage any files the user has asked you to work with.
 
         - Never delete or overwrite existing files unless the user has explicitly asked you to do so.
-        - Files may be organized into subdirectories. Use `file_access_ls` to explore the tree level by level,
-          or `file_access_grep` to search file contents recursively across the whole store.
+        - Use `file_access_ls` to locate directories. Search for specific names or phrases with `file_access_grep`,
+          limiting the search with `directory` or `globPattern`. Pass the returned `continuation` to read the next page.
         - To make small edits to an existing file, prefer `file_access_replace` (substring replacement) or
           `file_access_replace_lines` (whole-line replacement) over rewriting the whole file.
-        - To change part of a file, find the line numbers with `file_access_grep`, read the range around them
-          with `file_access_read_lines`, then edit with `file_access_replace_lines`. Reading the whole file
-          first is rarely necessary.
+        - Use `file_access_read_lines` with `startLine` and `endLine` to read the code around a match.
         - File paths are relative to the selected Project directory. Omit `directoryId` for the primary directory;
           use a `directoryId` from the Project directory list for an additional directory.
         """;
@@ -220,33 +218,61 @@ internal sealed class AgwFileAccessProvider : AIContextProvider
 
     [Description(
         """
-            Search the contents of files in the store (recursively, across all subdirectories) using a regular expression pattern (case-insensitive).
-            Optionally restrict the search to a base directory (relative path), and filter which files to search using a glob pattern matched against each file's path relative to that directory:
-            - '*' matches within a single path segment
-            - '**' matches across subdirectories, so use "**/*.md" to match markdown files at any depth, or "reports/**" to restrict the search to the 'reports' subtree.
-
-            Returns matching results whose file names are paths relative to the store root (usable with file_access_read), along with snippets and matching lines with line numbers.
+            Search recursively with a case-insensitive regular expression. The glob is relative to the search directory.
+            Use '*' within a path segment and '**' across directories, as in "**/*.md".
+            Returns up to 20 matching lines grouped by file. Pass the returned continuation with the same search to get the next page.
             Line numbers are 1-based and count lines terminated by \n, \r\n, or a lone \r, and content ending in a terminator has no extra empty line after it.
             """
     )]
-    private async Task<List<AgwFileSearchResult>> GrepAsync(
+    private async Task<GrepResult> GrepAsync(
         string regexPattern,
         string? globPattern = null,
         string? directory = null,
         [Description(DirectoryIdDescription)] string? directoryId = null,
+        [Description("Continuation object from a previous page. Reuse it with the same search parameters.")]
+            FileSearchPosition? continuation = null,
         CancellationToken cancellationToken = default
     )
     {
-        var results = await ResolveStore(directoryId)
-            .SearchAsync(
+        if (continuation is { } cursor && (string.IsNullOrEmpty(cursor.FileName) || cursor.LineNumber < 1))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Invalid file search continuation.");
+        }
+
+        var searchPage = await ResolveStore(directoryId)
+            .SearchForAccessAsync(
                 directory ?? string.Empty,
                 regexPattern,
                 string.IsNullOrWhiteSpace(globPattern) ? null : globPattern,
-                recursive: true,
+                continuation,
                 cancellationToken
             )
             .ConfigureAwait(false);
-        return [.. results];
+
+        var files = new List<GrepFileResult>();
+        var remaining = ProjectAgentFileStore.SearchPageSize;
+        FileSearchPosition? lastMatch = null;
+        foreach (var result in searchPage.Results)
+        {
+            var matches = result.MatchingLines.Take(remaining).ToArray();
+            if (matches.Length == 0)
+            {
+                continue;
+            }
+
+            files.Add(new GrepFileResult(result.FileName, matches));
+            remaining -= matches.Length;
+            var lastLine = matches[^1];
+            lastMatch = new FileSearchPosition(result.FileName, lastLine.LineNumber);
+            if (remaining == 0)
+            {
+                break;
+            }
+        }
+
+        var matchingLineCount = searchPage.Results.Sum(static result => result.MatchingLines.Count);
+        var hasMore = searchPage.HasMore || matchingLineCount > ProjectAgentFileStore.SearchPageSize;
+        return new GrepResult(files, hasMore ? lastMatch : null);
     }
 
     private AITool[] CreateTools()
@@ -304,4 +330,8 @@ internal sealed class AgwFileAccessProvider : AIContextProvider
         return _additionalStores.GetValueOrDefault(id)
             ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project directory was not found.");
     }
+
+    private sealed record GrepFileResult(string FileName, IReadOnlyList<AgwFileSearchMatch> MatchingLines);
+
+    private sealed record GrepResult(IReadOnlyList<GrepFileResult> Files, FileSearchPosition? Continuation);
 }

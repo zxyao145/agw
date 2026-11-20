@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Summaries;
@@ -6,9 +7,11 @@ using Agw.Infrastructure.Repositories;
 using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Testing;
+using Anthropic.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using OllamaSharp;
 
@@ -52,6 +55,42 @@ public class SummaryChatClientFactoryTests
         {
             Assert.NotNull(client.GetService<OpenAI.Chat.ChatClient>());
         }
+    }
+
+    [Fact]
+    public async Task CreateAsync_AnthropicRuntimeConfiguration_AddsFiveMinuteTopLevelCacheControl()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var server = await AnthropicPromptCachingTests.LocalAnthropicServer.StartAsync(cancellationToken);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var modelProvider = await SeedModelProviderAsync(
+            dbContext,
+            ProviderType.Anthropic,
+            $"{server.Address}/gateway/anthropic",
+            [CreateAuthConfig("test-key")],
+            cancellationToken
+        );
+        await using var services = new ServiceCollection().AddHttpClient().BuildServiceProvider();
+        var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
+        var factory = CreateFactory(dbContext, httpClientFactory);
+
+        using var client = await factory.CreateAsync(modelProvider.Id, cancellationToken);
+        var exception = await Record.ExceptionAsync(async () =>
+            await client!.GetResponseAsync([new(ChatRole.User, "question")], cancellationToken: cancellationToken)
+        );
+
+        var apiException = Assert.IsType<AnthropicBadRequestException>(exception);
+        Assert.Equal(HttpStatusCode.BadRequest, apiException.StatusCode);
+        Assert.True(server.Request.IsCompletedSuccessfully);
+        using var request = await server.Request;
+        var body = request.RootElement;
+        var cacheControl = body.GetProperty("cache_control");
+        Assert.Equal("ephemeral", cacheControl.GetProperty("type").GetString());
+        Assert.False(cacheControl.TryGetProperty("ttl", out _));
+        Assert.Equal("test-model", body.GetProperty("model").GetString());
+        Assert.Equal(1024, body.GetProperty("max_tokens").GetInt32());
     }
 
     [Theory]
@@ -153,10 +192,7 @@ public class SummaryChatClientFactoryTests
             CreateBy = "tester",
         };
 
-    private static SummaryChatClientFactory CreateFactory(
-        AgwDbContext dbContext,
-        RecordingHttpClientFactory httpClientFactory
-    )
+    private static SummaryChatClientFactory CreateFactory(AgwDbContext dbContext, IHttpClientFactory httpClientFactory)
     {
         var userInfo = new TestUserInfoService();
         var appService = TestAgentAppService.Create(

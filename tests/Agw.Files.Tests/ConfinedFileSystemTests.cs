@@ -230,8 +230,10 @@ public sealed class ConfinedFileSystemTests
         }
     }
 
-    [Fact]
-    public async Task Enumerate_And_Search_ShowOnlyEntriesInsideAllowedRoots()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Enumerate_And_Search_ShowOnlyEntriesInsideAllowedRoots(bool orderByPath)
     {
         var ct = TestContext.Current.CancellationToken;
         var root = CreateTestRoot();
@@ -260,7 +262,7 @@ public sealed class ConfinedFileSystemTests
             await foreach (
                 var result in fileSystem.SearchAsync(
                     string.Empty,
-                    new SearchOptions("needle", CaseInsensitive: true, Recursive: true),
+                    new SearchOptions("needle", CaseInsensitive: true, Recursive: true) { OrderByPath = orderByPath },
                     ct
                 )
             )
