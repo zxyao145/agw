@@ -6,6 +6,7 @@ namespace Agw.Shared.Contracts.Events;
 /// </summary>
 public static class EventManagedBy
 {
+    public const string Agw = "agw";
     public const string User = "user";
     public const string Job = "job";
     public const string ExtensionPrefix = "ext:";

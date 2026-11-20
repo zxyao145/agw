@@ -90,11 +90,11 @@ public sealed class NotificationAppServiceTests
         var parent = await scope.EventStaging.StageAsync(
             new EventStagingRequest
             {
-                PublisherKey = "agw.notifications",
+                BuiltInSource = EventBuiltInSources.Notifications,
                 Event = new CloudEventDraft
                 {
                     Id = "question-parent",
-                    Type = "agw.notification.created",
+                    Type = "agw.notification.answered",
                     Time = fixture.TimeProvider.GetUtcNow(),
                 },
             },

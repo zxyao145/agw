@@ -3,7 +3,9 @@ using System.Text.Json;
 using Agw.Auth.Contracts;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Configuration;
+using Agw.Events.Domain.Services;
 using Agw.Extensions.Contracts;
+using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Events;
@@ -23,6 +25,9 @@ public sealed class EventSourceAppService
     private readonly IExtensionGenerationCatalog _generationCatalog;
     private readonly EventsOptions _options;
     private readonly TimeProvider _timeProvider;
+    private readonly IApplicationLock _applicationLock;
+    private readonly EventSourceNameDomainService _nameService;
+    private readonly IEventPublisherSources _publisherSources;
 
     public EventSourceAppService(
         IEventsDbContext db,
@@ -31,7 +36,10 @@ public sealed class EventSourceAppService
         IEventIngestTransaction transaction,
         IExtensionGenerationCatalog generationCatalog,
         IOptions<EventsOptions> options,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IApplicationLock applicationLock,
+        EventSourceNameDomainService nameService,
+        IEventPublisherSources publisherSources
     )
     {
         _db = db;
@@ -41,15 +49,84 @@ public sealed class EventSourceAppService
         _generationCatalog = generationCatalog;
         _options = options.Value;
         _timeProvider = timeProvider;
+        _applicationLock = applicationLock;
+        _nameService = nameService;
+        _publisherSources = publisherSources;
     }
 
-    public Task<PagedResult<EventSource>> ListAsync(int pageIndex, int pageSize, CancellationToken cancellationToken) =>
-        EventPaging.ToPagedResultAsync(QuerySources(), pageIndex, pageSize, static source => source, cancellationToken);
+    public async Task<PagedResult<EventSource>> ListAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken
+    )
+    {
+        await _publisherSources.EnsureAllBuiltInAsync(cancellationToken);
+        return await EventPaging.ToPagedResultAsync(
+            QuerySources(),
+            pageIndex,
+            pageSize,
+            static source => source,
+            cancellationToken
+        );
+    }
 
-    public async Task<IReadOnlyList<EventSourceOption>> ListOptionsAsync(CancellationToken cancellationToken) =>
-        await QuerySources()
-            .Select(source => new EventSourceOption { Id = source.Id, Name = source.Name })
-            .ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<EventSourceOption>> ListOptionsAsync(CancellationToken cancellationToken)
+    {
+        await _publisherSources.EnsureAllBuiltInAsync(cancellationToken);
+        var sources = await QuerySources().ToArrayAsync(cancellationToken);
+        return sources
+            .Select(source => new EventSourceOption
+            {
+                Id = source.Id,
+                Name = source.Name,
+                Kind = source.Kind,
+                ManagedBy = source.ManagedBy,
+                EventTypes = GetEventTypes(source),
+            })
+            .ToArray();
+    }
+
+    public IReadOnlyList<string> GetEventTypes(EventSource source)
+    {
+        var hasExtension = source.Kind == EventSourceKind.Provider || EventManagedBy.IsExtension(source.ManagedBy);
+        var extension = hasExtension
+            ? _generationCatalog
+                .GetActiveGenerations()
+                .SingleOrDefault(snapshot =>
+                    source.Kind == EventSourceKind.Provider
+                        ? snapshot.GenerationId.ExtensionId == source.ProviderExtensionId
+                        : source.ManagedBy == EventManagedBy.ForExtension(snapshot.GenerationId.ExtensionId)
+                )
+            : null;
+        if (hasExtension && extension is null)
+            return [];
+        if (source.Kind == EventSourceKind.Provider)
+            return extension.FindSourceProvider(source.ProviderId)?.EventTypes ?? [];
+        return EventSourceTypeDeclaration.Resolve(source, extension);
+    }
+
+    public IReadOnlyList<EventSourceProviderOption> ListProviders() =>
+        _generationCatalog
+            .GetActiveGenerations()
+            .SelectMany(snapshot =>
+                snapshot.EventSourceProviders.Select(provider => new EventSourceProviderOption
+                {
+                    ExtensionId = snapshot.GenerationId.ExtensionId,
+                    ExtensionName = snapshot.Name,
+                    ExtensionDisplayName = snapshot.DisplayName,
+                    ProviderId = provider.Id,
+                    EventTypes = provider.EventTypes,
+                    Configurations = provider
+                        .Configurations.Select(configuration => new EventSourceProviderConfigurationOption
+                        {
+                            Id = configuration.Id,
+                            Name = configuration.Name,
+                            Description = configuration.Description,
+                        })
+                        .ToArray(),
+                })
+            )
+            .ToArray();
 
     private IOrderedQueryable<EventSource> QuerySources()
     {
@@ -78,32 +155,62 @@ public sealed class EventSourceAppService
     )
     {
         var userId = UserInfoUtil.RequiredUserId;
-        ValidateName(request.Name);
         ValidateKind(request.Kind);
-        ValidateProvider(request.Kind, request.ProviderExtensionId, request.ProviderId, request.Config);
-        var secret = SecretJson(request.Secret);
-        ValidateConfiguration(request.Kind, request.Config, secret is null ? null : ParseSecret(secret));
+        EventSourceNames.Validate(request.Name, request.Kind, EventManagedBy.User);
+        var provider = ValidateProvider(request.Kind, request.ProviderExtensionId, request.ProviderId, request.Config);
+        if (request.Kind == EventSourceKind.Webhook && request.Secret is not null)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Webhook secrets are generated by the server.");
+        }
+        var generatedSecret = request.Kind == EventSourceKind.Webhook ? GenerateWebhookSecret() : null;
+        var secret = generatedSecret is null ? SecretJson(request.Secret) : JsonSerializer.Serialize(generatedSecret);
+        var configuration = NormalizeConfiguration(request.Kind, request.Config, secret, provider);
 
-        var now = _timeProvider.GetUtcNow();
+        await using var nameLease = await _applicationLock.AcquireAsync(
+            EventSourceNames.LockKey(userId),
+            cancellationToken
+        );
+        await _nameService.EnsureAvailableAsync(request.Name, null, cancellationToken);
+
+        var source = CreateSourceRecord(request, userId, configuration);
+        await SaveCreatedSourceAsync(source, cancellationToken);
+        nameLease.HandleLostToken.ThrowIfCancellationRequested();
+
+        return Mutation(source) with
+        {
+            Secret = generatedSecret,
+        };
+    }
+
+    private EventSource CreateSourceRecord(
+        EventSourceCreateCommand request,
+        string userId,
+        SourceConfiguration configuration
+    )
+    {
         var sourceId = Guid.CreateVersion7();
         var source = new EventSource
         {
             Id = sourceId,
             CreateBy = userId,
-            Name = request.Name.Trim(),
+            Name = request.Name,
             Kind = request.Kind,
             ProviderExtensionId = request.ProviderExtensionId,
             ProviderId = request.ProviderId,
-            CeSource = $"/agw/sources/{sourceId:N}",
-            ConfigJson = request.Config.GetRawText(),
-            SecretJson = secret,
+            CeSource = EventSourceNames.CeSource(sourceId),
+            ConfigJson = configuration.ConfigJson,
+            SecretJson = configuration.SecretJson,
             Enabled = request.Enabled,
             NextRunAt =
-                request.Enabled && request.Kind is (EventSourceKind.HttpPoll or EventSourceKind.Provider)
-                    ? NextRunAt(request.Kind, request.Config, now)
+                request.Enabled && configuration.PollInterval is { } interval
+                    ? _timeProvider.GetUtcNow() + interval
                     : null,
         };
+        return source;
+    }
 
+    private async Task SaveCreatedSourceAsync(EventSource source, CancellationToken cancellationToken)
+    {
         try
         {
             await _transaction.ExecuteAsync(
@@ -122,8 +229,6 @@ public sealed class EventSourceAppService
         {
             throw ModificationConflict(exception);
         }
-
-        return Mutation(source);
     }
 
     public async Task<EventSourceMutationResult> UpdateAsync(
@@ -131,32 +236,39 @@ public sealed class EventSourceAppService
         CancellationToken cancellationToken
     )
     {
-        ValidateName(request.Name);
+        await using var nameLease = await _applicationLock.AcquireAsync(
+            EventSourceNames.LockKey(UserInfoUtil.RequiredUserId),
+            cancellationToken
+        );
         var source = await FindManagedAsync(request.Id, cancellationToken);
         EnsureEditable(source);
         EnsureVersion(source, request.Version);
+        EventSourceNames.Validate(request.Name, source.Kind, source.ManagedBy);
+        await _nameService.EnsureAvailableAsync(request.Name, source.Id, cancellationToken);
 
-        var retainedSecret = request.Secret is null ? source.SecretJson : SecretJson(request.Secret);
-        if (source.Kind == EventSourceKind.HttpPoll && request.Secret is null)
+        if (source.Kind == EventSourceKind.Webhook && request.Secret is not null)
         {
-            var config = EventSourceConfigParser.ParseHttpPoll(request.Config, _options.HttpPoll);
-            if (config.Request.Auth.Kind is "none" or "connection")
-            {
-                retainedSecret = null;
-            }
+            throw new AgwException(ErrorCodes.InvalidParam, "Use secret rotation to change a webhook secret.");
         }
+        var retainedSecret = request.Secret is null ? source.SecretJson : SecretJson(request.Secret);
         if (source.Kind is EventSourceKind.Timer or EventSourceKind.Provider)
         {
             retainedSecret = null;
         }
 
-        ValidateProvider(source.Kind, source.ProviderExtensionId, source.ProviderId, request.Config);
-        ValidateConfiguration(source.Kind, request.Config, retainedSecret is null ? null : ParseSecret(retainedSecret));
+        var provider = ValidateProvider(source.Kind, source.ProviderExtensionId, source.ProviderId, request.Config);
+        var configuration = NormalizeConfiguration(
+            source.Kind,
+            request.Config,
+            retainedSecret,
+            provider,
+            retainExistingSecret: request.Secret is null
+        );
 
-        source.Name = request.Name.Trim();
-        source.ConfigJson = request.Config.GetRawText();
-        source.SecretJson = retainedSecret;
-        ResetPollState(source, request.Config);
+        source.Name = request.Name;
+        source.ConfigJson = configuration.ConfigJson;
+        source.SecretJson = configuration.SecretJson;
+        ResetPollState(source, configuration.PollInterval);
 
         try
         {
@@ -176,6 +288,8 @@ public sealed class EventSourceAppService
             throw ModificationConflict(exception);
         }
 
+        nameLease.HandleLostToken.ThrowIfCancellationRequested();
+
         return Mutation(source);
     }
 
@@ -191,7 +305,7 @@ public sealed class EventSourceAppService
         if (request.Enabled && source.Kind is (EventSourceKind.HttpPoll or EventSourceKind.Provider))
         {
             using var configDocument = JsonDocument.Parse(source.ConfigJson);
-            source.NextRunAt = NextRunAt(source.Kind, configDocument.RootElement, _timeProvider.GetUtcNow());
+            source.NextRunAt = _timeProvider.GetUtcNow() + ReadPollInterval(source.Kind, configDocument.RootElement);
         }
         else
         {
@@ -260,7 +374,7 @@ public sealed class EventSourceAppService
             throw new AgwException(ErrorCodes.InvalidParam, "Only webhook sources have a rotatable secret.");
         }
 
-        var secret = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var secret = GenerateWebhookSecret();
         source.SecretJson = JsonSerializer.Serialize(secret);
 
         try
@@ -298,17 +412,6 @@ public sealed class EventSourceAppService
             ) ?? throw new AgwException(ErrorCodes.EventSourceNotFound);
     }
 
-    private static void ValidateName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name) || name.Length > 200)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Event source name is required and must be at most 200 characters."
-            );
-        }
-    }
-
     private static void ValidateKind(EventSourceKind kind)
     {
         if (kind is EventSourceKind.Publisher || !Enum.IsDefined(kind))
@@ -317,7 +420,12 @@ public sealed class EventSourceAppService
         }
     }
 
-    private void ValidateProvider(EventSourceKind kind, Guid? extensionId, string? providerId, JsonElement config)
+    private ExtensionEventSourceProviderDescriptor? ValidateProvider(
+        EventSourceKind kind,
+        Guid? extensionId,
+        string? providerId,
+        JsonElement config
+    )
     {
         if (kind != EventSourceKind.Provider)
         {
@@ -325,7 +433,7 @@ public sealed class EventSourceAppService
             {
                 throw new AgwException(ErrorCodes.InvalidParam, "Only provider sources specify a provider extension.");
             }
-            return;
+            return null;
         }
 
         if (
@@ -337,75 +445,91 @@ public sealed class EventSourceAppService
             throw new AgwException(ErrorCodes.InvalidParam, "Provider source configuration is incomplete.");
         }
 
-        if (
-            !_generationCatalog
-                .GetSnapshots()
-                .Any(snapshot =>
-                    snapshot.GenerationId.ExtensionId == id
-                    && snapshot.State == ExtensionGenerationState.Active
-                    && snapshot.EventSourceProviders.Any(provider => provider.Id == providerId)
-                )
-        )
+        var provider = _generationCatalog
+            .GetActiveGenerations()
+            .SingleOrDefault(snapshot => snapshot.GenerationId.ExtensionId == id)
+            .FindSourceProvider(providerId);
+        if (provider is null)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "The event source provider is unavailable.");
         }
+
+        return provider;
     }
 
-    private void ValidateConfiguration(EventSourceKind kind, JsonElement config, JsonElement? secret)
+    private sealed record SourceConfiguration(string ConfigJson, string? SecretJson, TimeSpan? PollInterval = null);
+
+    private SourceConfiguration NormalizeConfiguration(
+        EventSourceKind kind,
+        JsonElement config,
+        string? secretJson,
+        ExtensionEventSourceProviderDescriptor? provider,
+        bool retainExistingSecret = false
+    )
     {
         switch (kind)
         {
             case EventSourceKind.Webhook:
                 var webhook = EventSourceConfigParser.ParseWebhook(config);
-                EventSourceConfigParser.ValidateWebhookSecret(webhook, secret);
-                break;
+                EventSourceConfigParser.ValidateWebhookSecret(webhook, ParseSecret(secretJson));
+                return new SourceConfiguration(EventSourceConfigParser.Serialize(webhook), secretJson);
             case EventSourceKind.HttpPoll:
                 var poll = EventSourceConfigParser.ParseHttpPoll(config, _options.HttpPoll);
-                EventSourceConfigParser.ValidateHttpPollSecret(poll, secret);
-                break;
+                if (retainExistingSecret && poll.Request.Auth.Kind is ("none" or "connection"))
+                    secretJson = null;
+                EventSourceConfigParser.ValidateHttpPollSecret(poll, ParseSecret(secretJson));
+                return new SourceConfiguration(
+                    EventSourceConfigParser.Serialize(poll),
+                    secretJson,
+                    System.Xml.XmlConvert.ToTimeSpan(poll.Interval)
+                );
             case EventSourceKind.Timer:
                 _ = EventSourceConfigParser.ParseTimer(config);
-                if (secret is not null)
+                if (secretJson is not null)
                 {
                     throw new AgwException(ErrorCodes.InvalidParam, "Timer sources do not accept a secret.");
                 }
-                break;
+                return new SourceConfiguration(config.GetRawText(), null);
             case EventSourceKind.Provider:
-                if (secret is not null)
+                if (secretJson is not null)
                 {
                     throw new AgwException(ErrorCodes.InvalidParam, "Provider sources do not accept a secret.");
                 }
-                break;
+                return new SourceConfiguration(
+                    EventSourceConfigParser.Serialize(EventSourceConfigParser.ParseProvider(config, provider!)),
+                    null,
+                    _options.HttpPoll.MinInterval
+                );
             default:
                 throw new AgwException(ErrorCodes.InvalidParam);
         }
     }
 
-    private void ResetPollState(EventSource source, JsonElement config)
+    private void ResetPollState(EventSource source, TimeSpan? interval)
     {
-        if (source.Kind is EventSourceKind.HttpPoll or EventSourceKind.Provider)
+        if (interval is { } pollInterval)
         {
             source.BaselineAt = null;
             source.CursorJson = null;
             source.LastError = null;
-            source.NextRunAt = source.Enabled ? NextRunAt(source.Kind, config, _timeProvider.GetUtcNow()) : null;
+            source.NextRunAt = source.Enabled ? _timeProvider.GetUtcNow() + pollInterval : null;
             _db.EventSourceItems.RemoveRange(_db.EventSourceItems.Where(item => item.SourceId == source.Id));
         }
     }
 
-    private DateTimeOffset NextRunAt(EventSourceKind kind, JsonElement config, DateTimeOffset now)
-    {
-        if (kind == EventSourceKind.HttpPoll)
-        {
-            var poll = EventSourceConfigParser.ParseHttpPoll(config, _options.HttpPoll);
-            return now + System.Xml.XmlConvert.ToTimeSpan(poll.Interval);
-        }
+    private TimeSpan ReadPollInterval(EventSourceKind kind, JsonElement config) =>
+        kind == EventSourceKind.HttpPoll
+            ? System.Xml.XmlConvert.ToTimeSpan(
+                EventSourceConfigParser.ParseHttpPoll(config, _options.HttpPoll).Interval
+            )
+            : _options.HttpPoll.MinInterval;
 
-        return now + _options.HttpPoll.MinInterval;
-    }
+    private static string GenerateWebhookSecret() => WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
 
-    private static JsonElement? ParseSecret(string secretJson)
+    private static JsonElement? ParseSecret(string? secretJson)
     {
+        if (secretJson is null)
+            return null;
         using var document = JsonDocument.Parse(secretJson);
         return document.RootElement.Clone();
     }

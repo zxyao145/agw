@@ -148,22 +148,26 @@ internal sealed class TaskPilotEventProcessor
         CancellationToken cancellationToken
     )
     {
-        var publisherKey = delivery.Event.Type switch
+        var sources = context.HostCapabilities.GetRequired<IEventSourceFacade>();
+        Guid? expectedSourceId = delivery.Event.Type switch
         {
-            TaskPilotSystemSubscription.ExecutionCompleted => "agw.execution",
-            TaskPilotSystemSubscription.NotificationAnswered => "agw.notifications",
+            TaskPilotSystemSubscription.ExecutionCompleted => await sources.GetBuiltInSourceIdAsync(
+                EventBuiltInSources.Execution,
+                cancellationToken
+            ),
+            TaskPilotSystemSubscription.NotificationAnswered => await sources.GetBuiltInSourceIdAsync(
+                EventBuiltInSources.Notifications,
+                cancellationToken
+            ),
             TaskPilotSystemSubscription.DeliveryTick
             or TaskPilotSystemSubscription.ReviewDue
-            or TaskPilotSystemSubscription.RoundRetry => $"agw.scheduler:ext:{context.ExtensionId:D}",
+            or TaskPilotSystemSubscription.RoundRetry => await sources.GetExtensionSourceIdAsync(cancellationToken),
             _ => null,
         };
-        if (publisherKey is null)
+        if (expectedSourceId is null)
             return ExtensionEventHandlerResult.Succeeded;
 
-        var source = await context
-            .HostCapabilities.GetRequired<IEventSourceFacade>()
-            .GetAsync(delivery.SourceId, cancellationToken);
-        if (source is not { Kind: EventSourceKind.Publisher } || source.PublisherKey != publisherKey)
+        if (delivery.SourceId != expectedSourceId)
         {
             context.Logger.LogError(
                 "TaskPilot delivery {DeliveryId} for {EventType} has an untrusted source {SourceId}",

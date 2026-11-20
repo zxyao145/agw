@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Xml;
-using Agw.Events.Application.Persistence;
 using Agw.Events.Contracts;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
@@ -10,6 +9,10 @@ namespace Agw.Events.Application.Sources;
 
 public sealed class EventTimerScheduleSync
 {
+    internal const string SourceKeyPrefix = "source:";
+
+    internal static string GetSourceKey(Guid sourceId) => $"{SourceKeyPrefix}{sourceId}";
+
     private readonly IEventScheduler _scheduler;
 
     public EventTimerScheduleSync(IEventScheduler scheduler)
@@ -19,7 +22,7 @@ public sealed class EventTimerScheduleSync
 
     public Task SyncAsync(EventSource source, long requestSeq, CancellationToken cancellationToken)
     {
-        var businessKey = $"source:{source.Id}";
+        var businessKey = GetSourceKey(source.Id);
         if (!source.Enabled || source.DeletedAt is not null)
         {
             return _scheduler.CancelAsync(businessKey, requestSeq, cancellationToken);

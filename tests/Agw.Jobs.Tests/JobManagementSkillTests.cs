@@ -16,6 +16,7 @@ using Agw.Skills.Contracts.Registration;
 using Agw.Tests;
 using Agw.Tools.Abstractions.Generated;
 using Agw.Tools.Generated;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -39,6 +40,7 @@ public class JobManagementSkillTests
         Assert.NotNull(content);
         Assert.Contains("ISO 8601", content, StringComparison.Ordinal);
         Assert.Contains("targetKind", content, StringComparison.Ordinal);
+        Assert.Contains("lowercase letters", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -59,13 +61,42 @@ public class JobManagementSkillTests
                 agentId = targets.AgentId,
                 kind = "Interval",
                 interval = "PT15M",
-                name = "Interval Job",
+                name = "interval-job",
             }
         );
 
         Assert.Equal("Interval", created.Schedule.Kind);
         Assert.Equal("PT15M", created.Schedule.Interval);
         Assert.NotNull(created.DueAt);
+    }
+
+    [Fact]
+    public async Task CreateJobAsync_NameBreaksRule_ThrowsInvalidParamAndSavesNothing()
+    {
+        await using var fixture = await JobManagementSkillFixture.CreateAsync();
+        var targets = await fixture.SeedTargetsAsync("tester");
+        var tools = fixture.CreateTools(targets.ProjectId);
+        using var context = fixture.PushInteractiveContext(targets.ProjectId, "tester");
+
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            RunToolAsync<JobToolResponse>(
+                tools,
+                "agw_job_create",
+                new
+                {
+                    instructions = "Run the scheduled task.",
+                    targetKind = "Agent",
+                    agentId = targets.AgentId,
+                    kind = "Interval",
+                    interval = "PT15M",
+                    name = "Daily review",
+                }
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+        Assert.Contains("lowercase letters", error.Message);
+        Assert.Equal(0, await fixture.EventSourceCountAsync());
     }
 
     [Fact]
@@ -101,7 +132,7 @@ public class JobManagementSkillTests
                 agentId = targets.AgentId,
                 kind = "Cron",
                 cron = "0 9 * * 1-5",
-                name = "Weekday Job",
+                name = "weekday-job",
                 enabled = false,
             }
         );
@@ -169,7 +200,7 @@ public class JobManagementSkillTests
                 agentId,
                 kind = "Interval",
                 interval = "PT15M",
-                name = "Interval Job",
+                name = "interval-job",
             }
         );
 
@@ -292,6 +323,14 @@ public class JobManagementSkillTests
         {
             var host = await ModuleCompositionTestHost.CreateAsync();
             return new JobManagementSkillFixture(host);
+        }
+
+        public async Task<int> EventSourceCountAsync()
+        {
+            await using var scope = _host.Services.CreateAsyncScope();
+            return await scope
+                .ServiceProvider.GetRequiredService<AgwDbContext>()
+                .EventSources.CountAsync(TestContext.Current.CancellationToken);
         }
 
         public async ValueTask DisposeAsync()

@@ -7,7 +7,6 @@ using Agw.Extensions.Contracts;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Events;
-using Agw.Infrastructure.Events.Sources;
 using Agw.Infrastructure.Events.Transport;
 using Agw.Infrastructure.Notifications;
 using Agw.Notifications.Application.Persistence;
@@ -24,6 +23,7 @@ public static partial class DependencyInjection
 {
     private static void AddEventInfrastructure(IServiceCollection services, IConfiguration configuration)
     {
+        services.AddLogging();
         services
             .AddOptions<EventsOptions>()
             .Bind(configuration.GetSection(EventsOptions.SectionName))
@@ -39,14 +39,11 @@ public static partial class DependencyInjection
         services.AddScoped<IOutboxStaging, EventOutboxStaging>();
         services.AddScoped<EventRecordRecovery>();
         services.AddScoped<IEventRecoveryControl, EventRecoveryControl>();
-        services.AddScoped<EventStaging>();
-        services.AddScoped<IEventStaging>(provider => provider.GetRequiredService<EventStaging>());
-        services.AddScoped<IEventSourceFacade>(provider => provider.GetRequiredService<EventStaging>());
-        services.AddScoped<IEventContextFacade>(provider => provider.GetRequiredService<EventStaging>());
+        services.AddScoped<IEventRecordStaging, EventRecordStaging>();
+        services.AddScoped<IEventWebhookSourceLookup, EventWebhookSourceLookup>();
         services.AddScoped<IEventTemplateValidator, EventTemplateValidator>();
         services.AddScoped<IEventIngestTransaction, EventIngestTransaction>();
         services.AddScoped<IEventJobProjectLock, EventJobProjectLock>();
-        services.AddScoped<IEventScheduledPublisher, EventScheduledPublisher>();
         services.AddScoped<IEventDispatchNoticeStaging, EventDispatchNoticeStaging>();
         services.AddScoped<IBackgroundExecutionPersistence, BackgroundExecutionPersistence>();
         services.AddScoped<IBackgroundExecutionCompletionTransaction, BackgroundExecutionCompletionTransaction>();
@@ -60,14 +57,12 @@ public static partial class DependencyInjection
         );
         services.AddSingleton<EventRedisConnection>();
         services.AddSingleton<IEventTransport>(CreateEventTransport);
-        services.AddEventSourcesInfrastructure();
     }
 
     public static IServiceCollection AddEventWorkers(this IServiceCollection services)
     {
         services.AddHostedService<EventRetryRecoveryHostedService>();
         services.AddHostedService<EventRecoveryHostedService>();
-        services.AddHostedService<EventSourceScanHostedService>();
         return services;
     }
 

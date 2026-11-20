@@ -4,6 +4,7 @@ using Agw.Auth.Contracts;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Application.Sources;
 using Agw.Events.Contracts;
+using Agw.Events.Domain.Services;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
@@ -15,7 +16,6 @@ namespace Agw.Events.Application.Jobs;
 public sealed class EventJobFacade : IEventJobFacade
 {
     private const string FiredType = "job.timer.fired";
-    private const int MaxNameLength = 200;
     private const int MaxRunLimit = 500;
 
     private readonly IEventsDbContext _db;
@@ -24,6 +24,7 @@ public sealed class EventJobFacade : IEventJobFacade
     private readonly IEventJobProjectLock _projectLock;
     private readonly IApplicationLock _applicationLock;
     private readonly TimeProvider _timeProvider;
+    private readonly EventSourceNameDomainService _nameService;
 
     public EventJobFacade(
         IEventsDbContext db,
@@ -31,7 +32,8 @@ public sealed class EventJobFacade : IEventJobFacade
         IEventIngestTransaction transaction,
         IEventJobProjectLock projectLock,
         IApplicationLock applicationLock,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        EventSourceNameDomainService nameService
     )
     {
         _db = db;
@@ -40,20 +42,27 @@ public sealed class EventJobFacade : IEventJobFacade
         _projectLock = projectLock;
         _applicationLock = applicationLock;
         _timeProvider = timeProvider;
+        _nameService = nameService;
     }
 
-    public Task<EventJob> CreateAsync(EventJobDefinition definition, CancellationToken cancellationToken)
+    public async Task<EventJob> CreateAsync(EventJobDefinition definition, CancellationToken cancellationToken)
     {
         var owner = UserInfoUtil.RequiredUserId;
         var jobId = Guid.CreateVersion7();
         var sourceId = Guid.CreateVersion7();
+        var config = TimerConfig(jobId, definition);
+        await using var nameLease = await _applicationLock.AcquireAsync(
+            EventSourceNames.LockKey(owner),
+            cancellationToken
+        );
+        await _nameService.EnsureAvailableAsync(EventSourceNames.ForJobTimer(definition.Name), null, cancellationToken);
         var source = new EventSource
         {
             Id = sourceId,
             CreateBy = owner,
             Kind = EventSourceKind.Timer,
-            CeSource = $"/agw/sources/{sourceId:N}",
-            ConfigJson = TimerConfig(jobId, definition),
+            CeSource = EventSourceNames.CeSource(sourceId),
+            ConfigJson = config,
             ManagedBy = EventManagedBy.Job,
             ManagedKey = JobKey(jobId),
             Version = 1,
@@ -72,7 +81,7 @@ public sealed class EventJobFacade : IEventJobFacade
         var records = new JobRecords(source, subscription);
         ApplyDefinition(records, definition);
 
-        return WriteAsync(
+        var job = await WriteAsync(
             async token =>
             {
                 if (!await _projectLock.TryLockAsync(definition.ProjectId, token))
@@ -88,20 +97,32 @@ public sealed class EventJobFacade : IEventJobFacade
             },
             cancellationToken
         );
+        nameLease.HandleLostToken.ThrowIfCancellationRequested();
+        return job;
     }
 
-    public Task<EventJob> UpdateAsync(
+    public async Task<EventJob> UpdateAsync(
         Guid jobId,
         EventJobDefinition definition,
         CancellationToken cancellationToken,
         Guid? expectedProjectId = null
-    ) =>
-        ChangeAsync(
+    )
+    {
+        await using var nameLease = await _applicationLock.AcquireAsync(
+            EventSourceNames.LockKey(UserInfoUtil.RequiredUserId),
+            cancellationToken
+        );
+        var job = await ChangeAsync(
             jobId,
             async (records, token) =>
             {
                 var source = records.Source;
                 var config = TimerConfig(jobId, definition);
+                await _nameService.EnsureAvailableAsync(
+                    EventSourceNames.ForJobTimer(definition.Name),
+                    source.Id,
+                    token
+                );
                 var scheduleChanged = source.ConfigJson != config || source.Enabled != definition.Enabled;
                 source.ConfigJson = config;
                 ApplyDefinition(records, definition);
@@ -116,6 +137,9 @@ public sealed class EventJobFacade : IEventJobFacade
             destinationProjectId: definition.ProjectId,
             expectedProjectId: expectedProjectId
         );
+        nameLease.HandleLostToken.ThrowIfCancellationRequested();
+        return job;
+    }
 
     public Task<EventJob> SetEnabledAsync(Guid jobId, bool enabled, CancellationToken cancellationToken) =>
         ChangeAsync(
@@ -221,6 +245,9 @@ public sealed class EventJobFacade : IEventJobFacade
         );
     }
 
+    public Task<bool> IsNameAvailableAsync(string name, CancellationToken cancellationToken) =>
+        _nameService.IsAvailableAsync(EventSourceNames.ForJobTimer(name), cancellationToken);
+
     private async Task<EventJob> ChangeAsync(
         Guid jobId,
         Func<JobRecords, CancellationToken, Task<EventJob>> change,
@@ -320,7 +347,7 @@ public sealed class EventJobFacade : IEventJobFacade
         {
             return [];
         }
-        var keys = records.Select(record => $"source:{record.Source.Id}").ToArray();
+        var keys = records.Select(record => EventTimerScheduleSync.GetSourceKey(record.Source.Id)).ToArray();
         var schedules = await _db
             .EventSchedules.AsNoTracking()
             .Where(row => keys.Contains(row.CallerKey) && row.BusinessKey == row.CallerKey)
@@ -356,7 +383,7 @@ public sealed class EventJobFacade : IEventJobFacade
         return records
             .Select(record =>
             {
-                var schedule = schedules.GetValueOrDefault($"source:{record.Source.Id}");
+                var schedule = schedules.GetValueOrDefault(EventTimerScheduleSync.GetSourceKey(record.Source.Id));
                 return new EventJob
                 {
                     Id = Guid.Parse(record.Source.ManagedKey!),
@@ -375,7 +402,7 @@ public sealed class EventJobFacade : IEventJobFacade
         var timer = EventSourceConfigParser.ParseTimer(document.RootElement);
         return new EventJobDefinition
         {
-            Name = records.Source.Name,
+            Name = records.Subscription.Name,
             Enabled = records.Source.Enabled,
             ProjectId = records.Subscription.ProjectId!.Value,
             TargetKind = (EventJobTargetKind)records.Subscription.TargetKind,
@@ -394,9 +421,17 @@ public sealed class EventJobFacade : IEventJobFacade
     private static string TimerConfig(Guid jobId, EventJobDefinition definition)
     {
         var schedule = definition.Schedule ?? throw new AgwException(ErrorCodes.InvalidParam);
-        var validName = !string.IsNullOrWhiteSpace(definition.Name) && definition.Name.Length <= MaxNameLength;
+        var validName = EventSourceNames.IsValidJobName(definition.Name);
         var validTarget = Enum.IsDefined(definition.TargetKind);
-        if (!validName || !validTarget || string.IsNullOrWhiteSpace(definition.Instructions))
+        if (!validName)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Job name must use lowercase letters, digits, '-' and '.', "
+                    + "begin and end with a letter or digit, and contain no consecutive dots."
+            );
+        }
+        if (!validTarget || string.IsNullOrWhiteSpace(definition.Instructions))
         {
             throw new AgwException(ErrorCodes.InvalidParam);
         }
@@ -440,7 +475,7 @@ public sealed class EventJobFacade : IEventJobFacade
 
     private static void ApplyDefinition(JobRecords records, EventJobDefinition definition)
     {
-        records.Source.Name = definition.Name;
+        records.Source.Name = EventSourceNames.ForJobTimer(definition.Name);
         records.Source.Enabled = definition.Enabled;
         records.Subscription.Name = definition.Name;
         records.Subscription.Enabled = definition.Enabled;

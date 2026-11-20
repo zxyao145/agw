@@ -1110,6 +1110,7 @@ internal sealed partial class TaskPilotExecutionCoordinator
             receipt.Events.Any(emitted =>
                 !emitted.Type.StartsWith("taskpilot.", StringComparison.Ordinal)
                 || !allowedTypes.Contains(emitted.Type, StringComparer.Ordinal)
+                || TaskPilotSystemSubscription.SystemTypes.Contains(emitted.Type, StringComparer.Ordinal)
             )
         )
         {

@@ -3,6 +3,7 @@ using Agw.Agents.Contracts.Execution;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Configuration;
 using Agw.Events.Observability;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -11,9 +12,6 @@ namespace Agw.Events.Application.Delivery;
 
 public sealed class EventExecutionCompletionHandler : IEventExecutionCompletionHandler
 {
-    private const string CompletionEventType = "agw.execution.completed";
-    private const string ExecutionPublisherKey = "agw.execution";
-
     private readonly IEventsDbContext _db;
     private readonly EventsOptions _options;
     private readonly TimeProvider _timeProvider;
@@ -31,7 +29,11 @@ public sealed class EventExecutionCompletionHandler : IEventExecutionCompletionH
 
     public async Task HandleAsync(EventRecord record, EventSource source, CancellationToken cancellationToken)
     {
-        if (record.Type != CompletionEventType || source.PublisherKey != ExecutionPublisherKey || record.CeData is null)
+        var executionCompletion =
+            record.Type == EventBuiltInSources.ExecutionCompletedType
+            && source.ManagedBy == EventManagedBy.Agw
+            && source.Name == EventBuiltInSources.Execution;
+        if (!executionCompletion || record.CeData is null)
         {
             return;
         }

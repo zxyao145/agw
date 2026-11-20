@@ -10,6 +10,8 @@ namespace Agw.Shared.Data.Entities.Events;
 [EntityTypeConfiguration(typeof(EventSourceConfiguration))]
 public class EventSource : BaseEntity
 {
+    public const int DiscardedTypeMaxLength = 200;
+
     public Guid Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
@@ -19,8 +21,6 @@ public class EventSource : BaseEntity
     public Guid? ProviderExtensionId { get; set; }
 
     public string? ProviderId { get; set; }
-
-    public string? PublisherKey { get; set; }
 
     public string ManagedBy { get; set; } = EventManagedBy.User;
 
@@ -47,6 +47,10 @@ public class EventSource : BaseEntity
     public DateTimeOffset? LastRunAt { get; set; }
 
     public string? LastError { get; set; }
+
+    public string? LastDiscardedType { get; set; }
+
+    public DateTimeOffset? LastDiscardedAt { get; set; }
 
     public DateTimeOffset? DeletedAt { get; set; }
 

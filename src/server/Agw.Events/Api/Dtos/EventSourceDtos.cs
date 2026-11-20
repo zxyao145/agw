@@ -3,6 +3,13 @@ using Agw.Shared.Contracts.Events;
 
 namespace Agw.Events.Api.Dtos;
 
+public sealed record EventHttpPollFormOptionsResponse
+{
+    public required int MaxPages { get; init; }
+
+    public bool? CursorPathValid { get; init; }
+}
+
 public sealed record EventSourceCreateRequest
 {
     public required string Name { get; init; }
@@ -74,6 +81,8 @@ public sealed record EventSourceResponse
 
     public required JsonElement Config { get; init; }
 
+    public required IReadOnlyList<string> EventTypes { get; init; }
+
     public required bool Enabled { get; init; }
 
     public DateTimeOffset? BaselineAt { get; init; }
@@ -83,6 +92,10 @@ public sealed record EventSourceResponse
     public DateTimeOffset? LastRunAt { get; init; }
 
     public string? LastError { get; init; }
+
+    public string? LastDiscardedType { get; init; }
+
+    public DateTimeOffset? LastDiscardedAt { get; init; }
 
     public required bool HasSecret { get; init; }
 
@@ -94,6 +107,36 @@ public sealed record EventSourceOptionResponse
     public required Guid Id { get; init; }
 
     public required string Name { get; init; }
+
+    public required EventSourceKind Kind { get; init; }
+
+    public required string ManagedBy { get; init; }
+
+    public required IReadOnlyList<string> EventTypes { get; init; }
+}
+
+public sealed record EventSourceProviderResponse
+{
+    public required Guid ExtensionId { get; init; }
+
+    public required string ExtensionName { get; init; }
+
+    public required string ExtensionDisplayName { get; init; }
+
+    public required string ProviderId { get; init; }
+
+    public required IReadOnlyList<string> EventTypes { get; init; }
+
+    public required IReadOnlyList<EventSourceProviderConfigurationResponse> Configurations { get; init; }
+}
+
+public sealed record EventSourceProviderConfigurationResponse
+{
+    public required string Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Description { get; init; }
 }
 
 public sealed record EventSourceMutationResponse
@@ -112,5 +155,7 @@ public sealed record EventSourceTestResponse
 
 public sealed record EventWebhookReceiveResponse
 {
-    public required Guid EventId { get; init; }
+    public Guid? EventId { get; init; }
+
+    public required bool Discarded { get; init; }
 }

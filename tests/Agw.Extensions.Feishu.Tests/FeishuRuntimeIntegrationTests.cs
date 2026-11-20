@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Auth.Contracts;
+using Agw.Events;
 using Agw.Extensions.Application.Persistence;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.TestSupport;
@@ -43,6 +44,7 @@ public sealed class FeishuRuntimeIntegrationTests
                     .AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>()
                     .AddFiles(configuration)
                     .AddInfrastructure(configuration)
+                    .AddEvents(runWorkers: false)
                     .AddTools(configuration)
                     .AddNotifications(configuration, runWorkers: false),
             hostRole: "DataPlane",

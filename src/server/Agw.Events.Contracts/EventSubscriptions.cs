@@ -32,8 +32,6 @@ public sealed record ManagedSubscriptionRequest
 
     public IReadOnlyList<Guid> SourceIds { get; init; } = [];
 
-    public IReadOnlyList<string> PublisherKeys { get; init; } = [];
-
     public required IReadOnlyList<string> EventTypes { get; init; }
 
     public JsonElement? Filter { get; init; }

@@ -13,6 +13,8 @@ public sealed record ExtensionRuntimeLoadRequest
 
     public required string Name { get; init; }
 
+    public required string DisplayName { get; init; }
+
     public required string Version { get; init; }
 
     public required string ReleaseHash { get; init; }
@@ -55,6 +57,8 @@ public sealed record ExtensionGenerationSnapshot
     public required ExtensionGenerationId GenerationId { get; init; }
 
     public required string Name { get; init; }
+
+    public required string DisplayName { get; init; }
 
     public required string Version { get; init; }
 

@@ -12,6 +12,32 @@ public sealed class CloudEventEnvelopeSerializerTests
     private const int DefaultMaxPayloadBytes = 262144;
 
     [Fact]
+    public void DeserializeBatch_TwoEvents_ReturnsBoth()
+    {
+        var body = Encoding.UTF8.GetBytes(
+            """[{"specversion":"1.0","id":"first","source":"/upstream","type":"demo.created"},{"specversion":"1.0","id":"second","source":"/upstream","type":"demo.updated"}]"""
+        );
+
+        var events = new CloudEventEnvelopeSerializer().DeserializeBatch(body, "application/cloudevents-batch+json");
+
+        Assert.Equal(["first", "second"], events.Select(item => item.Id));
+    }
+
+    [Fact]
+    public void DeserializeBatch_NotArray_ThrowsInvalidParam()
+    {
+        var body = Encoding.UTF8.GetBytes(
+            """{"specversion":"1.0","id":"single","source":"/upstream","type":"demo.created"}"""
+        );
+
+        var error = Assert.Throws<AgwException>(() =>
+            new CloudEventEnvelopeSerializer().DeserializeBatch(body, "application/json")
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+    }
+
+    [Fact]
     public void Serialize_EnvelopeWithJsonDataAndTypedExtensions_RoundTripsAllAttributes()
     {
         using var document = JsonDocument.Parse("""{"answer":42}""");

@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:30918/"
+      "url": "http://127.0.0.1:39827/"
     }
   ],
   "paths": {
@@ -394,6 +394,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfEventSourceOptionResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/providers": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventSourceProviderResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/sources/http-poll-options": {
+      "get": {
+        "tags": [
+          "Event Sources"
+        ],
+        "parameters": [
+          {
+            "name": "cursorPath",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEventHttpPollFormOptionsResponse"
                 }
               }
             }
@@ -11654,6 +11701,38 @@
           }
         }
       },
+      "ApiResultOfEventHttpPollFormOptionsResponse": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventHttpPollFormOptionsResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfEventResponse": {
         "required": [
           "code",
@@ -11763,6 +11842,37 @@
             ],
             "items": {
               "$ref": "#/components/schemas/EventSourceOptionResponse"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfEventSourceProviderResponse[]": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EventSourceProviderResponse"
             }
           },
           "code": {
@@ -14872,6 +14982,24 @@
       "EventDispatchState": {
         "type": "integer"
       },
+      "EventHttpPollFormOptionsResponse": {
+        "required": [
+          "maxPages"
+        ],
+        "type": "object",
+        "properties": {
+          "maxPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cursorPathValid": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
       "EventIdRequest": {
         "required": [
           "id"
@@ -15172,7 +15300,10 @@
       "EventSourceOptionResponse": {
         "required": [
           "id",
-          "name"
+          "name",
+          "kind",
+          "managedBy",
+          "eventTypes"
         ],
         "type": "object",
         "properties": {
@@ -15182,6 +15313,77 @@
           },
           "name": {
             "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventSourceKind"
+          },
+          "managedBy": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "EventSourceProviderConfigurationResponse": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EventSourceProviderResponse": {
+        "required": [
+          "extensionId",
+          "extensionName",
+          "extensionDisplayName",
+          "providerId",
+          "eventTypes",
+          "configurations"
+        ],
+        "type": "object",
+        "properties": {
+          "extensionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "extensionName": {
+            "type": "string"
+          },
+          "extensionDisplayName": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configurations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSourceProviderConfigurationResponse"
+            }
           }
         }
       },
@@ -15193,6 +15395,7 @@
           "managedBy",
           "ceSource",
           "config",
+          "eventTypes",
           "enabled",
           "hasSecret",
           "version"
@@ -15237,6 +15440,12 @@
           "config": {
             "$ref": "#/components/schemas/JsonElement"
           },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -15266,6 +15475,19 @@
               "null",
               "string"
             ]
+          },
+          "lastDiscardedType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastDiscardedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           },
           "hasSecret": {
             "type": "boolean"
@@ -15414,12 +15636,6 @@
               "format": "uuid"
             }
           },
-          "publisherKeys": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "eventTypes": {
             "type": "array",
             "items": {
@@ -15497,7 +15713,6 @@
           "name",
           "enabled",
           "sourceIds",
-          "publisherKeys",
           "eventTypes",
           "targetKind",
           "managedBy",
@@ -15520,12 +15735,6 @@
             "items": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          "publisherKeys": {
-            "type": "array",
-            "items": {
-              "type": "string"
             }
           },
           "eventTypes": {
@@ -15640,13 +15849,19 @@
       },
       "EventWebhookReceiveResponse": {
         "required": [
-          "eventId"
+          "discarded"
         ],
         "type": "object",
         "properties": {
           "eventId": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
+          },
+          "discarded": {
+            "type": "boolean"
           }
         }
       },

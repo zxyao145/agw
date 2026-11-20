@@ -121,6 +121,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
             new EventSource
             {
                 Id = sourceId,
+                Name = $"agw.timer.job-{jobId:N}",
                 Kind = EventSourceKind.Timer,
                 ManagedBy = EventManagedBy.Job,
                 ManagedKey = jobId.ToString("D"),

@@ -49,6 +49,7 @@ import {
 } from "./schedule-value";
 import { JobRunPagination } from "./job-run-pagination";
 import { JobRunResultBadge } from "./job-run-result";
+import { getJobNameError, JOB_NAME_DESCRIPTION } from "./job-name";
 import { useJobRunPage } from "./use-job-run-page";
 
 type JobDto = components["schemas"]["JobResponse"];
@@ -148,12 +149,15 @@ function buildJobRequest(form: JobFormState): JobCreateRequest {
   if (!instructions) {
     throw new Error("Instructions are required.");
   }
+  const name = form.name.trim();
+  const nameError = getJobNameError(name);
+  if (nameError) throw new Error(nameError);
 
   return {
     projectId,
     targetKind: form.targetKind,
     agentId,
-    name: form.name.trim(),
+    name,
     instructions,
     schedule: form.schedule,
     enabled: form.enabled,
@@ -673,6 +677,7 @@ function JobDialog({
   const targetError =
     form.targetKind === null || !form.agentId ? "Select an execution target." : null;
   const instructionsError = form.instructions.trim() ? null : "Instructions are required.";
+  const nameError = getJobNameError(form.name.trim());
   const [isAdvanced, setIsAdvanced] = React.useState(false);
   const [showValidation, setShowValidation] = React.useState(false);
 
@@ -882,6 +887,7 @@ function JobDialog({
                   id={`${mode}-job-name`}
                   value={form.name}
                   placeholder="Generated automatically when blank"
+                  aria-invalid={nameError !== null}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
@@ -889,6 +895,13 @@ function JobDialog({
                     }))
                   }
                 />
+                <p
+                  className={
+                    nameError ? "text-xs text-destructive" : "text-xs text-muted-foreground"
+                  }
+                >
+                  {nameError ?? JOB_NAME_DESCRIPTION}
+                </p>
               </div>
 
               <div className="space-y-2 sm:col-span-2">
@@ -937,6 +950,9 @@ function JobDialog({
         </div>
 
         <DialogFooter>
+          {!isAdvanced && nameError ? (
+            <p className="text-xs text-destructive">{nameError}</p>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -964,7 +980,7 @@ function JobDialog({
               setShowValidation(true);
               onSubmit();
             }}
-            disabled={isSubmitting || scheduleError !== null}
+            disabled={isSubmitting || scheduleError !== null || nameError !== null}
           >
             {isSubmitting ? "Saving..." : submitLabel}
           </Button>

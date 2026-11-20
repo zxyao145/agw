@@ -1,34 +1,106 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Auth.Contracts;
-using Agw.Events.Application;
 using Agw.Events.Application.Persistence;
-using Agw.Events.Configuration;
+using Agw.Events.Application.Sources;
 using Agw.Events.Contracts;
 using Agw.Events.Contracts.Transport;
-using Agw.Events.Infrastructure.Dispatch;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Events.Sources;
-using Agw.Infrastructure.Events.Transport;
-using Agw.Infrastructure.Notifications;
-using Agw.Notifications.Application;
-using Agw.Notifications.Application.Persistence;
-using Agw.Notifications.Configuration;
-using Agw.Notifications.Contracts;
-using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Events;
-using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
-using Microsoft.Data.Sqlite;
+using Agw.Tests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace Agw.Infrastructure.Events;
 
 public sealed partial class EventStagingTests
 {
+    [Fact]
+    public async Task StageAsync_BuiltInSourceMissing_CreatesManagedRow()
+    {
+        using var user = PushUser("owner");
+        await using var host = await StagingHost.CreateAsync(true);
+        await using var scope = host.Services.CreateAsyncScope();
+        var staging = scope.ServiceProvider.GetRequiredService<IEventStaging>();
+        var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+
+        var result = await staging.StageAsync(
+            new EventStagingRequest
+            {
+                BuiltInSource = EventBuiltInSources.Execution,
+                Event = new CloudEventDraft { Id = "completion-1", Type = "agw.execution.completed" },
+            },
+            TestContext.Current.CancellationToken
+        );
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var source = await db.EventSources.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(EventBuiltInSources.Execution, source.Name);
+        Assert.Equal(EventSourceKind.Publisher, source.Kind);
+        Assert.Equal(EventManagedBy.Agw, source.ManagedBy);
+        Assert.Equal(EventBuiltInSources.Execution, source.ManagedKey);
+        Assert.Equal("/agw/executions", source.CeSource);
+        Assert.Equal(source.Id, (await db.Events.SingleAsync(TestContext.Current.CancellationToken)).SourceId);
+        Assert.False(result.Duplicate);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task StageAsync_BothOrNeitherPublisher_ThrowsInvalidParam(bool builtIn, bool extension)
+    {
+        using var user = PushUser("owner");
+        await using var host = await StagingHost.CreateAsync(true);
+        await using var scope = host.Services.CreateAsyncScope();
+        var request = new EventStagingRequest
+        {
+            BuiltInSource = builtIn ? EventBuiltInSources.Execution : null,
+            ExtensionId = extension ? Guid.CreateVersion7() : null,
+            Event = new CloudEventDraft { Id = "invalid", Type = "agw.execution.completed" },
+        };
+
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            scope
+                .ServiceProvider.GetRequiredService<IEventStaging>()
+                .StageAsync(request, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+    }
+
+    [Fact]
+    public async Task EnsureBuiltInAsync_CalledConcurrently_CreatesOneRow()
+    {
+        using var user = PushUser("owner");
+        await using var host = await StagingHost.CreateAsync(true);
+
+        async Task<Guid> EnsureAsync()
+        {
+            await using var scope = host.Services.CreateAsyncScope();
+            var source = await scope
+                .ServiceProvider.GetRequiredService<IEventPublisherSources>()
+                .EnsureBuiltInAsync(EventBuiltInSources.Execution, TestContext.Current.CancellationToken);
+            await scope
+                .ServiceProvider.GetRequiredService<AgwDbContext>()
+                .SaveChangesAsync(TestContext.Current.CancellationToken);
+            return source.Id;
+        }
+
+        var ids = await Task.WhenAll(EnsureAsync(), EnsureAsync());
+
+        Assert.Equal(ids[0], ids[1]);
+        await using var verification = host.Services.CreateAsyncScope();
+        Assert.Equal(
+            1,
+            await verification
+                .ServiceProvider.GetRequiredService<AgwDbContext>()
+                .EventSources.CountAsync(TestContext.Current.CancellationToken)
+        );
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -104,6 +176,53 @@ public sealed partial class EventStagingTests
     }
 
     [Fact]
+    public async Task StageExternalAsync_MappedDraftOutsideDeclaration_RecordsDiscard()
+    {
+        using var user = PushUser("owner");
+        await using var host = await StagingHost.CreateAsync(true);
+        await using var scope = host.Services.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<EventSourceAppService>();
+        var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var token = TestContext.Current.CancellationToken;
+        var created = await service.CreateAsync(
+            new EventSourceCreateCommand
+            {
+                Name = "http.orders",
+                Kind = EventSourceKind.HttpPoll,
+                Config = JsonSerializer.Deserialize<JsonElement>(
+                    """
+                    {"eventTypes":["demo.*"],"request":{"url":"https://example.test/orders"},"interval":"PT5M",
+                     "format":"mapped","mapping":{"items":"$.items[*]","key":{"var":"item.id"},
+                       "change":{"kind":"content"},"event":{"typeOnNew":"demo.created","typeOnChange":"demo.updated"}}}
+                    """
+                ),
+            },
+            token
+        );
+        var source = await db.EventSources.SingleAsync(row => row.Id == created.Id, token);
+        var staging = scope.ServiceProvider.GetRequiredService<EventStaging>();
+
+        var accepted = await staging.StageExternalAsync(
+            source,
+            new CloudEventDraft { Id = "one", Type = "demo.created" },
+            token
+        );
+        var discarded = await staging.StageExternalAsync(
+            source,
+            new CloudEventDraft { Id = "two", Type = "other.created" },
+            token
+        );
+        await db.SaveChangesAsync(token);
+
+        Assert.True(discarded.Discarded);
+        Assert.Null(discarded.EventId);
+        Assert.Equal(accepted.EventId, (await db.Events.SingleAsync(token)).Id);
+        Assert.Equal(accepted.EventId, (await db.EventOutbox.SingleAsync(token)).EntityId);
+        Assert.Equal("other.created", source.LastDiscardedType);
+        Assert.NotNull(source.LastDiscardedAt);
+    }
+
+    [Fact]
     public async Task StageAsync_ParentEvent_InheritsChainAndControlsDepth()
     {
         using var user = PushUser("owner");
@@ -123,7 +242,7 @@ public sealed partial class EventStagingTests
         var completion = await staging.StageAsync(
             new EventStagingRequest
             {
-                PublisherKey = "agw.execution",
+                BuiltInSource = EventBuiltInSources.Execution,
                 InheritParentHops = true,
                 Event = Request("completed").Event with
                 {
@@ -191,11 +310,11 @@ public sealed partial class EventStagingTests
         const string json = "{\"value\":42}";
         return new EventStagingRequest
         {
-            PublisherKey = "ext:019a4c17-0000-7000-8000-000000000001",
+            BuiltInSource = EventBuiltInSources.Notifications,
             Event = new CloudEventDraft
             {
                 Id = id,
-                Type = "example.updated",
+                Type = "agw.notification.answered",
                 DataContentType = "application/json",
                 Data = new CloudEventData
                 {
@@ -212,94 +331,27 @@ public sealed partial class EventStagingTests
 
     private sealed class StagingHost : IAsyncDisposable
     {
-        private readonly SqliteConnection _connection;
-        public ServiceProvider Services { get; }
+        private readonly ModuleCompositionTestHost _host;
 
-        private StagingHost(SqliteConnection connection, ServiceProvider services)
-        {
-            _connection = connection;
-            Services = services;
-        }
+        private StagingHost(ModuleCompositionTestHost host) => _host = host;
 
-        public static async Task<StagingHost> CreateAsync(bool outbox)
-        {
-            var connection = new SqliteConnection("Data Source=:memory:");
-            await connection.OpenAsync(TestContext.Current.CancellationToken);
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddSingleton(TimeProvider.System);
-            services.AddSingleton<IApplicationLock>(new InMemoryApplicationLock());
-            services.AddSingleton<IOptions<EventsOptions>>(
-                Options.Create(new EventsOptions { Outbox = new EventOutboxOptions { Enabled = outbox } })
+        public IServiceProvider Services => _host.Services;
+
+        public static async Task<StagingHost> CreateAsync(bool outbox, TimeProvider? timeProvider = null) =>
+            new(
+                await ModuleCompositionTestHost.CreateAsync(
+                    outboxEnabled: outbox,
+                    configureServices: timeProvider is null
+                        ? null
+                        : services => services.Replace(ServiceDescriptor.Singleton(timeProvider))
+                )
             );
-            services.AddSingleton(new CloudEventEnvelopeSerializer());
-            services.AddSingleton<IEventTransport, InProcessEventTransport>();
-            services.AddScoped<PendingTransportMessages>();
-            services.AddScoped<EventCommitCoordinator>();
-            services.AddScoped<EventSaveChangesInterceptor>();
-            services.AddScoped<EventTransactionInterceptor>();
-            services.AddScoped<EventVersionInterceptor>();
-            services.AddDbContext<AgwDbContext>(
-                (provider, options) =>
-                    options
-                        .UseSqlite(connection)
-                        .UseSnakeCaseNamingConvention()
-                        .AddInterceptors(
-                            provider.GetRequiredService<EventSaveChangesInterceptor>(),
-                            provider.GetRequiredService<EventTransactionInterceptor>(),
-                            provider.GetRequiredService<EventVersionInterceptor>()
-                        )
-            );
-            services.AddScoped<IOutboxStaging, EventOutboxStaging>();
-            services.AddScoped<EventRecordRecovery>();
-            services.AddScoped<EventStaging>();
-            services.AddScoped<IEventStaging>(provider => provider.GetRequiredService<EventStaging>());
-            services.AddScoped<IEventContextFacade>(provider => provider.GetRequiredService<EventStaging>());
-            services.AddScoped<IEventsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
-            services.AddScoped<INotificationsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
-            services.AddScoped<INotificationTransaction, NotificationTransaction>();
-            services.AddScoped<NotificationAppService>();
-            services.AddScoped<INotificationStaging, NotificationStagingFacade>();
-            services.AddOptions<NotificationDispatchOptions>();
-            services.AddScoped<IEventIngestTransaction, EventIngestTransaction>();
-            services.AddScoped<IEventScheduledPublisher, EventScheduledPublisher>();
-            services.AddScoped<INotificationDispatchStore, NotificationDispatchStore>();
-            services.AddScoped<IEventDispatchNoticeStaging, EventDispatchNoticeStaging>();
-            services.AddScoped<EventScheduleRunner>();
-            services.AddScoped<EventDispatcher>();
-            services.AddScoped<IEventWebhookReceiver, EventWebhookReceiver>();
-            var provider = services.BuildServiceProvider();
-            await using var scope = provider.CreateAsyncScope();
-            await scope
-                .ServiceProvider.GetRequiredService<AgwDbContext>()
-                .Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-            return new StagingHost(connection, provider);
-        }
 
-        public async Task<TransportDelivery> ReadAcceptedAsync()
-        {
-            return await ReadTransportDeliveryAsync(EventMessages.Accepted);
-        }
+        public Task<TransportDelivery> ReadAcceptedAsync() => ReadTransportDeliveryAsync(EventMessages.Accepted);
 
-        public async Task<TransportDelivery> ReadTransportDeliveryAsync(string topic)
-        {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5), TimeProvider.System);
-            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                timeout.Token,
-                TestContext.Current.CancellationToken
-            );
-            await using var enumerator = Services
-                .GetRequiredService<IEventTransport>()
-                .ConsumeAsync(topic, "test", cancellation.Token)
-                .GetAsyncEnumerator(cancellation.Token);
-            Assert.True(await enumerator.MoveNextAsync());
-            return enumerator.Current;
-        }
+        public Task<TransportDelivery> ReadTransportDeliveryAsync(string topic) =>
+            ModuleCompositionTestHost.ReadTransportDeliveryAsync(Services.GetRequiredService<IEventTransport>(), topic);
 
-        public async ValueTask DisposeAsync()
-        {
-            await Services.DisposeAsync();
-            await _connection.DisposeAsync();
-        }
+        public ValueTask DisposeAsync() => _host.DisposeAsync();
     }
 }

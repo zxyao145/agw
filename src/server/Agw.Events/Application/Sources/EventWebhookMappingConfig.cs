@@ -1,12 +1,12 @@
 using System.Text.Json;
 
-namespace Agw.Events.Application.Persistence;
+namespace Agw.Events.Application.Sources;
 
 public sealed record EventWebhookMappingConfig
 {
     public required JsonElement Id { get; init; }
 
-    public required JsonElement Type { get; init; }
+    public JsonElement? Type { get; init; }
 
     public JsonElement? Subject { get; init; }
 

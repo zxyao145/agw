@@ -65,7 +65,7 @@ public sealed partial class EventStagingTests
             .StageAsync(
                 new EventStagingRequest
                 {
-                    PublisherKey = "agw.execution",
+                    BuiltInSource = EventBuiltInSources.Execution,
                     Event = new CloudEventDraft
                     {
                         Id = $"{turnId:D}:completed",
@@ -170,7 +170,7 @@ public sealed partial class EventStagingTests
             .StageAsync(
                 new EventStagingRequest
                 {
-                    PublisherKey = "agw.execution",
+                    BuiltInSource = EventBuiltInSources.Execution,
                     Event = new CloudEventDraft
                     {
                         Id = $"{turnId:D}:completed",

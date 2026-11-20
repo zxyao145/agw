@@ -77,21 +77,20 @@ pnpm --filter @agw/desktop test:extensions          # Electron + SQLite Standalo
 
 ## Develop
 
-Install all client workspace dependencies once from the pnpm Workspace root:
+Install the workspace dependencies from `src`.
 
 ```bash
-cd src/clients
+cd src
 pnpm install
 ```
 
-Run Desktop and its Renderer together:
+From `src`, start Desktop and its renderer together.
 
 ```bash
-cd src/clients
 pnpm dev:desktop
 ```
 
-Common workspace-wide checks from `src/clients` are:
+Run workspace checks from `src`.
 
 ```bash
 pnpm build

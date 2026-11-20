@@ -6,6 +6,7 @@ public static class EventTelemetry
 {
     public static readonly Meter Meter = new("Agw.Events");
     public static readonly Counter<long> Received = Meter.CreateCounter<long>("agw.events.received");
+    public static readonly Counter<long> Discarded = Meter.CreateCounter<long>("agw.events.discarded");
     public static readonly Counter<long> PublishFailures = Meter.CreateCounter<long>("agw.events.publish_failures");
     public static readonly Histogram<long> Recovered = Meter.CreateHistogram<long>("agw.events.recovered");
     public static readonly Histogram<long> Backlog = Meter.CreateHistogram<long>("agw.events.backlog");

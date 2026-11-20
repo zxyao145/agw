@@ -44,15 +44,17 @@ public sealed class EventSubscriptionFacade : IEventSubscriptionFacade
         EventSubscriptionFilterValidator.Validate(request.Filter);
         if (!extension.EventHandlers.Any(handler => handler.Id == request.HandlerId))
             throw new AgwException(ErrorCodes.InvalidParam, "Event handler was not registered by the extension.");
-        ValidatePublishers(request.PublisherKeys, extensionId);
-        if (request.EventTypes.Count == 0 || request.EventTypes.Any(string.IsNullOrWhiteSpace))
+        if (request.EventTypes.Count == 0 || request.EventTypes.Any(type => !EventTypePatterns.IsValidPattern(type)))
             throw new AgwException(ErrorCodes.InvalidParam);
         var sourceIds = request.SourceIds.Distinct().ToArray();
-        if (
-            await _db.EventSources.CountAsync(source => sourceIds.Contains(source.Id), cancellationToken)
-            != sourceIds.Length
-        )
+        var sources = await _db
+            .EventSources.Where(source => sourceIds.Contains(source.Id))
+            .ToArrayAsync(cancellationToken);
+        if (sources.Length != sourceIds.Length)
             throw new AgwException(ErrorCodes.EventSourceNotFound);
+        var managedBy = EventManagedBy.ForExtension(extensionId);
+        if (sources.Any(source => !EventSubscriptionMatcher.IsTrustedPublisher(source, managedBy)))
+            throw new AgwException(ErrorCodes.InvalidParam, "Source is outside the extension subscription scope.");
         record ??= Create(extensionId, request.ManagedKey);
         var accepted = new EventSubscriptionBehavior(record).UpsertManaged(
             request.ManagedVersion,
@@ -60,7 +62,6 @@ public sealed class EventSubscriptionFacade : IEventSubscriptionFacade
             {
                 Name = request.Name,
                 SourceIdsJson = JsonSerializer.Serialize(sourceIds),
-                PublisherKeysJson = JsonSerializer.Serialize(request.PublisherKeys),
                 EventTypesJson = JsonSerializer.Serialize(request.EventTypes),
                 FilterJson = request.Filter?.GetRawText(),
                 HandlerExtensionId = extensionId,
@@ -131,18 +132,5 @@ public sealed class EventSubscriptionFacade : IEventSubscriptionFacade
     {
         if (string.IsNullOrWhiteSpace(key) || version < 1)
             throw new AgwException(ErrorCodes.InvalidParam);
-    }
-
-    private static void ValidatePublishers(IReadOnlyList<string> publishers, Guid extensionId)
-    {
-        var allowed = new[]
-        {
-            "agw.execution",
-            "agw.notifications",
-            $"ext:{extensionId}",
-            $"agw.scheduler:ext:{extensionId}",
-        };
-        if (publishers.Any(publisher => !allowed.Contains(publisher, StringComparer.Ordinal)))
-            throw new AgwException(ErrorCodes.InvalidParam, "Publisher is outside the extension subscription scope.");
     }
 }

@@ -48,10 +48,29 @@ const schedules: EventScheduleResponse[] = [
 const waitingRecords: UnpublishedEventRecord[] = [
   { entityId: "waiting-1", topic: "event.accepted", state: "Pending", recoverAfter: timestamp },
 ];
-const sourceOptions = Array.from({ length: 120 }, (_, index) => ({
-  id: `option-${index + 1}`,
-  name: `Source option ${index + 1}`,
-}));
+const sourceOptions = [
+  {
+    id: "built-in-execution",
+    name: "agw.execution",
+    kind: 4,
+    managedBy: "agw",
+    eventTypes: ["agw.execution.completed"],
+  },
+  {
+    id: "job-timer",
+    name: "agw.timer.job-1-20261114",
+    kind: 0,
+    managedBy: "job",
+    eventTypes: ["job.timer.fired"],
+  },
+  ...Array.from({ length: 120 }, (_, index) => ({
+    id: `option-${index + 1}`,
+    name: `Source option ${index + 1}`,
+    kind: 1,
+    managedBy: "user",
+    eventTypes: ["paging.test"],
+  })),
+];
 
 function newSource(index: number): EventSourceResponse {
   return {
@@ -61,6 +80,7 @@ function newSource(index: number): EventSourceResponse {
     managedBy: "user",
     ceSource: `/sources/${index}`,
     config: {},
+    eventTypes: ["paging.test"],
     enabled: true,
     hasSecret: false,
     version: 1,
@@ -73,7 +93,6 @@ function newSubscription(index: number): EventSubscriptionResponse {
     name: `Subscription ${index}`,
     enabled: true,
     sourceIds: ["source-1"],
-    publisherKeys: [],
     eventTypes: ["paging.test"],
     targetKind: 0,
     managedBy: "user",
@@ -116,6 +135,16 @@ async function renderPage(
       events.find((event) => event.id === query.get("id")),
     "GET /api/events/sources/list": ({ query }: ApiRequestRecord) => page(sources, query),
     "GET /api/events/sources/options": sourceOptions,
+    "GET /api/events/sources/providers": [
+      {
+        extensionId: "extension-1",
+        extensionName: "taskpilot",
+        extensionDisplayName: "TaskPilot",
+        providerId: "issues",
+        eventTypes: ["taskpilot.issue.*"],
+        configurations: [{ id: "main", name: "Main", description: "Primary workspace" }],
+      },
+    ],
     "GET /api/events/subscriptions/list": ({ query }: ApiRequestRecord) =>
       page(subscriptions, query),
     "GET /api/events/deliveries/list": ({ query }: ApiRequestRecord) => {
@@ -131,6 +160,25 @@ async function renderPage(
     "GET /api/agents": [],
     "GET /api/agentflows": [],
     "GET /api/projects": [],
+    "POST /api/events/sources/create": ({ body }: ApiRequestRecord) => {
+      const request = body as { name: string; kind: number; config: unknown };
+      sources.push({
+        ...newSource(sources.length + 1),
+        name: request.name,
+        kind: request.kind,
+        config: request.config,
+      });
+      return {
+        id: "created-source",
+        version: 1,
+        secret: request.kind === 1 ? "one-time-secret" : null,
+      };
+    },
+    "POST /api/events/subscriptions/create": ({ body }: ApiRequestRecord) => {
+      const request = body as EventSubscriptionResponse;
+      subscriptions.push({ ...newSubscription(subscriptions.length + 1), ...request });
+      return subscriptions.at(-1);
+    },
     "POST /api/events/sources/delete": ({ body }: ApiRequestRecord) => {
       const { id } = body as { id: string };
       sources = sources.filter((source) => source.id !== id);
@@ -155,8 +203,11 @@ async function renderPage(
   });
 
   return {
+    baseUrl: api.baseUrl,
     lastQuery: (path: string) =>
       api.requests.findLast((request) => request.method === "GET" && request.path === path)?.query,
+    lastPost: (path: string) =>
+      api.requests.findLast((request) => request.method === "POST" && request.path === path)?.body,
   };
 }
 
@@ -172,6 +223,16 @@ async function switchTab(name: string) {
 async function clickButton(name: string | RegExp) {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name }));
+  });
+}
+
+async function enterConditionValue(number: number, value: string) {
+  const input = screen.getByLabelText(`Condition ${number} values`);
+  await act(async () => {
+    fireEvent.change(input, { target: { value } });
+  });
+  await act(async () => {
+    fireEvent.keyDown(input, { key: "Enter" });
   });
 }
 
@@ -196,7 +257,8 @@ test("job-managed event sources and subscriptions show their job ID and stay rea
   const jobId = "job-123";
   const source: EventSourceResponse = {
     ...newSource(1),
-    name: "Job timer",
+    id: "job-timer",
+    name: "agw.timer.job-1-20261114",
     kind: 0,
     managedBy: "job",
     managedKey: jobId,
@@ -205,6 +267,7 @@ test("job-managed event sources and subscriptions show their job ID and stay rea
   const subscription: EventSubscriptionResponse = {
     ...newSubscription(1),
     name: "Job timer subscription",
+    sourceIds: [source.id],
     eventTypes: ["job.timer.fired"],
     managedBy: "job",
     managedKey: jobId,
@@ -228,6 +291,12 @@ test("job-managed event sources and subscriptions show their job ID and stay rea
   assert.equal(screen.getByText("Read only").textContent, "Read only");
   assert.equal(screen.queryAllByRole("button", { name: "Edit" }).length, 0);
   assert.equal(screen.queryAllByRole("button", { name: "Delete" }).length, 0);
+  await clickButton("View");
+  const dialog = await screen.findByRole("dialog");
+  assert.match(dialog.textContent ?? "", /View subscription/);
+  assert.match(dialog.textContent ?? "", /job\.timer\.fired/);
+  assert.ok(await within(dialog).findByText(source.name));
+  assert.equal(within(dialog).queryByRole("button", { name: "Save subscription" }), null);
 });
 
 test("the six lists request page 1 with 20 rows first", async (context) => {
@@ -366,12 +435,217 @@ test("the subscription dialog lists every source option", async (context) => {
   assert.equal(lastQuery("/api/events/sources/list"), undefined);
   await clickButton("Add subscription");
   const dialog = await screen.findByRole("dialog");
-  const group = within(dialog).getByRole("group", { name: "Sources" });
-  const checkboxes = await within(group).findAllByRole("checkbox");
+  const trigger = within(dialog).getByRole("combobox", { name: "Sources" });
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  await act(async () => {
+    fireEvent.click(trigger);
+  });
+  const list = await screen.findByRole("listbox", { name: "Sources" });
+  assert.equal(list.getAttribute("aria-multiselectable"), "true");
+  const options = await within(list).findAllByRole("option");
   assert.deepEqual(
-    checkboxes.map((checkbox) => checkbox.parentElement?.textContent),
+    options.map((option) => option.textContent),
     sourceOptions.map((option) => option.name),
   );
+});
+
+test("creating a Webhook shows its receive URL and one-time secret", async (context) => {
+  const { baseUrl, lastPost } = await renderPage(context, { sources: [] });
+  await switchTab("Sources");
+  await clickButton("Add source");
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "demo-ticket" } });
+    fireEvent.click(screen.getByLabelText("Fixed type"));
+    fireEvent.change(screen.getByLabelText("Fixed event type"), {
+      target: { value: "demo.ticket.created" },
+    });
+  });
+  await clickButton("Save source");
+  await waitFor(() =>
+    assert.deepEqual(lastPost("/api/events/sources/create"), {
+      name: "webhook.demo-ticket",
+      kind: 1,
+      config: { fixedType: "demo.ticket.created" },
+      enabled: true,
+    }),
+  );
+  assert.equal(
+    (await screen.findByTestId("webhook-url")).textContent,
+    `${baseUrl}/api/events/webhooks/receive?sourceId=created-source`,
+  );
+  assert.equal(screen.getByTestId("webhook-secret").textContent, "one-time-secret");
+});
+
+test("comma-separated source types keep a trailing separator while typing", async (context) => {
+  await renderPage(context, { sources: [] });
+  await switchTab("Sources");
+  await clickButton("Add source");
+  const input = screen.getByLabelText("Event types") as HTMLInputElement;
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "demo.one," } });
+  });
+  assert.equal(input.value, "demo.one,");
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "demo.one,demo.two" } });
+  });
+  assert.equal(input.value, "demo.one,demo.two");
+});
+
+test("condition values can be added and removed as tags", async (context) => {
+  await renderPage(context, { subscriptions: [] });
+  await switchTab("Subscriptions");
+  await clickButton("Add subscription");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Advanced settings"));
+  });
+  await clickButton("Add condition");
+  const input = screen.getByLabelText("Condition 1 values") as HTMLInputElement;
+  await enterConditionValue(1, "proj1");
+  assert.ok(screen.getByRole("button", { name: "Remove value proj1 from condition 1" }));
+  assert.equal(screen.queryByRole("img", { name: "OR" }), null);
+
+  await enterConditionValue(1, "proj2");
+  assert.ok(screen.getByRole("button", { name: "Remove value proj2 from condition 1" }));
+  assert.ok(screen.getByRole("img", { name: "OR" }));
+  assert.equal(input.value, "");
+
+  await clickButton("Remove value proj1 from condition 1");
+  assert.equal(screen.queryByRole("button", { name: "Remove value proj1 from condition 1" }), null);
+  assert.equal(screen.queryByRole("img", { name: "OR" }), null);
+  assert.equal(document.activeElement, input);
+});
+
+test("a user Timer source shows only supported actions", async (context) => {
+  await renderPage(context, {
+    sources: [{ ...newSource(1), kind: 0, name: "Timer source" }],
+  });
+  await switchTab("Sources");
+  await screen.findByText("Timer source");
+  assert.equal(screen.queryByRole("button", { name: "Edit" }), null);
+  assert.equal(screen.queryByRole("button", { name: "Test" }), null);
+  assert.equal(screen.queryByRole("button", { name: "Rotate secret" }), null);
+  assert.ok(screen.getByRole("button", { name: "Disable" }));
+});
+
+test("provider selection fills the extension name and offers named configurations", async (context) => {
+  await renderPage(context, { sources: [] });
+  await switchTab("Sources");
+  await clickButton("Add source");
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Source type"), { target: { value: "3" } });
+  });
+  await screen.findByRole("option", { name: "TaskPilot · issues" });
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Source provider"), {
+      target: { value: "extension-1:issues" },
+    });
+  });
+  assert.equal((screen.getByLabelText("Name") as HTMLInputElement).value, "taskpilot");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Advanced settings"));
+  });
+  assert.ok(screen.getByRole("option", { name: "Main · Primary workspace" }));
+});
+
+test("subscription form sends selected sources, types and scope conditions", async (context) => {
+  const { lastPost } = await renderPage(context, { subscriptions: [] });
+  await switchTab("Subscriptions");
+  await clickButton("Add subscription");
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Completion" } });
+  });
+  const trigger = screen.getByRole("combobox", { name: "Sources" });
+  await act(async () => {
+    fireEvent.click(trigger);
+  });
+  const list = await screen.findByRole("listbox", { name: "Sources" });
+  const execution = await within(list).findByRole("option", { name: "agw.execution" });
+  const timer = within(list).getByRole("option", { name: "agw.timer.job-1-20261114" });
+  await act(async () => {
+    fireEvent.click(execution);
+  });
+  await act(async () => {
+    fireEvent.click(timer);
+  });
+  assert.equal(execution.getAttribute("aria-selected"), "true");
+  assert.equal(timer.getAttribute("aria-selected"), "true");
+  await act(async () => {
+    fireEvent.keyDown(screen.getByLabelText("Search sources"), { key: "Escape" });
+  });
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(trigger.textContent, "2 selected");
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Event types"), {
+      target: { value: "agw.execution.completed" },
+    });
+  });
+  await clickButton("Add type");
+  await act(async () => {
+    fireEvent.keyDown(screen.getByLabelText("Target type"), { key: "Enter" });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("option", { name: "Extension handler" }));
+  });
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Handler extension ID"), {
+      target: { value: "extension-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Handler ID"), { target: { value: "handler" } });
+    fireEvent.change(screen.getByLabelText("Handler configuration JSON"), {
+      target: { value: "{" },
+    });
+    assert.equal(
+      (screen.getByRole("button", { name: "Save subscription" }) as HTMLButtonElement).disabled,
+      true,
+    );
+    fireEvent.change(screen.getByLabelText("Handler configuration JSON"), {
+      target: { value: '{"mode":"demo"}' },
+    });
+    fireEvent.click(screen.getByText("Advanced settings"));
+  });
+  await clickButton("Add condition");
+  assert.equal(screen.queryByRole("img", { name: "AND" }), null);
+  await clickButton("Add condition");
+  await clickButton("Add condition");
+  assert.equal(screen.getAllByRole("img", { name: "AND" }).length, 2);
+  await clickButton("Remove condition 3");
+  assert.ok(screen.getByRole("img", { name: "AND" }));
+  await enterConditionValue(1, "proj1");
+  await enterConditionValue(1, "proj2");
+  assert.ok(screen.getByRole("img", { name: "OR" }));
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Condition 2 field"), {
+      target: { value: "subject" },
+    });
+    fireEvent.change(screen.getByLabelText("Condition 2 values"), {
+      target: { value: "review" },
+    });
+  });
+  await clickButton("Save subscription");
+  await waitFor(() => assert.ok(lastPost("/api/events/subscriptions/create")));
+  const request = lastPost("/api/events/subscriptions/create") as Record<string, unknown>;
+  assert.deepEqual(request.sourceIds, ["built-in-execution", "job-timer"]);
+  assert.deepEqual(request.eventTypes, ["agw.execution.completed"]);
+  assert.deepEqual(request.handlerConfig, { mode: "demo" });
+  assert.deepEqual(request.filter, {
+    and: [{ in: [{ var: "scope" }, ["proj1", "proj2"]] }, { in: [{ var: "subject" }, ["review"]] }],
+  });
+});
+
+test("unsupported subscription filters are shown read only and can be cleared", async (context) => {
+  await renderPage(context, {
+    subscriptions: [{ ...newSubscription(1), filter: { "==": [{ var: "type" }, "paging.test"] } }],
+  });
+  await switchTab("Subscriptions");
+  await screen.findByText("Subscription 1");
+  await clickButton("Edit");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Advanced settings"));
+  });
+  assert.match(screen.getByRole("dialog").textContent ?? "", /Clear conditions/);
+  assert.match(screen.getByRole("dialog").textContent ?? "", /paging\.test/);
+  await clickButton("Clear conditions");
+  assert.ok(screen.getByRole("button", { name: "Add condition" }));
 });
 
 test("switching tabs keeps each list's page", async (context) => {

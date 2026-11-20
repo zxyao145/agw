@@ -366,6 +366,7 @@ public sealed class TurnAcceptanceTests : IAsyncLifetime
             {
                 ExtensionId = extensionId,
                 Name = package.Manifest.Name,
+                DisplayName = package.Manifest.DisplayName,
                 Version = package.Manifest.Version,
                 ReleaseHash = package.ReleaseHash,
                 Epoch = enabled.Version,

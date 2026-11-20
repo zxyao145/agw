@@ -26,6 +26,7 @@ public interface IEventJobFacade
         CancellationToken cancellationToken
     );
     Task<int> CountAsync(CancellationToken cancellationToken);
+    Task<bool> IsNameAvailableAsync(string name, CancellationToken cancellationToken);
 }
 
 public enum EventJobTargetKind

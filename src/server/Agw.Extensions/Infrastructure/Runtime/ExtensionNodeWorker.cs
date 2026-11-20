@@ -331,6 +331,7 @@ public sealed class ExtensionNodeWorker : BackgroundService, IExtensionNodeRecon
             {
                 ExtensionId = package.ExtensionId,
                 Name = manifest.Name,
+                DisplayName = manifest.DisplayName,
                 Version = manifest.Version,
                 ReleaseHash = package.ReleaseHash,
                 Epoch = enablement.Version,

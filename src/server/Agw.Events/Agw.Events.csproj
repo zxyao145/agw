@@ -9,6 +9,7 @@
     <ProjectReference Include="../Agw.Integrations.Contracts/Agw.Integrations.Contracts.csproj" />
     <PackageReference Include="JsonLogic" />
     <PackageReference Include="JsonPath.Net" />
+    <PackageReference Include="Meziantou.Framework.Http" />
     <PackageReference Include="Cronos" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />

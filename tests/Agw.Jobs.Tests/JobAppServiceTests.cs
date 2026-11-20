@@ -28,9 +28,9 @@ public class JobAppServiceTests
     {
         await using var fixture = await JobAppServiceFixture.CreateAsync();
 
-        var created = await fixture.CreateJobAsync("  Nightly Job  ");
+        var created = await fixture.CreateJobAsync("  nightly-job  ");
 
-        Assert.Equal("Nightly Job", created.Name);
+        Assert.Equal("nightly-job", created.Name);
     }
 
     [Fact]
@@ -42,6 +42,19 @@ public class JobAppServiceTests
         var updated = await fixture.UpdateJobAsync(fixture.ExistingJob!.Id, " ");
 
         Assert.Equal(expectedName, updated.Name);
+    }
+
+    [Fact]
+    public async Task ResolveNameAsync_GeneratedNameTaken_UsesNextNumber()
+    {
+        await using var fixture = await JobAppServiceFixture.CreateAsync(seedExistingJob: true);
+        var date = fixture.TimeProvider.GetUtcNow().ToString("yyyyMMdd");
+        await fixture.CreateJobAsync($"job-2-{date}");
+        await fixture.DeleteJobAsync(fixture.ExistingJob!.Id);
+
+        var created = await fixture.CreateJobAsync(" ");
+
+        Assert.Equal($"job-3-{date}", created.Name);
     }
 
     private sealed class JobAppServiceFixture : IAsyncDisposable
@@ -74,7 +87,7 @@ public class JobAppServiceTests
             await fixture.SeedTargetsAsync();
             if (seedExistingJob)
             {
-                fixture.ExistingJob = await fixture.CreateJobAsync("Existing Job");
+                fixture.ExistingJob = await fixture.CreateJobAsync("existing-job");
             }
             return fixture;
         }
@@ -118,6 +131,15 @@ public class JobAppServiceTests
                     },
                     TestContext.Current.CancellationToken
                 );
+        }
+
+        public async Task<JobResponse> DeleteJobAsync(Guid id)
+        {
+            using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
+            await using var scope = _host.Services.CreateAsyncScope();
+            return await scope
+                .ServiceProvider.GetRequiredService<JobAppService>()
+                .DeleteAsync(id, TestContext.Current.CancellationToken);
         }
 
         private async Task SeedTargetsAsync()

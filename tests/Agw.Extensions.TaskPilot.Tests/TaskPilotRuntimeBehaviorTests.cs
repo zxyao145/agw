@@ -8,6 +8,7 @@ using Agw.Agents.Execution;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Events;
+using Agw.Events.Application.Persistence;
 using Agw.Events.Contracts;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Sdk.Database;
@@ -42,6 +43,7 @@ using Xunit;
 
 namespace Agw.Extensions.TaskPilot.Tests;
 
+[Collection("TaskPilot extension package")]
 public sealed class TaskPilotRuntimeBehaviorTests
 {
     private static readonly Guid ExtensionId = Guid.Parse("019a4c17-5f00-7a80-8b3d-2b732f48a101");
@@ -55,6 +57,283 @@ public sealed class TaskPilotRuntimeBehaviorTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static bool PostgresConfigured => IsolatedTestConnections.Postgres is not null;
+
+    [Fact]
+    public async Task StageAsync_ExtensionSource_UsesManifestName()
+    {
+        (ExtensionRuntimeIntegrationHost host, _) = await CreateHostWithExecutionFacadeAsync(
+            null,
+            seedActualHostTargets: false
+        );
+        await using (host)
+        {
+            using var user = PushUser(UserId);
+            await using var scope = host.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            var staged = await scope
+                .ServiceProvider.GetRequiredService<IEventStaging>()
+                .StageAsync(
+                    new EventStagingRequest
+                    {
+                        ExtensionId = ExtensionId,
+                        Event = new CloudEventDraft { Id = "extension-source", Type = "taskpilot.receipt.applied" },
+                    },
+                    TestContext.Current.CancellationToken
+                );
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var source = await db.EventSources.SingleAsync(TestContext.Current.CancellationToken);
+            Assert.Equal("ext.taskpilot", source.Name);
+            Assert.Equal(EventSourceKind.Publisher, source.Kind);
+            Assert.Equal(EventManagedBy.ForExtension(ExtensionId), source.ManagedBy);
+            Assert.Equal("publisher", source.ManagedKey);
+            Assert.Equal($"/agw/extensions/{ExtensionId:D}", source.CeSource);
+            Assert.Equal(source.Id, (await db.Events.SingleAsync(TestContext.Current.CancellationToken)).SourceId);
+            Assert.False(staged.Duplicate);
+        }
+    }
+
+    [Fact]
+    public async Task StageScheduled_ExtensionCaller_UsesExtensionSource()
+    {
+        (ExtensionRuntimeIntegrationHost host, _) = await CreateHostWithExecutionFacadeAsync(
+            null,
+            seedActualHostTargets: false
+        );
+        await using (host)
+        {
+            using var user = PushUser(UserId);
+            await using var scope = host.Services.CreateAsyncScope();
+            var schedule = new EventSchedule
+            {
+                Id = Guid.CreateVersion7(),
+                CreateBy = UserId,
+                CallerKey = EventManagedBy.ForExtension(ExtensionId),
+                BusinessKey = "scheduled-source",
+                State = EventScheduleState.Active,
+                ChainId = Guid.CreateVersion7(),
+            };
+            await scope
+                .ServiceProvider.GetRequiredService<IEventScheduledPublisher>()
+                .StageAsync(
+                    schedule,
+                    new CloudEventDraft { Id = "scheduled-1", Type = "taskpilot.review.due" },
+                    TestContext.Current.CancellationToken
+                );
+            var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var source = await db.EventSources.SingleAsync(TestContext.Current.CancellationToken);
+            var record = await db.Events.SingleAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(source.Id, record.SourceId);
+            Assert.Equal($"/agw/extensions/{ExtensionId:D}", record.CeSource);
+            Assert.Equal(EventManagedBy.ForExtension(ExtensionId), source.ManagedBy);
+        }
+    }
+
+    [Fact]
+    public async Task EnsureExtensionAsync_NameTaken_AppendsSequence()
+    {
+        (ExtensionRuntimeIntegrationHost host, _) = await CreateHostWithExecutionFacadeAsync(
+            null,
+            seedActualHostTargets: false
+        );
+        await using (host)
+        {
+            using var user = PushUser(UserId);
+            await using var scope = host.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            db.EventSources.Add(
+                new EventSource
+                {
+                    Id = Guid.CreateVersion7(),
+                    CreateBy = UserId,
+                    Name = "ext.taskpilot",
+                    Kind = EventSourceKind.Provider,
+                    CeSource = "/agw/sources/provider",
+                    ConfigJson = "{}",
+                    Enabled = true,
+                }
+            );
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var source = await scope
+                .ServiceProvider.GetRequiredService<IEventPublisherSources>()
+                .EnsureExtensionAsync(ExtensionId, TestContext.Current.CancellationToken);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal("ext.taskpilot-2", source.Name);
+        }
+    }
+
+    [Fact]
+    public async Task SystemSubscription_Ensure_UsesBuiltInAndOwnSourceIds()
+    {
+        (ExtensionRuntimeIntegrationHost host, _) = await CreateHostAsync();
+        await using (host)
+        {
+            using var user = PushUser(UserId);
+            var request = new TaskPilotRuleWriteRequest
+            {
+                Name = "System source test",
+                Kind = TaskPilotRuleKind.Agent,
+                SourceIds = [SourceId],
+                EventTypes = ["taskpilot.input"],
+                TargetKind = AgentTargetKind.Agent,
+                TargetId = AgentId,
+                ProjectId = ProjectId,
+                Instructions = "Process events.",
+                GroupKey = "taskpilot-system-source-test",
+                MaxConcurrency = 1,
+                SessionPolicy = TaskPilotSessionPolicy.PerMatter,
+            };
+            var created = await host.InvokeEndpointAsync(
+                ExtensionId,
+                "rules-create",
+                JsonSerializer.SerializeToElement(
+                    new
+                    {
+                        method = "POST",
+                        query = new Dictionary<string, string[]>(),
+                        body = request,
+                    },
+                    JsonOptions
+                ),
+                TestContext.Current.CancellationToken
+            );
+            Assert.Equal(200, created.StatusCode);
+
+            var (_, payloadJson) = await FindOutboxAsync(
+                host,
+                "UpsertManagedSubscription",
+                "taskpilot:system:subscription:1"
+            );
+            using var payload = JsonDocument.Parse(payloadJson);
+            var sourceIds = payload
+                .RootElement.GetProperty("sourceIds")
+                .EnumerateArray()
+                .Select(item => item.GetGuid());
+            Assert.Equal([ExecutionSourceId, NotificationSourceId, SchedulerSourceId], sourceIds);
+        }
+    }
+
+    [Fact]
+    public async Task RuleEndpoints_SourceIsOtherExtensionPublisher_RecordsSubscriptionError()
+    {
+        (ExtensionRuntimeIntegrationHost host, ExtensionGenerationSnapshot generation) = await CreateHostAsync();
+        await using (host)
+        {
+            using var user = PushUser(UserId);
+            var foreignId = Guid.CreateVersion7();
+            await using (var scope = host.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+                db.EventSources.Add(
+                    PublisherSource(
+                        foreignId,
+                        "ext.foreign",
+                        "/agw/extensions/foreign",
+                        EventManagedBy.ForExtension(Guid.CreateVersion7()),
+                        "publisher"
+                    )
+                );
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+            var request = new TaskPilotRuleWriteRequest
+            {
+                Name = "Foreign source rule",
+                Kind = TaskPilotRuleKind.Agent,
+                SourceIds = [foreignId],
+                EventTypes = ["taskpilot.input"],
+                TargetKind = AgentTargetKind.Agent,
+                TargetId = AgentId,
+                ProjectId = ProjectId,
+                Instructions = "Process events.",
+                GroupKey = "taskpilot-foreign-source-test",
+                MaxConcurrency = 1,
+                SessionPolicy = TaskPilotSessionPolicy.PerMatter,
+            };
+            var created = await host.InvokeEndpointAsync(
+                ExtensionId,
+                "rules-create",
+                JsonSerializer.SerializeToElement(
+                    new
+                    {
+                        method = "POST",
+                        query = new Dictionary<string, string[]>(),
+                        body = request,
+                    },
+                    JsonOptions
+                ),
+                TestContext.Current.CancellationToken
+            );
+            Assert.Equal(200, created.StatusCode);
+            var ruleId = Assert.IsType<JsonElement>(created.JsonBody).GetProperty("rule").GetProperty("id").GetGuid();
+
+            var error = await WaitForManagedSubscriptionErrorAsync(
+                host,
+                generation,
+                ruleId,
+                TestContext.Current.CancellationToken
+            );
+            Assert.Contains("outside the extension subscription scope", error);
+            await using var verification = host.Services.CreateAsyncScope();
+            Assert.False(
+                await verification
+                    .ServiceProvider.GetRequiredService<AgwDbContext>()
+                    .EventSubscriptions.AnyAsync(
+                        row => row.ManagedKey == $"rule:{ruleId:D}",
+                        TestContext.Current.CancellationToken
+                    )
+            );
+        }
+    }
+
+    [Fact]
+    public async Task ValidateRule_EmitTypesContainSystemType_ThrowsInvalidParam()
+    {
+        (ExtensionRuntimeIntegrationHost host, ExtensionGenerationSnapshot generation) = await CreateHostAsync();
+        await using (host)
+        {
+            using var user = PushUser(UserId);
+            var request = new TaskPilotRuleWriteRequest
+            {
+                Name = "Reserved type rule",
+                Kind = TaskPilotRuleKind.Agent,
+                SourceIds = [SourceId],
+                EventTypes = ["taskpilot.input"],
+                TargetKind = AgentTargetKind.Agent,
+                TargetId = AgentId,
+                ProjectId = ProjectId,
+                Instructions = "Process events.",
+                GroupKey = "taskpilot-reserved-type-test",
+                MaxConcurrency = 1,
+                SessionPolicy = TaskPilotSessionPolicy.PerMatter,
+                EmitTypes = ["taskpilot.round.retry"],
+            };
+
+            var error = await Assert.ThrowsAsync<AgwException>(() =>
+                host.InvokeEndpointAsync(
+                    ExtensionId,
+                    "rules-create",
+                    JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            method = "POST",
+                            query = new Dictionary<string, string[]>(),
+                            body = request,
+                        },
+                        JsonOptions
+                    ),
+                    TestContext.Current.CancellationToken
+                )
+            );
+
+            Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+            await using var db = CreateDbContext(host, generation);
+            Assert.Empty(await db.Rules.ToArrayAsync(TestContext.Current.CancellationToken));
+        }
+    }
 
     [Fact]
     public async Task RuleEvent_QueuesRoundsAndKeepsTheConcurrencySlotOccupied()
@@ -966,6 +1245,37 @@ public sealed class TaskPilotRuntimeBehaviorTests
     }
 
     [Fact]
+    public async Task Receipt_EventWithSystemType_IsInvalid()
+    {
+        (ExtensionRuntimeIntegrationHost host, ExtensionGenerationSnapshot generation) = await CreateHostAsync();
+        await using (host)
+        {
+            var seeded = await SeedRunningRoundAsync(host, generation, emitTypes: ["taskpilot.delivery.tick"]);
+            var result = await host.InvokeEventHandlerAsync(
+                ExtensionId,
+                SystemEventInvocation(
+                    UserId,
+                    NewExecutionCompletedEvent(
+                        seeded,
+                        "Completed\n```taskpilot\n"
+                            + "{\"events\":[{\"id\":\"event\",\"type\":\"taskpilot.delivery.tick\",\"detail\":{\"value\":1}}]}\n```"
+                    )
+                ),
+                TestContext.Current.CancellationToken
+            );
+
+            Assert.Equal(ExtensionEventHandlerResultKind.Succeeded, result.Kind);
+            await using var assertions = CreateDbContext(host, generation);
+            var round = await assertions.Rounds.SingleAsync(
+                row => row.Id == seeded.RoundId,
+                TestContext.Current.CancellationToken
+            );
+            Assert.Equal(TaskPilotRoundState.ReceiptRepair, round.State);
+            Assert.Equal(0, await CountOutboxAsync(host, "PublishEvent"));
+        }
+    }
+
+    [Fact]
     public Task ExecutionCompletion_WithoutReceipt_ParsesAndUnloads()
     {
         return RunReceiptParserPhaseCaseAsync("PlainCompletion");
@@ -1733,29 +2043,57 @@ public sealed class TaskPilotRuntimeBehaviorTests
             }
         );
         db.EventSources.AddRange(
-            PublisherSource(ExecutionSourceId, "agw.execution", "/agw/executions"),
-            PublisherSource(NotificationSourceId, "agw.notifications", "/agw/notifications"),
+            PublisherSource(
+                ExecutionSourceId,
+                EventBuiltInSources.Execution,
+                "/agw/executions",
+                EventManagedBy.Agw,
+                EventBuiltInSources.Execution
+            ),
+            PublisherSource(
+                NotificationSourceId,
+                EventBuiltInSources.Notifications,
+                "/agw/notifications",
+                EventManagedBy.Agw,
+                EventBuiltInSources.Notifications
+            ),
             PublisherSource(
                 SchedulerSourceId,
-                $"agw.scheduler:ext:{ExtensionId:D}",
-                $"/agw/schedules/ext:{ExtensionId:D}"
+                "ext.taskpilot",
+                $"/agw/extensions/{ExtensionId:D}",
+                EventManagedBy.ForExtension(ExtensionId),
+                "publisher"
             )
         );
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private static EventSource PublisherSource(Guid id, string publisherKey, string source) =>
+    private static EventSource PublisherSource(
+        Guid id,
+        string name,
+        string source,
+        string managedBy,
+        string managedKey
+    ) =>
         new()
         {
             Id = id,
-            Name = publisherKey,
+            Name = name,
             Kind = EventSourceKind.Publisher,
-            PublisherKey = publisherKey,
+            ManagedBy = managedBy,
+            ManagedKey = managedKey,
             CeSource = source,
             ConfigJson = "{}",
             Enabled = true,
             Version = 1,
         };
+
+    private static IDisposable PushUser(string userId) =>
+        UserInfoUtil.Push(
+            new ClaimsPrincipal(
+                new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "TaskPilotRuntimeTest")
+            )
+        );
 
     private static string FindRepositoryRoot()
     {

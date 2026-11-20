@@ -64,7 +64,6 @@ public sealed class EventSubscriptionBehaviorTests
         {
             Name = name,
             SourceIdsJson = "[]",
-            PublisherKeysJson = "[]",
             EventTypesJson = "[\"com.example.updated\"]",
             HandlerExtensionId = ExtensionId,
             HandlerId = "handler",

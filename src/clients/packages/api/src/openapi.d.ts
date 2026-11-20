@@ -552,6 +552,78 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/events/sources/providers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventSourceProviderResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/events/sources/http-poll-options": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          cursorPath?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ApiResultOfEventHttpPollFormOptionsResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/events/sources/get": {
     parameters: {
       query?: never;
@@ -8193,6 +8265,13 @@ export interface components {
       title: string;
       detail?: null | string;
     };
+    ApiResultOfEventHttpPollFormOptionsResponse: {
+      data?: null | components["schemas"]["EventHttpPollFormOptionsResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
     ApiResultOfEventResponse: {
       data?: null | components["schemas"]["EventResponse"];
       /** Format: int32 */
@@ -8216,6 +8295,13 @@ export interface components {
     };
     "ApiResultOfEventSourceOptionResponse[]": {
       data?: null | components["schemas"]["EventSourceOptionResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail?: null | string;
+    };
+    "ApiResultOfEventSourceProviderResponse[]": {
+      data?: null | components["schemas"]["EventSourceProviderResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -8985,6 +9071,11 @@ export interface components {
     };
     EventDeliveryState: number;
     EventDispatchState: number;
+    EventHttpPollFormOptionsResponse: {
+      /** Format: int32 */
+      maxPages: number;
+      cursorPathValid?: null | boolean;
+    };
     EventIdRequest: {
       /** Format: uuid */
       id: string;
@@ -9067,6 +9158,23 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+      kind: components["schemas"]["EventSourceKind"];
+      managedBy: string;
+      eventTypes: string[];
+    };
+    EventSourceProviderConfigurationResponse: {
+      id: string;
+      name: string;
+      description?: null | string;
+    };
+    EventSourceProviderResponse: {
+      /** Format: uuid */
+      extensionId: string;
+      extensionName: string;
+      extensionDisplayName: string;
+      providerId: string;
+      eventTypes: string[];
+      configurations: components["schemas"]["EventSourceProviderConfigurationResponse"][];
     };
     EventSourceResponse: {
       /** Format: uuid */
@@ -9080,6 +9188,7 @@ export interface components {
       managedKey?: null | string;
       ceSource: string;
       config: components["schemas"]["JsonElement"];
+      eventTypes: string[];
       enabled: boolean;
       /** Format: date-time */
       baselineAt?: null | string;
@@ -9088,6 +9197,9 @@ export interface components {
       /** Format: date-time */
       lastRunAt?: null | string;
       lastError?: null | string;
+      lastDiscardedType?: null | string;
+      /** Format: date-time */
+      lastDiscardedAt?: null | string;
       hasSecret: boolean;
       /** Format: int64 */
       version: number | string;
@@ -9126,7 +9238,6 @@ export interface components {
       name: string;
       enabled: boolean;
       sourceIds?: string[];
-      publisherKeys?: string[];
       eventTypes: string[];
       filter?: null | components["schemas"]["JsonElement"];
       targetKind: components["schemas"]["EventSubscriptionTargetKind"];
@@ -9148,7 +9259,6 @@ export interface components {
       name: string;
       enabled: boolean;
       sourceIds: string[];
-      publisherKeys: string[];
       eventTypes: string[];
       filter?: null | components["schemas"]["JsonElement"];
       targetKind: components["schemas"]["EventSubscriptionTargetKind"];
@@ -9174,7 +9284,8 @@ export interface components {
     EventSubscriptionTargetKind: number;
     EventWebhookReceiveResponse: {
       /** Format: uuid */
-      eventId: string;
+      eventId?: null | string;
+      discarded: boolean;
     };
     ExecutionPermissionCapabilities: {
       supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];

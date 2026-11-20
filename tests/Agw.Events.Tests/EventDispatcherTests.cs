@@ -31,7 +31,7 @@ public sealed partial class EventStagingTests
                 CreateBy = "owner",
                 Name = "subscription",
                 Enabled = true,
-                EventTypesJson = "[\"example.*\"]",
+                EventTypesJson = "[\"agw.notification.answered\"]",
                 TargetKind = EventSubscriptionTargetKind.ExtensionHandler,
             }
         );

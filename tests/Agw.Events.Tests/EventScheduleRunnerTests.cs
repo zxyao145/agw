@@ -1,5 +1,6 @@
 using Agw.Events.Application;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Data.Entities.Events;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,11 +20,12 @@ public sealed partial class EventStagingTests
         await using (var scope = host.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            var source = AddTimerSource(db);
             var schedule = new EventSchedule
             {
                 Id = Guid.CreateVersion7(),
                 CreateBy = "owner",
-                CallerKey = "ext:019a4c17-0000-7000-8000-000000000001",
+                CallerKey = $"source:{source.Id:D}",
                 BusinessKey = "once",
                 Kind = EventScheduleKind.Once,
                 State = EventScheduleState.Active,
@@ -80,12 +82,13 @@ public sealed partial class EventStagingTests
         await using var host = await StagingHost.CreateAsync(true);
         await using var scope = host.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var source = AddTimerSource(db);
         var now = TimeProvider.System.GetUtcNow();
         var schedule = new EventSchedule
         {
             Id = Guid.CreateVersion7(),
             CreateBy = "owner",
-            CallerKey = "ext:019a4c17-0000-7000-8000-000000000001",
+            CallerKey = $"source:{source.Id:D}",
             BusinessKey = "interval",
             Kind = EventScheduleKind.Interval,
             State = EventScheduleState.Active,
@@ -115,13 +118,14 @@ public sealed partial class EventStagingTests
         await using var host = await StagingHost.CreateAsync(true);
         await using var scope = host.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var source = AddTimerSource(db);
         var now = TimeProvider.System.GetUtcNow();
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Singapore");
         var schedule = new EventSchedule
         {
             Id = Guid.CreateVersion7(),
             CreateBy = "owner",
-            CallerKey = "ext:019a4c17-0000-7000-8000-000000000001",
+            CallerKey = $"source:{source.Id:D}",
             BusinessKey = "cron",
             Kind = EventScheduleKind.Cron,
             State = EventScheduleState.Active,
@@ -150,5 +154,21 @@ public sealed partial class EventStagingTests
         var localDueAt = TimeZoneInfo.ConvertTime(dueAt.Value, timeZone);
         Assert.Equal(9, localDueAt.Hour);
         Assert.Equal(0, localDueAt.Minute);
+    }
+
+    private static EventSource AddTimerSource(AgwDbContext db)
+    {
+        var source = new EventSource
+        {
+            Id = Guid.CreateVersion7(),
+            CreateBy = "owner",
+            Name = "timer.test",
+            Kind = EventSourceKind.Timer,
+            CeSource = "/agw/sources/timer-test",
+            ConfigJson = "{}",
+            Enabled = true,
+        };
+        db.EventSources.Add(source);
+        return source;
     }
 }

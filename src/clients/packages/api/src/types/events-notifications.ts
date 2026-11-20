@@ -3,6 +3,8 @@ import type { components, paths } from "../openapi";
 export type JsonValue = components["schemas"]["JsonElement"];
 
 export type EventSourceResponse = components["schemas"]["EventSourceResponse"];
+export type EventSourceOptionResponse = components["schemas"]["EventSourceOptionResponse"];
+export type EventSourceProviderResponse = components["schemas"]["EventSourceProviderResponse"];
 export type EventSourceCreateRequest = components["schemas"]["EventSourceCreateRequest"];
 export type EventSourceUpdateRequest = components["schemas"]["EventSourceUpdateRequest"];
 export type EventSourceVersionRequest = components["schemas"]["EventSourceVersionRequest"];

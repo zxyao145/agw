@@ -16,8 +16,6 @@ public class EventSubscription : BaseEntity
 
     public string SourceIdsJson { get; set; } = "[]";
 
-    public string? PublisherKeysJson { get; set; }
-
     public string EventTypesJson { get; set; } = "[]";
 
     public string? FilterJson { get; set; }

@@ -51,11 +51,11 @@ public class JobsApiTests
         );
         var current = await fixture.SeedTargetsAsync("tester", cancellationToken);
         var destination = moveJob ? await fixture.SeedTargetsAsync("tester", cancellationToken) : current;
-        var job = await fixture.CreateViaApiAsync(CreateRequest(current, "Job before deletion"), cancellationToken);
+        var job = await fixture.CreateViaApiAsync(CreateRequest(current, "job-before-deletion"), cancellationToken);
         var request = new JobUpdateRequest
         {
             Id = job.Id,
-            Name = "Updated job",
+            Name = "updated-job",
             ProjectId = destination.ProjectId,
             AgentId = current.AgentId,
             TargetKind = job.TargetKind,
@@ -103,7 +103,7 @@ public class JobsApiTests
         var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
         var request = new JobCreateRequest
         {
-            Name = "Cron Job",
+            Name = "cron-job",
             ProjectId = targets.ProjectId,
             TargetKind = AgentRuntimeType.Agent,
             AgentId = targets.AgentId,
@@ -136,7 +136,7 @@ public class JobsApiTests
         var now = fixture.TimeProvider.GetUtcNow();
         var request = CreateRequest(
             targets,
-            "Once Job",
+            "once-job",
             new JobScheduleDto { Kind = "Once", At = now.AddMinutes(completed ? -1 : 1) }
         );
         var job = await fixture.CreateViaApiAsync(request with { Enabled = completed }, cancellationToken);
@@ -163,7 +163,7 @@ public class JobsApiTests
         await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
         var ownTargets = await fixture.SeedTargetsAsync("tester", cancellationToken);
         var otherTargets = await fixture.SeedTargetsAsync("other", cancellationToken);
-        var request = CreateRequest(ownTargets, "Invalid Job");
+        var request = CreateRequest(ownTargets, "invalid-job");
         request = invalidCase switch
         {
             "target-kind-out-of-range" => request with { TargetKind = (AgentRuntimeType)2 },
@@ -188,7 +188,7 @@ public class JobsApiTests
 
         var response = await fixture.Client.PostAsJsonAsync(
             "/api/jobs/create",
-            CreateRequest(otherTargets, "Foreign Project Job"),
+            CreateRequest(otherTargets, "foreign-project-job"),
             cancellationToken
         );
 
@@ -208,7 +208,7 @@ public class JobsApiTests
         var otherTargets = await fixture.SeedTargetsAsync("other", cancellationToken);
         var job = await fixture.CreateJobAsUserAsync(
             "other",
-            CreateRequest(otherTargets, "Other User Job"),
+            CreateRequest(otherTargets, "other-user-job"),
             cancellationToken
         );
 
@@ -220,7 +220,7 @@ public class JobsApiTests
                 new JobUpdateRequest
                 {
                     Id = job.Id,
-                    Name = "Changed",
+                    Name = "changed",
                     ProjectId = otherTargets.ProjectId,
                     TargetKind = AgentRuntimeType.Agent,
                     AgentId = otherTargets.AgentId,
@@ -257,10 +257,10 @@ public class JobsApiTests
         var firstTargets = await fixture.SeedTargetsAsync("tester", cancellationToken);
         var secondTargets = await fixture.SeedTargetsAsync("tester", cancellationToken);
         var firstJob = await fixture.CreateViaApiAsync(
-            CreateRequest(firstTargets, "First Project Job"),
+            CreateRequest(firstTargets, "first-project-job"),
             cancellationToken
         );
-        await fixture.CreateViaApiAsync(CreateRequest(secondTargets, "Second Project Job"), cancellationToken);
+        await fixture.CreateViaApiAsync(CreateRequest(secondTargets, "second-project-job"), cancellationToken);
 
         using var response = await fixture.Client.GetAsync(
             $"/api/jobs/list?projectId={firstTargets.ProjectId:D}",
@@ -279,7 +279,7 @@ public class JobsApiTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
         var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
-        var job = await fixture.CreateViaApiAsync(CreateRequest(targets, "Toggle Job"), cancellationToken);
+        var job = await fixture.CreateViaApiAsync(CreateRequest(targets, "toggle-job"), cancellationToken);
 
         using var disabled = await fixture.Client.PostAsJsonAsync(
             "/api/jobs/enable",
@@ -306,7 +306,7 @@ public class JobsApiTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
         var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
-        var job = await fixture.CreateViaApiAsync(CreateRequest(targets, "Deleted Job"), cancellationToken);
+        var job = await fixture.CreateViaApiAsync(CreateRequest(targets, "deleted-job"), cancellationToken);
 
         using var response = await fixture.Client.PostAsJsonAsync(
             "/api/jobs/delete",
@@ -332,7 +332,7 @@ public class JobsApiTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var fixture = await JobsApiFixture.CreateAsync(cancellationToken);
         var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
-        var job = await fixture.CreateViaApiAsync(CreateRequest(targets, "Runs Job"), cancellationToken);
+        var job = await fixture.CreateViaApiAsync(CreateRequest(targets, "runs-job"), cancellationToken);
 
         var response = await fixture.Client.GetAsync(
             $"/api/jobs/runs/list?jobId={job.Id:D}&offset={offset}&limit={limit}",
@@ -358,7 +358,7 @@ public class JobsApiTests
         var targets = await fixture.SeedTargetsAsync("tester", cancellationToken);
         var request = CreateRequest(
             targets,
-            "Cancelled Run Job",
+            "cancelled-run-job",
             new JobScheduleDto { Kind = "Once", At = fixture.TimeProvider.GetUtcNow().AddMinutes(-1) }
         );
         var job = await fixture.CreateViaApiAsync(request, cancellationToken);
@@ -377,7 +377,7 @@ public class JobsApiTests
         Assert.Equal(2, run.GetProperty("result").GetInt32());
         Assert.Equal(conversationId.ToString("D"), run.GetProperty("conversationId").GetString());
         Assert.Equal(
-            "Cancelled Run Job 2026-11-15 06:07:08 UTC",
+            "cancelled-run-job 2026-11-15 06:07:08 UTC",
             await fixture.GetConversationTitleAsync(conversationId, cancellationToken)
         );
     }

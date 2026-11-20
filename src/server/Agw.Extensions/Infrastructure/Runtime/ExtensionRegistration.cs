@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Agw.Extensions.Contracts;
 using Agw.Extensions.Sdk;
 using Agw.Extensions.Sdk.Database;
+using Agw.Shared.Contracts.Events;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -163,7 +164,28 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         ValidateIdentifier(descriptor.Id);
-        ValidateSchema(descriptor.ConfigSchema);
+        var validEventTypes =
+            descriptor.EventTypes is { Count: > 0 } types && types.All(EventTypePatterns.IsDeclaredExternalPattern);
+        if (!validEventTypes)
+        {
+            throw new AgwException(ErrorCodes.ExtensionPackageInvalid, "Extension source event types are invalid.");
+        }
+        var configurationIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var configuration in descriptor.Configurations)
+        {
+            ValidateIdentifier(configuration.Id);
+            var invalidConfiguration =
+                string.IsNullOrWhiteSpace(configuration.Name)
+                || configuration.Config.ValueKind != JsonValueKind.Object
+                || !configurationIds.Add(configuration.Id);
+            if (invalidConfiguration)
+            {
+                throw new AgwException(
+                    ErrorCodes.ExtensionPackageInvalid,
+                    "Extension source configuration is invalid."
+                );
+            }
+        }
         if (!_eventSourceProviderIds.Add(descriptor.Id))
         {
             throw new AgwException(
@@ -174,13 +196,7 @@ internal sealed class ExtensionRegistration : IExtensionRegistration
 
         Services.AddScoped<TProvider>();
         _eventSourceProviders.Add(
-            new RegisteredEventSourceProvider(
-                typeof(TProvider),
-                descriptor with
-                {
-                    ConfigSchema = descriptor.ConfigSchema?.Clone(),
-                }
-            )
+            new RegisteredEventSourceProvider(typeof(TProvider), EventSourceProviderDescriptorCloner.Clone(descriptor))
         );
     }
 

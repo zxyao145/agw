@@ -16,7 +16,9 @@ public interface IEventStaging
 
 public sealed record EventStagingRequest
 {
-    public required string PublisherKey { get; init; }
+    public string? BuiltInSource { get; init; }
+
+    public Guid? ExtensionId { get; init; }
 
     public required CloudEventDraft Event { get; init; }
 
@@ -46,6 +48,10 @@ public sealed record OutboxMessage
 public interface IEventSourceFacade
 {
     Task<EventSourceIdentity?> GetAsync(Guid sourceId, CancellationToken cancellationToken);
+
+    Task<Guid> GetBuiltInSourceIdAsync(string name, CancellationToken cancellationToken);
+
+    Task<Guid> GetExtensionSourceIdAsync(CancellationToken cancellationToken);
 }
 
 public interface IEventContextFacade
@@ -72,7 +78,11 @@ public sealed record EventSourceIdentity
 
     public required EventSourceKind Kind { get; init; }
 
-    public string? PublisherKey { get; init; }
+    public required string Name { get; init; }
+
+    public required string ManagedBy { get; init; }
+
+    public string? ManagedKey { get; init; }
 
     public required string Source { get; init; }
 }

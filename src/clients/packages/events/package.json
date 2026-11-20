@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@agw/api": "workspace:*",
-    "@agw/components": "workspace:*"
+    "@agw/components": "workspace:*",
+    "iso8601-duration": "catalog:"
   },
   "devDependencies": {
     "@agw/test-harness": "workspace:*"

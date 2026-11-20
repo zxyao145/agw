@@ -14,7 +14,6 @@ import {
   type EventSourceUpdateRequest,
   type EventSubscriptionRequest,
   type EventSubscriptionResponse,
-  type JsonValue,
   type UnpublishedEventRecord,
 } from "@agw/api";
 import {
@@ -25,109 +24,43 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   Input,
   Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   TablePagination,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  Textarea,
-  cn,
   formatLocalDateTime,
 } from "@agw/components";
 import { useMutation, useQuery, useQueryClient } from "@agw/components/query";
-import { getManagedLabel } from "./managed-record";
+import { getManagedLabel, isUserManaged } from "../managed-record";
 import {
   EVENT_PAGE_SIZE_OPTIONS,
   useEventListPage,
   type EventListPage,
 } from "./use-event-list-page";
-
-type SourceFormState = {
-  name: string;
-  kind: number;
-  configText: string;
-  secretText: string;
-  providerExtensionId: string;
-  providerId: string;
-};
+import { SourceDialog } from "../sources/source-dialog";
+import { EVENT_SOURCE_KIND } from "../sources/source-name";
+import {
+  createSourceForm,
+  InvalidSourceConfigurationError,
+  sourceFormToCreateRequest,
+  sourceFormToRequest,
+  sourceToForm,
+  type CreatedWebhook,
+  type SourceFormOptions,
+  type SourceFormState,
+} from "../sources/source-form";
+import { SubscriptionDialog } from "../subscriptions/subscription-dialog";
+import {
+  createSubscriptionForm,
+  subscriptionFormToRequest,
+  subscriptionToForm,
+  type SubscriptionFormState,
+} from "../subscriptions/subscription-form";
 
 type EventFilterState = { type?: string; subject?: string; chainId?: string };
-
-type SubscriptionFormState = {
-  name: string;
-  enabled: boolean;
-  sourceIds: string[];
-  publisherKeys: string;
-  eventTypes: string;
-  targetKind: number;
-  agentId: string;
-  projectId: string;
-  permissionMode: number;
-  instructions: string;
-  filterText: string;
-  handlerExtensionId: string;
-  handlerId: string;
-  handlerConfigText: string;
-};
-
-const emptySourceForm: SourceFormState = {
-  name: "",
-  kind: 1,
-  configText: "{}",
-  secretText: "",
-  providerExtensionId: "",
-  providerId: "",
-};
-
-const EXECUTION_PERMISSION_MODES = {
-  fullAccess: 0,
-  alwaysAsk: 1,
-  allowSameArguments: 2,
-} as const;
-
-const emptySubscriptionForm: SubscriptionFormState = {
-  name: "",
-  enabled: true,
-  sourceIds: [],
-  publisherKeys: "",
-  eventTypes: "",
-  targetKind: 0,
-  agentId: "",
-  projectId: "",
-  permissionMode: EXECUTION_PERMISSION_MODES.fullAccess,
-  instructions: "",
-  filterText: "",
-  handlerExtensionId: "",
-  handlerId: "",
-  handlerConfigText: "",
-};
-
-const NO_PROJECT = "none";
-
-function parseJson(text: string): JsonValue | undefined {
-  if (!text.trim()) return undefined;
-  return JSON.parse(text) as JsonValue;
-}
-
-function splitValues(text: string): string[] {
-  return text
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
 
 function eventStateLabel(value: number): string {
   return ["Pending", "Dispatched", "No match", "Hop limit exceeded"][value] ?? `State ${value}`;
@@ -154,31 +87,6 @@ function sourceKindLabel(value: number): string {
   );
 }
 
-function defaultSubscriptionForm(subscription: EventSubscriptionResponse): SubscriptionFormState {
-  return {
-    name: subscription.name,
-    enabled: subscription.enabled,
-    sourceIds: [...subscription.sourceIds],
-    publisherKeys: subscription.publisherKeys.join(", "),
-    eventTypes: subscription.eventTypes.join(", "),
-    targetKind: subscription.targetKind,
-    agentId: subscription.agentId ?? "",
-    projectId: subscription.projectId ?? "",
-    permissionMode: subscription.permissionMode ?? EXECUTION_PERMISSION_MODES.alwaysAsk,
-    instructions: subscription.instructions ?? "",
-    filterText: subscription.filter ? JSON.stringify(subscription.filter, null, 2) : "",
-    handlerExtensionId: subscription.handlerExtensionId ?? "",
-    handlerId: subscription.handlerId ?? "",
-    handlerConfigText: subscription.handlerConfig
-      ? JSON.stringify(subscription.handlerConfig, null, 2)
-      : "",
-  };
-}
-
-function sourceConfigText(source: EventSourceResponse): string {
-  return JSON.stringify(source.config, null, 2);
-}
-
 function ManagedBadge({
   managedBy,
   managedKey,
@@ -198,12 +106,14 @@ export function EventsPage() {
   const [selectedEventId, setSelectedEventId] = React.useState<string | null>(null);
   const [sourceDialogOpen, setSourceDialogOpen] = React.useState(false);
   const [editingSource, setEditingSource] = React.useState<EventSourceResponse | null>(null);
-  const [sourceForm, setSourceForm] = React.useState<SourceFormState>(emptySourceForm);
+  const [sourceForm, setSourceForm] = React.useState<SourceFormState>(() => createSourceForm());
+  const [createdSource, setCreatedSource] = React.useState<CreatedWebhook | null>(null);
   const [subscriptionDialogOpen, setSubscriptionDialogOpen] = React.useState(false);
   const [editingSubscription, setEditingSubscription] =
     React.useState<EventSubscriptionResponse | null>(null);
-  const [subscriptionForm, setSubscriptionForm] =
-    React.useState<SubscriptionFormState>(emptySubscriptionForm);
+  const [subscriptionForm, setSubscriptionForm] = React.useState<SubscriptionFormState>(() =>
+    createSubscriptionForm(),
+  );
 
   const eventsPage = useEventListPage({
     queryKey: ["events", "list", filters],
@@ -279,10 +189,9 @@ export function EventsPage() {
   const createSourceMutation = useMutation({
     mutationFn: (body: EventSourceCreateRequest) => apiPost("/api/events/sources/create", { body }),
     onSuccess: async (result) => {
-      toast.success(
-        result?.secret ? `Source created. Save this secret: ${result.secret}` : "Source created",
-      );
-      setSourceDialogOpen(false);
+      toast.success("Source created");
+      if (result?.secret) setCreatedSource({ id: result.id, secret: result.secret });
+      else setSourceDialogOpen(false);
       await invalidateEvents();
     },
     onError: (error) => toast.error(`Unable to create source: ${getApiErrorMessage(error)}`),
@@ -386,56 +295,35 @@ export function EventsPage() {
 
   const beginCreateSource = () => {
     setEditingSource(null);
-    setSourceForm(emptySourceForm);
+    setCreatedSource(null);
+    setSourceForm(createSourceForm());
     setSourceDialogOpen(true);
   };
 
   const beginEditSource = (source: EventSourceResponse) => {
-    setEditingSource(source);
-    setSourceForm({
-      name: source.name,
-      kind: source.kind,
-      configText: sourceConfigText(source),
-      secretText: "",
-      providerExtensionId: source.providerExtensionId ?? "",
-      providerId: source.providerId ?? "",
-    });
-    setSourceDialogOpen(true);
+    try {
+      const form = sourceToForm(source);
+      setEditingSource(source);
+      setCreatedSource(null);
+      setSourceForm(form);
+      setSourceDialogOpen(true);
+    } catch (error) {
+      if (!(error instanceof InvalidSourceConfigurationError)) throw error;
+      console.error("Invalid saved event source configuration", error);
+      toast.error(`Source configuration is invalid: ${getApiErrorMessage(error)}`);
+    }
   };
 
-  const saveSource = () => {
+  const saveSource = (options: SourceFormOptions) => {
     try {
-      const config = parseJson(sourceForm.configText);
-      if (config === undefined) throw new Error("Source configuration is required.");
-      const secret = parseJson(sourceForm.secretText);
       if (editingSource) {
         updateSourceMutation.mutate({
           id: editingSource.id,
           version: editingSource.version,
-          name: sourceForm.name.trim(),
-          config,
-          ...(secret === undefined ? {} : { secret }),
+          ...sourceFormToRequest(sourceForm, options),
         });
       } else {
-        if (
-          sourceForm.kind === 3 &&
-          (!sourceForm.providerExtensionId.trim() || !sourceForm.providerId.trim())
-        ) {
-          throw new Error("Extension ID and provider ID are required for an extension source.");
-        }
-        createSourceMutation.mutate({
-          name: sourceForm.name.trim(),
-          kind: sourceForm.kind,
-          config,
-          enabled: true,
-          ...(sourceForm.kind === 3 && sourceForm.providerExtensionId.trim()
-            ? { providerExtensionId: sourceForm.providerExtensionId.trim() }
-            : {}),
-          ...(sourceForm.kind === 3 && sourceForm.providerId.trim()
-            ? { providerId: sourceForm.providerId.trim() }
-            : {}),
-          ...(secret === undefined ? {} : { secret }),
-        });
+        createSourceMutation.mutate(sourceFormToCreateRequest(sourceForm, options));
       }
     } catch (error) {
       toast.error(`Source configuration is invalid: ${getApiErrorMessage(error)}`);
@@ -444,55 +332,19 @@ export function EventsPage() {
 
   const beginCreateSubscription = () => {
     setEditingSubscription(null);
-    setSubscriptionForm(emptySubscriptionForm);
+    setSubscriptionForm(createSubscriptionForm());
     setSubscriptionDialogOpen(true);
   };
 
-  const beginEditSubscription = (subscription: EventSubscriptionResponse) => {
+  const openSubscription = (subscription: EventSubscriptionResponse) => {
     setEditingSubscription(subscription);
-    setSubscriptionForm(defaultSubscriptionForm(subscription));
+    setSubscriptionForm(subscriptionToForm(subscription));
     setSubscriptionDialogOpen(true);
   };
 
   const saveSubscription = () => {
     try {
-      const filter = parseJson(subscriptionForm.filterText);
-      const handlerConfig = parseJson(subscriptionForm.handlerConfigText);
-      const isExecutionTarget = subscriptionForm.targetKind !== 2;
-      const request: EventSubscriptionRequest = {
-        ...(editingSubscription
-          ? { id: editingSubscription.id, version: editingSubscription.version }
-          : {}),
-        name: subscriptionForm.name.trim(),
-        enabled: subscriptionForm.enabled,
-        sourceIds: subscriptionForm.sourceIds,
-        publisherKeys: splitValues(subscriptionForm.publisherKeys),
-        eventTypes: splitValues(subscriptionForm.eventTypes),
-        ...(filter === undefined ? {} : { filter }),
-        targetKind: subscriptionForm.targetKind,
-        agentId: isExecutionTarget ? subscriptionForm.agentId || null : null,
-        projectId: subscriptionForm.projectId || null,
-        permissionMode: isExecutionTarget ? subscriptionForm.permissionMode : null,
-        instructions: subscriptionForm.instructions.trim() || null,
-        handlerExtensionId:
-          subscriptionForm.targetKind === 2
-            ? subscriptionForm.handlerExtensionId.trim() || null
-            : null,
-        handlerId:
-          subscriptionForm.targetKind === 2 ? subscriptionForm.handlerId.trim() || null : null,
-        ...(subscriptionForm.targetKind === 2 && handlerConfig !== undefined
-          ? { handlerConfig }
-          : {}),
-      };
-      if (!request.name || request.eventTypes.length === 0)
-        throw new Error("Name and at least one event type are required.");
-      if (isExecutionTarget && (!request.agentId || !request.projectId))
-        throw new Error("Select an Agent or Agentflow and a project.");
-      if (request.targetKind === 2 && (!request.handlerExtensionId || !request.handlerId)) {
-        throw new Error(
-          "Extension ID and handler ID are required for an extension handler target.",
-        );
-      }
+      const request = subscriptionFormToRequest(subscriptionForm, editingSubscription);
       saveSubscriptionMutation.mutate(request);
     } catch (error) {
       toast.error(`Subscription configuration is invalid: ${getApiErrorMessage(error)}`);
@@ -718,11 +570,22 @@ export function EventsPage() {
                         {source.ceSource}
                       </p>
                       <p className="text-xs text-muted-foreground">
+                        Event types: {source.eventTypes.join(", ")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
                         {source.lastRunAt
                           ? `Last run ${formatLocalDateTime(source.lastRunAt)}`
                           : "No runs yet"}
                         {source.nextRunAt ? ` · Next ${formatLocalDateTime(source.nextRunAt)}` : ""}
                       </p>
+                      {source.lastDiscardedType ? (
+                        <p className="text-xs text-muted-foreground">
+                          Last discarded: {source.lastDiscardedType}
+                          {source.lastDiscardedAt
+                            ? ` · ${formatLocalDateTime(source.lastDiscardedAt)}`
+                            : ""}
+                        </p>
+                      ) : null}
                       {source.lastError ? (
                         <p className="break-words text-xs text-destructive">{source.lastError}</p>
                       ) : null}
@@ -731,13 +594,16 @@ export function EventsPage() {
                       <Badge variant="outline">Read only</Badge>
                     ) : (
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => sourceActionMutation.mutate({ action: "test", source })}
-                        >
-                          Test
-                        </Button>
+                        {source.kind === EVENT_SOURCE_KIND.httpPoll ||
+                        source.kind === EVENT_SOURCE_KIND.provider ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => sourceActionMutation.mutate({ action: "test", source })}
+                          >
+                            Test
+                          </Button>
+                        ) : null}
                         <Button
                           size="sm"
                           variant="outline"
@@ -745,16 +611,26 @@ export function EventsPage() {
                         >
                           {source.enabled ? "Disable" : "Enable"}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => beginEditSource(source)}>
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => sourceActionMutation.mutate({ action: "rotate", source })}
-                        >
-                          Rotate secret
-                        </Button>
+                        {source.kind !== EVENT_SOURCE_KIND.timer ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => beginEditSource(source)}
+                          >
+                            Edit
+                          </Button>
+                        ) : null}
+                        {source.kind === EVENT_SOURCE_KIND.webhook ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              sourceActionMutation.mutate({ action: "rotate", source })
+                            }
+                          >
+                            Rotate secret
+                          </Button>
+                        ) : null}
                         <Button
                           size="sm"
                           variant="destructive"
@@ -825,14 +701,12 @@ export function EventsPage() {
                         Target {subscription.targetKind} · v{subscription.version}
                       </p>
                     </div>
-                    {getManagedLabel(subscription.managedBy, subscription.managedKey) ? (
-                      <Badge variant="outline">Read only</Badge>
-                    ) : (
+                    {isUserManaged(subscription.managedBy) ? (
                       <div className="flex gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => beginEditSubscription(subscription)}
+                          onClick={() => openSubscription(subscription)}
                         >
                           Edit
                         </Button>
@@ -845,6 +719,17 @@ export function EventsPage() {
                           }}
                         >
                           Delete
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">Read only</Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openSubscription(subscription)}
+                        >
+                          View
                         </Button>
                       </div>
                     )}
@@ -1077,6 +962,7 @@ export function EventsPage() {
         open={sourceDialogOpen}
         editingSource={editingSource}
         form={sourceForm}
+        createdSource={createdSource}
         pending={createSourceMutation.isPending || updateSourceMutation.isPending}
         onFormChange={setSourceForm}
         onOpenChange={setSourceDialogOpen}
@@ -1160,453 +1046,5 @@ function DetailValue({ label, value }: { label: string; value: string }) {
         {value}
       </p>
     </div>
-  );
-}
-
-const eventDialogFormClassName = cn(
-  "-ms-1 max-h-[65vh] overflow-y-auto p-1 scroll-py-1",
-  "[&_:is([data-slot=input],[data-slot=select-trigger],[data-slot=textarea]):focus-visible]:ring-2",
-);
-
-function SourceDialog({
-  open,
-  editingSource,
-  form,
-  pending,
-  onFormChange,
-  onOpenChange,
-  onSubmit,
-}: {
-  open: boolean;
-  editingSource: EventSourceResponse | null;
-  form: SourceFormState;
-  pending: boolean;
-  onFormChange: React.Dispatch<React.SetStateAction<SourceFormState>>;
-  onOpenChange(open: boolean): void;
-  onSubmit(): void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>{editingSource ? "Edit source" : "Add source"}</DialogTitle>
-          <DialogDescription>
-            Configure how Agw receives events. Secret values are only returned when a source is
-            created or rotated.
-          </DialogDescription>
-        </DialogHeader>
-        <div className={cn(eventDialogFormClassName, "space-y-4")}>
-          <div className="space-y-2">
-            <Label htmlFor="source-name">Name</Label>
-            <Input
-              id="source-name"
-              value={form.name}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, name: event.target.value }))
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="source-kind">Source type</Label>
-            <select
-              id="source-kind"
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={String(form.kind)}
-              disabled={Boolean(editingSource)}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, kind: Number(event.target.value) }))
-              }
-            >
-              <option value="1">Webhook</option>
-              <option value="2">HTTP poll</option>
-              <option value="3">Extension provider</option>
-            </select>
-          </div>
-          {form.kind === 3 ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="source-provider-extension">Extension ID</Label>
-                <Input
-                  id="source-provider-extension"
-                  value={form.providerExtensionId}
-                  disabled={Boolean(editingSource)}
-                  onChange={(event) =>
-                    onFormChange((current) => ({
-                      ...current,
-                      providerExtensionId: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-provider-id">Provider ID</Label>
-                <Input
-                  id="source-provider-id"
-                  value={form.providerId}
-                  disabled={Boolean(editingSource)}
-                  onChange={(event) =>
-                    onFormChange((current) => ({ ...current, providerId: event.target.value }))
-                  }
-                />
-              </div>
-            </>
-          ) : null}
-          <div className="space-y-2">
-            <Label htmlFor="source-config">Configuration JSON</Label>
-            <Textarea
-              id="source-config"
-              rows={8}
-              className="font-mono text-xs"
-              value={form.configText}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, configText: event.target.value }))
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="source-secret">Secret JSON</Label>
-            <Textarea
-              id="source-secret"
-              rows={3}
-              className="font-mono text-xs"
-              value={form.secretText}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, secretText: event.target.value }))
-              }
-              placeholder="Leave blank to keep the current value"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
-          </Button>
-          <Button onClick={onSubmit} disabled={pending || !form.name.trim()}>
-            {pending ? "Saving…" : "Save source"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function SubscriptionDialog({
-  open,
-  editingSubscription,
-  form,
-  pending,
-  onFormChange,
-  onOpenChange,
-  onSubmit,
-}: {
-  open: boolean;
-  editingSubscription: EventSubscriptionResponse | null;
-  form: SubscriptionFormState;
-  pending: boolean;
-  onFormChange: React.Dispatch<React.SetStateAction<SubscriptionFormState>>;
-  onOpenChange(open: boolean): void;
-  onSubmit(): void;
-}) {
-  const isAgentflow = form.targetKind === 1;
-  const isExtension = form.targetKind === 2;
-  const targetLabel = isAgentflow ? "Agentflow" : "Agent";
-  const sourceOptionsQuery = useQuery({
-    queryKey: ["events", "sources", "options"],
-    queryFn: () => apiGet("/api/events/sources/options"),
-    enabled: open,
-  });
-  const agentsQuery = useQuery({
-    queryKey: ["agents"],
-    queryFn: () => apiGet("/api/agents"),
-    enabled: open && form.targetKind === 0,
-  });
-  const agentflowsQuery = useQuery({
-    queryKey: ["agentflows"],
-    queryFn: () => apiGet("/api/agentflows"),
-    enabled: open && isAgentflow,
-  });
-  const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => apiGet("/api/projects"),
-    enabled: open,
-  });
-
-  const targetsQuery = isAgentflow ? agentflowsQuery : agentsQuery;
-  const sources = sourceOptionsQuery.data ?? [];
-  const targets = targetsQuery.data ?? [];
-  const projects = projectsQuery.data ?? [];
-  const hasTarget = targets.some((target) => target.id === form.agentId);
-  const hasProject = projects.some((project) => project.id === form.projectId);
-  const useNoProject = isExtension && !form.projectId;
-  const canSave =
-    !pending &&
-    form.name.trim().length > 0 &&
-    (isExtension || hasTarget) &&
-    (useNoProject || hasProject);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {editingSubscription ? "Edit subscription" : "Add subscription"}
-          </DialogTitle>
-          <DialogDescription>
-            Choose event types and the target that will process matching events.
-          </DialogDescription>
-        </DialogHeader>
-        <div className={cn(eventDialogFormClassName, "grid gap-4 md:grid-cols-2")}>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="subscription-name">Name</Label>
-            <Input
-              id="subscription-name"
-              value={form.name}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, name: event.target.value }))
-              }
-            />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="subscription-event-types">Event types</Label>
-            <Input
-              id="subscription-event-types"
-              value={form.eventTypes}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, eventTypes: event.target.value }))
-              }
-              placeholder="taskpilot.review.due, agw.execution.completed"
-            />
-            <p className="text-xs text-muted-foreground">Separate types with commas.</p>
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="subscription-publishers">Publisher keys</Label>
-            <Input
-              id="subscription-publishers"
-              value={form.publisherKeys}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, publisherKeys: event.target.value }))
-              }
-              placeholder="Optional publisher keys, separated with commas"
-            />
-          </div>
-          <fieldset className="space-y-2 md:col-span-2">
-            <legend className="text-sm font-medium">Sources</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {sources.map((source) => (
-                <label
-                  key={source.id}
-                  className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.sourceIds.includes(source.id)}
-                    onChange={(event) =>
-                      onFormChange((current) => ({
-                        ...current,
-                        sourceIds: event.target.checked
-                          ? [...current.sourceIds, source.id]
-                          : current.sourceIds.filter((id) => id !== source.id),
-                      }))
-                    }
-                    className="accent-primary"
-                  />
-                  <span className="truncate">{source.name}</span>
-                </label>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">Leave empty to match publisher keys.</p>
-          </fieldset>
-          <div className="space-y-2">
-            <Label htmlFor="subscription-target">Target type</Label>
-            <select
-              id="subscription-target"
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={String(form.targetKind)}
-              onChange={(event) =>
-                onFormChange((current) => ({
-                  ...current,
-                  targetKind: Number(event.target.value),
-                  agentId: "",
-                }))
-              }
-            >
-              <option value="0">Agent</option>
-              <option value="1">Agentflow</option>
-              <option value="2">Extension handler</option>
-            </select>
-          </div>
-          {!isExtension ? (
-            <div className="space-y-2">
-              <Label htmlFor="subscription-agent">{targetLabel}</Label>
-              <Select
-                value={hasTarget ? form.agentId : ""}
-                required
-                disabled={pending || targets.length === 0}
-                onValueChange={(value) =>
-                  onFormChange((current) => ({ ...current, agentId: value }))
-                }
-              >
-                <SelectTrigger id="subscription-agent" className="w-full">
-                  <SelectValue
-                    placeholder={
-                      targetsQuery.isPending
-                        ? `Loading ${targetLabel}s…`
-                        : targetsQuery.isError
-                          ? `Unable to load ${targetLabel}s`
-                          : targets.length === 0
-                            ? `No ${targetLabel}s available`
-                            : `Select an ${targetLabel}`
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent position="popper" align="start">
-                  {targets.map((target) => (
-                    <SelectItem key={target.id} value={target.id}>
-                      {("displayName" in target && target.displayName?.trim()) || target.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="subscription-handler-extension">Handler extension ID</Label>
-                <Input
-                  id="subscription-handler-extension"
-                  value={form.handlerExtensionId}
-                  onChange={(event) =>
-                    onFormChange((current) => ({
-                      ...current,
-                      handlerExtensionId: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="subscription-handler-id">Handler ID</Label>
-                <Input
-                  id="subscription-handler-id"
-                  value={form.handlerId}
-                  onChange={(event) =>
-                    onFormChange((current) => ({ ...current, handlerId: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="subscription-handler-config">Handler configuration JSON</Label>
-                <Textarea
-                  id="subscription-handler-config"
-                  rows={4}
-                  className="font-mono text-xs"
-                  value={form.handlerConfigText}
-                  onChange={(event) =>
-                    onFormChange((current) => ({
-                      ...current,
-                      handlerConfigText: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="subscription-project">Project</Label>
-            <Select
-              value={useNoProject ? NO_PROJECT : hasProject ? form.projectId : ""}
-              required={!isExtension}
-              disabled={pending || (!isExtension && projects.length === 0)}
-              onValueChange={(value) =>
-                onFormChange((current) => ({
-                  ...current,
-                  projectId: value === NO_PROJECT ? "" : value,
-                }))
-              }
-            >
-              <SelectTrigger id="subscription-project" className="w-full">
-                <SelectValue
-                  placeholder={
-                    projectsQuery.isPending
-                      ? "Loading projects…"
-                      : projectsQuery.isError
-                        ? "Unable to load projects"
-                        : projects.length === 0
-                          ? "No projects available"
-                          : "Select a project"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent position="popper" align="start">
-                {isExtension ? <SelectItem value={NO_PROJECT}>No project</SelectItem> : null}
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {!isExtension ? (
-            <div className="space-y-2">
-              <Label htmlFor="subscription-permission">Execution permission</Label>
-              <Select
-                value={String(form.permissionMode)}
-                disabled={pending}
-                onValueChange={(value) =>
-                  onFormChange((current) => ({ ...current, permissionMode: Number(value) }))
-                }
-              >
-                <SelectTrigger id="subscription-permission" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper" align="start">
-                  <SelectItem value={String(EXECUTION_PERMISSION_MODES.fullAccess)}>
-                    Full access
-                  </SelectItem>
-                  <SelectItem value={String(EXECUTION_PERMISSION_MODES.alwaysAsk)}>
-                    Always ask
-                  </SelectItem>
-                  <SelectItem value={String(EXECUTION_PERMISSION_MODES.allowSameArguments)}>
-                    Allow same arguments
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="subscription-instructions">Instructions</Label>
-            <Textarea
-              id="subscription-instructions"
-              rows={3}
-              value={form.instructions}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, instructions: event.target.value }))
-              }
-            />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="subscription-filter">Filter JSON</Label>
-            <Textarea
-              id="subscription-filter"
-              rows={5}
-              className="font-mono text-xs"
-              value={form.filterText}
-              onChange={(event) =>
-                onFormChange((current) => ({ ...current, filterText: event.target.value }))
-              }
-              placeholder="Optional JsonLogic expression"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
-          </Button>
-          <Button onClick={onSubmit} disabled={!canSave}>
-            {pending ? "Saving…" : "Save subscription"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

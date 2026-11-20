@@ -1,6 +1,7 @@
 using Agw.Events.Api.Dtos;
 using Agw.Events.Application.Persistence;
 using Agw.Events.Application.Sources;
+using Agw.Events.Configuration;
 using Agw.Shared.Contracts.Events;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Events;
@@ -10,6 +11,7 @@ using Bens.Results;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Options;
 using HttpResult = Microsoft.AspNetCore.Http.IResult;
 
 namespace Agw.Events.Api;
@@ -23,6 +25,8 @@ public static class EventSourcesEndpointRouteBuilderExtensions
 
         sources.MapGet("list", ListAsync).Produces<ApiResult<PagedResult<EventSourceResponse>>>();
         sources.MapGet("options", ListOptionsAsync).Produces<ApiResult<EventSourceOptionResponse[]>>();
+        sources.MapGet("providers", ListProviders).Produces<ApiResult<EventSourceProviderResponse[]>>();
+        sources.MapGet("http-poll-options", GetHttpPollOptions).Produces<ApiResult<EventHttpPollFormOptionsResponse>>();
         sources.MapGet("get", GetAsync).Produces<ApiResult<EventSourceResponse>>();
         sources.MapPost("create", CreateAsync).Produces<ApiResult<EventSourceMutationResponse>>();
         sources.MapPost("update", UpdateAsync).Produces<ApiResult<EventSourceMutationResponse>>();
@@ -51,7 +55,7 @@ public static class EventSourcesEndpointRouteBuilderExtensions
         return ApiResult.Ok(
             new PagedResult<EventSourceResponse>
             {
-                Items = page.Items.Select(ToResponse).ToArray(),
+                Items = page.Items.Select(source => ToResponse(source, service.GetEventTypes(source))).ToArray(),
                 Total = page.Total,
                 PageIndex = page.PageIndex,
                 PageSize = page.PageSize,
@@ -66,9 +70,50 @@ public static class EventSourcesEndpointRouteBuilderExtensions
     {
         var options = await service.ListOptionsAsync(cancellationToken);
         return ApiResult.Ok(
-            options.Select(option => new EventSourceOptionResponse { Id = option.Id, Name = option.Name }).ToArray()
+            options
+                .Select(option => new EventSourceOptionResponse
+                {
+                    Id = option.Id,
+                    Name = option.Name,
+                    Kind = option.Kind,
+                    ManagedBy = option.ManagedBy,
+                    EventTypes = option.EventTypes,
+                })
+                .ToArray()
         );
     }
+
+    private static HttpResult ListProviders(EventSourceAppService service) =>
+        ApiResult.Ok(
+            service
+                .ListProviders()
+                .Select(provider => new EventSourceProviderResponse
+                {
+                    ExtensionId = provider.ExtensionId,
+                    ExtensionName = provider.ExtensionName,
+                    ExtensionDisplayName = provider.ExtensionDisplayName,
+                    ProviderId = provider.ProviderId,
+                    EventTypes = provider.EventTypes,
+                    Configurations = provider
+                        .Configurations.Select(configuration => new EventSourceProviderConfigurationResponse
+                        {
+                            Id = configuration.Id,
+                            Name = configuration.Name,
+                            Description = configuration.Description,
+                        })
+                        .ToArray(),
+                })
+                .ToArray()
+        );
+
+    private static HttpResult GetHttpPollOptions(IOptions<EventsOptions> options, string? cursorPath = null) =>
+        ApiResult.Ok(
+            new EventHttpPollFormOptionsResponse
+            {
+                MaxPages = options.Value.HttpPoll.MaxPages,
+                CursorPathValid = cursorPath is null ? null : EventSourceConfigParser.IsValidJsonPath(cursorPath),
+            }
+        );
 
     private static async Task<HttpResult> GetAsync(
         Guid id,
@@ -77,7 +122,9 @@ public static class EventSourcesEndpointRouteBuilderExtensions
     )
     {
         var source = await service.GetAsync(id, cancellationToken);
-        return source is null ? ErrorCodes.EventSourceNotFound.ToApiResult() : ApiResult.Ok(ToResponse(source));
+        return source is null
+            ? ErrorCodes.EventSourceNotFound.ToApiResult()
+            : ApiResult.Ok(ToResponse(source, service.GetEventTypes(source)));
     }
 
     private static async Task<HttpResult> CreateAsync(
@@ -185,12 +232,12 @@ public static class EventSourcesEndpointRouteBuilderExtensions
     {
         var result = await receiver.ReceiveAsync(sourceId, context, cancellationToken);
         return Results.Json(
-            ApiResult.Ok(new EventWebhookReceiveResponse { EventId = result.EventId }),
+            ApiResult.Ok(new EventWebhookReceiveResponse { EventId = result.EventId, Discarded = result.Discarded }),
             statusCode: StatusCodes.Status202Accepted
         );
     }
 
-    private static EventSourceResponse ToResponse(EventSource source)
+    private static EventSourceResponse ToResponse(EventSource source, IReadOnlyList<string> eventTypes)
     {
         using var config = System.Text.Json.JsonDocument.Parse(source.ConfigJson);
         return new EventSourceResponse
@@ -204,11 +251,14 @@ public static class EventSourcesEndpointRouteBuilderExtensions
             ManagedKey = source.ManagedKey,
             CeSource = source.CeSource,
             Config = config.RootElement.Clone(),
+            EventTypes = eventTypes,
             Enabled = source.Enabled,
             BaselineAt = source.BaselineAt,
             NextRunAt = source.NextRunAt,
             LastRunAt = source.LastRunAt,
             LastError = source.LastError,
+            LastDiscardedType = source.LastDiscardedType,
+            LastDiscardedAt = source.LastDiscardedAt,
             HasSecret = source.SecretJson is not null,
             Version = source.Version,
         };

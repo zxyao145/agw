@@ -129,8 +129,8 @@ public class DashboardControllerTests : IDisposable
         var services = scope.ServiceProvider;
         var eventJobs = services.GetRequiredService<IEventJobFacade>();
         var projectId = await CreateJobProjectAsync(services, cancellationToken);
-        await eventJobs.CreateAsync(CreateJobDefinition("Current user job", projectId), cancellationToken);
-        var deletedJob = await eventJobs.CreateAsync(CreateJobDefinition("Deleted job", projectId), cancellationToken);
+        await eventJobs.CreateAsync(CreateJobDefinition("current-user-job", projectId), cancellationToken);
+        var deletedJob = await eventJobs.CreateAsync(CreateJobDefinition("deleted-job", projectId), cancellationToken);
         await eventJobs.DeleteAsync(deletedJob.Id, cancellationToken);
 
         using (
@@ -146,7 +146,7 @@ public class DashboardControllerTests : IDisposable
             var otherProjectId = await CreateJobProjectAsync(otherServices, cancellationToken);
             await otherServices
                 .GetRequiredService<IEventJobFacade>()
-                .CreateAsync(CreateJobDefinition("Other user job", otherProjectId), cancellationToken);
+                .CreateAsync(CreateJobDefinition("other-user-job", otherProjectId), cancellationToken);
         }
 
         var stats = ReadStats(await CreateController(scope.ServiceProvider).GetStats(cancellationToken));

@@ -40,7 +40,7 @@ public sealed class JobsPostgresTests
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
         await using var updateScope = host.Services.CreateAsyncScope();
         var jobs = updateScope.ServiceProvider.GetRequiredService<IEventJobFacade>();
-        var update = jobs.UpdateAsync(job.Id, job.Definition with { Name = "Updated job" }, timeout.Token);
+        var update = jobs.UpdateAsync(job.Id, job.Definition with { Name = "updated-job" }, timeout.Token);
         try
         {
             var read = jobRead.WaitAsync(timeout.Token);
@@ -181,7 +181,7 @@ public sealed class JobsPostgresTests
             .CreateAsync(
                 new EventJobDefinition
                 {
-                    Name = "PostgreSQL test job",
+                    Name = "postgresql-test-job",
                     Enabled = true,
                     ProjectId = projectId,
                     TargetKind = EventJobTargetKind.Agent,

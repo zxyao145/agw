@@ -1,14 +1,20 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Agw.Shared.Contracts.Events;
 
-namespace Agw.Events.Application.Persistence;
+namespace Agw.Events.Application.Sources;
 
 public sealed record EventWebhookSourceConfig
 {
-    public required string Format { get; init; }
+    public IReadOnlyList<string>? EventTypes { get; init; }
 
-    public required EventWebhookAuthConfig Auth { get; init; }
+    public string? FixedType { get; init; }
 
-    public IReadOnlyList<string> ContentTypes { get; init; } = ["application/json"];
+    public string Format { get; init; } = EventSourceFormats.CloudEvents;
+
+    public EventWebhookAuthConfig Auth { get; init; } = new();
+
+    public IReadOnlyList<string> ContentTypes { get; init; } = [];
 
     public EventWebhookMappingConfig? Mapping { get; init; }
 
@@ -17,11 +23,11 @@ public sealed record EventWebhookSourceConfig
 
 public sealed record EventWebhookAuthConfig
 {
-    public required string Kind { get; init; }
+    public string Kind { get; init; } = "BearerToken";
 
     public string? SignatureHeader { get; init; }
 
-    public string? TokenHeader { get; init; }
+    public string? TokenHeader { get; init; } = "Authorization";
 
     public string? TimestampHeader { get; init; }
 
@@ -37,10 +43,23 @@ public sealed record EventWebhookDisplayMappingConfig
 
 public sealed record EventHttpPollSourceConfig
 {
+    public IReadOnlyList<string>? EventTypes { get; init; }
+
+    public string? FixedType { get; init; }
+
     public required EventHttpPollRequestConfig Request { get; init; }
 
     public EventHttpPollPaginationConfig Pagination { get; init; } = new();
 
+    public string Format { get; init; } = EventSourceFormats.CloudEvents;
+
+    public EventHttpPollMappingConfig? Mapping { get; init; }
+
+    public required string Interval { get; init; }
+}
+
+public sealed record EventHttpPollMappingConfig
+{
     public required string Items { get; init; }
 
     public required JsonElement Key { get; init; }
@@ -48,13 +67,11 @@ public sealed record EventHttpPollSourceConfig
     public required EventHttpPollChangeConfig Change { get; init; }
 
     public required EventHttpPollEventConfig Event { get; init; }
-
-    public required string Interval { get; init; }
 }
 
 public sealed record EventHttpPollRequestConfig
 {
-    public required string Method { get; init; }
+    public string Method { get; init; } = "GET";
 
     public required string Url { get; init; }
 
@@ -76,7 +93,12 @@ public sealed record EventHttpPollAuthConfig
 
 public sealed record EventHttpPollPaginationConfig
 {
-    public string Kind { get; init; } = "none";
+    internal const string None = "none";
+    internal const string LinkHeader = "linkHeader";
+    internal const string Page = "page";
+    internal const string Cursor = "cursor";
+
+    public string Kind { get; init; } = None;
 
     public int? MaxPages { get; init; }
 
@@ -96,9 +118,9 @@ public sealed record EventHttpPollChangeConfig
 
 public sealed record EventHttpPollEventConfig
 {
-    public required string TypeOnNew { get; init; }
+    public string? TypeOnNew { get; init; }
 
-    public required string TypeOnChange { get; init; }
+    public string? TypeOnChange { get; init; }
 
     public JsonElement? Subject { get; init; }
 
@@ -113,6 +135,12 @@ public sealed record EventHttpPollEventConfig
     public JsonElement? Summary { get; init; }
 
     public JsonElement? Link { get; init; }
+}
+
+public sealed record EventProviderSourceConfig
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ConfigurationId { get; init; }
 }
 
 public sealed record EventTimerSourceConfig

@@ -6,19 +6,20 @@ using Agw.Shared.Data.Entities.Events;
 using Agw.Shared.Exceptions;
 using Json.Logic;
 
-namespace Agw.Events.Application.Persistence;
+namespace Agw.Events.Application.Sources;
 
 public static class EventWebhookMapper
 {
     public static CloudEventDraft MapMapped(
         EventSource source,
         EventWebhookMappingConfig mapping,
-        WebhookRequestContext request
+        WebhookRequestContext request,
+        string? fixedType = null
     )
     {
         var context = CreateContext(request);
         var id = ReadRequiredString(Evaluate(mapping.Id, context));
-        var type = ReadRequiredString(Evaluate(mapping.Type, context));
+        var type = fixedType ?? ReadRequiredString(Evaluate(mapping.Type!.Value, context));
         var tags = MapTags(mapping.Tags, context);
 
         return new CloudEventDraft
