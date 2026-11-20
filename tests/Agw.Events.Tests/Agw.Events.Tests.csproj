@@ -17,6 +17,5 @@
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
     <ProjectReference Include="../../src/server/Agw.Host/Agw.Host.csproj" />
-    <ProjectReference Include="../../src/server/Agw.Events/Agw.Events.csproj" />
   </ItemGroup>
 </Project>
